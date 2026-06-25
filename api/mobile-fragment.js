@@ -1,4 +1,8 @@
 const crypto = require("crypto");
+const {
+  endpointPayloadFromSnapshot,
+  readDesktopRouteSnapshot,
+} = require("../lib/desktop-route-snapshot-cache");
 
 const TAB_CONFIG = {
   strategy1: {
@@ -293,7 +297,17 @@ module.exports = async function handler(request, response) {
     return;
   }
   try {
-    const payload = await fetchJsonWithTimeout(`${originFrom(request)}${appendQuery(config.endpoint, { mobile: 1, ts: Date.now() })}`);
+    const endpoint = appendQuery(config.endpoint, {
+      mobile: 1,
+      canvas: 1,
+      compact: 1,
+      shell: 1,
+      limit: 60,
+      ts: Date.now(),
+    });
+    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
+    const payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint)
+      || await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000);
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
