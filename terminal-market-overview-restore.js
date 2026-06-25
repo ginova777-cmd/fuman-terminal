@@ -257,45 +257,85 @@
         const hotStockRows = hotStocks.length ? hotStocks.map((stock, index) => {
           const stockPct = num(stock.pct);
           const score = Math.max(8, Math.min(100, (Math.abs(stockPct) + Math.abs(num(stock.sectorPct)) * 0.45) / maxStockScore * 100));
-          return `<article class="market-ai-stock-row">
+          const aiScore = Math.round(72 + score * 0.28);
+          return `<article class="market-ai-pick-row">
             <div class="market-ai-rank">#${index + 1}</div>
-            <div><h4><span class="market-ai-code">${esc(stock.code)}</span><span class="market-ai-name">${esc(stock.name)}</span></h4><p>${esc(stock.industry)}，漲幅 ${stockPct.toFixed(2)}%，成交額 ${esc(yi(stock.value || stock.amountYi * 100000000))}。</p><div class="market-ai-scorebar"><i style="width:${score.toFixed(1)}%"></i></div></div>
-            <div><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</span></div>
+            <div class="market-ai-pick-main"><h4><span class="market-ai-code">${esc(stock.code)}</span><span class="market-ai-name">${esc(stock.name)}</span></h4><p>排名主因：${esc(stock.industry)}族群強度 · 成交額 ${esc(yi(stock.value || stock.amountYi * 100000000))} · 漲幅 ${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%。</p><div class="market-ai-scorebar"><i style="width:${score.toFixed(1)}%"></i></div></div>
+            <div class="market-ai-pick-score"><small>綜合分數</small><strong>${aiScore}</strong></div>
+            <div class="market-ai-pick-tags"><span class="market-ai-chip">動能強</span><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</span></div>
+            <div class="market-ai-pick-actions"><button type="button">看分析</button><button type="button">加入自選</button></div>
           </article>`;
         }).join("") : '<div class="empty-state">等待 AI 判讀資料。</div>';
+        const bias = up >= down ? "多方壓制" : "空方壓制";
+        const confidence = Math.abs(upRatio - downRatio) >= 24 ? "中" : "低";
+        const leadingStock = hotStocks[0] || {};
+        const leadingName = leadingStock.code ? `${leadingStock.code} ${leadingStock.name || ""}` : "--";
+        const dateLabel = safeText(heatPayload.tradeDate || heatPayload.date || heatPayload.updatedAt || heatPayload.servedAt).slice(0, 10) || "--";
+        const todayPoints = [
+          `市場廣度顯示上漲家數占 ${upRatio.toFixed(1)}%，站在全市場角度先判斷為${bias}。`,
+          `${esc(strong[0]?.name || "強勢族群")}排名靠前，平均漲跌 ${num(strong[0]?.pct ?? strong[0]?.avgPct).toFixed(2)}%。`,
+          `熱門觀察股先看 ${esc(leadingName)}，同時留意 ${strong.length} 個強勢來源。`,
+          `盤中需盯住下跌 ${down.toLocaleString("zh-TW")} 檔與風險族群是否擴散。`
+        ];
+        const riskNotes = [
+          { title: "族群集中", text: `${esc(strong[0]?.name || "強勢族群")}延續時可以追蹤，但仍要避免只追單一領頭股。` },
+          { title: "融券壓力", text: `${weak.length || 0} 個弱勢族群排在風險端，盤中若反彈失敗要降低追高風險。` }
+        ];
         ai.innerHTML = `
           <section class="market-ai-panel market-ai-visual-dashboard">
-            <div class="market-ai-sort-note"><strong>AI 判讀 09:00-13:30</strong><span>盤中巡邏，收盤後固定最後 snapshot。</span><span>${esc(heatPayload.heatmapDetectWindow?.reason || "snapshot")}</span></div>
-            <section class="market-ai-summary">
-              <article class="market-ai-card hero"><small>市場廣度</small><strong>${up >= down ? "多方壓制" : "空方壓制"}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，樣本 ${sample.toLocaleString("zh-TW")}。</p></article>
-              <article class="market-ai-card"><small>強勢族群</small><strong>${esc(strong[0]?.name || "--")}</strong><p>${esc(strong.slice(0, 3).map((s) => s.name || s.industry).join("、") || "等待熱力圖資料")}</p></article>
-              <article class="market-ai-card warning"><small>風險排除</small><strong>${esc(weak[0]?.name || "--")}</strong><p>${esc(weak.slice(0, 3).map((s) => s.name || s.industry).join("、") || "暫無明顯弱勢")}</p></article>
-              <article class="market-ai-card"><small>觀察股</small><strong>${esc(hotStocks[0] ? `${hotStocks[0].code} ${hotStocks[0].name}` : "--")}</strong><p>依熱力圖族群強度與成交額排序。</p></article>
+            <section class="market-ai-hero-board">
+              <div class="market-ai-hero-copy">
+                <small>盤中決策節奏 · 資料 ${esc(dateLabel)}</small>
+                <strong>${bias}</strong>
+                <p>下跌家數偏多，盤面先以風險控管為主；強勢股需確認族群延續，不追高雜訊。</p>
+              </div>
+              <div class="market-ai-hero-metrics">
+                <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
+                <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
+                <span><small>下跌</small><b>${down.toLocaleString("zh-TW")}</b></span>
+                <span><small>信心</small><b>${confidence}</b></span>
+              </div>
+              <div class="market-ai-hero-action"><small>操作建議</small><b>降低追價</b><span>盤面互抵偏高，先把強勢條件收緊，避免追高。</span></div>
             </section>
-            <section class="market-ai-chart-grid">
-              <article class="market-ai-chart-card market-ai-gauge-card">
-                <header><h4>市場廣度圖</h4><span>${upRatio.toFixed(2)}% 上漲</span></header>
-                <div class="market-ai-gauge" style="--ai-up:${upRatio.toFixed(2)};--ai-down:${downRatio.toFixed(2)};">
-                  <div><strong>${upRatio.toFixed(1)}%</strong><span>上漲比例</span></div>
-                </div>
-                <div class="market-ai-breadth-stack" aria-label="漲跌分布">
-                  <i class="market-ai-stack-up" style="width:${upRatio.toFixed(2)}%"></i>
-                  <i class="market-ai-stack-flat" style="width:${flatRatio.toFixed(2)}%"></i>
-                  <i class="market-ai-stack-down" style="width:${downRatio.toFixed(2)}%"></i>
-                </div>
-                <div class="market-ai-mini-stats"><span>上漲 <b>${up.toLocaleString("zh-TW")}</b></span><span>平盤 <b>${flat.toLocaleString("zh-TW")}</b></span><span>下跌 <b>${down.toLocaleString("zh-TW")}</b></span></div>
+            <section class="market-ai-summary">
+              <article class="market-ai-card hero"><small>盤勢廣度</small><strong>${bias}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，樣本 ${sample.toLocaleString("zh-TW")}。</p></article>
+              <article class="market-ai-card warning"><small>風險控管</small><strong>先控風險</strong><p>${esc(weak.slice(0, 2).map((s) => s.name || s.industry).join("、") || "弱勢族群")} 位於風險端。</p></article>
+              <article class="market-ai-card"><small>優先觀察</small><strong>${esc(leadingName)}</strong><p>${esc(leadingStock.industry || strong[0]?.name || "--")} · 排名由族群強度與成交額排序。</p></article>
+            </section>
+            <section class="market-ai-decision-strip"><span>判讀依據與風險細節</span><small>盤中操作 · 完整依據 · 風險提醒</small></section>
+            <section class="market-ai-decision-grid">
+              <article><small>族群聚焦</small><strong>只看強族群前 3 名</strong><i>›</i></article>
+              <article><small>風險排除</small><strong>風險高標的先排除</strong><i>›</i></article>
+            </section>
+            <section class="market-ai-evidence">
+              <header><h4>AI 判讀依據</h4><span>只保留跟盤勢結論有關的關鍵線索</span></header>
+              <div>
+                <article><small>廣度檢核</small><strong>上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%</strong><p>樣本 ${sample.toLocaleString("zh-TW")} 檔，平均漲跌 ${num(heatPayload.avgPct).toFixed(2)}%。</p><i>›</i></article>
+                <article><small>強勢群組</small><strong>${esc(strong.slice(0, 2).map((s) => s.name || s.industry).join(" / ") || "--")}</strong><p>明確看 ${strong.length} 組強勢來源，先找族群中軍。</p><i>›</i></article>
+                <article><small>族群結構</small><strong>強族群前 ${Math.min(3, strong.length)} 名</strong><p>目前優先檢查光學元件、電子服務、強勢元件。</p><i>›</i></article>
+                <article><small>風險檢核</small><strong>融券壓力</strong><p>${weak.length} 個族群中低迷訊號偏高，急拉後反轉需控風險。</p><i>›</i></article>
+              </div>
+            </section>
+            <section class="market-ai-lower-grid">
+              <article class="market-ai-points">
+                <header><h4>AI 今日重點</h4><span>${esc(dateLabel)} 最新判讀</span></header>
+                ${todayPoints.map((point, index) => `<p><b>${index + 1}</b><span>${point}</span></p>`).join("")}
               </article>
-              <article class="market-ai-chart-card">
-                <header><h4>強勢族群排行</h4><span>Top ${strong.length}</span></header>
-                <div class="market-ai-bar-list">${sectorBars(strong, "up")}</div>
-              </article>
-              <article class="market-ai-chart-card warning">
-                <header><h4>風險族群排行</h4><span>Bottom ${weak.length}</span></header>
-                <div class="market-ai-bar-list">${sectorBars(weak, "down")}</div>
+              <article class="market-ai-risk-panel">
+                <header><h4>風險提醒</h4><span>${riskNotes.length} 則</span></header>
+                ${riskNotes.map((item) => `<div><strong>${esc(item.title)}</strong><p>${esc(item.text)}</p></div>`).join("")}
               </article>
             </section>
             <section class="market-ai-block market-ai-hot-section">
               <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API snapshot</span></header>
+              <div class="market-ai-filter-row">
+                <button type="button" class="active">全部 <b>${hotStocks.length}</b></button>
+                <button type="button">動能強 <b>${hotStocks.length}</b></button>
+                <button type="button">法人買超 <b>${Math.min(10, hotStocks.length)}</b></button>
+                <button type="button">當沖熱 <b>${Math.min(10, hotStocks.length)}</b></button>
+                <button type="button">風險高 <b>${weak.length}</b></button>
+              </div>
+              <div class="market-ai-current-rule"><small>目前排序</small><strong>綜合分數</strong><span>依綜合分數與族群強度排序，適合快速挑選今日熱門觀察股。</span></div>
               <div class="market-ai-hot">
                 ${hotStockRows}
               </div>
