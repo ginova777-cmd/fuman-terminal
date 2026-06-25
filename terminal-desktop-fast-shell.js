@@ -2245,6 +2245,8 @@
         if (!isChipTradeRoute(canvasState.route)) return;
         const next = chipFilter.dataset.chipCanvasFilter || CHIP_TRADE_DEFAULT_FILTER;
         if (canvasState.signalFilter === next && canvasState.rows.length) return;
+        const previousEndpoint = endpointForRoute(canvasState.route);
+        const nextEndpoint = CHIP_TRADE_FILTERS.find((item) => item.key === next)?.endpoint || CANVAS_ENDPOINTS[canvasState.route] || "";
         canvasState.signalFilter = next;
         canvasState.offset = 0;
         canvasState.hoverIndex = -1;
@@ -2252,8 +2254,12 @@
         hideCanvasDetail();
         applyCanvasFilter();
         updateChipTradeFilterControls(currentCanvasShell());
-        setCanvasStatus("買賣超策略更新中");
         scheduleCanvasDraw();
+        if (previousEndpoint === nextEndpoint && canvasState.rows.length) {
+          setCanvasStatus("買賣超策略套用");
+          return;
+        }
+        setCanvasStatus("買賣超策略更新中");
         fetchCanvasRows(canvasState.route, true).then(() => {
           if (!isChipTradeRoute(canvasState.route) || canvasState.signalFilter !== next) return;
           applyCanvasFilter();

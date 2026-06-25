@@ -269,6 +269,9 @@ jointStreak             同買日                         -> /api/institution-la
 - 舊泛用策略 renderer 會把買賣超畫成 `Rank / Code / Signal`，內容怪且像沒資料；處理方式是買賣超使用自己的 Canvas table renderer。
 - 舊 DOM/html snapshot 會在買賣超 API rows 先顯示後，把畫面覆蓋成 `dom-snapshot`，造成「一開始有資料，馬上跳掉」；處理方式是把買賣超 / CB / 權證列為 API-only fixed route，並禁止 fixed Canvas routes 接受 `dom-*` / `html-*` rows。
 - fixed page Canvas 若接管 wheel / keydown 來改 `canvasState.offset`，使用者只是滾頁或觸控板經過結果區，就會造成買賣超結果「突然滾動」；處理方式是固定頁買賣超 / CB / 權證不吃 wheel / keydown 內部捲動，策略頁才保留 Canvas 內部滾動。
+- 舊 `MIN_OUTPUT_ROWS=1200` 會把排除後 300-500 筆有效買賣超 complete scan 誤判為失敗，導致正式 API 停在舊 run；處理方式是預設 `INSTITUTION_MIN_OUTPUT_ROWS=300`，並繼續依靠 Supabase complete run + expected/scanned/readback/result_count gate 擋 partial。
+- 舊 `run-institution.ps1` 預設 15 秒 request delay / 4 retries 讓更新流程拖到十幾分鐘；處理方式是預設 2500ms / 2 retries，仍可用環境變數調回慢掃。
+- 買賣超 5 個模式中，除 `tdcc1000` 外都走同一個 `/api/institution-latest` endpoint；同 endpoint filter 切換必須用既有 rows 即時本地篩選，不可每次 force fetch 造成 2-3 秒延遲。只有切到 / 切回 TDCC 另一 endpoint 才需要背景 fetch。
 - 部署驗證時 preview deployment 與正式 alias 可能短暫不同步；驗證必須看 `https://fuman-terminal.vercel.app` 正式 alias 與 production monitor，不可只看 preview URL。
 
 已退休的買賣超靜態 verifier 不可復活：
