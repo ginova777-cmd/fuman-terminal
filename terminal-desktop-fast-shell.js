@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-05"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-06"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-05";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-06";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -18,10 +18,11 @@
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const MARKET_ROUTE = "market|市場總覽";
   const REALTIME_RADAR_ROUTE = "realtime-radar|即時雷達";
+  const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
-  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
-  const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
-  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CB_DETECT_ROUTE];
+  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const FIXED_CANVAS_PERSIST_ROUTES = [CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -57,7 +58,6 @@
     "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
     "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
-  const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CHIP_TRADE_DEFAULT_FILTER = "foreignTrustVolumePct";
   const CHIP_TRADE_FILTERS = [
     { key: "foreignStreak", label: "外資連買日", endpoint: "/api/institution-latest" },
