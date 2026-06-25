@@ -3363,14 +3363,32 @@
   }
 
   function fetchMarketJson(path, limit = 60, force = false, timeoutMs = 6500) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-    return fetch(marketApiUrl(path, limit), {
-      cache: force ? "no-store" : "default",
-      signal: controller.signal,
-    }).then((res) => res.ok ? res.json() : null)
-      .catch(() => null)
-      .finally(() => window.clearTimeout(timer));
+    const url = marketApiUrl(path, limit);
+    return new Promise((resolve) => {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.timeout = timeoutMs;
+        xhr.setRequestHeader("Accept", "application/json");
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            resolve(null);
+            return;
+          }
+          try {
+            resolve(JSON.parse(xhr.responseText || "{}"));
+          } catch (error) {
+            resolve(null);
+          }
+        };
+        xhr.onerror = () => resolve(null);
+        xhr.ontimeout = () => resolve(null);
+        xhr.onabort = () => resolve(null);
+        xhr.send();
+      } catch (error) {
+        resolve(null);
+      }
+    });
   }
 
   function ensureMarketDesktopShell() {
