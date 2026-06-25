@@ -2,6 +2,13 @@
   if (window.__fumanDesktopFastShell === "20260623-09") {
     window.__fumanMarketOverviewRestoreReady = true;
     document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell";
+    [600, 2400, 6800].forEach((delay) => {
+      setTimeout(() => {
+        if (document.querySelector("#market-view.active:not([hidden])")) {
+          window.FUMAN_MARKET_API_HYDRATE?.(true);
+        }
+      }, delay);
+    });
     return;
   }
   if (window.__fumanMarketOverviewRestoreReady) return;

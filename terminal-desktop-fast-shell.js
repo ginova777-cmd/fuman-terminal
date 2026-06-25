@@ -1,11 +1,11 @@
 (function () {
   if (
     window.__fumanDesktopFastShell === "20260623-09"
-    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-09"
+    && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
-  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-09";
+  window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -3995,6 +3995,11 @@
       .finally(done);
   }
 
+  window.FUMAN_MARKET_API_HYDRATE = function hydrateMarketApiOnly(force = true) {
+    marketApiOnlyLoading = false;
+    refreshMarketApiOnly(Boolean(force));
+  };
+
   function installMarketApiOnlyHydrator() {
     const run = (force = false) => refreshMarketApiOnly(force);
     const boot = () => {
@@ -4051,6 +4056,11 @@
       if (document.visibilityState === "visible") run(false);
     });
     setInterval(() => run(false), API_ONLY_POLL_MS);
+    [1200, 4200, 9000].forEach((delay) => {
+      window.setTimeout(() => {
+        if (isMarketViewActive()) window.FUMAN_MARKET_API_HYDRATE?.(true);
+      }, delay);
+    });
   }
 
   function canvasShellHtml(key, meta) {
