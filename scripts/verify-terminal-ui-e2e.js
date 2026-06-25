@@ -698,7 +698,9 @@ function collectMobileStats(route) {
   };
   const layoutBlockers = [];
   if (!shell || !tabs || !hero) layoutBlockers.push("mobile shell missing core layout nodes");
-  if (/Times New Roman|serif/i.test(layout.bodyFont)) layoutBlockers.push(`mobile CSS not applied: font=${layout.bodyFont}`);
+  if (/Times New Roman/i.test(layout.bodyFont) || /(^|,\s*)serif(\s*,|$)/i.test(layout.bodyFont)) {
+    layoutBlockers.push(`mobile CSS not applied: font=${layout.bodyFont}`);
+  }
   if (!layout.bodyBackground || layout.bodyBackground === "rgba(0, 0, 0, 0)" || layout.bodyBackground === "rgb(255, 255, 255)") {
     layoutBlockers.push(`mobile CSS not applied: background=${layout.bodyBackground || "<missing>"}`);
   }
