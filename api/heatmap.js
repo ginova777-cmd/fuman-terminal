@@ -138,6 +138,9 @@ function isFinalCloseHeatmapPayload(payload, clock) {
   const today = String(clock?.date || "").replace(/\D/g, "");
   return meta.rows >= 500 && meta.maxDate === today && meta.maxTime >= "133000";
 }
+function hasHeatmapSnapshotPayload(payload) {
+  return Array.isArray(payload?.sectors) && payload.sectors.length > 0 && heatmapPayloadRows(payload).length > 0;
+}
 function snapshotHeatmapPayload(snapshot, clock) {
   return attachHeatmapDetectWindow({
     ...(snapshot.payload || {}),
@@ -2790,16 +2793,16 @@ module.exports = async function handler(request, response) {
   if (!detectWindowActive) {
     const snapshot = await readSnapshot("heatmap_latest", {
       tradeDate: clock.date,
-      allowLatestFallback: false,
-      timeoutMs: 900,
+      allowLatestFallback: true,
+      timeoutMs: 1400,
     });
-    if (snapshot?.payload && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
       response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
       response.status(200).json(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
