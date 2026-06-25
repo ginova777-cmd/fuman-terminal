@@ -1272,8 +1272,22 @@
     };
   }
 
+  function isSingleWarrantSignalRow(row) {
+    const group = String(row?.strategyGroup || row?.group || row?.strategy || "").toLowerCase();
+    if (group === "single" || group === "b" || group.includes("single")) return true;
+    const text = String(row?.reason || row?.signalLine || row?.state || row?.actionLabel || "").trim();
+    return /^B[：:\s]/i.test(text) || /策略B|單檔/.test(text);
+  }
+
   function normalizeWarrantCanvasRowsFromPayload(payload) {
-    const volumeRows = (Array.isArray(payload?.volumeMatches) && payload.volumeMatches.length ? payload.volumeMatches : payload?.rows || [])
+    const payloadRows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const volumeSourceRows = Array.isArray(payload?.volumeMatches) && payload.volumeMatches.length
+      ? payload.volumeMatches
+      : payloadRows.filter((row) => !isSingleWarrantSignalRow(row));
+    const singleSourceRows = Array.isArray(payload?.singleSignals) && payload.singleSignals.length
+      ? payload.singleSignals
+      : payloadRows.filter(isSingleWarrantSignalRow);
+    const volumeRows = volumeSourceRows
       .filter((row) => row && (row.underlyingCode || row.code))
       .map((row, index) => normalizeWarrantCanvasRow(row, index, "volume"))
       .filter((row) => row.code || row.title)
@@ -1283,7 +1297,7 @@
         cleanNumber(b.score) - cleanNumber(a.score)
       )
       .map((row, index) => ({ ...row, rank: index + 1 }));
-    const singleRows = (Array.isArray(payload?.singleSignals) ? payload.singleSignals : [])
+    const singleRows = singleSourceRows
       .filter((row) => row && (row.underlyingCode || row.code || row.warrantCode))
       .map((row, index) => normalizeWarrantCanvasRow(row, index, "single"))
       .filter((row) => row.code || row.title)
