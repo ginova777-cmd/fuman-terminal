@@ -1,5 +1,6 @@
 const childProcess = require("child_process");
 const fs = require("fs/promises");
+const http = require("http");
 const net = require("net");
 const os = require("os");
 const path = require("path");
@@ -24,16 +25,16 @@ const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMA
 const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FUMAN_UI_E2E_ROUTE_TIMEOUT_MS || 45000);
 
 const DESKTOP_ROUTES = [
-  { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]" },
-  { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]" },
-  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1" },
-  { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2" },
-  { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3" },
-  { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4" },
-  { key: "strategy5", label: "strategy5", selector: "aside.sidebar a[data-view=\"strategy\"] .s5" },
-  { key: "institution", label: "institution", selector: "aside.sidebar a[data-view=\"chip-trade\"]" },
-  { key: "cb", label: "cb detect", selector: "aside.sidebar a[data-view=\"cb-detect\"]" },
-  { key: "warrant", label: "warrant flow", selector: "aside.sidebar a[data-view=\"warrant-flow\"]" },
+  { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view" },
+  { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view" },
+  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view" },
+  { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
+  { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
+  { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
+  { key: "strategy5", label: "strategy5", selector: "aside.sidebar a[data-view=\"strategy\"] .s5", expectedRouteKey: "strategy|策略5", expectedPanelId: "strategy-view" },
+  { key: "institution", label: "institution", selector: "aside.sidebar a[data-view=\"chip-trade\"]", expectedRouteKey: "chip-trade|買賣超", expectedPanelId: "chip-trade-view" },
+  { key: "cb", label: "cb detect", selector: "aside.sidebar a[data-view=\"cb-detect\"]", expectedRouteKey: "cb-detect|CB可轉債", expectedPanelId: "cb-detect-view" },
+  { key: "warrant", label: "warrant flow", selector: "aside.sidebar a[data-view=\"warrant-flow\"]", expectedRouteKey: "warrant-flow|權證走向", expectedPanelId: "warrant-flow-view" },
 ];
 
 const MOBILE_ROUTES = [
@@ -98,9 +99,36 @@ function freePort() {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
-  if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
-  return response.json();
+  const target = new URL(url);
+  return new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: target.hostname,
+      port: target.port,
+      path: `${target.pathname}${target.search}`,
+      method: options.method || "GET",
+      timeout: 8000,
+    }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`${url} HTTP ${response.statusCode}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body || "{}"));
+        } catch (error) {
+          reject(new Error(`${url} JSON parse failed: ${error?.message || error}`));
+        }
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error(`${url} request timed out`)));
+    request.on("error", (error) => reject(new Error(`${url} fetch failed: ${error?.message || error}`)));
+    request.end();
+  });
 }
 
 async function launchBrowser() {
@@ -118,43 +146,88 @@ async function launchBrowser() {
     "--window-size=1440,1000",
     "about:blank",
   ];
-  if (!HEADFUL) args.unshift("--headless=new", "--disable-gpu");
+  if (!HEADFUL) {
+    args.unshift(
+      "--headless=new",
+      "--disable-gpu",
+      "--disable-gpu-sandbox",
+      "--disable-gpu-compositing",
+      "--disable-gpu-rasterization",
+      "--disable-accelerated-2d-canvas",
+      "--disable-accelerated-video-decode",
+      "--disable-features=Vulkan,DawnGraphite,UseSkiaRenderer,DefaultANGLEVulkan,VulkanFromANGLE",
+      "--use-angle=swiftshader",
+      "--use-gl=swiftshader",
+    );
+  }
   const child = childProcess.spawn(browserPath, args, { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (chunk) => {
     stderr += String(chunk).slice(0, 1000);
   });
   const versionUrl = `http://127.0.0.1:${port}/json/version`;
+  let stableHits = 0;
+  let lastError = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
       await fetchJson(versionUrl);
-      return { child, port, userDataDir, stderr: () => stderr };
+      await fetchJson(`http://127.0.0.1:${port}/json/list`);
+      stableHits += 1;
+      if (stableHits >= 2) return { child, port, userDataDir, stderr: () => stderr };
     } catch (error) {
+      stableHits = 0;
+      lastError = error;
       if (child.exitCode !== null) throw new Error(`browser exited early: ${stderr}`);
       await sleep(150);
     }
   }
-  throw new Error(`browser did not expose CDP: ${stderr}`);
+  throw new Error(`browser did not expose stable CDP: ${lastError?.message || ""} ${stderr}`);
 }
 
-async function createTab(port) {
-  const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent("about:blank")}`;
-  let target = null;
-  try {
-    target = await fetchJson(newUrl, { method: "PUT" });
-  } catch (error) {
-    const list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
-    target = list.find((item) => item.type === "page");
+async function createTab(browser) {
+  const port = typeof browser === "number" ? browser : browser.port;
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      let list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+      let target = list.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
+      try {
+        if (!target) {
+          const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent("about:blank")}`;
+          target = await fetchJson(newUrl, { method: "PUT" });
+        }
+      } catch (error) {
+        list = await fetchJson(`http://127.0.0.1:${port}/json/list`);
+        target = list.find((item) => item.type === "page");
+      }
+      if (!target?.webSocketDebuggerUrl) {
+        lastError = new Error("CDP page target missing websocket URL");
+        await sleep(350);
+        continue;
+      }
+      const cdp = new Cdp(target.webSocketDebuggerUrl);
+      try {
+        await cdp.connect();
+        await cdp.send("Page.enable", {}, 45000);
+        await cdp.send("Runtime.enable", {}, 30000);
+        await cdp.send("DOM.enable", {}, 30000);
+        await cdp.send("Network.enable", {}, 30000);
+        await cdp.send("Log.enable", {}, 10000).catch(() => null);
+        return cdp;
+      } catch (error) {
+        lastError = error;
+        cdp.close();
+        await sleep(500 + attempt * 250);
+      }
+    } catch (error) {
+      lastError = error;
+      if (browser?.child?.exitCode !== null && browser?.child?.exitCode !== undefined) {
+        throw new Error(`browser exited before CDP tab init (code ${browser.child.exitCode}): ${browser.stderr?.() || lastError.message}`);
+      }
+      await sleep(350);
+    }
   }
-  if (!target?.webSocketDebuggerUrl) throw new Error("CDP page target missing websocket URL");
-  const cdp = new Cdp(target.webSocketDebuggerUrl);
-  await cdp.connect();
-  await cdp.send("Page.enable");
-  await cdp.send("Runtime.enable");
-  await cdp.send("DOM.enable");
-  await cdp.send("Network.enable");
-  await cdp.send("Log.enable").catch(() => null);
-  return cdp;
+  throw lastError || new Error("CDP page target missing websocket URL");
 }
 
 class Cdp {
@@ -166,11 +239,23 @@ class Cdp {
     this.events = [];
   }
 
-  connect() {
+  connect(timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+      const timer = setTimeout(() => {
+        try { this.ws?.close(); } catch {}
+        finish(reject, new Error(`CDP websocket connect timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
       this.ws = new WebSocket(this.wsUrl);
-      this.ws.addEventListener("open", resolve, { once: true });
-      this.ws.addEventListener("error", reject, { once: true });
+      this.ws.addEventListener("open", () => finish(resolve), { once: true });
+      this.ws.addEventListener("error", (error) => finish(reject, error), { once: true });
+      this.ws.addEventListener("close", () => finish(reject, new Error("CDP websocket closed before open")), { once: true });
       this.ws.addEventListener("message", (event) => this.handleMessage(event));
     });
   }
@@ -317,11 +402,24 @@ async function clickSelectorByDom(cdp, selector) {
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
 }
 
+async function scrollSelectorIntoView(cdp, selector) {
+  await evaluate(cdp, (sel) => {
+    const el = document.querySelector(sel);
+    const target = el?.closest?.("a,button,[role=button]") || el;
+    if (!target) return false;
+    target.scrollIntoView({ block: "center", inline: "center" });
+    return true;
+  }, selector, 10000).catch(() => false);
+  await sleep(120);
+}
+
 async function clickSelector(cdp, selector) {
+  await scrollSelectorIntoView(cdp, selector);
   try {
     await clickSelectorByDom(cdp, selector);
     return;
   } catch {}
+  await scrollSelectorIntoView(cdp, selector);
   const rect = await waitFor(cdp, (sel) => {
     const el = document.querySelector(sel);
     if (!el) return { ok: false, reason: "missing" };
@@ -338,6 +436,35 @@ async function clickSelector(cdp, selector) {
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x, y: rect.y });
   await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
+}
+
+async function waitForDesktopRoute(cdp, route, timeoutMs = 7000) {
+  return waitFor(cdp, (expected) => {
+    const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden);
+    const activeRouteKey = document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
+    const activeNav = document.querySelector("[data-view].active,[data-view][aria-current='page']");
+    const panelOk = !expected.expectedPanelId || activePanel?.id === expected.expectedPanelId;
+    const routeOk = !expected.expectedRouteKey || activeRouteKey === expected.expectedRouteKey;
+    return {
+      ok: panelOk && routeOk,
+      activePanelId: activePanel?.id || "",
+      activeRouteKey,
+      activeNavView: activeNav?.dataset?.view || "",
+      expectedPanelId: expected.expectedPanelId || "",
+      expectedRouteKey: expected.expectedRouteKey || "",
+    };
+  }, route, timeoutMs, 250);
+}
+
+async function activateDesktopRoute(cdp, route) {
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await clickSelector(cdp, route.selector);
+    last = await waitForDesktopRoute(cdp, route, attempt ? 7000 : 4500).catch((error) => ({ error: error.message }));
+    if (last && !last.error && last.ok) return last;
+    await sleep(350);
+  }
+  throw new Error(`desktop route did not activate: ${route.key} (${JSON.stringify(last)})`);
 }
 
 async function screenshot(cdp, filename) {
@@ -357,6 +484,10 @@ function collectDesktopStats(route) {
   };
   const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
   const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document.body;
+  const activeRouteKey = document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
+  const activeNav = document.querySelector("[data-view].active,[data-view][aria-current='page']");
+  const routeIdentityOk = (!route.expectedPanelId || activePanel.id === route.expectedPanelId)
+    && (!route.expectedRouteKey || activeRouteKey === route.expectedRouteKey);
   const panelText = text(activePanel).slice(0, 16000);
   const rowSelectors = [
     ".metric-card",
@@ -419,6 +550,9 @@ function collectDesktopStats(route) {
   const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
   const warnings = [];
+  if (!routeIdentityOk) {
+    warnings.push(`route identity mismatch: panel=${activePanel.id || ""}/${route.expectedPanelId || ""}, route=${activeRouteKey}/${route.expectedRouteKey || ""}`);
+  }
   if (!dateSignals.length) warnings.push("freshness/date/run signal not visible enough");
   if (!rowsVisible && filterCounts.length) warnings.push("route has populated subfilters but default view has no rows");
   if (rowsVisible > 0 && hardBlockers.length !== blockerMatches.length) warnings.push("ignored hidden/soft empty-state text because rows are visible");
@@ -427,6 +561,11 @@ function collectDesktopStats(route) {
     routeKey: route.key,
     label: route.label,
     activePanelId: activePanel.id || "",
+    activeRouteKey,
+    activeNavView: activeNav?.dataset?.view || "",
+    routeIdentityOk,
+    expectedPanelId: route.expectedPanelId || "",
+    expectedRouteKey: route.expectedRouteKey || "",
     routeHeader: text(activePanel.querySelector(".desktop-route-shell-head h2")) || text(activePanel.querySelector("h1,h2,h3")),
     rowsVisible,
     domRows: domRows.length,
@@ -440,7 +579,7 @@ function collectDesktopStats(route) {
     dateSignals,
     blockerMatches: [...new Set(hardBlockers)],
     warnings,
-    ok: rowsVisible > 0 && hardBlockers.length === 0,
+    ok: routeIdentityOk && rowsVisible > 0 && hardBlockers.length === 0,
   };
 }
 
@@ -512,6 +651,9 @@ async function fallbackDesktopStats(cdp, route, error) {
     kind: "desktop",
     routeKey: route.key,
     label: route.label,
+    routeIdentityOk: false,
+    expectedPanelId: route.expectedPanelId || "",
+    expectedRouteKey: route.expectedRouteKey || "",
     rowsVisible,
     domRows: rowMatches.length,
     canvasRows: countMatch ? Number(countMatch[1]) || 0 : 0,
@@ -524,9 +666,10 @@ async function fallbackDesktopStats(cdp, route, error) {
     blockerMatches: [...new Set(hardBlockers)],
     warnings: [
       `Runtime stats fallback: ${error.message}`,
+      "route identity unavailable in fallback stats",
       ...(rowsVisible > 0 && hardBlockers.length !== blockerMatches.length ? ["ignored hidden/soft empty-state text because rows are visible"] : []),
     ],
-    ok: rowsVisible > 0 && hardBlockers.length === 0,
+    ok: false,
   };
 }
 
@@ -564,14 +707,14 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
   while (Date.now() - start < timeoutMs) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
-    if (last?.rowsVisible > 0 && !(last.blockerMatches || []).length) return last;
+    if (last?.routeIdentityOk && last?.rowsVisible > 0 && !(last.blockerMatches || []).length) return last;
     await sleep(900);
   }
   return last || { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: ["desktop stats missing"], warnings: [] };
 }
 
 async function runDesktopMode(browser, theme) {
-  const cdp = await createTab(browser.port);
+  const cdp = await createTab(browser);
   await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
   await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/?desktop=1&theme=${theme === "sun" ? "sun" : "dark"}`));
   await waitForSelector(cdp, "aside.sidebar [data-view]", 45000);
@@ -581,7 +724,7 @@ async function runDesktopMode(browser, theme) {
     let stats = null;
     try {
       stats = await withTimeout((async () => {
-        await clickSelector(cdp, route.selector);
+        await activateDesktopRoute(cdp, route);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
         return collectDesktopStatsWhenReady(cdp, route);
       })(), ROUTE_TIMEOUT_MS, `desktop/${theme}/${route.key}`);
@@ -602,7 +745,7 @@ async function runDesktopMode(browser, theme) {
 }
 
 async function runMobileMode(browser, theme) {
-  const cdp = await createTab(browser.port);
+  const cdp = await createTab(browser);
   await setViewport(cdp, { width: 390, height: 844, mobile: true });
   await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/api/mobile-page`));
   await waitForSelector(cdp, "#tabs button[data-fragment]", 45000);
