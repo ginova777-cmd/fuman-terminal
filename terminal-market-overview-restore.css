@@ -272,6 +272,205 @@
   color: #34d399;
 }
 
+.market-ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10070;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(34, 197, 94, 0.08), transparent 28%),
+    radial-gradient(circle at 78% 12%, rgba(250, 204, 21, 0.08), transparent 26%),
+    rgba(2, 6, 14, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.market-ai-modal-shell {
+  width: min(760px, 92vw);
+  max-height: min(760px, 86vh);
+  overflow: hidden;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(12, 22, 35, 0.98), rgba(8, 15, 26, 0.98)),
+    rgba(8, 15, 26, 0.98);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.market-ai-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border-bottom: 1px solid rgba(234, 179, 8, 0.2);
+}
+
+.market-ai-modal-title-block small {
+  color: #93a9ce;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.market-ai-modal-title-block h2 {
+  margin: 5px 0 7px;
+  color: #f8fafc;
+  font-size: 26px;
+  line-height: 1.12;
+}
+
+.market-ai-modal-title-block p {
+  margin: 0;
+  color: #aebfe0;
+  font-size: 13px;
+}
+
+.market-ai-modal-close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.market-ai-modal-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(520px, 58vh);
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.market-ai-modal-item {
+  border: 1px solid rgba(234, 179, 8, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.86), rgba(8, 15, 26, 0.9)),
+    rgba(8, 15, 26, 0.92);
+  padding: 14px;
+}
+
+.market-ai-modal-item.down {
+  border-color: rgba(251, 113, 133, 0.28);
+}
+
+.market-ai-modal-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.market-ai-modal-item-head small {
+  display: block;
+  color: #9fb0cd;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.market-ai-modal-item-head strong {
+  display: block;
+  margin-top: 4px;
+  color: #f8fafc;
+  font-size: 20px;
+}
+
+.market-ai-modal-item-head b {
+  color: #facc15;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.market-ai-modal-item.down .market-ai-modal-item-head b {
+  color: #fb7185;
+}
+
+.market-ai-modal-item p {
+  margin: 8px 0 12px;
+  color: #aebfe0;
+  font-size: 13px;
+}
+
+.market-ai-modal-stock-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.market-ai-modal-stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  border: 1px solid rgba(251, 113, 133, 0.38);
+  border-radius: 999px;
+  background: rgba(127, 29, 29, 0.24);
+  color: #fecdd3;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.market-ai-modal-stock-chip.down {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(6, 78, 59, 0.22);
+  color: #bbf7d0;
+}
+
+.market-ai-modal-stock-chip.muted {
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.72);
+  color: #94a3b8;
+}
+
+.market-ai-modal-stock-chip b {
+  color: #fda4af;
+  font-size: 11px;
+}
+
+.market-ai-modal-stock-chip.down b {
+  color: #86efac;
+}
+
+.market-ai-modal-empty {
+  border: 1px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  padding: 28px;
+  color: #aebfe0;
+  text-align: center;
+}
+
+.market-ai-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.86);
+}
+
+.market-ai-modal-footer button {
+  min-height: 38px;
+  border: 1px solid rgba(234, 179, 8, 0.28);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  cursor: pointer;
+  padding: 0 14px;
+  font-weight: 900;
+}
+
+.market-ai-modal-footer button.primary {
+  background: linear-gradient(135deg, #f59e0b, #facc15);
+  color: #1f2937;
+}
+
 .realtime-radar-nav span {
   color: #ff7a45;
 }
@@ -497,6 +696,28 @@
   color: #facc15;
   font-style: normal;
   font-size: 20px;
+}
+
+#market-view [data-market-ai-drilldown] {
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+#market-view [data-market-ai-drilldown]:hover,
+#market-view [data-market-ai-drilldown]:focus-visible {
+  border-color: rgba(250, 204, 21, 0.72);
+  background:
+    linear-gradient(135deg, rgba(250, 204, 21, 0.08), rgba(15, 23, 42, 0.74)),
+    rgba(8, 15, 26, 0.86);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.22), 0 18px 42px rgba(0, 0, 0, 0.18);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+#market-view [data-market-ai-drilldown]:hover i,
+#market-view [data-market-ai-drilldown]:focus-visible i {
+  color: #fde68a;
+  text-shadow: 0 0 16px rgba(250, 204, 21, 0.32);
 }
 
 #market-view .market-ai-evidence {
@@ -1055,6 +1276,53 @@ body.fuman-light-theme #market-view .market-ai-filter-row button {
 
 body.fuman-light-theme #market-view .market-ai-pick-actions button {
   background: rgba(255, 255, 255, 0.78);
+  color: #172033;
+}
+
+body.fuman-light-theme #market-view [data-market-ai-drilldown]:hover,
+body.fuman-light-theme #market-view [data-market-ai-drilldown]:focus-visible {
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.72), rgba(255, 255, 255, 0.96));
+  box-shadow: 0 14px 34px rgba(217, 119, 6, 0.12);
+}
+
+body.fuman-light-theme .market-ai-modal-overlay {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(16, 185, 129, 0.08), transparent 28%),
+    radial-gradient(circle at 78% 12%, rgba(217, 119, 6, 0.1), transparent 26%),
+    rgba(15, 23, 42, 0.38);
+}
+
+body.fuman-light-theme .market-ai-modal-shell {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
+}
+
+body.fuman-light-theme .market-ai-modal-header,
+body.fuman-light-theme .market-ai-modal-footer {
+  border-color: rgba(203, 213, 225, 0.72);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+body.fuman-light-theme .market-ai-modal-title-block h2,
+body.fuman-light-theme .market-ai-modal-item-head strong {
+  color: #172033;
+}
+
+body.fuman-light-theme .market-ai-modal-title-block small,
+body.fuman-light-theme .market-ai-modal-title-block p,
+body.fuman-light-theme .market-ai-modal-item p {
+  color: #5b6b82;
+}
+
+body.fuman-light-theme .market-ai-modal-item {
+  border-color: rgba(217, 119, 6, 0.2);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+body.fuman-light-theme .market-ai-modal-close,
+body.fuman-light-theme .market-ai-modal-footer button {
+  background: rgba(255, 255, 255, 0.88);
   color: #172033;
 }
 

@@ -5,6 +5,7 @@
     if (!window.__fumanMarketOverviewDirectPainter) {
       window.__fumanMarketOverviewDirectPainter = true;
       window.__fumanMarketDirectSectors = [];
+      window.__fumanMarketAiDrilldowns = {};
       const safeText = (value) => String(value ?? "");
       const esc = (value) => safeText(value).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
       const list = (value) => Array.isArray(value) ? value : [];
@@ -242,6 +243,85 @@
         const strong = sectors.filter((s) => num(s.pct ?? s.avgPct) >= 0).sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct)).slice(0, 8);
         const weak = sectors.filter((s) => num(s.pct ?? s.avgPct) < 0).sort((a, b) => num(a.pct ?? a.avgPct) - num(b.pct ?? b.avgPct)).slice(0, 8);
         const hotStocks = strong.flatMap((sector) => list(sector.stocks).slice(0, 3).map((stock) => ({ ...stock, industry: sector.name || sector.industry || "--", sectorPct: num(sector.pct ?? sector.avgPct) }))).slice(0, 10);
+        const sectorStockItems = (sector, limit = 4) => {
+          const sectorName = sector?.name || sector?.industry || "--";
+          return list(sector?.stocks).slice(0, limit).map((stock) => ({
+            code: safeText(stock.code || stock.stockCode || stock.ticker || ""),
+            name: safeText(stock.name || stock.stockName || ""),
+            pct: num(stock.pct ?? stock.changePct ?? stock.changePercent),
+            value: stock.value || (num(stock.amountYi) * 100000000),
+            close: stock.close || stock.price || stock.lastPrice || "--",
+            industry: safeText(stock.officialIndustry || stock.primaryIndustry || sectorName)
+          })).filter((stock) => stock.code || stock.name);
+        };
+        const makeGroupItem = (sector, index, tone = "up") => {
+          const pct = num(sector?.pct ?? sector?.avgPct);
+          const stocks = sectorStockItems(sector, 4);
+          const count = num(sector?.count || list(sector?.stocks).length || stocks.length);
+          return {
+            rank: index + 1,
+            title: safeText(sector?.name || sector?.industry || "--"),
+            pct,
+            tone,
+            count,
+            amount: yi(sector?.totalValue || sector?.value || (num(sector?.amountYi) * 100000000)),
+            ratioLabel: `${pct >= 0 ? "上漲" : "下跌"} ${Math.abs(pct).toFixed(1)}%`,
+            stocks
+          };
+        };
+        const strongItems = strong.slice(0, 3).map((sector, index) => makeGroupItem(sector, index, "up"));
+        const weakItems = weak.slice(0, 3).map((sector, index) => makeGroupItem(sector, index, "down"));
+        const mixedItems = strongItems.slice(0, 2).concat(weakItems.slice(0, 1));
+        window.__fumanMarketAiDrilldowns = {
+          focusStrong: {
+            kicker: "族群聚焦",
+            title: "只看強族群前 3 名",
+            subtitle: `目前有 ${strongItems.length} 組族群強度較佳，先聚焦領頭股與同族群擴散。`,
+            items: strongItems,
+            footerPrimary: "多用動能篩選",
+            footerSecondary: "只看說明"
+          },
+          riskExclude: {
+            kicker: "風險排除",
+            title: "風險高標的先排除",
+            subtitle: `弱勢族群先排除，避免反彈失敗標的拖累節奏。`,
+            items: weakItems,
+            footerPrimary: "套用風險排除",
+            footerSecondary: "只看說明"
+          },
+          breadth: {
+            kicker: "廣度檢核",
+            title: "廣度代表族群",
+            subtitle: `上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，先看強弱兩端代表族群。`,
+            items: mixedItems,
+            footerPrimary: "看強弱分布",
+            footerSecondary: "只看說明"
+          },
+          strongGroup: {
+            kicker: "強勢群組",
+            title: "強勢族群清單",
+            subtitle: "依族群漲跌、樣本數與成交額排序，優先看最有延續性的族群。",
+            items: strongItems,
+            footerPrimary: "多用動能篩選",
+            footerSecondary: "只看說明"
+          },
+          sectorStructure: {
+            kicker: "族群結構",
+            title: "強族群前 3 名",
+            subtitle: "目前先確認強族群是否有多檔股票同步發動，避免只追單一領頭。",
+            items: strongItems,
+            footerPrimary: "看族群擴散",
+            footerSecondary: "只看說明"
+          },
+          riskCheck: {
+            kicker: "風險檢核",
+            title: "融券壓力與弱勢族群",
+            subtitle: "弱勢族群若無法收斂，盤中反彈要先降低追價與隔日風險。",
+            items: weakItems,
+            footerPrimary: "套用風險排除",
+            footerSecondary: "只看說明"
+          }
+        };
         const maxSectorMove = Math.max(1, ...strong.concat(weak).map((sector) => Math.abs(num(sector.pct ?? sector.avgPct))));
         const maxStockScore = Math.max(1, ...hotStocks.map((stock) => Math.abs(num(stock.pct)) + Math.abs(num(stock.sectorPct)) * 0.45));
         const sectorBars = (items, tone) => items.length ? items.map((sector, index) => {
@@ -304,16 +384,16 @@
             </section>
             <section class="market-ai-decision-strip"><span>判讀依據與風險細節</span><small>盤中操作 · 完整依據 · 風險提醒</small></section>
             <section class="market-ai-decision-grid">
-              <article><small>族群聚焦</small><strong>只看強族群前 3 名</strong><i>›</i></article>
-              <article><small>風險排除</small><strong>風險高標的先排除</strong><i>›</i></article>
+              <article data-market-ai-drilldown="focusStrong" role="button" tabindex="0" aria-label="打開強族群前 3 名股票清單"><small>族群聚焦</small><strong>只看強族群前 3 名</strong><i>›</i></article>
+              <article data-market-ai-drilldown="riskExclude" role="button" tabindex="0" aria-label="打開風險高標的清單"><small>風險排除</small><strong>風險高標的先排除</strong><i>›</i></article>
             </section>
             <section class="market-ai-evidence">
               <header><h4>AI 判讀依據</h4><span>只保留跟盤勢結論有關的關鍵線索</span></header>
               <div>
-                <article><small>廣度檢核</small><strong>上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%</strong><p>樣本 ${sample.toLocaleString("zh-TW")} 檔，平均漲跌 ${num(heatPayload.avgPct).toFixed(2)}%。</p><i>›</i></article>
-                <article><small>強勢群組</small><strong>${esc(strong.slice(0, 2).map((s) => s.name || s.industry).join(" / ") || "--")}</strong><p>明確看 ${strong.length} 組強勢來源，先找族群中軍。</p><i>›</i></article>
-                <article><small>族群結構</small><strong>強族群前 ${Math.min(3, strong.length)} 名</strong><p>目前優先檢查光學元件、電子服務、強勢元件。</p><i>›</i></article>
-                <article><small>風險檢核</small><strong>融券壓力</strong><p>${weak.length} 個族群中低迷訊號偏高，急拉後反轉需控風險。</p><i>›</i></article>
+                <article data-market-ai-drilldown="breadth" role="button" tabindex="0" aria-label="打開廣度檢核股票清單"><small>廣度檢核</small><strong>上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%</strong><p>樣本 ${sample.toLocaleString("zh-TW")} 檔，平均漲跌 ${num(heatPayload.avgPct).toFixed(2)}%。</p><i>›</i></article>
+                <article data-market-ai-drilldown="strongGroup" role="button" tabindex="0" aria-label="打開強勢群組股票清單"><small>強勢群組</small><strong>${esc(strong.slice(0, 2).map((s) => s.name || s.industry).join(" / ") || "--")}</strong><p>明確看 ${strong.length} 組強勢來源，先找族群中軍。</p><i>›</i></article>
+                <article data-market-ai-drilldown="sectorStructure" role="button" tabindex="0" aria-label="打開強族群前 3 名股票清單"><small>族群結構</small><strong>強族群前 ${Math.min(3, strong.length)} 名</strong><p>目前優先檢查光學元件、電子服務、強勢元件。</p><i>›</i></article>
+                <article data-market-ai-drilldown="riskCheck" role="button" tabindex="0" aria-label="打開風險族群股票清單"><small>風險檢核</small><strong>融券壓力</strong><p>${weak.length} 個族群中低迷訊號偏高，急拉後反轉需控風險。</p><i>›</i></article>
               </div>
             </section>
             <section class="market-ai-lower-grid">
@@ -343,6 +423,45 @@
           </section>
         `;
       };
+      const openAiDrilldown = (key) => {
+        const detail = window.__fumanMarketAiDrilldowns?.[key];
+        if (!detail) return;
+        document.querySelector("[data-market-ai-modal]")?.remove();
+        const modal = document.createElement("section");
+        modal.className = "market-ai-modal-overlay";
+        modal.dataset.marketAiModal = "1";
+        const stockLabel = (stock) => [stock?.code, stock?.name].filter(Boolean).join(" ");
+        const items = list(detail.items);
+        const itemHtml = items.length ? items.map((item, index) => {
+          const pct = num(item.pct);
+          const stocks = list(item.stocks);
+          const chips = stocks.length ? stocks.map((stock) => {
+            const stockPct = num(stock.pct);
+            const label = stockLabel(stock) || "--";
+            return `<span class="market-ai-modal-stock-chip ${stockPct >= 0 ? "up" : "down"}">${esc(label)}${stockPct ? ` <b>${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</b>` : ""}</span>`;
+          }).join("") : '<span class="market-ai-modal-stock-chip muted">等待個股資料</span>';
+          return `<article class="market-ai-modal-item ${item.tone === "down" ? "down" : "up"}">
+            <div class="market-ai-modal-item-head">
+              <div><small>#${esc(item.rank || index + 1)}</small><strong>${esc(item.title || "--")}</strong></div>
+              <b>${esc(item.ratioLabel || `${pct >= 0 ? "上漲" : "下跌"} ${Math.abs(pct).toFixed(1)}%`)}</b>
+            </div>
+            <p>${esc(item.count || 0)} 檔樣本 · 平均漲跌 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% · 成交額約 ${esc(item.amount || "--")}</p>
+            <div class="market-ai-modal-stock-chips">${chips}</div>
+          </article>`;
+        }).join("") : '<div class="market-ai-modal-empty">目前沒有可展開的族群股票。</div>';
+        modal.innerHTML = `<div class="market-ai-modal-shell" role="dialog" aria-modal="true" aria-label="${esc(detail.title || "AI 判讀明細")}">
+          <header class="market-ai-modal-header">
+            <div class="market-ai-modal-title-block"><small>${esc(detail.kicker || "AI 判讀")}</small><h2>${esc(detail.title || "AI 判讀明細")}</h2><p>${esc(detail.subtitle || "")}</p></div>
+            <button type="button" class="market-ai-modal-close" data-market-ai-close aria-label="關閉">×</button>
+          </header>
+          <div class="market-ai-modal-list">${itemHtml}</div>
+          <footer class="market-ai-modal-footer">
+            <button type="button" class="primary">${esc(detail.footerPrimary || "套用篩選")}</button>
+            <button type="button" data-market-ai-close>${esc(detail.footerSecondary || "關閉")}</button>
+          </footer>
+        </div>`;
+        document.body.appendChild(modal);
+      };
       const openSector = (index) => {
         const sector = window.__fumanMarketDirectSectors[Number(index)];
         if (!sector) return;
@@ -360,6 +479,16 @@
         document.body.appendChild(modal);
       };
       document.addEventListener("click", (event) => {
+        const aiClose = event.target.closest?.("[data-market-ai-close]");
+        if (aiClose || event.target.matches?.("[data-market-ai-modal]")) {
+          document.querySelector("[data-market-ai-modal]")?.remove();
+          return;
+        }
+        const aiDrilldown = event.target.closest?.("[data-market-ai-drilldown]");
+        if (aiDrilldown) {
+          openAiDrilldown(aiDrilldown.dataset.marketAiDrilldown);
+          return;
+        }
         const close = event.target.closest?.("[data-market-direct-close]");
         if (close || event.target.matches?.("[data-market-direct-modal]")) {
           document.querySelector("[data-market-direct-modal]")?.remove();
@@ -367,6 +496,13 @@
         }
         const card = event.target.closest?.("[data-market-direct-sector]");
         if (card) openSector(card.dataset.marketDirectSector);
+      }, true);
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const aiDrilldown = event.target.closest?.("[data-market-ai-drilldown]");
+        if (!aiDrilldown) return;
+        event.preventDefault();
+        openAiDrilldown(aiDrilldown.dataset.marketAiDrilldown);
       }, true);
       const run = async () => {
         if (!marketActive() || window.__fumanMarketDirectPaintLoading) return;
