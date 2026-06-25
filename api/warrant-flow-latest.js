@@ -12,9 +12,6 @@ function readSecretText(file) {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
-const FALLBACK_SUPABASE_URL = String(
-  process.env.WARRANT_FLOW_FALLBACK_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
 let activeSupabaseUrl = SUPABASE_URL;
 
 const TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
@@ -213,6 +210,15 @@ function isSingleWarrantVolumeRow(row) {
     && cleanNumber(row?.volumeMultiple) > 0;
 }
 
+function isUnderlyingWarrantVolumeRow(row) {
+  const underlyingCode = String(row?.underlyingCode || row?.code || "").trim();
+  return /^\d{4}$/.test(underlyingCode)
+    && Boolean(String(row?.underlyingName || row?.name || "").trim())
+    && cleanNumber(row?.thirtyMinuteVolume || row?.callVolume || row?.volume) > 0
+    && cleanNumber(row?.floatingUnits || row?.callCount || row?.breadth) > 0
+    && cleanNumber(row?.volumeMultiple || row?.warrantHeatScore || row?.score) > 0;
+}
+
 function validateDataContract(payload) {
   const issues = [];
   if (!schemaVersionAtLeast(payload?.schemaVersion, REQUIRED_SCHEMA_VERSION)) {
@@ -224,16 +230,16 @@ function validateDataContract(payload) {
   }
   const invalidVolumeRows = volumeMatches
     .map((row, index) => ({ row, index }))
-    .filter(({ row }) => !isSingleWarrantVolumeRow(row))
+    .filter(({ row }) => !isSingleWarrantVolumeRow(row) && !isUnderlyingWarrantVolumeRow(row))
     .slice(0, 5);
   if (invalidVolumeRows.length) {
-    issues.push(`volume_matches_not_single_warrant:${invalidVolumeRows.map(({ index, row }) => `${index}:${row?.warrantCode || row?.code || "missing"}`).join(",")}`);
+    issues.push(`volume_matches_contract_invalid:${invalidVolumeRows.map(({ index, row }) => `${index}:${row?.warrantCode || row?.code || "missing"}`).join(",")}`);
   }
   return {
     ok: issues.length === 0,
     requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
     schemaVersion: payload?.schemaVersion || "",
-    volumeMatchesSingleWarrantOk: invalidVolumeRows.length === 0 && volumeMatches.length > 0,
+    volumeMatchesContractOk: invalidVolumeRows.length === 0 && volumeMatches.length > 0,
     checkedVolumeRows: volumeMatches.length,
     issues,
   };
@@ -533,16 +539,12 @@ module.exports = async function handler(request, response) {
     }
     const sourceErrors = [];
     let latest = { rows: [], run: null, skippedInvalidRuns: [] };
-    const candidates = [...new Set([SUPABASE_URL, FALLBACK_SUPABASE_URL].filter(Boolean))];
-    for (const candidate of candidates) {
-      activeSupabaseUrl = candidate;
-      try {
-        latest = await fetchLatestCompleteRows(options);
-        if (latest.rows.length) break;
-        sourceErrors.push(`${safeHost(candidate)}:empty`);
-      } catch (error) {
-        sourceErrors.push(`${safeHost(candidate)}:${error?.message || String(error)}`);
-      }
+    activeSupabaseUrl = SUPABASE_URL;
+    try {
+      latest = await fetchLatestCompleteRows(options);
+      if (!latest.rows.length) sourceErrors.push(`${safeHost(SUPABASE_URL)}:empty`);
+    } catch (error) {
+      sourceErrors.push(`${safeHost(SUPABASE_URL)}:${error?.message || String(error)}`);
     }
     if (!latest.rows.length) {
       if (options.snapshotFriendly) {

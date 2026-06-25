@@ -30,7 +30,15 @@ Write-Host "頻率：每 $WatchdogEveryMinutes 分鐘檢查一次"
 Write-Host "作用：shared source 停掉或 Supabase 資料過舊時，自動重新啟動 08:00 shared source。"
 Write-Host ""
 
-schtasks /Create /F /SC MINUTE /MO $WatchdogEveryMinutes /ST $StartTime /TN $TaskName /TR $taskRun | Out-Host
+$arguments = @(
+  "/Create", "/F",
+  "/SC", "MINUTE",
+  "/MO", $WatchdogEveryMinutes,
+  "/ST", $StartTime,
+  "/TN", $TaskName,
+  "/TR", $taskRun
+)
+& schtasks.exe @arguments | Out-Host
 
 Write-Host ""
 Write-Host "完成。現在會自動守護 Supabase 公共槽 shared source。"

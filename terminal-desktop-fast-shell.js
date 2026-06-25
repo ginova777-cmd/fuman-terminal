@@ -1,16 +1,19 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260623-09"
+    window.__fumanDesktopFastShell === "20260625-12"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
   ) return;
-  window.__fumanDesktopFastShell = "20260623-09";
+  window.__fumanDesktopFastShell = "20260625-12";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
   const SNAPSHOT_STORE = "snapshots";
   const SNAPSHOT_PREFIX = "FUMAN_DESKTOP_ROUTE_SNAPSHOT:";
+  const LEGACY_SNAPSHOT_PREFIXES = ["FUMAN_DESKTOP_ROUTE_SNAPSHOT:"];
+  const STRATEGY1_ROUTE_KEY = "strategy|策略1";
+  const STRATEGY1_CACHE_PURGE_KEY = "FUMAN_DESKTOP_STRATEGY1_CACHE_PURGED_20260625_12";
   const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
   const SNAPSHOT_MAX_CHARS = 850000;
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
@@ -24,7 +27,6 @@
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
-  const DEFAULT_DESKTOP_ROUTE_KEY = "strategy|策略5";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
   const STRATEGY4_PAGE_SIZE = 10;
@@ -117,6 +119,7 @@
 
   installStyle();
   installDesktopThemeToggle();
+  purgeStrategy1LegacyCache();
   purgeApiOnlyStrategySnapshots();
   installCanvasThemeObserver();
   installRouteSnapshots();
@@ -181,7 +184,7 @@
       deferWarm(link, source, interactionHoldRemaining() + CLICK_WARM_IDLE_MS);
       return;
     }
-    if (window.__fumanDesktopFastShell === "20260623-09") {
+    if (window.__fumanDesktopFastShell === "20260625-12") {
       window.FUMAN_TERMINAL_PREFETCH_APP?.();
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, `desktop-fast-shell-${source}`);
       return;
@@ -299,7 +302,7 @@
   function shouldRestoreNonMarketRoute() {
     const active = window.__fumanDesktopActiveRoute;
     if (active?.key && !isMarketRoute(active.key)) return true;
-    const key = readSavedLastRouteKey() || DEFAULT_DESKTOP_ROUTE_KEY;
+    const key = readSavedLastRouteKey();
     return !!key && !isMarketRoute(key);
   }
 
@@ -307,7 +310,7 @@
     if (document.documentElement.dataset.fumanInitialRouteRestoreReady === "1") return;
     document.documentElement.dataset.fumanInitialRouteRestoreReady = "1";
     const run = () => {
-      const key = readSavedLastRouteKey() || DEFAULT_DESKTOP_ROUTE_KEY;
+      const key = readSavedLastRouteKey();
       if (!key || isMarketRoute(key)) return false;
       const link = linkForRouteKey(key);
       if (!link) return false;
@@ -569,7 +572,7 @@
 
   function installActiveRouteGuard() {
     window.FUMAN_DESKTOP_ROUTE_STATE = {
-      version: "20260623-09",
+      version: "20260625-12",
       active: () => window.__fumanDesktopActiveRoute || null,
       isCurrent: (key, seq) => isRouteCurrent(key, seq),
       shouldBlockView(viewName, activeLink = null) {
@@ -794,6 +797,25 @@
 
   function pickFirstValue(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== "");
+  }
+
+  function firstPositiveNumber(...values) {
+    for (const value of values) {
+      if (value === undefined || value === null || value === "") continue;
+      const number = cleanNumber(value);
+      if (Number.isFinite(number) && number > 0) return number;
+    }
+    return 0;
+  }
+
+  function chipTradeForeignTrustVolumePct(row = {}) {
+    const existing = firstPositiveNumber(row.foreignTrustBuyVolumePct, row.institutionBuyVolumePct, row.foreignTrustVolumePct);
+    if (existing > 0) return existing;
+    const avgVolume = firstPositiveNumber(row.fiveDayAvgVolume, row.avg5Volume, row.volume5dAvg, row.avgVolume5d, row.avg_volume_5);
+    if (avgVolume <= 0) return 0;
+    const foreign = cleanNumber(row.foreign ?? row.foreignNet ?? row.foreign_net ?? row.foreignLots ?? row.foreign_lots);
+    const trust = cleanNumber(row.trust ?? row.trustNet ?? row.trust_net ?? row.trustLots ?? row.trust_lots);
+    return foreign + trust > 0 ? ((foreign + trust) / avgVolume) * 100 : 0;
   }
 
   function formatCompactNumber(value, digits = 0) {
@@ -1033,6 +1055,27 @@
     }).catch(() => undefined);
   }
 
+  function purgeStrategy1LegacyCache() {
+    try {
+      LEGACY_SNAPSHOT_PREFIXES.forEach((prefix) => {
+        try { sessionStorage.removeItem(prefix + STRATEGY1_ROUTE_KEY); } catch (error) {}
+      });
+      sessionStorage.setItem(STRATEGY1_CACHE_PURGE_KEY, "1");
+    } catch (error) {}
+    routeSnapshots.delete(STRATEGY1_ROUTE_KEY);
+    canvasStore.delete(STRATEGY1_ROUTE_KEY);
+    canvasRouteVersions.delete(STRATEGY1_ROUTE_KEY);
+    canvasInflight.delete(STRATEGY1_ROUTE_KEY);
+    if (!("indexedDB" in window)) return;
+    openSnapshotDb().then((db) => {
+      if (!db) return;
+      try {
+        const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+        tx.objectStore(SNAPSHOT_STORE).delete(STRATEGY1_ROUTE_KEY);
+      } catch (error) {}
+    }).catch(() => undefined);
+  }
+
   function canvasOptionsForRoute(route) {
     return CANVAS_ROUTE_OPTIONS[route] || { limit: 60, ttl: CANVAS_REFRESH_TTL_MS };
   }
@@ -1192,7 +1235,6 @@
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
       foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
       institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreignTrustVolumePct),
-      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume),
       foreignLots: pickFirstValue(merged.foreignLots, merged.foreign_lots),
       ratio1: pickFirstValue(merged.ratio1, merged.ratio1000Week1),
       ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
@@ -1435,20 +1477,12 @@
       return cleanNumber(row.foreignStreak) >= 3 && (cleanNumber(row.foreignLots) > 0 || foreign > 0) && ratioHit;
     }
     if (filter === "foreignTrustVolumePct") {
-      return foreign + trust > 0 && chipTradeForeignTrustVolumePct(row) > 0;
+      return foreign + trust > 0 && cleanNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct) > 0;
     }
     if (filter === "foreignStreak") return cleanNumber(row.foreignStreak) > 0;
     if (filter === "trustStreak") return cleanNumber(row.trustStreak) > 0;
     if (filter === "jointStreak") return cleanNumber(row.jointStreak) > 0;
     return true;
-  }
-
-  function chipTradeForeignTrustVolumePct(row) {
-    const explicit = cleanNumber(row?.foreignTrustBuyVolumePct || row?.institutionBuyVolumePct || row?.foreignTrustVolumePct);
-    if (explicit > 0) return explicit;
-    const avgVolume = cleanNumber(row?.fiveDayAvgVolume || row?.five_day_avg_volume);
-    if (avgVolume <= 0) return 0;
-    return ((cleanNumber(row?.foreign) + cleanNumber(row?.trust)) / avgVolume) * 100;
   }
 
   function fetchCanvasRows(route, force = false) {
@@ -1586,7 +1620,7 @@
     if (!workerCanvasSupported()) return null;
     if (canvasWorker) return canvasWorker;
     try {
-      const url = `${CANVAS_WORKER_URL}?runtime=${encodeURIComponent(window.__fumanDesktopFastShell || "20260623-09")}&t=${Date.now()}`;
+      const url = `${CANVAS_WORKER_URL}?runtime=${encodeURIComponent(window.__fumanDesktopFastShell || "20260625-12")}&t=${Date.now()}`;
       canvasWorker = new Worker(url);
       canvasWorker.onmessage = (event) => {
         const data = event.data || {};
@@ -2331,6 +2365,26 @@
     } catch (error) {}
   }
 
+  async function deleteIndexedSnapshot(key) {
+    const db = await openSnapshotDb();
+    if (!db || !key) return;
+    try {
+      const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+      tx.objectStore(SNAPSHOT_STORE).delete(key);
+    } catch (error) {}
+  }
+
+  function clearRouteSnapshotCache(route, options = {}) {
+    if (!route) return;
+    try { sessionStorage.removeItem(SNAPSHOT_PREFIX + route); } catch (error) {}
+    routeSnapshots.delete(route);
+    if (options.keepCanvasStore !== true) {
+      canvasStore.delete(route);
+      canvasRouteVersions.delete(route);
+    }
+    deleteIndexedSnapshot(route).catch(() => undefined);
+  }
+
   function isWorthSavingSnapshot(panel) {
     const html = panel?.innerHTML || "";
     if (!html || html.length > SNAPSHOT_MAX_CHARS) return false;
@@ -2438,13 +2492,7 @@
 
   function saveFixedPageSnapshotNow(route) {
     if (API_ONLY_FIXED_ROUTE_KEYS.includes(String(route || ""))) {
-      const stored = canvasStore.get(route);
-      if (stored?.rows?.length && !isDomDerivedSource(stored.source)) {
-        const item = { at: Date.now(), scrollTop: 0, html: "", rows: stored.rows };
-        routeSnapshots.set(route, item);
-        writeSessionSnapshot(route, item);
-        writeIndexedSnapshot(route, item);
-      }
+      clearRouteSnapshotCache(route, { keepCanvasStore: true });
       return;
     }
     const panel = panelForRoute(route);
@@ -2517,10 +2565,7 @@
     const install = () => {
       FIXED_ROUTE_KEYS.forEach((route) => {
         if (isApiOnlySnapshotRoute(route)) {
-          try { sessionStorage.removeItem(SNAPSHOT_PREFIX + route); } catch (error) {}
-          routeSnapshots.delete(route);
-          canvasStore.delete(route);
-          canvasRouteVersions.delete(route);
+          clearRouteSnapshotCache(route);
           return;
         }
         const item = readSessionSnapshot(route);
@@ -2784,7 +2829,7 @@
         ctx.fillStyle = colors.text;
         ctx.fillText(`${Math.round(cleanNumber(row.foreignStreak))}/${Math.round(cleanNumber(row.trustStreak))}/${Math.round(cleanNumber(row.jointStreak))}`, width - 236, y);
         ctx.fillStyle = colors.accent;
-        ctx.fillText(`${formatCanvasNumber(chipTradeForeignTrustVolumePct(row), 2)}%`, width - 144, y);
+        ctx.fillText(`${formatCanvasNumber(row.foreignTrustBuyVolumePct || row.institutionBuyVolumePct, 2)}%`, width - 144, y);
         ctx.fillStyle = String(row.pct || "").includes("-") ? colors.down : colors.up;
         ctx.fillText(row.pct || "--", width - 72, y);
       }
@@ -2972,11 +3017,10 @@
     const active = canvasState.signalFilter || CHIP_TRADE_DEFAULT_FILTER;
     wrap.hidden = false;
     wrap.innerHTML = CHIP_TRADE_FILTERS.map((item) => {
-      const currentEndpoint = endpointForRoute(canvasState.route);
-      const count = item.endpoint === currentEndpoint ? chipTradeFilterCount(canvasState.rows, item.key) : null;
+      const count = item.endpoint === endpointForRoute(canvasState.route) ? chipTradeFilterCount(canvasState.rows, item.key) : 0;
       return `
         <button type="button" data-chip-canvas-filter="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
-          ${escapeHtml(item.label)} <b>${escapeHtml(count == null ? "…" : String(count))}</b>
+          ${escapeHtml(item.label)} <b>${escapeHtml(String(count))}</b>
         </button>
       `;
     }).join("");
@@ -3019,7 +3063,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260623-09";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260625-12";
   }
 
   function loadScriptOnce(src, attr) {
@@ -3666,7 +3710,7 @@
     const liveRows = rows.filter((row) => {
       const tone = strategy2Tone(row);
       return tone === "entry" || tone === "prepare";
-    }).slice(0, 10);
+    }).slice(0, 24);
     const entryCount = liveRows.filter((row) => strategy2Tone(row) === "entry").length;
     const prepareCount = liveRows.filter((row) => strategy2Tone(row) === "prepare").length;
     const title = shell.querySelector("[data-canvas-meta-title]");
@@ -3890,6 +3934,10 @@
   function restoreFixedPageSnapshot(link) {
     const key = fixedRouteKey(link);
     if (!key) return false;
+    if (isApiOnlySnapshotRoute(key)) {
+      clearRouteSnapshotCache(key, { keepCanvasStore: true });
+      return false;
+    }
     if (isMarketRoute(key)) {
       removeFixedPageShell(key);
       return false;
@@ -4041,7 +4089,7 @@
   }
 
   function installShowViewGuard() {
-    if (window.__fumanDesktopShowViewGuard === "20260623-09") return;
+    if (window.__fumanDesktopShowViewGuard === "20260625-12") return;
     const tryInstall = () => {
       let original = null;
       try {
@@ -4054,7 +4102,7 @@
         return;
       }
       if (original.__fumanDesktopShowViewGuard) {
-        window.__fumanDesktopShowViewGuard = "20260623-09";
+        window.__fumanDesktopShowViewGuard = "20260625-12";
         return;
       }
       const guarded = function (viewName, activeLink = null, ...rest) {
@@ -4070,7 +4118,7 @@
         window.showView = guarded;
       }
       window.showView = guarded;
-      window.__fumanDesktopShowViewGuard = "20260623-09";
+      window.__fumanDesktopShowViewGuard = "20260625-12";
     };
     tryInstall();
   }
@@ -4560,7 +4608,7 @@
       }
       .strategy2-battle-board {
         display: grid;
-        grid-template-rows: minmax(248px, 0.46fr) minmax(390px, 1.54fr);
+        grid-template-rows: minmax(210px, 0.82fr) minmax(330px, 1.18fr);
         gap: 14px;
         min-height: 610px;
       }

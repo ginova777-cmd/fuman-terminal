@@ -2,29 +2,20 @@
   "strategy": "strategy3",
   "label": "strategy3 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-16T13:37:28.6674772+08:00",
-  "finishedAt": "2026-06-16T13:37:58.4098100+08:00",
+  "startedAt": "2026-06-25T07:42:36.1624407+08:00",
+  "finishedAt": "2026-06-25T07:43:15.0575033+08:00",
   "status": "failed",
   "exitCode": 1,
   "scanned": 0,
-  "total": 289,
-  "matches": 12,
+  "total": 0,
+  "matches": 0,
   "complete": false,
-  "qualityStatus": "degraded",
+  "qualityStatus": "",
   "fallback": false,
   "payloadPath": "C:\\fuman-runtime\\data\\strategy3-latest.json",
   "warnings": [
-    "strategy3 source warning: strategy3 supabase fallback: strategy3 quotes 7<500",
-    "strategy3 source warning: twse volume fetch failed: 20260612 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260612&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260611 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260611&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260610 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260610&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260609 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260609&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260608 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260608&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260605 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260605&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source warning: twse volume fetch failed: 20260604 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260604&type=ALLBUT0999&response=json HTTP 403",
-    "strategy3 source health failed: after1300ReadyCount 0 below 20; warningCount 8 above 3",
-    "Error: Strategy3 source health failed: after1300ReadyCount 0 below 20; warningCount 8 above 3"
+    "strategy3 source warning: strategy3 supabase fallback: strategy3 quotes 0<500"
   ],
   "blockingReason": "critical scan failed with exit code 1",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260625-074233.log"
 }

@@ -33,10 +33,19 @@ function isSingleWarrantVolumeRow(item) {
     cleanNumber(item && item.volumeMultiple) > 0;
 }
 
+function isUnderlyingWarrantVolumeRow(item) {
+  const underlyingCode = String((item && (item.underlyingCode || item.code)) || "").trim();
+  return /^\\d{4}$/.test(underlyingCode) &&
+    Boolean(String((item && (item.underlyingName || item.name)) || "").trim()) &&
+    cleanNumber(item && (item.thirtyMinuteVolume || item.callVolume || item.volume)) > 0 &&
+    cleanNumber(item && (item.floatingUnits || item.callCount || item.breadth)) > 0 &&
+    cleanNumber(item && (item.volumeMultiple || item.warrantHeatScore || item.score)) > 0;
+}
+
 function normalizeWarrantVolumeRows(payload) {
-  const volumeMatches = normalizeArray(payload && payload.volumeMatches).filter(isSingleWarrantVolumeRow);
+  const volumeMatches = normalizeArray(payload && payload.volumeMatches).filter((item) => isSingleWarrantVolumeRow(item) || isUnderlyingWarrantVolumeRow(item));
   if (volumeMatches.length) return volumeMatches;
-  const rows = normalizeArray(payload && payload.rows).filter(isSingleWarrantVolumeRow);
+  const rows = normalizeArray(payload && payload.rows).filter((item) => isSingleWarrantVolumeRow(item) || isUnderlyingWarrantVolumeRow(item));
   if (rows.length) return rows;
   return [];
 }
@@ -146,7 +155,7 @@ function formatWarrantMoney(value) {
 }
 
 function normalizeWarrantFlowTab(tab) {
-  return ["volume", "chip", "watch", "history"].includes(tab) ? tab : "volume";
+  return ["volume", "chip"].includes(tab) ? tab : "volume";
 }
 
 function setWarrantFlowTab(tab) {
@@ -171,14 +180,13 @@ function renderWarrantFlowTabs() {
   const tabButton = (tab, label, title) =>
     '<button class="' + (warrantFlowTab === tab ? "active" : "") + '" type="button" data-warrant-flow-tab="' + tab + '" title="' + escapeAttr(title || label) + '">' + label + '</button>';
   return [
-    tabButton("volume", "權證爆量", "用 30 分量、流通、倍數排序"),
-    tabButton("chip", "權證籌碼", "查看原本權證籌碼條件"),
-    tabButton("watch", "觀察中", "查看觀察中"),
-    tabButton("history", "歷史", "查看歷史"),
+    tabButton("volume", "策略A 標的熱度", "用 volumeMatches 看標的認購熱度與資金聚集"),
+    tabButton("chip", "策略B 單檔訊號", "用 singleSignals 看單一權證大額與連續訊號"),
   ].join("");
 }
 
 function hydrateWarrantFlowItem(item) {
+  const topWarrant = normalizeArray(item.topWarrants)[0] || {};
   const rawName = String(item.underlyingName || item.name || "").trim();
   const exact = latestStocks.find((stock) => stock.code === String(item.underlyingCode || item.code || "").trim() || stock.name === rawName);
   const partial = exact || latestStocks.find((stock) => rawName && (stock.name.includes(rawName) || rawName.includes(stock.name)));
@@ -208,11 +216,11 @@ function hydrateWarrantFlowItem(item) {
     moneyness,
     repeatLarge,
     actionLabel: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額"),
-    warrantCode: String(item.warrantCode || item.symbol || "").trim(),
-    warrantName: String(item.warrantName || item.name || "").trim(),
-    thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume),
-    floatingUnits: cleanNumber(item.floatingUnits),
-    volumeMultiple: cleanNumber(item.volumeMultiple),
+    warrantCode: String(item.warrantCode || item.symbol || topWarrant.code || "").trim(),
+    warrantName: String(item.warrantName || topWarrant.name || "").trim(),
+    thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume || item.callVolume || item.volume),
+    floatingUnits: cleanNumber(item.floatingUnits || item.callCount || item.breadth),
+    volumeMultiple: cleanNumber(item.volumeMultiple || item.warrantHeatScore || item.score),
     priority: { isPriority: true, score, label: item.actionLabel || (repeatLarge ? "單券連續大額" : "單券大額") },
   };
 }
@@ -238,8 +246,8 @@ function getWarrantVolumeRows(rows) {
   return rows
     .map((item) => {
       const thirtyMinuteVolume = cleanNumber(item.thirtyMinuteVolume) || Math.round(cleanNumber(item.volume) / 1000);
-      const floatingUnits = cleanNumber(item.floatingUnits);
-      const volumeMultiple = cleanNumber(item.volumeMultiple) || (floatingUnits ? thirtyMinuteVolume / Math.max(1, floatingUnits) : 0);
+      const floatingUnits = cleanNumber(item.floatingUnits || item.callCount || item.breadth);
+      const volumeMultiple = cleanNumber(item.volumeMultiple || item.warrantHeatScore || item.score) || (floatingUnits ? thirtyMinuteVolume / Math.max(1, floatingUnits) : 0);
       const topWarrant = normalizeArray(item.topWarrants)[0] || {};
       return {
         ...item,
@@ -310,12 +318,12 @@ function renderWarrantFlow() {
   const rows = activeRows.slice(pageStart, pageStart + pageSize);
   const listLabel = keyword
     ? "搜尋結果 " + activeRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁"
-    : (warrantFlowTab === "volume" ? "權證爆量 " : warrantFlowTab === "chip" ? "權證籌碼 " : warrantFlowTab === "watch" ? "觀察中 " : "歷史 ") + activeRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁";
+    : (warrantFlowTab === "volume" ? "策略A 標的熱度 " : "策略B 單檔訊號 ") + activeRows.length + " 檔｜第 " + warrantFlowPage + "/" + pageCount + " 頁";
   const helperText = keyword
     ? "搜尋權證清單；可用股票代號、名稱或權證代號查詢。"
     : warrantFlowTab === "volume"
-      ? "顯示盤中爆量觀察：用 30 分量、流通與倍數排序。"
-      : "顯示盤後單券大額權證精選：同券連續大額、價平附近與標的漲幅可控；ETF 與 2330 已排除。";
+      ? "策略A 顯示標的權證熱度：用 30 分量、廣度與熱度排序。"
+      : "策略B 顯示單檔權證訊號：大額、連續與標的條件分開觀察。";
   const warrantQuoteDate = getWarrantQuoteDate();
   const stockQuoteDate = getWarrantStockQuoteDate();
   const scanTime = warrantFlowUpdatedAt ? new Date(warrantFlowUpdatedAt).toLocaleString("zh-TW", { hour12: false }) : "待確認";
@@ -328,19 +336,19 @@ function renderWarrantFlow() {
   if (renderSignature === warrantFlowLastRenderSignature) return;
   warrantFlowLastRenderSignature = renderSignature;
 
-  const body = warrantFlowTab === "watch" || warrantFlowTab === "history"
-    ? '<tr><td colspan="9">「' + (warrantFlowTab === "watch" ? "觀察中" : "歷史") + '」頁籤已保留，下一步可接指定名單或歷史資料。</td></tr>'
-    : rows.length ? rows.map((item) => {
+  const body = rows.length ? rows.map((item) => {
     const sign = item.stockPercent >= 0 ? "+" : "";
     const hot = warrantFlowTab === "volume" ? (item.volumeMultiple >= 5 ? "hot" : item.volumeMultiple >= 2 ? "mid" : "low") : (item.repeatLarge ? "hot" : item.score >= 70 ? "mid" : "low");
     const pct = Number.isFinite(Number(item.stockPercent)) ? sign + formatNumber(item.stockPercent, 2) + "%" : "--";
+    const hasSingleSignal = warrantFlowTab === "volume" && warrantFlowChipData.some((single) => String(single && (single.underlyingCode || single.code) || "").trim() === String(item.code || "").trim());
+    const namePrefix = hasSingleSignal ? "🔥 " : "";
     if (warrantFlowTab === "volume") {
       return '<tr>' +
       '<td><span class="swing-score">' + (item.volumeRank || "--") + '</span></td>' +
       '<td><span class="code">' + escapeAttr(item.code || "--") + '</span></td>' +
-      '<td>' + escapeAttr(item.name) + '</td>' +
+      '<td>' + escapeAttr(namePrefix + item.name) + '</td>' +
       '<td class="price">' + formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2) + '</td>' +
-      '<td><span class="code">' + escapeAttr(item.warrantCode || "--") + '</span><br><small>' + escapeAttr(item.warrantName || "--") + '</small></td>' +
+      '<td><span class="code">' + escapeAttr(item.warrantCode || "--") + '</span><br><small>' + escapeAttr(item.warrantName || "標的彙總") + '</small></td>' +
       '<td><b class="swing-stage ' + hot + '">' + formatNumber(item.thirtyMinuteVolume, 0) + '</b></td>' +
       '<td><b class="swing-stage mid">' + formatNumber(item.floatingUnits, 0) + '</b></td>' +
       '<td><b class="swing-stage ' + hot + '">' + formatNumber(item.volumeMultiple, 1) + '</b></td>' +
@@ -359,7 +367,7 @@ function renderWarrantFlow() {
       '<td class="price">' + pct + '</td>' +
       '<td class="warrant-reason-cell">' + renderWarrantSignalBadges(item) + '</td>' +
       '</tr>';
-  }).join("") : '<tr><td colspan="' + (warrantFlowTab === "volume" ? "10" : "9") + '">' + (keyword ? "單券精選內找不到這檔股票或權證。" : "權證快照尚未建立；背景同步完成後會自動更新。") + '</td></tr>';
+  }).join("") : '<tr><td colspan="' + (warrantFlowTab === "volume" ? "10" : "9") + '">' + (keyword ? "權證兩大策略內找不到這檔股票或權證。" : "權證快照尚未建立；背景同步完成後會自動更新。") + '</td></tr>';
   const tableHeader = warrantFlowTab === "volume"
     ? '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>30 分量</th><th>流通</th><th>倍數</th><th>標的漲幅</th><th>原因</th>'
     : '<th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>權證代號</th><th>單券金額</th><th>訊號</th><th>標的漲幅</th><th>原因</th>';
@@ -367,7 +375,7 @@ function renderWarrantFlow() {
   panel.innerHTML = [
     '<section class="swing-dashboard warrant-flow-dashboard">',
     '<div class="swing-topbar"><div>',
-    '<h2 data-warrant-refresh title="重新整理權證單券精選">' + titleWithSchedule("◒", "策略6：權證資金走向", "warrant") + '</h2>',
+    '<h2 data-warrant-refresh title="重新整理權證兩大策略">' + titleWithSchedule("◒", "權證走向：兩大策略", "warrant") + '</h2>',
     '<p>' + helperText + '<br><small>' + escapeAttr(freshnessText) + '</small></p>',
     '</div></div>',
     renderDataFreshnessBarHtml("warrant-flow"),

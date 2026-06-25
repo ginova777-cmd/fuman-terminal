@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const WORKER_VERSION = "20260623-09";
+  const WORKER_VERSION = "20260624-11";
   const rowsByRoute = new Map();
   const rowVersionsByRoute = new Map();
   const buffers = new Map();

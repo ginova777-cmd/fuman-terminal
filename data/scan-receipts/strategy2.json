@@ -1,9 +1,9 @@
 {
-  "strategy": "realtime-radar",
-  "label": "realtime radar raw refresh",
+  "strategy": "strategy2",
+  "label": "strategy2 intraday raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-25T07:42:33.9239383+08:00",
-  "finishedAt": "2026-06-25T07:42:34.2394635+08:00",
+  "startedAt": "2026-06-25T07:42:35.8813816+08:00",
+  "finishedAt": "2026-06-25T07:42:35.9974577+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -12,7 +12,7 @@
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
-  "payloadPath": "C:\\fuman-runtime\\data\\realtime-radar-latest.json",
+  "payloadPath": "C:\\fuman-runtime\\data\\strategy2-intraday-latest.json",
   "warnings": [],
   "blockingReason": "",
   "log": "C:\\fuman-runtime\\logs\\full-scan-20260625-074233.log"

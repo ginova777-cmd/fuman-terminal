@@ -54,6 +54,15 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function firstPositiveNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const number = cleanNumber(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
 function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
@@ -72,8 +81,19 @@ function normalizeRow(row) {
   const foreign = cleanNumber(payload.foreign ?? row.foreign_net);
   const trust = cleanNumber(payload.trust ?? row.trust_net);
   const tradeVolume = cleanNumber(payload.tradeVolume || row.trade_volume);
-  const fiveDayAvgVolume = cleanNumber(payload.fiveDayAvgVolume || payload.five_day_avg_volume);
-  const foreignTrustBuyVolumePct = cleanNumber(payload.foreignTrustBuyVolumePct ?? payload.institutionBuyVolumePct ?? payload.foreignTrustVolumePct)
+  const fiveDayAvgVolume = firstPositiveNumber(
+    payload.fiveDayAvgVolume,
+    payload.five_day_avg_volume,
+    payload.avg5Volume,
+    payload.volume5dAvg,
+    payload.avgVolume5d,
+    payload.avg_volume_5
+  );
+  const foreignTrustBuyVolumePct = firstPositiveNumber(
+    payload.foreignTrustBuyVolumePct,
+    payload.institutionBuyVolumePct,
+    payload.foreignTrustVolumePct
+  )
     || (fiveDayAvgVolume > 0 ? ((foreign + trust) / fiveDayAvgVolume) * 100 : 0);
   return {
     ...payload,

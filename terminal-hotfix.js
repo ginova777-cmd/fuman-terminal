@@ -1,6 +1,6 @@
 (function () {
-  if (window.__fumanTerminalHotfix === "20260623-09") return;
-  window.__fumanTerminalHotfix = "20260623-09";
+  if (window.__fumanTerminalHotfix === "20260624-11") return;
+  window.__fumanTerminalHotfix = "20260624-11";
 
   installDesktopApiPollingCache();
   installDesktopViewSnapshotCache();
@@ -122,7 +122,7 @@
     document.addEventListener("pointerdown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
-      if (window.__fumanDesktopFastShell === "20260623-09") return;
+      if (window.__fumanDesktopFastShell === "20260624-11") return;
       if (link.dataset.view === "strategy") {
         window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "strategy-pointer");
         window.FUMAN_TERMINAL_PREFETCH_APP?.();
@@ -135,19 +135,19 @@
     document.addEventListener("pointerenter", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
-      if (window.__fumanDesktopFastShell === "20260623-09") return;
+      if (window.__fumanDesktopFastShell === "20260624-11") return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
     }, true);
     document.addEventListener("pointerover", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
-      if (window.__fumanDesktopFastShell === "20260623-09") return;
+      if (window.__fumanDesktopFastShell === "20260624-11") return;
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, "hover");
     }, true);
     document.addEventListener("mousedown", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
-      if (window.__fumanDesktopFastShell === "20260623-09") return;
+      if (window.__fumanDesktopFastShell === "20260624-11") return;
       if (link.dataset.view === "strategy") return;
       switchNow(link);
     }, true);
@@ -165,7 +165,7 @@
     document.addEventListener("click", (event) => {
       const link = event.target.closest?.("[data-view]");
       if (!link || link.closest("[data-member-tab]")) return;
-      if (window.__fumanDesktopFastShell === "20260623-09") return;
+      if (window.__fumanDesktopFastShell === "20260624-11") return;
       if (event.__fumanFastOfficialClick) return;
       if (event.__fumanDeferredViewClick) return;
       if (event.button && event.button !== 0) return;
@@ -275,7 +275,7 @@
     let attempts = 0;
     const isFastShellBusy = () => Math.max(0, Number(window.__fumanDesktopFastInteractionUntil || 0) - Date.now()) > 0;
     const keepLegacyCold = () => {
-      if (window.__fumanDesktopFastShell !== "20260623-09") return false;
+      if (window.__fumanDesktopFastShell !== "20260624-11") return false;
       try {
         if (new URLSearchParams(location.search).get("legacy") === "1") return false;
       } catch (error) {}
@@ -289,12 +289,12 @@
         if (attempts < 6) setTimeout(warm, attempts < 3 ? 2400 : 9000);
         return;
       }
-      if (window.__fumanDesktopFastShell === "20260623-09" && isFastShellBusy()) {
+      if (window.__fumanDesktopFastShell === "20260624-11" && isFastShellBusy()) {
         setTimeout(warm, 620);
         return;
       }
       if (typeof window.FUMAN_TERMINAL_LOAD_APP === "function") {
-        if (window.__fumanDesktopFastShell === "20260623-09" && !window.FUMAN_TERMINAL_APP_READY) {
+        if (window.__fumanDesktopFastShell === "20260624-11" && !window.FUMAN_TERMINAL_APP_READY) {
           window.FUMAN_TERMINAL_PREFETCH_APP?.();
           if (attempts < 18) {
             setTimeout(warm, attempts < 4 ? 1400 : 2400);
@@ -325,7 +325,7 @@
       try {
         if (new URLSearchParams(location.search).get("legacy") === "1") return false;
       } catch (error) {}
-      return window.__fumanDesktopFastShell === "20260623-09"
+      return window.__fumanDesktopFastShell === "20260624-11"
         || document.documentElement.classList.contains("fuman-desktop-fast-path");
     };
     const resources = [

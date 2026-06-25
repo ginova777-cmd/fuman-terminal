@@ -2,26 +2,20 @@
   "strategy": "strategy5",
   "label": "strategy5 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-16T13:38:46.2224546+08:00",
-  "finishedAt": "2026-06-16T13:40:05.9382818+08:00",
+  "startedAt": "2026-06-25T07:51:04.1223828+08:00",
+  "finishedAt": "2026-06-25T07:51:40.2663681+08:00",
   "status": "degraded",
   "exitCode": 0,
-  "scanned": 1958,
-  "total": 1958,
-  "matches": 46,
+  "scanned": 0,
+  "total": 0,
+  "matches": 0,
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
   "payloadPath": "C:\\fuman-runtime\\data\\strategy5-latest.json",
   "warnings": [
-    "strategy5 source warning: twse volume fetch failed: 20260612 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260612&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260611 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260611&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260610 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260610&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260609 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260609&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260608 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260608&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260605 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260605&type=ALLBUT0999&response=json HTTP 403",
-    "strategy5 source warning: twse volume fetch failed: 20260604 :: https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=20260604&type=ALLBUT0999&response=json HTTP 403"
+    "strategy5 source warning: FinMind chip supplement rows=1000"
   ],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260625-074233.log"
 }
