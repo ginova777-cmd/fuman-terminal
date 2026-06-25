@@ -68,15 +68,40 @@ function sendPayload(request, response, statusCode, payload) {
 function signature(tab, payload) {
   return crypto.createHash("sha1").update(JSON.stringify({
     tab,
-    runId: extractRunId(payload),
+    runId: extractRunId(payload, tab),
     updatedAt: payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || "",
     count: payload?.count ?? payload?.total ?? payload?.result_count ?? "",
     quality: payload?.qualityStatus || payload?.sourceHealth?.status || "",
   })).digest("hex").slice(0, 12);
 }
 
-function extractRunId(payload) {
-  return String(
+function compactToken(value) {
+  return String(value || "waiting")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "waiting";
+}
+
+function compactDate(value) {
+  const raw = String(value || "").replace(/\D/g, "");
+  if (raw.length >= 8) return raw.slice(0, 8);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()).replace(/\D/g, "");
+}
+
+function waitingRunId(payload, tab = "") {
+  const reason = payload?.reason || payload?.error || payload?.detail || payload?.qualityStatus || payload?.cacheSource || "waiting";
+  const date = compactDate(payload?.date || payload?.marketSession?.taipeiDate || payload?.updatedAt || payload?.transport?.fetchedAt);
+  return `${compactToken(tab || "mobile")}-waiting-${date}-${compactToken(reason)}`;
+}
+
+function extractRunId(payload, tab = "") {
+  const runId = String(
     payload?.runId
     || payload?.transport?.runId
     || payload?.transport?.payloadRunId
@@ -84,7 +109,8 @@ function extractRunId(payload) {
     || payload?.payload?.transport?.runId
     || payload?.meta?.runId
     || ""
-  );
+  ).trim();
+  return runId || waitingRunId(payload, tab);
 }
 
 async function buildBoot(request) {
@@ -120,7 +146,7 @@ async function buildBoot(request) {
       url: `/api/mobile-fragment?tab=${encodeURIComponent(tab)}`,
       hash,
       api: TAB_ENDPOINTS[tab],
-      runId: extractRunId(payload),
+      runId: extractRunId(payload, tab),
       complete: payload?.complete === true,
       count: Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0,
     };

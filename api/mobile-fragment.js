@@ -288,13 +288,7 @@ function renderFragment(tab, config, payload) {
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
-  const runId = payload?.runId
-    || payload?.transport?.runId
-    || payload?.transport?.payloadRunId
-    || payload?.payload?.runId
-    || payload?.payload?.transport?.runId
-    || payload?.meta?.runId
-    || "";
+  const runId = extractRunId(payload, tab);
   const quality = payload?.qualityStatus || payload?.sourceHealth?.status || "";
   const statusLine = [config.subtitle, runId ? `run ${runId}` : "", quality ? `quality ${quality}` : ""].filter(Boolean).join("｜");
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
@@ -312,6 +306,44 @@ function renderFragment(tab, config, payload) {
       <section class="mobile-terminal-points">${points}</section>
       <section class="mobile-terminal-list">${list}</section>
     </section>`;
+}
+
+function compactToken(value) {
+  return String(value || "waiting")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "waiting";
+}
+
+function compactDate(value) {
+  const raw = String(value || "").replace(/\D/g, "");
+  if (raw.length >= 8) return raw.slice(0, 8);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()).replace(/\D/g, "");
+}
+
+function waitingRunId(payload, tab = "") {
+  const reason = payload?.reason || payload?.error || payload?.detail || payload?.qualityStatus || payload?.cacheSource || "waiting";
+  const date = compactDate(payload?.date || payload?.marketSession?.taipeiDate || payload?.updatedAt || payload?.transport?.fetchedAt);
+  return `${compactToken(tab || "mobile")}-waiting-${date}-${compactToken(reason)}`;
+}
+
+function extractRunId(payload, tab = "") {
+  const runId = String(
+    payload?.runId
+    || payload?.transport?.runId
+    || payload?.transport?.payloadRunId
+    || payload?.payload?.runId
+    || payload?.payload?.transport?.runId
+    || payload?.meta?.runId
+    || ""
+  ).trim();
+  return runId || waitingRunId(payload, tab);
 }
 
 module.exports = async function handler(request, response) {
