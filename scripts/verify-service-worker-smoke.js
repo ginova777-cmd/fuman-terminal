@@ -13,13 +13,8 @@ const index = fs.readFileSync(indexPath, "utf8");
 const modules = fs.readFileSync(modulesPath, "utf8");
 const issues = [];
 const lazyStaticAssets = [
-  "terminal-chip-flow.js",
-  "terminal-warrant-flow.js",
+  "terminal-chip-snapshot-module.js",
   "terminal-watchlist-module.js",
-];
-const moduleMapAssets = [
-  "terminal-chip-flow.js",
-  "terminal-warrant-flow.js",
 ];
 
 function requireText(needle, message) {
@@ -51,9 +46,13 @@ for (const asset of ["styles.css", "terminal-core.js"]) {
   }
 }
 
-for (const asset of moduleMapAssets) {
-  if (!modules.includes(`src: "${asset}"`)) {
-    issues.push(`${asset} must be registered in terminal-modules.js`);
+for (const marker of [
+  'chipSnapshot: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
+  'chipFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
+  'warrantFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
+]) {
+  if (!modules.includes(marker)) {
+    issues.push(`terminal-modules.js missing current chip snapshot marker: ${marker}`);
   }
 }
 

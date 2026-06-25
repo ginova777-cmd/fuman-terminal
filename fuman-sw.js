@@ -2,6 +2,7 @@ const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260623-09";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
+const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260625-09";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
@@ -17,8 +18,8 @@ const STATIC_ASSETS = [
   "/terminal.js?v=public-terminal-fast-20260623-09",
   "/terminal-app.js?v=public-terminal-fast-20260623-09",
   "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260623-09",
-  "/terminal-market-overview-restore.css?v=market-overview-restore-20260625-01",
-  "/terminal-market-overview-restore.js?v=market-overview-restore-20260625-01",
+  `/terminal-market-overview-restore.css?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
+  `/terminal-market-overview-restore.js?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
   "/terminal-member-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
@@ -94,6 +95,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys
         .filter((key) => key.startsWith("fuman-terminal-sw-") && (!key.startsWith(CACHE_VERSION) || key.endsWith("-data")))
         .map((key) => caches.delete(key))))
+      .then(() => purgeOldMarketOverviewAssets())
       .then(() => prefetchCoreDataAssets())
       .then(() => self.clients.claim())
   );
@@ -206,6 +208,17 @@ async function prefetchAssetList(assets) {
   }));
 }
 
+async function purgeOldMarketOverviewAssets() {
+  const cache = await caches.open(STATIC_CACHE);
+  const requests = await cache.keys();
+  await Promise.allSettled(requests.map((request) => {
+    const url = new URL(request.url);
+    if (!/^\/terminal-market-overview-restore\.(?:js|css)$/i.test(url.pathname)) return undefined;
+    if (url.search.includes(MARKET_OVERVIEW_RESTORE_ASSET_EPOCH)) return undefined;
+    return cache.delete(request);
+  }));
+}
+
 async function dataStaleWhileRevalidate(request) {
   const cache = await caches.open(DATA_CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
@@ -255,6 +268,7 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "PREFETCH_DATA_LOW_POWER") event.waitUntil(prefetchLowPowerDataAssets());
   if (event.data && event.data.type === "CLEAR_DATA_CACHE") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchCoreDataAssets()));
   if (event.data && event.data.type === "CLEAR_DATA_CACHE_LOW_POWER") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchLowPowerDataAssets()));
+  if (event.data && event.data.type === "CLEAR_MARKET_OVERVIEW_CACHE") event.waitUntil(purgeOldMarketOverviewAssets());
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;
