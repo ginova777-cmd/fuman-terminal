@@ -1410,11 +1410,11 @@
     const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
     const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
     const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
-    canvasState.filtered = canvasState.rows.filter((row) => {
+    const filterRows = (activeChipFilter = chipFilter) => canvasState.rows.filter((row) => {
       if (zoneFilter && String(row.swingZone || "").toUpperCase() !== zoneFilter) return false;
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
-      if (chipFilter && !matchesChipTradeFilter(row, chipFilter)) return false;
+      if (activeChipFilter && !matchesChipTradeFilter(row, activeChipFilter)) return false;
       if (!query) return true;
       return [
         row.code,
@@ -1430,6 +1430,13 @@
         row.legal5d,
       ].join(" ").toLowerCase().includes(query);
     });
+    canvasState.filtered = filterRows(chipFilter);
+    if (isChipTradeRoute(canvasState.route) && chipFilter && !canvasState.filtered.length && canvasState.rows.length) {
+      const fallbackFilter = [CHIP_TRADE_DEFAULT_FILTER, "foreignStreak", "trustStreak", "jointStreak", ""]
+        .find((key) => !key || filterRows(key).length);
+      canvasState.signalFilter = fallbackFilter || "";
+      canvasState.filtered = filterRows(canvasState.signalFilter);
+    }
     const pageSize = canvasPageSizeForRoute();
     const maxOffset = pageSize
       ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
