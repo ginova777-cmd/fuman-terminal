@@ -1,11 +1,14 @@
 (function () {
+  const WARRANT_TABS_HOTFIX = "20260625-01";
   if (
     window.__fumanDesktopFastShell === "20260623-09"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
+    && window.__fumanWarrantTabsHotfix === WARRANT_TABS_HOTFIX
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
+  window.__fumanWarrantTabsHotfix = WARRANT_TABS_HOTFIX;
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -137,6 +140,7 @@
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
+  installWarrantTabsHotfix();
 
   function routeKey(link) {
     return `${link?.dataset?.view || ""}|${(link?.textContent || "").replace(/\s+/g, " ").trim()}`;
@@ -3914,6 +3918,13 @@
     `;
   }
 
+  function ensureWarrantTabsMount(shell) {
+    if (!shell || shell.querySelector("[data-warrant-canvas-tabs]")) return;
+    const canvas = shell.querySelector(".desktop-route-canvas");
+    if (!canvas) return;
+    canvas.insertAdjacentHTML("beforebegin", '<div class="desktop-warrant-flow-tabs" data-warrant-canvas-tabs hidden></div>');
+  }
+
   function strategy2NoteLabel(row, tone, history = false) {
     const raw = compactText(row?.signalLine || row?.subStrategy || row?.reason || row?.state || "", history ? 120 : 72);
     if (!history && tone === "prepare" && /暫停進場區顯示|市場來源/.test(raw)) return row?.state && row.state !== "待確認" ? row.state : "預備進場";
@@ -4047,7 +4058,11 @@
     if (!FIXED_CANVAS_PERSIST_ROUTES.includes(route)) return false;
     const panel = panelForRoute(route);
     if (!panel) return false;
-    if (panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell")) return true;
+    const existingShell = panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell");
+    if (existingShell) {
+      if (isWarrantFlowRoute(route)) ensureWarrantTabsMount(existingShell);
+      return true;
+    }
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-fixed-shell-panel");
     const meta = strategyMeta(route);
@@ -4057,6 +4072,7 @@
     const header = panel.querySelector(":scope > header");
     if (header) header.insertAdjacentHTML("afterend", html);
     else panel.insertAdjacentHTML("afterbegin", html);
+    if (isWarrantFlowRoute(route)) ensureWarrantTabsMount(panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell"));
     return true;
   }
 
@@ -4065,6 +4081,28 @@
     document.documentElement.dataset.fumanPersistentFixedCanvasReady = "1";
     const run = () => {
       FIXED_CANVAS_PERSIST_ROUTES.forEach(ensurePersistentFixedCanvas);
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
+    else run();
+    new MutationObserver(() => run()).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  function installWarrantTabsHotfix() {
+    if (document.documentElement.dataset.fumanWarrantTabsHotfix === WARRANT_TABS_HOTFIX) return;
+    document.documentElement.dataset.fumanWarrantTabsHotfix = WARRANT_TABS_HOTFIX;
+    let activatedCurrentWarrantRoute = false;
+    const run = () => {
+      ensurePersistentFixedCanvas(WARRANT_FLOW_ROUTE);
+      const shell = panelForRoute(WARRANT_FLOW_ROUTE)?.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell");
+      ensureWarrantTabsMount(shell);
+      const link = document.querySelector('[data-view="warrant-flow"]');
+      if (link && !activatedCurrentWarrantRoute && (link.classList?.contains("active") || panelForRoute(WARRANT_FLOW_ROUTE)?.classList?.contains("active"))) {
+        activatedCurrentWarrantRoute = true;
+        activateFixedPageRoute(link, "warrant-tabs-hotfix");
+      } else if (isWarrantFlowRoute(canvasState.route)) {
+        updateWarrantFlowTabControls(shell);
+        scheduleCanvasDraw();
+      }
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
     else run();
@@ -4102,6 +4140,7 @@
     if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
+    if (isWarrantFlowRoute(key)) ensureWarrantTabsMount(shell);
     updateStrategySignalControls(shell);
     updateStrategy4ZoneControls(shell);
     updateChipTradeFilterControls(shell);
