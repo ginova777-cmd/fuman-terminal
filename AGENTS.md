@@ -1021,6 +1021,19 @@ npm run verify:live-version
 
 每日固定計算流程是 `run-scorecard-snapshot.ps1` / `npm run scorecard:sync`：從本機 DuckDB 匯出 `data/scorecard-latest.json`，發布到 Supabase snapshot，再跑 `npm run verify:scorecard`。這條流程更新資料，不需要每天 deploy Vercel。
 
+成績單上傳 / 部署規則：
+
+- 成績單每日資料更新只跑 `run-scorecard-snapshot.ps1` / `npm run scorecard:sync`，發布 Supabase snapshot `scorecard_latest`；不需要也不應該每天重新部署 Vercel。
+- 只改成績單文件或 AGENTS 交接文字時，只需要 commit / push；不需要 `vercel --prod`，因為正式 `/88` 畫面程式沒有變。
+- 只有修改 `88.html`、`api/scorecard.js`、`vercel.json`、scorecard scripts、package scripts 或 production route 時，才算成績單程式變更，必須跑完整 gate 後再由乾淨 worktree 上傳。
+- 上傳前必須確認工作樹只包含本次成績單相關檔案；`data/scan-receipts/*`、`data/mobile-analysis/*`、策略 scanner receipts、暫存輸出不得混入成績單程式 commit。
+- 上傳前必須確認 `.vercel/project.json` 指向正式 `fuman-terminal` project，不能讓 Vercel CLI 自動 link、不能部署到 preview / sync / publish-sync / 新 project。
+- `C:\fuman-terminal` 只作 production mirror；同步只能 `git pull --ff-only`，不要在 dirty 的 `C:\fuman-terminal` 直接改檔、commit 或部署。
+- 不可從 `C:\fuman-terminal-sync` 上傳或部署成績單；該路徑不是正式來源。
+- 不可用 Google Sheet、Streamlit、本機 JSON、version bump 或 Vercel redeploy side effect 假裝修好成績單資料。
+- 若需要正式 `/88` 立刻反映程式修改，流程是乾淨 worktree 修改 -> local gates -> `verify:publish-gate` -> commit -> push main -> `vercel --prod` -> live `/88` / `/api/scorecard` 驗證。
+- 若只是 Supabase snapshot 資料更新，流程是跑每日 snapshot job -> `npm run verify:scorecard` -> 確認 `/api/scorecard` cacheSource 是 `supabase-snapshot`；不要 commit receipts，不要 deploy。
+
 改成績單時必跑：
 
 ```text
