@@ -55,8 +55,7 @@ const authModeButtons = [...document.querySelectorAll("[data-auth-mode]")];
 const authLogoutButton = document.querySelector(".sidebar-foot .logout");
 const memberState = document.querySelector("#member-state");
 const supabaseClient = window.supabase?.createClient?.(FUMAN_SUPABASE_URL, FUMAN_SUPABASE_KEY);
-const PUBLIC_VIEWS = new Set(["market", "member", "chip-trade", "watchlist", "realtime-radar", "cb-detect"]);
-const FORCE_UNLOCKED_NAV_VIEWS = new Set(["realtime-radar", "cb-detect"]);
+const PUBLIC_VIEWS = new Set(["market", "member", "chip-trade", "watchlist"]);
 let authMode = "login";
 
 function setAuthMessage(text, type = "") {
@@ -83,17 +82,7 @@ function isTerminalUnlocked() {
 }
 
 function isProtectedView(viewName) {
-  return Boolean(viewName) && !PUBLIC_VIEWS.has(viewName) && !FORCE_UNLOCKED_NAV_VIEWS.has(viewName);
-}
-
-function stripForcedUnlockedNavLocks(root = document) {
-  FORCE_UNLOCKED_NAV_VIEWS.forEach((view) => {
-    root.querySelectorAll?.(`[data-view="${view}"]`).forEach((link) => {
-      link.classList.remove("member-locked-link");
-      link.removeAttribute("aria-disabled");
-      link.dataset.memberUnlocked = "1";
-    });
-  });
+  return Boolean(viewName) && !PUBLIC_VIEWS.has(viewName);
 }
 
 function getActiveViewName() {
@@ -172,7 +161,6 @@ function applyMemberLocks(viewName = getActiveViewName(), activeLink = null) {
   viewLinks.forEach((link) => {
     link.classList.toggle("member-locked-link", isProtectedView(link.dataset.view) && !unlocked);
   });
-  stripForcedUnlockedNavLocks();
   Object.entries(viewPanels).forEach(([name, panel]) => {
     const locked = name === viewName && isProtectedView(name) && !unlocked;
     panel?.classList.toggle("member-locked-view", locked);

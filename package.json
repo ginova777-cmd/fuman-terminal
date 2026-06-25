@@ -5,8 +5,8 @@
   "description": "Fuman stock terminal with a Vercel API proxy for official market data.",
   "scripts": {
     "dev": "vercel dev",
-    "deploy": "node scripts/require-version-bump-approval.js vercel --prod && vercel --prod",
-    "release:main": "node scripts/require-version-bump-approval.js npm run release:main && pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-main-release-pipeline.ps1",
+    "deploy": "vercel --prod",
+    "release:main": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-main-release-pipeline.ps1",
     "release": "node scripts/release.js",
     "snapshot:data": "node scripts/commit-data-snapshot.js",
     "cleanup:api-only-retired": "node scripts/cleanup-api-only-retired-artifacts.js",

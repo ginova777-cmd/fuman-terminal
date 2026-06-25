@@ -136,7 +136,7 @@ async function main() {
   assertOk("home", home, (r) => r.body.includes(`terminal-core.js?v=${version}`));
   const checks = [
     ["core", `/terminal-core.js?v=${version}`, (r) => r.body.includes("terminal-modules.js")],
-    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-flow.js")],
+    ["modules", `/terminal-modules.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_MODULES") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
     ["worker", `/terminal-worker.js?v=${version}`, (r) => r.body.includes("swingBuckets")],
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("FUMAN_TERMINAL_LOAD_FEATURE_MODULE") && r.body.includes("terminal-app.js")],

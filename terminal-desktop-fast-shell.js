@@ -1,14 +1,11 @@
 (function () {
-  const WARRANT_TABS_HOTFIX = "20260625-01";
   if (
     window.__fumanDesktopFastShell === "20260623-09"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260624-01"
     && window.__fumanOriginalDesktopMarket === "20260624-01"
-    && window.__fumanWarrantTabsHotfix === WARRANT_TABS_HOTFIX
   ) return;
   window.__fumanDesktopFastShell = "20260623-09";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260624-01";
-  window.__fumanWarrantTabsHotfix = WARRANT_TABS_HOTFIX;
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
   const SNAPSHOT_DB = "fuman-desktop-route-snapshots";
@@ -20,10 +17,9 @@
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
-  const WARRANT_FLOW_ROUTE = "warrant-flow|權證走向";
   const FIXED_ROUTE_KEYS = ["market|市場總覽", "chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
-  const API_ONLY_FIXED_ROUTE_KEYS = ["chip-trade|買賣超", CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
@@ -134,13 +130,12 @@
   installAutoLatencySampler();
   installPerformanceLogExport();
   installPersistentFixedCanvases();
-  document.documentElement.dataset.fumanOriginalDesktopMarket = "api-only-disabled";
+  installOriginalDesktopMarketBridge();
   installMarketApiOnlyHydrator();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
-  installWarrantTabsHotfix();
 
   function routeKey(link) {
     return `${link?.dataset?.view || ""}|${(link?.textContent || "").replace(/\s+/g, " ").trim()}`;
@@ -798,10 +793,6 @@
     return Number.isFinite(number) ? number : 0;
   }
 
-  function normalizeArray(value) {
-    return Array.isArray(value) ? value : [];
-  }
-
   function pickFirstValue(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== "");
   }
@@ -982,20 +973,12 @@
     return route === CHIP_TRADE_ROUTE;
   }
 
-  function isWarrantFlowRoute(route) {
-    return route === WARRANT_FLOW_ROUTE;
-  }
-
   function isApiBackedSnapshotItem(item) {
     return Boolean(item?.rows?.length) && !item.html;
   }
 
   function isDomDerivedSource(source) {
     return /dom|html|indexeddb|session/i.test(String(source || ""));
-  }
-
-  function isUnsafeFixedDomSource(source) {
-    return /(^|-)dom|(^|-)html/i.test(String(source || ""));
   }
 
   function isApiOnlyPollingRoute(route) {
@@ -1210,7 +1193,7 @@
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
       foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
       institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreignTrustVolumePct),
-      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume, merged.avg5Volume, merged.volume5dAvg, merged.avgVolume5d, merged.avg_volume_5),
+      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume),
       foreignLots: pickFirstValue(merged.foreignLots, merged.foreign_lots),
       ratio1: pickFirstValue(merged.ratio1, merged.ratio1000Week1),
       ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
@@ -1227,100 +1210,8 @@
     };
   }
 
-  function normalizeWarrantCanvasRow(row, index, group) {
-    const topWarrant = Array.isArray(row?.topWarrants) ? row.topWarrants[0] || {} : {};
-    const code = String(row?.underlyingCode || row?.code || "").trim();
-    const title = compactText(row?.underlyingName || row?.name || code || "--", 64);
-    const score = cleanNumber(row?.score || row?.finalScore || row?.warrantHeatScore);
-    const pct = row?.underlyingPercent ?? row?.percent ?? row?.changePercent ?? "";
-    const price = row?.underlyingClose ?? row?.close ?? row?.price ?? "";
-    const warrantCode = String(row?.warrantCode || row?.symbol || topWarrant.code || "").trim();
-    const warrantName = compactText(row?.warrantName || topWarrant.name || "", 44);
-    const thirtyMinuteVolume = cleanNumber(row?.thirtyMinuteVolume || row?.callVolume || row?.volume);
-    const floatingUnits = cleanNumber(row?.floatingUnits || row?.callCount || row?.breadth);
-    const volumeMultiple = cleanNumber(row?.volumeMultiple || row?.warrantHeatScore || row?.score);
-    const value = cleanNumber(row?.value || row?.totalSignalValue || row?.callValue);
-    const signalCount = cleanNumber(row?.estimatedLargeSignalCount || row?.largeSignalCount || row?.signalCount);
-    const actionLabel = compactText(row?.actionLabel || row?.signalGrade || (group === "single" ? "單檔權證訊號" : "標的熱度"), 32);
-    const reason = compactText(row?.reason || row?.stockSetupLabel || row?.branchLabel || "", 180);
-    const signalLine = group === "single"
-      ? compactText([warrantCode, warrantName, actionLabel, signalCount ? `${signalCount}筆` : ""].filter(Boolean).join(" ｜ "), 120)
-      : compactText([
-        warrantCode ? `熱門 ${warrantCode}` : "",
-        thirtyMinuteVolume ? `30分量 ${Math.round(thirtyMinuteVolume).toLocaleString("zh-TW")}` : "",
-        floatingUnits ? `廣度 ${Math.round(floatingUnits).toLocaleString("zh-TW")}` : "",
-        volumeMultiple ? `熱度 ${formatCanvasNumber(volumeMultiple, 1)}` : "",
-      ].filter(Boolean).join(" ｜ "), 120);
-    return {
-      rank: cleanNumber(row?.rank) || index + 1,
-      code,
-      title,
-      pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
-      price: price === "" || price == null ? "" : String(price),
-      score: score ? String(Math.round(score * 100) / 100) : "",
-      reason,
-      line: compactText([code, title, signalLine, reason].filter(Boolean).join(" ｜ "), 180),
-      signalLine,
-      strategyGroup: group,
-      strategyDisplay: group === "single" ? "策略B 單檔權證訊號" : "策略A 標的權證熱度",
-      warrantCode,
-      warrantName,
-      thirtyMinuteVolume,
-      floatingUnits,
-      volumeMultiple,
-      value,
-      signalCount,
-      actionLabel,
-      triggerReason: reason,
-      triggerTags: group === "single" ? [actionLabel, warrantCode].filter(Boolean) : ["標的熱度", warrantCode || "認購彙總"].filter(Boolean),
-    };
-  }
-
-  function isSingleWarrantSignalRow(row) {
-    const group = String(row?.strategyGroup || row?.group || row?.strategy || "").toLowerCase();
-    if (group === "single" || group === "b" || group.includes("single")) return true;
-    const text = String(row?.reason || row?.signalLine || row?.state || row?.actionLabel || "").trim();
-    return /^B[：:\s]/i.test(text) || /策略B|單檔/.test(text);
-  }
-
-  function normalizeWarrantCanvasRowsFromPayload(payload) {
-    const payloadRows = Array.isArray(payload?.rows) ? payload.rows : [];
-    const volumeSourceRows = Array.isArray(payload?.volumeMatches) && payload.volumeMatches.length
-      ? payload.volumeMatches
-      : payloadRows.filter((row) => !isSingleWarrantSignalRow(row));
-    const singleSourceRows = Array.isArray(payload?.singleSignals) && payload.singleSignals.length
-      ? payload.singleSignals
-      : payloadRows.filter(isSingleWarrantSignalRow);
-    const volumeRows = volumeSourceRows
-      .filter((row) => row && (row.underlyingCode || row.code))
-      .map((row, index) => normalizeWarrantCanvasRow(row, index, "volume"))
-      .filter((row) => row.code || row.title)
-      .sort((a, b) =>
-        cleanNumber(b.volumeMultiple) - cleanNumber(a.volumeMultiple) ||
-        cleanNumber(b.thirtyMinuteVolume) - cleanNumber(a.thirtyMinuteVolume) ||
-        cleanNumber(b.score) - cleanNumber(a.score)
-      )
-      .map((row, index) => ({ ...row, rank: index + 1 }));
-    const singleRows = singleSourceRows
-      .filter((row) => row && (row.underlyingCode || row.code || row.warrantCode))
-      .map((row, index) => normalizeWarrantCanvasRow(row, index, "single"))
-      .filter((row) => row.code || row.title)
-      .sort((a, b) =>
-        cleanNumber(b.value) - cleanNumber(a.value) ||
-        cleanNumber(b.signalCount) - cleanNumber(a.signalCount) ||
-        cleanNumber(b.score) - cleanNumber(a.score)
-      )
-      .map((row, index) => ({ ...row, rank: index + 1 }));
-    const singleCodes = new Set(singleRows.map((row) => row.code).filter(Boolean));
-    return [
-      ...volumeRows.map((row) => ({ ...row, hasSingleSignal: singleCodes.has(row.code) })),
-      ...singleRows,
-    ].slice(0, 120);
-  }
-
   function normalizeCanvasRowsFromPayload(payload, route = "") {
     if (isRoutePayloadNotDrawable(payload, route)) return [];
-    if (isWarrantFlowRoute(route)) return normalizeWarrantCanvasRowsFromPayload(payload);
     const limit = canvasOptionsForRoute(route).limit || 60;
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const arrays = flattenApiArrays(payload);
@@ -1404,7 +1295,6 @@
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return false;
-    if (FIXED_CANVAS_PERSIST_ROUTES.includes(route) && isUnsafeFixedDomSource(source)) return false;
     canvasStore.set(route, { rows: cleanRows, source, at });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
@@ -1420,8 +1310,6 @@
         return true;
       }
       updateStrategyFilterControls(currentCanvasShell());
-      updateChipTradeFilterControls(currentCanvasShell());
-      updateWarrantFlowTabControls(currentCanvasShell());
       scheduleCanvasDraw();
     }
     return true;
@@ -1440,10 +1328,8 @@
 
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
-    if (FIXED_CANVAS_PERSIST_ROUTES.includes(route) && isUnsafeFixedDomSource(memory?.source)) return [];
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
     const snapshot = routeSnapshots.get(route);
-    if (API_ONLY_FIXED_ROUTE_KEYS.includes(route) && snapshot?.html) return [];
     if (isStrategyRoute(route) && !isApiBackedSnapshotItem(snapshot)) return [];
     if (snapshot?.rows?.length) {
       setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now());
@@ -1510,15 +1396,12 @@
     const query = compactText(canvasState.query, 80).toLowerCase();
     const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
     const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
-    const warrantFilter = isWarrantFlowRoute(canvasState.route) ? compactText(canvasState.signalFilter || "volume", 16) : "";
     const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
     canvasState.filtered = canvasState.rows.filter((row) => {
       if (zoneFilter && String(row.swingZone || "").toUpperCase() !== zoneFilter) return false;
       const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
       if (chipFilter && !matchesChipTradeFilter(row, chipFilter)) return false;
-      if (warrantFilter === "single" && row.strategyGroup !== "single") return false;
-      if (warrantFilter !== "single" && isWarrantFlowRoute(canvasState.route) && row.strategyGroup === "single") return false;
       if (!query) return true;
       return [
         row.code,
@@ -1532,11 +1415,6 @@
         row.volumeRatio,
         row.tradeValue,
         row.legal5d,
-        row.strategyGroup,
-        row.strategyDisplay,
-        row.warrantCode,
-        row.warrantName,
-        row.actionLabel,
       ].join(" ").toLowerCase().includes(query);
     });
     const pageSize = canvasPageSizeForRoute();
@@ -1569,7 +1447,7 @@
   function chipTradeForeignTrustVolumePct(row) {
     const explicit = cleanNumber(row?.foreignTrustBuyVolumePct || row?.institutionBuyVolumePct || row?.foreignTrustVolumePct);
     if (explicit > 0) return explicit;
-    const avgVolume = cleanNumber(row?.fiveDayAvgVolume || row?.five_day_avg_volume || row?.avg5Volume || row?.volume5dAvg || row?.avgVolume5d || row?.avg_volume_5);
+    const avgVolume = cleanNumber(row?.fiveDayAvgVolume || row?.five_day_avg_volume);
     if (avgVolume <= 0) return 0;
     return ((cleanNumber(row?.foreign) + cleanNumber(row?.trust)) / avgVolume) * 100;
   }
@@ -2249,8 +2127,6 @@
         if (!isChipTradeRoute(canvasState.route)) return;
         const next = chipFilter.dataset.chipCanvasFilter || CHIP_TRADE_DEFAULT_FILTER;
         if (canvasState.signalFilter === next && canvasState.rows.length) return;
-        const previousEndpoint = endpointForRoute(canvasState.route);
-        const nextEndpoint = CHIP_TRADE_FILTERS.find((item) => item.key === next)?.endpoint || CANVAS_ENDPOINTS[canvasState.route] || "";
         canvasState.signalFilter = next;
         canvasState.offset = 0;
         canvasState.hoverIndex = -1;
@@ -2258,12 +2134,8 @@
         hideCanvasDetail();
         applyCanvasFilter();
         updateChipTradeFilterControls(currentCanvasShell());
-        scheduleCanvasDraw();
-        if (previousEndpoint === nextEndpoint && canvasState.rows.length) {
-          setCanvasStatus("買賣超策略套用");
-          return;
-        }
         setCanvasStatus("買賣超策略更新中");
+        scheduleCanvasDraw();
         fetchCanvasRows(canvasState.route, true).then(() => {
           if (!isChipTradeRoute(canvasState.route) || canvasState.signalFilter !== next) return;
           applyCanvasFilter();
@@ -2271,23 +2143,6 @@
           setCanvasStatus("買賣超策略套用");
           scheduleCanvasDraw();
         }).catch(() => setCanvasStatus("沿用快照"));
-        return;
-      }
-      const warrantTab = event.target.closest?.("[data-warrant-canvas-tab]");
-      if (warrantTab) {
-        event.preventDefault();
-        if (!isWarrantFlowRoute(canvasState.route)) return;
-        const next = warrantTab.dataset.warrantCanvasTab || "volume";
-        if (canvasState.signalFilter === next && canvasState.rows.length) return;
-        canvasState.signalFilter = next;
-        canvasState.offset = 0;
-        canvasState.hoverIndex = -1;
-        canvasState.selectedIndex = -1;
-        hideCanvasDetail();
-        applyCanvasFilter();
-        updateWarrantFlowTabControls(currentCanvasShell());
-        setCanvasStatus(next === "single" ? "策略B 單檔訊號" : "策略A 標的熱度");
-        scheduleCanvasDraw();
         return;
       }
       const zoneFilter = event.target.closest?.("[data-strategy4-zone-filter]");
@@ -2357,7 +2212,6 @@
     document.addEventListener("wheel", (event) => {
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
-      if (FIXED_CANVAS_PERSIST_ROUTES.includes(canvasState.route)) return;
       if (canvasPageSizeForRoute()) return;
       const direction = event.deltaY > 0 ? 1 : -1;
       const step = Math.max(1, Math.min(8, Math.round(Math.abs(event.deltaY) / 42)));
@@ -2374,7 +2228,6 @@
     document.addEventListener("keydown", (event) => {
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
-      if (FIXED_CANVAS_PERSIST_ROUTES.includes(canvasState.route)) return;
       const capacity = visibleCanvasCapacity(canvas);
       const pageSize = canvasPageSizeForRoute();
       const oldOffset = canvasState.offset;
@@ -2754,10 +2607,6 @@
       drawChipTradeCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
       return;
     }
-    if (isWarrantFlowRoute(canvasState.route)) {
-      drawWarrantFlowCanvasRows(ctx, colors, width, height, rows, source || "", headerHeight);
-      return;
-    }
 
     ctx.fillStyle = colors.header;
     roundRect(ctx, 24, 88, width - 48, 38, 12);
@@ -2960,103 +2809,6 @@
     ctx.fillText(`${CHIP_TRADE_FILTERS.find((item) => item.key === activeFilter)?.label || "買賣超"}｜${compactText(source || "snapshot", 24)}`, 32, height - 24);
   }
 
-  function drawWarrantSectionHeader(ctx, colors, x, y, width, title, subtitle, count) {
-    ctx.fillStyle = colors.header;
-    roundRect(ctx, x, y, width, 34, 10);
-    ctx.fill();
-    ctx.fillStyle = colors.accent;
-    ctx.font = "900 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(title, x + 14, y + 22);
-    ctx.fillStyle = colors.muted;
-    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(compactText(subtitle, 58), x + 210, y + 22);
-    ctx.textAlign = "right";
-    ctx.fillText(`${count} 筆`, x + width - 14, y + 22);
-    ctx.textAlign = "left";
-  }
-
-  function drawWarrantMiniColumns(ctx, colors, y, width, single = false) {
-    ctx.fillStyle = colors.muted;
-    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    const labels = single
-      ? [["Rank", 46], ["Code", 106], ["單檔權證", 184], ["金額", width - 390], ["訊號", width - 274], ["Score", width - 150], ["Change", width - 72]]
-      : [["Rank", 46], ["Code", 106], ["標的熱度", 184], ["30分量", width - 430], ["廣度", width - 322], ["熱度", width - 230], ["Score", width - 150], ["Change", width - 72]];
-    labels.forEach(([label, x], index) => {
-      ctx.textAlign = index >= 3 ? "right" : "left";
-      ctx.fillText(label, x, y);
-    });
-    ctx.textAlign = "left";
-  }
-
-  function drawWarrantFlowCanvasRows(ctx, colors, width, height, rows, source, headerHeight) {
-    const volumeRows = rows.filter((row) => row.strategyGroup !== "single");
-    const singleRows = rows.filter((row) => row.strategyGroup === "single");
-    const activeSingle = canvasState.signalFilter === "single";
-    const activeRows = activeSingle ? singleRows : volumeRows;
-    const rowHeight = 36;
-    const topY = 88;
-    const visibleLimit = Math.max(5, Math.min(12, Math.floor((Math.max(320, height - topY - 72)) / rowHeight)));
-
-    drawWarrantSectionHeader(
-      ctx,
-      colors,
-      24,
-      topY,
-      width - 48,
-      activeSingle ? "策略B 單檔權證訊號" : "策略A 標的權證熱度",
-      activeSingle ? "singleSignals：看單一權證大額與連續訊號" : "volumeMatches：看標的認購熱度與資金聚集；火焰代表同時命中策略B",
-      activeRows.length
-    );
-    drawWarrantMiniColumns(ctx, colors, topY + 56, width, activeSingle);
-    activeRows.slice(0, visibleLimit).forEach((row, index) => {
-      const y = topY + 86 + index * rowHeight;
-      const pctText = row.pct || "--";
-      ctx.fillStyle = index % 2 ? colors.rowAlt : colors.row;
-      roundRect(ctx, 24, y - 24, width - 48, 30, 8);
-      ctx.fill();
-      ctx.fillStyle = colors.accent;
-      ctx.font = "900 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(String(row.rank || index + 1), 48, y - 3);
-      ctx.fillStyle = colors.blue;
-      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(row.code || "--", 106, y - 3);
-      ctx.fillStyle = colors.text;
-      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      const namePrefix = !activeSingle && row.hasSingleSignal ? "🔥 " : "";
-      ctx.fillText(compactText(`${namePrefix}${row.title || "--"} ${row.warrantCode ? `· ${row.warrantCode}` : ""}`, 42), 184, y - 8);
-      ctx.fillStyle = colors.muted;
-      ctx.font = "12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(compactText(activeSingle ? row.warrantName || row.reason || "" : row.reason || row.signalLine || "", 72), 184, y + 8);
-      ctx.textAlign = "right";
-      ctx.fillStyle = colors.text;
-      ctx.font = "800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      if (activeSingle) {
-        ctx.fillText(formatYi(row.value), width - 390, y - 3);
-        ctx.fillStyle = colors.accent;
-        ctx.fillText(row.actionLabel || "--", width - 274, y - 3);
-      } else {
-        ctx.fillText(formatCanvasNumber(row.thirtyMinuteVolume, 0), width - 430, y - 3);
-        ctx.fillText(formatCanvasNumber(row.floatingUnits, 0), width - 322, y - 3);
-        ctx.fillStyle = colors.accent;
-        ctx.fillText(formatCanvasNumber(row.volumeMultiple, 1), width - 230, y - 3);
-      }
-      ctx.fillStyle = colors.text;
-      ctx.fillText(row.score || "--", width - 150, y - 3);
-      ctx.fillStyle = String(pctText).includes("-") ? colors.down : colors.up;
-      ctx.fillText(pctText, width - 72, y - 3);
-      ctx.textAlign = "left";
-    });
-
-    if (!activeRows.length) {
-      ctx.fillStyle = colors.muted;
-      ctx.font = "800 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(activeSingle ? "策略B 單檔權證訊號同步中。" : "策略A 標的權證熱度同步中。", 44, 164);
-    }
-    ctx.fillStyle = colors.muted;
-    ctx.font = "700 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(`策略A ${warrantFlowTabCount(canvasState.rows, "volume")}｜策略B ${warrantFlowTabCount(canvasState.rows, "single")}｜${compactText(source || "snapshot", 26)}`, 32, height - 24);
-  }
-
   function formatCanvasNumber(value, digits = 0) {
     const number = cleanNumber(value);
     if (!Number.isFinite(number)) return "--";
@@ -3229,33 +2981,6 @@
         </button>
       `;
     }).join("");
-  }
-
-  function warrantFlowTabCount(rows, tab) {
-    return (Array.isArray(rows) ? rows : []).filter((row) => tab === "single" ? row.strategyGroup === "single" : row.strategyGroup !== "single").length;
-  }
-
-  function updateWarrantFlowTabControls(shell) {
-    const panel = shell || currentCanvasShell();
-    if (!panel) return;
-    const wrap = panel.querySelector("[data-warrant-canvas-tabs]");
-    if (!wrap) return;
-    if (!isWarrantFlowRoute(canvasState.route)) {
-      wrap.hidden = true;
-      wrap.innerHTML = "";
-      return;
-    }
-    const active = canvasState.signalFilter === "single" ? "single" : "volume";
-    const tabs = [
-      { key: "volume", label: "策略A 標的熱度", note: "volumeMatches", count: warrantFlowTabCount(canvasState.rows, "volume") },
-      { key: "single", label: "策略B 單檔訊號", note: "singleSignals", count: warrantFlowTabCount(canvasState.rows, "single") },
-    ];
-    wrap.hidden = false;
-    wrap.innerHTML = tabs.map((item) => `
-      <button type="button" data-warrant-canvas-tab="${escapeHtml(item.key)}" class="${active === item.key ? "active" : ""}">
-        ${escapeHtml(item.label)} <b>${escapeHtml(String(item.count))}</b><small>${escapeHtml(item.note)}</small>
-      </button>
-    `).join("");
   }
 
   function updateStrategyFilterControls(shell) {
@@ -3448,66 +3173,6 @@
     const n = Number(value || 0);
     if (!Number.isFinite(n) || !n) return "--";
     return n >= 100000000 ? `${(n / 100000000).toFixed(n >= 1000000000 ? 1 : 2)} 億` : `${n.toLocaleString("zh-TW")}`;
-  }
-
-  function formatMarketIndexValue(value, digits = 2) {
-    const number = cleanNumber(value);
-    if (!number) return "--";
-    return number.toLocaleString("zh-TW", {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    });
-  }
-
-  function formatMarketIndexChange(record) {
-    const sign = String(record?.["漲跌"] || record?.sign || "").trim() === "-" ? "-" : "+";
-    const points = cleanNumber(record?.["漲跌點數"] ?? record?.change ?? record?.diff);
-    const pct = cleanNumber(record?.["漲跌百分比"] ?? record?.pct ?? record?.percent);
-    const signedPoints = `${sign}${Math.abs(points).toFixed(2)}`;
-    const signedPct = `${sign}${Math.abs(pct).toFixed(2)}%`;
-    return `${signedPoints} (${signedPct})`;
-  }
-
-  function renderMarketIndexesApi(marketPayload) {
-    const cards = [...document.querySelectorAll(".metric-card")];
-    if (!cards.length) return;
-    const indexes = normalizeArray(marketPayload?.indexes);
-    const targets = [
-      { keyword: "發行量加權", label: "加權指數", card: cards[0] },
-      { keyword: "櫃買", label: "櫃買指數", card: cards[1] },
-    ];
-    targets.forEach((target) => {
-      const record = indexes.find((item) => String(item?.["指數"] || item?.["指數/報酬指數"] || item?.name || "").includes(target.keyword));
-      if (!record || !target.card) return;
-      const sign = String(record?.["漲跌"] || record?.sign || "").trim() === "-" ? "-" : "+";
-      const value = record?.["收盤指數"] ?? record?.close ?? record?.price;
-      target.card.innerHTML = `
-        <span>↗ ${escapeHtml(target.label)}</span>
-        <strong>${escapeHtml(formatMarketIndexValue(value, 2))}</strong>
-        <em class="${sign === "-" ? "up" : "down"}">${escapeHtml(formatMarketIndexChange(record))}</em>
-      `;
-    });
-
-    const near = marketPayload?.futuresNear || marketPayload?.futures || null;
-    const statusLabel = {
-      day: "日盤進行中",
-      night: "夜盤進行中",
-      closed: "已收盤",
-    }[marketPayload?.marketStatus] || "";
-    if (cards[2]) {
-      if (near?.price && cleanNumber(near.price) > 0) {
-        const sign = String(near.change || "").startsWith("-") ? "-" : "+";
-        cards[2].innerHTML = `
-          <span>⇅ 台指期夜盤</span>
-          <strong>${escapeHtml(formatMarketIndexValue(near.price, 0))}</strong>
-          <em class="${sign === "-" ? "up" : "down"}">${escapeHtml(near.change || "--")} (${escapeHtml(near.pct || "--")})</em>
-          ${near.basisLabel ? `<small class="metric-signal ${near.basisSide === "short" ? "green" : near.basisSide === "long" ? "red" : ""}">${escapeHtml(near.basisLabel)}</small>` : statusLabel ? `<small>${escapeHtml(statusLabel)}</small>` : ""}
-        `;
-      } else {
-        cards[2].innerHTML = `<span>⇅ 台指期夜盤</span><strong>--</strong><em>${escapeHtml(statusLabel || "等待資料")}</em>`;
-      }
-    }
-    if (cards[3]) cards[3].remove();
   }
 
   function formatMarketHeatmapPrice(value) {
@@ -3910,21 +3575,17 @@
     if (!isMarketViewActive() || marketApiOnlyLoading) return;
     marketApiOnlyLoading = true;
     Promise.all([
-      fetch(marketApiUrl("/api/market", 24), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
       fetch(marketApiUrl("/api/heatmap", 60), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
       fetch(marketApiUrl("/api/realtime-radar-latest", 20), { cache: force ? "no-store" : "default" }).then((res) => res.ok ? res.json() : null).catch(() => null),
-    ]).then(([marketPayload, heatmapPayload, radarPayload]) => {
+    ]).then(([heatmapPayload, radarPayload]) => {
       const signature = JSON.stringify({
-        market: marketPayload?.updatedAt || marketPayload?.indexes?.[0]?.["收盤指數"] || "",
         heatmap: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || heatmapPayload?.stockCount || "",
         radar: radarPayload?.updatedAt || radarPayload?.timestamp || radarPayload?.rows?.[0]?.detectedAt || "",
-        indexCount: normalizeArray(marketPayload?.indexes).length,
         heatmapCount: heatmapPayload?.sectorCount || normalizeArray(heatmapPayload?.sectors).length,
         radarCount: normalizeArray(radarPayload?.rows).length,
       });
       if (!force && signature === marketApiOnlySignature) return;
       marketApiOnlySignature = signature;
-      if (marketPayload?.ok !== false) renderMarketIndexesApi(marketPayload || {});
       if (heatmapPayload?.sectors?.length) renderMarketHeatmapApi(heatmapPayload.sectors, heatmapPayload);
       renderMarketApiAi(heatmapPayload || {}, radarPayload || {});
       renderMarketApiRadar(radarPayload || {});
@@ -3998,19 +3659,11 @@
         <div class="desktop-strategy4-zone-filters" data-strategy4-zone-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
-        <div class="desktop-warrant-flow-tabs" data-warrant-canvas-tabs hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
         <div class="desktop-canvas-detail" hidden></div>
       </section>
     `;
-  }
-
-  function ensureWarrantTabsMount(shell) {
-    if (!shell || shell.querySelector("[data-warrant-canvas-tabs]")) return;
-    const canvas = shell.querySelector(".desktop-route-canvas");
-    if (!canvas) return;
-    canvas.insertAdjacentHTML("beforebegin", '<div class="desktop-warrant-flow-tabs" data-warrant-canvas-tabs hidden></div>');
   }
 
   function strategy2NoteLabel(row, tone, history = false) {
@@ -4146,11 +3799,7 @@
     if (!FIXED_CANVAS_PERSIST_ROUTES.includes(route)) return false;
     const panel = panelForRoute(route);
     if (!panel) return false;
-    const existingShell = panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell");
-    if (existingShell) {
-      if (isWarrantFlowRoute(route)) ensureWarrantTabsMount(existingShell);
-      return true;
-    }
+    if (panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell")) return true;
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-fixed-shell-panel");
     const meta = strategyMeta(route);
@@ -4160,7 +3809,6 @@
     const header = panel.querySelector(":scope > header");
     if (header) header.insertAdjacentHTML("afterend", html);
     else panel.insertAdjacentHTML("afterbegin", html);
-    if (isWarrantFlowRoute(route)) ensureWarrantTabsMount(panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell"));
     return true;
   }
 
@@ -4169,28 +3817,6 @@
     document.documentElement.dataset.fumanPersistentFixedCanvasReady = "1";
     const run = () => {
       FIXED_CANVAS_PERSIST_ROUTES.forEach(ensurePersistentFixedCanvas);
-    };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
-    else run();
-    new MutationObserver(() => run()).observe(document.documentElement, { childList: true, subtree: true });
-  }
-
-  function installWarrantTabsHotfix() {
-    if (document.documentElement.dataset.fumanWarrantTabsHotfix === WARRANT_TABS_HOTFIX) return;
-    document.documentElement.dataset.fumanWarrantTabsHotfix = WARRANT_TABS_HOTFIX;
-    let activatedCurrentWarrantRoute = false;
-    const run = () => {
-      ensurePersistentFixedCanvas(WARRANT_FLOW_ROUTE);
-      const shell = panelForRoute(WARRANT_FLOW_ROUTE)?.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell");
-      ensureWarrantTabsMount(shell);
-      const link = document.querySelector('[data-view="warrant-flow"]');
-      if (link && !activatedCurrentWarrantRoute && (link.classList?.contains("active") || panelForRoute(WARRANT_FLOW_ROUTE)?.classList?.contains("active"))) {
-        activatedCurrentWarrantRoute = true;
-        activateFixedPageRoute(link, "warrant-tabs-hotfix");
-      } else if (isWarrantFlowRoute(canvasState.route)) {
-        updateWarrantFlowTabControls(shell);
-        scheduleCanvasDraw();
-      }
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
     else run();
@@ -4228,11 +3854,9 @@
     if (status) status.textContent = canvasWorkerReady ? canvasWorkerMode : canvasState.source || "shell";
     if (input && document.activeElement !== input) input.value = canvasState.query || "";
     if (canvas) canvas.setAttribute("aria-label", `${meta.title} Canvas 快速列表`);
-    if (isWarrantFlowRoute(key)) ensureWarrantTabsMount(shell);
     updateStrategySignalControls(shell);
     updateStrategy4ZoneControls(shell);
     updateChipTradeFilterControls(shell);
-    updateWarrantFlowTabControls(shell);
     updateCanvasPagination(shell);
     return canvas;
   }
@@ -4249,7 +3873,7 @@
     canvasState.source = source || stored?.source || "shell";
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
-      canvasState.signalFilter = isWarrantFlowRoute(key) ? "volume" : "";
+      canvasState.signalFilter = "";
       canvasState.zoneFilter = "";
       canvasState.offset = 0;
       canvasState.hoverIndex = -1;
@@ -5229,8 +4853,7 @@
         margin-top: 18px;
       }
       .desktop-strategy4-zone-filters,
-      .desktop-strategy4-signal-filters,
-      .desktop-warrant-flow-tabs {
+      .desktop-strategy4-signal-filters {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -5244,13 +4867,11 @@
         margin-top: 6px;
       }
       .desktop-strategy4-zone-filters[hidden],
-      .desktop-strategy4-signal-filters[hidden],
-      .desktop-warrant-flow-tabs[hidden] {
+      .desktop-strategy4-signal-filters[hidden] {
         display: none !important;
       }
       .desktop-strategy4-zone-filters button,
-      .desktop-strategy4-signal-filters button,
-      .desktop-warrant-flow-tabs button {
+      .desktop-strategy4-signal-filters button {
         min-height: 34px;
         border: 1px solid rgba(148,163,184,0.18);
         border-radius: 10px;
@@ -5261,24 +4882,15 @@
         cursor: pointer;
       }
       .desktop-strategy4-zone-filters button.active,
-      .desktop-strategy4-signal-filters button.active,
-      .desktop-warrant-flow-tabs button.active {
+      .desktop-strategy4-signal-filters button.active {
         border-color: rgba(255,112,55,0.68);
         color: #fff3e9;
         background: rgba(255,112,55,0.18);
       }
       .desktop-strategy4-zone-filters b,
-      .desktop-strategy4-signal-filters b,
-      .desktop-warrant-flow-tabs b {
+      .desktop-strategy4-signal-filters b {
         margin-left: 5px;
         color: #ffb27b;
-      }
-      .desktop-warrant-flow-tabs small {
-        display: block;
-        margin-top: 2px;
-        color: #8fb3e8;
-        font-size: 10px;
-        font-weight: 800;
       }
       .desktop-canvas-search-wrap {
         display: grid;
@@ -5466,22 +5078,19 @@
           color: #64748b;
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters button,
-        body.fuman-light-theme .desktop-strategy4-signal-filters button,
-        body.fuman-light-theme .desktop-warrant-flow-tabs button {
+        body.fuman-light-theme .desktop-strategy4-signal-filters button {
           border-color: #cbd8e6;
           color: #334155;
           background: rgba(255,255,255,0.9);
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters button.active,
-        body.fuman-light-theme .desktop-strategy4-signal-filters button.active,
-        body.fuman-light-theme .desktop-warrant-flow-tabs button.active {
+        body.fuman-light-theme .desktop-strategy4-signal-filters button.active {
           border-color: rgba(249,115,22,0.5);
           color: #c2410c;
           background: #fff7ed;
         }
         body.fuman-light-theme .desktop-strategy4-zone-filters b,
-        body.fuman-light-theme .desktop-strategy4-signal-filters b,
-        body.fuman-light-theme .desktop-warrant-flow-tabs b {
+        body.fuman-light-theme .desktop-strategy4-signal-filters b {
           color: #ea580c;
         }
         body.fuman-light-theme .desktop-route-shell-grid article {
@@ -5743,16 +5352,14 @@
           color: #64748b !important;
         }
         html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button,
-        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button,
-        html body.fuman-light-theme.public-terminal .desktop-warrant-flow-tabs button {
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button {
           border-color: #cbd8e6 !important;
           background: #ffffff !important;
           color: #334155 !important;
           box-shadow: none !important;
         }
         html body.fuman-light-theme.public-terminal .desktop-strategy4-zone-filters button.active,
-        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active,
-        html body.fuman-light-theme.public-terminal .desktop-warrant-flow-tabs button.active {
+        html body.fuman-light-theme.public-terminal .desktop-strategy4-signal-filters button.active {
           border-color: rgba(249, 115, 22, 0.55) !important;
           background: #fff7ed !important;
           color: #c2410c !important;

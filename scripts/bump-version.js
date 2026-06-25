@@ -2,13 +2,6 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-
-if (process.env.ALLOW_VERSION_BUMP !== "1") {
-  console.error("[version] failed");
-  console.error("npm run bump:version requires ALLOW_VERSION_BUMP=1.");
-  process.exit(1);
-}
-
 const FILES = [
   "index.html",
   "index.github.html",

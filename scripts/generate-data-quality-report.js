@@ -6,6 +6,7 @@ const FILES = [
   "market-summary.json",
   "strategy2-intraday-latest.json",
   "realtime-radar-latest.json",
+  "institution-latest.json",
   "warrant-flow-latest.json",
 ];
 const TRUSTED_STRATEGY2_MA35_SOURCES = new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]);
