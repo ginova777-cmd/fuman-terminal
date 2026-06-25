@@ -14,7 +14,7 @@ Last updated: 2026-06-25 Asia/Taipei
 - 架構以 Supabase API / snapshot 為資料核心
 - 桌面與手機都走固定 shell、快照優先、即時資料分流
 - 策略2當沖維持即時，不冷處理
-- 其他策略與籌碼頁面盡量走後端預產 route snapshot
+- 其他策略與籌碼頁面走「上一個完整掃」/ 後端預產 route snapshot
 - 不靠 bump 版本號解決資料或手感問題
 - 不靠 Google Sheet、靜態 JSON、瀏覽器強刷、舊 workflow 當正式資料來源
 
@@ -79,6 +79,26 @@ scanner / writer
 - Supabase complete run
 - Supabase route snapshot
 - API 回傳的 `runId` / `snapshotId` / `updatedAt` / `usedDate`
+
+## 資料日期規則
+
+只有以下頁面必須是當天資料：
+
+- 市場總覽
+- 策略2當沖
+- 即時雷達
+
+以下頁面是「每天固定完整掃後更新」，在完整掃尚未安排或尚未跑完前，顯示前一個完整掃結果是正常行為：
+
+- 策略1
+- 策略3
+- 策略4
+- 策略5
+- 買賣超
+- CB
+- 權證走向
+
+驗證腳本不可把上述完整掃頁面因為日期是前一天就判成 stale。這些頁面的正確 gate 是 `latest-complete`：必須有 Supabase complete run、readback、result count / completeness 合理；但不要求 `scan_date` 一定等於今天。只有 `RUN_GATE_DATE_STRICT` 指定的 live 頁才需要 same-day，預設只包含 `strategy2`。
 
 策略快照 / API gate 不能只看 `run_id`。所有策略資料接入 desktop snapshot 或 terminal fast bundle 前，至少要核對：
 
