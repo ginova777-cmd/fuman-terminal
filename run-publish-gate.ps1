@@ -8,6 +8,17 @@ $syncRoot = $PSScriptRoot
 $runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $receiptDir = Join-Path $runtimeRoot "data\scan-receipts"
 
+Push-Location $syncRoot
+try {
+  & npm.cmd run verify:publish-gate
+  $contractExit = $LASTEXITCODE
+} finally {
+  Pop-Location
+}
+if ($contractExit -ne 0) {
+  exit $contractExit
+}
+
 function Read-JsonFile($path) {
   if (-not (Test-Path -LiteralPath $path)) { return $null }
   try { return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop } catch { return $null }

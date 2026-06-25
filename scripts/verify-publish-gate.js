@@ -173,6 +173,7 @@ const gate = read("run-live-freshness-gate.ps1");
 const fullScan = read("run-full-scan.ps1");
 const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
+const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
 const openBuyLatestApi = read("api/open-buy-latest.js");
@@ -225,6 +226,12 @@ assertNoPatternInExistingFiles([
   "api/market-overview-latest.js",
   "lib/desktop-route-snapshot-cache.js",
 ], /google\s*sheet|googlesheet|sheets\.googleapis|docs\.google\.com\/spreadsheets/i, "must not use Google Sheet as a production data source");
+if (!/verify:publish-gate/.test(prepareDeploy)) {
+  issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
+}
+if (!/verify:publish-gate/.test(publishGate)) {
+  issues.push("run-publish-gate.ps1 must run verify:publish-gate before freshness publish");
+}
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }

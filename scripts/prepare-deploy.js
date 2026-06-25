@@ -25,6 +25,7 @@ function runCheck(label, command) {
 }
 
 run("guard:source", ["npm", "run", "guard:source"]);
+run("verify:publish-gate", ["npm", "run", "verify:publish-gate"]);
 run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
 run("verify:bump", ["npm", "run", "verify:bump"]);
 run("verify:terminal-modules", ["npm", "run", "verify:terminal-modules"]);
