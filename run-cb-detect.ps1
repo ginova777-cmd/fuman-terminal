@@ -23,6 +23,16 @@ try {
     "CB detect full scan failed with exit code $exitCode" >> $log
     exit $exitCode
   }
+  $snapshotScript = Join-Path $codeRepo "refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      "CB detect desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+      exit $LASTEXITCODE
+    }
+  } else {
+    "CB detect desktop snapshot refresh skipped; helper not found." >> $log
+  }
   & $nodeExe "scripts\sync-afterhours-supabase-status.js" "--source=fuman_afterhours_cb" "--require=cb" "--optional=institution,warrant" 2>&1 | ForEach-Object { $_ | Out-File -LiteralPath $log -Append -Encoding utf8 }
   $supabaseExit = $LASTEXITCODE
   if ($supabaseExit -ne 0) {

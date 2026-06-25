@@ -116,6 +116,16 @@ function Invoke-NpmAt($root, $scriptName) {
   }
 }
 
+function Invoke-DesktopRouteSnapshotRefresh($source) {
+  $scriptPath = Join-Path $syncRoot "refresh-desktop-route-snapshot.ps1"
+  if (-not (Test-Path -LiteralPath $scriptPath)) {
+    throw "desktop route snapshot helper missing: $scriptPath"
+  }
+  $null = Invoke-GateCommand "desktop route snapshot refresh" {
+    & $scriptPath -Source $source -LogPath $log
+  }
+}
+
 function Read-GateJson($path) {
   return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
 }
@@ -406,6 +416,7 @@ try {
   }
 
   $gateMode = if ($SkipRawRefresh) { "publish" } elseif ($Fast) { "fast" } else { "full" }
+  Invoke-DesktopRouteSnapshotRefresh "live-freshness-gate-$gateMode"
   Invoke-NpmAt $publishRoot "verify:live-version"
   Write-GateLog "Legacy terminal freshness diagnostic disabled; not writing data/live-freshness-ok.json"
 

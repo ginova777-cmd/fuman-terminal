@@ -91,5 +91,16 @@ for ($attempt = 1; $attempt -le 6; $attempt++) {
   }
 }
 if (-not $apiVerified) { throw "Strategy3 complete API verification failed after retries: $lastApiError" }
+
+$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "strategy3" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+  }
+} else {
+  Write-Strategy3CompleteLog "Strategy3 desktop snapshot refresh skipped; helper not found."
+}
+
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
 

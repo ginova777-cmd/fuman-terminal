@@ -44,6 +44,18 @@ if ($scanExit -ne 0) {
   exit $scanExit
 }
 
+$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "warrant-flow" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    "Warrant flow desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+    Write-FumanFlowHealth -Scope warrant -Status publish_delayed -Message "Warrant flow scan succeeded but desktop snapshot refresh failed" -Detail @{ exitCode = $LASTEXITCODE; log = $log }
+    exit $LASTEXITCODE
+  }
+} else {
+  "Warrant flow desktop snapshot refresh skipped; helper not found." >> $log
+}
+
 $publishOk = $false
 $syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 if (Test-Path $syncScript) {

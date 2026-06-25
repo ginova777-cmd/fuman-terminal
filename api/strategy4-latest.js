@@ -16,6 +16,8 @@ const RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_
 const EXPECTED_SCHEMA = "strategy4-cache-v3-unit-contract";
 const EXPECTED_UNIT = "lots";
 const EXPECTED_SOURCE = "supabase:strategy4_daily_ohlcv_view";
+const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
+const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, LEGACY_LOTS_SOURCE]);
 
 function apiOnlyError(error, detail = "") {
   return {
@@ -76,6 +78,11 @@ async function fetchExactCount(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function isAllowedDataContractSource(value) {
+  const source = String(value || "").trim();
+  return !source || ALLOWED_DATA_CONTRACT_SOURCES.has(source);
 }
 
 function parseRequestOptions(request) {
@@ -245,7 +252,7 @@ async function fetchLatestCompleteRun() {
     if (!candidate?.run_id) return false;
     if (candidate.schema_version && candidate.schema_version !== EXPECTED_SCHEMA) return false;
     if (candidate.volume_unit && candidate.volume_unit !== EXPECTED_UNIT) return false;
-    if (candidate.data_contract_source && candidate.data_contract_source !== EXPECTED_SOURCE) return false;
+    if (!isAllowedDataContractSource(candidate.data_contract_source)) return false;
     return true;
   });
   if (!row?.run_id) return null;
@@ -304,7 +311,7 @@ module.exports = async function handler(request, response) {
     payload.transport.gate = latest.gate || "";
     payload.transport.runId = latest.runId || payload.transport.runId || "";
     payload.runId = latest.runId || payload.runId || "";
-    if (payload.schemaVersion !== EXPECTED_SCHEMA || payload.volumeUnit !== EXPECTED_UNIT || payload.dataContractSource !== EXPECTED_SOURCE) {
+    if (payload.schemaVersion !== EXPECTED_SCHEMA || payload.volumeUnit !== EXPECTED_UNIT || !isAllowedDataContractSource(payload.dataContractSource)) {
       response.status(409).json(apiOnlyError("strategy4_supabase_contract_mismatch"));
       return;
     }

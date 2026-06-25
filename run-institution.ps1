@@ -92,6 +92,18 @@ if ($scanExit -ne 0) {
   exit $scanExit
 }
 
+$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "institution" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    "Institution desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+    Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but desktop snapshot refresh failed" -Detail @{ exitCode = $LASTEXITCODE; log = $log }
+    exit $LASTEXITCODE
+  }
+} else {
+  "Institution desktop snapshot refresh skipped; helper not found." >> $log
+}
+
 "Institution scan succeeded; refreshing slim/top cache files before publish" >> $log
 $slimExit = Invoke-NodeScan "scripts\generate-slim-cache.js" "Institution slim refresh"
 if ($slimExit -ne 0) {

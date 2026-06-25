@@ -157,6 +157,17 @@ try {
   exit 1
 }
 
+$snapshotScript = Join-Path $repo "refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "strategy4" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log "Strategy4 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+  }
+} else {
+  Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
+}
+
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
 
 

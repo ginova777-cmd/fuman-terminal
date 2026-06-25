@@ -221,6 +221,7 @@ const gate = read("run-live-freshness-gate.ps1");
 const fullScan = read("run-full-scan.ps1");
 const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
+const refreshDesktopSnapshot = read("refresh-desktop-route-snapshot.ps1");
 const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
@@ -228,6 +229,12 @@ const openBuyLatestApi = read("api/open-buy-latest.js");
 const strategy4LatestApi = read("api/strategy4-latest.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
 const runStrategy4 = read("run-strategy4.ps1");
+const runOpenBuy = read("run-open-buy.ps1");
+const runStrategy3Complete = read("run-strategy3-complete-scan.ps1");
+const runStrategy5 = read("run-strategy5.ps1");
+const runInstitution = read("run-institution.ps1");
+const runWarrantFlow = read("run-warrant-flow.ps1");
+const runCbDetect = read("run-cb-detect.ps1");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
@@ -300,6 +307,31 @@ if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate/.test(cac
 if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.test(gate) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(gate)) {
   issues.push("freshness gate critical data release must snapshot source data before release:main");
 }
+for (const marker of [
+  "scripts\\write-desktop-route-snapshot.js",
+  "--fail-on-partial",
+  "FUMAN_RUNTIME_DIR",
+  "NODE_OPTIONS",
+  "scan-receipts",
+]) {
+  if (!refreshDesktopSnapshot.includes(marker)) issues.push(`refresh-desktop-route-snapshot.ps1 missing ${marker}`);
+}
+if (!/Invoke-DesktopRouteSnapshotRefresh/.test(gate) || !/refresh-desktop-route-snapshot\.ps1/.test(gate) || !/Invoke-DesktopRouteSnapshotRefresh "live-freshness-gate-\$gateMode"/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 must refresh desktop route snapshot after Supabase/cache publish so terminal UI gets the latest complete runs");
+}
+for (const [file, text, source] of [
+  ["run-open-buy.ps1", runOpenBuy, "open-buy"],
+  ["run-strategy3-complete-scan.ps1", runStrategy3Complete, "strategy3"],
+  ["run-strategy4.ps1", runStrategy4, "strategy4"],
+  ["run-strategy5.ps1", runStrategy5, "strategy5"],
+  ["run-institution.ps1", runInstitution, "institution"],
+  ["run-warrant-flow.ps1", runWarrantFlow, "warrant-flow"],
+  ["run-cb-detect.ps1", runCbDetect, "cb-detect"],
+]) {
+  if (!/refresh-desktop-route-snapshot\.ps1/.test(text) || !new RegExp(`-Source\\s+["']${source}["']`).test(text)) {
+    issues.push(`${file} must refresh desktop route snapshot after successful Supabase scan with source=${source}`);
+  }
+}
 if (!/Get-CriticalDataReleaseFiles/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must limit freshness-gate source repo writes to critical data files");
 }
@@ -350,8 +382,11 @@ if (/latest-payload/.test(openBuyLatestApi)) {
 if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.snapshotFriendly\s*\?\s*\{\s*decision_ready:\s*false/.test(openBuyLatestApi)) {
   issues.push("api/open-buy-latest.js snapshot/compact path must still read v_strategy1_ready_status and must not bypass decision_ready");
 }
-if (!/emptySnapshotPayload\("strategy1_decision_not_ready"/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js compact snapshot response must return an empty Strategy1 payload when decision_ready is false");
+if (!/snapshotFriendlyPendingPayload/.test(openBuyLatestApi) || !/decision-pending-display/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js compact snapshot response must show latest complete-run candidates when decision_ready is false, with decision-pending metadata");
+}
+if (!/canvas=1&compact=1&shell=1&limit=60&live=1/.test(runOpenBuy)) {
+  issues.push("run-open-buy.ps1 must verify terminal compact Strategy1 API, not the strict full API, before refreshing desktop snapshot");
 }
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
@@ -576,7 +611,16 @@ for (const file of [
   "scripts/verify-scorecard-snapshot.js",
   "scripts/export-scorecard-snapshot.py",
   "scripts/publish-scorecard-snapshot.js",
+  "refresh-desktop-route-snapshot.ps1",
   "run-scorecard-snapshot.ps1",
+  "run-open-buy.ps1",
+  "run-strategy3.ps1",
+  "run-strategy3-complete-scan.ps1",
+  "run-strategy4.ps1",
+  "run-strategy5.ps1",
+  "run-institution.ps1",
+  "run-warrant-flow.ps1",
+  "run-cb-detect.ps1",
   "data/terminal-home-bundle.json",
   "data/terminal-home-mobile-slim.json",
   "data/scorecard-latest.json",
@@ -824,10 +868,21 @@ if (fetchResult.status !== 0) {
       "run-daily-release.ps1",
       "run-full-scan.ps1",
       "run-publish-gate.ps1",
+      "refresh-desktop-route-snapshot.ps1",
+      "run-open-buy.ps1",
+      "run-strategy3.ps1",
+      "run-strategy3-complete-scan.ps1",
+      "run-strategy4.ps1",
+      "run-strategy5.ps1",
+      "run-institution.ps1",
+      "run-warrant-flow.ps1",
+      "run-cb-detect.ps1",
       "package.json",
       "vercel.json",
       "88.html",
       "api/scorecard.js",
+      "api/open-buy-latest.js",
+      "api/strategy4-latest.js",
       "data/scorecard-latest.json",
       "data/mobile-home-summary.json",
       "data/strategy-match-index.json",
@@ -837,6 +892,8 @@ if (fetchResult.status !== 0) {
       "data/terminal-home-bundle.json",
       "data/terminal-home-mobile-slim.json",
       "scripts/generate-health-summary.js",
+      "scripts/verify-terminal-resource-chain.js",
+      "scripts/verify-source-sync.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
       "STRATEGY2-FRESHNESS-GOVERNANCE.md",

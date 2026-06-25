@@ -203,6 +203,8 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     canvas: Boolean(options.canvas),
     qualityStatus: String(run.quality_status || rows[0]?.quality_status || "complete"),
     decisionReady: readyStatus?.decision_ready === true,
+    decisionPending: readyStatus?.decision_ready !== true,
+    reason: readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus),
     lastError: "",
     count: matches.length,
     total: expectedTotal || resultCount,
@@ -224,6 +226,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       watch_count: watchCount,
       block_count: blockCount,
       decision_ready: readyStatus?.decision_ready === true,
+      decision_pending: readyStatus?.decision_ready !== true,
       latest_run_source: RUNS_TABLE,
       ready_status_view: READY_STATUS_VIEW,
     },
@@ -234,6 +237,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       table: RESULTS_TABLE,
       readyStatusView: READY_STATUS_VIEW,
       gate: STRATEGY1_GATE,
+      decisionReady: readyStatus?.decision_ready === true,
       runId,
       via: "api/open-buy-latest",
       fetchedAt: new Date().toISOString(),
@@ -308,6 +312,25 @@ function decisionReadyError(readyStatus) {
     || "decision_ready=false";
 }
 
+async function snapshotFriendlyPendingPayload(readyStatus, options) {
+  const detail = decisionReadyError(readyStatus);
+  const run = await fetchLatestCompleteRun(readyStatus, 50);
+  if (!run?.run_id) return emptySnapshotPayload("strategy1_decision_not_ready", detail);
+  const rows = await fetchRowsForRun(run.run_id, options.limit);
+  if (!rows.length) return emptySnapshotPayload("strategy1_complete_run_empty", run.run_id);
+  const payload = buildPayload(rows, run, readyStatus, options);
+  return {
+    ...payload,
+    qualityStatus: payload.qualityStatus || "decision_pending",
+    reason: detail,
+    decisionPending: true,
+    transport: {
+      ...(payload.transport || {}),
+      gate: `${STRATEGY1_GATE}+decision-pending-display`,
+    },
+  };
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -341,7 +364,7 @@ module.exports = async function handler(request, response) {
     if (readyStatus?.decision_ready !== true) {
       const detail = decisionReadyError(readyStatus);
       if (options.snapshotFriendly) {
-        response.status(200).json(emptySnapshotPayload("strategy1_decision_not_ready", detail));
+        response.status(200).json(await snapshotFriendlyPendingPayload(readyStatus, options));
         return;
       }
       response.status(503).json(missingPayload("strategy1_decision_not_ready", detail));

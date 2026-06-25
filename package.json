@@ -69,6 +69,7 @@
     "verify:mobile-api-only": "node --use-system-ca scripts/verify-mobile-api-only.js",
     "verify:mobile-api-only:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-api-only.js --live",
     "verify:terminal-ui-e2e": "node --use-system-ca scripts/verify-terminal-ui-e2e.js",
+    "verify:terminal-resource-chain": "node --use-system-ca scripts/verify-terminal-resource-chain.js",
     "verify:mobile-responsive-ui": "node --use-system-ca scripts/verify-terminal-ui-e2e.js --only=mobile-desktop-night,mobile-desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun",
     "verify:mobile-ai-fragment": "node scripts/verify-mobile-ai-fragment.js",
     "verify:mobile-ai-fragment:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-ai-fragment.js --live",

@@ -56,6 +56,17 @@ if (Test-Path -LiteralPath $strategy5File) {
   }
 }
 
+$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "strategy5" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+    exit $LASTEXITCODE
+  }
+} else {
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
+}
+
 $slimScript = "scripts\generate-slim-cache.js"
 if (Test-Path -LiteralPath $slimScript) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "=== Strategy5 index regeneration start $(Get-Date) ==="

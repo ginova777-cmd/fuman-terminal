@@ -34,18 +34,30 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-$verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-"Open buy API-only scan complete; verifying latest complete-run API $verifyUrl" >> $log
+$verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+"Open buy API-only scan complete; verifying terminal compact complete-run API $verifyUrl" >> $log
 try {
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing
   $payload = $response.Content | ConvertFrom-Json
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or $payload.complete -ne $true -or -not $payload.runId) {
     throw "open-buy API verification failed status=$($response.StatusCode) ok=$($payload.ok) complete=$($payload.complete) runId=$($payload.runId)"
   }
-  "Open buy API-only verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate)" >> $log
+  "Open buy terminal compact API verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate) decisionReady=$($payload.decisionReady)" >> $log
 } catch {
   "Open buy API-only verification failed: $($_.Exception.Message)" >> $log
   exit 1
 }
+
+$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+if (Test-Path -LiteralPath $snapshotScript) {
+  & $snapshotScript -Source "open-buy" -LogPath $log
+  if ($LASTEXITCODE -ne 0) {
+    "Open buy desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+    exit $LASTEXITCODE
+  }
+} else {
+  "Open buy desktop snapshot refresh skipped; helper not found." >> $log
+}
+
 "=== Open buy full scan end $(Get-Date) ===" >> $log
 
