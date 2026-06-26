@@ -383,6 +383,9 @@ if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.te
 if (!/CACHE_SYNC_ALLOW_GIT_DATA_COMMIT/.test(cacheSync) || !/SCHEDULED_CACHE_GIT_COMMIT_DISABLED/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block automatic scheduled cache data commits unless CACHE_SYNC_ALLOW_GIT_DATA_COMMIT=1 is explicitly set");
 }
+if (!/CACHE_SYNC_ALLOW_DEPLOY_DATA_WRITE/.test(cacheSync) || !/CACHE_SYNC_DEPLOY_DATA_WRITE_DISABLED/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 must block generated data writes into deploy worktree unless CACHE_SYNC_ALLOW_DEPLOY_DATA_WRITE=1 is explicitly set");
+}
 for (const marker of [
   "scripts\\write-desktop-route-snapshot.js",
   "--fail-on-partial",

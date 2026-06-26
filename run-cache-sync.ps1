@@ -12,6 +12,7 @@ $syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } e
 $mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
 $allowGitDataCommit = $env:CACHE_SYNC_ALLOW_GIT_DATA_COMMIT -eq "1"
+$allowDeployDataWrite = $allowGitDataCommit -or $env:CACHE_SYNC_ALLOW_DEPLOY_DATA_WRITE -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"
 $logDir = Join-Path $sourceRepo "logs"
 $lockFile = Join-Path $sourceRepo "locks\cache-sync.lock"
@@ -46,6 +47,11 @@ if ($env:FUMAN_INSIDE_FRESHNESS_GATE -ne "1") {
 if ($Scope -ne "all") {
   Write-Log "Scoped publish blocked: scope=$Scope. Use npm run freshness:gate for the single verified publish path."
   exit 2
+}
+
+if (-not $allowDeployDataWrite) {
+  Write-Log "CACHE_SYNC_DEPLOY_DATA_WRITE_DISABLED scope=$Scope. Generated cache data stays in C:\fuman-runtime/Supabase; C:\fuman-terminal data/*.json must not be touched without CACHE_SYNC_ALLOW_DEPLOY_DATA_WRITE=1 or CACHE_SYNC_ALLOW_GIT_DATA_COMMIT=1."
+  exit 0
 }
 
 function Clear-StaleSyncGitIndexLock($label) {
