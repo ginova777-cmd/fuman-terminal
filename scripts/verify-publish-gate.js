@@ -691,12 +691,10 @@ if (/INSTITUTION_SOURCE_PROVIDER\)\s*\{\s*\$env:INSTITUTION_SOURCE_PROVIDER\s*=\
   issues.push("run-live-freshness-gate.ps1 must not force INSTITUTION_SOURCE_PROVIDER=finmind; use auto for official-first fallback");
 }
 for (const marker of [
-  "Invoke-ScanTask \"strategy3\" \"strategy3 raw refresh\" \"critical\"",
-  "scripts\\scan-strategy3-cache.js",
-  "data\\strategy3-latest.json",
+  "Invoke-RunnerTask \"strategy3\" \"strategy3 full scan\" \"critical\" \"run-strategy3-complete-scan.ps1\"",
+  "run-strategy3-complete-scan.ps1",
   "data\\scan-receipts",
   "scan-summary.json",
-  "} 900",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing full scan marker ${marker}`);
 }
