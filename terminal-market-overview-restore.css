@@ -1185,6 +1185,28 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
   color: #facc15;
 }
 
+#market-view .market-ai-pick-actions button.is-added,
+.market-ai-modal-footer button.is-added {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(6, 78, 59, 0.72);
+  color: #6ee7b7;
+}
+
+.market-ai-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 100000;
+  border: 1px solid rgba(250, 204, 21, 0.42);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  color: #facc15;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 #market-view .market-ai-scorebar {
   height: 8px;
   margin-top: 9px;

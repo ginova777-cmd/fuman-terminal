@@ -323,7 +323,8 @@
         const flatRatio = Math.max(0, 100 - upRatio - downRatio);
         const strong = sectors.filter((s) => num(s.pct ?? s.avgPct) >= 0).sort((a, b) => num(b.pct ?? b.avgPct) - num(a.pct ?? a.avgPct)).slice(0, 8);
         const weak = sectors.filter((s) => num(s.pct ?? s.avgPct) < 0).sort((a, b) => num(a.pct ?? a.avgPct) - num(b.pct ?? b.avgPct)).slice(0, 8);
-        const hotStocks = strong.flatMap((sector) => list(sector.stocks).slice(0, 3).map((stock) => ({ ...stock, industry: sector.name || sector.industry || "--", sectorPct: num(sector.pct ?? sector.avgPct) }))).slice(0, 10);
+        const hotStocks = strong.flatMap((sector) => list(sector.stocks).slice(0, 3).map((stock) => ({ ...stock, industry: sector.name || sector.industry || "--", sectorPct: num(sector.pct ?? sector.avgPct), aiTag: "動能強" }))).slice(0, 10);
+        const riskStocks = weak.flatMap((sector) => list(sector.stocks).slice(0, 3).map((stock) => ({ ...stock, industry: sector.name || sector.industry || "--", sectorPct: num(sector.pct ?? sector.avgPct), aiTag: "風險高" }))).slice(0, 8);
         const sectorStockItems = (sector, limit = 4) => {
           const sectorName = sector?.name || sector?.industry || "--";
           return list(sector?.stocks).slice(0, limit).map((stock) => ({
@@ -404,7 +405,24 @@
           }
         };
         const maxSectorMove = Math.max(1, ...strong.concat(weak).map((sector) => Math.abs(num(sector.pct ?? sector.avgPct))));
-        const maxStockScore = Math.max(1, ...hotStocks.map((stock) => Math.abs(num(stock.pct)) + Math.abs(num(stock.sectorPct)) * 0.45));
+        const maxStockScore = Math.max(1, ...hotStocks.concat(riskStocks).map((stock) => Math.abs(num(stock.pct)) + Math.abs(num(stock.sectorPct)) * 0.45));
+        const stockAmount = (stock) => num(stock.value || stock.amount || stock.tradingValue || stock.amountYi * 100000000);
+        const institutionalStocks = hotStocks.filter((stock) => {
+          const foreign = num(stock.foreign || stock.foreignBuySell || stock.foreignNet);
+          const trust = num(stock.trust || stock.investmentTrust || stock.trustNet);
+          const dealer = num(stock.dealer || stock.dealerNet || stock.selfDealer);
+          return foreign > 0 || trust > 0 || dealer > 0 || /法人|外資|投信/.test(safeText(stock.reason || stock.memo || stock.tags));
+        }).slice(0, 10);
+        const intradayStocks = hotStocks.slice().sort((a, b) => stockAmount(b) - stockAmount(a)).slice(0, 10);
+        const aiStockBuckets = {
+          all: { label: "綜合分數", note: "依綜合分數與族群強度排序，適合快速挑選今日熱門觀察股。", stocks: hotStocks },
+          momentum: { label: "動能強", note: "只看族群強度與個股漲幅同向的標的。", stocks: hotStocks.filter((stock) => num(stock.pct) >= 0).slice(0, 10) },
+          institution: { label: "法人買超", note: "優先顯示帶有法人買超線索的標的；若資料源未提供法人欄位，顯示綜合分數候選。", stocks: institutionalStocks.length ? institutionalStocks : hotStocks },
+          intraday: { label: "當沖熱", note: "依成交額與盤中熱度排序，優先看流動性較高的觀察股。", stocks: intradayStocks },
+          risk: { label: "風險高", note: "弱勢族群與反轉風險較高的標的，先排除追高。", stocks: riskStocks.length ? riskStocks : weakItems.flatMap((item) => list(item.stocks)).slice(0, 8) }
+        };
+        window.__fumanMarketAiStockBuckets = aiStockBuckets;
+        window.__fumanMarketAiStocks = {};
         const sectorBars = (items, tone) => items.length ? items.map((sector, index) => {
           const pct = num(sector.pct ?? sector.avgPct);
           const width = Math.max(8, Math.min(100, Math.abs(pct) / maxSectorMove * 100));
@@ -415,16 +433,27 @@
             <b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b>
           </div>`;
         }).join("") : '<div class="empty-state">等待熱力圖資料。</div>';
-        const hotStockRows = hotStocks.length ? hotStocks.map((stock, index) => {
+        const hotStockRows = (stocks, bucket = "all") => stocks.length ? stocks.map((stock, index) => {
           const stockPct = num(stock.pct);
           const score = Math.max(8, Math.min(100, (Math.abs(stockPct) + Math.abs(num(stock.sectorPct)) * 0.45) / maxStockScore * 100));
           const aiScore = Math.round(72 + score * 0.28);
-          return `<article class="market-ai-pick-row">
+          const stockKey = `${bucket}-${index}-${safeText(stock.code || stock.stockCode || stock.ticker || stock.name)}`;
+          window.__fumanMarketAiStocks[stockKey] = {
+            ...stock,
+            code: safeText(stock.code || stock.stockCode || stock.ticker || ""),
+            name: safeText(stock.name || stock.stockName || ""),
+            aiScore,
+            score,
+            pct: stockPct,
+            value: stockAmount(stock),
+            bucket
+          };
+          return `<article class="market-ai-pick-row" data-market-ai-stock="${esc(stockKey)}">
             <div class="market-ai-rank">#${index + 1}</div>
             <div class="market-ai-pick-main"><h4><span class="market-ai-code">${esc(stock.code)}</span><span class="market-ai-name">${esc(stock.name)}</span></h4><p>排名主因：${esc(stock.industry)}族群強度 · 成交額 ${esc(yi(stock.value || stock.amountYi * 100000000))} · 漲幅 ${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%。</p><div class="market-ai-scorebar"><i style="width:${score.toFixed(1)}%"></i></div></div>
             <div class="market-ai-pick-score"><small>綜合分數</small><strong>${aiScore}</strong></div>
-            <div class="market-ai-pick-tags"><span class="market-ai-chip">動能強</span><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</span></div>
-            <div class="market-ai-pick-actions"><button type="button">看分析</button><button type="button">加入自選</button></div>
+            <div class="market-ai-pick-tags"><span class="market-ai-chip">${esc(stock.aiTag || aiStockBuckets[bucket]?.label || "動能強")}</span><span class="market-ai-chip">${esc(stock.industry)}</span><span class="market-ai-chip">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</span></div>
+            <div class="market-ai-pick-actions"><button type="button" data-market-ai-stock-action="analysis" data-market-ai-stock-key="${esc(stockKey)}">看分析</button><button type="button" data-market-ai-stock-action="watch" data-market-ai-stock-key="${esc(stockKey)}">加入自選</button></div>
           </article>`;
         }).join("") : '<div class="empty-state">等待 AI 判讀資料。</div>';
         const bias = up >= down ? "多方壓制" : "空方壓制";
@@ -488,17 +517,17 @@
               </article>
             </section>
             <section class="market-ai-block market-ai-hot-section">
-              <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API snapshot</span></header>
+              <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div></header>
               <div class="market-ai-filter-row">
-                <button type="button" class="active">全部 <b>${hotStocks.length}</b></button>
-                <button type="button">動能強 <b>${hotStocks.length}</b></button>
-                <button type="button">法人買超 <b>${Math.min(10, hotStocks.length)}</b></button>
-                <button type="button">當沖熱 <b>${Math.min(10, hotStocks.length)}</b></button>
-                <button type="button">風險高 <b>${weak.length}</b></button>
+                <button type="button" class="active" data-market-ai-filter="all">全部 <b>${aiStockBuckets.all.stocks.length}</b></button>
+                <button type="button" data-market-ai-filter="momentum">動能強 <b>${aiStockBuckets.momentum.stocks.length}</b></button>
+                <button type="button" data-market-ai-filter="institution">法人買超 <b>${aiStockBuckets.institution.stocks.length}</b></button>
+                <button type="button" data-market-ai-filter="intraday">當沖熱 <b>${aiStockBuckets.intraday.stocks.length}</b></button>
+                <button type="button" data-market-ai-filter="risk">風險高 <b>${aiStockBuckets.risk.stocks.length}</b></button>
               </div>
               <div class="market-ai-current-rule"><small>目前排序</small><strong>綜合分數</strong><span>依綜合分數與族群強度排序，適合快速挑選今日熱門觀察股。</span></div>
               <div class="market-ai-hot">
-                ${hotStockRows}
+                ${hotStockRows(aiStockBuckets.all.stocks, "all")}
               </div>
             </section>
           </section>
@@ -543,6 +572,104 @@
         </div>`;
         document.body.appendChild(modal);
       };
+      const showAiToast = (message) => {
+        document.querySelector("[data-market-ai-toast]")?.remove();
+        const toast = document.createElement("div");
+        toast.dataset.marketAiToast = "1";
+        toast.className = "market-ai-toast";
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1800);
+      };
+      const renderAiFilter = (filterKey, button) => {
+        const bucket = window.__fumanMarketAiStockBuckets?.[filterKey] || window.__fumanMarketAiStockBuckets?.all;
+        const panel = button?.closest?.(".market-ai-hot-section");
+        if (!bucket || !panel) return;
+        panel.querySelectorAll("[data-market-ai-filter]").forEach((item) => item.classList.toggle("active", item === button));
+        const rule = panel.querySelector(".market-ai-current-rule");
+        if (rule) {
+          const strong = rule.querySelector("strong");
+          const note = rule.querySelector("span");
+          if (strong) strong.textContent = bucket.label || "綜合分數";
+          if (note) note.textContent = bucket.note || "依最新 AI 判讀排序。";
+        }
+        const hot = panel.querySelector(".market-ai-hot");
+        if (!hot) return;
+        const stocks = list(bucket.stocks);
+        if (!stocks.length) {
+          hot.innerHTML = `<div class="empty-state">${esc(bucket.label || "此分類")} 目前沒有符合條件的股票。</div>`;
+          return;
+        }
+        const maxScore = Math.max(1, ...stocks.map((stock) => Math.abs(num(stock.pct)) + Math.abs(num(stock.sectorPct)) * 0.45));
+        window.__fumanMarketAiStocks = window.__fumanMarketAiStocks || {};
+        hot.innerHTML = stocks.map((stock, index) => {
+          const code = safeText(stock.code || stock.stockCode || stock.ticker || "");
+          const name = safeText(stock.name || stock.stockName || "");
+          const pct = num(stock.pct ?? stock.changePct ?? stock.changePercent);
+          const value = num(stock.value || stock.amount || stock.tradingValue || stock.amountYi * 100000000);
+          const score = Math.max(8, Math.min(100, (Math.abs(pct) + Math.abs(num(stock.sectorPct)) * 0.45) / maxScore * 100));
+          const aiScore = Math.round(72 + score * 0.28);
+          const stockKey = `${filterKey}-${index}-${code || name}`;
+          window.__fumanMarketAiStocks[stockKey] = { ...stock, code, name, pct, value, aiScore, score, bucket: filterKey };
+          return `<article class="market-ai-pick-row" data-market-ai-stock="${esc(stockKey)}">
+            <div class="market-ai-rank">#${index + 1}</div>
+            <div class="market-ai-pick-main"><h4><span class="market-ai-code">${esc(code || "--")}</span><span class="market-ai-name">${esc(name || "--")}</span></h4><p>排名主因：${esc(stock.industry || "--")}族群強度 · 成交額 ${esc(yi(value))} · 漲幅 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%。</p><div class="market-ai-scorebar"><i style="width:${score.toFixed(1)}%"></i></div></div>
+            <div class="market-ai-pick-score"><small>綜合分數</small><strong>${aiScore}</strong></div>
+            <div class="market-ai-pick-tags"><span class="market-ai-chip">${esc(bucket.label || stock.aiTag || "AI")}</span><span class="market-ai-chip">${esc(stock.industry || "--")}</span><span class="market-ai-chip">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</span></div>
+            <div class="market-ai-pick-actions"><button type="button" data-market-ai-stock-action="analysis" data-market-ai-stock-key="${esc(stockKey)}">看分析</button><button type="button" data-market-ai-stock-action="watch" data-market-ai-stock-key="${esc(stockKey)}">加入自選</button></div>
+          </article>`;
+        }).join("");
+      };
+      const openAiStockAnalysis = (stockKey) => {
+        const stock = window.__fumanMarketAiStocks?.[stockKey];
+        if (!stock) return showAiToast("這筆股票資料尚未載入");
+        document.querySelector("[data-market-ai-modal]")?.remove();
+        const pct = num(stock.pct);
+        const score = num(stock.aiScore || stock.score);
+        const modal = document.createElement("section");
+        modal.className = "market-ai-modal-overlay";
+        modal.dataset.marketAiModal = "1";
+        const chips = [
+          stock.industry,
+          stock.aiTag || window.__fumanMarketAiStockBuckets?.[stock.bucket]?.label,
+          `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+          stock.value ? yi(stock.value) : ""
+        ].filter(Boolean).map((item) => `<span class="market-ai-modal-stock-chip ${pct >= 0 ? "up" : "down"}">${esc(item)}</span>`).join("");
+        modal.innerHTML = `<div class="market-ai-modal-shell" role="dialog" aria-modal="true" aria-label="${esc(stock.code || stock.name || "AI 股票分析")}">
+          <header class="market-ai-modal-header">
+            <div class="market-ai-modal-title-block"><small>AI 股票分析</small><h2>${esc([stock.code, stock.name].filter(Boolean).join(" ") || "--")}</h2><p>依熱門觀察股、族群強度、成交額與漲跌幅整理。</p></div>
+            <button type="button" class="market-ai-modal-close" data-market-ai-close aria-label="關閉">×</button>
+          </header>
+          <div class="market-ai-modal-list">
+            <article class="market-ai-modal-item ${pct >= 0 ? "up" : "down"}">
+              <div class="market-ai-modal-item-head"><div><small>綜合分數</small><strong>${esc(stock.aiScore || Math.round(score) || "--")}</strong></div><b>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</b></div>
+              <p>排名主因：${esc(stock.industry || "--")}族群強度，成交額 ${esc(stock.value ? yi(stock.value) : "--")}。${esc(stock.reason || stock.memo || "")}</p>
+              <div class="market-ai-modal-stock-chips">${chips || '<span class="market-ai-modal-stock-chip muted">等待更多欄位</span>'}</div>
+            </article>
+          </div>
+          <footer class="market-ai-modal-footer">
+            <button type="button" class="primary" data-market-ai-stock-action="watch" data-market-ai-stock-key="${esc(stockKey)}">加入自選</button>
+            <button type="button" data-market-ai-close>關閉</button>
+          </footer>
+        </div>`;
+        document.body.appendChild(modal);
+      };
+      const addAiStockToWatchlist = (stockKey, button) => {
+        const stock = window.__fumanMarketAiStocks?.[stockKey];
+        if (!stock) return showAiToast("這筆股票資料尚未載入");
+        const key = "fuman-terminal-ai-watchlist";
+        let rows = [];
+        try { rows = JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) { rows = []; }
+        const code = safeText(stock.code || stock.stockCode || stock.ticker || "");
+        const next = rows.filter((item) => safeText(item.code) !== code);
+        next.unshift({ code, name: safeText(stock.name || stock.stockName || ""), industry: safeText(stock.industry || ""), addedAt: new Date().toISOString() });
+        localStorage.setItem(key, JSON.stringify(next.slice(0, 80)));
+        if (button) {
+          button.textContent = "已加入";
+          button.classList.add("is-added");
+        }
+        showAiToast(`${code || stock.name || "股票"} 已加入自選`);
+      };
       const openSector = (index) => {
         const sector = window.__fumanMarketDirectSectors[Number(index)];
         if (!sector) return;
@@ -568,6 +695,18 @@
         const aiDrilldown = event.target.closest?.("[data-market-ai-drilldown]");
         if (aiDrilldown) {
           openAiDrilldown(aiDrilldown.dataset.marketAiDrilldown);
+          return;
+        }
+        const aiFilter = event.target.closest?.("[data-market-ai-filter]");
+        if (aiFilter) {
+          renderAiFilter(aiFilter.dataset.marketAiFilter || "all", aiFilter);
+          return;
+        }
+        const aiStockAction = event.target.closest?.("[data-market-ai-stock-action]");
+        if (aiStockAction) {
+          const stockKey = aiStockAction.dataset.marketAiStockKey || aiStockAction.closest?.("[data-market-ai-stock]")?.dataset.marketAiStock;
+          if (aiStockAction.dataset.marketAiStockAction === "watch") addAiStockToWatchlist(stockKey, aiStockAction);
+          else openAiStockAnalysis(stockKey);
           return;
         }
         const heatmapModeButton = event.target.closest?.("[data-market-heatmap-mode]");

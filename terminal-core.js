@@ -1,6 +1,6 @@
 (function () {
   const version = "public-terminal-fast-20260623-09";
-  const runtimeAssetEpoch = "market-overview-restore-20260625-10";
+  const runtimeAssetEpoch = "market-overview-restore-20260625-11";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_RUNTIME_ASSET_EPOCH = runtimeAssetEpoch;
   window.FUMAN_TERMINAL_BOOT = {
