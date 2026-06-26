@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260623-09"
+    window.__fumanDesktopFastShell === "20260626-strategy2-history-01"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260623-09";
+  window.__fumanDesktopFastShell = "20260626-strategy2-history-01";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -5052,10 +5052,10 @@
         display: none !important;
       }
       .strategy2-battle-shell {
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         gap: 14px;
-        min-height: 680px;
+        min-height: 720px;
         padding: 18px;
       }
       .strategy2-battle-header {
@@ -5101,10 +5101,10 @@
         cursor: pointer;
       }
       .strategy2-battle-board {
-        display: grid;
-        grid-template-rows: minmax(248px, 0.46fr) minmax(390px, 1.54fr);
+        display: flex;
+        flex-direction: column;
         gap: 14px;
-        min-height: 610px;
+        min-height: 0;
       }
       .strategy2-battle-panel {
         min-width: 0;
@@ -5117,10 +5117,17 @@
         background: rgba(3, 8, 18, 0.68);
       }
       .strategy2-entry-panel {
+        flex: 0 0 auto;
+        max-height: 236px;
         border-color: rgba(250, 204, 21, 0.36);
         background:
           linear-gradient(90deg, rgba(250, 204, 21, 0.08), rgba(30, 64, 175, 0.12)),
           rgba(3, 8, 18, 0.72);
+      }
+      .strategy2-history-panel {
+        flex: 1 1 auto;
+        min-height: 390px;
+        border-color: rgba(59, 130, 246, 0.30);
       }
       .strategy2-battle-panel header {
         display: flex;
@@ -5150,6 +5157,12 @@
       .strategy2-battle-scroll {
         min-height: 0;
         overflow: auto;
+      }
+      .strategy2-entry-panel .strategy2-battle-scroll {
+        max-height: 168px;
+      }
+      .strategy2-history-panel .strategy2-battle-scroll {
+        min-height: 310px;
       }
       .strategy2-terminal-table {
         width: 100%;
