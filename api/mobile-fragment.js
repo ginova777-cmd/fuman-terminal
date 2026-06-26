@@ -14,7 +14,7 @@ const TAB_CONFIG = {
   strategy2: {
     title: "策略2 當沖",
     subtitle: "2 分 K 即時偵測",
-    endpoint: "/api/latest-strategy?key=strategy2",
+    endpoint: "/api/strategy2-latest",
     points: ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"],
   },
   strategy3: {

@@ -11,6 +11,7 @@ const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const ALLOWED_KEYS = new Set(["strategy1", "strategy2", "strategy3", "strategy4", "strategy5"]);
+const DIRECT_AUTHORITATIVE_KEYS = new Set(["strategy2"]);
 const STRATEGY_HANDLERS = {
   strategy2: () => require("./strategy2-latest"),
   strategy3: () => require("./strategy3-latest"),
@@ -38,9 +39,27 @@ function createCaptureResponse() {
   };
 }
 
-async function captureHandler(handler, query = {}) {
+function queryUrl(query = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query || {})) {
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, String(item));
+    } else if (value !== undefined && value !== null) {
+      params.set(key, String(value));
+    }
+  }
+  const search = params.toString();
+  return `/api/latest-strategy${search ? `?${search}` : ""}`;
+}
+
+async function captureHandler(handler, request = {}, query = {}) {
   const response = createCaptureResponse();
-  await handler({ method: "GET", query }, response);
+  await handler({
+    method: "GET",
+    headers: request.headers || {},
+    query,
+    url: queryUrl(query),
+  }, response);
   return response.body;
 }
 
@@ -73,6 +92,11 @@ async function fetchStatusRow(key) {
   return Array.isArray(rows) ? rows[0] : null;
 }
 
+async function fetchDirectPayload(key, request) {
+  if (!STRATEGY_HANDLERS[key]) return null;
+  return captureHandler(STRATEGY_HANDLERS[key](), request, request.query || {});
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -90,40 +114,54 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const row = await fetchStatusRow(key);
-    if (!row) {
+    const directPayload = DIRECT_AUTHORITATIVE_KEYS.has(key) ? await fetchDirectPayload(key, request) : null;
+    let row = null;
+    try {
+      row = await fetchStatusRow(key);
+    } catch (error) {
+      if (!directPayload) throw error;
+    }
+    if (!row && !directPayload) {
       response.status(404).json({ ok: false, error: "strategy_not_found", strategyKey: key });
       return;
     }
-    let payload = row.payload || null;
+    let payload = directPayload || row?.payload || null;
     if (!payload && STRATEGY_HANDLERS[key]) {
-      payload = await captureHandler(STRATEGY_HANDLERS[key]());
+      payload = await fetchDirectPayload(key, request);
     }
+    const payloadRunId = payload?.runId || payload?.transport?.runId || "";
+    const payloadUpdatedAt = payload?.updatedAt || payload?.generatedAt || "";
+    const payloadDate = payload?.date || payload?.usedDate || "";
     const transport = {
-      source: "supabase",
-      rpc: "get_latest_strategy_payload",
-      gate: "strategy_cache_status",
+      source: DIRECT_AUTHORITATIVE_KEYS.has(key) ? "supabase-direct" : "supabase",
+      rpc: row ? "get_latest_strategy_payload" : "",
+      gate: DIRECT_AUTHORITATIVE_KEYS.has(key) ? "direct-latest-run" : "strategy_cache_status",
       fetchedAt: new Date().toISOString(),
     };
     if (payload?.transport) {
       transport.payloadSource = payload.transport.source || payload.cacheSource || "";
       transport.payloadGate = payload.transport.gate || "";
-      transport.payloadRunId = payload.transport.runId || payload.runId || "";
+      transport.payloadRunId = payloadRunId;
       transport.payloadVia = payload.transport.via || "";
     }
     response.status(200).json({
-      ok: row.scan_status !== "failed" && payload?.cacheSource !== "static-fallback",
-      strategyKey: row.strategy_key,
-      label: row.label,
-      usedDate: row.used_date,
-      updatedAt: row.updated_at,
-      scanStatus: row.scan_status,
-      scanned: row.scanned,
-      total: row.total,
-      count: Number(row.match_count ?? payloadCount(payload)),
-      source: row.source,
-      log: row.log,
-      error: row.error,
+      ok: row?.scan_status !== "failed" && payload?.cacheSource !== "static-fallback" && payload?.ok !== false,
+      strategyKey: row?.strategy_key || key,
+      label: row?.label || key,
+      usedDate: payloadDate || row?.used_date || "",
+      updatedAt: payloadUpdatedAt || row?.updated_at || "",
+      scanStatus: row?.scan_status || (payload?.ok === false ? "failed" : "complete"),
+      scanned: Number(payload?.scanned ?? row?.scanned ?? 0),
+      total: Number(payload?.total ?? row?.total ?? 0),
+      count: Number(payload?.count ?? row?.match_count ?? payloadCount(payload)),
+      source: DIRECT_AUTHORITATIVE_KEYS.has(key) ? (payload?.cacheSource || "supabase-direct") : row?.source,
+      log: row?.log || "",
+      error: payload?.error || row?.error || "",
+      runId: payloadRunId,
+      date: payloadDate,
+      complete: payload?.complete === true,
+      qualityStatus: payload?.qualityStatus || "",
+      cacheSource: payload?.cacheSource || "",
       payload,
       transport,
     });

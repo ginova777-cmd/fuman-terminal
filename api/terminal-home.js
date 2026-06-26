@@ -1,5 +1,5 @@
 const openBuyLatest = require("./open-buy-latest");
-const latestStrategy = require("./latest-strategy");
+const strategy2Latest = require("./strategy2-latest");
 const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
@@ -267,7 +267,7 @@ module.exports = async function handler(request, response) {
   try {
     const [openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
       safeCall("openBuy", () => fetchOpenBuyLatest()),
-      safeCall("strategy2", () => callJson(latestStrategy, { ...request, query: { ...(request.query || {}), key: "strategy2" } })),
+      safeCall("strategy2", () => callJson(strategy2Latest, request)),
       safeCall("strategy3", () => callJson(strategy3Latest, request)),
       safeCall("strategy4", () => callJson(strategy4Latest, request)),
       safeCall("strategy5", () => callJson(strategy5Latest, request)),

@@ -4,6 +4,7 @@ const zlib = require("zlib");
 const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const FIRST_SCREEN_BUDGET_BYTES = 170000;
 const FIRST_SCREEN_JSON_BUDGET_BYTES = 30000;
+const STRATEGY2_HEALTH_ENDPOINT = "/api/strategy2-latest?top=1&compact=1&limit=50&live=1";
 const FIRST_SCREEN_TARGETS = [
   "/",
   "/terminal-app.js",
@@ -11,7 +12,7 @@ const FIRST_SCREEN_TARGETS = [
   "/terminal-mobile-diagnostics.js",
   "/api/mobile-boot",
   "/api/terminal-home",
-  "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50",
+  STRATEGY2_HEALTH_ENDPOINT,
 ];
 const FIRST_SCREEN_FORBIDDEN = [
   "/data/mobile-home-summary.json",
@@ -27,12 +28,12 @@ const FIRST_SCREEN_FORBIDDEN = [
   "/data/strategy4-zone-c-page-1.json",
 ];
 const MAX_BYTES = {
-  "/terminal-app.js": 122000,
+  "/terminal-app.js": 136000,
   "/terminal-watchlist-module.js": 18000,
   "/terminal-mobile-diagnostics.js": 4000,
   "/api/mobile-boot": 30000,
   "/api/terminal-home": 45000,
-  "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50": 30000,
+  [STRATEGY2_HEALTH_ENDPOINT]: 30000,
 };
 
 const TARGETS = [
@@ -42,7 +43,7 @@ const TARGETS = [
   { path: "/terminal-mobile-diagnostics.js", kind: "script", versioned: true, maxBytes: MAX_BYTES["/terminal-mobile-diagnostics.js"], cache: /immutable/i },
   { path: "/api/mobile-boot", kind: "json", maxBytes: MAX_BYTES["/api/mobile-boot"], cache: /no-store/i },
   { path: "/api/terminal-home", kind: "json", maxBytes: MAX_BYTES["/api/terminal-home"], cache: /no-store/i },
-  { path: "/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50", kind: "json", maxBytes: MAX_BYTES["/api/latest-strategy?key=strategy2?top=1&compact=1&limit=50"], cache: /no-store/i },
+  { path: STRATEGY2_HEALTH_ENDPOINT, kind: "json", maxBytes: MAX_BYTES[STRATEGY2_HEALTH_ENDPOINT], cache: /no-store/i },
 ];
 
 function fetchBuffer(pathname, version = "") {

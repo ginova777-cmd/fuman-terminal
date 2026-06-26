@@ -226,7 +226,12 @@ const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
 const openBuyLatestApi = read("api/open-buy-latest.js");
+const latestStrategyApi = read("api/latest-strategy.js");
+const strategy2LatestApi = read("api/strategy2-latest.js");
 const strategy4LatestApi = read("api/strategy4-latest.js");
+const terminalHomeApi = read("api/terminal-home.js");
+const mobileBootApi = read("api/mobile-boot.js");
+const mobileFragmentApi = read("api/mobile-fragment.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
 const runStrategy4 = read("run-strategy4.ps1");
 const runOpenBuy = read("run-open-buy.ps1");
@@ -243,6 +248,7 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
+const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
 const scorecardApi = read("api/scorecard.js");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
@@ -416,6 +422,27 @@ if (/readJson\("data\/open-buy-latest\.json"/.test(read("api/terminal-home.js"))
 if (!/publish_strategy2_complete_run/.test(strategy2CompleteRunPublisher) || !/strategy2_latest\?on_conflict=id/.test(strategy2CompleteRunPublisher)) {
   issues.push("publish-strategy2-complete-run.js must publish strategy2_latest and Supabase complete run RPC");
 }
+if (!/DIRECT_AUTHORITATIVE_KEYS\s*=\s*new Set\(\["strategy2"\]\)/.test(latestStrategyApi) || !/fetchDirectPayload/.test(latestStrategyApi) || !/direct-latest-run/.test(latestStrategyApi)) {
+  issues.push("api/latest-strategy.js must treat Strategy2 as direct-authoritative and must not trust stale strategy_cache_status payloads");
+}
+if (!/emptyTodayRun[\s\S]*return buildStrategy2RunPayload\(emptyTodayRun/.test(strategy2LatestApi) || !/emptyToday:\s*true/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must return today's empty/not-ready run instead of falling back to historical Strategy2 rows");
+}
+if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-run/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must let Supabase latest run date correct stale local market-session files");
+}
+if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
+  issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
+}
+if (!/endpoint:\s*"\/api\/strategy2-latest"/.test(mobileFragmentApi) || /endpoint:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileFragmentApi)) {
+  issues.push("api/mobile-fragment.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
+}
+if (!/require\("\.\/strategy2-latest"\)/.test(terminalHomeApi) || !/callJson\(strategy2Latest,\s*request\)/.test(terminalHomeApi) || /callJson\(latestStrategy/.test(terminalHomeApi)) {
+  issues.push("api/terminal-home.js must load Strategy2 directly from strategy2-latest, not latest-strategy");
+}
+if (!/STRATEGY2_HEALTH_ENDPOINT\s*=\s*"\/api\/strategy2-latest\?top=1&compact=1&limit=50&live=1"/.test(mobileHealthVerifier) || /strategy2\?top=1/.test(mobileHealthVerifier)) {
+  issues.push("scripts/verify-mobile-health.js must probe the direct Strategy2 live API and must not build malformed latest-strategy query strings");
+}
 if (!/strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow/.test(runIdCompleteGate) || /RUN_GATE_OPTIONAL \|\| "strategy2"/.test(runIdCompleteGate)) {
   issues.push("verify-run-id-complete-gates.js must require strategy2 as a strict complete-run gate by default");
 }
@@ -505,7 +532,6 @@ for (const marker of [
   if (!dailyRelease.includes(marker)) issues.push(`run-daily-release.ps1 missing daily release marker ${marker}`);
 }
 
-const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
 for (const marker of [
   "FIRST_SCREEN_BUDGET_BYTES",
   "FIRST_SCREEN_JSON_BUDGET_BYTES",

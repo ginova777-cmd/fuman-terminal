@@ -124,6 +124,19 @@ function allowedForMarketSession(run, marketSession) {
   return Boolean(runDate && runDate <= marketSession.marketDataDate);
 }
 
+function sessionWithSupabaseRunDate(marketSession, runDate) {
+  const runKey = compactDate(runDate);
+  const marketKey = compactDate(marketSession?.marketDataDate);
+  if (!runKey || (marketKey && runKey <= marketKey)) return marketSession;
+  return {
+    ...(marketSession || {}),
+    marketDataDate: runKey,
+    marketDataIsoDate: isoDate(runKey),
+    hasTodayMarketData: runKey === marketSession?.today,
+    reason: `${marketSession?.reason || "market-session"}+supabase-latest-run`,
+  };
+}
+
 function apiOnlyError(error, detail = "") {
   return {
     ok: false,
@@ -448,12 +461,26 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
   );
   const skippedEmptyRunIds = [];
   const latestRun = await hydrateRunPayloadRows(base, latestRows[0], options);
-  if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, marketSession)) {
-    return buildStrategy2RunPayload(latestRun, { sourceTable: `${LATEST_RUN_VIEW}+${RESULTS_TABLE}`, marketSession, options });
+  const latestRunDate = payloadRunDate(latestRun?.payload || {}, latestRun);
+  const runAwareMarketSession = sessionWithSupabaseRunDate(marketSession, latestRunDate);
+  if (latestRun?.run_id && latestRun?.payload && hasStrategy2PayloadRows(latestRun.payload) && allowedForMarketSession(latestRun, runAwareMarketSession)) {
+    return buildStrategy2RunPayload(latestRun, { sourceTable: `${LATEST_RUN_VIEW}+${RESULTS_TABLE}`, marketSession: runAwareMarketSession, options });
   }
-  const emptyTodayRun = latestRun?.run_id && payloadRunDate(latestRun.payload || {}, latestRun) === marketSession?.today
+  const currentSessionDate = runAwareMarketSession?.marketDataDate || runAwareMarketSession?.today || "";
+  const emptyTodayRun = latestRun?.run_id && (
+    latestRunDate === runAwareMarketSession?.today
+    || latestRunDate === currentSessionDate
+  )
     ? latestRun
     : null;
+  if (emptyTodayRun) {
+    return buildStrategy2RunPayload(emptyTodayRun, {
+      sourceTable: `${LATEST_RUN_VIEW}+${RESULTS_TABLE}`,
+      marketSession: runAwareMarketSession,
+      options,
+      emptyToday: true,
+    });
+  }
   if (latestRun?.run_id) skippedEmptyRunIds.push(latestRun.run_id);
 
   const historyRows = await fetchRows(
@@ -465,19 +492,19 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
       "status=eq.complete",
       "complete=eq.true",
       "result_count=gt.0",
-      options?.today && marketSession?.today ? "scan_date=eq." + isoDate(marketSession.today) : "",
-      marketSession?.closed && marketSession.marketDataIsoDate ? "scan_date=lte." + marketSession.marketDataIsoDate : "",
+      options?.today && runAwareMarketSession?.today ? "scan_date=eq." + isoDate(runAwareMarketSession.today) : "",
+      runAwareMarketSession?.closed && runAwareMarketSession.marketDataIsoDate ? "scan_date=lte." + runAwareMarketSession.marketDataIsoDate : "",
       "order=scan_date.desc,finished_at.desc",
       "limit=10",
     ].filter(Boolean).join("&")
   );
   for (const row of historyRows) {
     const historyRun = await hydrateRunPayloadRows(base, row, options);
-    if (historyRun?.run_id && historyRun?.payload && hasStrategy2PayloadRows(historyRun.payload) && allowedForMarketSession(historyRun, marketSession)) {
-      return buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: `${RUNS_TABLE}+${RESULTS_TABLE}`, marketSession, options });
+    if (historyRun?.run_id && historyRun?.payload && hasStrategy2PayloadRows(historyRun.payload) && allowedForMarketSession(historyRun, runAwareMarketSession)) {
+      return buildStrategy2RunPayload(historyRun, { skippedEmptyRunIds, sourceTable: `${RUNS_TABLE}+${RESULTS_TABLE}`, marketSession: runAwareMarketSession, options });
     }
   }
-  return emptyTodayRun ? buildStrategy2RunPayload(emptyTodayRun, { marketSession, options, emptyToday: true }) : null;
+  return emptyTodayRun ? buildStrategy2RunPayload(emptyTodayRun, { marketSession: runAwareMarketSession, options, emptyToday: true }) : null;
 }
 
 module.exports = async function handler(request, response) {
