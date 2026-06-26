@@ -423,6 +423,9 @@
         };
         window.__fumanMarketAiStockBuckets = aiStockBuckets;
         window.__fumanMarketAiStocks = {};
+        const activeAiFilter = window.__fumanMarketAiActiveFilter && aiStockBuckets[window.__fumanMarketAiActiveFilter]
+          ? window.__fumanMarketAiActiveFilter
+          : "all";
         const sectorBars = (items, tone) => items.length ? items.map((sector, index) => {
           const pct = num(sector.pct ?? sector.avgPct);
           const width = Math.max(8, Math.min(100, Math.abs(pct) / maxSectorMove * 100));
@@ -519,15 +522,15 @@
             <section class="market-ai-block market-ai-hot-section">
               <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div></header>
               <div class="market-ai-filter-row">
-                <button type="button" class="active" data-market-ai-filter="all">全部 <b>${aiStockBuckets.all.stocks.length}</b></button>
-                <button type="button" data-market-ai-filter="momentum">動能強 <b>${aiStockBuckets.momentum.stocks.length}</b></button>
-                <button type="button" data-market-ai-filter="institution">法人買超 <b>${aiStockBuckets.institution.stocks.length}</b></button>
-                <button type="button" data-market-ai-filter="intraday">當沖熱 <b>${aiStockBuckets.intraday.stocks.length}</b></button>
-                <button type="button" data-market-ai-filter="risk">風險高 <b>${aiStockBuckets.risk.stocks.length}</b></button>
+                <button type="button" class="${activeAiFilter === "all" ? "active" : ""}" data-market-ai-filter="all">全部 <b>${aiStockBuckets.all.stocks.length}</b></button>
+                <button type="button" class="${activeAiFilter === "momentum" ? "active" : ""}" data-market-ai-filter="momentum">動能強 <b>${aiStockBuckets.momentum.stocks.length}</b></button>
+                <button type="button" class="${activeAiFilter === "institution" ? "active" : ""}" data-market-ai-filter="institution">法人買超 <b>${aiStockBuckets.institution.stocks.length}</b></button>
+                <button type="button" class="${activeAiFilter === "intraday" ? "active" : ""}" data-market-ai-filter="intraday">當沖熱 <b>${aiStockBuckets.intraday.stocks.length}</b></button>
+                <button type="button" class="${activeAiFilter === "risk" ? "active" : ""}" data-market-ai-filter="risk">風險高 <b>${aiStockBuckets.risk.stocks.length}</b></button>
               </div>
-              <div class="market-ai-current-rule"><small>目前排序</small><strong>綜合分數</strong><span>依綜合分數與族群強度排序，適合快速挑選今日熱門觀察股。</span></div>
+              <div class="market-ai-current-rule"><small>目前排序</small><strong>${esc(aiStockBuckets[activeAiFilter].label)}</strong><span>${esc(aiStockBuckets[activeAiFilter].note)}</span></div>
               <div class="market-ai-hot">
-                ${hotStockRows(aiStockBuckets.all.stocks, "all")}
+                ${hotStockRows(aiStockBuckets[activeAiFilter].stocks, activeAiFilter)}
               </div>
             </section>
           </section>
@@ -585,6 +588,7 @@
         const bucket = window.__fumanMarketAiStockBuckets?.[filterKey] || window.__fumanMarketAiStockBuckets?.all;
         const panel = button?.closest?.(".market-ai-hot-section");
         if (!bucket || !panel) return;
+        window.__fumanMarketAiActiveFilter = filterKey;
         panel.querySelectorAll("[data-market-ai-filter]").forEach((item) => item.classList.toggle("active", item === button));
         const rule = panel.querySelector(".market-ai-current-rule");
         if (rule) {
