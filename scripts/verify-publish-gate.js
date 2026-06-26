@@ -398,7 +398,7 @@ for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness 
 for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
 }
-for (const marker of ["Fuman Strategy2 Readiness Source 0750", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
+for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
   if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
 }
 for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {

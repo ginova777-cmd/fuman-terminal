@@ -79,10 +79,10 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy2 Readiness Source 0750",
-      "displayName": "Fuman Strategy2 Readiness Source 0750",
-      "description": "策略2戰備資料源：07:50 啟動，保證 08:45 個股期貨、08:55 試搓 history、09:35 1m coverage",
-      "time": "07:50",
+      "taskName": "\\Fuman Strategy2 Readiness Source 0800",
+      "displayName": "Fuman Strategy2 Readiness Source 0800",
+      "description": "策略2戰備資料源：08:00 確認交易日並啟動，保證 08:45 個股期貨、08:55 試撮 history、09:00 當沖 1m 母池 coverage",
+      "time": "08:00",
       "aliases": [
         "策略2戰備",
         "strategy2 readiness"

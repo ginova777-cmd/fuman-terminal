@@ -1,6 +1,6 @@
 param(
-  [string]$TaskName = "Fuman Strategy2 Readiness Source 0750",
-  [string]$StartTime = "07:50",
+  [string]$TaskName = "Fuman Strategy2 Readiness Source 0800",
+  [string]$StartTime = "08:00",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [switch]$RunNow
 )
