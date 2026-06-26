@@ -1,21 +1,21 @@
 {
   "ok": true,
-  "updatedAt": "2026-06-22T15:04:35.542Z",
+  "updatedAt": "2026-06-26T03:16:35.702Z",
   "generatedBy": "generate-performance-report",
   "assets": [
     {
       "file": "market-summary.json",
       "ok": true,
-      "bytes": 109113,
+      "bytes": 143101,
       "count": 0,
-      "updatedAt": "2026-06-22T15:04:31.107Z"
+      "updatedAt": "2026-06-26T03:04:17.467Z"
     },
     {
       "file": "health-summary.json",
       "ok": true,
-      "bytes": 3513,
+      "bytes": 3204,
       "count": 0,
-      "updatedAt": "2026-06-22T07:58:13.746Z"
+      "updatedAt": "2026-06-24T07:57:29.560Z"
     },
     {
       "file": "institution-slim.json",
@@ -48,39 +48,39 @@
     {
       "file": "realtime-radar-latest.json",
       "ok": true,
-      "bytes": 690,
-      "count": 0,
-      "updatedAt": "2026-06-22T07:45:04.424Z"
+      "bytes": 107074,
+      "count": 80,
+      "updatedAt": "2026-06-26T02:42:10.869Z"
     },
     {
       "file": "signal-quality-report.json",
       "ok": true,
-      "bytes": 631,
+      "bytes": 656,
       "count": 0,
-      "updatedAt": "2026-06-22T15:04:35.254Z"
+      "updatedAt": "2026-06-26T03:16:35.136Z"
     },
     {
       "file": "data-quality-report.json",
       "ok": true,
-      "bytes": 1224,
+      "bytes": 1228,
       "count": 0,
-      "updatedAt": "2026-06-22T15:04:35.329Z"
+      "updatedAt": "2026-06-26T03:16:35.261Z"
     },
     {
       "file": "data-consistency-report.json",
       "ok": true,
       "bytes": 201,
       "count": 0,
-      "updatedAt": "2026-06-22T15:04:35.400Z"
+      "updatedAt": "2026-06-26T03:16:35.394Z"
     },
     {
       "file": "strategy-weight-report.json",
       "ok": true,
       "bytes": 418,
       "count": 0,
-      "updatedAt": "2026-06-22T15:04:35.471Z"
+      "updatedAt": "2026-06-26T03:16:35.574Z"
     }
   ],
-  "totalBytes": 628324,
+  "totalBytes": 768416,
   "missing": []
 }
