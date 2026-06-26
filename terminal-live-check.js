@@ -1483,6 +1483,9 @@ let strategy4ScanTotal = 0;
 let strategy4CacheLoading = false;
 let strategy4ApiRunId = "";
 let openBuyApiRunId = "";
+let openBuyDecisionPending = false;
+let openBuyBuyCount = 0;
+let openBuyStageCards = [];
 let strategy3Data = [];
 let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
@@ -2225,6 +2228,9 @@ function loadOpenBuyLocalCache() {
 
 function mergeOpenBuyCache(payload) {
   openBuyApiRunId = String(payload?.runId || payload?.transport?.runId || payload?.updatedAt || "");
+  openBuyDecisionPending = payload?.decisionPending === true || payload?.decisionReady === false;
+  openBuyBuyCount = cleanNumber(payload?.buyCount || normalizeArray(payload?.buyMatches).length);
+  openBuyStageCards = normalizeArray(payload?.stageCards);
   openBuyScanMatches = {};
   openBuyScannedCodes = new Set();
   openBuyPage = 1;
@@ -5009,7 +5015,7 @@ function setStrategyChrome(mode) {
       : swing
       ? "用波段指標邏輯整理全台股，盤中即時更新價量，分類突破缺口、逃逸缺口、V轉與多頭攻擊。"
       : openBuy
-      ? "21:30 產生明日候選，08:55 最終確認，09:00 只執行 BUY 名單。"
+      ? "21:30 先篩選符合，08:45 看個股期貨，08:55 搓合完美符合才列 BUY。"
       : strategy3
       ? ""
       : "正在進入主要結果頁。";
@@ -5404,8 +5410,13 @@ function renderOpenBuyRadar(universe) {
   const scanText = openBuyScanLastAt
     ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
     : `等待後端掃描 0/${totalCount}`;
+  const stageOne = openBuyStageCards.find((card) => card.key === "candidate_2130_futopt_0845") || {};
+  const futoptCount = cleanNumber(stageOne.secondaryCount);
+  const futoptText = futoptCount ? `個股期貨 ${futoptCount.toLocaleString("zh-TW")}` : "個股期貨待確認";
+  const readyBuyCount = openBuyDecisionPending ? openBuyBuyCount : (openBuyBuyCount || rows.filter((stock) => String(stock.decision || "").toUpperCase() === "BUY").length || rows.length);
+  const readyBuyText = openBuyDecisionPending && !readyBuyCount ? "待確認" : readyBuyCount.toLocaleString("zh-TW");
 
-  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30產生明日候選｜08:55最終確認｜${scanText}`;
+  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30初篩+08:45個股期貨｜08:55搓合確認｜${scanText}`;
   if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
   if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
   if (strategyTopHit) strategyTopHit.textContent = rows.length ? "+1.2%" : "--";
@@ -5436,7 +5447,7 @@ function renderOpenBuyRadar(universe) {
       </tr>
     `;
   }).join("") : `
-    <tr><td colspan="10">策略1後端掃描中。21:30 產生明日候選，08:55 用盤前狀態做最終確認。</td></tr>
+    <tr><td colspan="10">策略1後端掃描中。21:30 先篩選符合，08:45 確認個股期貨，08:55 看搓合完美符合。</td></tr>
   `;
   const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
 
@@ -5445,16 +5456,16 @@ function renderOpenBuyRadar(universe) {
       <div class="swing-topbar">
         <div>
           <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-          <p>21:30 產生明日候選；08:55 盤前最終確認。09:00 只執行 BUY 名單。${scanText}</p>
+          <p>21:30 先篩選符合；08:45 看個股期貨；08:55 搓合完美符合才進 BUY。${scanText}</p>
         </div>
 
       </div>
       <div class="swing-signal-grid">
         <button class="swing-card active selected" type="button">
-          <div><strong>21:30 候選</strong><small>完整掃描產生明日名單</small></div><em>${scanCount}</em>
+          <div><strong>21:30 初篩 + 08:45 個股期貨</strong><small>先篩符合，再確認個股期貨｜${futoptText}</small></div><em>${scanCount}</em>
         </button>
         <button class="swing-card active" type="button">
-          <div><strong>08:55 最終</strong><small>盤前最後確認後開盤買</small></div><em>待接</em>
+          <div><strong>08:55 搓合確認</strong><small>搓合完美符合才列 BUY</small></div><em>${readyBuyText}</em>
         </button>
       </div>
       <section class="swing-panel">

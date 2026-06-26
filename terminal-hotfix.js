@@ -799,13 +799,13 @@
       if (!isStrategy1) return false;
       if (!text.includes("08:55")) return false;
 
-      replaceText(root, legacyFirstCard, "21:30 候選");
+      replaceText(root, legacyFirstCard, "21:30 初篩 + 08:45 個股期貨");
       replaceText(root, "收盤後用日K篩明日名單", "完整掃描產生明日名單");
-      replaceText(root, legacyLead, "21:30 產生明日候選");
-      replaceText(root, legacySummary, "21:30產生明日候選");
-      replaceText(root, legacyHeader, "21:30 產生明日候選");
-      replaceText(root, "08:55後看最終名單", "08:55 最終確認");
-      replaceText(root, "買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。", "09:00 只執行 BUY 名單。");
+      replaceText(root, legacyLead, "21:30 先篩選符合；08:45 看個股期貨");
+      replaceText(root, legacySummary, "21:30初篩+08:45個股期貨");
+      replaceText(root, legacyHeader, "21:30 先篩選符合；08:45 看個股期貨");
+      replaceText(root, "08:55後看最終名單", "08:55 搓合確認");
+      replaceText(root, "買入：09:00 開盤價｜停利 +1.2%｜停損 -1.0%｜09:10 強制出場。", "08:55 搓合完美符合才列 BUY。");
 
       const grid = root.querySelector(".swing-signal-grid");
       if (!grid) return true;
@@ -814,7 +814,7 @@
         if (cardText.includes(legacyProfit) || cardText.includes(legacyRun)) card.remove();
       });
       const cards = [...grid.querySelectorAll(".swing-card")];
-      if (cards.length > 2 && cards.some((card) => (card.textContent || "").includes("21:30")) && cards.some((card) => (card.textContent || "").includes("08:55"))) {
+      if (cards.length > 2 && cards.some((card) => (card.textContent || "").includes("08:45")) && cards.some((card) => (card.textContent || "").includes("08:55"))) {
         cards.slice(2).forEach((card) => card.remove());
       }
       return true;

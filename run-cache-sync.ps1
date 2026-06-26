@@ -11,6 +11,7 @@ $codeRepo = "${PSScriptRoot}"
 $syncRepo = if ($env:FUMAN_PUBLISH_SYNC_REPO) { $env:FUMAN_PUBLISH_SYNC_REPO } else { "C:\fuman-terminal" }
 $mainDeployRepo = if ($env:FUMAN_MAIN_DEPLOY_REPO) { $env:FUMAN_MAIN_DEPLOY_REPO } else { "C:\fuman-terminal" }
 $publishToCodeRepo = $env:CACHE_SYNC_WRITE_CODE_REPO -eq "1"
+$allowGitDataCommit = $env:CACHE_SYNC_ALLOW_GIT_DATA_COMMIT -eq "1"
 $repoUrl = "https://github.com/ginova777-cmd/fuman-terminal.git"
 $logDir = Join-Path $sourceRepo "logs"
 $lockFile = Join-Path $sourceRepo "locks\cache-sync.lock"
@@ -93,6 +94,16 @@ function New-CacheSyncLock {
 
 function Invoke-PublishedDataVerification {
   Write-Log "Published data freshness verifier removed; relying on targeted API verifiers and publish gate."
+}
+
+function Disable-ScheduledCacheGitCommit($changedFiles, $label) {
+  $changed = @($changedFiles | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  Write-Log "SCHEDULED_CACHE_GIT_COMMIT_DISABLED label=$label changed=$($changed.Count). Generated cache data stays in C:\fuman-runtime/Supabase; main must not receive automatic data/*.json commits."
+  if ($changed.Count -gt 0) {
+    Write-Log "SCHEDULED_CACHE_GIT_COMMIT_DISABLED files=$($changed -join ', ')"
+  }
+  Run-Git "Reset blocked scheduled cache staged files ($label)" @("reset", "--hard", "HEAD")
+  Invoke-PublishedDataVerification
 }
 
 function Invoke-PrePublishDataFreshnessGate {
@@ -364,6 +375,10 @@ function Replay-OutboxSnapshots {
     Run-Git "Stage outbox cache files" (@("add", "-f") + $files)
     $changed = & $gitExe -C $syncRepo diff --cached --name-only -- $files
     if ($changed) {
+      if (-not $allowGitDataCommit) {
+        Disable-ScheduledCacheGitCommit @($changed) "outbox"
+        continue
+      }
       $outboxStamp = Get-Date -Format "yyyy-MM-dd HH:mm"
       Run-Git "Commit outbox cache files" @("commit", "-m", "Replay scheduled cache $outboxStamp")
       Run-GitWithRetry "Push outbox cache commit" @("push", "origin", "main")
@@ -1009,6 +1024,11 @@ try {
 
 Invoke-PrePublishDataFreshnessGate
 
+  if (-not $allowGitDataCommit) {
+    Disable-ScheduledCacheGitCommit @($changed) "main"
+    exit 0
+  }
+
   $stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
   Run-Git "Commit cache files" @("commit", "-m", "Update scheduled cache $stamp")
 
@@ -1060,6 +1080,10 @@ Invoke-PrePublishDataFreshnessGate
     }
     $retryChanged = & $gitExe -C $syncRepo diff --cached --name-only
     if ($retryChanged) {
+      if (-not $allowGitDataCommit) {
+        Disable-ScheduledCacheGitCommit @($retryChanged) "retry"
+        return
+      }
       $criticalDataReleaseNeededAfterRetry = Test-CriticalDataReleaseNeeded @($retryChanged)
       Invoke-PrePublishDataFreshnessGate
       Run-Git "Commit cache files after retry reset" @("commit", "-m", "Update scheduled cache $stamp retry")

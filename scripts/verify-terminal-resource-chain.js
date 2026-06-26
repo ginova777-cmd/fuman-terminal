@@ -502,7 +502,10 @@ function obviousFallback(summary) {
     summary?.transportSource,
     summary?.error,
   ].join(" ").toLowerCase();
-  return /(static|fallback|previous|json-snapshot|snapshot-friendly-empty)/.test(text) || summary?.snapshotFallback;
+  const officialDesktopSnapshot = /supabase:desktop_route_snapshot/.test(text)
+    && !/snapshot-soft-fallback|snapshot-friendly-empty|previous/.test(text);
+  return /(static|fallback|previous|json-snapshot|snapshot-friendly-empty)/.test(text)
+    || (summary?.snapshotFallback && !officialDesktopSnapshot);
 }
 
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {

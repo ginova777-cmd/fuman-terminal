@@ -63,19 +63,19 @@ for (const file of ["terminal-app.js", "terminal-live-check.js"]) {
   if (!block) continue;
   const cardCount = (block.match(/class="swing-card active/g) || []).length;
   if (cardCount !== 2) pushIssue(`${file}: Strategy1 open-buy must render exactly 2 cards, found ${cardCount}`);
-  for (const required of ["21:30 候選", "08:55 最終", "09:00 只執行 BUY 名單"]) {
+  for (const required of ["21:30 初篩 + 08:45 個股期貨", "08:55 搓合確認", "搓合完美符合才列 BUY"]) {
     if (!block.includes(required)) pushIssue(`${file}: Strategy1 open-buy block missing ${required}`);
   }
 }
 
 const mobileFragment = read("api/mobile-fragment.js");
-if (!mobileFragment.includes('points: ["21:30 候選", "08:55 最終"]')) {
-  pushIssue("api/mobile-fragment.js: Strategy1 mobile points must be only 21:30 候選 / 08:55 最終");
+if (!mobileFragment.includes('points: ["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"]')) {
+  pushIssue("api/mobile-fragment.js: Strategy1 mobile points must be 21:30+08:45 / 08:55 two-stage contract");
 }
 
 const slimGenerator = read("scripts/generate-slim-cache.js");
-if (!slimGenerator.includes('"21:30 候選 / 08:55 最終"') || !slimGenerator.includes('["21:30 候選", "08:55 最終"]')) {
-  pushIssue("scripts/generate-slim-cache.js: Strategy1 slim fragment must be only 21:30 候選 / 08:55 最終");
+if (!slimGenerator.includes('"21:30 初篩 + 08:45 個股期貨 / 08:55 搓合"') || !slimGenerator.includes('["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"]')) {
+  pushIssue("scripts/generate-slim-cache.js: Strategy1 slim fragment must keep the 21:30+08:45 / 08:55 two-stage contract");
 }
 
 const packageJson = JSON.parse(read("package.json"));

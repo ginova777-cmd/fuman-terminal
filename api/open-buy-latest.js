@@ -48,6 +48,27 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function arrayLength(payload, keys) {
+  for (const key of keys) {
+    const value = payload?.[key];
+    if (Array.isArray(value)) return value.length;
+  }
+  return 0;
+}
+
+function isEmptySnapshotRestore(payload = {}) {
+  const sourceText = [
+    payload.cacheSource,
+    payload.source,
+    payload.transport?.gate,
+    payload.transport?.source,
+  ].filter(Boolean).join(" ");
+  const rows = arrayLength(payload, ["rows", "matches", "buyMatches"]);
+  const runId = String(payload.runId || payload.transport?.runId || payload.meta?.run_id || "").trim();
+  return /snapshot-friendly-empty|snapshot-soft-fallback/i.test(sourceText)
+    || (!runId && cleanNumber(payload.count) === 0 && rows === 0);
+}
+
 function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
@@ -165,12 +186,55 @@ async function fetchRowsForRun(runId, limit = 2000) {
   );
 }
 
+function selectPendingDisplayRows(rows) {
+  const buy = rows.filter((row) => row.decision === "BUY");
+  if (buy.length) return buy;
+  const watch = rows.filter((row) => row.decision === "WATCH");
+  if (watch.length) return watch;
+  const nonBlocked = rows.filter((row) => row.decision !== "BLOCK");
+  return nonBlocked.length ? nonBlocked : rows;
+}
+
+function strategy1StageCards(resultCount, buyCount, readyStatus = {}) {
+  const futoptCount = cleanNumber(
+    readyStatus.futopt_ready_count
+    || readyStatus.futopt_count
+    || readyStatus.individual_futures_count
+    || readyStatus.futures_ready_count
+  );
+  const futoptReady = readyStatus.futopt_ready === true || futoptCount > 0;
+  const decisionReady = readyStatus.decision_ready === true;
+  return [
+    {
+      key: "candidate_2130_futopt_0845",
+      time: "21:30 + 08:45",
+      title: "初篩 + 個股期貨",
+      label: "21:30 初篩符合 + 08:45 個股期貨確認",
+      count: resultCount,
+      secondaryCount: futoptCount,
+      status: resultCount > 0 && futoptReady ? "ready" : resultCount > 0 ? "waiting_futopt" : "waiting",
+    },
+    {
+      key: "auction_0855",
+      time: "08:55",
+      title: "搓合確認",
+      label: "08:55 搓合完美符合",
+      count: buyCount,
+      status: decisionReady ? "ready" : "waiting",
+    },
+  ];
+}
+
 function buildPayload(rows, run, readyStatus, options = {}) {
   const normalized = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizeRow);
   const matches = normalized.filter((row) => row.decision === "BUY");
+  const decisionPending = readyStatus?.decision_ready !== true;
+  const displayRows = decisionPending && options.pendingCandidateDisplay
+    ? selectPendingDisplayRows(normalized)
+    : matches;
   const expectedTotal = cleanNumber(run.expected_total);
   const scannedCount = cleanNumber(run.scanned_count);
   const resultCount = normalized.length;
@@ -201,12 +265,14 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     },
     complete: true,
     canvas: Boolean(options.canvas),
-    qualityStatus: String(run.quality_status || rows[0]?.quality_status || "complete"),
+    qualityStatus: decisionPending && options.pendingCandidateDisplay ? "decision_pending" : String(run.quality_status || rows[0]?.quality_status || "complete"),
     decisionReady: readyStatus?.decision_ready === true,
-    decisionPending: readyStatus?.decision_ready !== true,
+    decisionPending,
+    displayMode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
     reason: readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus),
     lastError: "",
-    count: matches.length,
+    count: displayRows.length,
+    displayCount: displayRows.length,
     total: expectedTotal || resultCount,
     expectedTotal,
     scannedCount,
@@ -214,8 +280,10 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     buyCount,
     watchCount,
     blockCount,
-    rows: matches,
-    matches,
+    stageCards: strategy1StageCards(resultCount, buyCount, readyStatus),
+    rows: displayRows,
+    matches: displayRows,
+    buyMatches: matches,
     meta: {
       gate: STRATEGY1_GATE,
       run_id: runId,
@@ -225,8 +293,10 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       buy_count: buyCount,
       watch_count: watchCount,
       block_count: blockCount,
+      display_count: displayRows.length,
+      display_mode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
       decision_ready: readyStatus?.decision_ready === true,
-      decision_pending: readyStatus?.decision_ready !== true,
+      decision_pending: decisionPending,
       latest_run_source: RUNS_TABLE,
       ready_status_view: READY_STATUS_VIEW,
     },
@@ -238,6 +308,8 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       readyStatusView: READY_STATUS_VIEW,
       gate: STRATEGY1_GATE,
       decisionReady: readyStatus?.decision_ready === true,
+      decisionPending,
+      displayMode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
       runId,
       via: "api/open-buy-latest",
       fetchedAt: new Date().toISOString(),
@@ -318,12 +390,19 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
   if (!run?.run_id) return emptySnapshotPayload("strategy1_decision_not_ready", detail);
   const rows = await fetchRowsForRun(run.run_id, options.limit);
   if (!rows.length) return emptySnapshotPayload("strategy1_complete_run_empty", run.run_id);
-  const payload = buildPayload(rows, run, readyStatus, options);
+  const payload = buildPayload(rows, run, readyStatus, { ...options, pendingCandidateDisplay: true });
   return {
     ...payload,
-    qualityStatus: payload.qualityStatus || "decision_pending",
+    gate: `${STRATEGY1_GATE}+decision-pending-display`,
+    qualityStatus: "decision_pending",
     reason: detail,
     decisionPending: true,
+    lastError: detail,
+    meta: {
+      ...(payload.meta || {}),
+      gate: `${STRATEGY1_GATE}+decision-pending-display`,
+      decision_pending_display: true,
+    },
     transport: {
       ...(payload.transport || {}),
       gate: `${STRATEGY1_GATE}+decision-pending-display`,
@@ -345,7 +424,7 @@ module.exports = async function handler(request, response) {
     timeoutMs: 2500,
     via: "api/open-buy-latest",
   });
-  if (cached) {
+  if (cached && !isEmptySnapshotRestore(cached)) {
     response.status(200).json(cached);
     return;
   }

@@ -380,6 +380,9 @@ if (!/FUMAN_INSIDE_FRESHNESS_GATE/.test(cacheSync) || !/freshness:gate/.test(cac
 if (!/npm run snapshot:data/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO/.test(gate) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(gate)) {
   issues.push("freshness gate critical data release must snapshot source data before release:main");
 }
+if (!/CACHE_SYNC_ALLOW_GIT_DATA_COMMIT/.test(cacheSync) || !/SCHEDULED_CACHE_GIT_COMMIT_DISABLED/.test(cacheSync)) {
+  issues.push("run-cache-sync.ps1 must block automatic scheduled cache data commits unless CACHE_SYNC_ALLOW_GIT_DATA_COMMIT=1 is explicitly set");
+}
 for (const marker of [
   "scripts\\write-desktop-route-snapshot.js",
   "--fail-on-partial",

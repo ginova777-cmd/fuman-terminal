@@ -77,6 +77,7 @@
     "verify:mobile-api-only": "node --use-system-ca scripts/verify-mobile-api-only.js",
     "verify:mobile-api-only:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-api-only.js --live",
     "verify:terminal-ui-e2e": "node --use-system-ca scripts/verify-terminal-ui-e2e.js",
+    "verify:terminal-ui-e2e:matrix": "node --use-system-ca scripts/verify-terminal-ui-e2e-matrix.js",
     "verify:terminal-resource-chain": "node --use-system-ca scripts/verify-terminal-resource-chain.js",
     "verify:terminal-source-contracts": "node --use-system-ca scripts/verify-terminal-source-contracts.js",
     "verify:terminal-fields": "node --use-system-ca scripts/verify-terminal-field-completeness.js",
