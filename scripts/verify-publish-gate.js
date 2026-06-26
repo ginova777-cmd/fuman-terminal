@@ -165,6 +165,9 @@ if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts
 if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
   issues.push("package.json missing scripts.check:scanner-resource-health for scanner publish/preserve gate");
 }
+if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
+  issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
+}
 const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
 if (!gateScript) {
   issues.push("package.json missing scripts.freshness:gate");
@@ -469,8 +472,14 @@ if (!/canvas=1&compact=1&shell=1&limit=70&live=1/.test(runStrategy4)) {
 if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(slimCacheGenerator)) {
   issues.push("generate-slim-cache.js must not generate strategy4 static slim/zone/page JSON");
 }
+if (!/FUMAN_SLIM_CACHE_WRITE_CODE_REPO/.test(slimCacheGenerator) || !/function\s+writeRoots/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must write generated static artifacts to runtime only unless FUMAN_SLIM_CACHE_WRITE_CODE_REPO=1 is explicitly set");
+}
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
+}
+if (/data\/(mobile-|terminal-home|stocks-|strategy-match|strategy-weight|performance-report|signal-quality-report|data-quality-report|data-consistency-report|market-ai|market-summary|heatmap)|data\/mobile-analysis/.test(sourceSync)) {
+  issues.push("sync-main-deploy-source.js must not copy generated static terminal/mobile/report JSON artifacts");
 }
 if (/readJson\("data\/open-buy-latest\.json"/.test(read("api/terminal-home.js"))) {
   issues.push("api/terminal-home.js must not fallback to legacy data/open-buy-latest.json");
@@ -706,9 +715,13 @@ for (const file of [
   "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
   "scripts/fugle-websocket-collector.js",
+  "scripts/generate-slim-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
+  "scripts/verify-terminal-field-completeness.js",
   "scripts/verify-terminal-source-contracts.js",
+  "api/market.js",
+  "api/realtime-radar-latest.js",
   "scripts/verify-desktop-api-only.js",
   "scripts/verify-production-guard.js",
   "scripts/verify-scorecard-snapshot.js",
@@ -724,15 +737,12 @@ for (const file of [
   "run-institution.ps1",
   "run-warrant-flow.ps1",
   "run-cb-detect.ps1",
-  "data/terminal-home-bundle.json",
-  "data/terminal-home-mobile-slim.json",
+  "data/chip-trade-exclusions.json",
   "data/scorecard-latest.json",
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
-  "data/star-preopen-latest.json",
-  "data/star-preopen-scorecard-source.json",
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
@@ -824,6 +834,18 @@ for (const marker of [
 ]) {
   const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
   if (!sourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
+}
+const terminalFieldCompleteness = read("scripts/verify-terminal-field-completeness.js");
+for (const marker of [
+  "strategy4",
+  "zoneLabel",
+  "institutionTotalNet",
+  "realtime-radar",
+  "signalTags",
+  "/api/market",
+  "terminal-field-completeness.md",
+]) {
+  if (!terminalFieldCompleteness.includes(marker)) issues.push(`verify-terminal-field-completeness.js missing terminal field contract marker ${marker}`);
 }
 if (!strategy2SharedSource.includes("fetchStrategy3QuoteLatestReady") || !strategy2SharedSource.includes("order: \"updated_at.desc\"")) {
   issues.push("lib/supabase-public-slot.js must keep Strategy3 latest quote fallback ordered by updated_at.desc");
@@ -1062,16 +1084,14 @@ if (fetchResult.status !== 0) {
       "api/scorecard.js",
       "api/open-buy-latest.js",
       "api/cb-detect-latest.js",
+      "api/institution-latest.js",
+      "api/market.js",
       "api/strategy4-latest.js",
+      "api/strategy5-latest.js",
       "data/scorecard-latest.json",
-      "data/mobile-home-summary.json",
-      "data/strategy-match-index.json",
-      "data/strategy2-intraday-live-top.json",
-      "data/strategy2-intraday-slim.json",
-      "data/strategy2-intraday-top.json",
-      "data/terminal-home-bundle.json",
-      "data/terminal-home-mobile-slim.json",
+      "scripts/generate-slim-cache.js",
       "scripts/generate-health-summary.js",
+      "scripts/verify-terminal-field-completeness.js",
       "scripts/verify-terminal-resource-chain.js",
       "scripts/verify-terminal-source-contracts.js",
       "scripts/verify-source-sync.js",

@@ -240,6 +240,16 @@ function isReservedRouteArtifact(rel) {
   return RESERVED_ROUTE_ARTIFACTS.has(key);
 }
 
+function isGitTracked(root, rel) {
+  if (!fs.existsSync(path.join(root, ".git"))) return false;
+  const result = spawnSync("git", ["ls-files", "--error-unmatch", "--", rel.replace(/\\/g, "/")], {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  return result.status === 0;
+}
+
 function rmFile(root, rel, result, dryRun) {
   const target = path.resolve(root, rel);
   if (isReservedRouteArtifact(rel)) {
@@ -254,6 +264,10 @@ function rmFile(root, rel, result, dryRun) {
   const stat = fs.statSync(target);
   if (!stat.isFile()) {
     result.skipped.push({ path: target, reason: "not-file" });
+    return;
+  }
+  if (isGitTracked(root, rel)) {
+    result.skipped.push({ path: target, reason: "tracked-in-git" });
     return;
   }
   if (!dryRun) fs.unlinkSync(target);

@@ -61,6 +61,8 @@ const FILES = [
   "api/desktop-static-disabled.js",
   "api/latest-signals.js",
   "api/latest-strategy.js",
+  "api/market.js",
+  "api/realtime-radar-latest.js",
   "api/terminal-home.js",
   "api/refresh.js",
   "api/performance-report.js",
@@ -102,6 +104,7 @@ const FILES = [
   "scripts/verify-publish-gate.js",
   "scripts/verify-terminal-resource-chain.js",
   "scripts/verify-terminal-source-contracts.js",
+  "scripts/verify-terminal-field-completeness.js",
   "scripts/verify-scorecard-snapshot.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
@@ -146,54 +149,11 @@ const FILES = [
   "run-cb-detect.ps1",
   "run-flow.ps1",
   "flow-health.ps1",
-  "data/afterhours-supabase-status.json",
   "data/chip-trade-exclusions.json",
-  "data/data-consistency-report.json",
-  "data/data-quality-report.json",
-  "data/market-summary.json",
-  "data/heatmap-latest.json",
-  "data/market-ai-breadth-latest.json",
-  "data/market-ai-panel-latest.json",
-  "data/market-ai-live.json",
-  "data/mobile-boot.json",
-  "data/mobile-runtime-config.json",
-  "data/mobile-terminal-latest.json",
-  "data/mobile-ai-latest.html",
-  "data/mobile-ai-lite.html",
-  "data/mobile-ai-ultra.html",
-  "data/mobile-strategy1-ultra.html",
-  "data/mobile-strategy2-ultra.html",
-  "data/mobile-strategy3-ultra.html",
-  "data/mobile-strategy4-ultra.html",
-  "data/mobile-strategy5-ultra.html",
-  "data/mobile-chip-ultra.html",
-  "data/mobile-warrant-ultra.html",
-  "data/mobile-digest.json",
-  "data/mobile-home-summary.json",
-  "data/performance-report.json",
-  "data/signal-quality-report.json",
   "data/scorecard-latest.json",
-  "data/stocks-index.json",
-  "data/stocks-quotes-mobile-top.json",
-  "data/stocks-quotes-slim.json",
-  "data/stocks-slim.json",
-  "data/star-preopen-latest.json",
-  "data/star-preopen-backup.json",
-  "data/star-preopen-scorecard-source.json",
-  "data/strategy-match-index.json",
-  "data/strategy-weight-report.json",
-  "data/terminal-home-bundle.json",
-  "data/terminal-home-mobile-slim.json",
-  "data/institution-tdcc-breakout.json",
-  "data/institution-tdcc-breakout-top.json",
-  "data/institution-tdcc-breakout.csv",
-  "data/tdcc-shareholding-1000-history.json",
-  "data/flow-health-latest.json",
 ];
 
-const DIRECTORIES = [
-  "data/mobile-analysis",
-];
+const DIRECTORIES = [];
 
 const STRATEGY4_KEY = "strategy" + "4";
 const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json");
@@ -278,6 +238,16 @@ function isReservedRouteArtifact(rel) {
   return RESERVED_ROUTE_ARTIFACTS.has(key);
 }
 
+function isGitTracked(root, rel) {
+  if (!fs.existsSync(path.join(root, ".git"))) return false;
+  const result = require("child_process").spawnSync("git", ["ls-files", "--error-unmatch", "--", rel.replace(/\\/g, "/")], {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  return result.status === 0;
+}
+
 function deleteRetiredArtifacts() {
   if (isSamePath(SOURCE_ROOT, DEPLOY_ROOT)) return;
   for (const file of RETIRED_ARTIFACTS) {
@@ -286,6 +256,7 @@ function deleteRetiredArtifacts() {
     if (!isInside(DEPLOY_ROOT, target) || !fs.existsSync(target)) continue;
     const stat = fs.statSync(target);
     if (!stat.isFile()) continue;
+    if (isGitTracked(DEPLOY_ROOT, file)) continue;
     fs.unlinkSync(target);
     retiredDeleted += 1;
   }

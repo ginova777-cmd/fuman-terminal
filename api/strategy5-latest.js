@@ -132,8 +132,21 @@ function normalizePayload(row) {
   const matches = rawMatches.map(normalizeMatch).filter(Boolean);
   const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
   const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : matches[0] || null;
+  const sourceInst = payload.inst && typeof payload.inst === "object" ? payload.inst : {};
+  const institutionTotalNet = cleanNumber(payload.institutionTotalNet ?? payload.institution_total_net ?? payload.totalNet ?? payload.total_net ?? sourceInst.total ?? row.institution_total_net ?? row.total_net);
+  const foreignNet = cleanNumber(payload.foreignNet ?? payload.foreign_net ?? sourceInst.foreign ?? row.foreign_net);
+  const trustNet = cleanNumber(payload.trustNet ?? payload.investmentTrustNet ?? payload.investment_trust_net ?? sourceInst.trust ?? row.trust_net);
+  const dealerNet = cleanNumber(payload.dealerNet ?? payload.dealer_net ?? sourceInst.dealer ?? row.dealer_net);
+  const inst = {
+    ...sourceInst,
+    total: cleanNumber(sourceInst.total ?? institutionTotalNet),
+    foreign: cleanNumber(sourceInst.foreign ?? foreignNet),
+    trust: cleanNumber(sourceInst.trust ?? trustNet),
+    dealer: cleanNumber(sourceInst.dealer ?? dealerNet),
+  };
   return {
     ...payload,
+    inst,
     matches,
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
@@ -145,6 +158,17 @@ function normalizePayload(row) {
     value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
     tradeValue: cleanNumber(payload.tradeValue || payload.value || row.trade_value),
     score: cleanNumber(payload.score || row.score),
+    institutionTotalNet,
+    institution_total_net: institutionTotalNet,
+    totalNet: institutionTotalNet,
+    total_net: institutionTotalNet,
+    foreignNet,
+    foreign_net: foreignNet,
+    trustNet,
+    investmentTrustNet: trustNet,
+    investment_trust_net: trustNet,
+    dealerNet,
+    dealer_net: dealerNet,
     activeMatch,
     reason: String(payload.reason || row.reason || matches.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };

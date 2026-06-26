@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, "..");
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const deployRoot = process.env.FUMAN_DEPLOY_DIR || "C:\\fuman-terminal";
+const SLIM_CACHE_WRITE_CODE_REPO = process.env.FUMAN_SLIM_CACHE_WRITE_CODE_REPO === "1";
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 const STRATEGY4_API_ONLY = true;
 const OPEN_BUY_API_ONLY = true;
@@ -38,6 +39,11 @@ function dataRoots(order = "runtime-first") {
   return [...new Set(roots.filter(Boolean))];
 }
 
+function writeRoots() {
+  if (SLIM_CACHE_WRITE_CODE_REPO) return dataRoots("repo-first");
+  return [...new Set([runtimeRoot].filter(Boolean))];
+}
+
 function isStrategy4StaticOutput(output) {
   return /^data[\\/]+strategy4.*\.json$/i.test(String(output || ""));
 }
@@ -63,7 +69,7 @@ function writeToBoth(output, payload) {
     console.log(`desktop API-only: skipped static slim output ${output}`);
     return;
   }
-  for (const root of dataRoots("repo-first")) {
+  for (const root of writeRoots()) {
     writeJson(path.join(root, output), payload);
   }
 }
@@ -79,13 +85,13 @@ function writeText(file, text) {
 }
 
 function writeTextToBoth(output, text) {
-  for (const root of dataRoots("repo-first")) {
+  for (const root of writeRoots()) {
     writeText(path.join(root, output), text);
   }
 }
 
 function clearDirInAllRoots(output) {
-  for (const root of dataRoots("repo-first")) {
+  for (const root of writeRoots()) {
     const target = path.join(root, output);
     if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
     fs.mkdirSync(target, { recursive: true });

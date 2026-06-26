@@ -70,13 +70,39 @@ function buildMarketSession(tradingDay, payload) {
   };
 }
 
-function withMarketSession(payload, marketSession, reason = "") {
+function normalizeRadarRows(payload) {
+  if (!Array.isArray(payload?.rows)) return payload;
   return {
     ...payload,
-    reason: reason || payload?.reason,
+    rows: payload.rows.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const tags = Array.isArray(row.tags)
+        ? row.tags
+        : Array.isArray(row.signalTags)
+          ? row.signalTags
+          : [];
+      const signal = row.signal || tags[0] || row.stateId || row.side || "";
+      const state = row.state || row.side || row.radarMode || "";
+      const reason = row.reason || tags.join(" / ") || signal || state;
+      return {
+        ...row,
+        tags,
+        signal,
+        state,
+        reason,
+      };
+    }),
+  };
+}
+
+function withMarketSession(payload, marketSession, reason = "") {
+  const normalizedPayload = normalizeRadarRows(payload);
+  return {
+    ...normalizedPayload,
+    reason: reason || normalizedPayload?.reason,
     marketSession,
     transport: {
-      ...(payload?.transport || {}),
+      ...(normalizedPayload?.transport || {}),
       via: "api/realtime-radar-latest",
       gate: marketSession?.closed ? "non-trading-day-cache" : "trading-day-live",
       fetchedAt: new Date().toISOString(),
@@ -121,6 +147,10 @@ function quoteRowsToRadarPayload(rows = []) {
         score: radarScore(row),
         flow: value * (side === "short" ? -1 : 1),
         signalTags: [side === "short" ? "短線轉弱" : "短線強勢", "Live報價"],
+        tags: [side === "short" ? "短線轉弱" : "短線強勢", "Live報價"],
+        signal: side === "short" ? "短線轉弱" : "短線強勢",
+        state: side,
+        reason: `${side === "short" ? "短線轉弱" : "短線強勢"} / Live報價`,
         radarUpdatedAt: quoteAt,
         radarDate: date,
         radarMode: "intraday",

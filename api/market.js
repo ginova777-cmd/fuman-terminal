@@ -216,6 +216,17 @@ function cleanRequestNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function taipeiDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
 function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
@@ -227,7 +238,8 @@ function readRequestOptions(request) {
   }
 }
 
-function marketCanvasRows(indexes, futures, otcSignal, limit = 80) {
+function marketCanvasRows(indexes, futures, otcSignal, limit = 80, updatedAt = new Date().toISOString()) {
+  const date = taipeiDateKey(new Date(updatedAt));
   const rows = [];
   indexes.forEach((item, index) => {
     rows.push({
@@ -239,6 +251,9 @@ function marketCanvasRows(indexes, futures, otcSignal, limit = 80) {
       pct: `${item["漲跌"] || ""}${item["漲跌百分比"] || "0"}%`,
       score: item["漲跌點數"] || "",
       reason: item._source || "market-index",
+      updatedAt,
+      time: updatedAt,
+      date,
     });
   });
   if (futures?.near) {
@@ -251,6 +266,9 @@ function marketCanvasRows(indexes, futures, otcSignal, limit = 80) {
       pct: futures.near.pct || "",
       score: futures.near.change || "",
       reason: futures.near.basisLabel || "futures",
+      updatedAt,
+      time: updatedAt,
+      date,
     });
   }
   if (otcSignal) {
@@ -262,6 +280,9 @@ function marketCanvasRows(indexes, futures, otcSignal, limit = 80) {
       pct: otcSignal.label || "",
       score: otcSignal.side || "",
       reason: otcSignal.source || "",
+      updatedAt,
+      time: updatedAt,
+      date,
     });
   }
   return rows.slice(0, Math.max(1, Math.min(120, cleanRequestNumber(limit) || 80)));
@@ -287,6 +308,7 @@ module.exports = async function handler(request, response) {
   const trading = marketStatus === "day";
   const [indexes, futures, otcSignal] = await Promise.all([fetchIndexes(), fetchFutures(), fetchOtcYahooSignal()]);
   const ok = indexes.length > 0;
+  const updatedAt = new Date().toISOString();
 
   response.setHeader(
     "Cache-Control",
@@ -296,12 +318,13 @@ module.exports = async function handler(request, response) {
   );
 
   const requestOptions = readRequestOptions(request);
+  const rows = requestOptions.canvas ? marketCanvasRows(indexes, futures, otcSignal, requestOptions.limit, updatedAt) : [];
   response.status(ok ? 200 : 502).json({
     ok,
     source: "MIS即時",
     trading,
     marketStatus,
-    updatedAt: new Date().toISOString(),
+    updatedAt,
     indexes,
     stocks: [],
     futures: futures.near,
@@ -309,7 +332,7 @@ module.exports = async function handler(request, response) {
     futuresNext: futures.next,
     otcSignal,
     canvas: requestOptions.canvas,
-    returnedCount: requestOptions.canvas ? marketCanvasRows(indexes, futures, otcSignal, requestOptions.limit).length : 0,
-    rows: requestOptions.canvas ? marketCanvasRows(indexes, futures, otcSignal, requestOptions.limit) : [],
+    returnedCount: rows.length,
+    rows,
   });
 };

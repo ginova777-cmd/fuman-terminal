@@ -104,6 +104,8 @@ function normalizeSignalList(value) {
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const signals = normalizeSignalList(payload.signals || row.signals);
+  const swingZone = String(payload.swingZone || payload.zone || row.zone || "").trim();
+  const swingZoneLabel = String(payload.swingZoneLabel || payload.zoneLabel || row.zone_label || "").trim();
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
@@ -115,8 +117,12 @@ function normalizePayload(row) {
     value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
     swingScore: cleanNumber(payload.swingScore || payload.score || row.score),
     score: cleanNumber(payload.score || payload.swingScore || row.score),
-    swingZone: String(payload.swingZone || payload.zone || row.zone || "").trim(),
-    swingZoneLabel: String(payload.swingZoneLabel || payload.zoneLabel || row.zone_label || "").trim(),
+    swingZone,
+    swingZoneLabel,
+    zone: swingZone,
+    zoneLabel: swingZoneLabel,
+    zone_label: swingZoneLabel,
+    pattern: String(payload.pattern || payload.strategy || swingZoneLabel || swingZone).trim(),
     signals,
     reason: String(payload.reason || row.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };

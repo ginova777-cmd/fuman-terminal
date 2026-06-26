@@ -71,6 +71,8 @@ function normalizeRow(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const foreign = cleanNumber(payload.foreign ?? row.foreign_net);
   const trust = cleanNumber(payload.trust ?? row.trust_net);
+  const dealer = cleanNumber(payload.dealer ?? row.dealer_net);
+  const total = cleanNumber(payload.total ?? row.total_net);
   const tradeVolume = cleanNumber(payload.tradeVolume || row.trade_volume);
   const fiveDayAvgVolume = cleanNumber(payload.fiveDayAvgVolume || payload.five_day_avg_volume);
   const foreignTrustBuyVolumePct = cleanNumber(payload.foreignTrustBuyVolumePct ?? payload.institutionBuyVolumePct ?? payload.foreignTrustVolumePct)
@@ -85,8 +87,19 @@ function normalizeRow(row) {
     value: cleanNumber(payload.value || row.trade_value),
     foreign,
     trust,
-    dealer: cleanNumber(payload.dealer ?? row.dealer_net),
-    total: cleanNumber(payload.total ?? row.total_net),
+    dealer,
+    total,
+    foreignNet: foreign,
+    foreign_net: foreign,
+    trustNet: trust,
+    investmentTrustNet: trust,
+    investment_trust_net: trust,
+    dealerNet: dealer,
+    dealer_net: dealer,
+    totalNet: total,
+    total_net: total,
+    institutionTotalNet: total,
+    institution_total_net: total,
     fiveDayAvgVolume,
     foreignTrustBuyVolumePct,
     institutionBuyVolumePct: foreignTrustBuyVolumePct,
