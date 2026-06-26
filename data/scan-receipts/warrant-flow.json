@@ -2,8 +2,8 @@
   "strategy": "warrant-flow",
   "label": "warrant flow raw refresh",
   "tier": "degradable",
-  "startedAt": "2026-06-16T13:22:54.7736840+08:00",
-  "finishedAt": "2026-06-16T13:23:33.6185686+08:00",
+  "startedAt": "2026-06-26T15:58:34.4477251+08:00",
+  "finishedAt": "2026-06-26T15:58:52.5661984+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -12,8 +12,9 @@
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
-  "payloadPath": "C:\\fuman-runtime\\data\\warrant-flow-latest.json",
+  "runId": "warrant-flow-20260625-20260626075845",
+  "payloadPath": "C:\\fuman-runtime\\data\\warrant-flow-summary.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-154546.log"
 }

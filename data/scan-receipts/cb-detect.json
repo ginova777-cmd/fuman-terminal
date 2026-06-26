@@ -2,18 +2,19 @@
   "strategy": "cb-detect",
   "label": "cb detect raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-16T13:40:05.9656244+08:00",
-  "finishedAt": "2026-06-16T13:40:22.5148571+08:00",
+  "startedAt": "2026-06-26T15:59:41.5729033+08:00",
+  "finishedAt": "2026-06-26T15:59:49.7724748+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
   "total": 0,
-  "matches": 14,
+  "matches": 0,
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
+  "runId": "",
   "payloadPath": "C:\\fuman-runtime\\data\\cb-detect-latest.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-154546.log"
 }

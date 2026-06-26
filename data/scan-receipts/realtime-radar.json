@@ -2,21 +2,19 @@
   "strategy": "realtime-radar",
   "label": "realtime radar raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-16T13:12:48.1200817+08:00",
-  "finishedAt": "2026-06-16T13:13:15.9442935+08:00",
+  "startedAt": "2026-06-26T15:45:47.0066878+08:00",
+  "finishedAt": "2026-06-26T15:45:47.2247739+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
   "total": 0,
-  "matches": 80,
+  "matches": 0,
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
+  "runId": "",
   "payloadPath": "C:\\fuman-runtime\\data\\realtime-radar-latest.json",
-  "warnings": [
-    "realtime radar supabase upload failed: supabase upload failed HTTP 404 {\"code\":\"PGRST205\",\"details\":null,\"hint\":\"Perhaps you meant the table 'public.fugle_intraday_1m'\",\"message\":\"Could not find the table 'public.fuman_realtime_radar_cache' in the schema cache\"}",
-    "realtime radar 2026-06-16 13:12:48: rows 80 status ok stale 154 [1538(4268s),2321(2240s),1475(1405s),3593(1402s),6951(1276s),1516(735s),2254(735s),4148(735s),4581(735s),1541(734s),1737(734s),4572(734s)] failed 0/14"
-  ],
+  "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-154546.log"
 }

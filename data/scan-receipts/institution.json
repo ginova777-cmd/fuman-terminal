@@ -2,20 +2,19 @@
   "strategy": "institution",
   "label": "institution raw refresh",
   "tier": "degradable",
-  "startedAt": "2026-06-16T13:13:16.7640244+08:00",
-  "finishedAt": "2026-06-16T13:22:54.7587634+08:00",
-  "status": "degraded",
+  "startedAt": "2026-06-26T15:48:48.2404980+08:00",
+  "finishedAt": "2026-06-26T15:58:34.4277441+08:00",
+  "status": "complete",
   "exitCode": 0,
   "scanned": 0,
   "total": 0,
-  "matches": 290,
+  "matches": 0,
   "complete": true,
   "qualityStatus": "",
   "fallback": false,
+  "runId": "",
   "payloadPath": "C:\\fuman-runtime\\data\\institution-latest.json",
-  "warnings": [
-    "institution metric warning: tpex 5-day metrics failed: 115/06/12 :: terminated"
-  ],
+  "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260616-131248.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-154546.log"
 }
