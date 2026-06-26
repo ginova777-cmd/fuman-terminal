@@ -120,8 +120,16 @@
     const freshness = freshnessDate
       ? `<div class="data-freshness-bar open-buy-freshness-bar ${freshnessIsToday ? "is-live" : "is-stale"}" data-open-buy-freshness-bar="1">模式：<strong>策略1｜最新可用收盤資料</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(freshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(freshnessToday))}</strong>${freshnessIsToday ? "" : "｜狀態：<strong>快取/最新可用</strong>"}</div>`
       : renderDataFreshnessLoadingHtml(`open-buy:${freshnessDate}:${freshnessToday}`);
+    const stageCards = typeof openBuyStageCards !== "undefined" && Array.isArray(openBuyStageCards) ? openBuyStageCards : [];
+    const stageOne = stageCards.find((card) => card.key === "candidate_2130_futopt_0845") || {};
+    const stageTwo = stageCards.find((card) => card.key === "auction_0855") || {};
+    const buyCount = typeof openBuyBuyCount !== "undefined" ? cleanNumber(openBuyBuyCount) : 0;
+    const decisionPending = typeof openBuyDecisionPending !== "undefined" ? Boolean(openBuyDecisionPending) : false;
+    const futoptText = stageOne.status === "ready" ? "個股期貨已確認" : stageOne.status === "waiting" ? "等待 08:45 個股期貨" : "盤前資源檢查";
+    const stageScanCount = cleanNumber(stageOne.count) || scanCount;
+    const readyBuyText = decisionPending && !buyCount ? "待確認" : (cleanNumber(stageTwo.count) || buyCount || 0);
 
-    if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30產生明日候選｜08:55最終確認｜${scanText}`;
+    if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30初篩+08:45個股期貨｜08:55搓合確認｜${scanText}`;
     if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
     if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + cleanNumber(stock.score), 0) / rows.length) : "--";
     if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => cleanNumber(stock.score))).toFixed(0)}` : "--";
@@ -153,17 +161,25 @@
           <td data-label="AI分析" class="open-buy-analysis-cell">${renderAi(stock)}</td>
           <td data-label="觸發原因" class="open-buy-trigger-cell">${renderTrigger(stock)}</td>
         </tr>`;
-    }).join("") : '<tr><td colspan="12">策略1後端掃描中。21:30 產生明日候選，08:55 用盤前狀態做最終確認。</td></tr>';
+    }).join("") : '<tr><td colspan="12">策略1後端掃描中。21:30 先篩選符合，08:45 確認個股期貨，08:55 看搓合完美符合。</td></tr>';
     const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
     strategyTable.innerHTML = `
       <section class="swing-dashboard open-buy-tactical-dashboard">
         <div class="swing-topbar">
           <div>
             <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-            <p>21:30 產生明日候選；08:55 盤前最終確認。09:00 只執行 BUY 名單。${scanText}</p>
+            <p>21:30 先篩選符合；08:45 看個股期貨；08:55 搓合完美符合才進 BUY。${scanText}</p>
           </div>
         </div>
         ${freshness}
+        <div class="swing-signal-grid">
+          <button class="swing-card active selected" type="button">
+            <div><strong>21:30 初篩 + 08:45 個股期貨</strong><small>先篩符合，再確認個股期貨｜${escapeAttr(futoptText)}</small></div><em>${escapeAttr(stageScanCount)}</em>
+          </button>
+          <button class="swing-card active" type="button">
+            <div><strong>08:55 搓合確認</strong><small>搓合完美符合才列 BUY</small></div><em>${escapeAttr(readyBuyText)}</em>
+          </button>
+        </div>
         <section class="swing-panel open-buy-tactical-panel">
           <table class="swing-table open-buy-tactical-table">
             <thead><tr><th>排名</th><th>股票</th><th>多空</th><th>價格</th><th>漲幅</th><th>量</th><th>推估量比</th><th>成交額</th><th>法人5D</th><th>分數</th><th>AI分析</th><th>觸發原因</th></tr></thead>

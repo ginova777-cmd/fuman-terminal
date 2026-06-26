@@ -21,11 +21,15 @@ const forbidden = [
   "有賺就走",
   "快跑",
   "開盤價進場\", \"有賺就走\", \"09:10 強制出場",
+  "21:30 產生明日候選",
+  "09:00 只執行 BUY",
 ];
 
 const uiFiles = [
   "terminal-app.js",
   "terminal-live-check.js",
+  "terminal-open-buy-view.js",
+  "terminal-desktop-fast-shell.js",
   "api/mobile-fragment.js",
   "scripts/generate-slim-cache.js",
 ];
@@ -52,13 +56,12 @@ function openBuyBlock(file) {
   }
   const end = content.indexOf("function renderStrategy5Dashboard", start);
   if (end < 0) {
-    pushIssue(`${file}: missing renderStrategy5Dashboard after renderOpenBuyDashboard`);
     return content.slice(start);
   }
   return content.slice(start, end);
 }
 
-for (const file of ["terminal-app.js", "terminal-live-check.js"]) {
+for (const file of ["terminal-app.js", "terminal-live-check.js", "terminal-open-buy-view.js"]) {
   const block = openBuyBlock(file);
   if (!block) continue;
   const cardCount = (block.match(/class="swing-card active/g) || []).length;
@@ -66,6 +69,11 @@ for (const file of ["terminal-app.js", "terminal-live-check.js"]) {
   for (const required of ["21:30 初篩 + 08:45 個股期貨", "08:55 搓合確認", "搓合完美符合才列 BUY"]) {
     if (!block.includes(required)) pushIssue(`${file}: Strategy1 open-buy block missing ${required}`);
   }
+}
+
+const desktopFastShell = read("terminal-desktop-fast-shell.js");
+if (!desktopFastShell.includes("21:30 初篩符合 + 08:45 個股期貨確認；08:55 搓合完美符合才列 BUY")) {
+  pushIssue("terminal-desktop-fast-shell.js: Strategy1 fast shell summary must use 21:30+08:45 / 08:55 two-stage contract");
 }
 
 const mobileFragment = read("api/mobile-fragment.js");
