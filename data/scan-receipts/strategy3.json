@@ -2,8 +2,8 @@
   "strategy": "strategy3",
   "label": "strategy3 raw refresh",
   "tier": "critical",
-  "startedAt": "2026-06-26T20:11:52.7547499+08:00",
-  "finishedAt": "2026-06-26T20:12:50.6234848+08:00",
+  "startedAt": "2026-06-26T20:30:00.1432622+08:00",
+  "finishedAt": "2026-06-26T20:31:42.8397812+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -12,9 +12,9 @@
   "complete": true,
   "qualityStatus": "complete",
   "fallback": false,
-  "runId": "strategy3-20260626-20260626121227",
+  "runId": "strategy3-20260626-20260626123108",
   "payloadPath": "C:\\fuman-runtime\\data\\strategy3-latest.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\strategy3-complete-scan-20260626-201152.log"
+  "log": "C:\\fuman-runtime\\logs\\strategy3-complete-scan-20260626-203000.log"
 }
