@@ -281,8 +281,7 @@ $$;
 
 grant execute on function public.refresh_strategy2_intraday_ready_cache() to service_role;
 
-drop view if exists public.v_strategy2_intraday_ready;
-create view public.v_strategy2_intraday_ready as
+create or replace view public.v_strategy2_intraday_ready as
 select
   c.symbol,
   c.name,
@@ -320,8 +319,7 @@ where c.symbol ~ '^[0-9]{4}$';
 grant select on public.v_strategy2_intraday_ready to anon;
 grant select on public.v_strategy2_intraday_ready to service_role;
 
-drop view if exists public.v_futopt_stock_mapping_ready;
-create view public.v_futopt_stock_mapping_ready as
+create or replace view public.v_futopt_stock_mapping_ready as
 with trade_clock as (
   select (now() at time zone 'Asia/Taipei')::date as trade_date
 ),
@@ -986,10 +984,7 @@ $$;
 
 grant execute on function public.refresh_strategy2_readiness_cache() to service_role;
 
-drop view if exists public.v_strategy2_readiness_missing;
-drop view if exists public.v_strategy2_readiness_status;
-
-create view public.v_strategy2_readiness_status as
+create or replace view public.v_strategy2_readiness_status as
 select
   id,
   checked_at,
@@ -1018,7 +1013,7 @@ select
 from public.strategy2_readiness_status_cache
 where id = 'latest';
 
-create view public.v_strategy2_readiness_missing as
+create or replace view public.v_strategy2_readiness_missing as
 select
   checked_at,
   gate,
