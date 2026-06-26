@@ -437,6 +437,9 @@ if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:
 if (!/endpoint:\s*"\/api\/strategy2-latest"/.test(mobileFragmentApi) || /endpoint:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileFragmentApi)) {
   issues.push("api/mobile-fragment.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
 }
+if (!/function\s+strategy2EntryTime[\s\S]*?\[[^\]]*"time"[^\]]*"quoteTime"/.test(mobileFragmentApi)) {
+  issues.push("api/mobile-fragment.js Strategy2 entry time must prefer compact row time before quoteTime so live rows are not filtered out");
+}
 if (!/require\("\.\/strategy2-latest"\)/.test(terminalHomeApi) || !/callJson\(strategy2Latest,\s*request\)/.test(terminalHomeApi) || /callJson\(latestStrategy/.test(terminalHomeApi)) {
   issues.push("api/terminal-home.js must load Strategy2 directly from strategy2-latest, not latest-strategy");
 }

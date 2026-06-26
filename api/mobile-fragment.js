@@ -166,7 +166,7 @@ function arrayAt(value, keys) {
 }
 
 function strategy2EntryTime(row) {
-  return firstValue(row, ["entryAt", "timestamp", "quoteTime", "latestSeenAt", "latestAAt", "firstAAt", "highestAt"], "");
+  return firstValue(row, ["entryAt", "timestamp", "time", "latestSeenAt", "latestAAt", "firstAAt", "highestAt", "quoteTime"], "");
 }
 
 function strategy2TimeValue(row) {

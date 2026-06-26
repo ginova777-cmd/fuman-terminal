@@ -117,6 +117,22 @@ const CONTRACTS = [
     checks: [
       runView("v_institution_latest_complete_run", "institution"),
       resultTable("institution_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "foreign_net", "trust_net", "dealer_net", "total_net", "data_contract_source"]),
+      sourceTable("v_institution_source_health", [
+        "checked_trade_date",
+        "latest_trade_date",
+        "institutional_latest_trade_date",
+        "margin_latest_trade_date",
+        "unified_latest_trade_date",
+        "institutional_rows",
+        "margin_rows",
+        "unified_rows",
+        "valid_after_exclusion_rows",
+        "min_required_rows",
+        "stale_days",
+        "coverage_status",
+        "reason",
+        "suggested_scanner_behavior",
+      ], { order: "checked_trade_date.desc", level: "warning", healthStatusField: "coverage_status" }),
     ],
   },
   {
@@ -203,6 +219,8 @@ function sourceTable(table, fields, options = {}) {
     requireToday: options.requireToday === true,
     maxAgeDays: Number(options.maxAgeDays || 0),
     purpose: options.purpose || "",
+    healthStatusField: options.healthStatusField || "",
+    acceptedHealthStatuses: options.acceptedHealthStatuses || ["ready", "ok", "healthy", "complete"],
   };
 }
 
@@ -287,7 +305,16 @@ function compactDate(value) {
 }
 
 function rowDate(row = {}) {
-  return compactDate(row.updated_at || row.quote_time || row.last_trade_time || row.scan_date || row.finished_at || row.trade_date);
+  return compactDate(
+    row.updated_at
+    || row.quote_time
+    || row.last_trade_time
+    || row.scan_date
+    || row.finished_at
+    || row.trade_date
+    || row.latest_trade_date
+    || row.checked_trade_date
+  );
 }
 
 function dateAgeDays(dateKey) {
@@ -351,6 +378,17 @@ async function checkOne(strategy, check) {
     const ageDays = dateAgeDays(newest);
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
     if (ageDays != null && ageDays > check.maxAgeDays) issues.push(`${check.table} newest date ${newest} age ${ageDays}d > ${check.maxAgeDays}d`);
+  }
+  if (result.ok && check.healthStatusField) {
+    const row = result.rows[0] || {};
+    const status = String(row[check.healthStatusField] || "").trim().toLowerCase();
+    const accepted = new Set((check.acceptedHealthStatuses || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean));
+    if (!status) {
+      issues.push(`${check.table} ${check.healthStatusField} missing`);
+    } else if (!accepted.has(status)) {
+      const reason = String(row.reason || row.suggested_scanner_behavior || "").replace(/\s+/g, " ").slice(0, 180);
+      issues.push(`${check.table} ${check.healthStatusField}=${status}${reason ? ` (${reason})` : ""}`);
+    }
   }
   return {
     ...check,
