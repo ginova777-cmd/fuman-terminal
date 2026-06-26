@@ -54,6 +54,11 @@ function Invoke-NodeScan($scriptPath, $label) {
       $exitCode = $LASTEXITCODE
       if ($exitCode -eq 0) { return 0 }
       "$label attempt $attempt failed with exit code $exitCode" >> $log
+      $tailText = (Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Last 80) -join "`n"
+      if (Test-InstitutionControlledSourceNotReady $tailText) {
+        "$label controlled source-not-ready detected; stop retrying and preserve latest complete run" >> $log
+        return $exitCode
+      }
       if ($attempt -lt 3) {
         "Waiting 60 seconds before retry" >> $log
         Start-Sleep -Seconds 60
