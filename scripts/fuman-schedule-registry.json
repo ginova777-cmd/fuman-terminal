@@ -91,8 +91,8 @@
     {
       "taskName": "\\Fuman Strategy2 Intraday Scan",
       "displayName": "Fuman Strategy2 Intraday Scan",
-      "description": "策略2當沖雷達，08:45 啟動，先抓盤前期貨/試撮，09:00 後巡邏到 13:30",
-      "time": "08:45",
+      "description": "策略2當沖雷達，08:00 啟動；08:45 進入個股期貨/試撮 gate，09:00 後巡邏到 12:00",
+      "time": "08:00",
       "aliases": [
         "策略2",
         "當沖"

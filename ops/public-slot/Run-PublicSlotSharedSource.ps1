@@ -2035,8 +2035,19 @@ do {
       payload = @{ source = "public-slot-shared-source" }
     })
     try {
-      $strategy2ReadyRows = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body @{}
-      Write-Log "strategy2 ready cache refreshed rows=$strategy2ReadyRows"
+      $strategy2ReadyPages = 0
+      $strategy2ReadyProcessed = 0
+      $strategy2ReadyLast = $null
+      for ($readyPage = 0; $readyPage -lt 12; $readyPage++) {
+        $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body @{}
+        $strategy2ReadyPages += 1
+        $processedThisPage = [int](Get-Number $strategy2ReadyLast.processed)
+        $strategy2ReadyProcessed += $processedThisPage
+        $nextOffset = [int](Get-Number $strategy2ReadyLast.next_offset)
+        $totalExpected = [int](Get-Number $strategy2ReadyLast.total_expected)
+        if ($nextOffset -eq 0 -or ($totalExpected -gt 0 -and $strategy2ReadyProcessed -ge $totalExpected)) { break }
+      }
+      Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages processed=$strategy2ReadyProcessed last=$strategy2ReadyLast"
     } catch {
       Write-Log "WARN strategy2 ready cache refresh skipped: $($_.Exception.Message)"
     }

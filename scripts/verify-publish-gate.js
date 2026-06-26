@@ -392,7 +392,7 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
   if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
 }
-for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed"]) {
+for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "next_offset"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
 }
 for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
