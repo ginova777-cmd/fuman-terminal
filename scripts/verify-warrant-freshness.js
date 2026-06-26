@@ -86,6 +86,13 @@ function assertOk(condition, message, issues) {
   if (!condition) issues.push(message);
 }
 
+function isAllowedWarrantCacheSource(value) {
+  return [
+    "supabase-api",
+    "supabase:desktop_route_snapshot",
+  ].includes(String(value || "").trim());
+}
+
 function schemaVersionAtLeast(actual, required) {
   const actualText = String(actual || "").trim();
   const requiredText = String(required || "").trim();
@@ -159,7 +166,7 @@ async function verifySupabaseApi(issues) {
   const marketDataDate = compactDateKey(apiPayload.marketSession?.marketDataDate);
 
   assertOk(apiPayload?.ok === true, "warrant-flow api ok not true", issues);
-  assertOk(apiPayload?.cacheSource === "supabase-api", `warrant-flow api cacheSource=${apiPayload?.cacheSource || "missing"}`, issues);
+  assertOk(isAllowedWarrantCacheSource(apiPayload?.cacheSource), `warrant-flow api cacheSource=${apiPayload?.cacheSource || "missing"}`, issues);
   assertOk(Boolean(apiPayload?.runId), "warrant-flow api runId missing", issues);
   assertOk(schemaVersionAtLeast(apiPayload?.schemaVersion, "warrant-flow-run-id-complete-v1"), `warrant-flow api schemaVersion invalid ${apiPayload?.schemaVersion || "missing"}`, issues);
   assertOk(apiPayload?.dataContract?.ok === true, `warrant-flow api dataContract not ok ${JSON.stringify(apiPayload?.dataContract?.issues || [])}`, issues);

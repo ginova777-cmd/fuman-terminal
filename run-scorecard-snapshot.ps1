@@ -32,6 +32,16 @@ if (-not $Python) {
 
 Set-Location -LiteralPath $ProjectRoot
 $outFile = Join-Path $ProjectRoot "data\scorecard-latest.json"
+$runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
+$terminalSourceFile = Join-Path $runtimeRoot "data\scorecard-terminal-current.json"
+
+Write-Step "generate terminal scorecard source"
+& node --use-system-ca "scripts\generate-terminal-scorecard-source.js" "--out=$terminalSourceFile"
+if ($LASTEXITCODE -ne 0) { throw "terminal scorecard source generation failed with exit code $LASTEXITCODE" }
+
+Write-Step "upsert terminal scorecard source to Supabase"
+& node --use-system-ca "scripts\scorecard-source-supabase-ops.js" "backfill" "--source-file=$terminalSourceFile"
+if ($LASTEXITCODE -ne 0) { throw "scorecard Supabase source backfill failed with exit code $LASTEXITCODE" }
 
 Write-Step "export Supabase scorecard source"
 & node --use-system-ca "scripts\export-scorecard-supabase-source.js" "--out=$outFile"

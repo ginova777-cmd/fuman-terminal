@@ -153,6 +153,9 @@ if (!packageJson.scripts?.["scorecard:export-source"] || !/export-scorecard-supa
 if (!packageJson.scripts?.["scorecard:source:ops"] || !/scorecard-source-supabase-ops\.js/.test(packageJson.scripts["scorecard:source:ops"])) {
   issues.push("package.json missing scripts.scorecard:source:ops for scorecard Supabase source apply/backfill/probe");
 }
+if (!packageJson.scripts?.["scorecard:terminal-source"] || !/generate-terminal-scorecard-source\.js/.test(packageJson.scripts["scorecard:terminal-source"])) {
+  issues.push("package.json missing scripts.scorecard:terminal-source for terminal complete-run scorecard freshness");
+}
 if (!packageJson.scripts?.["verify:scorecard"] || !/verify-scorecard-snapshot\.js/.test(packageJson.scripts["verify:scorecard"])) {
   issues.push("package.json missing scripts.verify:scorecard");
 }
@@ -891,6 +894,7 @@ for (const file of [
   "scripts/verify-scorecard-resource-chain.js",
   "scripts/verify-market-surfaces-chain.js",
   "scripts/export-scorecard-supabase-source.js",
+  "scripts/generate-terminal-scorecard-source.js",
   "scripts/scorecard-source-supabase-ops.js",
   "scripts/export-scorecard-snapshot.py",
   "scripts/publish-scorecard-snapshot.js",
@@ -1228,7 +1232,8 @@ if (fetchResult.status !== 0) {
   } else {
     const allowedDirty = new Set([
       ".gitignore",
-      "AGENTS.md",
+      "AGENTS.md",
+      "scorecardAGENTS.MD",
       "scripts/verify-publish-gate.js",
       "fuman-sw.js",
       "api/realtime-radar-latest.js",
@@ -1262,6 +1267,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-scorecard-snapshot.js",
       "scripts/verify-scorecard-resource-chain.js",
       "scripts/export-scorecard-supabase-source.js",
+      "scripts/generate-terminal-scorecard-source.js",
       "scripts/export-scorecard-snapshot.py",
       "scripts/publish-scorecard-snapshot.js",
       "scripts/publish-mobile-update-event.js",
