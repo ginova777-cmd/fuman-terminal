@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const LIVE_BASE_URL = "https://fuman-terminal.vercel.app";
@@ -24,6 +25,25 @@ function argValue(name) {
 
 const live = process.argv.includes("--live");
 const baseUrl = (argValue("--base-url") || process.env.FUMAN_LIVE_BASE_URL || LIVE_BASE_URL).replace(/\/+$/, "");
+const legacyStaticMode = process.env.FUMAN_VERIFY_LEGACY_MOBILE_STATIC === "1" || process.argv.includes("--legacy-static");
+
+if (!legacyStaticMode) {
+  const args = ["scripts/verify-mobile-api-only.js"];
+  if (live) args.push("--live");
+  if (baseUrl) args.push(`--base-url=${baseUrl}`);
+  const result = spawnSync(process.execPath, args, {
+    cwd: ROOT,
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  if (result.error) {
+    console.error(`[mobile-ai-fragment${live ? ":live" : ""}] API-only verifier failed: ${result.error.message}`);
+    process.exit(1);
+  }
+  if ((result.status || 0) !== 0) process.exit(result.status || 1);
+  console.log(`[mobile-ai-fragment${live ? ":live" : ""}] legacy static fragment check skipped; API-only mobile contract is authoritative`);
+  process.exit(0);
+}
 
 function sha1(text) {
   return crypto.createHash("sha1").update(text).digest("hex").slice(0, 12);

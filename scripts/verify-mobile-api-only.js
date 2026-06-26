@@ -101,7 +101,7 @@ function checkApiBoot() {
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must be CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
   requireText(apiBoot, "/api/mobile-fragment?tab=", "/api/mobile-boot must point strategy tabs to API-rendered fragments");
-  for (const endpoint of ["/api/open-buy-latest", "/api/latest-strategy?key=strategy2", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
+  for (const endpoint of ["/api/open-buy-latest", "/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
     requireText(apiBoot, endpoint, `/api/mobile-boot must derive mobile fragments from ${endpoint}`);
     requireText(fragmentApi, endpoint, `/api/mobile-fragment must render rows from ${endpoint}`);
   }
@@ -126,6 +126,8 @@ function checkGeneratorAndContracts() {
   requireText(generator, "lowPower", "mobile boot must carry lowPower render policy");
   requireText(generator, "fragments", "mobile boot must carry versioned fragment manifest");
   requireText(eventScript, "mobile_update_events", "scanner/postdeploy must publish mobile update events");
+  requireText(eventScript, "/api/mobile-boot", "mobile update events must read API-only mobile boot");
+  requireText(eventScript, "MOBILE_UPDATE_EVENT_BOOT_SOURCE", "mobile update events must require explicit legacy mode before reading static boot");
   requireText(eventScript, "boot_hash", "mobile update events must include boot_hash");
   requireText(runGate, "status=eq.complete", "run gate must read only complete Supabase runs");
   requireText(runGate, "complete=eq.true", "run gate must require complete=true");

@@ -5,6 +5,7 @@ const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.verc
 const FIRST_SCREEN_BUDGET_BYTES = 173000;
 const FIRST_SCREEN_JSON_BUDGET_BYTES = 30000;
 const STRATEGY2_HEALTH_ENDPOINT = "/api/strategy2-latest?top=1&compact=1&limit=50&live=1";
+const STATIC_MOBILE_ARTIFACTS_ARE_LEGACY_CACHE_ONLY = true;
 const FIRST_SCREEN_TARGETS = [
   "/",
   "/terminal-app.js",
@@ -138,7 +139,7 @@ async function main() {
     if (pathname.endsWith(".json")) firstScreenJsonBytes += result.body.length;
     if (result.status < 200 || result.status >= 400) issues.push(`first-screen target unhealthy ${pathname} status=${result.status}`);
   }
-  for (const pathname of FIRST_SCREEN_FORBIDDEN) {
+for (const pathname of FIRST_SCREEN_FORBIDDEN) {
     if (FIRST_SCREEN_TARGETS.includes(pathname)) issues.push(`first-screen forbidden target included ${pathname}`);
   }
   if (firstScreenBytes > FIRST_SCREEN_BUDGET_BYTES) issues.push(`first-screen too large bytes=${firstScreenBytes} max=${FIRST_SCREEN_BUDGET_BYTES}`);

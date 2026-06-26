@@ -1,9 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const stocksHandler = require("../api/stocks");
-const { ROOT, dataPath } = require("./runtime-paths");
+const { dataOutputPaths } = require("./runtime-paths");
 
-const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const MIN_STOCK_COUNT = Number(process.env.STOCKS_SLIM_MIN_COUNT || 1500);
 
 function cleanNumber(value) {
@@ -20,8 +19,8 @@ function writeJson(file, payload) {
 }
 
 function writeToAll(rel, payload) {
-  for (const root of [...new Set([ROOT, path.dirname(path.dirname(dataPath("x"))), syncRoot])]) {
-    writeJson(path.join(root, rel), payload);
+  for (const file of dataOutputPaths(rel, { repoEnv: "FUMAN_STOCKS_SLIM_WRITE_CODE_REPO" })) {
+    writeJson(file, payload);
   }
 }
 

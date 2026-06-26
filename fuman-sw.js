@@ -36,7 +36,9 @@ const STATIC_ASSETS = [
   "/favicon.ico",
 ];
 
-const DATA_PATTERNS = [
+// Legacy static data patterns are cache hygiene only. Formal mobile data must
+// come from /api/mobile-boot and /api/mobile-fragment, never from /data/*.json.
+const LEGACY_STATIC_DATA_PATTERNS = [
   /\/api\/terminal-fast-bundle/i,
   /\/data\/mobile-boot\.json/i,
   /\/data\/mobile-analysis\/[^/]+\.json/i,
@@ -106,7 +108,7 @@ function isSameOriginGet(request) {
 }
 
 function isDataRequest(url) {
-  return DATA_PATTERNS.some((pattern) => pattern.test(url.pathname));
+  return LEGACY_STATIC_DATA_PATTERNS.some((pattern) => pattern.test(url.pathname));
 }
 
 function isLiveRequest(url) {

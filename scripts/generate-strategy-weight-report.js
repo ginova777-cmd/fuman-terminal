@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { ROOT, RUNTIME_ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
 function readJson(file) {
   if (!fs.existsSync(file)) return null;
@@ -47,8 +47,7 @@ function main() {
       strategy4Multiplier: clamp((strategy4.complete === false ? 0.95 : 1) * qualityPenalty, 0.88, 1.12),
     },
   };
-  for (const root of [ROOT, RUNTIME_ROOT]) {
-    const out = path.join(root, "data", "strategy-weight-report.json");
+  for (const out of dataOutputPaths("strategy-weight-report.json", { repoEnv: "FUMAN_REPORT_WRITE_CODE_REPO" })) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   }

@@ -75,6 +75,14 @@ const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scrip
 if (terminalModulesGuard.status !== 0) {
   issues.push(`verify-terminal-modules-contract failed: ${(terminalModulesGuard.stderr || terminalModulesGuard.stdout || "").trim()}`);
 }
+
+const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-deploy-worktree-clean.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (deployWorktreeCleanGuard.status !== 0) {
+  issues.push(`verify-deploy-worktree-clean failed: ${(deployWorktreeCleanGuard.stderr || deployWorktreeCleanGuard.stdout || "").trim()}`);
+}
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -167,6 +175,15 @@ if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includ
 }
 if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
   issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
+}
+if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
+  issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
+}
+if (!String(packageJson.scripts?.["monitor:deploy-worktree-clean"] || "").includes("scripts/monitor-deploy-worktree-clean.js")) {
+  issues.push("package.json missing scripts.monitor:deploy-worktree-clean");
+}
+if (!String(packageJson.scripts?.["monitor:deploy-worktree-clean:install"] || "").includes("install-deploy-worktree-clean-monitor-task.ps1")) {
+  issues.push("package.json missing scripts.monitor:deploy-worktree-clean:install");
 }
 const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
 if (!gateScript) {
@@ -274,6 +291,16 @@ const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
+const mobileApiOnlyVerifier = read("scripts/verify-mobile-api-only.js");
+const mobileAiFragmentVerifier = read("scripts/verify-mobile-ai-fragment.js");
+const mobileUpdateEventPublisher = read("scripts/publish-mobile-update-event.js");
+const runtimePaths = read("scripts/runtime-paths.js");
+const dataQualityReportGenerator = read("scripts/generate-data-quality-report.js");
+const consistencyReportGenerator = read("scripts/generate-consistency-report.js");
+const signalQualityReportGenerator = read("scripts/generate-signal-quality-report.js");
+const performanceReportGenerator = read("scripts/generate-performance-report.js");
+const strategyWeightReportGenerator = read("scripts/generate-strategy-weight-report.js");
+const stocksSlimGenerator = read("scripts/generate-stocks-slim.js");
 const scorecardApi = read("api/scorecard.js");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
@@ -617,6 +644,36 @@ for (const marker of [
 ]) {
   if (!mobileHealthVerifier.includes(marker)) issues.push(`verify-mobile-health.js missing ${marker}`);
 }
+if (!/STATIC_MOBILE_ARTIFACTS_ARE_LEGACY_CACHE_ONLY/.test(mobileHealthVerifier)) {
+  issues.push("verify-mobile-health.js must mark static mobile artifacts as legacy/cache only");
+}
+if (!/FUMAN_VERIFY_LEGACY_MOBILE_STATIC/.test(mobileAiFragmentVerifier) || !/verify-mobile-api-only\.js/.test(mobileAiFragmentVerifier)) {
+  issues.push("verify-mobile-ai-fragment.js must default to API-only verification and require explicit legacy static mode for /data mobile fragments");
+}
+if (!/\/api\/mobile-boot/.test(mobileUpdateEventPublisher) || !/MOBILE_UPDATE_EVENT_BOOT_SOURCE/.test(mobileUpdateEventPublisher)) {
+  issues.push("publish-mobile-update-event.js must read API-only /api/mobile-boot by default and require explicit legacy static mode");
+}
+if (!/\/api\/mobile-boot/.test(mobileApiOnlyVerifier) || !/MOBILE_UPDATE_EVENT_BOOT_SOURCE/.test(mobileApiOnlyVerifier)) {
+  issues.push("verify-mobile-api-only.js must guard mobile update event API-only boot source");
+}
+if (!/function dataOutputPaths/.test(runtimePaths) || !/FUMAN_WRITE_CODE_REPO_DATA/.test(runtimePaths)) {
+  issues.push("runtime-paths.js must expose dataOutputPaths with explicit opt-in repo data writes");
+}
+for (const [name, source] of [
+  ["generate-data-quality-report.js", dataQualityReportGenerator],
+  ["generate-consistency-report.js", consistencyReportGenerator],
+  ["generate-signal-quality-report.js", signalQualityReportGenerator],
+  ["generate-performance-report.js", performanceReportGenerator],
+  ["generate-strategy-weight-report.js", strategyWeightReportGenerator],
+  ["generate-stocks-slim.js", stocksSlimGenerator],
+]) {
+  if (!/dataOutputPaths/.test(source)) {
+    issues.push(`${name} must write generated data through runtime-only dataOutputPaths`);
+  }
+  if (/\[\s*ROOT\s*,\s*(?:RUNTIME_ROOT|process\.env\.FUMAN_RUNTIME_ROOT)/.test(source) || /\bFUMAN_SYNC_DIR\b/.test(source)) {
+    issues.push(`${name} must not default to writing generated data into repo/deploy sync roots`);
+  }
+}
 
 const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
 for (const marker of [
@@ -696,6 +753,9 @@ const serviceWorker = read("fuman-sw.js");
 if (!/networkFirst\(request\)/.test(serviceWorker) || !/cache: "no-store"/.test(serviceWorker)) {
   issues.push("fuman-sw.js must keep mobile data requests network-first/no-store");
 }
+if (!/LEGACY_STATIC_DATA_PATTERNS/.test(serviceWorker) || !/Formal mobile data must/.test(serviceWorker)) {
+  issues.push("fuman-sw.js must label /data mobile patterns as legacy cache only, not formal mobile data");
+}
 if (!/ETIMEDOUT|ECONNRESET|fetch failed/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must capture external source timeout warnings");
 }
@@ -720,6 +780,13 @@ for (const file of [
   "scripts/scan-strategy3-cache.js",
   "scripts/verify-terminal-field-completeness.js",
   "scripts/verify-terminal-source-contracts.js",
+  "scripts/verify-deploy-worktree-clean.js",
+  "scripts/monitor-deploy-worktree-clean.js",
+  "scripts/install-deploy-worktree-clean-monitor-task.ps1",
+  "scripts/verify-mobile-health.js",
+  "scripts/verify-mobile-api-only.js",
+  "scripts/verify-mobile-ai-fragment.js",
+  "scripts/publish-mobile-update-event.js",
   "api/market.js",
   "api/realtime-radar-latest.js",
   "scripts/verify-desktop-api-only.js",
@@ -1033,6 +1100,7 @@ if (fetchResult.status !== 0) {
       ".gitignore",
       "AGENTS.md",
       "scripts/verify-publish-gate.js",
+      "fuman-sw.js",
       "api/realtime-radar-latest.js",
       "api/terminal-home.js",
       "terminal-runtime-config.js",
@@ -1060,8 +1128,22 @@ if (fetchResult.status !== 0) {
       "scripts/verify-scorecard-snapshot.js",
       "scripts/export-scorecard-snapshot.py",
       "scripts/publish-scorecard-snapshot.js",
+      "scripts/publish-mobile-update-event.js",
       "scripts/verify-source-sync.js",
       "scripts/cleanup-api-only-retired-artifacts.js",
+      "scripts/verify-deploy-worktree-clean.js",
+      "scripts/monitor-deploy-worktree-clean.js",
+      "scripts/install-deploy-worktree-clean-monitor-task.ps1",
+      "scripts/runtime-paths.js",
+      "scripts/generate-consistency-report.js",
+      "scripts/generate-data-quality-report.js",
+      "scripts/generate-performance-report.js",
+      "scripts/generate-signal-quality-report.js",
+      "scripts/generate-stocks-slim.js",
+      "scripts/generate-strategy-weight-report.js",
+      "scripts/verify-mobile-health.js",
+      "scripts/verify-mobile-api-only.js",
+      "scripts/verify-mobile-ai-fragment.js",
       "install-api-only-cleanup-task.ps1",
       "run-scorecard-snapshot.ps1",
       "run-main-release-pipeline.ps1",

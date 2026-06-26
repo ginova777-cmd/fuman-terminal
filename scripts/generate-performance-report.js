@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
 function readJson(file) {
   if (!fs.existsSync(file)) return null;
@@ -44,8 +44,7 @@ function main() {
   payload.totalBytes = payload.assets.reduce((sum, item) => sum + (item.bytes || 0), 0);
   payload.missing = payload.assets.filter((item) => !item.ok).map((item) => item.file);
   payload.ok = payload.missing.length === 0;
-  for (const root of [ROOT, process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime"]) {
-    const out = path.join(root, "data", "performance-report.json");
+  for (const out of dataOutputPaths("performance-report.json", { repoEnv: "FUMAN_REPORT_WRITE_CODE_REPO" })) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   }

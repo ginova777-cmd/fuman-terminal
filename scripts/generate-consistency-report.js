@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
 function read(file) {
   const candidates = [dataPath(file), path.join(ROOT, "data", file)];
@@ -36,8 +36,7 @@ function main() {
       warrantTop: count(warrantTop),
     },
   };
-  for (const root of [ROOT, process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime"]) {
-    const out = path.join(root, "data", "data-consistency-report.json");
+  for (const out of dataOutputPaths("data-consistency-report.json", { repoEnv: "FUMAN_REPORT_WRITE_CODE_REPO" })) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }

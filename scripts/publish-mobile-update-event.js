@@ -5,6 +5,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const DEFAULT_SUPABASE_URL = "https://cpmpfhbzutkiecccekfr.supabase.co";
+const DEFAULT_TERMINAL_URL = "https://fuman-terminal.vercel.app";
 
 function readSecret(name) {
   for (const dir of [
@@ -21,6 +22,22 @@ function readSecret(name) {
 
 function readJson(rel) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Cache-Control": "no-cache",
+      "User-Agent": "FumanMobileUpdateEvent/1.0",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${url} returned ${response.status} ${text.slice(0, 160)}`.trim());
+  }
+  return response.json();
 }
 
 function postJson(url, key, payload) {
@@ -99,6 +116,22 @@ function changedKeysFromBoot(boot) {
   return [...keys];
 }
 
+async function loadMobileBoot() {
+  if (process.env.MOBILE_UPDATE_EVENT_BOOT_SOURCE === "local-static") {
+    return readJson("data/mobile-boot.json");
+  }
+  const baseUrl = String(process.env.FUMAN_TERMINAL_URL || process.env.FUMAN_LIVE_BASE_URL || DEFAULT_TERMINAL_URL).replace(/\/+$/, "");
+  try {
+    return await fetchJson(`${baseUrl}/api/mobile-boot?mobileEvent=${Date.now()}`);
+  } catch (error) {
+    if (process.env.MOBILE_UPDATE_EVENT_ALLOW_LOCAL_STATIC_FALLBACK === "1") {
+      console.warn(`[mobile-event] API boot unavailable; using legacy local static fallback: ${error.message}`);
+      return readJson("data/mobile-boot.json");
+    }
+    throw error;
+  }
+}
+
 async function publish() {
   const strict = process.argv.includes("--strict");
   const dryRun = process.argv.includes("--dry-run");
@@ -122,10 +155,10 @@ async function publish() {
     return;
   }
 
-  const boot = readJson("data/mobile-boot.json");
+  const boot = await loadMobileBoot();
   const digest = boot?.digest || {};
   const version = boot?.updatedAt || digest.aiUpdatedAt || new Date().toISOString();
-  const bootHash = digest.ultraHash || digest.aiHash || digest.mobileHash || "";
+  const bootHash = boot?.bootHash || digest.ultraHash || digest.aiHash || digest.mobileHash || "";
   const payload = {
     version,
     boot_hash: bootHash,

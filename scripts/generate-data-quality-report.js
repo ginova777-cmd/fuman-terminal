@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
 const FILES = [
   "market-summary.json",
@@ -201,8 +201,7 @@ function main() {
     highIssues: files.flatMap((item) => item.issues.filter((issue) => issue.level === "high").map((issue) => ({ file: item.file, ...issue }))),
     mediumIssues: files.flatMap((item) => item.issues.filter((issue) => issue.level === "medium").map((issue) => ({ file: item.file, ...issue }))),
   };
-  for (const root of [ROOT, process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime"]) {
-    const out = path.join(root, "data", "data-quality-report.json");
+  for (const out of dataOutputPaths("data-quality-report.json", { repoEnv: "FUMAN_REPORT_WRITE_CODE_REPO" })) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }
