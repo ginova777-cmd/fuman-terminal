@@ -121,8 +121,15 @@ function Invoke-DesktopRouteSnapshotRefresh($source) {
   if (-not (Test-Path -LiteralPath $scriptPath)) {
     throw "desktop route snapshot helper missing: $scriptPath"
   }
-  $null = Invoke-GateCommand "desktop route snapshot refresh" {
+  $exitCode = Invoke-GateCommand "desktop route snapshot refresh" {
     & $scriptPath -Source $source -LogPath $log
+  } -AllowFailure
+  if ($exitCode -ne 0) {
+    Write-GateLog "desktop route snapshot refresh failed with exit=$exitCode; retrying once"
+    Start-Sleep -Seconds 12
+    Invoke-GateCommand "desktop route snapshot refresh retry" {
+      & $scriptPath -Source $source -LogPath $log
+    }
   }
 }
 
@@ -429,8 +436,12 @@ try {
   Write-GateLog "Legacy terminal freshness diagnostic disabled; not writing data/live-freshness-ok.json"
 
   if (-not $SkipTerminalCopy) {
-    Write-GateLog "Copying verified publish data back to terminal root"
-    Copy-Item -Path (Join-Path $publishRoot "data\*.json") -Destination (Join-Path $terminalRoot "data") -Force
+    if ((Resolve-Path -LiteralPath $publishRoot).Path -ne (Resolve-Path -LiteralPath $terminalRoot).Path) {
+        Write-GateLog "Copying verified publish data back to terminal root"
+        Copy-Item -Path (Join-Path $publishRoot "data\*.json") -Destination (Join-Path $terminalRoot "data") -Force
+    } else {
+        Write-GateLog "Publish root equals terminal root; verified publish data copy skipped"
+    }
   }
 
   $head = & $gitExe -C $publishRoot log -1 --oneline --decorate

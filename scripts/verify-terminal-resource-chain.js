@@ -188,13 +188,17 @@ function receiptSummary(receiptKey) {
   const file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
   const row = readJsonFile(file);
   if (!row) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  const preservedLatest = row.preservedLatest === true && row.publishBlocked === true && Boolean(String(row.runId || ""));
+  const fallback = row.fallback === true && !preservedLatest;
   return {
-    ok: row.status === "complete" && row.complete !== false && row.fallback !== true,
+    ok: row.status === "complete" && row.complete !== false && !fallback,
     key: receiptKey,
     file,
     status: String(row.status || ""),
     complete: row.complete === true,
-    fallback: row.fallback === true,
+    fallback,
+    preservedLatest,
+    publishBlocked: row.publishBlocked === true,
     startedAt: row.startedAt || "",
     finishedAt: row.finishedAt || "",
     exitCode: row.exitCode,

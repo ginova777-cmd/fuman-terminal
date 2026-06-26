@@ -406,15 +406,253 @@ $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
 7. 跑 `verify-scorecard-resource-chain.js`。
 8. 確認 `/api/scorecard` 與 `/88` 顯示新日期。
 
-## 目前下一步建議
+## 14:00 Daily Automation Contract
 
-把 `generate-terminal-scorecard-source.js` 接進每日成績單排程，讓每日 complete run 後自動：
+正式每日成績單自動流程固定在收盤後執行，建議時間：
+
+```text
+14:00 Asia/Taipei
+```
+
+14:00 排程只做成績單 source / snapshot / verification，不做 Vercel deploy，不跑 publish gate，不修改前端程式。
+
+正式排程腳本：
+
+```text
+C:\fuman-terminal\run-scorecard-daily-automation.ps1
+```
+
+手動執行：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
+```
+
+正式流程：
 
 ```text
 generate terminal scorecard source
 -> backfill Supabase source tables
--> run-scorecard-snapshot.ps1
+-> check v_scorecard_source_health
+-> export Supabase scorecard source
+-> publish scorecard_latest snapshot
+-> verify scorecard snapshot
 -> verify-scorecard-resource-chain.js
 ```
 
-這樣 `/88` 就會每天讀正式 Supabase source，而不是等手動回填。
+## Automation Failure Guard
+
+`run-scorecard-daily-automation.ps1` 必須在 publish 前檢查：
+
+| check | required |
+| --- | --- |
+| generated source latestDate | must equal expected Taipei date |
+| generated source records | `> 0` |
+| `v_scorecard_source_health.status` | `ready` |
+| `latest_record_date` | must equal generated latestDate |
+| `latest_summary_date` | must equal generated latestDate when present |
+| snapshot verify | pass |
+| resource chain verify | pass |
+
+若任一條件失敗：
+
+```text
+do not publish scorecard_latest
+preserve latest complete scorecard snapshot
+surface warning / failed step in terminal logs
+```
+
+休市日或特殊補跑若要允許沿用最近交易日，必須人工顯式加：
+
+```powershell
+-AllowPreviousTradeDate
+```
+
+正式每日排程不可預設使用 `-AllowPreviousTradeDate`。
+
+## Windows Task Scheduler Contract
+
+正式工作名稱：
+
+```text
+Fuman Scorecard Daily Automation 1400
+```
+
+正式觸發：
+
+```text
+Daily 14:00 Asia/Taipei
+```
+
+正式 Action：
+
+```text
+powershell.exe
+```
+
+正式 Arguments：
+
+```text
+-NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
+```
+
+目前排程狀態：
+
+```text
+TaskName      = \Fuman Scorecard Daily Automation 1400
+Status        = Ready
+Schedule Type = Daily
+Start Time    = 14:00
+Run As User   = ginov
+```
+
+驗證排程是否存在：
+
+```powershell
+schtasks /Query /TN "Fuman Scorecard Daily Automation 1400" /V /FO LIST
+```
+
+手動觸發排程：
+
+```powershell
+schtasks /Run /TN "Fuman Scorecard Daily Automation 1400"
+```
+
+## 14:00 Automation Maintainer Notes
+
+每日自動化完成後 `/88` 應符合：
+
+```text
+/api/scorecard latestDate = latest scorecard source date
+/api/scorecard cacheSource = supabase-snapshot
+/88 displays the same latestDate
+verify-scorecard-resource-chain.js = ok
+```
+
+若失敗，優先檢查：
+
+1. `C:\fuman-runtime\data\scorecard-terminal-current.json`
+2. `public.trade_records`
+3. `public.strategy_daily_summary`
+4. `public.v_scorecard_source_health`
+5. `C:\fuman-terminal\data\scorecard-latest.json`
+6. `scorecard_latest` Supabase snapshot
+
+不可為了讓 `/88` 看起來更新而繞過 source health。
+
+## 2026-06-26 Total Battle Test Result
+
+2026-06-26 已完成成績單自動流程總考驗。
+
+測試方式：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
+schtasks /Run /TN "Fuman Scorecard Daily Automation 1400"
+schtasks /Query /TN "Fuman Scorecard Daily Automation 1400" /V /FO LIST
+Set-Location -LiteralPath C:\fuman-terminal
+node --use-system-ca scripts\verify-scorecard-resource-chain.js
+```
+
+通過結果：
+
+| item | result |
+| --- | --- |
+| direct script run | pass |
+| Windows scheduled task run | pass |
+| scheduled task Last Result | `0` |
+| next scheduled run | `2026-06-27 14:00` |
+| generated source latestDate | `2026-06-26` |
+| generated source rows | `374` |
+| Supabase backfill tradeRows | `374` |
+| Supabase backfill dailyRows | `7` |
+| exported snapshot rows | `1000` |
+| exported dailyRows | `23` |
+| published snapshot key | `scorecard_latest` |
+| published tradeDate | `20260626` |
+| published cacheSource | `supabase-snapshot` |
+| snapshot verify | pass |
+| live `/api/scorecard` verify | pass |
+| missing record sources | `0` |
+| missing daily sources | `0` |
+| resource chain | `ok` |
+
+本次修正的真實排程問題：
+
+1. PowerShell `ConvertFrom-Json` 讀大型中文 JSON 時可能失敗。
+   - 修正：`run-scorecard-daily-automation.ps1` 改用 Node 讀大型 JSON，PowerShell 只接收小型 ASCII summary。
+2. PowerShell `Out-File -Encoding utf8` 產生的 health 暫存 JSON 可能帶 BOM。
+   - 修正：Node summary reader 解析 JSON 前先移除 BOM。
+
+目前成績單自動流程狀態：
+
+```text
+complete-run APIs
+-> C:\fuman-runtime\data\scorecard-terminal-current.json
+-> public.trade_records
+-> public.strategy_daily_summary
+-> public.v_scorecard_source_health
+-> C:\fuman-terminal\data\scorecard-latest.json
+-> scorecard_latest
+-> /api/scorecard
+-> /88
+```
+
+狀態判定：
+
+```text
+戰鬥狀態 = ready
+```
+
+## Daily Scorecard Battle Checklist
+
+每天檢查只看以下項目：
+
+| check | pass condition |
+| --- | --- |
+| Scheduler exists | `Fuman Scorecard Daily Automation 1400` exists |
+| Scheduler enabled | status is `Ready` or task is currently `Running` |
+| Scheduler result | last completed run has `Last Result = 0` |
+| Generated source | `scorecard-terminal-current.json` exists and records `> 0` |
+| Source latest date | latestDate equals expected latest trade date |
+| Supabase source health | `v_scorecard_source_health.status = ready` |
+| Snapshot JSON | `C:\fuman-terminal\data\scorecard-latest.json` exists |
+| Snapshot latestDate | equals Supabase source latestDate |
+| API source | `/api/scorecard.cacheSource = supabase-snapshot` |
+| API latestDate | equals snapshot latestDate |
+| Resource chain | `verify-scorecard-resource-chain.js = ok` |
+
+若任一項失敗：
+
+```text
+do not redeploy
+do not bump version
+do not use DuckDB fallback unless explicitly debugging
+do not overwrite scorecard_latest with stale data
+fix the failed source / health / scheduler step first
+```
+
+## Next System-Level Health Target
+
+下一層總控應把以下結果合併成一張每日戰鬥狀態總表：
+
+```text
+public.v_scanner_resource_health
+public.v_scorecard_source_health
+post-scan snapshot refresh verifier
+Fuman Scorecard Daily Automation 1400 Last Result
+verify-scorecard-resource-chain.js
+```
+
+目標：
+
+```text
+one daily dashboard:
+strategy readiness
+source freshness
+scorecard freshness
+snapshot publish status
+scheduler result
+terminal-visible reason
+```

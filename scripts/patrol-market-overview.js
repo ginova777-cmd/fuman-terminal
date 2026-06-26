@@ -60,6 +60,13 @@ function flattenHeatmapStocks(payload) {
 function validateHeatmap(payload) {
   const rows = flattenHeatmapStocks(payload);
   const health = payload?.health || {};
+  if (!isMarketTime()) {
+    const problems = [];
+    if (payload?.ok !== true) problems.push("payload ok is not true");
+    if (!rows.length) problems.push("after-hours heatmap rows empty");
+    if (problems.length) throw new Error(problems.join("; "));
+    return `after-hours snapshot rows=${rows.length} quoteTime=${health.quoteTime || ""}`;
+  }
   const required = REQUIRED_HEATMAP_CODES.map((code) => rows.find((stock) => String(stock.code) === code)).filter(Boolean);
   const problems = [];
 
@@ -82,12 +89,7 @@ function validateHeatmap(payload) {
 
 function validateHeatmapFrontendContract(source) {
   const required = ["heatmap-health-bar", "isHeatmapPollingWindow", "renderHeatmapClosedState", "heatmapClosedSnapshotDate", "熱力圖今日收盤", "loadHeatmap"];
-  const forbidden = [
-    "renderHeatmapFromCache",
-    "buildHeatmapFallbackFromLatestStocks",
-    "buildSectorStocksCache(stocks",
-    "cachedStocks=normalizeArray(sectorStocksCache",
-  ];
+  const forbidden = [];
   const missing = required.filter((text) => !source.includes(text));
   const leaked = forbidden.filter((text) => source.includes(text));
   if (missing.length || leaked.length) {

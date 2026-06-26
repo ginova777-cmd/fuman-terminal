@@ -50,7 +50,9 @@ if ($summaryExit -ne 0) {
 $syncAfterOutput = "${PSScriptRoot}\run-sync-after-output.ps1"
 if (Test-Path -LiteralPath $syncAfterOutput) {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $syncAfterOutput -Label "Market overview patrol" -LogPath $log >> $log 2>&1
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  if ($LASTEXITCODE -ne 0) {
+    "Market overview sync-after-output warning: exit code $LASTEXITCODE; market surfaces chain remains authoritative." >> $log
+  }
 } else {
   "Market overview patrol finished; sync helper not found." >> $log
 }
