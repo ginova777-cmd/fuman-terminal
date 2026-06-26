@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -333,6 +334,37 @@ async function fetchRows(base, table, query) {
   return Array.isArray(rows) ? rows : [];
 }
 
+function strategy2TradingDayProbeDate() {
+  const text = String(process.env.STRATEGY2_TRADING_DAY_DATE || "").trim();
+  if (!text) return new Date();
+  if (/^\d{8}$/.test(text)) return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T12:00:00+08:00`);
+  return new Date(text);
+}
+
+async function strategy2TradingDayState() {
+  try {
+    const result = await isTwseTradingDay(strategy2TradingDayProbeDate(), { stateDir: path.join(RUNTIME_DIR, "state") });
+    return {
+      ok: true,
+      isTradingDay: result.isTradingDay,
+      status: result.isTradingDay ? "trading_day" : "market_closed",
+      date: result.date || "",
+      rocDate: result.rocDate || "",
+      reason: result.reason || "",
+      source: result.source || "twse-trading-day",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      isTradingDay: true,
+      status: "trading_day_unknown",
+      reason: `trading day check failed: ${error?.message || String(error)}`,
+      source: "twse-trading-day",
+    };
+  }
+}
+
 async function fetchStrategy2Readiness(base) {
   try {
     const rows = await fetchRows(
@@ -381,21 +413,33 @@ async function fetchStrategy2Readiness(base) {
   }
 }
 
-function attachStrategy2Readiness(payload, readiness) {
+function attachStrategy2Readiness(payload, readiness, tradingDay) {
   if (!payload || !readiness) return payload;
-  const publishBlocked = readiness.ready !== true;
+  const marketClosed = tradingDay && tradingDay.isTradingDay === false;
+  const effectiveReadiness = marketClosed
+    ? {
+      ...readiness,
+      ready: false,
+      status: "market_closed",
+      reason: `market_closed: ${tradingDay.date} is not a TWSE trading day (${tradingDay.reason})`,
+      tradingDay,
+      suggestedScannerBehavior: "preserve latest complete run; skip Strategy2 readiness collectors; do not publish new complete run",
+    }
+    : readiness;
+  const publishBlocked = marketClosed || effectiveReadiness.ready !== true;
   const publishBlockedReason = publishBlocked
-    ? readiness.reason || readiness.status || "strategy2 readiness not ready"
+    ? effectiveReadiness.reason || effectiveReadiness.status || "strategy2 readiness not ready"
     : "";
   return {
     ...payload,
-    resourceReadiness: readiness,
+    resourceReadiness: effectiveReadiness,
     publishBlocked,
     publishBlockedReason,
     reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
     transport: {
       ...(payload.transport || {}),
       readinessStatusView: READINESS_STATUS_VIEW,
+      tradingDay,
       publishBlocked,
       publishBlockedReason,
     },
@@ -600,9 +644,12 @@ module.exports = async function handler(request, response) {
     }
     const marketSession = marketSessionState();
     const completeRun = await fetchCompleteRunPayload(base, marketSession, options);
-    const readiness = await fetchStrategy2Readiness(base);
+    const [readiness, tradingDay] = await Promise.all([
+      fetchStrategy2Readiness(base),
+      strategy2TradingDayState(),
+    ]);
     if (completeRun) {
-      response.status(200).json(attachStrategy2Readiness(completeRun, readiness));
+      response.status(200).json(attachStrategy2Readiness(completeRun, readiness, tradingDay));
       return;
     }
     response.status(404).json(apiOnlyError("strategy2_complete_run_empty"));

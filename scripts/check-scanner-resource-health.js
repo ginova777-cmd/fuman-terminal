@@ -1,7 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const STATE_DIR = path.join(RUNTIME_DIR, "state");
 const SUPABASE_URL = String(
   process.env.SUPABASE_URL
   || process.env.FUMAN_SUPABASE_URL
@@ -38,6 +40,14 @@ function argValue(name, fallback = "") {
   const prefix = `${name}=`;
   const arg = process.argv.find((item) => item.startsWith(prefix));
   return arg ? arg.slice(prefix.length) : fallback;
+}
+
+function tradingDayProbeDate() {
+  const text = String(process.env.STRATEGY2_TRADING_DAY_DATE || "").trim();
+  if (!text) return new Date();
+  if (/^\d{8}$/.test(text)) return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T12:00:00+08:00`);
+  return new Date(text);
 }
 
 function readSecret(name) {
@@ -124,6 +134,29 @@ async function main() {
   const allowStale = process.argv.includes("--allow-stale") || process.env.SCANNER_RESOURCE_HEALTH_ALLOW_STALE === "1";
   const strategy = normalizeStrategy(requested);
   if (!strategy) throw new Error("missing --strategy");
+  if (String(strategy || "").toLowerCase() === "strategy2") {
+    const tradingDay = await isTwseTradingDay(tradingDayProbeDate(), { stateDir: STATE_DIR });
+    if (!tradingDay.isTradingDay) {
+      console.log(JSON.stringify({
+        ok: false,
+        blocked: true,
+        requested,
+        strategy,
+        status: "market_closed",
+        sourceStatus: "market_closed",
+        requiredSource: "twse trading calendar",
+        latestDate: tradingDay.date || "",
+        rowCount: 0,
+        minRequiredRows: 0,
+        reason: `market_closed: ${tradingDay.date} is not a TWSE trading day (${tradingDay.reason})`,
+        suggestedScannerBehavior: "preserve latest complete run; skip Strategy2 source collectors; do not publish new complete run",
+        updatedAt: new Date().toISOString(),
+        tradingDay,
+      }, null, 2));
+      process.exitCode = 2;
+      return;
+    }
+  }
   const rows = await fetchHealthRows();
   const row = rows.find((item) => String(item.strategy || "").toLowerCase() === String(strategy).toLowerCase());
   if (!row) throw new Error(`missing scanner resource health row for ${strategy}`);

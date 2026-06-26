@@ -85,6 +85,7 @@ const FILES = [
   "scripts/verify-chip-source-health.js",
   "scripts/check-scanner-resource-health.js",
   "scripts/check-strategy2-readiness-gate.js",
+  "scripts/check-strategy2-trading-day.js",
   "scripts/install-chip-source-sync-task.ps1",
   "scripts/prepare-deploy.js",
   "scripts/guard-source-tree.js",

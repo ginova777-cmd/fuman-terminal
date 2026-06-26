@@ -176,6 +176,9 @@ if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includ
 if (!String(packageJson.scripts?.["strategy2:readiness"] || "").includes("scripts/check-strategy2-readiness-gate.js")) {
   issues.push("package.json missing scripts.strategy2:readiness for Strategy2 100% readiness gate");
 }
+if (!String(packageJson.scripts?.["strategy2:trading-day"] || "").includes("scripts/check-strategy2-trading-day.js")) {
+  issues.push("package.json missing scripts.strategy2:trading-day for Strategy2 market-closed detection");
+}
 if (!String(packageJson.scripts?.["strategy2:readiness-source:install"] || "").includes("Install-Strategy2ReadinessSourceTask.ps1")) {
   issues.push("package.json missing scripts.strategy2:readiness-source:install for Strategy2 source collector task");
 }
@@ -293,6 +296,7 @@ const officialChipSync = read("scripts/sync-official-chip-data.js");
 const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
 const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
 const strategy2ReadinessGate = read("scripts/check-strategy2-readiness-gate.js");
+const strategy2TradingDayGate = read("scripts/check-strategy2-trading-day.js");
 const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
@@ -376,13 +380,19 @@ for (const marker of ["v_scanner_resource_health", "ready", "stale", "not_ready"
 for (const marker of ["v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 readiness marker ${marker}`);
 }
-for (const marker of ["v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {
+for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
+  if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 market/readiness marker ${marker}`);
+}
+for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {
   if (!strategy2ReadinessGate.includes(marker)) issues.push(`check-strategy2-readiness-gate.js missing Strategy2 readiness gate marker ${marker}`);
+}
+for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
+  if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
 }
 for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
 }
-for (const marker of ["FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
+for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
 }
 for (const marker of ["Fuman Strategy2 Readiness Source 0750", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
@@ -391,7 +401,7 @@ for (const marker of ["Fuman Strategy2 Readiness Source 0750", "Start-Strategy2R
 for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
 }
-for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest"]) {
+for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest", "market_closed"]) {
   if (!scannerResourceHealthRunner.includes(marker)) issues.push(`scanner-resource-health.ps1 missing scanner gate marker ${marker}`);
 }
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
@@ -561,7 +571,7 @@ if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-
 if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2LatestApi) || !/const minLimit = hasTopLimit \? 1 : 20/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must honor top=1 for lightweight mobile health checks without shrinking normal terminal payloads");
 }
-for (const marker of ["v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
+for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 readiness API marker ${marker}`);
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
@@ -814,6 +824,7 @@ for (const file of [
   "scripts/scan-intraday-signals.js",
   "scripts/fugle-websocket-collector.js",
   "scripts/check-strategy2-readiness-gate.js",
+  "scripts/check-strategy2-trading-day.js",
   "scripts/generate-slim-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
@@ -1169,6 +1180,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-chip-source-health.js",
       "scripts/check-scanner-resource-health.js",
       "scripts/check-strategy2-readiness-gate.js",
+      "scripts/check-strategy2-trading-day.js",
       "scripts/fuman-schedule-registry.json",
       "scripts/generate-cb-detect.js",
       "scripts/install-chip-source-sync-task.ps1",

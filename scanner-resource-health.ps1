@@ -41,7 +41,7 @@ function Invoke-ScannerResourceHealthGate {
   $status = ([string]$payload.status).ToLowerInvariant()
   $publishAllowed = $status -eq "ready"
   $fallbackWarningOnly = $status -eq "stale"
-  $preserveLatest = $status -in @("stale", "not_ready", "failed") -or $exitCode -ne 0
+  $preserveLatest = $status -in @("stale", "not_ready", "failed", "market_closed") -or $exitCode -ne 0
   return [pscustomobject]@{
     Ok = $publishAllowed
     PublishAllowed = $publishAllowed

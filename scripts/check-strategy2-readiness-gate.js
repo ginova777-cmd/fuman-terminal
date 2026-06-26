@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -19,6 +20,14 @@ const MISSING_LIMIT = Math.max(1, Math.min(5000, Number(process.env.STRATEGY2_RE
 
 function dateStamp(date = new Date()) {
   return date.toISOString().replace(/\D/g, "").slice(0, 12);
+}
+
+function tradingDayProbeDate() {
+  const text = String(process.env.STRATEGY2_TRADING_DAY_DATE || "").trim();
+  if (!text) return new Date();
+  if (/^\d{8}$/.test(text)) return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T12:00:00+08:00`);
+  return new Date(text);
 }
 
 function taipeiTimestamp(date = new Date()) {
@@ -94,6 +103,36 @@ function groupMissing(rows) {
 
 async function checkOnce() {
   const checkedAt = new Date();
+  const tradingDay = await isTwseTradingDay(tradingDayProbeDate(), { stateDir: STATE_DIR });
+  if (!tradingDay.isTradingDay) {
+    const payload = {
+      ok: true,
+      source: "strategy2-readiness-gate",
+      gate: "strategy2-0845-futopt+0855-preopen-hot+0900-1200-detection",
+      checkedAt: checkedAt.toISOString(),
+      checkedAtTaipei: taipeiTimestamp(checkedAt),
+      status: "market_closed",
+      reason: `market_closed: ${tradingDay.date} is not a TWSE trading day (${tradingDay.reason})`,
+      publishAllowed: false,
+      scannerBehavior: "preserve latest complete run; skip Strategy2 readiness collectors on non-trading day; no new complete run",
+      tradingDay,
+      stages: [],
+      missingSummary: [],
+      missingRows: [],
+      contracts: {
+        tradingDayChecker: "scripts/twse-trading-day.js",
+        sourceTaskGuard: "scripts/check-strategy2-trading-day.js",
+        statusView: STATUS_VIEW,
+        missingView: MISSING_VIEW,
+        rpc: "refresh_strategy2_readiness_cache",
+        cacheTables: ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache"],
+      },
+      logFile: LOG_FILE,
+    };
+    fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    log(`readiness market_closed date=${tradingDay.date} reason=${tradingDay.reason}`);
+    return payload;
+  }
   const statusRows = await fetchRows(
     STATUS_VIEW,
     [
