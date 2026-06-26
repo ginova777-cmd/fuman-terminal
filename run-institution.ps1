@@ -66,6 +66,9 @@ function Invoke-NodeScan($scriptPath, $label) {
 }
 
 function Assert-InstitutionApi {
+  param(
+    [switch]$AllowPreviousComplete
+  )
   $url = "https://fuman-terminal.vercel.app/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
   $payload = $response.Content | ConvertFrom-Json
@@ -77,11 +80,34 @@ function Assert-InstitutionApi {
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Institution API missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
   $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
-  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+  if (-not $AllowPreviousComplete -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
     throw "Institution API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
   "Institution API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
   return $payload
+}
+
+function Test-InstitutionControlledSourceNotReady($Message) {
+  $text = [string]$Message
+  return $text -match "too few rows after exclusions" -or $text -match "source freshness" -or $text -match "tpex 5-day metrics failed"
+}
+
+function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "") {
+  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "institution" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      "Institution desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+      Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution latest complete run preserved but desktop snapshot refresh failed" -Detail @{ exitCode = $LASTEXITCODE; log = $log; runId = $RunId }
+      Write-InstitutionReceipt "failed" $LASTEXITCODE $false 0 $RunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+      exit $LASTEXITCODE
+    }
+  } else {
+    "Institution desktop snapshot refresh skipped; helper not found." >> $log
+  }
+  if ($Warning) {
+    Write-InstitutionReceipt "complete" 0 $true $Count $RunId @($Warning)
+  }
 }
 
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
@@ -91,6 +117,19 @@ Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
 $scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan"
 if ($scanExit -ne 0) {
   "Institution scan failed with exit code $scanExit" >> $log
+  $tailText = (Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Last 80) -join "`n"
+  if (Test-InstitutionControlledSourceNotReady $tailText) {
+    "Institution source coverage not ready; preserving latest complete run instead of poisoning receipt." >> $log
+    try {
+      $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
+      Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "source coverage insufficient; preserved latest complete run"
+      Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution source coverage insufficient; preserved latest complete run" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
+      "Institution deferred complete scan end; preserved runId=$($verifiedPayload.runId) count=$($verifiedPayload.count)" >> $log
+      exit 0
+    } catch {
+      "Institution latest complete preservation failed: $($_.Exception.Message)" >> $log
+    }
+  }
   Write-FumanFlowHealth -Scope institution -Status scan_failed -Message "Institution scan failed" -Detail @{ exitCode = $scanExit; log = $log }
   Write-InstitutionReceipt "failed" $scanExit $false 0 "" @("scanner exit code $scanExit") "critical scan failed with exit code $scanExit"
   exit $scanExit
@@ -105,18 +144,7 @@ try {
   exit 1
 }
 
-$snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
-if (Test-Path -LiteralPath $snapshotScript) {
-  & $snapshotScript -Source "institution" -LogPath $log
-  if ($LASTEXITCODE -ne 0) {
-    "Institution desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
-    Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message "Institution scan succeeded but desktop snapshot refresh failed" -Detail @{ exitCode = $LASTEXITCODE; log = $log }
-    Write-InstitutionReceipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
-    exit $LASTEXITCODE
-  }
-} else {
-  "Institution desktop snapshot refresh skipped; helper not found." >> $log
-}
+Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId)
 
 Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
