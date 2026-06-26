@@ -56,7 +56,8 @@ function Assert-OpenBuyApiPreserve {
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing -TimeoutSec 45
   $payload = $response.Content | ConvertFrom-Json
   $hasRunId = -not [string]::IsNullOrWhiteSpace([string]$payload.runId)
-  $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and [string]$payload.error -eq "strategy1_decision_not_ready"
+  $controlledErrors = @("strategy1_decision_not_ready", "strategy1_complete_run_empty", "strategy1_complete_run_missing")
+  $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and ($controlledErrors -contains [string]$payload.error)
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or (-not $hasRunId -and -not $isControlledWaiting)) {
     throw "open-buy preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId) decisionReady=$($payload.decisionReady)"
   }
@@ -123,7 +124,8 @@ try {
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing
   $payload = $response.Content | ConvertFrom-Json
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or $payload.complete -ne $true -or -not $payload.runId) {
-    $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and [string]$payload.error -eq "strategy1_decision_not_ready" -and -not [string]::IsNullOrWhiteSpace($scanRunId)
+    $controlledErrors = @("strategy1_decision_not_ready", "strategy1_complete_run_empty", "strategy1_complete_run_missing")
+    $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and ($controlledErrors -contains [string]$payload.error) -and -not [string]::IsNullOrWhiteSpace($scanRunId)
     if (-not $isControlledWaiting) {
       throw "open-buy API verification failed status=$($response.StatusCode) ok=$($payload.ok) complete=$($payload.complete) runId=$($payload.runId)"
     }

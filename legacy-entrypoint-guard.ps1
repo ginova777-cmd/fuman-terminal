@@ -8,6 +8,10 @@ if ($env:FUMAN_LEGACY_SCAN_ONLY -eq "1") {
 
 $directScanLabels = @(
   "run-open-buy.ps1",
+  "run-open-buy-preopen-prepare.ps1",
+  "run-open-buy-preopen.ps1",
+  "run-star-preopen-watch.ps1",
+  "run-strategy1-preopen-common.ps1",
   "run-open-buy-sync-retry.ps1",
   "run-strategy2-intraday.ps1",
   "run-strategy5.ps1",
