@@ -87,6 +87,7 @@ const KEY_FILES = [
   "run-strategy3-complete-scan.ps1",
   "run-strategy4.ps1",
   "run-strategy5.ps1",
+  "run-strategy5-watchdog.ps1",
   "run-institution.ps1",
   "run-warrant-flow.ps1",
   "run-cb-detect.ps1",

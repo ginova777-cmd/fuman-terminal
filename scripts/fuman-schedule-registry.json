@@ -186,21 +186,22 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy5 Cache 0600",
-      "displayName": "Fuman Strategy5 Cache 0600",
-      "description": "策略5綜合策略，早上 06:00 快取",
-      "time": "06:00",
-      "aliases": [
-        "策略5 0600"
-      ]
-    },
-    {
       "taskName": "\\Fuman Strategy5 Cache 2100",
       "displayName": "Fuman Strategy5 Cache 2100",
       "description": "策略5綜合策略，晚上 21:00 快取",
       "time": "21:00",
       "aliases": [
         "策略5 2100"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy5 Watchdog 2130",
+      "displayName": "Fuman Strategy5 Watchdog 2130",
+      "description": "策略5 Watchdog，21:30 檢查 21:00 complete run；失敗會補跑",
+      "time": "21:30",
+      "aliases": [
+        "strategy5 watchdog",
+        "策略5 watchdog"
       ]
     },
     {

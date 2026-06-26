@@ -1054,6 +1054,14 @@ if (/strategy3-latest\.json|run-cache-sync\.ps1/.test(strategy3Watchdog)) {
   issues.push("run-strategy3-watchdog.ps1 must not read strategy3 static JSON or repair through cache sync");
 }
 
+const strategy5Watchdog = read("run-strategy5-watchdog.ps1");
+for (const marker of ["/api/strategy5-latest", "Cache-Control", "no-store", "runId", "complete", "21:00"]) {
+  if (!strategy5Watchdog.includes(marker)) issues.push(`run-strategy5-watchdog.ps1 missing API-only watchdog marker ${marker}`);
+}
+if (/strategy5-latest\.json|run-cache-sync\.ps1/.test(strategy5Watchdog)) {
+  issues.push("run-strategy5-watchdog.ps1 must not read strategy5 static JSON or repair through cache sync");
+}
+
 
 if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
   issues.push("STRATEGY2-FRESHNESS-GOVERNANCE.md missing strategy2 data governance");
@@ -1222,6 +1230,7 @@ if (fetchResult.status !== 0) {
       "run-strategy3-complete-scan.ps1",
       "run-strategy4.ps1",
       "run-strategy5.ps1",
+      "run-strategy5-watchdog.ps1",
       "run-institution.ps1",
       "run-warrant-flow.ps1",
       "run-cb-detect.ps1",
