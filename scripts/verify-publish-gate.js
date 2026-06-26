@@ -173,6 +173,12 @@ if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts
 if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
   issues.push("package.json missing scripts.check:scanner-resource-health for scanner publish/preserve gate");
 }
+if (!String(packageJson.scripts?.["strategy2:readiness"] || "").includes("scripts/check-strategy2-readiness-gate.js")) {
+  issues.push("package.json missing scripts.strategy2:readiness for Strategy2 100% readiness gate");
+}
+if (!String(packageJson.scripts?.["strategy2:readiness-source:install"] || "").includes("Install-Strategy2ReadinessSourceTask.ps1")) {
+  issues.push("package.json missing scripts.strategy2:readiness-source:install for Strategy2 source collector task");
+}
 if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
   issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
 }
@@ -286,6 +292,7 @@ const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
 const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
 const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
+const strategy2ReadinessGate = read("scripts/check-strategy2-readiness-gate.js");
 const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
@@ -302,6 +309,10 @@ const performanceReportGenerator = read("scripts/generate-performance-report.js"
 const strategyWeightReportGenerator = read("scripts/generate-strategy-weight-report.js");
 const stocksSlimGenerator = read("scripts/generate-stocks-slim.js");
 const scorecardApi = read("api/scorecard.js");
+const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
+const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
+const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
+const strategy2ReadinessSql = read("ops/public-slot/Strategy2ReadinessContractCache.sql");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -361,6 +372,24 @@ for (const marker of ["v_institution_source_health", "v_chip_flows_latest", "cov
 }
 for (const marker of ["v_scanner_resource_health", "ready", "stale", "not_ready", "failed", "STRATEGY_ALIASES"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing scanner resource health marker ${marker}`);
+}
+for (const marker of ["v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
+  if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 readiness marker ${marker}`);
+}
+for (const marker of ["v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {
+  if (!strategy2ReadinessGate.includes(marker)) issues.push(`check-strategy2-readiness-gate.js missing Strategy2 readiness gate marker ${marker}`);
+}
+for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed"]) {
+  if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
+}
+for (const marker of ["FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
+  if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
+}
+for (const marker of ["Fuman Strategy2 Readiness Source 0750", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
+  if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
+}
+for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35"]) {
+  if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
 }
 for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest"]) {
   if (!scannerResourceHealthRunner.includes(marker)) issues.push(`scanner-resource-health.ps1 missing scanner gate marker ${marker}`);
@@ -531,6 +560,9 @@ if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-
 }
 if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2LatestApi) || !/const minLimit = hasTopLimit \? 1 : 20/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must honor top=1 for lightweight mobile health checks without shrinking normal terminal payloads");
+}
+for (const marker of ["v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
+  if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 readiness API marker ${marker}`);
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
@@ -781,6 +813,7 @@ for (const file of [
   "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
   "scripts/fugle-websocket-collector.js",
+  "scripts/check-strategy2-readiness-gate.js",
   "scripts/generate-slim-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
@@ -815,7 +848,11 @@ for (const file of [
   "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
+  "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+  "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+  "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
+  "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
@@ -904,6 +941,10 @@ for (const marker of [
   "cb_detect_scan_runs",
   "cb_detect_scan_results",
   "cumulative_bid_volume",
+  "v_strategy2_readiness_status",
+  "v_strategy2_readiness_missing",
+  "strategy2_ready_100",
+  "missing_summary",
 ]) {
   const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
   if (!sourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
@@ -1109,6 +1150,7 @@ if (fetchResult.status !== 0) {
       "fuman-sw.js",
       "api/realtime-radar-latest.js",
       "api/terminal-home.js",
+      "api/strategy2-latest.js",
       "terminal-runtime-config.js",
       "scripts/e2e-smoke.js",
       "scripts/verify-deployment.js",
@@ -1126,6 +1168,8 @@ if (fetchResult.status !== 0) {
       "scripts/sync-official-chip-data.js",
       "scripts/verify-chip-source-health.js",
       "scripts/check-scanner-resource-health.js",
+      "scripts/check-strategy2-readiness-gate.js",
+      "scripts/fuman-schedule-registry.json",
       "scripts/generate-cb-detect.js",
       "scripts/install-chip-source-sync-task.ps1",
       "scripts/fugle-websocket-collector.js",
@@ -1189,6 +1233,10 @@ if (fetchResult.status !== 0) {
       "lib/supabase-public-slot.js",
       "scripts/scan-intraday-signals.js",
       "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+      "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+      "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
+      "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
+      "ops/public-slot/Strategy2ReadinessContractCache.sql",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)

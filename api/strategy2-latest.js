@@ -14,6 +14,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR }
 const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_strategy2_latest_complete_run";
 const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
 const RESULTS_TABLE = process.env.STRATEGY2_SUPABASE_RESULTS_TABLE || "strategy2_scan_results";
+const READINESS_STATUS_VIEW = process.env.STRATEGY2_READINESS_STATUS_VIEW || "v_strategy2_readiness_status";
 const AUTHORITATIVE_GATE = "complete-run-authoritative";
 const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
@@ -332,6 +333,75 @@ async function fetchRows(base, table, query) {
   return Array.isArray(rows) ? rows : [];
 }
 
+async function fetchStrategy2Readiness(base) {
+  try {
+    const rows = await fetchRows(
+      base,
+      READINESS_STATUS_VIEW,
+      [
+        "select=status,reason,strategy2_ready_100,futopt_expected_count,futopt_ready_count,preopen_hot_candidate_count,preopen_hot_ready_count,detection_expected_count,intraday_1m_ready_count,latest_execution_expected,latest_execution_scanned,latest_run_id,checked_at,missing_summary",
+        "limit=1",
+      ].join("&")
+    );
+    const row = rows[0] || null;
+    if (!row) return { ok: false, status: "failed", reason: "strategy2 readiness status missing" };
+    const ready = row.strategy2_ready_100 === true;
+    return {
+      ok: true,
+      ready,
+      status: row.status || (ready ? "ready" : "not_ready"),
+      reason: row.reason || "",
+      checkedAt: row.checked_at || "",
+      latestRunId: row.latest_run_id || "",
+      futopt: {
+        expected: cleanNumber(row.futopt_expected_count),
+        ready: cleanNumber(row.futopt_ready_count),
+      },
+      preopenHot: {
+        expected: cleanNumber(row.preopen_hot_candidate_count),
+        ready: cleanNumber(row.preopen_hot_ready_count),
+      },
+      intraday1m: {
+        expected: cleanNumber(row.detection_expected_count),
+        ready: cleanNumber(row.intraday_1m_ready_count),
+      },
+      execution: {
+        expected: cleanNumber(row.latest_execution_expected),
+        scanned: cleanNumber(row.latest_execution_scanned),
+      },
+      missingSummary: row.missing_summary || null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      ready: false,
+      status: "failed",
+      reason: `strategy2 readiness status unavailable: ${error?.message || String(error)}`,
+    };
+  }
+}
+
+function attachStrategy2Readiness(payload, readiness) {
+  if (!payload || !readiness) return payload;
+  const publishBlocked = readiness.ready !== true;
+  const publishBlockedReason = publishBlocked
+    ? readiness.reason || readiness.status || "strategy2 readiness not ready"
+    : "";
+  return {
+    ...payload,
+    resourceReadiness: readiness,
+    publishBlocked,
+    publishBlockedReason,
+    reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
+    transport: {
+      ...(payload.transport || {}),
+      readinessStatusView: READINESS_STATUS_VIEW,
+      publishBlocked,
+      publishBlockedReason,
+    },
+  };
+}
+
 function hasStrategy2PayloadRows(payload) {
   return Array.isArray(payload?.events) && payload.events.length > 0
     || Array.isArray(payload?.records) && payload.records.length > 0
@@ -530,8 +600,9 @@ module.exports = async function handler(request, response) {
     }
     const marketSession = marketSessionState();
     const completeRun = await fetchCompleteRunPayload(base, marketSession, options);
+    const readiness = await fetchStrategy2Readiness(base);
     if (completeRun) {
-      response.status(200).json(completeRun);
+      response.status(200).json(attachStrategy2Readiness(completeRun, readiness));
       return;
     }
     response.status(404).json(apiOnlyError("strategy2_complete_run_empty"));

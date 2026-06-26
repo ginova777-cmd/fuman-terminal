@@ -39,7 +39,7 @@ $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
-function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservedLatest = $false, $PublishBlocked = $false) {
   $receipt = [ordered]@{
     strategy = "strategy2"
     label = "strategy2 intraday patrol"
@@ -52,8 +52,10 @@ function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     total = 0
     matches = $Matches
     complete = $Complete
-    qualityStatus = if ($Complete) { "complete" } else { "" }
-    fallback = $false
+    qualityStatus = if ($PreservedLatest) { "preserved_latest" } elseif ($Complete) { "complete" } else { "" }
+    fallback = [bool]$PreservedLatest
+    preservedLatest = [bool]$PreservedLatest
+    publishBlocked = [bool]$PublishBlocked
     runId = $RunId
     payloadPath = "supabase:strategy2_latest"
     warnings = @($Warnings)
@@ -87,7 +89,7 @@ if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   "Strategy2 source gate blocked new publish; preserving latest complete/live run. $reason" >> $log
   $verifiedPayload = Assert-Strategy2ApiPreserve
-  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
   "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
   exit 0
 }

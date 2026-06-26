@@ -75,6 +75,45 @@ async function fetchHealthRows() {
   }
 }
 
+async function fetchStrategy2ReadinessStatus() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const select = [
+      "status",
+      "reason",
+      "strategy2_ready_100",
+      "futopt_expected_count",
+      "futopt_ready_count",
+      "preopen_hot_candidate_count",
+      "preopen_hot_ready_count",
+      "detection_expected_count",
+      "intraday_1m_ready_count",
+      "latest_execution_expected",
+      "latest_execution_scanned",
+      "latest_run_id",
+      "checked_at",
+      "missing_summary",
+    ].join(",");
+    const url = `${SUPABASE_URL}/rest/v1/v_strategy2_readiness_status?select=${encodeURIComponent(select)}&limit=1`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`v_strategy2_readiness_status HTTP ${response.status}: ${text.slice(0, 240)}`);
+    const rows = JSON.parse(text || "[]");
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function normalizeStrategy(value) {
   const key = String(value || "").trim().toLowerCase();
   return STRATEGY_ALIASES.get(key) || value;
@@ -89,28 +128,54 @@ async function main() {
   const row = rows.find((item) => String(item.strategy || "").toLowerCase() === String(strategy).toLowerCase());
   if (!row) throw new Error(`missing scanner resource health row for ${strategy}`);
   const status = String(row.status || "").toLowerCase();
-  const ok = status === READY_STATUS || (allowStale && status === STALE_STATUS);
+  let effectiveStatus = status;
+  let readiness = null;
+  let readinessWarning = "";
+  if (String(row.strategy || "").toLowerCase() === "strategy2") {
+    try {
+      readiness = await fetchStrategy2ReadinessStatus();
+      if (readiness && readiness.strategy2_ready_100 !== true) {
+        effectiveStatus = status === READY_STATUS ? "not_ready" : status;
+      }
+    } catch (error) {
+      readinessWarning = `strategy2 readiness status unavailable: ${error?.message || String(error)}`;
+      if (status === READY_STATUS) effectiveStatus = "failed";
+    }
+  }
+  const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
   const blocked = !ok;
+  const readinessReason = readiness && readiness.strategy2_ready_100 !== true
+    ? readiness.reason || [
+      `futopt=${Number(readiness.futopt_ready_count || 0)}/${Number(readiness.futopt_expected_count || 0)}`,
+      `preopen_hot=${Number(readiness.preopen_hot_ready_count || 0)}/${Number(readiness.preopen_hot_candidate_count || 0)}`,
+      `intraday_1m=${Number(readiness.intraday_1m_ready_count || 0)}/${Number(readiness.detection_expected_count || 0)}`,
+      `execution=${Number(readiness.latest_execution_scanned || 0)}/${Number(readiness.latest_execution_expected || 0)}`,
+    ].join("; ")
+    : "";
+  const reason = [row.reason || "", readinessReason, readinessWarning].filter(Boolean).join("; ");
   const payload = {
     ok,
     blocked,
     requested,
     strategy: row.strategy,
-    status,
+    status: effectiveStatus,
+    sourceStatus: status,
     requiredSource: row.required_source || "",
     latestDate: row.latest_date || "",
     rowCount: Number(row.row_count || 0),
-    reason: row.reason || "",
+    minRequiredRows: Number(row.min_required_rows || 0),
+    reason,
     suggestedScannerBehavior: row.suggested_scanner_behavior || "",
     updatedAt: row.updated_at || "",
+    readiness,
   };
   console.log(JSON.stringify(payload, null, 2));
-  if (status === READY_STATUS) return;
-  if (status === STALE_STATUS) {
+  if (effectiveStatus === READY_STATUS) return;
+  if (effectiveStatus === STALE_STATUS) {
     process.exitCode = allowStale ? 0 : 2;
     return;
   }
-  process.exitCode = BLOCKING_STATUSES.has(status) ? 3 : 3;
+  process.exitCode = BLOCKING_STATUSES.has(effectiveStatus) || effectiveStatus === "not_ready" ? 3 : 3;
 }
 
 main().catch((error) => {

@@ -2040,6 +2040,12 @@ do {
     } catch {
       Write-Log "WARN strategy2 ready cache refresh skipped: $($_.Exception.Message)"
     }
+    try {
+      $strategy2Readiness = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_readiness_cache" -Body @{}
+      Write-Log "strategy2 readiness cache refreshed $strategy2Readiness"
+    } catch {
+      Write-Log "WARN strategy2 readiness cache refresh skipped: $($_.Exception.Message)"
+    }
     Write-Log "$status $message"
   } catch {
     $errorMessage = $_.Exception.Message

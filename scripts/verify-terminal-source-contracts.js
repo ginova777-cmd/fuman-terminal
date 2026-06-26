@@ -66,6 +66,17 @@ const CONTRACTS = [
       sourceTable("v_strategy2_intraday_ready", [
         "symbol", "name", "price", "today_candle_count", "latest_candle_time", "ready_ge_35",
       ], { level: "warning" }),
+      sourceTable("v_strategy2_readiness_status", [
+        "checked_at", "status", "reason", "strategy2_ready_100",
+        "futopt_expected_count", "futopt_ready_count",
+        "preopen_hot_candidate_count", "preopen_hot_ready_count",
+        "detection_expected_count", "intraday_1m_ready_count",
+        "latest_run_id", "latest_execution_expected", "latest_execution_scanned",
+        "missing_summary",
+      ], { level: "warning", healthStatusField: "status", acceptedHealthStatuses: ["ready"] }),
+      sourceTable("v_strategy2_readiness_missing", [
+        "checked_at", "gate", "symbol", "name", "future_symbol", "missing_reason", "details",
+      ], { level: "warning" }),
     ],
   },
   {
