@@ -110,8 +110,34 @@ function Test-Strategy3ControlledSourceNotReady($Message) {
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
+Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh start"
+& $nodeExe "scripts\refresh-strategy3-ready-snapshot.js" >> $log 2>&1
+$refreshExitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+if ($refreshExitCode -ne 0) {
+  Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh failed with exit code $refreshExitCode; resource health gate will decide preserve/publish."
+} else {
+  Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh ok"
+}
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
+$after1300Gate = $null
+if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "after1300|latest_candle_date|ready_snapshot|snapshot_rows") {
+  $after1300Text = (& $nodeExe "scripts\check-strategy3-after1300-readiness.js" 2>&1) -join "`n"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 after1300 live-source gate output: $after1300Text"
+  try {
+    $after1300Gate = $after1300Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $after1300Gate = $null
+  }
+  if ($after1300Gate -and $after1300Gate.ready -eq $true) {
+    Write-Strategy3CompleteLog "Strategy3 ready_snapshot health is stale, but live after1300 source is ready; continuing scan. after1300=$($after1300Gate.after1300ReadyCount)/$($after1300Gate.minAfter1300) latest=$($after1300Gate.latestCandleTime)"
+    $resourceGate = [pscustomobject]@{
+      PreserveLatest = $false
+      Status = "ready"
+      Reason = "live after1300 source ready; ready_snapshot refresh blocked by DB grant/function"
+    }
+  }
+}
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish; preserving latest complete run. $reason"
