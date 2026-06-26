@@ -73,10 +73,17 @@ function normalizeSignals(value) {
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const signals = normalizeSignals(payload.matches || payload.signals || row.signals);
+  const rawName = String(payload.rawName || payload.name || row.name || row.code || "").trim();
+  const tvOk = Boolean(payload.tvOk || payload.tvFlame || payload.tvOvernightEntry?.ok);
+  const displayName = String(payload.displayName || (tvOk && rawName ? `${rawName} 🔥` : rawName)).trim();
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
-    name: String(payload.name || row.name || row.code || "").trim(),
+    rawName,
+    displayName,
+    tvOk,
+    tvFlame: tvOk,
+    name: displayName || rawName,
     close: cleanNumber(payload.close || payload.price || row.close || row.price),
     price: cleanNumber(payload.price || payload.close || row.price || row.close),
     percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
@@ -122,6 +129,8 @@ function buildPayload(rows, run, options = {}) {
   const sourceHealth = normalizeSourceHealth(run?.payload?.sourceHealth);
   const qualityStatus = sourceHealth?.status || String(first.quality_status || run?.quality_status || "");
   const resultCount = cleanNumber(run?.result_count || run?.payload?.count);
+  const displayMode = String(run?.payload?.displayMode || first.payload?.displayMode || "").trim();
+  const noMatchReason = String(run?.payload?.noMatchReason || first.payload?.noMatchReason || "").trim();
   return {
     ok: true,
     source: "supabase:strategy3_scan_results",
@@ -137,6 +146,8 @@ function buildPayload(rows, run, options = {}) {
     returnedCount: matches.length,
     total: Math.max(matches.length, cleanNumber(run?.expected_total || run?.scanned_count)),
     sourceHealth,
+    displayMode,
+    noMatchReason,
     matches,
     transport: {
       source: "supabase",

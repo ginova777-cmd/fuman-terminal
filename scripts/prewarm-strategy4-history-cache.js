@@ -14,6 +14,9 @@ const BATCH_SIZE = Number(process.env.STRATEGY4_PREWARM_BATCH_SIZE || 40);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || 0);
 const SLEEP_MS = Number(process.env.STRATEGY4_PREWARM_SLEEP_MS || 800);
 const MAX_REMAINING_MISS = Number(process.env.STRATEGY4_PREWARM_MAX_REMAINING_MISS || 2000);
+const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
+const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
+const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
 const SUPABASE_ONLY = process.env.STRATEGY4_PREWARM_SUPABASE_ONLY !== "0";
 const SUPABASE_TABLES = String(process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || "strategy4_daily_ohlcv_view")
   .split(",")
@@ -47,6 +50,10 @@ const SUPABASE_KEY = process.env.STRATEGY4_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
   || readText(path.join(SECRET_DIR, "strategy4-supabase-anon-key.txt"))
   || readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
+const FINMIND_API_TOKEN = process.env.FINMIND_API_TOKEN
+  || process.env.FINMIND_TOKEN
+  || readText(path.join(SECRET_DIR, "finmind-api-token.txt"))
+  || readText("C:\\fuman-runtime\\secrets\\finmind-api-token.txt");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,6 +79,26 @@ function isoDateDaysAgo(days) {
   return date.toISOString().slice(0, 10);
 }
 
+function rocToIso(value) {
+  const parts = String(value || "").split("/");
+  if (parts.length !== 3) return "";
+  const year = Number(parts[0]) + 1911;
+  return `${year}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+}
+
+function monthStartsBetween(from, to) {
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const endMonth = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+  const months = [];
+  while (cursor <= endMonth) {
+    months.push(`${cursor.getUTCFullYear()}/${String(cursor.getUTCMonth() + 1).padStart(2, "0")}/01`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
+
 function historyCacheFile(code) {
   return path.join(FUGLE_HISTORY_CACHE_DIR, `${normalizeCode(code)}.json`);
 }
@@ -79,8 +106,11 @@ function historyCacheFile(code) {
 function normalizeHistoryRow(row) {
   const date = String(row.date || row.trade_date || row.trading_date || "").slice(0, 10);
   const close = cleanNumber(row.close || row.closing_price || row.price);
-  const volumeLots = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume);
-  const volumeShares = cleanNumber(row.volume_shares ?? row.volumeShares) || (volumeLots ? volumeLots * 1000 : 0);
+  const rawVolume = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume ?? row.Trading_Volume);
+  const unit = String(row.volumeUnit || row.volume_unit || "").toLowerCase();
+  const rawShares = cleanNumber(row.volume_shares ?? row.volumeShares);
+  const volumeShares = rawShares || (/share|stock|股/.test(unit) ? rawVolume : (rawVolume ? rawVolume * 1000 : 0));
+  const volumeLots = /share|stock|股/.test(unit) ? rawVolume / 1000 : rawVolume;
   if (!date || !close || !volumeLots) return null;
   return {
     date,
@@ -88,7 +118,7 @@ function normalizeHistoryRow(row) {
     volume_lots: Number(volumeLots.toFixed(4)),
     volume_shares: Number(volumeShares.toFixed(0)),
     volumeUnit: "lots",
-    value: cleanNumber(row.trade_value_twd ?? row.tradeValueTwd ?? row.value ?? row.turnover ?? row.trade_value ?? row.trading_money),
+    value: cleanNumber(row.trade_value_twd ?? row.tradeValueTwd ?? row.value ?? row.turnover ?? row.trade_value ?? row.trading_money ?? row.Trading_money),
     open: cleanNumber(row.open || row.opening_price),
     high: cleanNumber(row.high || row.max || row.highest_price),
     low: cleanNumber(row.low || row.min || row.lowest_price),
@@ -99,8 +129,11 @@ function normalizeHistoryRow(row) {
 
 function normalizeVolumeRow(row) {
   const date = String(row.date || row.trade_date || row.trading_date || "").slice(0, 10);
-  const volumeLots = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume);
-  const volumeShares = cleanNumber(row.volume_shares ?? row.volumeShares) || (volumeLots ? volumeLots * 1000 : 0);
+  const rawVolume = cleanNumber(row.volume_lots ?? row.volumeLots ?? row.volume ?? row.trade_volume ?? row.trading_volume ?? row.Trading_Volume);
+  const unit = String(row.volumeUnit || row.volume_unit || "").toLowerCase();
+  const rawShares = cleanNumber(row.volume_shares ?? row.volumeShares);
+  const volumeShares = rawShares || (/share|stock|股/.test(unit) ? rawVolume : (rawVolume ? rawVolume * 1000 : 0));
+  const volumeLots = /share|stock|股/.test(unit) ? rawVolume / 1000 : rawVolume;
   if (!date || !volumeLots) return null;
   return {
     date,
@@ -130,13 +163,14 @@ function writePrefilterVolumeCache(code, from, to, rows, source = "supabase-fugl
   return true;
 }
 
-function writeHistoryCache(code, from, to, rows, source = "supabase-fugle") {
+function writeHistoryCache(code, from, to, rows, source = "supabase-fugle", options = {}) {
   const normalizedRows = rows
     .map(normalizeHistoryRow)
     .filter(Boolean)
     .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-180);
-  if (normalizedRows.length < 60) return false;
+    .slice(-HISTORY_CACHE_ROWS);
+  const minRows = Number(options.minRows || STRATEGY4_MIN_HISTORY_BARS);
+  if (normalizedRows.length < minRows) return false;
   fs.mkdirSync(FUGLE_HISTORY_CACHE_DIR, { recursive: true });
   fs.writeFileSync(historyCacheFile(code), `${JSON.stringify({
     code: normalizeCode(code),
@@ -156,7 +190,44 @@ function hasFreshHistoryCache(code, from, to) {
       && payload?.from === from
       && payload?.to === to
       && Array.isArray(payload?.rows)
-      && payload.rows.length >= 60;
+      && payload.rows.length >= STRATEGY4_MIN_HISTORY_BARS;
+  } catch {
+    return false;
+  }
+}
+
+function historyCacheSummary(code, from, to) {
+  try {
+    const payload = JSON.parse(fs.readFileSync(historyCacheFile(code), "utf8"));
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    return {
+      code: normalizeCode(code),
+      source: String(payload?.source || ""),
+      from: String(payload?.from || ""),
+      to: String(payload?.to || ""),
+      rows: rows.length,
+      firstDate: rows[0]?.date || rows[0]?.trade_date || "",
+      lastDate: rows[rows.length - 1]?.date || rows[rows.length - 1]?.trade_date || "",
+      freshRange: payload?.from === from && payload?.to === to,
+    };
+  } catch {
+    return {
+      code: normalizeCode(code),
+      source: "",
+      from: "",
+      to: "",
+      rows: 0,
+      firstDate: "",
+      lastDate: "",
+      freshRange: false,
+    };
+  }
+}
+
+function historyCacheHasAnyRows(code) {
+  try {
+    const payload = JSON.parse(fs.readFileSync(historyCacheFile(code), "utf8"));
+    return Array.isArray(payload?.rows) && payload.rows.length > 0;
   } catch {
     return false;
   }
@@ -312,6 +383,158 @@ async function warmFromSupabase(stocks, from, to) {
   return { warmed: 0, table: "", codeField: "", dateField: "" };
 }
 
+function normalizeFinMindHistoryRows(payload) {
+  const rows = Array.isArray(payload?.data) ? payload.data : [];
+  return rows.map((row) => ({
+    date: String(row.date || "").slice(0, 10),
+    volume: cleanNumber(row.Trading_Volume),
+    volumeUnit: "shares",
+    value: cleanNumber(row.Trading_money),
+    open: cleanNumber(row.open),
+    high: cleanNumber(row.max),
+    low: cleanNumber(row.min),
+    close: cleanNumber(row.close),
+    change: cleanNumber(row.spread),
+  })).filter((row) => row.date && row.close);
+}
+
+function normalizeTpexOfficialRows(payload) {
+  const table = Array.isArray(payload?.tables) ? payload.tables[0] : null;
+  if (!Array.isArray(table?.data)) return [];
+  return table.data.map((row) => ({
+    date: rocToIso(row[0]),
+    volume: cleanNumber(row[1]),
+    volumeUnit: "lots",
+    value: cleanNumber(row[2]) * 1000,
+    open: cleanNumber(row[3]),
+    high: cleanNumber(row[4]),
+    low: cleanNumber(row[5]),
+    close: cleanNumber(row[6]),
+    change: cleanNumber(row[7]),
+  })).filter((row) => row.date && row.close);
+}
+
+async function fetchFinMindHistoryRows(code, from, to) {
+  if (!FINMIND_API_TOKEN) return [];
+  const params = new URLSearchParams({
+    dataset: "TaiwanStockPrice",
+    data_id: code,
+    start_date: from,
+    end_date: to,
+  });
+  const response = await fetch(`https://api.finmindtrade.com/api/v4/data?${params.toString()}`, {
+    headers: {
+      Accept: "application/json",
+      Referer: "https://finmindtrade.com/",
+      Authorization: `Bearer ${FINMIND_API_TOKEN}`,
+    },
+  });
+  if (!response.ok) throw new Error(`FinMind ${code} HTTP ${response.status}`);
+  return normalizeFinMindHistoryRows(await response.json());
+}
+
+async function fetchTpexOfficialHistoryRows(code, from, to) {
+  const byDate = new Map();
+  for (const month of monthStartsBetween(from, to)) {
+    const url = `https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=${code}&date=${encodeURIComponent(month)}&id=&response=json`;
+    let parsed = null;
+    let lastError = "";
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Accept: "application/json, text/plain, */*",
+            Referer: "https://www.tpex.org.tw/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+            "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+            "Cache-Control": "no-cache",
+          },
+        });
+        const text = await response.text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!/^\s*\{/.test(text)) throw new Error(`non-json ${text.slice(0, 24).replace(/\s+/g, " ")}`);
+        parsed = JSON.parse(text);
+        break;
+      } catch (error) {
+        lastError = error.message || String(error);
+        await sleep(250 * attempt);
+      }
+    }
+    if (!parsed) {
+      console.log(`strategy4 tpex official month skipped ${code} ${month}: ${lastError}`);
+      continue;
+    }
+    normalizeTpexOfficialRows(parsed)
+      .filter((row) => row.date >= from && row.date <= to)
+      .forEach((row) => byDate.set(row.date, row));
+    await sleep(Math.max(120, Math.min(SLEEP_MS || 120, 500)));
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function warmFromFinMind(stocks, from, to) {
+  if (!stocks.length) return { warmed: 0, partial: 0, failed: 0 };
+  if (!FINMIND_API_TOKEN) {
+    console.log("strategy4 finmind history warm skipped: missing token");
+    return { warmed: 0, partial: 0, failed: 0 };
+  }
+  let warmed = 0;
+  let partial = 0;
+  let failed = 0;
+  for (const stock of stocks) {
+    try {
+      const rows = await fetchFinMindHistoryRows(stock.code, from, to);
+      const isFull = rows.length >= STRATEGY4_MIN_HISTORY_BARS;
+      const written = rows.length > 0
+        ? writeHistoryCache(stock.code, from, to, rows, isFull ? "finmind:TaiwanStockPrice" : "finmind:TaiwanStockPrice:partial", { minRows: isFull ? STRATEGY4_MIN_HISTORY_BARS : 1 })
+        : false;
+      console.log(`strategy4 finmind history warm ${stock.code}: rows ${rows.length}, written ${written}`);
+      if (written && isFull) {
+        warmed += 1;
+      } else if (written) {
+        partial += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      console.log(`strategy4 finmind history warm failed ${stock.code}: ${error.message || error}`);
+    }
+    if (SLEEP_MS > 0) await sleep(Math.min(SLEEP_MS, 200));
+  }
+  return { warmed, partial, failed };
+}
+
+async function warmFromTpexOfficial(stocks, from, to) {
+  if (!stocks.length) return { warmed: 0, partial: 0, skipped: 0, failed: 0 };
+  let warmed = 0;
+  let partial = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const stock of stocks) {
+    const market = String(stock.market || "").toUpperCase();
+    if (market && market !== "TPEX" && market !== "OTC") {
+      skipped += 1;
+      continue;
+    }
+    try {
+      const rows = await fetchTpexOfficialHistoryRows(stock.code, from, to);
+      const isFull = rows.length >= STRATEGY4_MIN_HISTORY_BARS;
+      const written = rows.length > 0
+        ? writeHistoryCache(stock.code, from, to, rows, isFull ? "tpex-official" : "tpex-official:partial", { minRows: isFull ? STRATEGY4_MIN_HISTORY_BARS : 1 })
+        : false;
+      console.log(`strategy4 tpex official history warm ${stock.code}: rows ${rows.length}, written ${written}`);
+      if (written && isFull) {
+        warmed += 1;
+      } else if (written) {
+        partial += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      console.log(`strategy4 tpex official history warm failed ${stock.code}: ${error.message || error}`);
+    }
+  }
+  return { warmed, partial, skipped, failed };
+}
+
 function callStocksHandler() {
   return new Promise((resolve, reject) => {
     const req = { method: "GET", query: {} };
@@ -377,14 +600,18 @@ async function fetchSupabaseUniverse() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return [];
   const rows = [];
   const pageSize = 1000;
-  for (const table of ["stock_universe", "stock_tickers"]) {
+  for (const table of ["strategy4_stock_universe_view", "stock_universe", "stock_tickers"]) {
     rows.length = 0;
     for (let offset = 0; offset < 5000; offset += pageSize) {
       const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
-      url.searchParams.set("select", table === "stock_universe"
-        ? "symbol,name,market,industry,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,is_active"
-        : "symbol,name,market,stock_type,industry,is_etf,is_suspended");
-      if (table === "stock_universe") {
+      url.searchParams.set("select", table === "strategy4_stock_universe_view"
+        ? "symbol,name,market,industry,is_strategy4_eligible,is_active"
+        : (table === "stock_universe"
+          ? "symbol,name,market,industry,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,is_active"
+          : "symbol,name,market,stock_type,industry,is_etf,is_suspended"));
+      if (table === "strategy4_stock_universe_view") {
+        url.searchParams.set("is_strategy4_eligible", "eq.true");
+      } else if (table === "stock_universe") {
         url.searchParams.set("is_active", "eq.true");
         url.searchParams.set("is_etf", "eq.false");
         url.searchParams.set("is_warrant", "eq.false");
@@ -420,7 +647,7 @@ async function fetchSupabaseUniverse() {
 }
 
 async function main() {
-  const from = isoDateDaysAgo(270);
+  const from = isoDateDaysAgo(HISTORY_LOOKBACK_DAYS);
   const to = new Date().toISOString().slice(0, 10);
   let universe = await fetchSupabaseUniverse();
   if (!universe.length) {
@@ -439,6 +666,13 @@ async function main() {
   let supabaseVolumeRows = 0;
   let supabaseVolumeUpdated = 0;
   let supabaseSyncStatus = null;
+  let finmindWarmed = 0;
+  let finmindPartial = 0;
+  let finmindFailed = 0;
+  let tpexWarmed = 0;
+  let tpexPartial = 0;
+  let tpexSkipped = 0;
+  let tpexFailed = 0;
 
   try {
     const syncStatus = await readSupabaseSyncStatus(to);
@@ -494,14 +728,37 @@ async function main() {
       if (SLEEP_MS > 0) await sleep(SLEEP_MS);
       continue;
     }
+    const finmindResult = await warmFromFinMind(stillMissing, from, to);
+    finmindWarmed += finmindResult.warmed;
+    finmindPartial += finmindResult.partial;
+    finmindFailed += finmindResult.failed;
+    const stillMissingAfterFinMind = stillMissing.filter((stock) => !hasFreshHistoryCache(stock.code, from, to));
+    if (!stillMissingAfterFinMind.length) {
+      scanned += chunk.length;
+      console.log(`${label} finmind warmed ${finmindResult.warmed}; remaining 0`);
+      if (SLEEP_MS > 0) await sleep(SLEEP_MS);
+      continue;
+    }
+    const tpexResult = await warmFromTpexOfficial(stillMissingAfterFinMind, from, to);
+    tpexWarmed += tpexResult.warmed;
+    tpexPartial += tpexResult.partial;
+    tpexSkipped += tpexResult.skipped;
+    tpexFailed += tpexResult.failed;
+    const stillMissingAfterTpex = stillMissingAfterFinMind.filter((stock) => !hasFreshHistoryCache(stock.code, from, to));
+    if (!stillMissingAfterTpex.length) {
+      scanned += chunk.length;
+      console.log(`${label} tpex warmed ${tpexResult.warmed}; remaining 0`);
+      if (SLEEP_MS > 0) await sleep(SLEEP_MS);
+      continue;
+    }
     if (SUPABASE_ONLY) {
       scanned += chunk.length;
-      console.log(`${label} supabase-only: skip strategy API fallback for ${stillMissing.length} missing history caches`);
+      console.log(`${label} supabase-only: skip strategy API fallback for ${stillMissingAfterTpex.length} missing history caches`);
       if (SLEEP_MS > 0) await sleep(SLEEP_MS);
       continue;
     }
     try {
-      const result = await callStrategy4Handler(stillMissing);
+      const result = await callStrategy4Handler(stillMissingAfterTpex);
       Object.entries(result.sourceCounts || {}).forEach(([source, count]) => {
         sourceCounts[source] = (sourceCounts[source] || 0) + Number(count || 0);
       });
@@ -515,15 +772,28 @@ async function main() {
     if (SLEEP_MS > 0) await sleep(SLEEP_MS);
   }
 
-  const remainingMiss = universe.filter((stock) => !hasFreshHistoryCache(stock.code, from, to)).length;
+  const remainingMissingStocks = universe.filter((stock) => !hasFreshHistoryCache(stock.code, from, to));
+  const remainingMissingRaw = remainingMissingStocks.map((stock) => ({
+    code: stock.code,
+    name: stock.name,
+    market: stock.market,
+    ...historyCacheSummary(stock.code, from, to),
+  }));
+  const insufficientHistory = remainingMissingRaw.filter((item) => item.rows > 0 && item.rows < STRATEGY4_MIN_HISTORY_BARS);
+  const remainingMissing = remainingMissingRaw.filter((item) => !(item.rows > 0 && item.rows < STRATEGY4_MIN_HISTORY_BARS));
+  const remainingMiss = remainingMissing.length;
+  const computableUniverse = Math.max(universe.length - insufficientHistory.length, 0);
   const status = {
     ok: remainingMiss <= MAX_REMAINING_MISS,
     source: "strategy4-history-prewarm",
     phase: "complete",
     universe: universe.length,
+    computableUniverse,
     missingBefore: missing.length,
     scanned,
     remainingMiss,
+    rawRemainingMiss: remainingMissingRaw.length,
+    insufficientHistoryCount: insufficientHistory.length,
     maxRemainingMiss: MAX_REMAINING_MISS,
     sourceCounts,
     supabaseWarmed,
@@ -531,10 +801,19 @@ async function main() {
     supabaseSyncStatus,
     supabaseVolumeRows,
     supabaseVolumeUpdated,
+    finmindWarmed,
+    finmindPartial,
+    finmindFailed,
+    tpexWarmed,
+    tpexPartial,
+    tpexSkipped,
+    tpexFailed,
+    remainingMissing,
+    insufficientHistory,
     errors: errors.slice(-50),
   };
   writeStatus(status);
-  console.log(`strategy4 history prewarm complete: scanned ${scanned}, remainingMiss ${remainingMiss}/${universe.length}`);
+  console.log(`strategy4 history prewarm complete: scanned ${scanned}, remainingMiss ${remainingMiss}/${computableUniverse}, insufficientHistory ${insufficientHistory.length}/${universe.length}`);
   if (!status.ok) {
     throw new Error(`Strategy4 history prewarm remaining cache miss too high: ${remainingMiss}/${MAX_REMAINING_MISS}`);
   }

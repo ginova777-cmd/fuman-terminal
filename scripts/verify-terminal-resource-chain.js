@@ -5,6 +5,10 @@ const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.ve
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-resource-chain-audit");
 const NOW = new Date();
+const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--routes="))?.slice("--routes=".length) || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean));
 
 const SUPABASE_URL = String(
   process.env.SUPABASE_URL
@@ -57,6 +61,8 @@ const STRATEGIES = [
     endpoint: "/api/strategy3-latest",
     mobileTab: "strategy3",
     receiptKey: "strategy3",
+    requireReceiptRunId: true,
+    requireReceiptCountMatch: true,
     runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
     resultTable: "strategy3_scan_results",
     resultStrategy: "strategy3",
@@ -518,6 +524,12 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`scanner receipt not clean: ${receipt.status}`);
     }
     if (receipt.fallback) issues.push("scanner receipt fallback=true");
+    if (config.requireReceiptRunId && supabase?.runId && !receipt.runId) {
+      issues.push(`scanner receipt missing runId for latest complete run ${supabase.runId}`);
+    }
+    if (config.requireReceiptCountMatch && supabase?.count > 0 && receipt.matches !== supabase.count) {
+      issues.push(`scanner receipt matches != Supabase latest count (${receipt.matches} vs ${supabase.count})`);
+    }
     if (receipt.runId && supabase?.runId && receipt.runId !== supabase.runId) {
       issues.push(`scanner receipt runId != Supabase latest (${receipt.runId} vs ${supabase.runId})`);
     }
@@ -602,10 +614,12 @@ async function auditOne(config, desktopSnapshotPayload) {
     endpoint,
     liveEndpoint,
     supabase,
+    supabaseNotApplicable: !config.runView && !config.snapshotKey,
     resultRows,
     live,
     terminalApi: compact,
     desktopSnapshot,
+    desktopSnapshotNotApplicable: config.allowMissingDesktopSnapshot && desktopSnapshot?.error === "endpoint_not_in_desktop_snapshot",
     mobileFragment: mobile,
     ok: issues.length === 0,
     issues,
@@ -632,10 +646,14 @@ function markdown(results, desktopSnapshot, fastBundle) {
       : "n/a";
     const sup = row.supabase?.ok
       ? `${row.supabase.runId || row.supabase.date || "--"}<br>${row.supabase.count ?? "--"}`
+      : row.supabaseNotApplicable
+        ? "n/a"
       : `ERR ${row.supabase?.error || "missing"}`;
     const live = `${row.live?.status || "--"} ${row.live?.runId || row.live?.date || "--"}<br>${row.live?.count ?? "--"} ${row.live?.cacheSource || row.live?.transportSource || ""}`;
     const term = `${row.terminalApi?.status || "--"} ${row.terminalApi?.runId || row.terminalApi?.date || "--"}<br>${row.terminalApi?.count ?? "--"} ${row.terminalApi?.cacheSource || row.terminalApi?.transportSource || ""}`;
-    const snap = `${row.desktopSnapshot?.status || "--"} ${row.desktopSnapshot?.runId || row.desktopSnapshot?.date || "--"}<br>${row.desktopSnapshot?.count ?? "--"} ${row.desktopSnapshot?.cacheSource || row.desktopSnapshot?.transportSource || ""}`;
+    const snap = row.desktopSnapshotNotApplicable
+      ? "n/a"
+      : `${row.desktopSnapshot?.status || "--"} ${row.desktopSnapshot?.runId || row.desktopSnapshot?.date || "--"}<br>${row.desktopSnapshot?.count ?? "--"} ${row.desktopSnapshot?.cacheSource || row.desktopSnapshot?.transportSource || ""}`;
     const mob = row.mobileFragment
       ? `${row.mobileFragment.status || "--"} ${row.mobileFragment.runId || "--"}<br>${row.mobileFragment.count ?? "--"}`
       : "n/a";
@@ -665,7 +683,7 @@ async function main() {
   const desktopSnapshotPayload = desktopSnapshotResult.json || {};
   const fastBundlePayload = fastBundleResult.json || {};
   const results = [];
-  for (const config of STRATEGIES) {
+  for (const config of STRATEGIES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
     console.log(`[audit] ${config.key}`);
     results.push(await auditOne(config, desktopSnapshotPayload));
   }

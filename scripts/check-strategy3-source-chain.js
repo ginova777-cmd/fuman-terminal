@@ -1,9 +1,22 @@
 const {
-  fetchStrategy3Intraday1mLatestN,
   fetchStrategy3Intraday1mStatus,
+  fetchStrategy3LiveSideVolumeMap,
   fetchStrategy3QuoteLatestReady,
   fetchStrategy3QuoteReady,
 } = require("../lib/supabase-public-slot");
+const {
+  chipTradeExclusion,
+  loadChipTradeBlacklist,
+} = require("../lib/chip-trade-exclusions");
+const { fetchStrategy3TvCandles } = require("../lib/strategy3-tv-candles");
+const { analyzeTradingViewOvernightEntry } = require("../lib/strategy3-tv-entry");
+
+const MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
+const MAX_CHANGE_PERCENT = Number(process.env.STRATEGY3_MAX_CHANGE_PERCENT || 5);
+const MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO || 1);
+const MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
+const REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
+const REQUIRE_NEAR_100_HIGH = process.env.STRATEGY3_REQUIRE_NEAR_100_HIGH === "1";
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
@@ -26,78 +39,26 @@ function candleMinutes(row) {
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
-function emaSeries(values, period) {
-  const alpha = 2 / (period + 1);
-  const out = [];
-  values.forEach((value, index) => {
-    out[index] = index === 0 ? value : value * alpha + out[index - 1] * (1 - alpha);
-  });
-  return out;
-}
-
-function smaAt(values, index, period) {
-  const start = Math.max(0, index - period + 1);
-  const slice = values.slice(start, index + 1);
-  return slice.reduce((sum, value) => sum + value, 0) / Math.max(slice.length, 1);
-}
-
-function analyzeTradingViewOvernightEntry(candles) {
-  const rows = (candles || [])
-    .map((row) => ({
-      ...row,
-      open: cleanNumber(row.open),
-      high: cleanNumber(row.high),
-      low: cleanNumber(row.low),
-      close: cleanNumber(row.close),
-      volume: cleanNumber(row.volume),
-      minutes: candleMinutes(row),
-    }))
-    .filter((row) => row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0 && row.volume > 0);
-  if (rows.length < 35) {
-    return { ok: false, reason: `1m candles ${rows.length}/35`, candleCount: rows.length };
-  }
-  const moneyFlow = rows.map((row) => (row.high - row.low) === 0 ? 0 : ((row.close - row.open) / (row.high - row.low)) * row.volume);
-  const mfAvg = emaSeries(moneyFlow, 8);
-  const controlLine = mfAvg.map((_, index) => smaAt(mfAvg, index, 2));
-  const rawObv = rows.map((row, index) => {
-    if (index === 0) return 0;
-    if (row.close > rows[index - 1].close) return row.volume;
-    if (row.close < rows[index - 1].close) return -row.volume;
-    return 0;
-  });
-  const obvLine = emaSeries(rawObv, 10);
-  const lastSessionRows = rows
-    .map((row, index) => ({ row, index }))
-    .filter((item) => item.row.minutes != null && item.row.minutes >= 13 * 60 && item.row.minutes <= 13 * 60 + 30);
-  if (!lastSessionRows.length) {
-    return { ok: false, reason: "missing 13:00-13:30 candles", candleCount: rows.length };
-  }
-  const item = lastSessionRows.at(-1);
-  const index = item.index;
-  const highest100 = Math.max(...rows.slice(Math.max(0, index - 99), index + 1).map((row) => row.high));
-  const isNearHigh = item.row.close >= highest100 * 0.98;
-  const currentControl = cleanNumber(controlLine[index]);
-  const previousControl = cleanNumber(controlLine[index - 1]);
-  const currentObv = cleanNumber(obvLine[index]);
-  const controlDirUp = currentControl > previousControl;
-  const ok = isNearHigh && currentControl > 0 && controlDirUp && currentObv > 0;
-  return {
-    ok,
-    reason: ok
-      ? "tv entry ok"
-      : `nearHigh=${isNearHigh}; control=${currentControl.toFixed(2)}; controlDirUp=${controlDirUp}; obv=${currentObv.toFixed(2)}`,
-    candleCount: rows.length,
-    lastCandleTime: item.row.candleTime || item.row.time || "",
-    nearHigh: isNearHigh,
-    controlLine: Number(currentControl.toFixed(2)),
-    previousControlLine: Number(previousControl.toFixed(2)),
-    controlDirUp,
-    obvLine: Number(currentObv.toFixed(2)),
-  };
-}
-
 function latestDate(values) {
   return [...new Set(values.filter(Boolean).map((value) => String(value).slice(0, 10)))].sort().at(-1) || "";
+}
+
+function passesFieldGate(quote) {
+  const pct = cleanNumber(quote.percent);
+  const volumeRatio = cleanNumber(quote.volumeRatio || quote.projectedRatio);
+  const volumeLots = cleanNumber(quote.tradeVolume) / 1000;
+  const outsideVolume = cleanNumber(quote.outsideVolume ?? quote.cumulativeAskVolume);
+  const insideVolume = cleanNumber(quote.insideVolume ?? quote.cumulativeBidVolume);
+  const outsideInsideDiff = outsideVolume - insideVolume;
+  const outsideInsideRatio = insideVolume > 0
+    ? outsideVolume / insideVolume
+    : (outsideVolume > 0 ? 99 : 0);
+  const ok = pct >= MIN_CHANGE_PERCENT
+    && pct <= MAX_CHANGE_PERCENT
+    && volumeRatio > MIN_VOLUME_RATIO
+    && (MIN_TRADE_VOLUME_LOTS <= 0 || volumeLots >= MIN_TRADE_VOLUME_LOTS)
+    && (!REQUIRE_OUTSIDE_GT_INSIDE || (outsideVolume > 0 && insideVolume > 0 && outsideVolume > insideVolume));
+  return { ok, pct, volumeRatio, volumeLots, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
 }
 
 function rankCandidates(quotes) {
@@ -107,11 +68,15 @@ function rankCandidates(quotes) {
       const scoreA = cleanNumber(a.tradeValue || a.value) / 1000000
         + cleanNumber(a.tradeVolume) / 100000
         + Math.max(0, cleanNumber(a.percent)) * 8
-        + cleanNumber(a.volumeRatio || a.projectedRatio) * 5;
+        + cleanNumber(a.volumeRatio || a.projectedRatio) * 5
+        + Math.max(0, cleanNumber(a.outsideVolume) - cleanNumber(a.insideVolume)) / 500
+        + Math.max(0, (cleanNumber(a.insideVolume) > 0 ? cleanNumber(a.outsideVolume) / cleanNumber(a.insideVolume) : 0) - 1) * 16;
       const scoreB = cleanNumber(b.tradeValue || b.value) / 1000000
         + cleanNumber(b.tradeVolume) / 100000
         + Math.max(0, cleanNumber(b.percent)) * 8
-        + cleanNumber(b.volumeRatio || b.projectedRatio) * 5;
+        + cleanNumber(b.volumeRatio || b.projectedRatio) * 5
+        + Math.max(0, cleanNumber(b.outsideVolume) - cleanNumber(b.insideVolume)) / 500
+        + Math.max(0, (cleanNumber(b.insideVolume) > 0 ? cleanNumber(b.outsideVolume) / cleanNumber(b.insideVolume) : 0) - 1) * 16;
       return scoreB - scoreA;
     });
 }
@@ -127,21 +92,37 @@ async function main() {
   }));
   const latest = await fetchStrategy3QuoteLatestReady({ minQuotes: 500, timeout: 20000 });
   const status = await fetchStrategy3Intraday1mStatus(latest.quotes.map((quote) => quote.code));
+  const side = await fetchStrategy3LiveSideVolumeMap(latest.quotes.map((quote) => quote.code)).catch(() => ({ byCode: new Map(), ok: false }));
+  const blacklistCodes = loadChipTradeBlacklist();
   const merged = latest.quotes.map((quote) => {
     const row = status.byCode.get(quote.code) || {};
-    return {
+    const sideRow = side.byCode.get(quote.code) || {};
+    const item = {
       ...quote,
+      outsideVolume: cleanNumber(sideRow.outsideVolume),
+      insideVolume: cleanNumber(sideRow.insideVolume),
+      cumulativeAskVolume: cleanNumber(sideRow.cumulativeAskVolume),
+      cumulativeBidVolume: cleanNumber(sideRow.cumulativeBidVolume),
+      cumulativeBidAskVolume: cleanNumber(sideRow.cumulativeBidAskVolume),
       after1300CandleCount: cleanNumber(row.after_1300_candle_count ?? row.candles_after_1300),
       hasAfter1300Candle: row.has_after_1300_candle === true || cleanNumber(row.after_1300_candle_count) > 0,
       latestCandleTime: row.latest_candle_time || quote.latestCandleTime || "",
     };
+    const exclusion = chipTradeExclusion(item, blacklistCodes);
+    return {
+      ...item,
+      chipExcluded: exclusion.excluded,
+      chipExclusionReasons: exclusion.reasons,
+    };
   });
-  const after1300 = merged.filter((quote) => quote.hasAfter1300Candle || cleanNumber(quote.after1300CandleCount) > 0);
-  const ranked = rankCandidates(after1300).slice(0, tvLimit);
+  const chipReady = merged.filter((quote) => !quote.chipExcluded);
+  const after1300 = chipReady.filter((quote) => quote.hasAfter1300Candle || cleanNumber(quote.after1300CandleCount) > 0);
+  const fieldReady = after1300.filter((quote) => passesFieldGate(quote).ok);
+  const ranked = rankCandidates(fieldReady).slice(0, tvLimit);
   let tvOk = 0;
   const examples = [];
   for (const quote of ranked) {
-    const result = await fetchStrategy3Intraday1mLatestN(quote.code, 160).catch((error) => ({ error: error?.message || String(error), candles: [] }));
+    const result = await fetchStrategy3TvCandles(quote.code, 160).catch((error) => ({ error: error?.message || String(error), candles: [], rows: [], quality: {} }));
     const tv = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
     if (tv.ok) tvOk += 1;
     if (examples.length < 12) {
@@ -151,11 +132,26 @@ async function main() {
         close: quote.close,
         percent: quote.percent,
         tradeVolume: quote.tradeVolume,
+        tradeVolumeLots: Math.round(cleanNumber(quote.tradeVolume) / 1000),
+        volumeRatio: Number(cleanNumber(quote.volumeRatio || quote.projectedRatio).toFixed(2)),
+        outsideVolume: cleanNumber(quote.outsideVolume),
+        insideVolume: cleanNumber(quote.insideVolume),
+        outsideGtInside: cleanNumber(quote.outsideVolume) > cleanNumber(quote.insideVolume),
+        outsideInsideDiff: Math.round(cleanNumber(quote.outsideVolume) - cleanNumber(quote.insideVolume)),
+        outsideInsideRatio: Number((cleanNumber(quote.insideVolume) > 0 ? cleanNumber(quote.outsideVolume) / cleanNumber(quote.insideVolume) : 0).toFixed(2)),
         latestQuoteDate: String(quote.updatedAt || quote.quoteTimeRaw || "").slice(0, 10),
         after1300CandleCount: quote.after1300CandleCount,
         latestCandleTime: quote.latestCandleTime,
         tvOk: tv.ok,
         tvReason: tv.reason,
+        tvControlSource: tv.controlSource,
+        tvControlOk: tv.controlOk,
+        tvObvOk: tv.obvOk,
+        tvCandleSource: result.source || "",
+        tvCandleQuality: result.quality || {},
+        tvCandleFallbackFrom: result.fallbackFrom || "",
+        tvCandleFallbackReason: result.fallbackReason || "",
+        tvCandleFallbackError: result.fallbackError || "",
         tvCandleCount: tv.candleCount,
         tvLastCandleTime: tv.lastCandleTime,
       });
@@ -175,9 +171,20 @@ async function main() {
       source: quoteReady.source,
     },
     latestQuoteRows: latest.quotes.length,
+    chipReadyCount: chipReady.length,
+    chipExcludedCount: merged.length - chipReady.length,
     latestQuoteDate,
     latestCandleDate,
     after1300ReadyCount: after1300.length,
+    fieldGateReadyCount: fieldReady.length,
+    fieldGate: {
+      minChangePercent: MIN_CHANGE_PERCENT,
+      maxChangePercent: MAX_CHANGE_PERCENT,
+      minVolumeRatio: MIN_VOLUME_RATIO,
+      minTradeVolumeLots: MIN_TRADE_VOLUME_LOTS,
+      requireOutsideGtInside: REQUIRE_OUTSIDE_GT_INSIDE,
+      sideVolumeRows: side.byCode.size,
+    },
     minAfter1300,
     tvChecked: ranked.length,
     tvOk,

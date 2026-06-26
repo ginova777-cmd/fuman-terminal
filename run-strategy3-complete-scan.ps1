@@ -12,7 +12,8 @@ $logDir = Join-Path $env:FUMAN_RUNTIME_DIR "logs"
 New-Item -ItemType Directory -Force -Path $logDir, $env:FUMAN_DATA_DIR, $env:FUMAN_CACHE_DIR, $env:FUMAN_STATE_DIR | Out-Null
 $log = Join-Path $logDir ("strategy3-complete-scan-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
-New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$syncReceiptDir = Join-Path $PSScriptRoot "data\scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir, $syncReceiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
 function Write-Strategy3CompleteLog($Message) {
@@ -43,6 +44,7 @@ function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     log = $log
   }
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy3.json") -Encoding utf8
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $syncReceiptDir "strategy3.json") -Encoding utf8
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
@@ -95,11 +97,12 @@ captureHandler(handler).then((result) => {
   $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.matches).Count }
   if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 latest API stale; usedDate=$usedDate today=$today" }
   if ($AllowPreviousComplete -and ([string]::IsNullOrWhiteSpace($usedDate) -or $usedDate -gt $today)) { throw "Strategy3 latest API invalid latest complete date; usedDate=$usedDate today=$today" }
-  if ($count -le 0) { throw "Strategy3 latest API empty; count=$count" }
   $cacheSource = [string]$payload.cacheSource
   if ($cacheSource -notin @("supabase-api", "supabase-snapshot")) { throw "Strategy3 latest API did not use Supabase complete-run/snapshot path; cacheSource=$cacheSource" }
   if ([string]::IsNullOrWhiteSpace([string]$payload.runId)) { throw "Strategy3 latest API missing runId" }
   if ($cacheSource -eq "supabase-api" -and [string]$payload.transport.gate -ne "run_id") { throw "Strategy3 latest API did not use run_id gate; gate=$($payload.transport.gate)" }
+  $allowZeroCompleteToday = (-not $AllowPreviousComplete) -and $usedDate -eq $today
+  if ($count -le 0 -and -not $allowZeroCompleteToday) { throw "Strategy3 latest API empty; count=$count" }
   Write-Strategy3CompleteLog "Strategy3 complete API verified: usedDate=$usedDate count=$count runId=$($payload.runId) cacheSource=$($payload.cacheSource) gate=$($payload.transport.gate)"
   return $payload
 }

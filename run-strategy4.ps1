@@ -138,12 +138,16 @@ try {
   $previousPrewarmSleep = $env:STRATEGY4_PREWARM_SLEEP_MS
   $previousPrewarmMaxMiss = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
   $previousPrewarmUseMis = $env:STRATEGY4_USE_MIS
+  $previousHistoryLookbackDays = $env:STRATEGY4_HISTORY_LOOKBACK_DAYS
+  $previousHistoryCacheRows = $env:STRATEGY4_HISTORY_CACHE_ROWS
   try {
     $env:STRATEGY4_USE_MIS = "0"
     $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
-    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "0"
+    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "999"
     $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
     $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
+    $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
+    $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
     & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
     $prewarmExit = $LASTEXITCODE
   } finally {
@@ -152,6 +156,8 @@ try {
     if ($null -ne $previousPrewarmSleep) { $env:STRATEGY4_PREWARM_SLEEP_MS = $previousPrewarmSleep } else { Remove-Item Env:STRATEGY4_PREWARM_SLEEP_MS -ErrorAction SilentlyContinue }
     if ($null -ne $previousPrewarmMaxMiss) { $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = $previousPrewarmMaxMiss } else { Remove-Item Env:STRATEGY4_PREWARM_MAX_REMAINING_MISS -ErrorAction SilentlyContinue }
     if ($null -ne $previousPrewarmUseMis) { $env:STRATEGY4_USE_MIS = $previousPrewarmUseMis } else { Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue }
+    if ($null -ne $previousHistoryLookbackDays) { $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = $previousHistoryLookbackDays } else { Remove-Item Env:STRATEGY4_HISTORY_LOOKBACK_DAYS -ErrorAction SilentlyContinue }
+    if ($null -ne $previousHistoryCacheRows) { $env:STRATEGY4_HISTORY_CACHE_ROWS = $previousHistoryCacheRows } else { Remove-Item Env:STRATEGY4_HISTORY_CACHE_ROWS -ErrorAction SilentlyContinue }
   }
   if ($prewarmExit -ne 0) {
     Write-Log "Strategy4 Supabase daily volume cache prewarm failed with exit code $prewarmExit"

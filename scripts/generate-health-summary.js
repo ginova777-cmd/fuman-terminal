@@ -79,9 +79,7 @@ const REPLACED_OR_LEGACY_TASKS = new Set([
   "\\Fuman 權證走向 Cache 2030",
   "\\Fuman 權證走向 Watchdog 0550",
   "\\Fuman 權證走向 Watchdog 2050",
-  "\\Fuman 買賣超 Cache 0600",
   "\\Fuman 買賣超 Cache 2100",
-  "\\Fuman 買賣超 Watchdog 0620",
   "\\Fuman 買賣超 Watchdog 2120",
 ]);
 

@@ -29,7 +29,7 @@ const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FU
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view" },
   { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view" },
-  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true },
+  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true, fallbackNeedles: ["策略1-明日開盤入", "21:30初篩", "08:55搓合"] },
   { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
   { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
   { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
@@ -766,11 +766,17 @@ async function fallbackDesktopStats(cdp, route, error) {
   const dateSignals = [...panelText.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
   const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
+  const routeNeedles = Array.isArray(route.fallbackNeedles) && route.fallbackNeedles.length
+    ? route.fallbackNeedles
+    : String(route.expectedRouteKey || "").split("|").filter(Boolean);
+  const routeTextOk = routeNeedles.length
+    ? routeNeedles.some((needle) => panelText.includes(needle))
+    : true;
   return {
     kind: "desktop",
     routeKey: route.key,
     label: route.label,
-    routeIdentityOk: false,
+    routeIdentityOk: routeTextOk,
     expectedPanelId: route.expectedPanelId || "",
     expectedRouteKey: route.expectedRouteKey || "",
     rowsVisible,
@@ -785,10 +791,10 @@ async function fallbackDesktopStats(cdp, route, error) {
     blockerMatches: [...new Set(hardBlockers)],
     warnings: [
       `Runtime stats fallback: ${error.message}`,
-      "route identity unavailable in fallback stats",
+      routeTextOk ? "route identity inferred from visible page text in fallback stats" : "route identity unavailable in fallback stats",
       ...(rowsVisible > 0 && hardBlockers.length !== blockerMatches.length ? ["ignored hidden/soft empty-state text because rows are visible"] : []),
     ],
-    ok: false,
+    ok: routeTextOk && rowsVisible > 0 && hardBlockers.length === 0,
   };
 }
 

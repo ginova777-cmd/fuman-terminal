@@ -185,6 +185,9 @@ if (!String(packageJson.scripts?.["strategy2:readiness-source:install"] || "").i
 if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
   issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
 }
+if (!String(packageJson.scripts?.["verify:strategy4-standard-gate"] || "").includes("scripts/verify-strategy4-standard-gate.js")) {
+  issues.push("package.json missing scripts.verify:strategy4-standard-gate for Strategy4 resource/source/history/API/terminal standard gate");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -275,6 +278,7 @@ const mobileBootApi = read("api/mobile-boot.js");
 const mobileFragmentApi = read("api/mobile-fragment.js");
 const cbDetectLatestApi = read("api/cb-detect-latest.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
+const strategy4StandardGate = read("scripts/verify-strategy4-standard-gate.js");
 const cbDetectScanner = read("scripts/generate-cb-detect.js");
 const runStrategy4 = read("run-strategy4.ps1");
 const runOpenBuy = read("run-open-buy.ps1");
@@ -537,6 +541,29 @@ if (!/STRATEGY4_API_ONLY = true/.test(strategy4Scanner) || /OUT_FILE|BACKUP_FILE
 for (const marker of ["stock_daily_volume", "supabase:stock_daily_volume"]) {
   if (!strategy4Scanner.includes(marker)) issues.push(`scan-strategy4-cache.js missing stable Strategy4 source marker ${marker}`);
   if (!strategy4LatestApi.includes(marker)) issues.push(`strategy4-latest.js missing stable Strategy4 source marker ${marker}`);
+}
+for (const marker of [
+  "assertStrategy4PrePublishSelfTest",
+  "verifyStrategy4PublishedSelfTest",
+  "REQUIRED_WALLET_FIELDS",
+  "REQUIRED_MUTAKI_FIELDS",
+  "executionRate",
+  "coverageRatio",
+]) {
+  if (!strategy4Scanner.includes(marker)) issues.push(`scan-strategy4-cache.js missing Strategy4 standard self-test marker ${marker}`);
+}
+for (const marker of [
+  "v_scanner_resource_health",
+  "stock_daily_volume",
+  "fugle_daily_volume",
+  "strategy4_daily_ohlcv_view",
+  "strategy4-history-prewarm-status.json",
+  "verify-terminal-resource-chain.js",
+  "verify-terminal-field-completeness.js",
+  "verify-terminal-source-contracts.js",
+  "published-breakdown-complete",
+]) {
+  if (!strategy4StandardGate.includes(marker)) issues.push(`verify-strategy4-standard-gate.js missing Strategy4 standard gate marker ${marker}`);
 }
 if (/run-cache-sync|Invoke-CacheSync|FUMAN_STRATEGY4_SCOPED_PUBLISH|generate-slim-cache|run-strategy4-postflight|data\\strategy4|data\/strategy4|strategy4-(latest|backup|summary|slim|zone|score).*\.json/.test(runStrategy4) || !/api\/strategy4-latest/.test(runStrategy4)) {
   issues.push("run-strategy4.ps1 must be API-only: no static strategy4 JSON copy, slim generation, cache sync, or static postflight");
@@ -1062,6 +1089,13 @@ if (/strategy5-latest\.json|run-cache-sync\.ps1/.test(strategy5Watchdog)) {
   issues.push("run-strategy5-watchdog.ps1 must not read strategy5 static JSON or repair through cache sync");
 }
 
+const strategy5Watchdog = read("run-strategy5-watchdog.ps1");
+for (const marker of ["/api/strategy5-latest", "Cache-Control", "no-store", "runId", "complete", "21:00"]) {
+  if (!strategy5Watchdog.includes(marker)) issues.push(`run-strategy5-watchdog.ps1 missing API-only watchdog marker ${marker}`);
+}
+if (/strategy5-latest\.json|run-cache-sync\.ps1/.test(strategy5Watchdog)) {
+  issues.push("run-strategy5-watchdog.ps1 must not read strategy5 static JSON or repair through cache sync");
+}
 
 if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
   issues.push("STRATEGY2-FRESHNESS-GOVERNANCE.md missing strategy2 data governance");

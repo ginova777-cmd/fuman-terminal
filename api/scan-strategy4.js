@@ -10,6 +10,9 @@ const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_D
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
+const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
+const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
+const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
 const ALLOW_YAHOO_FALLBACK = process.env.STRATEGY4_ALLOW_YAHOO_FALLBACK !== "0";
 const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
 const ALLOW_EXTERNAL_FALLBACK = process.env.STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK === "1";
@@ -127,7 +130,7 @@ function readFugleHistoryCache(code, from, to) {
     || payload?.from !== from
     || payload?.to !== to
     || !Array.isArray(payload?.rows)
-    || payload.rows.length < 60
+    || payload.rows.length < STRATEGY4_MIN_HISTORY_BARS
   ) return null;
   const source = payload.source || "fugle-cache";
   const sourceUnit = /supabase|fugle|finmind|yahoo|twse|tpex/i.test(source) ? "shares" : "";
@@ -138,13 +141,13 @@ function readFugleHistoryCache(code, from, to) {
   return { rows, source };
 }
 
-function writeFugleHistoryCache(code, from, to, rows) {
-  if (!Array.isArray(rows) || rows.length < 60) return false;
+function writeFugleHistoryCache(code, from, to, rows, source = "fugle") {
+  if (!Array.isArray(rows) || rows.length < STRATEGY4_MIN_HISTORY_BARS) return false;
   return writeJson(fugleHistoryCacheFile(code), {
     code: normalizeCode(code),
     from,
     to,
-    source: "fugle",
+    source,
     updatedAt: new Date().toISOString(),
     rows,
   });
@@ -171,7 +174,7 @@ function normalizeTpexRows(payload) {
   return table.data.map((row) => ({
     date: rocToIso(row[0]),
     volume: cleanNumber(row[1]),
-    volumeUnit: "shares",
+    volumeUnit: "lots",
     value: cleanNumber(row[2]) * 1000,
     open: cleanNumber(row[3]),
     high: cleanNumber(row[4]),
@@ -271,7 +274,7 @@ async function mergeTpexDailyQuote(code, history) {
     byDate.set(quote.date, { ...(byDate.get(quote.date) || {}), ...quote });
     return {
       ...history,
-      rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-180),
+      rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-HISTORY_CACHE_ROWS),
     };
   } catch {
     return history;
@@ -293,7 +296,7 @@ async function fetchTpexMonth(code, date) {
 
 async function fetchFugleHistory(code) {
   if (!FUGLE_API_KEY) return { rows: [], source: "" };
-  const from = isoDateDaysAgo(270);
+  const from = isoDateDaysAgo(HISTORY_LOOKBACK_DAYS);
   const to = new Date().toISOString().slice(0, 10);
   const cached = readFugleHistoryCache(code, from, to);
   if (cached) return cached;
@@ -311,7 +314,7 @@ async function fetchFugleHistory(code) {
     },
   }, 20000));
   const rows = normalizeFugleRows(payload);
-  writeFugleHistoryCache(code, from, to, rows);
+  writeFugleHistoryCache(code, from, to, rows, "fugle");
   return { rows, source: "fugle" };
 }
 
@@ -320,7 +323,7 @@ async function fetchFinMindHistory(code) {
   const params = new URLSearchParams({
     dataset: "TaiwanStockPrice",
     data_id: code,
-    start_date: isoDateDaysAgo(270),
+    start_date: isoDateDaysAgo(HISTORY_LOOKBACK_DAYS),
     end_date: new Date().toISOString().slice(0, 10),
   });
   const url = `https://api.finmindtrade.com/api/v4/data?${params.toString()}`;
@@ -356,14 +359,14 @@ async function fetchHistory(code, preferredMarket = "") {
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_MS) return cached.value;
 
-  const months = monthStarts(8);
+  const months = monthStarts(Math.max(8, Math.ceil(HISTORY_LOOKBACK_DAYS / 28)));
   let market = marketHint === "TPEX" ? "TPEX" : "TWSE";
   let rows = [];
 
   let historySource = "";
   try {
     const primary = await fetchFugleHistory(code);
-    if (primary.rows.length >= 60) {
+    if (primary.rows.length >= STRATEGY4_MIN_HISTORY_BARS) {
       rows = primary.rows;
       historySource = primary.source || "fugle";
     } else if (primary.source) {
@@ -372,7 +375,7 @@ async function fetchHistory(code, preferredMarket = "") {
   } catch {
   }
 
-  if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK && rows.length < 60) {
+  if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK && rows.length < STRATEGY4_MIN_HISTORY_BARS) {
     const value = {
       code,
       market,
@@ -383,7 +386,7 @@ async function fetchHistory(code, preferredMarket = "") {
     return value;
   }
 
-  if (rows.length < 60) {
+  if (rows.length < STRATEGY4_MIN_HISTORY_BARS) {
     try {
       const finmind = await fetchFinMindHistory(code);
       if (finmind.rows.length >= rows.length) {
@@ -394,7 +397,7 @@ async function fetchHistory(code, preferredMarket = "") {
     }
   }
 
-  if (rows.length < 60 && ALLOW_YAHOO_FALLBACK) {
+  if (rows.length < STRATEGY4_MIN_HISTORY_BARS && ALLOW_YAHOO_FALLBACK) {
     const yahoo = await fetchYahooHistory(code, marketHint || market);
     if (yahoo.rows.length >= rows.length) {
       rows = yahoo.rows;
@@ -402,7 +405,7 @@ async function fetchHistory(code, preferredMarket = "") {
     }
   }
 
-  if (rows.length < 60) {
+  if (rows.length < STRATEGY4_MIN_HISTORY_BARS) {
     const officialRows = [];
     if (market !== "TPEX") {
       for (const item of months) {
@@ -440,11 +443,15 @@ async function fetchHistory(code, preferredMarket = "") {
 
   const byDate = new Map();
   rows.forEach((row) => byDate.set(row.date, row));
+  const normalizedRows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-HISTORY_CACHE_ROWS);
+  if (normalizedRows.length >= STRATEGY4_MIN_HISTORY_BARS && /^(fugle|finmind|twse-official|tpex-official)$/.test(historySource || "")) {
+    writeFugleHistoryCache(code, isoDateDaysAgo(HISTORY_LOOKBACK_DAYS), new Date().toISOString().slice(0, 10), normalizedRows, historySource);
+  }
   const value = {
     code,
     market,
     source: historySource || (market === "TPEX" ? "tpex-official" : "twse-official"),
-    rows: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-180),
+    rows: normalizedRows,
   };
   cache.set(cacheKey, { ts: Date.now(), value });
   return value;
@@ -552,8 +559,15 @@ function walletSnapshots(rows, lookback = 5) {
   const mfValues = moneyFlowSeries(rows);
   const mfAvg = emaSeries(mfValues, 20);
   const controlSeries = mfAvg.map((_, index) => sma(mfAvg.slice(0, index + 1), 5));
+  const rawObvValues = rows.map((row, index) => {
+    if (index === 0) return 0;
+    const prev = rows[index - 1];
+    return row.close > prev.close ? row.volume : row.close < prev.close ? -row.volume : 0;
+  });
+  const obvSeries = emaSeries(rawObvValues, 20);
   const absMfValues = mfValues.map(Math.abs);
   const volumeMa5Series = absMfValues.map((_, index) => sma(absMfValues.slice(0, index + 1), 5));
+  const volumeMa20Series = absMfValues.map((_, index) => sma(absMfValues.slice(0, index + 1), 20));
   const volumeMa60Series = absMfValues.map((_, index) => sma(absMfValues.slice(0, index + 1), 60));
   const start = Math.max(60, rows.length - Math.max(1, lookback));
   const snapshots = [];
@@ -562,7 +576,10 @@ function walletSnapshots(rows, lookback = 5) {
     const prevControlLine = controlSeries[index - 1] || 0;
     const prev2ControlLine = controlSeries[index - 2] || prevControlLine;
     const controlLine = controlSeries[index] || 0;
+    const prevObvLine = obvSeries[index - 1] || 0;
+    const obvLine = obvSeries[index] || 0;
     const volumeMa5 = volumeMa5Series[index] || 0;
+    const volumeMa20 = volumeMa20Series[index] || 0;
     const volumeMa60 = volumeMa60Series[index] || 0;
     const prevVolumeMa5 = volumeMa5Series[index - 1] || 0;
     const prevVolumeMa60 = volumeMa60Series[index - 1] || 0;
@@ -571,16 +588,31 @@ function walletSnapshots(rows, lookback = 5) {
     const atr14 = atr(rows.slice(0, index + 1), 14);
     const typicalPrice = (row.high + row.low + row.close) / 3;
     const isRed = row.close > row.open;
+    const isGreen = row.close < row.open;
     const isGray = Math.abs(mf) < volAvg * 0.3;
     const isStrongMove = Math.abs(mf) > atr14 * 2.5;
     const isDangerZone = row.close < typicalPrice || (controlLine < prevControlLine && prevControlLine < prev2ControlLine);
+    const syncScore = [
+      controlLine > 0 && controlLine > prevControlLine ? 30 : 0,
+      obvLine > 0 && obvLine > prevObvLine ? 30 : 0,
+      row.close > typicalPrice ? 20 : 0,
+      isStrongMove ? 20 : 0,
+    ].reduce((sum, value) => sum + value, 0);
     snapshots.push({
       date: row.date,
       mf,
       controlLine,
+      obvLine,
       volumeMa5,
+      volumeMa20,
       volumeMa60,
+      grayThreshold: 0.3,
+      isGray,
+      isStrongMove,
+      isDangerZone,
+      syncScore,
       strongBuy: !isGray && isStrongMove && prevControlLine <= 0 && controlLine > 0 && isRed && !isDangerZone,
+      strongSell: !isGray && isStrongMove && prevControlLine >= 0 && controlLine < 0 && isGreen,
       volumeCrossUp: prevVolumeMa5 <= prevVolumeMa60 && volumeMa5 > volumeMa60 && isRed,
     });
   }
@@ -597,21 +629,25 @@ function walletSnapshot(rows) {
     volumeMa5: 0,
     volumeMa60: 0,
     strongBuy: false,
+    strongSell: false,
     volumeCrossUp: false,
   };
   return {
     ...latest,
     strongBuy: Boolean(latestStrongBuy),
+    strongSell: Boolean(snapshots.slice().reverse().find((item) => item.strongSell)),
     volumeCrossUp: Boolean(latestVolumeCross),
     strongBuyDate: latestStrongBuy?.date || "",
+    strongSellDate: snapshots.slice().reverse().find((item) => item.strongSell)?.date || "",
     volumeCrossDate: latestVolumeCross?.date || "",
     latestStrongBuy,
+    latestStrongSell: snapshots.slice().reverse().find((item) => item.strongSell) || null,
     latestVolumeCross,
   };
 }
 
 function analyzeRows(rows) {
-  if (rows.length < 60) return null;
+  if (rows.length < STRATEGY4_MIN_HISTORY_BARS) return null;
   const normalizedRows = rows.map((row) => ({ ...row, volume: normalizeVolumeLots(row.volume, row), volumeUnit: "lots" }));
   const closes = normalizedRows.map((row) => row.close);
   const volumes = normalizedRows.map((row) => row.volume);
@@ -621,6 +657,9 @@ function analyzeRows(rows) {
   const ma5 = sma(closes, 5);
   const ma10 = sma(closes, 10);
   const ma20 = sma(closes, 20);
+  const ma60 = sma(closes, 60);
+  const ma120 = sma(closes, 120);
+  const ma240 = sma(closes, 240);
   const ma5Prev = sma(closes, 5, 1);
   const ma10Prev = sma(closes, 10, 1);
   const ma20Prev3 = sma(closes, 20, 3);
@@ -671,6 +710,9 @@ function analyzeRows(rows) {
     ma5,
     ma10,
     ma20,
+    ma60,
+    ma120,
+    ma240,
     ma5Prev,
     ma10Prev,
     ma20Offset,
@@ -684,6 +726,9 @@ function analyzeRows(rows) {
     atr14,
     wallet,
     stage,
+    swHigh,
+    swLow,
+    swDiff,
     highest20Prev,
     highest10Prev,
     highest2Prev,
@@ -900,6 +945,12 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     });
   }
   const zoneBase = swingZone === "A" ? 48 : swingZone === "B" ? 38 : 28;
+  const entryPrice = last.close;
+  const stopPrice = daily.gapUp && prev ? prev.high : entryPrice - daily.atr14 * 1.5;
+  const targetPrice = (vFast || vReversal)
+    ? (entryPrice < daily.fib382 ? daily.fib382 : (entryPrice < daily.fib500 ? daily.fib500 : daily.fib618))
+    : entryPrice + (entryPrice - stopPrice) * 1.2;
+  const currentFibRatio = daily.swDiff ? Number(((entryPrice - daily.swLow) / daily.swDiff).toFixed(4)) : 0;
   const score = Math.min(100, Math.round(
     zoneBase +
     signals.length * 7 +
@@ -936,12 +987,49 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     wallet: {
       mf: Math.round(daily.wallet.mf),
       controlLine: Math.round(daily.wallet.controlLine),
+      obvLine: Math.round(daily.wallet.obvLine || 0),
       volumeMa5: Math.round(daily.wallet.volumeMa5),
+      volumeMa20: Math.round(daily.wallet.volumeMa20 || 0),
       volumeMa60: Math.round(daily.wallet.volumeMa60),
+      isGray: Boolean(daily.wallet.isGray),
+      isStrongMove: Boolean(daily.wallet.isStrongMove),
+      isDangerZone: Boolean(daily.wallet.isDangerZone),
+      syncScore: Math.round(daily.wallet.syncScore || 0),
       strongBuy: daily.wallet.strongBuy,
+      strongSell: daily.wallet.strongSell,
       volumeCrossUp: daily.wallet.volumeCrossUp,
       strongBuyDate: daily.wallet.strongBuyDate,
+      strongSellDate: daily.wallet.strongSellDate,
       volumeCrossDate: daily.wallet.volumeCrossDate,
+    },
+    mutakiV17: {
+      ma5: Number(daily.ma5.toFixed(2)),
+      ma10: Number(daily.ma10.toFixed(2)),
+      ma20: Number(daily.ma20.toFixed(2)),
+      ma60: Number(daily.ma60.toFixed(2)),
+      ma120: Number((daily.ma120 || 0).toFixed(2)),
+      ma240: Number((daily.ma240 || 0).toFixed(2)),
+      ema21: Number(daily.ema21.toFixed(2)),
+      ema21Up: daily.ema21 > daily.ema21Prev,
+      ma20Heavy: last.close < daily.ma20Offset,
+      fib382: Number(daily.fib382.toFixed(2)),
+      fib500: Number(daily.fib500.toFixed(2)),
+      fib618: Number(daily.fib618.toFixed(2)),
+      fibRatio: currentFibRatio,
+      bias20: Number(daily.bias20.toFixed(2)),
+      rsi14: Number(daily.rsi14.toFixed(2)),
+      atr14: Number(daily.atr14.toFixed(2)),
+      entryPrice: Number(entryPrice.toFixed(2)),
+      stopPrice: Number(stopPrice.toFixed(2)),
+      targetPrice: Number(targetPrice.toFixed(2)),
+      riskReward: stopPrice < entryPrice ? Number(((targetPrice - entryPrice) / (entryPrice - stopPrice)).toFixed(2)) : 0,
+      trendConfirmed,
+      isBullTrend: daily.bullTrend,
+      isRealBody: daily.realBody,
+      isDeepFall: daily.deepFall,
+      isGapUp: daily.gapUp,
+      isRunawayUp: runawayGap,
+      isBreakawayUp: breakawayGap,
     },
     reason: signals[0].reason,
   };

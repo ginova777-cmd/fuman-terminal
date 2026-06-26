@@ -4,6 +4,10 @@ const path = require("path");
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-field-completeness");
 const LIMIT = Math.max(1, Number(process.env.TERMINAL_FIELD_AUDIT_LIMIT || 20));
+const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--routes="))?.slice("--routes=".length) || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean));
 
 const ROUTES = [
   {
@@ -250,7 +254,7 @@ function writeReports(results) {
 
 async function main() {
   const results = [];
-  for (const route of ROUTES) {
+  for (const route of ROUTES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
     console.log(`[field-completeness] ${route.key}`);
     const response = await fetchJson(route.endpoint);
     if (!response.ok || !response.json) {

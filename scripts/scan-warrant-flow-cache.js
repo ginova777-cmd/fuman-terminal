@@ -420,6 +420,7 @@ async function main() {
   await publishWarrantFlowCompleteRunToSupabase(output);
 
   if (WARRANT_FLOW_API_ONLY) {
+    writeSummary("warrant", output, SUMMARY_FILE);
     console.log(`warrant-flow API-only: skipped static warrant-flow*.json output, matches ${matches.length}, tradeDate ${newestTradeDate || "--"}`);
     return;
   }

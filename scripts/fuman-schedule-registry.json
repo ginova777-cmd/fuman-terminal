@@ -234,24 +234,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman 買賣超 Cache 0600",
-      "displayName": "Fuman 買賣超 Cache 0600",
-      "description": "買賣超資料，早上 06:00 快取並發布終端",
-      "time": "06:00",
-      "aliases": [
-        "買賣超 0600"
-      ]
-    },
-    {
-      "taskName": "\\Fuman 買賣超 Watchdog 0620",
-      "displayName": "Fuman 買賣超 Watchdog 0620",
-      "description": "早上 06:20 檢查買賣超 06:00 是否成功；失敗會重跑",
-      "time": "06:20",
-      "aliases": [
-        "買賣超 0620"
-      ]
-    },
-    {
       "taskName": "\\Fuman 權證走向 Cache 2030",
       "displayName": "Fuman 權證走向 Cache 2030",
       "description": "權證資金走向，晚上 20:30 快取並發布終端",

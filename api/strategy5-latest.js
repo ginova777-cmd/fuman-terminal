@@ -194,7 +194,7 @@ function buildPayload(rows, run, options = {}) {
     generatedDate: scanDate,
     usedDate: run?.payload?.usedDate || scanDate,
     sourceDate: run?.payload?.sourceDate || run?.payload?.usedDate || scanDate,
-    schedule: run?.payload?.schedule || "06:00/21:00",
+    schedule: run?.payload?.schedule || "daily complete scan",
     fullScan: true,
     complete: true,
     canvas: Boolean(options.canvas),

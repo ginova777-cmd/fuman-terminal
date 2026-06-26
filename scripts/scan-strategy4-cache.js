@@ -20,6 +20,7 @@ const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1500
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
+const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT || 1500);
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIVE_BID_ASK_VOLUME || 3000);
 const STRATEGY4_CACHE_SCHEMA_VERSION = "strategy4-cache-v3-unit-contract";
@@ -74,6 +75,52 @@ const STRATEGY4_API_ONLY = true;
 let strategy4VolumeCache = null;
 let strategy4VolumeCacheSource = `supabase:${STRATEGY4_DAILY_VIEW}`;
 
+const REQUIRED_WALLET_FIELDS = [
+  "mf",
+  "controlLine",
+  "obvLine",
+  "volumeMa5",
+  "volumeMa20",
+  "volumeMa60",
+  "isGray",
+  "isStrongMove",
+  "isDangerZone",
+  "syncScore",
+  "strongBuy",
+  "volumeCrossUp",
+  "strongSell",
+];
+
+const REQUIRED_MUTAKI_FIELDS = [
+  "ma5",
+  "ma10",
+  "ma20",
+  "ma60",
+  "ma120",
+  "ma240",
+  "ema21",
+  "ema21Up",
+  "ma20Heavy",
+  "fib382",
+  "fib500",
+  "fib618",
+  "fibRatio",
+  "bias20",
+  "rsi14",
+  "atr14",
+  "entryPrice",
+  "stopPrice",
+  "targetPrice",
+  "riskReward",
+  "trendConfirmed",
+  "isBullTrend",
+  "isRealBody",
+  "isDeepFall",
+  "isGapUp",
+  "isRunawayUp",
+  "isBreakawayUp",
+];
+
 function readText(file) {
   try {
     return fs.readFileSync(file, "utf8").trim();
@@ -101,6 +148,94 @@ function writeSupabaseStatus(ok, details = {}) {
     checkedAt: new Date().toISOString(),
     ...details,
   });
+}
+
+function hasOwnObjectField(object, field) {
+  return object && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, field);
+}
+
+function missingFields(object, fields) {
+  return fields.filter((field) => !hasOwnObjectField(object, field));
+}
+
+function strategy4BreakdownIssues(stock) {
+  const issues = [];
+  const code = normalizeCode(stock?.code);
+  const wallet = stock?.wallet;
+  const mutaki = stock?.mutakiV17;
+  if (!wallet || typeof wallet !== "object") {
+    issues.push(`${code}: wallet missing`);
+  } else {
+    const missing = missingFields(wallet, REQUIRED_WALLET_FIELDS);
+    if (missing.length) issues.push(`${code}: wallet missing ${missing.join(",")}`);
+  }
+  if (!mutaki || typeof mutaki !== "object") {
+    issues.push(`${code}: mutakiV17 missing`);
+  } else {
+    const missing = missingFields(mutaki, REQUIRED_MUTAKI_FIELDS);
+    if (missing.length) issues.push(`${code}: mutakiV17 missing ${missing.join(",")}`);
+  }
+  return issues;
+}
+
+function buildStrategy4PrePublishSelfTest(output) {
+  const matches = normalizeArray(output.matches);
+  const coverage = output.supabaseCoverage && typeof output.supabaseCoverage === "object" ? output.supabaseCoverage : {};
+  const breakdownIssues = matches.flatMap(strategy4BreakdownIssues);
+  const issues = [];
+
+  if (output.complete !== true) issues.push("complete must be true");
+  if (String(output.qualityStatus || "") !== "complete") issues.push(`qualityStatus must be complete, got ${output.qualityStatus || "(blank)"}`);
+  if (cleanNumber(output.total) < MIN_SOURCE_ROW_COUNT) issues.push(`total ${cleanNumber(output.total)} below ${MIN_SOURCE_ROW_COUNT}`);
+  if (cleanNumber(output.count) < MIN_MATCH_COUNT) issues.push(`count ${cleanNumber(output.count)} below ${MIN_MATCH_COUNT}`);
+  if (cleanNumber(output.noDataCount) !== 0) issues.push(`noDataCount must be 0, got ${output.noDataCount}`);
+  if (cleanNumber(output.errorCount) !== 0) issues.push(`errorCount must be 0, got ${output.errorCount}`);
+  if (cleanNumber(output.executionRate) !== 1) issues.push(`executionRate must be 1, got ${output.executionRate}`);
+  if (cleanNumber(output.coverageRatio) !== 1) issues.push(`coverageRatio must be 1, got ${output.coverageRatio}`);
+  if (cleanNumber(output.computableUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`computableUniverseTotal ${cleanNumber(output.computableUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
+  if (cleanNumber(output.sourceUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`sourceUniverseTotal ${cleanNumber(output.sourceUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
+  if (cleanNumber(output.insufficientHistoryCount) !== 0) issues.push(`insufficientHistoryCount must be 0, got ${output.insufficientHistoryCount}`);
+  if (coverage.ok !== true) issues.push("supabaseCoverage.ok must be true");
+  if (String(coverage.phase || "") !== "complete") issues.push(`supabaseCoverage.phase must be complete, got ${coverage.phase || "(blank)"}`);
+  if (cleanNumber(coverage.remainingMiss) !== 0) issues.push(`supabaseCoverage.remainingMiss must be 0, got ${coverage.remainingMiss}`);
+  if (cleanNumber(coverage.insufficientHistoryCount) !== 0) issues.push(`supabaseCoverage.insufficientHistoryCount must be 0, got ${coverage.insufficientHistoryCount}`);
+  if (cleanNumber(coverage.computableUniverse) < MIN_SOURCE_ROW_COUNT) issues.push(`supabaseCoverage.computableUniverse ${cleanNumber(coverage.computableUniverse)} below ${MIN_SOURCE_ROW_COUNT}`);
+  if (breakdownIssues.length) issues.push(...breakdownIssues.slice(0, 20));
+
+  return {
+    ok: issues.length === 0,
+    status: issues.length === 0 ? "ready" : "failed",
+    issues,
+    fieldGateReadyCount: matches.length,
+    count: cleanNumber(output.count),
+    total: cleanNumber(output.total),
+    executionRate: cleanNumber(output.executionRate),
+    coverageRatio: cleanNumber(output.coverageRatio),
+    computableUniverseTotal: cleanNumber(output.computableUniverseTotal),
+    sourceUniverseTotal: cleanNumber(output.sourceUniverseTotal),
+    noDataCount: cleanNumber(output.noDataCount),
+    errorCount: cleanNumber(output.errorCount),
+    insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
+    missingBreakdown: breakdownIssues.length,
+    walletBreakdownRows: matches.filter((item) => item?.wallet && typeof item.wallet === "object").length,
+    mutakiBreakdownRows: matches.filter((item) => item?.mutakiV17 && typeof item.mutakiV17 === "object").length,
+    sourceHealth: {
+      dataSourceCounts: output.dataSourceCounts || {},
+      yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
+      misSourceRatio: cleanNumber(output.misSourceRatio),
+      supabaseCoverage: coverage,
+    },
+  };
+}
+
+function assertStrategy4PrePublishSelfTest(output) {
+  const selfTest = buildStrategy4PrePublishSelfTest(output);
+  output.selfTest = selfTest;
+  output.prePublishSelfTest = selfTest;
+  if (!selfTest.ok) {
+    throw new Error(`Strategy4 pre-publish self-test failed: ${selfTest.issues.slice(0, 8).join("; ")}${selfTest.issues.length > 8 ? ` ... +${selfTest.issues.length - 8}` : ""}`);
+  }
+  return selfTest;
 }
 
 function normalizeCode(value) {
@@ -294,11 +429,13 @@ function runSupabaseHistoryPrewarm() {
       ...process.env,
       STRATEGY4_SUPABASE_URL: SUPABASE_URL,
       STRATEGY4_SUPABASE_ANON_KEY: SUPABASE_KEY || process.env.STRATEGY4_SUPABASE_ANON_KEY || "",
-      STRATEGY4_PREWARM_SUPABASE_ONLY: "1",
+      STRATEGY4_PREWARM_SUPABASE_ONLY: process.env.STRATEGY4_PREWARM_SUPABASE_ONLY || "0",
       STRATEGY4_PREWARM_BATCHES_PER_RUN: process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || "999",
       STRATEGY4_SUPABASE_HISTORY_TABLES: process.env.STRATEGY4_SUPABASE_HISTORY_TABLES || STRATEGY4_DAILY_VIEW,
       STRATEGY4_SUPABASE_HISTORY_CODE_FIELDS: process.env.STRATEGY4_SUPABASE_HISTORY_CODE_FIELDS || "symbol",
       STRATEGY4_SUPABASE_HISTORY_DATE_FIELDS: process.env.STRATEGY4_SUPABASE_HISTORY_DATE_FIELDS || "trade_date",
+      STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK: process.env.STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK || "1",
+      STRATEGY4_ALLOW_YAHOO_FALLBACK: process.env.STRATEGY4_ALLOW_YAHOO_FALLBACK || "0",
     },
   });
   const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
@@ -329,6 +466,12 @@ function getSupabaseCoverageStatus() {
     coverageRatio: universe ? Number(((universe - remainingMiss) / universe).toFixed(4)) : 0,
     qualityStatus,
   };
+}
+
+function insufficientHistoryCodesFromCoverage(supabaseCoverage) {
+  return new Set(normalizeArray(supabaseCoverage?.insufficientHistory)
+    .map((item) => normalizeCode(item?.code || item?.symbol))
+    .filter((code) => /^\d{4}$/.test(code)));
 }
 
 function cachedAvgVolume5(code) {
@@ -763,7 +906,7 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
   });
 }
 
-function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage }) {
+function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
   const expectedMatchDate = normalizeIsoDate(scanStamp) || scanDateFromOutput({ scanStamp });
   const allMatches = [...currentMatches.values()];
   const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
@@ -835,6 +978,12 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     pendingCount,
     noDataCount,
     errorCount,
+    executionRate: codes.length ? Number((scanned.size / codes.length).toFixed(4)) : 1,
+    coverageRatio: codes.length ? Number(((codes.length - noDataCount) / codes.length).toFixed(4)) : 1,
+    sourceUniverseTotal: Number(supabaseCoverage?.universe || (codes.length + insufficientHistory.length)),
+    computableUniverseTotal: codes.length,
+    insufficientHistoryCount: insufficientHistory.length,
+    insufficientHistory,
     total: codes.length,
     scannedThisRun,
     scannedCodes: [...scanned].filter((code) => codes.includes(code)),
@@ -983,6 +1132,11 @@ function buildSupabaseRunRow(output, runId) {
       zones: output.zones || null,
       runMode: output.runMode || "",
       scanStamp: output.scanStamp || "",
+      executionRate: cleanNumber(output.executionRate),
+      coverageRatio: cleanNumber(output.coverageRatio),
+      sourceUniverseTotal: cleanNumber(output.sourceUniverseTotal),
+      computableUniverseTotal: cleanNumber(output.computableUniverseTotal),
+      insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
       sourceWarnings: output.sourceWarnings || [],
       yahooSourceCount: cleanNumber(output.yahooSourceCount),
       yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
@@ -990,6 +1144,9 @@ function buildSupabaseRunRow(output, runId) {
       misSourceRatio: cleanNumber(output.misSourceRatio),
       dataSourceCounts: output.dataSourceCounts || {},
       supabaseCoverage: output.supabaseCoverage || null,
+      selfTest: output.selfTest || null,
+      prePublishSelfTest: output.prePublishSelfTest || null,
+      publishedSelfTest: output.publishedSelfTest || null,
     },
   };
 }
@@ -1040,6 +1197,85 @@ function buildSupabaseScanRows(output, mode = "full", runId = "", includeRunId =
       payload: stock,
     };
   }).filter((row) => /^\d{4}$/.test(row.code));
+}
+
+async function fetchSupabaseSelfTestRows(table, query) {
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const response = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${table} readback HTTP ${response.status} ${text.slice(0, 240)}`.trim());
+  const rows = JSON.parse(text || "[]");
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function verifyStrategy4PublishedSelfTest(output, runId) {
+  const expectedCount = cleanNumber(output.count);
+  const expectedTotal = cleanNumber(output.total);
+  const issues = [];
+  const resultRows = await fetchSupabaseSelfTestRows(
+    SUPABASE_RESULTS_TABLE,
+    [
+      "select=run_id,code,payload,complete,quality_status,schema_version,volume_unit,data_contract_source,price_source",
+      "strategy=eq.strategy4",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "order=rank.asc",
+      `limit=${Math.max(expectedCount + 5, 25)}`,
+    ].join("&")
+  );
+  const missingBreakdown = resultRows.filter((row) => {
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+    return strategy4BreakdownIssues(payload).length > 0;
+  }).length;
+  if (resultRows.length !== expectedCount) issues.push(`strategy4_scan_results readback ${resultRows.length} != output.count ${expectedCount}`);
+  if (missingBreakdown !== 0) issues.push(`strategy4_scan_results missing breakdown rows ${missingBreakdown}`);
+
+  const runRows = await fetchSupabaseSelfTestRows(
+    SUPABASE_RUNS_TABLE,
+    [
+      "select=run_id,strategy,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,quality_status,schema_version,volume_unit,data_contract_source,payload",
+      "strategy=eq.strategy4",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "limit=1",
+    ].join("&")
+  );
+  const run = runRows[0] || null;
+  if (!run) {
+    issues.push("strategy4_scan_runs readback missing complete run row");
+  } else {
+    if (run.status !== "complete") issues.push(`run.status ${run.status} != complete`);
+    if (run.complete !== true) issues.push("run.complete must be true");
+    if (cleanNumber(run.result_count) !== expectedCount) issues.push(`run.result_count ${run.result_count} != ${expectedCount}`);
+    if (cleanNumber(run.expected_total) !== expectedTotal) issues.push(`run.expected_total ${run.expected_total} != ${expectedTotal}`);
+    if (cleanNumber(run.scanned_count) !== expectedTotal) issues.push(`run.scanned_count ${run.scanned_count} != ${expectedTotal}`);
+    if (cleanNumber(run.no_data_count) !== 0) issues.push(`run.no_data_count ${run.no_data_count} != 0`);
+    if (cleanNumber(run.error_count) !== 0) issues.push(`run.error_count ${run.error_count} != 0`);
+    if (String(run.quality_status || "") !== "complete") issues.push(`run.quality_status ${run.quality_status || "(blank)"} != complete`);
+  }
+
+  const selfTest = {
+    ok: issues.length === 0,
+    status: issues.length === 0 ? "ready" : "failed",
+    issues,
+    runId,
+    resultCount: resultRows.length,
+    expectedCount,
+    missingBreakdown,
+    runFound: Boolean(run),
+    runResultCount: cleanNumber(run?.result_count),
+    runExpectedTotal: cleanNumber(run?.expected_total),
+    runScannedCount: cleanNumber(run?.scanned_count),
+    checkedAt: new Date().toISOString(),
+  };
+  if (!selfTest.ok) {
+    throw new Error(`Strategy4 published self-test failed: ${issues.slice(0, 8).join("; ")}${issues.length > 8 ? ` ... +${issues.length - 8}` : ""}`);
+  }
+  return selfTest;
 }
 
 async function upsertStrategy4RunToSupabase(output, runId) {
@@ -1106,6 +1342,9 @@ async function upsertStrategy4ResultsToSupabase(output) {
             lastMessage = "strategy4 complete run upsert failed";
             throw new Error(lastMessage);
           }
+          const publishedSelfTest = await verifyStrategy4PublishedSelfTest(output, runId);
+          output.publishedSelfTest = publishedSelfTest;
+          await upsertStrategy4RunToSupabase(output, runId);
         }
         await publishStrategyCacheStatus("strategy4", "策略4-主力籌碼", output, {
           used_date: output.scanStamp || output.date || scanDateFromOutput(output),
@@ -1126,6 +1365,8 @@ async function upsertStrategy4ResultsToSupabase(output) {
           walletStrongBuyCount: rows.filter((row) => row.has_wallet_strong_buy).length,
           walletVolumeCrossCount: rows.filter((row) => row.has_wallet_volume_cross).length,
           qualityStatus: output.qualityStatus,
+          prePublishSelfTest: output.prePublishSelfTest || null,
+          publishedSelfTest: output.publishedSelfTest || null,
           mode,
           attempt,
         });
@@ -1146,6 +1387,16 @@ async function upsertStrategy4ResultsToSupabase(output) {
     } catch (error) {
       const cause = error?.cause?.message ? ` (${error.cause.message})` : "";
       lastMessage = `${error?.message || String(error || "unknown error")}${cause}`;
+      if (includeRunId && /Strategy4 published self-test failed/i.test(lastMessage)) {
+        output.publishedSelfTest = {
+          ok: false,
+          status: "failed",
+          issues: [lastMessage],
+          runId,
+          checkedAt: new Date().toISOString(),
+        };
+        await upsertStrategy4RunToSupabase({ ...output, complete: false, qualityStatus: "failed" }, runId).catch(() => false);
+      }
     }
     console.warn(`strategy4 supabase upsert attempt ${attempt}/${SUPABASE_RESULTS_ATTEMPTS} failed: ${lastMessage}`);
     if (attempt < SUPABASE_RESULTS_ATTEMPTS) await sleep(Math.min(15000, 1500 * attempt));
@@ -1224,7 +1475,15 @@ async function main() {
   }
   const prewarmStatus = runSupabaseHistoryPrewarm();
   const supabaseCoverage = getSupabaseCoverageStatus() || prewarmStatus || null;
-  const universe = await fetchUniverse();
+  let universe = await fetchUniverse();
+  const insufficientHistoryCodes = insufficientHistoryCodesFromCoverage(supabaseCoverage);
+  const insufficientHistory = normalizeArray(supabaseCoverage?.insufficientHistory)
+    .filter((item) => insufficientHistoryCodes.has(normalizeCode(item?.code || item?.symbol)));
+  if (insufficientHistoryCodes.size) {
+    const before = universe.length;
+    universe = universe.filter((stock) => !insufficientHistoryCodes.has(stock.code));
+    console.log(`strategy4 computable universe excludes insufficient history ${before - universe.length}/${before}: ${[...insufficientHistoryCodes].slice(0, 20).join(",")}`);
+  }
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
   await refreshStrategy4VolumeCacheFromSupabase();
@@ -1318,6 +1577,7 @@ async function main() {
         volumeFilter,
         quoteLiquidityFilter,
         supabaseCoverage,
+        insufficientHistory,
       });
       writeStrategy4Output(chunkOutput, false);
       syncStrategy4Output(`chunk-${chunk + 1}-of-${chunksToRun}`);
@@ -1342,6 +1602,7 @@ async function main() {
     volumeFilter,
     quoteLiquidityFilter,
     supabaseCoverage,
+    insufficientHistory,
   });
   console.log(`strategy4 first pass done: ${runMode} scannedThisRun ${scannedThisRun}, scannedTotal ${scanned.size}/${codes.length}, matches ${firstPassOutput.count}, noData ${noDataCodes.size}`);
   if (SYNC_PARTIAL) {
@@ -1377,10 +1638,11 @@ async function main() {
         complete: false,
         runMode,
         scanStamp,
-        volumeFilter,
-        quoteLiquidityFilter,
-        supabaseCoverage,
-      });
+          volumeFilter,
+          quoteLiquidityFilter,
+          supabaseCoverage,
+          insufficientHistory,
+        });
       if (SYNC_PARTIAL) {
         writeStrategy4Output(retryOutput, false);
       }
@@ -1403,8 +1665,11 @@ async function main() {
     volumeFilter,
     quoteLiquidityFilter,
     supabaseCoverage,
+    insufficientHistory,
   });
 
+  const prePublishSelfTest = assertStrategy4PrePublishSelfTest(output);
+  console.log(`strategy4 pre-publish self-test ok: count ${prePublishSelfTest.count}, executionRate ${prePublishSelfTest.executionRate}, coverageRatio ${prePublishSelfTest.coverageRatio}, breakdown ${prePublishSelfTest.walletBreakdownRows}/${prePublishSelfTest.mutakiBreakdownRows}`);
   writeStrategy4Output(output, true);
   await upsertStrategy4ResultsToSupabase(output);
   syncStrategy4Output("complete");

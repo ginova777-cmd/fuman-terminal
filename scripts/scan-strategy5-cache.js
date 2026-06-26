@@ -1209,7 +1209,7 @@ async function main() {
     ...issuedSharesResult.warnings,
     ...volumeAverageResult.warnings,
   ];
-  if (finmindChipMap.size) sourceWarnings.push(`FinMind chip supplement rows=${finmindChipMap.size}`);
+  if (finmindChipMap.size) console.log(`strategy5 FinMind chip supplement rows=${finmindChipMap.size}`);
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map);
   const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || institution.usedDate || institution.date || "";
@@ -1221,7 +1221,7 @@ async function main() {
     generatedDate: taipeiDateKey(now),
     usedDate: quoteDate,
     sourceDate: quoteDate,
-    schedule: "06:00/21:00",
+    schedule: "daily complete scan",
     fullScan: true,
     complete: true,
     total: stocks.length,

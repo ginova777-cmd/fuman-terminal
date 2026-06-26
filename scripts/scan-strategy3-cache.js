@@ -5,6 +5,7 @@ const {
   fetchStrategy3CapitalMap,
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3Intraday1mLatestN,
+  fetchStrategy3LiveSideVolumeMap,
   fetchStrategy3QuoteLatestReady,
   fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
@@ -15,6 +16,8 @@ const {
 } = require("../lib/chip-trade-exclusions");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { fetchStrategy3TvCandles } = require("../lib/strategy3-tv-candles");
+const { analyzeTradingViewOvernightEntry } = require("../lib/strategy3-tv-entry");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -42,6 +45,12 @@ const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
 const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
 const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
+const STRATEGY3_MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
+const STRATEGY3_MAX_CHANGE_PERCENT = Number(process.env.STRATEGY3_MAX_CHANGE_PERCENT || 5);
+const STRATEGY3_MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO || 1);
+const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
+const STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
+const STRATEGY3_REQUIRE_NEAR_100_HIGH = process.env.STRATEGY3_REQUIRE_NEAR_100_HIGH === "1";
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -52,6 +61,13 @@ const SUPABASE_RESULTS_TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "
 const SUPABASE_RUNS_TABLE = process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs";
 const STRATEGY3_API_ONLY = true;
 const SUPABASE_RESULTS_ATTEMPTS = Math.max(1, Number(process.env.STRATEGY3_SUPABASE_RESULTS_ATTEMPTS || 3));
+const STRATEGY3_NO_TV_PASS_REASON = "資源已就緒；硬門檻後 TradingView 隔日沖條件本輪 0 檔通過";
+const STRATEGY3_MIN_FIELD_GATE_CANDIDATES = Number(process.env.STRATEGY3_MIN_FIELD_GATE_CANDIDATES || 12);
+const STRATEGY3_DRIFT_MIN_QUOTE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_QUOTE_ROWS || 1000);
+const STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS || 1000);
+const STRATEGY3_DRIFT_MIN_FUGLE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_FUGLE_ROWS || 1000);
+const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS || 1000);
+
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -70,7 +86,8 @@ function preserveScorecardSource(payload) {
 function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats = {}) {
   const issues = [];
   const warnings = [];
-  const after1300Count = stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
+  const after1300Count = cleanNumber(exclusionStats.resourceAfter1300Count)
+    || stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
   if (STRATEGY3_REQUIRE_TURNOVER && issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
   } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
@@ -125,7 +142,6 @@ function applyStrategy3Exclusions(stocks, blacklistCodes) {
   for (const stock of stocks) {
     const exclusion = chipTradeExclusion({
       ...stock,
-      avgVolume5: stock.avgVolume,
       tradeVolume: stock.tradeVolume,
       is_blacklisted: stock.is_blacklisted ?? stock.isBlacklisted,
       is_daytrade_unsuitable: stock.is_daytrade_unsuitable ?? stock.isDaytradeUnsuitable,
@@ -199,6 +215,98 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function buildSupabaseHeaders(preferCount = false) {
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  };
+  if (preferCount) headers.Prefer = "count=exact";
+  return headers;
+}
+
+async function fetchSupabaseRest(pathname, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("missing Supabase service credentials");
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 20000);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
+      headers: buildSupabaseHeaders(Boolean(options.count)),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${pathname} HTTP ${response.status} ${text.slice(0, 240)}`);
+    const range = response.headers.get("content-range") || "";
+    const exactCount = range.includes("/") ? Number(range.split("/").pop()) : null;
+    return { rows: text ? JSON.parse(text) : [], exactCount };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchStrategy3SourceDriftHealth() {
+  const checks = [];
+  const add = (item) => checks.push(item);
+  try {
+    const result = await fetchSupabaseRest("v_strategy3_quote_ready?select=symbol&limit=1", { count: true });
+    add({ source: "v_strategy3_quote_ready", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_QUOTE_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_QUOTE_ROWS ? "ready" : "failed" });
+  } catch (error) {
+    add({ source: "v_strategy3_quote_ready", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_QUOTE_ROWS, status: "failed", reason: error?.message || String(error) });
+  }
+  try {
+    const result = await fetchSupabaseRest("strategy3_ready_snapshot?select=symbol&limit=1", { count: true });
+    add({ source: "strategy3_ready_snapshot", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS ? "ready" : "failed" });
+  } catch (error) {
+    add({ source: "strategy3_ready_snapshot", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: "failed", reason: error?.message || String(error) });
+  }
+  try {
+    const result = await fetchSupabaseRest("fugle_quotes_latest?select=symbol&limit=1", { count: true });
+    add({ source: "fugle_quotes_latest", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_FUGLE_ROWS ? "ready" : "failed" });
+  } catch (error) {
+    add({ source: "fugle_quotes_latest", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: "failed", reason: error?.message || String(error) });
+  }
+  try {
+    const result = await fetchSupabaseRest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true });
+    const latestDate = String(result.rows?.[0]?.trade_date || "");
+    add({ source: "stock_daily_volume", rowCount: cleanNumber(result.exactCount), latestDate, minRequired: STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS && latestDate ? "ready" : "failed" });
+  } catch (error) {
+    add({ source: "stock_daily_volume", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS, status: "failed", reason: error?.message || String(error) });
+  }
+  const failed = checks.filter((item) => item.status !== "ready");
+  return {
+    status: failed.length ? "failed" : "ready",
+    checks,
+    reason: failed.length
+      ? failed.map((item) => `${item.source} rows=${item.rowCount}/${item.minRequired}${item.reason ? ` ${item.reason}` : ""}`).join("; ")
+      : "strategy3 source counts ready",
+  };
+}
+
+function validateStrategy3PrePublish(output) {
+  const issues = [];
+  const matches = Array.isArray(output.matches) ? output.matches : [];
+  const fieldGateCount = matches.length;
+  const tvPassCount = cleanNumber(output.tvPassCount);
+  if (output.sourceHealth?.status === "failed") issues.push(`sourceHealth failed: ${(output.sourceHealth.issues || []).join("; ")}`);
+  if (output.sourceDriftHealth?.status !== "ready") issues.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`);
+  if (fieldGateCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) issues.push(`fieldGateReadyCount ${fieldGateCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (!Object.prototype.hasOwnProperty.call(output, "tvPassCount")) issues.push("missing tvPassCount");
+  if (!matches.every((stock) => stock && stock.tvOvernightEntry && typeof stock.tvOvernightEntry.ok === "boolean")) issues.push("missing per-row tvOvernightEntry breakdown");
+  return { ok: issues.length === 0, fieldGateReadyCount: fieldGateCount, expectedFieldGateReadyCount: STRATEGY3_MIN_FIELD_GATE_CANDIDATES, tvPassCount, issues };
+}
+
+async function verifyStrategy3PublishedRun(expectedRunId, expectedCount) {
+  const table = encodeURIComponent(SUPABASE_RESULTS_TABLE);
+  const runId = encodeURIComponent(expectedRunId);
+  const result = await fetchSupabaseRest(`${table}?select=code,name,payload&run_id=eq.${runId}&strategy=eq.strategy3&limit=80`, { count: true, timeoutMs: 25000 });
+  const rows = Array.isArray(result.rows) ? result.rows : [];
+  const tvPassCount = rows.filter((row) => row?.payload?.tvOk === true || row?.payload?.tvFlame === true || row?.payload?.tvOvernightEntry?.ok === true).length;
+  const missingBreakdown = rows.filter((row) => !row?.payload?.tvBreakdown && !row?.payload?.tvOvernightEntry).length;
+  return { ok: rows.length === expectedCount && missingBreakdown === 0, runId: expectedRunId, count: rows.length, expectedCount, tvPassCount, missingBreakdown };
+}
+
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -247,10 +355,16 @@ function buildSupabaseRunRow(output, runId, status = "complete") {
     updated_at: scanTime,
     payload: {
       count: cleanNumber(output.count),
+      tvPassCount: cleanNumber(output.tvPassCount),
       total: cleanNumber(output.total),
       usedDate: output.usedDate || "",
+      displayMode: output.displayMode || "",
+      noMatchReason: output.noMatchReason || "",
       sourceWarnings: (output.sourceWarnings || []).slice(0, 20),
       sourceHealth: output.sourceHealth || null,
+      sourceDriftHealth: output.sourceDriftHealth || null,
+      selfTest: output.selfTest || null,
+      publishedSelfTest: output.publishedSelfTest || null,
     },
   };
 }
@@ -260,12 +374,16 @@ function buildSupabaseScanRows(output, runId) {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   return (output.matches || []).map((stock, index) => {
     const signals = normalizeStrategy3Signals(stock);
+    const rawName = String(stock.rawName || stock.name || stock.code || "").trim();
+    const displayName = String(
+      stock.displayName || (stock.tvOk && rawName ? `${rawName} 🔥` : rawName) || stock.code || ""
+    ).trim();
     return {
       run_id: runId,
       strategy: "strategy3",
       scan_date: scanDate,
       code: normalizeCode(stock.code),
-      name: String(stock.name || stock.code || "").trim(),
+      name: displayName,
       price: cleanNumber(stock.close || stock.price),
       close: cleanNumber(stock.close || stock.price),
       change_percent: cleanNumber(stock.percent ?? stock.changePercent),
@@ -280,7 +398,27 @@ function buildSupabaseScanRows(output, runId) {
       quality_status: String(output.qualityStatus || "").trim(),
       generated_at: scanTime,
       updated_at: scanTime,
-      payload: stock,
+      payload: {
+        ...stock,
+        rawName,
+        displayName,
+        name: displayName,
+        tvOk: Boolean(stock.tvOvernightEntry?.ok),
+        tvFlame: Boolean(stock.tvOvernightEntry?.ok),
+        tvBreakdown: {
+          controlOk: stock.tvOvernightEntry?.controlOk === true,
+          obvOk: stock.tvOvernightEntry?.obvOk === true,
+          nearHigh: stock.tvOvernightEntry?.nearHigh === true,
+          nearHighOk: stock.tvOvernightEntry?.nearHighOk === true,
+          candleRows: cleanNumber(stock.tvOvernightEntry?.candleCount),
+          candleSource: String(stock.tvOvernightEntry?.candleSource || ""),
+          degenerateRatio: cleanNumber(stock.tvOvernightEntry?.candleQuality?.degenerateRatio),
+          degenerateRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.degenerateRows),
+          after1300Rows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.after1300Rows),
+          formulaVersion: String(stock.tvOvernightEntry?.formulaVersion || ""),
+          controlSource: String(stock.tvOvernightEntry?.controlSource || ""),
+        },
+      },
     };
   }).filter((row) => /^\d{4}$/.test(row.code));
 }
@@ -443,64 +581,6 @@ function after1300CandleRows(candles, quoteDate = "") {
   });
 }
 
-function analyzeTradingViewOvernightEntry(candles) {
-  const rows = (candles || [])
-    .map((row) => ({
-      ...row,
-      open: cleanNumber(row.open),
-      high: cleanNumber(row.high),
-      low: cleanNumber(row.low),
-      close: cleanNumber(row.close),
-      volume: cleanNumber(row.volume),
-      minutes: candleMinutes(row),
-    }))
-    .filter((row) => row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0 && row.volume > 0);
-  if (rows.length < 35) {
-    return { ok: false, reason: `1分K不足 ${rows.length}/35`, signal: "tv_overnight_entry", candleCount: rows.length };
-  }
-  const moneyFlow = rows.map((row) => (row.high - row.low) === 0 ? 0 : ((row.close - row.open) / (row.high - row.low)) * row.volume);
-  const mfAvg = emaSeries(moneyFlow, 8);
-  const controlLine = mfAvg.map((_, index) => smaAt(mfAvg, index, 2));
-  const rawObv = rows.map((row, index) => {
-    if (index === 0) return 0;
-    if (row.close > rows[index - 1].close) return row.volume;
-    if (row.close < rows[index - 1].close) return -row.volume;
-    return 0;
-  });
-  const obvLine = emaSeries(rawObv, 10);
-  const lastSessionRows = rows
-    .map((row, index) => ({ row, index }))
-    .filter((item) => item.row.minutes != null && item.row.minutes >= 13 * 60 && item.row.minutes <= 13 * 60 + 30);
-  if (!lastSessionRows.length) {
-    return { ok: false, reason: "缺少 13:00-13:30 尾盤1分K", signal: "tv_overnight_entry", candleCount: rows.length };
-  }
-  const item = lastSessionRows.at(-1);
-  const index = item.index;
-  const highest100 = Math.max(...rows.slice(Math.max(0, index - 99), index + 1).map((row) => row.high));
-  const isNearHigh = item.row.close >= highest100 * 0.98;
-  const currentControl = cleanNumber(controlLine[index]);
-  const previousControl = cleanNumber(controlLine[index - 1]);
-  const currentObv = cleanNumber(obvLine[index]);
-  const controlDirUp = currentControl > previousControl;
-  const ok = isNearHigh && currentControl > 0 && controlDirUp && currentObv > 0;
-  return {
-    ok,
-    signal: "tv_overnight_entry",
-    candleCount: rows.length,
-    lastCandleTime: item.row.candleTime || item.row.time || "",
-    nearHigh: isNearHigh,
-    highest100: Number(highest100.toFixed(2)),
-    close: Number(item.row.close.toFixed(2)),
-    controlLine: Number(currentControl.toFixed(2)),
-    previousControlLine: Number(previousControl.toFixed(2)),
-    controlDirUp,
-    obvLine: Number(currentObv.toFixed(2)),
-    reason: ok
-      ? `TradingView隔日沖進場：13:00-13:30 尾盤、收盤貼近100根高點98%內、控盤線為正且上彎、OBV為正。`
-      : `TradingView隔日沖未通過：尾盤=${Boolean(item)}、近高=${isNearHigh}、控盤線=${currentControl.toFixed(2)}、控盤上彎=${controlDirUp}、OBV=${currentObv.toFixed(2)}。`,
-  };
-}
-
 async function mapLimit(items, limit, mapper) {
   const out = new Array(items.length);
   let next = 0;
@@ -584,6 +664,31 @@ async function hydrateAfter1300StatusFromSupabase(stocks, warnings) {
   }
   const repaired = await repairAfter1300StatusFromRpc(stocks, warnings);
   return { statusRows, ...repaired };
+}
+
+async function hydrateSideVolumeFromSupabase(stocks, warnings) {
+  if (!Array.isArray(stocks) || !stocks.length) return { sideRows: 0 };
+  try {
+    const sideResult = await fetchStrategy3LiveSideVolumeMap(stocks.map((stock) => stock.code));
+    let sideRows = 0;
+    stocks.forEach((stock) => {
+      const side = sideResult.byCode.get(stock.code);
+      if (!side) return;
+      stock.outsideVolume = cleanNumber(side.outsideVolume);
+      stock.insideVolume = cleanNumber(side.insideVolume);
+      stock.cumulativeAskVolume = cleanNumber(side.cumulativeAskVolume);
+      stock.cumulativeBidVolume = cleanNumber(side.cumulativeBidVolume);
+      stock.cumulativeBidAskVolume = cleanNumber(side.cumulativeBidAskVolume);
+      stock.sideVolumeTotal = cleanNumber(side.sideVolumeTotal);
+      stock.sideVolumeUpdatedAt = side.sideVolumeUpdatedAt || "";
+      stock.sideVolumeSource = side.source || sideResult.source || "fugle_quotes_live";
+      sideRows += 1;
+    });
+    return { sideRows };
+  } catch (error) {
+    warnings.push(`strategy3 fugle live side-volume read skipped: ${error?.message || String(error)}`);
+    return { sideRows: 0 };
+  }
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -742,6 +847,7 @@ async function fetchSupabaseStrategy3Universe() {
   } catch (error) {
     warnings.push(`stock_capital_latest read skipped: ${error?.message || String(error)}`);
   }
+  const sideVolumeResult = await hydrateSideVolumeFromSupabase(stocks, warnings);
   const issuedSharesMap = new Map(capitalResult.byCode);
   stocks.forEach((stock) => {
     if (cleanNumber(stock.issuedShares) > 0) issuedSharesMap.set(stock.code, cleanNumber(stock.issuedShares));
@@ -751,6 +857,9 @@ async function fetchSupabaseStrategy3Universe() {
     if (stock.avgVolume > 0) volumeAverageMap.set(stock.code, stock.avgVolume);
   });
   if (!access.ok) warnings.push(`strategy3 supabase read access partial: ${access.failed.map((item) => item.table).join(",")}`);
+  if (STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE && sideVolumeResult.sideRows < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
+    warnings.push(`strategy3 outside/inside side-volume coverage low: ${sideVolumeResult.sideRows}<${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
+  }
   return {
     stocks,
     issuedSharesMap,
@@ -850,6 +959,25 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
+function strategy3FieldGate(stock, volumeRatio, volumeLots) {
+  const pct = cleanNumber(stock.percent);
+  const outsideVolume = cleanNumber(stock.outsideVolume ?? stock.cumulativeAskVolume);
+  const insideVolume = cleanNumber(stock.insideVolume ?? stock.cumulativeBidVolume);
+  const outsideInsideDiff = outsideVolume - insideVolume;
+  const outsideInsideRatio = insideVolume > 0
+    ? outsideVolume / insideVolume
+    : (outsideVolume > 0 ? 99 : 0);
+  const checks = {
+    changePercent3To5: pct >= STRATEGY3_MIN_CHANGE_PERCENT && pct <= STRATEGY3_MAX_CHANGE_PERCENT,
+    volumeRatioGt1: volumeRatio > STRATEGY3_MIN_VOLUME_RATIO,
+    outsideGtInside: !STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE || (outsideVolume > 0 && insideVolume > 0 && outsideVolume > insideVolume),
+    tradeVolumeLots: STRATEGY3_MIN_TRADE_VOLUME_LOTS <= 0 || volumeLots >= STRATEGY3_MIN_TRADE_VOLUME_LOTS,
+  };
+  const ok = Object.values(checks).every(Boolean);
+  const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (${STRATEGY3_MIN_CHANGE_PERCENT}-${STRATEGY3_MAX_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
+  return { ok, checks, reason, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
+}
+
 async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
@@ -860,29 +988,46 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     const volumeLots = stock.tradeVolume / 1000;
     const issuedShares = issuedSharesMap.get(stock.code) || 0;
     const turnoverRate = issuedShares ? (stock.tradeVolume / issuedShares) * 100 : 0;
-    const avgVolume = volumeAverageMap.get(stock.code) || 0;
-    const volumeRatio = cleanNumber(stock.volumeRatio) || (avgVolume ? stock.tradeVolume / avgVolume : 0);
+    const avgVolume = volumeAverageMap.get(stock.code) || cleanNumber(stock.avgVolume) || 0;
+    const volumeRatio = cleanNumber(stock.volumeRatio || stock.projectedRatio || stock.volume_ratio || stock.volume_ratio_5)
+      || (avgVolume ? stock.tradeVolume / avgVolume : 0);
+    const fieldGate = strategy3FieldGate(stock, volumeRatio, volumeLots);
     const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
+    const outsideDominanceScore = Math.min(Math.max(fieldGate.outsideInsideDiff, 0) / 500, 18)
+      + Math.min(Math.max(fieldGate.outsideInsideRatio - 1, 0) * 16, 16);
     const overnightScore = clamp(Math.round(
       Math.min((pct - 3) * 18, 36) +
       Math.min(volumeLots / 80, 18) +
       Math.min(turnoverRate * 6, 30) +
-      Math.min(volumeRatio * 12, 20) -
+      Math.min(volumeRatio * 12, 20) +
+      outsideDominanceScore -
       heatPenalty
     ), 0, 100);
     const turnoverPass = STRATEGY3_REQUIRE_TURNOVER ? turnoverRate > 5 : true;
-    const fixedPass = stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0);
+    const fixedPass = stock.close > 0
+      && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0)
+      && fieldGate.ok
+      && turnoverPass;
     const fixedReason = fixedPass
-      ? `進入 TradingView 隔日沖判斷：有 13:00 後1分K，最終只看 TV 條件。`
-      : "未進入 TradingView 隔日沖判斷：缺少價格或 13:00 後1分K。";
+      ? `進入 TradingView 隔日沖判斷：有 13:00 後1分K，且通過漲幅/量比/外內盤/成交張數門檻。${fieldGate.reason}`
+      : `未進入 TradingView 隔日沖判斷：價格、13:00後1分K或硬門檻未通過。close=${stock.close}、after1300=${stock.after1300CandleCount || 0}、volumeRatio=${volumeRatio.toFixed(2)}。${fieldGate.reason}`;
     return {
       ...stock,
       valueRank,
       volumeRank,
       volumeLots: Math.round(volumeLots),
+      tradeVolumeLots: Math.round(volumeLots),
       turnoverRate: Number(turnoverRate.toFixed(2)),
       volumeRatio: Number(volumeRatio.toFixed(2)),
       projectedRatio: Number(volumeRatio.toFixed(2)),
+      outsideVolume: Math.round(fieldGate.outsideVolume),
+      insideVolume: Math.round(fieldGate.insideVolume),
+      outsideGtInside: fieldGate.outsideVolume > fieldGate.insideVolume,
+      outsideInsideDiff: Math.round(fieldGate.outsideInsideDiff),
+      outsideInsideRatio: Number(fieldGate.outsideInsideRatio.toFixed(2)),
+      outsideDominanceScore: Number(outsideDominanceScore.toFixed(2)),
+      strategy3FieldGate: fieldGate,
+      strategy3FixedPass: fixedPass,
       overnightScore,
       overnightState: fixedPass ? "待TV判斷" : "觀察",
       score: overnightScore,
@@ -890,6 +1035,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     };
   })
     .filter((stock) => stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0))
+    .filter((stock) => stock.strategy3FixedPass)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
     .slice(0, STRATEGY3_TV_CANDIDATE_LIMIT > 0 ? STRATEGY3_TV_CANDIDATE_LIMIT : undefined);
 
@@ -897,8 +1043,21 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
 
   const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
-      const result = await fetchStrategy3Intraday1mLatestN(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
-      const tvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
+      const result = await fetchStrategy3TvCandles(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
+      const rawTvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
+      const quality = result.quality || {};
+      const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、after1300=${quality.after1300Rows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
+      const tvEntry = {
+        ...rawTvEntry,
+        reason: `${rawTvEntry.reason} ${sourceNote}。`,
+        candleSource: result.source || "",
+        candleQuality: quality,
+        candleFallbackFrom: result.fallbackFrom || "",
+        candleFallbackReason: result.fallbackReason || "",
+        candleFallbackError: result.fallbackError || "",
+        supabaseCandleQuality: result.supabaseQuality || null,
+        fugleCandleQuality: result.fugleQuality || null,
+      };
       return {
         ...stock,
         tvOvernightEntry: tvEntry,
@@ -926,9 +1085,25 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   });
 
   return analyzed
-    .filter((stock) => stock.tvOvernightEntry?.ok)
-    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
-    .slice(0, 80);
+    .sort((a, b) => {
+      const tvDiff = Number(Boolean(b.tvOvernightEntry?.ok)) - Number(Boolean(a.tvOvernightEntry?.ok));
+      if (tvDiff) return tvDiff;
+      return b.overnightScore - a.overnightScore
+        || cleanNumber(b.outsideInsideDiff) - cleanNumber(a.outsideInsideDiff)
+        || b.value - a.value;
+    })
+    .slice(0, 80)
+    .map((stock) => {
+      const tvOk = Boolean(stock.tvOvernightEntry?.ok);
+      return {
+        ...stock,
+        tvOk,
+        tvFlame: tvOk,
+        rawName: stock.name,
+        displayName: tvOk ? `${stock.name} 🔥` : stock.name,
+        displayMode: tvOk ? "tv_pass" : "field_gate_watch",
+      };
+    });
 }
 
 async function main() {
@@ -968,11 +1143,13 @@ async function main() {
       ...volumeAverageResult.warnings,
     ];
     await hydrateAfter1300StatusFromSupabase(stocks, sourceWarnings);
+    await hydrateSideVolumeFromSupabase(stocks, sourceWarnings);
   }
   if (!stocks.length) throw new Error("No stock universe");
+  const resourceAfter1300Count = stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
   const exclusionResult = applyStrategy3Exclusions(stocks, loadStrategy3Blacklist());
   stocks = exclusionResult.stocks;
-  exclusionStats = exclusionResult.stats;
+  exclusionStats = { ...exclusionResult.stats, resourceAfter1300Count };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats);
@@ -983,8 +1160,15 @@ async function main() {
   if (sourceHealth.status === "failed") {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
+  const sourceDriftHealth = await fetchStrategy3SourceDriftHealth();
+  if (sourceDriftHealth.status !== "ready") {
+    throw new Error(`Strategy3 source drift failed: ${sourceDriftHealth.reason}`);
+  }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
   const quoteDate = latestStockDateKey(stocks);
+  const tvPassCount = matches.filter((stock) => stock.tvOvernightEntry?.ok).length;
+  const displayMode = matches.length ? "field_gate_with_tv_flame" : "no_tv_pass";
+  const noMatchReason = matches.length ? "" : STRATEGY3_NO_TV_PASS_REASON;
   const output = {
     ok: true,
     source,
@@ -993,23 +1177,34 @@ async function main() {
     usedDate: quoteDate,
     total: stocks.length,
     count: matches.length,
+    tvPassCount,
     complete: true,
     sourceWarnings,
     qualityStatus: sourceHealth.status,
     sourceHealth,
+    sourceDriftHealth,
+    displayMode,
+    noMatchReason,
     matches,
   };
+
+  const prePublishSelfTest = validateStrategy3PrePublish(output);
+  output.selfTest = prePublishSelfTest;
+  if (!prePublishSelfTest.ok) {
+    throw new Error(`Strategy3 pre-publish self-test failed: ${prePublishSelfTest.issues.join("; ")}`);
+  }
 
   preservePreviousTradingSource((previousRaw.matches || []).length ? previousRaw : backup, output);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  if (!matches.length) {
-    output.noMatchReason = "source ready; TradingView overnight-entry filter produced zero matches";
-    output.matches = [];
-    output.rows = [];
-  }
   const runId = await upsertStrategy3ResultsToSupabase(output);
   if (runId) {
+    const publishedSelfTest = await verifyStrategy3PublishedRun(runId, output.count);
+    output.publishedSelfTest = publishedSelfTest;
+    if (!publishedSelfTest.ok) {
+      throw new Error(`Strategy3 published self-test failed: count=${publishedSelfTest.count}/${publishedSelfTest.expectedCount}; missingBreakdown=${publishedSelfTest.missingBreakdown}`);
+    }
+    await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(output, runId, "complete")], "run_id");
     const snapshotResult = await upsertStrategy3Snapshot(output);
     if (snapshotResult.ok) {
       console.log(`strategy3 snapshot upsert ok: strategy3_latest run ${runId}`);

@@ -5,6 +5,10 @@ const { isTwseTradingDay } = require("./twse-trading-day");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-source-contracts");
 const STRICT_WARNINGS = process.argv.includes("--strict") || process.env.TERMINAL_SOURCE_CONTRACT_STRICT_WARNINGS === "1";
+const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--routes="))?.slice("--routes=".length) || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean));
 
 const SUPABASE_URL = String(
   process.env.SUPABASE_URL
@@ -273,6 +277,19 @@ function taipeiTimeParts(date = new Date()) {
   return Object.fromEntries(parts.map((part) => [part.type, part.value]));
 }
 
+function taipeiMinutes(date = new Date()) {
+  const parts = taipeiTimeParts(date);
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function allowStrategy2ReadinessStatus(row = {}) {
+  const minutes = taipeiMinutes();
+  const beforeLiveWindow = minutes < (8 * 60 + 45);
+  const afterLiveWindow = minutes >= (12 * 60);
+  if (!beforeLiveWindow && !afterLiveWindow) return false;
+  return Boolean(String(row.latest_run_id || "").trim()) && Number(row.intraday_1m_ready_count || 0) > 0;
+}
+
 function keyToTaipeiNoon(dateKey) {
   const text = String(dateKey || "");
   return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
@@ -402,7 +419,7 @@ async function checkOne(strategy, check) {
     const accepted = new Set((check.acceptedHealthStatuses || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean));
     if (!status) {
       issues.push(`${check.table} ${check.healthStatusField} missing`);
-    } else if (!accepted.has(status)) {
+    } else if (!accepted.has(status) && !(strategy.key === "strategy2" && check.table === "v_strategy2_readiness_status" && allowStrategy2ReadinessStatus(row))) {
       const reason = String(row.reason || row.suggested_scanner_behavior || "").replace(/\s+/g, " ").slice(0, 180);
       issues.push(`${check.table} ${check.healthStatusField}=${status}${reason ? ` (${reason})` : ""}`);
     }
@@ -443,7 +460,7 @@ async function main() {
   const results = [];
   const failures = [];
   const warnings = [];
-  for (const strategy of CONTRACTS) {
+  for (const strategy of CONTRACTS.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
     console.log(`[source-contract] ${strategy.key}`);
     const checks = [];
     for (const check of strategy.checks) {

@@ -175,6 +175,7 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
     complete = if ($payload -and $null -ne $payload.complete) { [bool]$payload.complete } else { $status -ne "failed" }
     qualityStatus = if ($payload) { [string]$payload.qualityStatus } else { "" }
     fallback = if ($payload) { [bool]$payload.fallbackFromPrevious } else { $false }
+    runId = if ($payload -and $payload.runId) { [string]$payload.runId } elseif ($payload -and $payload.run_id) { [string]$payload.run_id } elseif ($payload -and $payload.transport -and $payload.transport.runId) { [string]$payload.transport.runId } else { "" }
     payloadPath = $payloadPath
     warnings = @($warnings.ToArray() | Select-Object -First 20)
     blockingReason = $blockingReason
@@ -183,6 +184,62 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
   Write-Receipt $receipt
   Write-ScanLog "END [$tier] $label status=$status exit=$exitCode matches=$($receipt.matches) scanned=$($receipt.scanned)/$($receipt.total)"
   if ($blockingReason) { $criticalFailures.Add("${strategy}: $blockingReason") | Out-Null }
+}
+
+function Invoke-RunnerTask($strategy, $label, $tier, $runner) {
+  $startedAt = (Get-Date)
+  Write-ScanLog "START [$tier] $label"
+  $exitCode = 0
+  try {
+    Push-Location $syncRoot
+    try {
+      & "${syncRoot}\${runner}" *>&1 | ForEach-Object {
+        $text = [string]$_
+        Write-Host $text
+        Add-Content -LiteralPath $log -Value $text -Encoding utf8
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    Write-ScanLog "$label exception: $($_.Exception.Message)"
+  }
+  $receipt = Read-JsonFile (Join-Path $receiptDir ("{0}.json" -f $strategy))
+  if (-not $receipt) {
+    $receipt = [ordered]@{
+      strategy = $strategy
+      label = $label
+      tier = $tier
+      startedAt = $startedAt.ToString("o")
+      finishedAt = (Get-Date).ToString("o")
+      status = if ($exitCode -eq 0) { "complete" } else { "failed" }
+      exitCode = $exitCode
+      scanned = 0
+      total = 0
+      matches = 0
+      complete = ($exitCode -eq 0)
+      qualityStatus = if ($exitCode -eq 0) { "complete" } else { "" }
+      fallback = $false
+      runId = ""
+      payloadPath = $runner
+      warnings = @()
+      blockingReason = if ($exitCode -eq 0) { "" } else { "critical scan failed with exit code $exitCode" }
+      log = $log
+    }
+    Write-Receipt $receipt
+  } else {
+    $receipts.Add($receipt) | Out-Null
+  }
+  $status = [string]($receipt.status ?? "")
+  $complete = [bool]($receipt.complete ?? $false)
+  $blockingReason = [string]($receipt.blockingReason ?? "")
+  if ($exitCode -ne 0 -or $status -eq "failed" -or -not $complete) {
+    if ([string]::IsNullOrWhiteSpace($blockingReason)) { $blockingReason = "critical scan failed with exit code $exitCode" }
+    if ($tier -eq "critical") { $criticalFailures.Add("${strategy}: $blockingReason") | Out-Null }
+  }
+  Write-ScanLog "END [$tier] $label status=$status exit=$exitCode matches=$($receipt.matches) scanned=$($receipt.scanned)/$($receipt.total)"
 }
 
 function Enter-FullScanLock {
@@ -266,8 +323,8 @@ try {
     }
   }
 
-  Invoke-ScanTask "open-buy" "open buy raw refresh" "critical" "scripts\scan-open-buy-cache.js" (Join-Path $runtimeRoot "data\open-buy-latest.json") @{}
-  Invoke-ScanTask "strategy3" "strategy3 raw refresh" "critical" "scripts\scan-strategy3-cache.js" (Join-Path $runtimeRoot "data\strategy3-latest.json") (Get-Strategy3ScanEnv)
+  Invoke-RunnerTask "open-buy" "open buy full scan" "critical" "run-open-buy.ps1"
+  Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"
 
   if (-not $SkipInstitution) {
     Invoke-ScanTask "institution" "institution raw refresh" "degradable" "scripts\scan-institution-cache.js" (Join-Path $runtimeRoot "data\institution-latest.json") @{
@@ -278,10 +335,10 @@ try {
     } 900
   }
   if (-not $SkipWarrant) {
-    Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-latest.json") @{} 240
+    Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-summary.json") @{} 240
   }
 
-  Invoke-ScanTask "strategy4" "strategy4 raw refresh" "critical" "scripts\scan-strategy4-cache.js" (Join-Path $runtimeRoot "data\strategy4-latest.json") @{ STRATEGY4_ALLOW_DEGRADED_COMPLETE = "1" }
+  Invoke-RunnerTask "strategy4" "strategy4 full scan" "critical" "run-strategy4.ps1"
   Invoke-ScanTask "strategy5" "strategy5 raw refresh" "critical" "scripts\scan-strategy5-cache.js" (Join-Path $runtimeRoot "data\strategy5-latest.json") @{ STRATEGY5_USE_MIS = "0" }
   Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
   Invoke-DesktopRouteSnapshotWrite
