@@ -188,6 +188,9 @@ if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scr
 if (!String(packageJson.scripts?.["verify:strategy4-standard-gate"] || "").includes("scripts/verify-strategy4-standard-gate.js")) {
   issues.push("package.json missing scripts.verify:strategy4-standard-gate for Strategy4 resource/source/history/API/terminal standard gate");
 }
+if (!String(packageJson.scripts?.["verify:daily-battle-readiness"] || "").includes("scripts/verify-daily-battle-readiness.js")) {
+  issues.push("package.json missing scripts.verify:daily-battle-readiness for all-strategy battle readiness table");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }

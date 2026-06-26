@@ -86,6 +86,7 @@
     "verify:terminal-source-contracts": "node --use-system-ca scripts/verify-terminal-source-contracts.js",
     "verify:terminal-fields": "node --use-system-ca scripts/verify-terminal-field-completeness.js",
     "verify:strategy4-standard-gate": "node --use-system-ca scripts/verify-strategy4-standard-gate.js",
+    "verify:daily-battle-readiness": "node --use-system-ca scripts/verify-daily-battle-readiness.js",
     "verify:mobile-responsive-ui": "node --use-system-ca scripts/verify-terminal-ui-e2e.js --only=mobile-desktop-night,mobile-desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun",
     "verify:mobile-ai-fragment": "node scripts/verify-mobile-ai-fragment.js",
     "verify:mobile-ai-fragment:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-ai-fragment.js --live",

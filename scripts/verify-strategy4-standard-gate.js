@@ -11,6 +11,7 @@ const MIN_SOURCE_ROWS = Number(process.env.STRATEGY4_STANDARD_MIN_SOURCE_ROWS ||
 const MIN_HISTORY_ROWS = Number(process.env.STRATEGY4_STANDARD_MIN_HISTORY_ROWS || 60000);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const RUN_TERMINAL = !process.argv.includes("--skip-terminal");
+const JSON_OUTPUT = process.argv.includes("--json");
 const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
 
 const SUPABASE_URL = String(
@@ -352,6 +353,11 @@ async function main() {
     ...checks.map((check) => `- ${check.ok ? "OK" : "FAIL"} ${check.id}: ${check.message}`),
     "",
   ].join("\n"));
+  if (JSON_OUTPUT) {
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
+    if (!ok) process.exit(1);
+    return;
+  }
   console.log(`[strategy4-standard-gate] wrote ${path.join(OUT_DIR, "strategy4-standard-gate.md")}`);
   if (!ok) {
     console.error("[strategy4-standard-gate] issues found");
