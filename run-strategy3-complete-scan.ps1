@@ -61,6 +61,9 @@ function Convert-DateTextToYmd($Value) {
 }
 
 function Assert-Strategy3CompleteApi {
+  param(
+    [switch]$AllowPreviousComplete
+  )
   $apiCheck = @"
 const handler = require("./api/strategy3-latest");
 const { captureHandler } = require("./scripts/strategy-api-capture");
@@ -90,7 +93,8 @@ captureHandler(handler).then((result) => {
   $today = Get-TaipeiTodayYmd
   $usedDate = Convert-DateTextToYmd $payload.usedDate
   $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.matches).Count }
-  if ($usedDate -ne $today) { throw "Strategy3 latest API stale; usedDate=$usedDate today=$today" }
+  if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 latest API stale; usedDate=$usedDate today=$today" }
+  if ($AllowPreviousComplete -and ([string]::IsNullOrWhiteSpace($usedDate) -or $usedDate -gt $today)) { throw "Strategy3 latest API invalid latest complete date; usedDate=$usedDate today=$today" }
   if ($count -le 0) { throw "Strategy3 latest API empty; count=$count" }
   $cacheSource = [string]$payload.cacheSource
   if ($cacheSource -notin @("supabase-api", "supabase-snapshot")) { throw "Strategy3 latest API did not use Supabase complete-run/snapshot path; cacheSource=$cacheSource" }
@@ -100,11 +104,37 @@ captureHandler(handler).then((result) => {
   return $payload
 }
 
+function Test-Strategy3ControlledSourceNotReady($Message) {
+  $text = [string]$Message
+  return $text -match "after1300ReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout"
+}
+
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
-& $nodeExe "scripts\scan-strategy3-cache.js" >> $log 2>&1
-$exitCode = $LASTEXITCODE
-if ($null -eq $exitCode) { $exitCode = 0 }
-if ($exitCode -ne 0) { throw "Strategy3 complete scanner failed with exit code $exitCode; log=$log" }
+$scannerError = ""
+try {
+  & $nodeExe "scripts\scan-strategy3-cache.js" >> $log 2>&1
+  $exitCode = $LASTEXITCODE
+  if ($null -eq $exitCode) { $exitCode = 0 }
+  if ($exitCode -ne 0) { throw "Strategy3 complete scanner failed with exit code $exitCode; log=$log" }
+} catch {
+  $scannerError = $_.Exception.Message
+  $tailText = (Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Last 40) -join "`n"
+  if (-not (Test-Strategy3ControlledSourceNotReady "$scannerError`n$tailText")) {
+    throw
+  }
+  Write-Strategy3CompleteLog "Strategy3 source not ready; preserving latest complete run instead of poisoning receipt. error=$scannerError"
+  $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
+  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "strategy3" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+    }
+  }
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("source not ready; preserved latest complete run: $scannerError")
+  Write-Strategy3CompleteLog "Strategy3 deferred complete scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+  exit 0
+}
 
 $apiVerified = $false
 $lastApiError = ""
