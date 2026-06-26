@@ -70,9 +70,35 @@ function Invoke-NodeScan($scriptPath, $label) {
   return $exitCode
 }
 
+function Invoke-Strategy5SnapshotRefresh($RunId = "", $Count = 0, $Warning = "") {
+  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "strategy5" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+      Write-Strategy5Receipt "failed" $LASTEXITCODE $false 0 $RunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+      exit $LASTEXITCODE
+    }
+  } else {
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
+  }
+  if ($Warning) {
+    Write-Strategy5Receipt "complete" 0 $true $Count $RunId @($Warning) $Warning
+  }
+}
+
 "=== Strategy5 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy5" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 source gate blocked new publish; preserving latest complete run. $reason"
+  $verifiedPayload = Assert-Strategy5Api
+  Invoke-Strategy5SnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $reason
+  exit 0
+}
 
 $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
 if ($scanExit -ne 0) {

@@ -35,14 +35,68 @@ $env:NODE_OPTIONS = "--use-system-ca"
 
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\strategy2-intraday-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
+
+function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "strategy2"
+    label = "strategy2 intraday patrol"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = "supabase:strategy2_latest"
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy2.json") -Encoding utf8
+}
+
+function Assert-Strategy2ApiPreserve {
+  $url = "https://fuman-terminal.vercel.app/api/strategy2-latest?top=1&compact=1&limit=50&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  $payload = $response.Content | ConvertFrom-Json
+  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or [string]::IsNullOrWhiteSpace([string]$payload.runId)) {
+    throw "Strategy2 preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  }
+  $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
+  "Strategy2 preserve API verified runId=$($payload.runId) count=$count cache=$($payload.cacheSource)" >> $log
+  return [pscustomobject]@{
+    runId = [string]$payload.runId
+    count = $count
+  }
+}
+
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy2" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  "Strategy2 source gate blocked new publish; preserving latest complete/live run. $reason" >> $log
+  $verifiedPayload = Assert-Strategy2ApiPreserve
+  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
+  exit 0
+}
 
 & $nodeExe "scripts\patrol-intraday-signals.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
   "Strategy2 intraday patrol failed with exit code $exitCode" >> $log
+  Write-Strategy2Receipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode"
   exit $exitCode
 }
 
@@ -50,6 +104,8 @@ if ($exitCode -ne 0) {
 # Each scan writes runtime/latest JSON and a Supabase complete run for frontend polling.
 # Do not redirect to cache sync, freshness:gate, deploy, bump, or GitHub push during runtime refreshes.
 "Strategy2 intraday cache written; fast-path sync-after-output skipped." >> $log
+$verifiedPayload = Assert-Strategy2ApiPreserve
+Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
 

@@ -2,6 +2,7 @@ const fs = require("fs/promises");
 const fsSync = require("fs");
 const path = require("path");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -16,6 +17,11 @@ const INSTITUTION_FILE = fsSync.existsSync(path.join(DATA_DIR, "institution-slim
   : path.join(__dirname, "..", "data", "institution-slim.json");
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_SERVICE_ROLE_KEY = process.env.FUMAN_TERMINAL_SUPABASE_SERVICE_ROLE_KEY
+  || serviceRoleKey({ runtimeDir: RUNTIME_DIR });
+const CB_DETECT_RUNS_TABLE = process.env.CB_DETECT_SUPABASE_RUNS_TABLE || "cb_detect_scan_runs";
+const CB_DETECT_RESULTS_TABLE = process.env.CB_DETECT_SUPABASE_RESULTS_TABLE || "cb_detect_scan_results";
 const HISTORY_MONTHS = 14;
 const HISTORY_CONCURRENCY = 4;
 const INTRADAY_60M_RANGE = "6mo";
@@ -1072,6 +1078,157 @@ function normalize(row, source, stockMap, technicalMap, quoteMap) {
   };
 }
 
+function dateForSupabase(value) {
+  const parsed = Date.parse(value || "");
+  const date = Number.isFinite(parsed) ? new Date(parsed) : new Date();
+  return date.toISOString().slice(0, 10);
+}
+
+async function upsertSupabaseRows(table, rows, conflict) {
+  if (!rows.length) return;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("cb-detect supabase credentials missing");
+  }
+  const batchSize = Math.max(1, Number(process.env.CB_DETECT_SUPABASE_BATCH_SIZE || 250));
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const chunk = rows.slice(i, i + batchSize);
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(chunk),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`${table} upsert HTTP ${response.status}: ${text.slice(0, 240)}`);
+    }
+  }
+}
+
+async function fetchSupabaseRows(table, query) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("cb-detect supabase credentials missing");
+  }
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${table} readback HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+function buildCbDetectRunRow({ runId, updatedAt, status, count, sourceCounts, compactedDuplicates }) {
+  const complete = status === "complete";
+  return {
+    run_id: runId,
+    strategy: "cb_detect",
+    scan_date: dateForSupabase(updatedAt),
+    started_at: updatedAt,
+    finished_at: complete ? updatedAt : null,
+    status,
+    expected_total: count,
+    scanned_count: count,
+    result_count: complete ? count : 0,
+    complete,
+    quality_status: complete ? "complete" : status,
+    source: "CBAS",
+    schema_version: "cb-detect-complete-run-v1",
+    data_contract_source: "cb_detect_scan_runs/results",
+    generated_at: updatedAt,
+    updated_at: updatedAt,
+    payload: {
+      sourceCounts,
+      compactedDuplicates,
+    },
+  };
+}
+
+function buildCbDetectResultRows(rows, runId, updatedAt) {
+  const scanDate = dateForSupabase(updatedAt);
+  return rows.map((row, index) => {
+    const symbol = String(row.cbCode || row.code || row.symbol || `cb-${index + 1}`).trim();
+    return {
+      run_id: runId,
+      scan_date: scanDate,
+      symbol,
+      name: String(row.cbName || row.name || row.code || symbol).trim(),
+      payload: {
+        ...row,
+        rank: index + 1,
+        dataContractSource: "cb_detect_scan_results",
+      },
+      generated_at: updatedAt,
+      updated_at: updatedAt,
+    };
+  }).filter((row) => row.symbol);
+}
+
+async function verifyCbDetectSupabaseReadback(runId, expectedRows) {
+  const runRows = await fetchSupabaseRows(
+    CB_DETECT_RUNS_TABLE,
+    [
+      "select=run_id,status,complete,result_count,quality_status,updated_at",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "limit=1",
+    ].join("&")
+  );
+  const run = runRows[0] || {};
+  if (run.run_id !== runId || run.status !== "complete" || run.complete !== true) {
+    throw new Error(`cb-detect run readback incomplete for ${runId}`);
+  }
+  if (Number(run.result_count || 0) !== expectedRows) {
+    throw new Error(`cb-detect run result_count mismatch: expected ${expectedRows}, got ${run.result_count}`);
+  }
+  const resultRows = await fetchSupabaseRows(
+    CB_DETECT_RESULTS_TABLE,
+    [
+      "select=run_id,symbol",
+      `run_id=eq.${encodeURIComponent(runId)}`,
+      "limit=5000",
+    ].join("&")
+  );
+  if (resultRows.length !== expectedRows) {
+    throw new Error(`cb-detect result readback mismatch: expected ${expectedRows}, got ${resultRows.length}`);
+  }
+}
+
+async function publishCbDetectCompleteRunToSupabase(payload, compactedDuplicates) {
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  if (rows.length <= 0) {
+    throw new Error("cb-detect complete run refused: empty result set");
+  }
+  const runContext = {
+    runId: payload.runId,
+    updatedAt: payload.updatedAt,
+    count: rows.length,
+    sourceCounts: payload.sourceCounts || {},
+    compactedDuplicates,
+  };
+  const running = buildCbDetectRunRow({ ...runContext, status: "failed" });
+  const resultRows = buildCbDetectResultRows(rows, payload.runId, payload.updatedAt);
+  if (resultRows.length !== rows.length) {
+    throw new Error(`cb-detect complete run refused: built rows ${resultRows.length}, expected ${rows.length}`);
+  }
+  await upsertSupabaseRows(CB_DETECT_RUNS_TABLE, [running], "run_id");
+  await upsertSupabaseRows(CB_DETECT_RESULTS_TABLE, resultRows, "run_id,symbol");
+  const complete = buildCbDetectRunRow({ ...runContext, status: "complete" });
+  await upsertSupabaseRows(CB_DETECT_RUNS_TABLE, [complete], "run_id");
+  await verifyCbDetectSupabaseReadback(payload.runId, resultRows.length);
+  console.log(`cb-detect supabase complete run ok: ${payload.runId}, rows ${resultRows.length}`);
+  return payload.runId;
+}
+
 async function fetchJson(url) {
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`${url} ${response.status}`);
@@ -1152,6 +1309,7 @@ async function main() {
     rows: compactCandidates,
   };
 
+  await publishCbDetectCompleteRunToSupabase(payload, candidates.length - compactCandidates.length);
   const snapshot = await upsertSnapshot("cb_detect_latest", payload, {
     source: "cb-detect-api-only",
     reason: "cb-detect-complete-run",

@@ -271,12 +271,16 @@ try {
   Write-GateLog "syncRoot=$syncRoot publishRoot=$publishRoot terminalRoot=$terminalRoot"
   Invoke-RepoSyncPreflight
   Set-FumanRuntimeEnv
+  $fastStrategy2Only = $Fast -and $env:FUMAN_FAST_GATE_ALLOW_DAILY_REFRESH -ne "1"
+  if ($fastStrategy2Only) {
+    Write-GateLog "Fast gate strategy2-only mode: daily scanners, realtime radar, STAR preopen, institution, warrant, strategy3, strategy4, strategy5, and CB raw refresh are skipped."
+  }
 
   if ($SkipRawRefresh) {
     Write-GateLog "Raw refresh skipped; publish gate will only sync, verify, and publish already-scanned data."
   }
 
-  if (-not $SkipRawRefresh -and -not $SkipRealtime) {
+  if (-not $SkipRawRefresh -and -not $SkipRealtime -and -not $fastStrategy2Only) {
     $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
     Push-Location $syncRoot
     try {
@@ -290,14 +294,18 @@ try {
     Set-Strategy2IntradayEnv
     Push-Location $syncRoot
     try {
-      $null = Invoke-GateCommand "STAR preopen raw refresh" { & $nodeExe "scripts\scan-star-preopen.js" } -AllowFailure
+      if ($fastStrategy2Only) {
+        Write-GateLog "Fast gate strategy2-only mode: STAR preopen raw refresh skipped."
+      } else {
+        $null = Invoke-GateCommand "STAR preopen raw refresh" { & $nodeExe "scripts\scan-star-preopen.js" } -AllowFailure
+      }
       $null = Invoke-GateCommand "strategy2 intraday raw refresh" { & $nodeExe "scripts\scan-intraday-signals.js" } -AllowFailure
     } finally {
       Pop-Location
     }
   }
 
-  if (-not $SkipRawRefresh -and -not $SkipInstitution) {
+  if (-not $SkipRawRefresh -and -not $SkipInstitution -and -not $fastStrategy2Only) {
     Push-Location $syncRoot
     $previousInstitutionSlowScan = $env:INSTITUTION_SLOW_SCAN
     $previousInstitutionDelay = $env:INSTITUTION_REQUEST_DELAY_MS
@@ -308,7 +316,7 @@ try {
       if (-not $env:INSTITUTION_SLOW_SCAN) { $env:INSTITUTION_SLOW_SCAN = "1" }
       if (-not $env:INSTITUTION_REQUEST_DELAY_MS) { $env:INSTITUTION_REQUEST_DELAY_MS = "15000" }
       if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "4" }
-      if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "finmind" }
+      if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "auto" }
       if (-not $env:SHIOAJI_PYTHON) { $env:SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" }
       $null = Invoke-GateCommand "institution raw refresh" { & $nodeExe "scripts\scan-institution-cache.js" }
       $null = Invoke-GateCommand "institution TDCC breakout refresh" { & $nodeExe "scripts\generate-institution-tdcc-breakout.js" }
@@ -322,7 +330,7 @@ try {
     }
   }
 
-  if (-not $SkipRawRefresh -and -not $SkipWarrant) {
+  if (-not $SkipRawRefresh -and -not $SkipWarrant -and -not $fastStrategy2Only) {
     Push-Location $syncRoot
     try {
       $null = Invoke-GateCommand "warrant flow raw refresh" { & $nodeExe "scripts\scan-warrant-flow-cache.js" } -AllowFailure

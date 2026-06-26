@@ -12,6 +12,53 @@ $pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
 $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("cb-detect-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$scanStartedAt = (Get-Date).ToString("o")
+
+function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+  $receipt = [ordered]@{
+    strategy = "cb-detect"
+    label = "CB detect full scan"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = $Status
+    exitCode = $ExitCode
+    scanned = 0
+    total = 0
+    matches = $Matches
+    complete = $Complete
+    qualityStatus = if ($Complete) { "complete" } else { "" }
+    fallback = $false
+    runId = $RunId
+    payloadPath = "supabase-snapshot:cb_detect_latest"
+    warnings = @($Warnings)
+    blockingReason = $BlockingReason
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8
+}
+
+function Assert-CbDetectApi {
+  $url = "https://fuman-terminal.vercel.app/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  $payload = $response.Content | ConvertFrom-Json
+  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
+    throw "CB detect API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  }
+  if ([int]$payload.count -le 0) { throw "CB detect API empty count=$($payload.count)" }
+  $apiUpdatedAtRaw = $payload.updatedAt ?? $payload.generatedAt
+  $apiUpdatedAtText = if ($apiUpdatedAtRaw -is [DateTime]) { ([DateTime]$apiUpdatedAtRaw).ToUniversalTime().ToString("o") } else { [string]$apiUpdatedAtRaw }
+  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "CB detect API missing updatedAt" }
+  $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal)
+  $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
+  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+    throw "CB detect API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
+  }
+  "CB detect API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
+  return $payload
+}
 
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 $codeRepo = "${PSScriptRoot}"
@@ -21,6 +68,7 @@ try {
   $exitCode = $LASTEXITCODE
   if ($exitCode -ne 0) {
     "CB detect full scan failed with exit code $exitCode" >> $log
+    Write-CbDetectReceipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode"
     exit $exitCode
   }
   $snapshotScript = Join-Path $codeRepo "refresh-desktop-route-snapshot.ps1"
@@ -28,37 +76,23 @@ try {
     & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
     if ($LASTEXITCODE -ne 0) {
       "CB detect desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+      Write-CbDetectReceipt "failed" $LASTEXITCODE $false 0 "" @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
       exit $LASTEXITCODE
     }
   } else {
     "CB detect desktop snapshot refresh skipped; helper not found." >> $log
   }
-  & $nodeExe "scripts\sync-afterhours-supabase-status.js" "--source=fuman_afterhours_cb" "--require=cb" "--optional=institution,warrant" 2>&1 | ForEach-Object { $_ | Out-File -LiteralPath $log -Append -Encoding utf8 }
-  $supabaseExit = $LASTEXITCODE
-  if ($supabaseExit -ne 0) {
-    "CB detect Supabase verification failed with exit code $supabaseExit" >> $log
-    exit $supabaseExit
+  try {
+    $verifiedPayload = Assert-CbDetectApi
+  } catch {
+    "CB detect API verification failed: $($_.Exception.Message)" >> $log
+    Write-CbDetectReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
+    exit 1
   }
+  Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 } finally {
   Pop-Location
 }
 
-$syncScript = Join-Path $codeRepo "run-cache-sync.ps1"
-if (Test-Path -LiteralPath $syncScript) {
-  "CB detect full scan completed; starting Git sync" >> $log
-  $cacheSyncLock = Join-Path $runtime "locks\cache-sync.lock"
-  if (Test-Path -LiteralPath $cacheSyncLock) {
-    "CB detect Git sync delayed; cache-sync lock exists, starting background sync" >> $log
-    Start-Process -FilePath $pwshExe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $syncScript, "-Scope", "cb") -WindowStyle Hidden | Out-Null
-  } else {
-    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $syncScript -Scope cb 2>&1 | ForEach-Object { $_ | Out-File -LiteralPath $log -Append -Encoding utf8 }
-    if ($LASTEXITCODE -ne 0) {
-      "CB detect Git sync failed with exit code $LASTEXITCODE" >> $log
-      exit $LASTEXITCODE
-    }
-  }
-} else {
-  "CB detect sync skipped; run-cache-sync.ps1 not found." >> $log
-}
-
+"CB detect API-only: cache sync, afterhours static status, and release/freshness gate are disabled; terminal reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log

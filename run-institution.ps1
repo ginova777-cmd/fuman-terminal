@@ -11,7 +11,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 if (-not $env:INSTITUTION_SLOW_SCAN) { $env:INSTITUTION_SLOW_SCAN = "1" }
 if (-not $env:INSTITUTION_REQUEST_DELAY_MS) { $env:INSTITUTION_REQUEST_DELAY_MS = "15000" }
 if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "4" }
-if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "finmind" }
+if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "auto" }
 if (-not $env:SHIOAJI_PYTHON) { $env:SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" }
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $logDir = Join-Path $runtime "logs"
@@ -119,6 +119,16 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
 Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  "Institution source gate blocked new publish; preserving latest complete run. $reason" >> $log
+  $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
+  Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $reason
+  Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution resource health blocked new publish; preserved latest complete run" -Detail @{ reason = $reason; log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
+  exit 0
+}
 $scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan"
 if ($scanExit -ne 0) {
   "Institution scan failed with exit code $scanExit" >> $log

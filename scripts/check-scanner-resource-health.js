@@ -1,0 +1,119 @@
+const fs = require("fs");
+const path = require("path");
+
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const SUPABASE_URL = String(
+  process.env.SUPABASE_URL
+  || process.env.FUMAN_SUPABASE_URL
+  || readSecret("supabase-url.txt")
+  || "https://cpmpfhbzutkiecccekfr.supabase.co"
+).replace(/\/+$/, "");
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_ANON_KEY
+  || process.env.FUMAN_SUPABASE_ANON_KEY
+  || readSecret("supabase-service-role-key.txt")
+  || readSecret("supabase-anon-key.txt");
+
+const STRATEGY_ALIASES = new Map([
+  ["strategy1", "Strategy1"],
+  ["open-buy", "Strategy1"],
+  ["open_buy", "Strategy1"],
+  ["strategy2", "Strategy2"],
+  ["strategy3", "Strategy3"],
+  ["strategy4", "Strategy4"],
+  ["strategy5", "Strategy5 / institution"],
+  ["institution", "Strategy5 / institution"],
+  ["chip", "Strategy5 / institution"],
+  ["cb", "CB"],
+  ["cb-detect", "CB"],
+  ["warrant", "Warrant"],
+  ["warrant-flow", "Warrant"],
+]);
+const READY_STATUS = "ready";
+const STALE_STATUS = "stale";
+const BLOCKING_STATUSES = new Set(["not_ready", "failed"]);
+
+function argValue(name, fallback = "") {
+  const prefix = `${name}=`;
+  const arg = process.argv.find((item) => item.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : fallback;
+}
+
+function readSecret(name) {
+  for (const file of [
+    path.join(RUNTIME_DIR, "secrets", name),
+    path.join(process.cwd(), "secrets", name),
+  ]) {
+    try {
+      return fs.readFileSync(file, "utf8").trim();
+    } catch {}
+  }
+  return "";
+}
+
+async function fetchHealthRows() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/v_scanner_resource_health?select=${encodeURIComponent("strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at")}&limit=50`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`v_scanner_resource_health HTTP ${response.status}: ${text.slice(0, 240)}`);
+    const rows = JSON.parse(text || "[]");
+    return Array.isArray(rows) ? rows : [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function normalizeStrategy(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return STRATEGY_ALIASES.get(key) || value;
+}
+
+async function main() {
+  const requested = argValue("--strategy", process.env.SCANNER_RESOURCE_HEALTH_STRATEGY || "");
+  const allowStale = process.argv.includes("--allow-stale") || process.env.SCANNER_RESOURCE_HEALTH_ALLOW_STALE === "1";
+  const strategy = normalizeStrategy(requested);
+  if (!strategy) throw new Error("missing --strategy");
+  const rows = await fetchHealthRows();
+  const row = rows.find((item) => String(item.strategy || "").toLowerCase() === String(strategy).toLowerCase());
+  if (!row) throw new Error(`missing scanner resource health row for ${strategy}`);
+  const status = String(row.status || "").toLowerCase();
+  const ok = status === READY_STATUS || (allowStale && status === STALE_STATUS);
+  const blocked = !ok;
+  const payload = {
+    ok,
+    blocked,
+    requested,
+    strategy: row.strategy,
+    status,
+    requiredSource: row.required_source || "",
+    latestDate: row.latest_date || "",
+    rowCount: Number(row.row_count || 0),
+    reason: row.reason || "",
+    suggestedScannerBehavior: row.suggested_scanner_behavior || "",
+    updatedAt: row.updated_at || "",
+  };
+  console.log(JSON.stringify(payload, null, 2));
+  if (status === READY_STATUS) return;
+  if (status === STALE_STATUS) {
+    process.exitCode = allowStale ? 0 : 2;
+    return;
+  }
+  process.exitCode = BLOCKING_STATUSES.has(status) ? 3 : 3;
+}
+
+main().catch((error) => {
+  console.error(JSON.stringify({ ok: false, blocked: true, error: error?.message || String(error) }, null, 2));
+  process.exitCode = 1;
+});

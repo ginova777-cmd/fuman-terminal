@@ -139,6 +139,12 @@ const CONTRACTS = [
     key: "cb",
     label: "cb detect",
     checks: [
+      runTableSelect(
+        "cb_detect_scan_runs",
+        "cb_detect",
+        "run_id,strategy,scan_date,finished_at,status,complete,result_count,quality_status,data_contract_source,payload"
+      ),
+      resultTable("cb_detect_scan_results", ["run_id", "scan_date", "symbol", "name", "payload", "updated_at"]),
       snapshotKey("cb_detect_latest"),
     ],
   },

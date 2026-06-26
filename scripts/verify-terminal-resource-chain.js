@@ -97,10 +97,14 @@ const STRATEGIES = [
   {
     key: "cb",
     label: "CB",
-    policy: "snapshot latest",
+    policy: "latest complete scan",
     endpoint: "/api/cb-detect-latest",
     mobileTab: "cb",
     receiptKey: "cb-detect",
+    runView: { table: "cb_detect_scan_runs", strategy: "cb_detect", order: "finished_at.desc" },
+    resultTable: "cb_detect_scan_results",
+    resultSelect: "run_id,scan_date,symbol,name,payload,updated_at",
+    resultOrder: "symbol.asc",
     snapshotKey: "cb_detect_latest",
   },
   {
@@ -306,10 +310,10 @@ async function fetchResultRows(config, runId) {
   const result = await fetchSupabaseRows(
     config.resultTable,
     [
-      "select=run_id,scan_date,code,name,rank,updated_at,generated_at,quality_status,payload",
+      `select=${config.resultSelect || "run_id,scan_date,code,name,rank,updated_at,generated_at,quality_status,payload"}`,
       config.resultStrategy ? `strategy=eq.${encodeURIComponent(config.resultStrategy)}` : "",
       `run_id=eq.${encodeURIComponent(runId)}`,
-      "order=rank.asc",
+      `order=${config.resultOrder || "rank.asc"}`,
       "limit=10",
     ].filter(Boolean).join("&")
   );
@@ -560,7 +564,7 @@ async function auditOne(config, desktopSnapshotPayload) {
     fetchJson(publicUrl(endpoint)),
     config.mobileTab ? fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 }) : Promise.resolve(null),
   ]);
-  const supabase = snapshotKey || latestRun;
+  const supabase = latestRun || snapshotKey;
   const resultRows = supabase?.runId ? await fetchResultRows(config, supabase.runId) : null;
   const live = liveResult.json ? summarizePayload(liveResult.json, liveResult.status, liveResult.elapsedMs) : {
     status: liveResult.status,

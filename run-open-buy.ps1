@@ -51,6 +51,45 @@ function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "open-buy.json") -Encoding utf8
 }
 
+function Assert-OpenBuyApiPreserve {
+  $verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $response = Invoke-WebRequest $verifyUrl -UseBasicParsing -TimeoutSec 45
+  $payload = $response.Content | ConvertFrom-Json
+  $hasRunId = -not [string]::IsNullOrWhiteSpace([string]$payload.runId)
+  $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and [string]$payload.error -eq "strategy1_decision_not_ready"
+  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or (-not $hasRunId -and -not $isControlledWaiting)) {
+    throw "open-buy preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId) decisionReady=$($payload.decisionReady)"
+  }
+  $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
+  "Open buy preserve API verified runId=$($payload.runId) count=$count decisionReady=$($payload.decisionReady) cache=$($payload.cacheSource)" >> $log
+  return [pscustomobject]@{
+    runId = [string]$payload.runId
+    count = $count
+    decisionReady = $payload.decisionReady
+    detail = [string]($payload.detail ?? $payload.reason ?? $payload.error ?? "")
+  }
+}
+
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy1" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  "Open buy source gate blocked new publish; preserving latest complete/waiting display. $reason" >> $log
+  $preservedPayload = Assert-OpenBuyApiPreserve
+  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "open-buy" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      "Open buy desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+      Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 ([string]$preservedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+      exit $LASTEXITCODE
+    }
+  }
+  Write-OpenBuyReceipt "complete" 0 $true ([int]$preservedPayload.count) ([string]$preservedPayload.runId) @($reason) $reason
+  "Open buy resource-gated scan end; preserved runId=$($preservedPayload.runId) count=$($preservedPayload.count)" >> $log
+  exit 0
+}
+
 & $nodeExe "scripts\scan-open-buy-cache.js" >> $log 2>&1
 $exitCode = $LASTEXITCODE
 

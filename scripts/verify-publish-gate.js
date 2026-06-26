@@ -153,6 +153,18 @@ if (!String(packageJson.scripts?.["verify:mobile-responsive-ui"] || "").includes
 if (!String(packageJson.scripts?.postdeploy || "").includes("verify-mobile-layout.js --live")) {
   issues.push("postdeploy must run live mobile layout verification");
 }
+if (!String(packageJson.scripts?.["sync:official:chip"] || "").includes("scripts/sync-official-chip-data.js")) {
+  issues.push("package.json missing scripts.sync:official:chip for TWSE/TPEx chip source fallback");
+}
+if (!String(packageJson.scripts?.["sync:chip:sources"] || "").includes("run-chip-source-sync.ps1")) {
+  issues.push("package.json missing scripts.sync:chip:sources for daily FinMind-first chip source sync");
+}
+if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts/verify-chip-source-health.js")) {
+  issues.push("package.json missing scripts.verify:chip-source for scoped chip source health verification");
+}
+if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
+  issues.push("package.json missing scripts.check:scanner-resource-health for scanner publish/preserve gate");
+}
 const gateScript = packageJson.scripts && packageJson.scripts["freshness:gate"];
 if (!gateScript) {
   issues.push("package.json missing scripts.freshness:gate");
@@ -232,19 +244,29 @@ const strategy4LatestApi = read("api/strategy4-latest.js");
 const terminalHomeApi = read("api/terminal-home.js");
 const mobileBootApi = read("api/mobile-boot.js");
 const mobileFragmentApi = read("api/mobile-fragment.js");
+const cbDetectLatestApi = read("api/cb-detect-latest.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
+const cbDetectScanner = read("scripts/generate-cb-detect.js");
 const runStrategy4 = read("run-strategy4.ps1");
 const runOpenBuy = read("run-open-buy.ps1");
+const runStrategy2Intraday = read("run-strategy2-intraday.ps1");
 const runStrategy3Complete = read("run-strategy3-complete-scan.ps1");
 const runStrategy5 = read("run-strategy5.ps1");
 const runInstitution = read("run-institution.ps1");
 const runWarrantFlow = read("run-warrant-flow.ps1");
 const runCbDetect = read("run-cb-detect.ps1");
+const runChipSourceSync = read("run-chip-source-sync.ps1");
+const productionHealthMonitor = read("scripts/monitor-production-health.js");
+const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
 const strategy2SharedSource = read("lib/supabase-public-slot.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
+const officialChipSync = read("scripts/sync-official-chip-data.js");
+const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
+const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
+const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
@@ -298,6 +320,21 @@ if (!/verify:publish-gate/.test(prepareDeploy)) {
 if (!/verify:publish-gate/.test(publishGate)) {
   issues.push("run-publish-gate.ps1 must run verify:publish-gate before freshness publish");
 }
+for (const marker of ["twse:T86", "tpex:3itrade_hedge_result", "twse:MI_MARGN", "tpex:margin_balance", "keepOfficialOnlyForFinMindGaps"]) {
+  if (!officialChipSync.includes(marker)) issues.push(`sync-official-chip-data.js missing official chip fallback marker ${marker}`);
+}
+for (const marker of ["sync:finmind:chip", "sync:official:chip", "verify:chip-source", "FinMind chip sync failed; continuing to official source gap fill"]) {
+  if (!runChipSourceSync.includes(marker)) issues.push(`run-chip-source-sync.ps1 missing chip source pipeline marker ${marker}`);
+}
+for (const marker of ["v_institution_source_health", "v_chip_flows_latest", "coverage_status", "CHIP_SOURCE_HEALTH_MAX_AGE_DAYS"]) {
+  if (!chipSourceHealthVerifier.includes(marker)) issues.push(`verify-chip-source-health.js missing chip source health marker ${marker}`);
+}
+for (const marker of ["v_scanner_resource_health", "ready", "stale", "not_ready", "failed", "STRATEGY_ALIASES"]) {
+  if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing scanner resource health marker ${marker}`);
+}
+for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest"]) {
+  if (!scannerResourceHealthRunner.includes(marker)) issues.push(`scanner-resource-health.ps1 missing scanner gate marker ${marker}`);
+}
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");
 }
@@ -336,6 +373,25 @@ for (const [file, text, source] of [
 ]) {
   if (!/refresh-desktop-route-snapshot\.ps1/.test(text) || !new RegExp(`-Source\\s+["']${source}["']`).test(text)) {
     issues.push(`${file} must refresh desktop route snapshot after successful Supabase scan with source=${source}`);
+  }
+}
+for (const [file, text, strategy] of [
+  ["run-open-buy.ps1", runOpenBuy, "strategy1"],
+  ["run-strategy2-intraday.ps1", runStrategy2Intraday, "strategy2"],
+  ["run-strategy3-complete-scan.ps1", runStrategy3Complete, "strategy3"],
+  ["run-strategy4.ps1", runStrategy4, "strategy4"],
+  ["run-strategy5.ps1", runStrategy5, "strategy5"],
+  ["run-institution.ps1", runInstitution, "institution"],
+  ["run-warrant-flow.ps1", runWarrantFlow, "warrant"],
+]) {
+  if (!/scanner-resource-health\.ps1/.test(text) || !/Invoke-ScannerResourceHealthGate/.test(text)) {
+    issues.push(`${file} must gate scanner publish on v_scanner_resource_health`);
+  }
+  if (!new RegExp(`-Strategy\\s+["']${strategy}["']`, "i").test(text)) {
+    issues.push(`${file} scanner resource health gate must use strategy=${strategy}`);
+  }
+  if (!/PreserveLatest/.test(text)) {
+    issues.push(`${file} must preserve latest complete run when resource health is stale/not_ready/failed`);
   }
 }
 if (!/Get-CriticalDataReleaseFiles/.test(cacheSync) || !/CACHE_SYNC_WRITE_CODE_REPO_CRITICAL_ONLY/.test(cacheSync)) {
@@ -404,7 +460,7 @@ for (const marker of ["stock_daily_volume", "supabase:stock_daily_volume"]) {
   if (!strategy4Scanner.includes(marker)) issues.push(`scan-strategy4-cache.js missing stable Strategy4 source marker ${marker}`);
   if (!strategy4LatestApi.includes(marker)) issues.push(`strategy4-latest.js missing stable Strategy4 source marker ${marker}`);
 }
-if (/run-cache-sync|generate-slim-cache|run-strategy4-postflight|data\\strategy4|data\/strategy4|strategy4-(latest|backup|summary|slim|zone|score).*\.json/.test(runStrategy4) || !/api\/strategy4-latest/.test(runStrategy4)) {
+if (/run-cache-sync|Invoke-CacheSync|FUMAN_STRATEGY4_SCOPED_PUBLISH|generate-slim-cache|run-strategy4-postflight|data\\strategy4|data\/strategy4|strategy4-(latest|backup|summary|slim|zone|score).*\.json/.test(runStrategy4) || !/api\/strategy4-latest/.test(runStrategy4)) {
   issues.push("run-strategy4.ps1 must be API-only: no static strategy4 JSON copy, slim generation, cache sync, or static postflight");
 }
 if (!/canvas=1&compact=1&shell=1&limit=70&live=1/.test(runStrategy4)) {
@@ -510,6 +566,12 @@ for (const marker of [
 }
 if (!/SkipRawRefresh/.test(gate) || !/Raw refresh skipped/.test(gate) || !/\$gateMode = if \(\$SkipRawRefresh\)/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must support publish-only mode via -SkipRawRefresh");
+}
+if (!/fastStrategy2Only/.test(gate) || !/Fast gate strategy2-only mode/.test(gate) || !/FUMAN_FAST_GATE_ALLOW_DAILY_REFRESH/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 -Fast must default to Strategy2-only and skip daily scanners unless explicitly overridden");
+}
+if (/INSTITUTION_SOURCE_PROVIDER\)\s*\{\s*\$env:INSTITUTION_SOURCE_PROVIDER\s*=\s*["']finmind["']/.test(gate)) {
+  issues.push("run-live-freshness-gate.ps1 must not force INSTITUTION_SOURCE_PROVIDER=finmind; use auto for official-first fallback");
 }
 for (const marker of [
   "Invoke-ScanTask \"strategy3\" \"strategy3 raw refresh\" \"critical\"",
@@ -743,6 +805,9 @@ for (const marker of [
 for (const marker of [
   "scanner receipt",
   "sourceHealth",
+  "cb_detect_scan_runs",
+  "cb_detect_scan_results",
+  "latest complete scan",
 ]) {
   const terminalResourceChain = read("scripts/verify-terminal-resource-chain.js");
   if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
@@ -753,6 +818,8 @@ for (const marker of [
   "v_strategy3_quote_ready",
   "strategy4_daily_ohlcv_view",
   "v_chip_flows_latest",
+  "cb_detect_scan_runs",
+  "cb_detect_scan_results",
   "cumulative_bid_volume",
 ]) {
   const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
@@ -777,6 +844,9 @@ for (const marker of ["Write-OpenBuyReceipt", "scan-receipts", "refresh-desktop-
 for (const marker of ["Write-InstitutionReceipt", "/api/institution-latest", "Institution API-only"]) {
   if (!runInstitution.includes(marker)) issues.push(`run-institution.ps1 missing API-only receipt marker ${marker}`);
 }
+if (/INSTITUTION_SOURCE_PROVIDER\s*=\s*["']finmind["']/.test(runInstitution)) {
+  issues.push("run-institution.ps1 must not force INSTITUTION_SOURCE_PROVIDER=finmind; official TWSE/TPEx should run first with FinMind as fallback");
+}
 if (/run-cache-sync|generate-slim-cache|Sync-InstitutionLocalCache|data\\institution|data\/institution/.test(runInstitution)) {
   issues.push("run-institution.ps1 must be API-only after scanner success: no slim generation, local mirror, cache sync, or static institution data publish");
 }
@@ -786,6 +856,21 @@ for (const marker of ["STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS", "dateAgeDays", "v_c
 }
 if (/run-sync-after-output|generate-slim-cache|data\\strategy5|data\/strategy5/.test(runStrategy5) || !/api\/strategy5-latest/.test(runStrategy5) || !/Strategy5 API-only/.test(runStrategy5)) {
   issues.push("run-strategy5.ps1 must be API-only after scanner success: no slim generation, cache sync, or static strategy5 data publish");
+}
+if (/run-cache-sync|freshness:gate|release:daily|Start-Process/.test(runWarrantFlow) || !/api\/warrant-flow-latest/.test(runWarrantFlow) || !/Warrant flow API-only/.test(runWarrantFlow)) {
+  issues.push("run-warrant-flow.ps1 must be API-only after scanner success: no cache sync, release/freshness gate, or background publish");
+}
+if (/run-cache-sync|freshness:gate|release:daily|sync-afterhours-supabase-status|Start-Process/.test(runCbDetect) || !/api\/cb-detect-latest/.test(runCbDetect) || !/CB detect API-only/.test(runCbDetect)) {
+  issues.push("run-cb-detect.ps1 must be API-only after scanner success: no cache sync, afterhours static status, release/freshness gate, or background publish");
+}
+for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "publishCbDetectCompleteRunToSupabase", "verifyCbDetectSupabaseReadback"]) {
+  if (!cbDetectScanner.includes(marker)) issues.push(`generate-cb-detect.js missing CB complete-run marker ${marker}`);
+}
+for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "readLatestCompleteRun", "cacheSource: \"supabase-api\"", "gate: \"run_id\""]) {
+  if (!cbDetectLatestApi.includes(marker)) issues.push(`api/cb-detect-latest.js missing CB complete-run API marker ${marker}`);
+}
+if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
+  issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");
 }
 
 for (const legacyScript of [
@@ -932,12 +1017,21 @@ if (fetchResult.status !== 0) {
       "scripts/e2e-smoke.js",
       "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
+      "legacy-entrypoint-guard.ps1",
       "run-live-freshness-gate.ps1",
+      "scanner-resource-health.ps1",
+      "run-chip-source-sync.ps1",
       "run-api-only-retired-cleanup.ps1",
       "run-cache-sync.ps1",
       "run-open-buy-sync-retry.ps1",
       "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
+      "scripts/scan-institution-cache.js",
+      "scripts/sync-official-chip-data.js",
+      "scripts/verify-chip-source-health.js",
+      "scripts/check-scanner-resource-health.js",
+      "scripts/generate-cb-detect.js",
+      "scripts/install-chip-source-sync-task.ps1",
       "scripts/fugle-websocket-collector.js",
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-production-guard.js",
@@ -954,6 +1048,7 @@ if (fetchResult.status !== 0) {
       "run-publish-gate.ps1",
       "refresh-desktop-route-snapshot.ps1",
       "run-open-buy.ps1",
+      "run-strategy2-intraday.ps1",
       "run-strategy3.ps1",
       "run-strategy3-complete-scan.ps1",
       "run-strategy4.ps1",
@@ -966,6 +1061,7 @@ if (fetchResult.status !== 0) {
       "88.html",
       "api/scorecard.js",
       "api/open-buy-latest.js",
+      "api/cb-detect-latest.js",
       "api/strategy4-latest.js",
       "data/scorecard-latest.json",
       "data/mobile-home-summary.json",

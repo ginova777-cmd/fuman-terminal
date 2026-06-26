@@ -110,6 +110,23 @@ function Test-Strategy3ControlledSourceNotReady($Message) {
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish; preserving latest complete run. $reason"
+  $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
+  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "strategy3" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+    }
+  }
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  Write-Strategy3CompleteLog "Strategy3 resource-gated scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+  exit 0
+}
 $scannerError = ""
 try {
   & $nodeExe "scripts\scan-strategy3-cache.js" >> $log 2>&1

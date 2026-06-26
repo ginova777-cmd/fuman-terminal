@@ -6,6 +6,7 @@ node_modules/
 .trade-manager-cache/
 logs/
 locks/
+outputs/
 data/strategy2-intraday-latest.json
 archive/strategy2-intraday/
 check-fuman.ps1

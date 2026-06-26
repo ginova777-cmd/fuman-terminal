@@ -79,40 +79,18 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
   }
 }
 
-function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
-  $previousScopedPublish = $env:FUMAN_STRATEGY4_SCOPED_PUBLISH
-  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-    Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts start $(Get-Date) ==="
-    try {
-      $env:FUMAN_STRATEGY4_SCOPED_PUBLISH = "1"
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath -Scope strategy4 *>&1 | Tee-Object -FilePath $log -Append | Out-Null
-    } finally {
-      if ($null -ne $previousScopedPublish) {
-        $env:FUMAN_STRATEGY4_SCOPED_PUBLISH = $previousScopedPublish
-      } else {
-        Remove-Item Env:FUMAN_STRATEGY4_SCOPED_PUBLISH -ErrorAction SilentlyContinue
-      }
-    }
-    $syncExit = $LASTEXITCODE
-    if ($syncExit -eq 0) {
-      Write-Log "=== Strategy4 clean cache sync attempt $attempt/$maxAttempts succeeded $(Get-Date) ==="
-      return 0
-    }
-
-    Write-Log "Strategy4 clean cache sync attempt $attempt/$maxAttempts failed with exit code $syncExit"
-    if ($attempt -lt $maxAttempts) {
-      $delaySeconds = 30 * $attempt
-      Write-Log "Retrying Strategy4 clean cache sync in $delaySeconds seconds."
-      Start-Sleep -Seconds $delaySeconds
-    }
-  }
-
-  return $syncExit
-}
-
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  Write-Log "Strategy4 source gate blocked new publish; preserving latest complete run. $reason"
+  $latestPayload = Assert-Strategy4LatestApi
+  Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
+  exit 0
+}
 if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
   try {
     $tz = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
