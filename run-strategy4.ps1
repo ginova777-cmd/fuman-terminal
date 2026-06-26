@@ -50,6 +50,35 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy4.json") -Encoding utf8
 }
 
+function Assert-Strategy4LatestApi {
+  $apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $apiResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 45
+  $payload = $apiResponse.Content | ConvertFrom-Json
+  if ($apiResponse.StatusCode -ne 200) { throw "Strategy4 API HTTP $($apiResponse.StatusCode)" }
+  if ($payload.ok -ne $true) { throw "Strategy4 API ok=false error=$($payload.error)" }
+  if ([string]::IsNullOrWhiteSpace([string]$payload.runId)) { throw "Strategy4 API missing runId" }
+  if (([int]$payload.count) -le 0) { throw "Strategy4 API empty count=$($payload.count)" }
+  Write-Log "Strategy4 latest API verified: runId=$($payload.runId) count=$($payload.count) scanStamp=$($payload.scanStamp)"
+  return $payload
+}
+
+function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "") {
+  $snapshotScript = Join-Path $repo "refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $snapshotScript -Source "strategy4" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      Write-Log "Strategy4 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+      Write-Strategy4Receipt "failed" $LASTEXITCODE $false 0 $RunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+      exit $LASTEXITCODE
+    }
+  } else {
+    Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
+  }
+  if ($Warning) {
+    Write-Strategy4Receipt "complete" 0 $true $Count $RunId @($Warning)
+  }
+}
+
 function Invoke-CacheSyncWithRetry($scriptPath, $maxAttempts = 3) {
   $previousScopedPublish = $env:FUMAN_STRATEGY4_SCOPED_PUBLISH
   for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
@@ -94,6 +123,8 @@ if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
   $startAt = [TimeSpan]::Parse("16:00:00")
   if ($taipeiNow.TimeOfDay -lt $startAt) {
     Write-Log "Strategy4 full scan skipped before 16:00 Taipei: $($taipeiNow.ToString('yyyy/MM/dd HH:mm:ss'))"
+    $latestPayload = Assert-Strategy4LatestApi
+    Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) "before 16:00 Taipei; preserved latest complete run"
     exit 0
   }
 }
@@ -196,17 +227,7 @@ try {
   exit 1
 }
 
-$snapshotScript = Join-Path $repo "refresh-desktop-route-snapshot.ps1"
-if (Test-Path -LiteralPath $snapshotScript) {
-  & $snapshotScript -Source "strategy4" -LogPath $log
-  if ($LASTEXITCODE -ne 0) {
-    Write-Log "Strategy4 desktop snapshot refresh failed with exit code $LASTEXITCODE"
-    Write-Strategy4Receipt "failed" $LASTEXITCODE $false 0 ([string]$strategy4Output.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
-    exit $LASTEXITCODE
-  }
-} else {
-  Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
-}
+Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId)
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
