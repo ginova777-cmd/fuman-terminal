@@ -431,6 +431,9 @@ if (!/emptyTodayRun[\s\S]*return buildStrategy2RunPayload\(emptyTodayRun/.test(s
 if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-run/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must let Supabase latest run date correct stale local market-session files");
 }
+if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2LatestApi) || !/const minLimit = hasTopLimit \? 1 : 20/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must honor top=1 for lightweight mobile health checks without shrinking normal terminal payloads");
+}
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
 }

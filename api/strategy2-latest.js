@@ -164,11 +164,15 @@ function parseRequestOptions(request) {
   }
   const params = url.searchParams;
   const compact = ["canvas", "compact", "shell"].some((key) => /^(1|true|yes)$/i.test(params.get(key) || ""));
+  const requestedTop = Number(params.get("top") || "");
+  const hasTopLimit = Number.isFinite(requestedTop) && requestedTop > 0;
   const requestedLimit = Number(params.get("limit") || "");
   const fallbackLimit = compact ? 60 : 200;
   const wantsAllToday = /^(1|true|yes)$/i.test(params.get("today") || params.get("allToday") || "");
   const maxLimit = compact ? (wantsAllToday ? 240 : 120) : 500;
-  const limit = Math.max(20, Math.min(maxLimit, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : fallbackLimit));
+  const rawLimit = hasTopLimit ? requestedTop : Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : fallbackLimit;
+  const minLimit = hasTopLimit ? 1 : 20;
+  const limit = Math.max(minLimit, Math.min(maxLimit, rawLimit));
   return {
     compact,
     canvas: /^(1|true|yes)$/i.test(params.get("canvas") || ""),
