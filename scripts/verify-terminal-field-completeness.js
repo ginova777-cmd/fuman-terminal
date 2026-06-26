@@ -138,10 +138,45 @@ const ROUTES = [
     key: "market",
     label: "市場總覽",
     endpoint: "/api/market?canvas=1&compact=1&shell=1&limit=24&live=1",
+    metaGroups: [
+      ["日期/更新", ["updatedAt", "generatedAt", "date", "tradeDate"]],
+      ["來源/freshness", ["source", "cacheSource", "freshness", "snapshotFresh"]],
+    ],
     groups: [
       ["名稱", ["name", "label", "title", "symbol"]],
       ["數值", ["value", "price", "close", "index"]],
       ["時間/更新", ["updatedAt", "time", "date"]],
+    ],
+  },
+  {
+    key: "heatmap",
+    label: "熱力圖",
+    endpoint: "/api/heatmap?limit=80&live=1",
+    metaGroups: [
+      ["日期/更新", ["updatedAt", "servedAt", "generatedAt", "date", "tradeDate", "resolvedTradeDate"]],
+      ["來源/freshness", ["source", "cacheSource", "freshness", "snapshotFresh"]],
+    ],
+    groups: [
+      ["分類名稱", ["name", "industry", "label", "title"]],
+      ["漲跌/分數", ["pct", "avgPct", "changePercent", "score"]],
+      ["樣本數", ["count", "stockCount", "sample", "up", "down"]],
+    ],
+  },
+  {
+    key: "market-ai",
+    label: "AI判讀",
+    endpoint: "/api/market-ai-live?limit=60&live=1",
+    metaGroups: [
+      ["日期/更新", ["updatedAt", "generatedAt", "snapshot.tradeDate", "aiDetectWindow.taipeiDate"]],
+      ["來源/freshness", ["source", "cacheSource", "freshness", "snapshotFresh"]],
+      ["AI摘要/廣度", ["summary", "breadth", "marketSession", "aiDetectWindow"]],
+    ],
+    groups: [
+      ["代號", ["code", "Code", "symbol", "stockId", "stock_id"]],
+      ["名稱", ["name", "Name", "stockName", "stock_name"]],
+      ["價格", ["price", "close", "ClosingPrice", "lastPrice", "latestClose"]],
+      ["漲跌/排序", ["change", "Change", "pct", "percent", "score", "rankScore", "finalScore", "rank"]],
+      ["量能/金額", ["value", "TradeValue", "volume", "TradeVolume", "tradeValue"]],
     ],
   },
 ];
@@ -171,9 +206,16 @@ function rowIdentity(row, index) {
 }
 
 function rowsOf(payload) {
-  for (const key of ["rows", "matches", "data", "items", "top"]) {
+  for (const key of ["rows", "matches", "data", "items", "top", "stocks", "sectors", "hotStocks"]) {
     if (Array.isArray(payload?.[key])) return payload[key];
   }
+  if (payload?.snapshot) {
+    for (const key of ["rows", "matches", "data", "items", "top", "stocks", "sectors", "hotStocks"]) {
+      if (Array.isArray(payload.snapshot?.[key])) return payload.snapshot[key];
+    }
+  }
+  if (Array.isArray(payload?.market?.stocks)) return payload.market.stocks;
+  if (Array.isArray(payload?.breadth?.stocks)) return payload.breadth.stocks;
   if (payload?.data && typeof payload.data === "object") return Object.values(payload.data);
   return [];
 }
@@ -201,6 +243,19 @@ async function fetchJson(endpoint) {
 function checkRoute(route, payload) {
   const rows = rowsOf(payload).slice(0, LIMIT);
   const issues = [];
+  (route.metaGroups || [
+    ["日期/runId", ["runId", "transport.runId", "updatedAt", "generatedAt", "usedDate", "date", "tradeDate"]],
+    ["來源/freshness", ["source", "cacheSource", "transport.source", "freshness", "qualityStatus", "sourceHealth.status"]],
+  ]).forEach(([label, fields]) => {
+    const hit = fields.find((field) => !isBlank(getPath(payload, field)));
+    if (!hit) {
+      issues.push({
+        row: "payload",
+        field: label,
+        message: `missing all of: ${fields.join(", ")}`,
+      });
+    }
+  });
   if (!rows.length) {
     if (route.allowZeroWhen && route.allowZeroWhen(payload)) return { rows, issues, zeroAllowed: true };
     issues.push({ row: "", field: "rows", message: "no rows/cards returned" });

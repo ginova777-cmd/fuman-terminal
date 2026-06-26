@@ -27,8 +27,10 @@ const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMA
 const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FUMAN_UI_E2E_ROUTE_TIMEOUT_MS || 45000);
 
 const DESKTOP_ROUTES = [
-  { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view" },
-  { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view" },
+  { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
+  { key: "heatmap", label: "heatmap", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "[data-market-mode=\"overview\"]", requiredText: ["熱力圖"], requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
+  { key: "market-ai", label: "market ai", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "[data-market-mode=\"ai\"]", requiredText: ["AI 判讀", "操作建議", "風險"] },
+  { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
   { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true, fallbackNeedles: ["策略1-明日開盤入", "21:30初篩", "08:55搓合"] },
   { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
   { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
@@ -37,6 +39,7 @@ const DESKTOP_ROUTES = [
   { key: "institution", label: "institution", selector: "aside.sidebar a[data-view=\"chip-trade\"]", expectedRouteKey: "chip-trade|買賣超", expectedPanelId: "chip-trade-view" },
   { key: "cb", label: "cb detect", selector: "aside.sidebar a[data-view=\"cb-detect\"]", expectedRouteKey: "cb-detect|CB可轉債", expectedPanelId: "cb-detect-view" },
   { key: "warrant", label: "warrant flow", selector: "aside.sidebar a[data-view=\"warrant-flow\"]", expectedRouteKey: "warrant-flow|權證走向", expectedPanelId: "warrant-flow-view" },
+  { key: "watchlist", label: "watchlist", selector: "aside.sidebar a[data-view=\"watchlist\"]", expectedRouteKey: "watchlist|自選股", expectedPanelId: "watchlist-view", allowWaitingEmpty: true, requiredText: ["自選股"], requiredFieldSignals: ["codeName", "reasonScoreActionRisk"] },
 ];
 
 const MOBILE_ROUTES = [
@@ -534,6 +537,55 @@ async function activateDesktopRoute(cdp, route) {
   throw new Error(`desktop route did not activate: ${route.key} (${JSON.stringify(last)})`);
 }
 
+async function prepareDesktopRoute(cdp, route) {
+  if (route.key !== "watchlist") return;
+  await evaluate(cdp, () => {
+    const rows = [
+      { code: "2330", name: "台積電", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
+      { code: "2317", name: "鴻海", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
+    ];
+    const value = JSON.stringify(rows);
+    localStorage.setItem("fuman_watchlist", value);
+    localStorage.setItem("fuman_mobile_watchlist_v1", value);
+    return true;
+  });
+}
+
+async function afterDesktopRouteActivate(cdp, route) {
+  if (route.postClickSelector) {
+    await clickSelector(cdp, route.postClickSelector);
+    await sleep(1200);
+  }
+  if (route.key === "watchlist") {
+    await evaluate(cdp, () => {
+      const input = document.querySelector("#watchlist-search-input");
+      if (input) {
+        input.value = "2330";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      return true;
+    });
+    await clickSelector(cdp, "#watchlist-add-btn");
+    await sleep(800);
+    await evaluate(cdp, () => {
+      const rows = [
+        { code: "2330", name: "台積電", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
+        { code: "2317", name: "鴻海", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
+      ];
+      localStorage.setItem("fuman_watchlist", JSON.stringify(rows));
+      window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
+      return true;
+    });
+    const clicked = await evaluate(cdp, () => {
+      const target = document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
+      target?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      return Boolean(target);
+    }).catch(() => false);
+    if (!clicked) await sleep(800);
+    await sleep(800);
+  }
+}
+
 async function screenshot(cdp, filename) {
   if (NO_SCREENSHOTS) return "";
   const result = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true }, 30000);
@@ -559,12 +611,17 @@ function collectDesktopStats(route) {
   const rowSelectors = [
     ".metric-card",
     ".sector-card",
+    ".market-ai-card",
+    ".market-ai-block",
+    ".market-ai-point",
     ".market-ai-stock-row",
     ".radar-signal-card",
     ".radar-leader-card",
     "#strategy-table .strategy-row:not(.strategy-head)",
     "#strategy-table tbody tr",
     "#strategy-table [data-stock-code]",
+    ".desktop-route-shell tbody tr",
+    ".desktop-route-shell [data-stock-code]",
     ".strategy5-stock-card",
     ".intraday-table tbody tr",
     ".swing-table tbody tr",
@@ -573,6 +630,9 @@ function collectDesktopStats(route) {
     ".warrant-flow-panel tbody tr",
     ".warrant-flow-card",
     ".warrant-flow-list > *",
+    ".watchlist-stock-list > *",
+    ".watchlist-card",
+    ".watch-analysis-panel",
   ];
   const emptyPattern = /等待資料載入|尚未產生|目前沒有符合|更新策略資料中|載入全台股|等待最新 complete run|權證快照尚未建立/;
   const domRows = [];
@@ -618,14 +678,29 @@ function collectDesktopStats(route) {
   const rowsVisible = Math.max(domRows.length, canvasRows);
   const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
+  const requiredText = Array.isArray(route.requiredText) ? route.requiredText : [];
+  const missingRequiredText = requiredText.filter((needle) => !panelText.includes(needle));
+  const fieldSignals = {
+    codeName: /(?:\b\d{4}\b\s*[\u4e00-\u9fffA-Za-z]{1,}|(?:股票|代號|標的|權證|CB).{0,42}(?:[\u4e00-\u9fff]{2,}|名稱))/.test(panelText),
+    runOrDate: dateSignals.length > 0,
+    sourceFreshness: /(?:來源|API|Supabase|fresh|complete|更新|掃描|資料)/i.test(panelText),
+    reasonScoreActionRisk: /(?:原因|判斷|訊號|分數|排序|進場|觀察|風險|操作|建議|熱度|型態|雷達|CBAS|門檻|轉換|溢價|強|弱|自選股|分析|快照)/.test(panelText),
+  };
   const warnings = [];
   if (!routeIdentityOk) {
     warnings.push(`route identity mismatch: panel=${activePanel.id || ""}/${route.expectedPanelId || ""}, route=${activeRouteKey}/${route.expectedRouteKey || ""}`);
   }
   if (waitingEmptyOk) warnings.push(`controlled waiting state: ${emptyStateText.slice(0, 90)}`);
   if (!dateSignals.length) warnings.push("freshness/date/run signal not visible enough");
+  if (missingRequiredText.length) warnings.push(`missing required visible text: ${missingRequiredText.join(", ")}`);
   if (!rowsVisible && filterCounts.length) warnings.push("route has populated subfilters but default view has no rows");
   if (rowsVisible > 0 && hardBlockers.length !== blockerMatches.length) warnings.push("ignored hidden/soft empty-state text because rows are visible");
+  const requiredFieldSignals = Array.isArray(route.requiredFieldSignals)
+    ? route.requiredFieldSignals
+    : ["codeName", "runOrDate", "sourceFreshness", "reasonScoreActionRisk"];
+  const fieldBlockers = rowsVisible > 0
+    ? requiredFieldSignals.filter((key) => !fieldSignals[key]).map((key) => `visible field signal missing: ${key}`)
+    : [];
   return {
     kind: "desktop",
     routeKey: route.key,
@@ -649,9 +724,11 @@ function collectDesktopStats(route) {
     emptyStateText,
     waitingEmptyOk,
     dateSignals,
-    blockerMatches: [...new Set(hardBlockers)],
+    fieldSignals,
+    missingRequiredText,
+    blockerMatches: [...new Set([...hardBlockers, ...fieldBlockers])],
     warnings,
-    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && hardBlockers.length === 0,
+    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && hardBlockers.length === 0 && fieldBlockers.length === 0 && missingRequiredText.length === 0,
   };
 }
 
@@ -697,7 +774,12 @@ function collectMobileStats(route) {
     horizontalOverflow,
   };
   const layoutBlockers = [];
+  const actionText = [...document.querySelectorAll(".actions a,.actions button")].map((el) => text(el)).join(" ");
+  const actionHref = [...document.querySelectorAll(".actions a")].map((el) => el.getAttribute("href") || "").join(" ");
   if (!shell || !tabs || !hero) layoutBlockers.push("mobile shell missing core layout nodes");
+  if (/終端/.test(actionText) || (actionHref && /(?:^|\/)(?:index\.html)?(?:\?|#|$)/.test(actionHref))) {
+    layoutBlockers.push("mobile shell must not expose desktop terminal action");
+  }
   if (/Times New Roman/i.test(layout.bodyFont) || /(^|,\s*)serif(\s*,|$)/i.test(layout.bodyFont)) {
     layoutBlockers.push(`mobile CSS not applied: font=${layout.bodyFont}`);
   }
@@ -853,7 +935,9 @@ async function runDesktopMode(browser, theme) {
     let stats = null;
     try {
       stats = await withTimeout((async () => {
+        await prepareDesktopRoute(cdp, route);
         await activateDesktopRoute(cdp, route);
+        await afterDesktopRouteActivate(cdp, route);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
         return collectDesktopStatsWhenReady(cdp, route);
       })(), ROUTE_TIMEOUT_MS, `desktop/${theme}/${route.key}`);
