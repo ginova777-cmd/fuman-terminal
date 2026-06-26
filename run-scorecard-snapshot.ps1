@@ -2,6 +2,7 @@ param(
   [string]$ProjectRoot = "C:\fuman-terminal",
   [string]$ScorecardRoot = "C:\Users\ginov\Documents\Codex\2026-06-22\new-chat-7\outputs\backtest-scorecard",
   [string]$Python = "",
+  [switch]$AllowDuckDbFallback,
   [switch]$NoLiveVerify
 )
 
@@ -32,9 +33,16 @@ if (-not $Python) {
 Set-Location -LiteralPath $ProjectRoot
 $outFile = Join-Path $ProjectRoot "data\scorecard-latest.json"
 
-Write-Step "export DuckDB snapshot"
-& $Python "scripts\export-scorecard-snapshot.py" --db $duckdb --out $outFile
-if ($LASTEXITCODE -ne 0) { throw "scorecard export failed with exit code $LASTEXITCODE" }
+Write-Step "export Supabase scorecard source"
+& node --use-system-ca "scripts\export-scorecard-supabase-source.js" "--out=$outFile"
+if ($LASTEXITCODE -ne 0) {
+  if (-not $AllowDuckDbFallback -and $env:FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK -ne "1") {
+    throw "scorecard Supabase source export failed with exit code $LASTEXITCODE; refusing to republish stale DuckDB fallback"
+  }
+  Write-Step "Supabase source unavailable; export DuckDB fallback because fallback was explicitly allowed"
+  & $Python "scripts\export-scorecard-snapshot.py" --db $duckdb --out $outFile
+  if ($LASTEXITCODE -ne 0) { throw "scorecard DuckDB fallback export failed with exit code $LASTEXITCODE" }
+}
 
 Write-Step "publish Supabase snapshot"
 & node --use-system-ca "scripts\publish-scorecard-snapshot.js" "--file=$outFile"

@@ -24,6 +24,34 @@ public-terminal-fast-20260623-09
 Supabase only polling / snapshot
 ```
 
+## 成績單 `/88`
+
+成績單公開網址固定：
+
+```text
+https://fuman-terminal.vercel.app/88
+```
+
+正式導管必須是：
+
+```text
+Supabase trade_records / strategy_daily_summary
+-> scripts/export-scorecard-supabase-source.js
+-> data/scorecard-latest.json fallback/bootstrap
+-> Supabase snapshot scorecard_latest
+-> /api/scorecard
+-> /88
+```
+
+規則：
+
+- `data/scorecard-latest.json` 只可當 fallback / bootstrap，不可當正式權威。
+- 舊 DuckDB `scorecard.duckdb` 只可用 `-AllowDuckDbFallback` 或 `FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK=1` 手動 fallback，不可預設發布。
+- Google Sheet / Streamlit / 本機 workbook 都不可當正式公開來源。
+- 每日排程 `Fuman Scorecard Snapshot 1538` 應跑 `run-scorecard-snapshot.ps1`，由 Supabase 上游表匯出後發布 `scorecard_latest`。
+- `npm run verify:scorecard-chain` 必須通過；若失敗在 `scorecard-upstream-supabase-source` 或 `scorecard-source-freshness`，代表來源導管沒接好，不可用 redeploy 或 version bump 掩蓋。
+- Supabase schema 合約在 `ops/public-slot/ScorecardSourceContract.sql`；至少要有 `trade_records`、`strategy_daily_summary`、`v_scorecard_source_health`。
+
 終端架構：
 
 ```text
@@ -72,6 +100,29 @@ fixed shell + Canvas / OffscreenCanvas + compact API + route snapshot
 ## 市場總覽 / 熱力圖
 
 市場總覽是正式桌面終端主畫面，不是泛用策略頁，也不是純表格頁。
+
+### 導管驗證
+
+市場總覽、熱力圖、AI 判讀、即時雷達、自選股必須一起驗，不可只看其中一個 API。
+
+固定 gate：
+
+```text
+npm run verify:market-surfaces-chain
+```
+
+這支必須檢查：
+
+- 市場總覽 `/api/market`
+- 熱力圖 `/api/heatmap`
+- AI 判讀 `/api/market-ai-live`
+- 即時雷達 `/api/realtime-radar-latest`
+- 自選股 `/api/watchlist-match-index`
+- 桌面 UI E2E 市場總覽 / 即時雷達
+- 手機 UI E2E AI / 自選股
+- `terminal-market-overview-restore.js` 內的市場總覽、熱力圖 tabs、AI panel、即時雷達入口 contract
+
+若 `verify:market-surfaces-chain` 失敗，不可用 redeploy、version bump、static JSON 或 service worker cache 掩蓋。
 
 ### 固定顯示
 

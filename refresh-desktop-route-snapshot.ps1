@@ -1,7 +1,9 @@
 param(
   [string]$Source = "scanner",
   [string]$LogPath = "",
-  [switch]$AllowFailure
+  [switch]$AllowFailure,
+  [switch]$SkipVerify,
+  [int]$VerifyMaxAgeSeconds = 600
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +53,36 @@ if ($exitCode -ne 0) {
   if (-not $AllowFailure) { exit $exitCode }
 } else {
   Write-SnapshotLog "Desktop route snapshot refresh ok source=$safeSource"
+  if (-not $SkipVerify) {
+    $verifyScript = Join-Path $PSScriptRoot "scripts\verify-post-scan-snapshot-refresh-contract.js"
+    if (-not (Test-Path -LiteralPath $verifyScript)) {
+      Write-SnapshotLog "Post-scan snapshot refresh contract verifier missing source=$safeSource"
+      if (-not $AllowFailure) { exit 90 }
+    } else {
+      $maxAgeMs = [Math]::Max(0, $VerifyMaxAgeSeconds * 1000)
+      Write-SnapshotLog "Post-scan snapshot refresh contract verify start source=$safeSource"
+      Push-Location $PSScriptRoot
+      try {
+        & $nodeExe "scripts\verify-post-scan-snapshot-refresh-contract.js" "--max-age-ms=$maxAgeMs" 2>&1 | ForEach-Object {
+          $text = [string]$_
+          if ($LogPath) {
+            Add-Content -LiteralPath $LogPath -Value $text -Encoding utf8
+          } else {
+            Write-Host $text
+          }
+        }
+        $verifyExitCode = $LASTEXITCODE
+      } finally {
+        Pop-Location
+      }
+      if ($verifyExitCode -ne 0) {
+        Write-SnapshotLog "Post-scan snapshot refresh contract failed source=$safeSource exit=$verifyExitCode"
+        if (-not $AllowFailure) { exit $verifyExitCode }
+      } else {
+        Write-SnapshotLog "Post-scan snapshot refresh contract ok source=$safeSource"
+      }
+    }
+  }
 }
 
 exit 0

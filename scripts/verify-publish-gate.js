@@ -147,8 +147,23 @@ if (!packageJson.scripts?.["scorecard:sync"] || !/run-scorecard-snapshot\.ps1/.t
 if (!packageJson.scripts?.["scorecard:publish"] || !/publish-scorecard-snapshot\.js/.test(packageJson.scripts["scorecard:publish"])) {
   issues.push("package.json missing scripts.scorecard:publish");
 }
+if (!packageJson.scripts?.["scorecard:export-source"] || !/export-scorecard-supabase-source\.js/.test(packageJson.scripts["scorecard:export-source"])) {
+  issues.push("package.json missing scripts.scorecard:export-source Supabase source exporter");
+}
+if (!packageJson.scripts?.["scorecard:source:ops"] || !/scorecard-source-supabase-ops\.js/.test(packageJson.scripts["scorecard:source:ops"])) {
+  issues.push("package.json missing scripts.scorecard:source:ops for scorecard Supabase source apply/backfill/probe");
+}
 if (!packageJson.scripts?.["verify:scorecard"] || !/verify-scorecard-snapshot\.js/.test(packageJson.scripts["verify:scorecard"])) {
   issues.push("package.json missing scripts.verify:scorecard");
+}
+if (!packageJson.scripts?.["verify:scorecard-chain"] || !/verify-scorecard-resource-chain\.js/.test(packageJson.scripts["verify:scorecard-chain"])) {
+  issues.push("package.json missing scripts.verify:scorecard-chain");
+}
+if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-surfaces-chain\.js/.test(packageJson.scripts["verify:market-surfaces-chain"])) {
+  issues.push("package.json missing scripts.verify:market-surfaces-chain for market overview/heatmap/AI/realtime/watchlist");
+}
+if (!packageJson.scripts?.["verify:post-scan-snapshot-refresh"] || !/verify-post-scan-snapshot-refresh-contract\.js/.test(packageJson.scripts["verify:post-scan-snapshot-refresh"])) {
+  issues.push("package.json missing scripts.verify:post-scan-snapshot-refresh for scan-complete immediate-display contract");
 }
 for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {
   if (!packageJson.scripts?.[scriptName]) {
@@ -873,9 +888,15 @@ for (const file of [
   "scripts/verify-desktop-api-only.js",
   "scripts/verify-production-guard.js",
   "scripts/verify-scorecard-snapshot.js",
+  "scripts/verify-scorecard-resource-chain.js",
+  "scripts/verify-market-surfaces-chain.js",
+  "scripts/export-scorecard-supabase-source.js",
+  "scripts/scorecard-source-supabase-ops.js",
   "scripts/export-scorecard-snapshot.py",
   "scripts/publish-scorecard-snapshot.js",
+  "scripts/verify-post-scan-snapshot-refresh-contract.js",
   "refresh-desktop-route-snapshot.ps1",
+  "run-post-scan-snapshot-refresh-verify.ps1",
   "run-scorecard-snapshot.ps1",
   "run-open-buy.ps1",
   "run-strategy3.ps1",
@@ -891,6 +912,7 @@ for (const file of [
   "scripts/scan-star-preopen.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
+  "ops/public-slot/ScorecardSourceContract.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
@@ -973,6 +995,18 @@ for (const marker of [
 ]) {
   const terminalResourceChain = read("scripts/verify-terminal-resource-chain.js");
   if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
+}
+const marketSurfacesChain = read("scripts/verify-market-surfaces-chain.js");
+for (const marker of [
+  "/api/market",
+  "/api/heatmap",
+  "/api/market-ai-live",
+  "/api/realtime-radar-latest",
+  "/api/watchlist-match-index",
+  "terminal-ui-e2e-report.json",
+  "data-market-heatmap-mode",
+]) {
+  if (!marketSurfacesChain.includes(marker)) issues.push(`verify-market-surfaces-chain.js missing market surface marker ${marker}`);
 }
 for (const marker of [
   "fugle_quotes_latest",
@@ -1226,6 +1260,8 @@ if (fetchResult.status !== 0) {
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-production-guard.js",
       "scripts/verify-scorecard-snapshot.js",
+      "scripts/verify-scorecard-resource-chain.js",
+      "scripts/export-scorecard-supabase-source.js",
       "scripts/export-scorecard-snapshot.py",
       "scripts/publish-scorecard-snapshot.js",
       "scripts/publish-mobile-update-event.js",
@@ -1289,6 +1325,7 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
       "ops/public-slot/Strategy2ReadinessContractCache.sql",
       "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
+      "ops/public-slot/ScorecardSourceContract.sql",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)
