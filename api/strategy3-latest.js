@@ -154,7 +154,6 @@ function buildSnapshotPayload(snapshot, options = {}) {
   const sourcePayload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
   if (!sourcePayload) return null;
   const rows = normalizeSnapshotRows(sourcePayload);
-  if (!rows.length) return null;
   const matches = rows
     .slice(0, options.limit || rows.length)
     .map((row, index) => normalizePayload({ ...row, rank: row.rank || index + 1, payload: row }));
@@ -260,7 +259,7 @@ module.exports = async function handler(request, response) {
       return;
     }
     const latest = await fetchLatestCompleteRows(options.limit);
-    if (!latest.rows.length) {
+    if (!latest.rows.length && !latest.run?.run_id) {
       response.status(404).json(apiOnlyError("strategy3_scan_results_latest_empty"));
       return;
     }

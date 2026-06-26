@@ -310,12 +310,13 @@ async function upsertStrategy3ResultsToSupabase(output) {
   const runId = strategy3RunIdFromOutput(output);
   const runningOutput = { ...output, count: 0 };
   const rows = buildSupabaseScanRows(output, runId);
-  if (!rows.length) return false;
   let lastMessage = "";
   for (let attempt = 1; attempt <= SUPABASE_RESULTS_ATTEMPTS; attempt += 1) {
     try {
       await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(runningOutput, runId, "running")], "run_id");
-      await upsertSupabaseRows(SUPABASE_RESULTS_TABLE, rows, "run_id,strategy,code");
+      if (rows.length) {
+        await upsertSupabaseRows(SUPABASE_RESULTS_TABLE, rows, "run_id,strategy,code");
+      }
       await upsertSupabaseRows(SUPABASE_RUNS_TABLE, [buildSupabaseRunRow(output, runId, "complete")], "run_id");
       console.log(`strategy3 supabase upsert ok: ${rows.length} rows into ${SUPABASE_RESULTS_TABLE}, run ${runId}`);
       output.runId = runId;
@@ -1003,17 +1004,9 @@ async function main() {
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   if (!matches.length) {
-    const previousUsable = (previousRaw.matches || []).length && previousRaw.source !== "github-actions-backup-readonly";
-    const fallback = previousUsable ? previousRaw : backup;
-    if ((fallback.matches || []).length) {
-      fs.writeFileSync(OUT_FILE, `${JSON.stringify({
-        ...fallback,
-        source: fallback.source === "github-actions-backup-readonly" ? "github-actions-backup" : fallback.source,
-        preservedAt: new Date().toISOString(),
-        preservedReason: "strategy3 current scan produced zero matches",
-      }, null, 2)}\n`);
-    }
-    throw new Error("Strategy3 scan produced zero matches; preserved previous valid output and refused to publish an empty result");
+    output.noMatchReason = "source ready; TradingView overnight-entry filter produced zero matches";
+    output.matches = [];
+    output.rows = [];
   }
   const runId = await upsertStrategy3ResultsToSupabase(output);
   if (runId) {
