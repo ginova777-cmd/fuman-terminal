@@ -23,6 +23,9 @@ $env:FULL_SCAN = "1"
 $env:OPEN_BUY_BATCH_SIZE = "64"
 $env:OPEN_BUY_BATCHES_PER_RUN = "999"
 $env:OPEN_BUY_USE_MIS = "0"
+$script:OpenBuyVerifiedRunId = ""
+$script:OpenBuyVerifiedCount = 0
+$script:OpenBuyReceiptWarnings = @()
 
 function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
   $receipt = [ordered]@{
@@ -62,15 +65,36 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
+$scanRunId = ""
+$scanMatches = 0
+$runLine = Select-String -LiteralPath $log -Pattern "open-buy supabase run_id gate ok:\s*([^,]+),\s*matches\s+(\d+)" | Select-Object -Last 1
+if ($runLine -and $runLine.Matches.Count -gt 0) {
+  $scanRunId = [string]$runLine.Matches[0].Groups[1].Value
+  $scanMatches = [int]$runLine.Matches[0].Groups[2].Value
+}
+
 $verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 "Open buy API-only scan complete; verifying terminal compact complete-run API $verifyUrl" >> $log
 try {
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing
   $payload = $response.Content | ConvertFrom-Json
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or $payload.complete -ne $true -or -not $payload.runId) {
-    throw "open-buy API verification failed status=$($response.StatusCode) ok=$($payload.ok) complete=$($payload.complete) runId=$($payload.runId)"
+    $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and [string]$payload.error -eq "strategy1_decision_not_ready" -and -not [string]::IsNullOrWhiteSpace($scanRunId)
+    if (-not $isControlledWaiting) {
+      throw "open-buy API verification failed status=$($response.StatusCode) ok=$($payload.ok) complete=$($payload.complete) runId=$($payload.runId)"
+    }
+    $script:OpenBuyVerifiedRunId = $scanRunId
+    $script:OpenBuyVerifiedCount = $scanMatches
+    $pendingDetail = [string]$payload.detail
+    if ([string]::IsNullOrWhiteSpace($pendingDetail)) { $pendingDetail = [string]$payload.reason }
+    if ([string]::IsNullOrWhiteSpace($pendingDetail)) { $pendingDetail = [string]$payload.error }
+    $script:OpenBuyReceiptWarnings = @("decision pending: $pendingDetail")
+    "Open buy compact API is in controlled waiting state; scanner readback runId=$scanRunId count=$scanMatches decisionReady=$($payload.decisionReady) detail=$($payload.detail)" >> $log
+  } else {
+    $script:OpenBuyVerifiedRunId = [string]$payload.runId
+    $script:OpenBuyVerifiedCount = [int]$payload.count
+    "Open buy terminal compact API verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate) decisionReady=$($payload.decisionReady)" >> $log
   }
-  "Open buy terminal compact API verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate) decisionReady=$($payload.decisionReady)" >> $log
 } catch {
   "Open buy API-only verification failed: $($_.Exception.Message)" >> $log
   Write-OpenBuyReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
@@ -88,6 +112,5 @@ if (Test-Path -LiteralPath $snapshotScript) {
   "Open buy desktop snapshot refresh skipped; helper not found." >> $log
 }
 
-Write-OpenBuyReceipt "complete" 0 $true ([int]$payload.count) ([string]$payload.runId)
+Write-OpenBuyReceipt "complete" 0 $true $script:OpenBuyVerifiedCount $script:OpenBuyVerifiedRunId $script:OpenBuyReceiptWarnings
 "=== Open buy full scan end $(Get-Date) ===" >> $log
-
