@@ -216,6 +216,335 @@ AI 判讀不可只顯示純文字，不可沒有圖表 / 儀表板。
 - 可做 pointerdown prewarm。
 - 可做 memory cache，但必須保留 live intent。
 
+## Strategy1 戰鬥契約
+
+策略1是「明日開盤入 / open-buy」API-only / Supabase complete-run 策略。  
+2026-06-26 校正後，以下規則是正式口徑。
+
+### 權威資料來源
+
+Strategy1 正式來源只認：
+
+- Supabase `strategy1_open_buy_runs`
+- Supabase `strategy1_open_buy_results`
+- Supabase `strategy1_open_buy_audit`
+- Supabase `v_strategy1_ready_status`
+- Supabase `strategy1_futopt_preopen_live_snapshot`
+- Supabase `v_strategy1_futopt_preopen_join_terminal`
+- Supabase `v_strategy1_preopen_features`
+- Supabase `v_strategy1_preopen_history_coverage`
+- `/api/open-buy-latest`
+
+不可用 static JSON、暫存檔、舊 snapshot 或人工結果當正式權威。
+
+### 三段式時間窗
+
+Strategy1 分成三個正式階段：
+
+```text
+21:30  chip candidate / open-buy candidate
+08:45  futopt preopen observe
+08:55  final flame gate
+```
+
+21:30 是候選，不是買進訊號。  
+08:45 是個股期貨與試搓觀察，不是買進訊號。  
+08:55 才是最終火焰 gate。
+
+### 顯示與 Publish 規則
+
+- 21:30 candidate card 只顯示候選，不可顯示火焰。
+- 08:45 observe card 只顯示期貨強 / 試搓強觀察，不等於 BUY。
+- 08:55 final flame gate 全過，且 result decision 是 BUY，才可顯示火焰。
+- 主清單 `main_matches` 只顯示 `decision=BUY`。
+- `WATCH` / `BLOCK` 不進主清單，只留在 Supabase results / audit / debug。
+- Strategy1 不可因 preopen / futopt 還沒 ready 就清空 latest complete run。
+- 非時間窗或 controlled not_ready 時，terminal 必須顯示 reason，不可誤判 source missing。
+
+### 21:30 Candidate Gate
+
+21:30 候選階段需要：
+
+- `daily_ready = true`
+- `chip_ready = true`
+- `strategy1_open_buy_runs` 有 latest complete run
+- `strategy1_open_buy_results` 有候選結果
+- `strategy1_open_buy_results` 必須可用 `run_id` / `trade_date` / `symbol` 或 `code` 查回
+
+21:30 階段允許顯示：
+
+```text
+候選卡
+BUY/WATCH/BLOCK 統計
+籌碼佳 / 日線佳 reason
+```
+
+21:30 階段禁止：
+
+```text
+顯示火焰
+提示可盤前掛漲停
+把候選直接當 08:55 BUY
+```
+
+### 08:45 Futopt / Preopen Observe Gate
+
+08:45 觀察階段需要：
+
+- `strategy1_futopt_preopen_live_snapshot` 有當日資料
+- `v_strategy1_futopt_preopen_join_terminal` 有當日 join rows
+- `futopt_quotes_live` 必須有可被 terminal 使用的 `symbol` 或 `source_symbol`
+- `v_futopt_stock_mapping_ready` 必須能把個股期貨對回股票代號
+- `v_strategy1_ready_status.futopt_ready` 要能明確回 true / false
+
+08:45 階段允許：
+
+```text
+顯示期貨強觀察
+顯示試搓強觀察
+顯示 futopt/preopen source health
+```
+
+08:45 階段禁止：
+
+```text
+顯示火焰
+發布 final BUY
+用空結果覆蓋 latest complete run
+```
+
+### 08:55 Final Flame Gate
+
+08:55 火焰 gate 需要同時成立：
+
+- `preopen_ready = true`
+- `futopt_ready = true`
+- `decision_ready = true`
+- `flame_gate_open = true`
+- result `decision = BUY`
+- setup type 是 A 級 / open-buy 正式型態
+
+只有 08:55 final flame gate 全過的標的，股票名稱旁才可顯示火焰。
+
+若以下任一條件不成立：
+
+- `preopen_ready = false`
+- `futopt_ready = false`
+- `decision_ready = false`
+- `flame_gate_open = false`
+
+則狀態是 controlled not_ready，terminal 必須保留 latest complete run 並顯示 `flame_reason`。
+
+### Ready Status Contract
+
+`v_strategy1_ready_status` 必須提供以下欄位：
+
+```text
+strategy
+local_date
+local_time
+current_phase
+trade_date
+daily_ready
+chip_ready
+preopen_ready
+futopt_ready
+decision_ready
+flame_gate_open
+flame_reason
+updated_at
+```
+
+語意：
+
+- `daily_ready`：日線 / 基礎資料 ready。
+- `chip_ready`：籌碼資料 ready。
+- `preopen_ready`：當次盤前試搓資料 ready。
+- `futopt_ready`：當次 08:45 個股期貨觀察資料 ready。
+- `decision_ready`：可做最終 BUY 判斷。
+- `flame_gate_open`：允許 terminal 顯示火焰。
+- `flame_reason`：not_ready 時必須可讀，不可空白。
+
+### Terminal Key Contract
+
+所有 Strategy1 terminal / scanner / API 使用的資料列，至少要看得到：
+
+```text
+run_id
+trade_date 或 scan_date
+symbol 或 code
+name
+decision
+score
+reason
+setup_type
+block_reason
+updated_at
+payload
+```
+
+若底層 source 只有 `code` 沒有 `symbol`，Supabase view 必須補出 `symbol`。  
+若底層 source 只有 `symbol` 沒有 `code`，Supabase view 必須補出 `code`。  
+terminal 不可因欄位命名差異而讀不到標的。
+
+### Source Visibility / Coverage Gate
+
+Strategy1 每次檢查都要分三件事：
+
+```text
+1. 資料存在嗎？
+2. health view 算得對嗎？
+3. terminal scanner key 看得到嗎？
+```
+
+source connected 不等於 final gate open。  
+若資料存在但時間窗未開，狀態應該是 controlled not_ready。  
+若資料不存在或欄位缺失，狀態才是 source missing / failed。
+
+### API Contract
+
+正式 API：
+
+```text
+/api/open-buy-latest
+```
+
+terminal compact path 必須支援：
+
+```text
+/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=N&live=1
+```
+
+API 必須讀 Supabase runs/results 與 `v_strategy1_ready_status`。  
+API 不可使用 retired static JSON fallback 當正式資料。  
+compact / snapshot path 在 `decision_ready=false` 時，可以顯示 latest complete candidate，但必須標明 decision pending / not_ready reason。
+
+### Self-Test Gate
+
+Strategy1 daily verify 必須確認：
+
+- `/api/open-buy-latest` 可讀
+- latest complete run 可讀
+- result rows 可讀
+- `decision=BUY` 主清單可讀
+- `WATCH` / `BLOCK` 留在 audit/debug，不混入主清單
+- `v_strategy1_ready_status` 有完整 ready flags
+- 21:30 / 08:45 / 08:55 phase status 都能回 reason
+- terminal key `run_id` / `trade_date` / `symbol` 或 `code` 可讀
+
+失敗時不可覆蓋 latest complete run。
+
+### 排程原則
+
+Strategy1 每日節奏：
+
+```text
+21:30 產生 open-buy candidate / 籌碼佳候選
+08:45 刷新 futopt preopen observe source
+08:55 執行 final flame gate / decision readiness check
+```
+
+Strategy1 battle verify 排程：
+
+```text
+21:35 verify candidate
+08:50 verify futopt / preopen observe
+08:52 verify flame gate
+```
+
+08:55 前不可顯示火焰。  
+08:55 後若 final gate 未開，也不可顯示火焰。  
+只有 final gate 全過標的才可顯示火焰。
+
+### 失敗處理規則
+
+遇到以下任何狀況，Strategy1 不可發布壞資料：
+
+- source table / view 缺欄位
+- `v_strategy1_ready_status` 缺 ready flag
+- `flame_reason` 空白
+- latest complete run 不可讀
+- result rows 不可讀
+- terminal key 看不到 `symbol` / `code`
+- 08:55 final gate 未開
+
+正確行為：
+
+```text
+preserve latest complete run
+surface reason
+show warning
+do not publish bad data
+do not show flame
+```
+
+## Strategy3 戰鬥契約
+
+策略3是隔日沖 API-only / Supabase complete-run 策略。2026-06-26 校正後，以下規則是正式口徑。
+
+### 顯示與 Publish 規則
+
+- 候選清單固定顯示 field gate 後的 12 檔。
+- TradingView / TV 條件只負責加火焰，不可把候選清單砍成 0 檔。
+- complete run 不可因 tvPassCount=0 而寫 0 筆；tvPassCount 可以是 0，但 count 必須維持 12。
+- 若 fieldGateReadyCount < 12，scanner 必須 failed/block，不可覆蓋 latest complete run。
+- API 最新來源是 `/api/strategy3-latest` 與 Supabase `strategy3_scan_runs` / `strategy3_scan_results`，不使用 static JSON 作為權威。
+
+### Field Gate 硬門檻
+
+- 漲幅 3% 到 5%。
+- 量比 > 1，量比不足時以 `stock_daily_volume` 補 `avgVolume` 後計算。
+- 外盤 > 內盤。
+- 成交張數保留為欄位與評分資訊，不使用「內外盤累計 < 3000 張」作為硬剔除。
+- 已移除「貼近近 100 根收盤高點」硬剔除；`nearHigh` 只作為診斷欄位。
+
+### TV Close-Price Proxy
+
+- 控盤線與 OBV 以 close-price proxy 為正式口徑，避免 Supabase 1m high/low 大量退化造成誤判。
+- TV pass 條件：`controlOk=true` 且 `obvOk=true`，`nearHigh` 不作硬門檻，除非 `STRATEGY3_REQUIRE_NEAR_100_HIGH=1`。
+- 每檔 result payload 必須保留 `tvBreakdown`：`controlOk / obvOk / nearHigh / nearHighOk / candleRows / candleSource / degenerateRatio / after1300Rows / formulaVersion / controlSource`。
+
+### Source Drift Gate
+
+每次 scanner publish 前必須檢查：
+
+- `v_strategy3_quote_ready` count >= 1000
+- `strategy3_ready_snapshot` count >= 1000
+- `fugle_quotes_latest` count >= 1000
+- `stock_daily_volume` count >= 1000 且 latestDate 存在
+
+任一來源 failed 時，scanner 不可硬跑，不可覆蓋 latest complete run。
+
+### Self-Test Gate
+
+scanner 必須有兩段 self-test：
+
+- pre-publish `selfTest`：`fieldGateReadyCount=12`、`tvPassCount` 欄位存在、每檔有 `tvOvernightEntry` breakdown、`sourceDriftHealth=ready`。
+- published `publishedSelfTest`：寫入 Supabase 後讀回 `count=12`、`missingBreakdown=0`、`tvPassCount` 可讀。
+
+驗證指令：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+node scripts\verify-strategy3-battle-state.js
+```
+
+成功條件：`ok=true`、API `count=12`、`fieldGateReadyCount=12`、`tvBreakdownRows=12`、`publishedSelfTest.ok=true`、`sourceDriftHealth.status=ready`。
+
+### 排程
+
+正式 Strategy3 建議三段：
+
+- 13:00 complete scan；掃描腳本會先 refresh ready snapshot，再跑 resource health gate / self-test，通過才 publish。
+- 13:05 battle verify / watchdog；必須在 13:30 收盤前完成，避免事後才發現壞 run。
+
+安裝腳本：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+.\install-strategy3-battle-tasks.ps1
+```
+
 ## 正式發布 / 上傳硬規則
 
 以下是所有 Codex 都必須遵守的上傳規則。缺一項就不要發布。
