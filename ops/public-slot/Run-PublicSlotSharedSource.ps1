@@ -2041,6 +2041,12 @@ do {
       Write-Log "WARN strategy2 ready cache refresh skipped: $($_.Exception.Message)"
     }
     try {
+      $strategy2PreopenGate = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_preopen_hot_gate_cache" -Body @{}
+      Write-Log "strategy2 preopen hot gate cache refreshed $strategy2PreopenGate"
+    } catch {
+      Write-Log "WARN strategy2 preopen hot gate cache refresh skipped: $($_.Exception.Message)"
+    }
+    try {
       $strategy2Readiness = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_readiness_cache" -Body @{}
       Write-Log "strategy2 readiness cache refreshed $strategy2Readiness"
     } catch {

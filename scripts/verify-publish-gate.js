@@ -316,7 +316,10 @@ const scorecardApi = read("api/scorecard.js");
 const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
-const strategy2ReadinessSql = read("ops/public-slot/Strategy2ReadinessContractCache.sql");
+const strategy2ReadinessSql = [
+  read("ops/public-slot/Strategy2ReadinessContractCache.sql"),
+  read("ops/public-slot/Strategy2Readiness100SourcePatch.sql"),
+].join("\n");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -389,7 +392,7 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
   if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
 }
-for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed"]) {
+for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
 }
 for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
@@ -398,7 +401,7 @@ for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10",
 for (const marker of ["Fuman Strategy2 Readiness Source 0750", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
   if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
 }
-for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35"]) {
+for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
 }
 for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest", "market_closed"]) {
@@ -1249,6 +1252,7 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
       "ops/public-slot/Strategy2ReadinessContractCache.sql",
+      "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
     ]);
     const dirty = status.stdout
       .split(/\r?\n/)

@@ -135,6 +135,7 @@ const FILES = [
   "scripts/publish-scorecard-snapshot.js",
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
+  "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
   "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
