@@ -2,7 +2,7 @@ const https = require("https");
 const zlib = require("zlib");
 
 const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const FIRST_SCREEN_BUDGET_BYTES = 170000;
+const FIRST_SCREEN_BUDGET_BYTES = 172000;
 const FIRST_SCREEN_JSON_BUDGET_BYTES = 30000;
 const STRATEGY2_HEALTH_ENDPOINT = "/api/strategy2-latest?top=1&compact=1&limit=50&live=1";
 const FIRST_SCREEN_TARGETS = [

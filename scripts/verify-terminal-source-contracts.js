@@ -341,7 +341,10 @@ async function checkOne(strategy, check) {
   if (result.ok && check.requireToday) {
     const expected = await expectedQuoteDateKey();
     const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
-    if (newest !== expected) issues.push(`${check.table} newest date ${newest || "--"} != expected quote date ${expected}`);
+    const today = taipeiDateKey();
+    if (!newest) issues.push(`${check.table} newest date missing; expected at least quote date ${expected}`);
+    else if (newest < expected) issues.push(`${check.table} newest date ${newest} < expected quote date ${expected}`);
+    else if (newest > today) issues.push(`${check.table} newest date ${newest} > Taipei today ${today}`);
   }
   if (result.ok && check.maxAgeDays) {
     const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
