@@ -72,7 +72,12 @@ function Assert-OpenBuyApiPreserve {
 
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy1" -LogPath $log
-if ($resourceGate.PreserveLatest) {
+$candidateScanAllowedByPhase = $false
+if ($resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "(?i)preopen|futopt|flame|decision|time window") {
+  $candidateScanAllowedByPhase = $true
+  "Open buy source gate is controlled not_ready for final/preopen phase; 21:30 candidate scan may continue. status=$($resourceGate.Status) reason=$($resourceGate.Reason)" >> $log
+}
+if ($resourceGate.PreserveLatest -and -not $candidateScanAllowedByPhase) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   "Open buy source gate blocked new publish; preserving latest complete/waiting display. $reason" >> $log
   $preservedPayload = Assert-OpenBuyApiPreserve

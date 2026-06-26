@@ -36,12 +36,26 @@ function countRows(payload) {
   return Array.isArray(payload?.records) ? payload.records.length : Number(payload?.summary?.rows || 0);
 }
 
+function rowSource(row = {}) {
+  return String(row.source || row.dataSource || row.data_source || row.source_sheet || "").trim();
+}
+
+function countMissingRecordSources(payload) {
+  return Array.isArray(payload?.records) ? payload.records.filter((row) => !rowSource(row)).length : 0;
+}
+
+function countMissingDailySources(payload) {
+  return Array.isArray(payload?.summary?.daily) ? payload.summary.daily.filter((row) => !rowSource(row)).length : 0;
+}
+
 function summarizePayload(payload, source) {
   return {
     ok: Boolean(payload && payload.ok !== false),
     latestDate: payload?.latestDate || payload?.summary?.latestDate || "",
     rows: countRows(payload),
     cacheSource: payload?.cacheSource || source,
+    missingRecordSources: countMissingRecordSources(payload),
+    missingDailySources: countMissingDailySources(payload),
   };
 }
 
@@ -58,6 +72,8 @@ async function main() {
   if (!snapshotSummary.ok) issues.push("scorecard snapshot ok=false or missing");
   if (!snapshotSummary.latestDate) issues.push("scorecard snapshot latestDate missing");
   if (snapshotSummary.rows <= 0) issues.push(`scorecard snapshot rows invalid: ${snapshotSummary.rows}`);
+  if (snapshotSummary.missingRecordSources > 0) issues.push(`scorecard snapshot records missing source fields: ${snapshotSummary.missingRecordSources}`);
+  if (snapshotSummary.missingDailySources > 0) issues.push(`scorecard snapshot daily rows missing source fields: ${snapshotSummary.missingDailySources}`);
 
   let liveSummary = null;
   if (CHECK_LIVE) {
@@ -69,6 +85,8 @@ async function main() {
     if (live.status < 200 || live.status >= 300) issues.push(`live /api/scorecard HTTP ${live.status}`);
     if (!liveSummary.ok) issues.push("live /api/scorecard ok=false");
     if (liveSummary.rows <= 0) issues.push(`live /api/scorecard rows invalid: ${liveSummary.rows}`);
+    if (liveSummary.missingRecordSources > 0) issues.push(`live /api/scorecard records missing source fields: ${liveSummary.missingRecordSources}`);
+    if (liveSummary.missingDailySources > 0) issues.push(`live /api/scorecard daily rows missing source fields: ${liveSummary.missingDailySources}`);
   }
 
   const report = {

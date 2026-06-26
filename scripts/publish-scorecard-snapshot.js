@@ -8,8 +8,48 @@ const SNAPSHOT_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--
   || process.env.FUMAN_SCORECARD_SNAPSHOT_FILE
   || path.join(ROOT, "data", "scorecard-latest.json"));
 
+function cleanText(value) {
+  return String(value ?? "").trim();
+}
+
+function rowSource(row = {}, fallback = "") {
+  return cleanText(row.dataSource || row.data_source || row.source || row.source_sheet || fallback);
+}
+
+function normalizeRecord(row = {}, fallback = "scorecard") {
+  const source = rowSource(row, fallback);
+  return {
+    ...row,
+    source,
+    dataSource: source,
+    source_sheet: cleanText(row.source_sheet || source),
+  };
+}
+
+function normalizePayload(payload) {
+  const source = cleanText(payload.source || "supabase:scorecard_snapshot");
+  const records = Array.isArray(payload.records)
+    ? payload.records.map((row) => normalizeRecord(row, payload.exportSource || source))
+    : [];
+  const summary = payload.summary && typeof payload.summary === "object" ? { ...payload.summary } : {};
+  if (Array.isArray(summary.daily)) {
+    summary.daily = summary.daily.map((row) => normalizeRecord(row, "回測摘要"));
+  }
+  return {
+    ...payload,
+    source,
+    records,
+    summary,
+    sourceFields: {
+      source,
+      cacheSource: cleanText(payload.cacheSource || "supabase-snapshot"),
+      exportSource: cleanText(payload.exportSource || source),
+    },
+  };
+}
+
 function readPayload() {
-  const payload = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
+  const payload = normalizePayload(JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8")));
   if (!payload || payload.ok === false || !Array.isArray(payload.records)) {
     throw new Error(`invalid scorecard snapshot payload: ${SNAPSHOT_FILE}`);
   }
