@@ -201,7 +201,6 @@ const STRATEGY1_MARKER_FILES = [
   "api/terminal-home.js",
   "api/mobile-fragment.js",
   "scripts/generate-slim-cache.js",
-  "run-open-buy-preopen.ps1",
   "run-open-buy.ps1",
   "run-open-buy-sync-retry.ps1",
   "terminal-app.js",
