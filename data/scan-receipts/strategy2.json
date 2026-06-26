@@ -2,8 +2,8 @@
   "strategy": "strategy2",
   "label": "strategy2 intraday raw refresh",
   "tier": "optional",
-  "startedAt": "2026-06-26T15:45:48.2178325+08:00",
-  "finishedAt": "2026-06-26T15:45:48.3335416+08:00",
+  "startedAt": "2026-06-26T20:10:04.9302961+08:00",
+  "finishedAt": "2026-06-26T20:10:05.0469419+08:00",
   "status": "complete",
   "exitCode": 0,
   "scanned": 0,
@@ -16,5 +16,5 @@
   "payloadPath": "C:\\fuman-runtime\\data\\strategy2-intraday-latest.json",
   "warnings": [],
   "blockingReason": "",
-  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-154546.log"
+  "log": "C:\\fuman-runtime\\logs\\full-scan-20260626-201003.log"
 }
