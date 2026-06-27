@@ -78,6 +78,15 @@ assertNoRegex("terminal-hotfix.js", /__fumanDesktopFastShell\s*[!=]==?\s*["']20\
 assertNoRegex("terminal-desktop-fast-shell.js", /__fumanDesktopFastShell\s*[!=]==?\s*["']20260623-09["']/g, "retired 20260623-09 ownership check");
 
 for (const marker of [
+  "installMarketDesktopModeHandlers",
+  "fumanFastMarketModeReady",
+  "selectMarketDesktopMode",
+  "scheduleMarketDesktopModeHydrate",
+]) {
+  if (!fastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing market mode ownership marker: ${marker}`);
+}
+
+for (const marker of [
   "if (window.__fumanDesktopFastShell) return;",
   "if (!window.__fumanDesktopFastShell) return false;",
   "Boolean(window.__fumanDesktopFastShell)",

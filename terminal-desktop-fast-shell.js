@@ -3416,6 +3416,7 @@
       ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
       tabs.insertAdjacentElement("afterend", ai);
     }
+    installMarketDesktopModeHandlers(tabs);
     market.classList.toggle("market-overview-mode", marketDesktopMode !== "ai");
     market.classList.toggle("market-ai-mode", marketDesktopMode === "ai");
     tabs.querySelectorAll("[data-market-mode]").forEach((button) => {
@@ -3430,6 +3431,44 @@
   function applyMarketDesktopMode(mode) {
     marketDesktopMode = mode === "ai" ? "ai" : "overview";
     ensureMarketDesktopShell();
+  }
+
+  function scheduleMarketDesktopModeHydrate(mode, force = false) {
+    if (mode !== "ai") return;
+    window.clearTimeout(window.__fumanMarketAiHydrateTimer || 0);
+    const delay = isInteractionHoldActive() ? interactionHoldRemaining() + 120 : 80;
+    window.__fumanMarketAiHydrateTimer = window.setTimeout(() => {
+      if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+      marketApiOnlyLoading = false;
+      refreshMarketApiOnly(force);
+    }, Math.max(80, delay));
+  }
+
+  function selectMarketDesktopMode(mode, source = "market-mode") {
+    const nextMode = mode === "ai" ? "ai" : "overview";
+    applyMarketDesktopMode(nextMode);
+    document.documentElement.dataset.fumanMarketDesktopMode = nextMode;
+    document.documentElement.dataset.fumanMarketDesktopModeSource = source;
+    scheduleMarketDesktopModeHydrate(nextMode, true);
+  }
+
+  function installMarketDesktopModeHandlers(tabs) {
+    if (!tabs || tabs.dataset.fumanFastMarketModeReady === "1") return;
+    tabs.dataset.fumanFastMarketModeReady = "1";
+    const choose = (event, source) => {
+      const button = event.target.closest?.("[data-market-mode]");
+      if (!button || !tabs.contains(button)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      selectMarketDesktopMode(button.dataset.marketMode, source);
+    };
+    tabs.addEventListener("pointerdown", (event) => choose(event, "tabs-pointerdown"), true);
+    tabs.addEventListener("click", (event) => choose(event, "tabs-click"), true);
+    tabs.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      choose(event, "tabs-keydown");
+    }, true);
   }
 
   function restoreMarketDesktopMode() {
@@ -4034,8 +4073,7 @@
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation();
-          applyMarketDesktopMode(mode.dataset.marketMode);
-          if (mode.dataset.marketMode === "ai") run(false);
+          selectMarketDesktopMode(mode.dataset.marketMode, "document-click");
           return;
         }
         const close = event.target.closest?.("[data-market-heatmap-close]");
@@ -4056,8 +4094,7 @@
         const mode = event.target.closest?.("[data-market-mode]");
         if (mode) {
           event.preventDefault();
-          applyMarketDesktopMode(mode.dataset.marketMode);
-          if (mode.dataset.marketMode === "ai") run(false);
+          selectMarketDesktopMode(mode.dataset.marketMode, "document-keydown");
           return;
         }
         const card = event.target.closest?.("[data-market-heatmap-sector]");
