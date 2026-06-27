@@ -80,6 +80,7 @@
     window.__fumanWatchlistAddBridge = "20260627-03";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
+    const maxRows = 10;
     const normalizeCode = (value) => String(value || "").trim().match(/\d{4}/)?.[0] || "";
     const normalizeRows = (rows) => Array.isArray(rows)
       ? rows.map((row) => ({
@@ -95,7 +96,7 @@
       }
     };
     const writeRows = (rows) => {
-      const normalized = normalizeRows(rows).slice(0, 80);
+      const normalized = normalizeRows(rows).slice(0, maxRows);
       const value = JSON.stringify(normalized);
       try {
         window.localStorage?.setItem(watchlistKey, value);
@@ -111,7 +112,7 @@
     };
     const fallbackRender = (rows, activeCode) => {
       const count = document.querySelector("#watchlist-count");
-      if (count) count.textContent = String(rows.length);
+      if (count) count.textContent = `${rows.length}/${maxRows}`;
       const box = document.querySelector("#watchlist-stocks");
       if (!box) return;
       box.innerHTML = rows.map((row) => {
@@ -147,13 +148,21 @@
           const ok = shellAdd(normalized);
           if (ok) {
             lastBridgeAddAt = Date.now();
-            setStatus(`${normalized} 已加入或選中自選股`, "added");
-            return true;
+            setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
+            setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 120);
           }
-        } catch (error) {}
+          return ok;
+        } catch (error) {
+          setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
+          return false;
+        }
       }
       const rows = readRows();
       const existed = rows.some((row) => row.code === normalized);
+      if (!existed && rows.length >= maxRows) {
+        setStatus(`已達 ${maxRows} 檔上限，請先移除一檔再新增。`, "warn");
+        return false;
+      }
       const nextRows = existed
         ? rows
         : [{ code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }, ...rows];
