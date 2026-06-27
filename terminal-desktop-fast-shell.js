@@ -107,6 +107,7 @@
   let originalDesktopMarketRetryTimer = 0;
   let marketApiOnlySignature = "";
   let marketApiOnlyLoading = false;
+  let marketApiOnlyLoadingMode = "";
   let marketDesktopMode = "overview";
   let marketHeatmapSectorRows = [];
   const canvasState = {
@@ -3942,23 +3943,31 @@
   }
 
   function refreshMarketApiOnly(force = false) {
-    if (!isMarketViewActive() || marketApiOnlyLoading) return;
+    if (!isMarketViewActive()) return;
+    const loadMode = marketDesktopMode === "ai" ? "ai" : "overview";
+    if (marketApiOnlyLoading && (marketApiOnlyLoadingMode === loadMode || loadMode !== "ai")) return;
     restoreMarketDesktopMode();
+    const shouldLoadAi = loadMode === "ai";
     marketApiOnlyLoading = true;
+    marketApiOnlyLoadingMode = loadMode;
     const state = { market: null, heatmap: null, radar: null, ai: null };
-    let pending = 4;
+    let pending = shouldLoadAi ? 4 : 2;
     const done = () => {
       pending -= 1;
-      if (pending <= 0) marketApiOnlyLoading = false;
+      if (pending <= 0 && marketApiOnlyLoadingMode === loadMode) {
+        marketApiOnlyLoading = false;
+        marketApiOnlyLoadingMode = "";
+      }
     };
     const signature = () => JSON.stringify({
+      mode: loadMode,
       market: normalizeArray(state.market?.indexes).map((item) => `${item["指數"]}:${item["收盤指數"]}:${item["漲跌"]}:${item["漲跌點數"]}:${item["漲跌百分比"]}`).join("|"),
       futures: `${state.market?.futuresNear?.price || state.market?.futures?.price || ""}:${state.market?.futuresNext?.price || ""}`,
       heatmap: normalizeArray(state.heatmap?.sectors).slice(0, 60).map((item) => `${item.name || item.industry}:${item.pct ?? item.avgPct}:${item.up}:${item.down}:${item.count}`).join("|"),
-      ai: state.ai?.snapshot?.snapshotId || state.ai?.aiDetectWindow?.active || state.ai?.summary?.strategy2Count || "",
-      radar: state.radar?.runId || state.radar?.timestamp || state.radar?.rows?.[0]?.detectedAt || "",
+      ai: shouldLoadAi ? state.ai?.snapshot?.snapshotId || state.ai?.aiDetectWindow?.active || state.ai?.summary?.strategy2Count || "" : "",
+      radar: shouldLoadAi ? state.radar?.runId || state.radar?.timestamp || state.radar?.rows?.[0]?.detectedAt || "" : "",
       heatmapCount: state.heatmap?.sectorCount || normalizeArray(state.heatmap?.sectors).length,
-      radarCount: normalizeArray(state.radar?.rows).length,
+      radarCount: shouldLoadAi ? normalizeArray(state.radar?.rows).length : 0,
     });
     const renderIfChanged = (allowSame = false) => {
       const nextSignature = signature();
@@ -3966,8 +3975,10 @@
       marketApiOnlySignature = nextSignature;
       renderMarketOverviewApi(state.market || {}, state.heatmap || {});
       if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
-      renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
-      renderMarketApiRadar(state.radar || {});
+      if (shouldLoadAi) {
+        renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
+        renderMarketApiRadar(state.radar || {});
+      }
     };
     fetchMarketJson("/api/market", 24, force, 6500)
       .then((payload) => {
@@ -3981,18 +3992,20 @@
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
-      .then((payload) => {
-        state.radar = payload || {};
-        renderIfChanged(true);
-      })
-      .finally(done);
-    fetchMarketJson("/api/market-ai-live", 20, force, 5200)
-      .then((payload) => {
-        state.ai = payload || {};
-        renderIfChanged(true);
-      })
-      .finally(done);
+    if (shouldLoadAi) {
+      fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
+        .then((payload) => {
+          state.radar = payload || {};
+          renderIfChanged(true);
+        })
+        .finally(done);
+      fetchMarketJson("/api/market-ai-live", 20, force, 5200)
+        .then((payload) => {
+          state.ai = payload || {};
+          renderIfChanged(true);
+        })
+        .finally(done);
+    }
   }
 
   window.FUMAN_MARKET_API_HYDRATE = function hydrateMarketApiOnly(force = true) {
