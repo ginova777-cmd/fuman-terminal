@@ -3552,9 +3552,9 @@
     }
     window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
     window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => {
-      if (!isMarketViewActive() || isInteractionHoldActive()) return;
-      refreshMarketApiOnly(true);
-    }, 120);
+      if (!isMarketViewActive()) return;
+      refreshMarketSnapshotFirst(true);
+    }, 80);
     return true;
   }
 
@@ -3721,6 +3721,44 @@
     }
     const message = market.querySelector("#terminal-message");
     if (message) message.textContent = "市場總覽已同步 Supabase/API 快照，熱力圖可點選看相關股票。";
+  }
+
+  let marketSnapshotFirstLoading = false;
+  function refreshMarketSnapshotFirst(force = false) {
+    if (!isMarketViewActive() || marketSnapshotFirstLoading) return;
+    restoreMarketDesktopMode();
+    marketSnapshotFirstLoading = true;
+    const state = { market: null, heatmap: null };
+    let pending = 2;
+    const done = () => {
+      pending -= 1;
+      if (pending <= 0) marketSnapshotFirstLoading = false;
+    };
+    const paint = () => {
+      if (!isMarketViewActive()) {
+        marketSnapshotFirstLoading = false;
+        return;
+      }
+      renderMarketOverviewApi(state.market || {}, state.heatmap || {});
+      if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
+    };
+    fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200)
+      .then((payload) => {
+        if (payload?.sectors?.length) {
+          state.heatmap = {
+            ...payload,
+            snapshotFirst: true,
+          };
+          paint();
+        }
+      })
+      .finally(done);
+    fetchMarketJson("/api/market", 24, force, 2200)
+      .then((payload) => {
+        state.market = payload || {};
+        paint();
+      })
+      .finally(done);
   }
 
   function renderMarketHeatmapApi(sectors, payload) {
@@ -4130,6 +4168,7 @@
     };
     const boot = () => {
       restoreMarketDesktopMode();
+      refreshMarketSnapshotFirst(true);
       schedule(true, 120);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
@@ -4173,7 +4212,10 @@
       }, true);
     }
     window.addEventListener("fuman:desktop-route", (event) => {
-      if (isMarketRoute(event?.detail?.key)) schedule(true, 120);
+      if (isMarketRoute(event?.detail?.key)) {
+        refreshMarketSnapshotFirst(true);
+        schedule(true, 120);
+      }
     });
     window.addEventListener("focus", () => schedule(false, 2200));
     document.addEventListener("visibilitychange", () => {
