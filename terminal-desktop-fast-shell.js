@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260627-route-switch-01"
+    window.__fumanDesktopFastShell === "20260627-route-switch-02"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260627-route-switch-01";
+  window.__fumanDesktopFastShell = "20260627-route-switch-02";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -3466,7 +3466,10 @@
       });
     }
     window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
-    window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => refreshMarketApiOnly(true), 0);
+    window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => {
+      if (!isMarketViewActive() || isInteractionHoldActive()) return;
+      refreshMarketApiOnly(true);
+    }, 6200);
     return true;
   }
 
@@ -3942,7 +3945,7 @@
   }
 
   function refreshMarketApiOnly(force = false) {
-    if (!isMarketViewActive() || marketApiOnlyLoading) return;
+    if (!isMarketViewActive() || marketApiOnlyLoading || isInteractionHoldActive()) return;
     restoreMarketDesktopMode();
     marketApiOnlyLoading = true;
     const state = { market: null, heatmap: null, radar: null, ai: null };
@@ -4006,9 +4009,20 @@
 
   function installMarketApiOnlyHydrator() {
     const run = (force = false) => refreshMarketApiOnly(force);
+    const schedule = (force = false, delay = 6200) => {
+      window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
+      window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => {
+        if (!isMarketViewActive()) return;
+        if (isInteractionHoldActive()) {
+          schedule(force, interactionHoldRemaining() + 1200);
+          return;
+        }
+        run(force);
+      }, Math.max(300, delay));
+    };
     const boot = () => {
       restoreMarketDesktopMode();
-      run(true);
+      schedule(true, 6200);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
     else boot();
@@ -4053,14 +4067,14 @@
       }, true);
     }
     window.addEventListener("fuman:desktop-route", (event) => {
-      if (isMarketRoute(event?.detail?.key)) setTimeout(() => run(true), 80);
+      if (isMarketRoute(event?.detail?.key)) schedule(true, 6200);
     });
-    window.addEventListener("focus", () => run(false));
+    window.addEventListener("focus", () => schedule(false, 2200));
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") run(false);
+      if (document.visibilityState === "visible") schedule(false, 2200);
     });
     setInterval(() => run(false), API_ONLY_POLL_MS);
-    [1200, 4200, 9000].forEach((delay) => {
+    [9000, 14000].forEach((delay) => {
       window.setTimeout(() => {
         if (isMarketViewActive()) window.FUMAN_MARKET_API_HYDRATE?.(true);
       }, delay);
