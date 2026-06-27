@@ -6,6 +6,12 @@ $env:FUMAN_DATA_DIR = if ($env:FUMAN_DATA_DIR) { $env:FUMAN_DATA_DIR } else { Jo
 $env:FUMAN_CACHE_DIR = if ($env:FUMAN_CACHE_DIR) { $env:FUMAN_CACHE_DIR } else { Join-Path $env:FUMAN_RUNTIME_DIR "cache" }
 $env:FUMAN_STATE_DIR = if ($env:FUMAN_STATE_DIR) { $env:FUMAN_STATE_DIR } else { Join-Path $env:FUMAN_RUNTIME_DIR "state" }
 $env:NODE_OPTIONS = "--use-system-ca"
+foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TARGET_ID", "LINE_TO", "LINE_USER_ID", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_TO")) {
+  if (-not [Environment]::GetEnvironmentVariable($name, "Process")) {
+    $value = [Environment]::GetEnvironmentVariable($name, "User")
+    if ($value) { [Environment]::SetEnvironmentVariable($name, $value, "Process") }
+  }
+}
 
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $logDir = Join-Path $env:FUMAN_RUNTIME_DIR "logs"
