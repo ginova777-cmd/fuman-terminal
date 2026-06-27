@@ -1393,7 +1393,6 @@
     Object.entries(endpoints).forEach(([endpoint, endpointPayload]) => {
       const route = routeForCompactEndpoint(endpoint);
       if (!route) return;
-      if (route === CHIP_TRADE_ROUTE) return;
       const rows = normalizeCanvasRowsFromPayload(endpointPayload, route);
       if (!rows.length) return;
       rememberCanvasRows(route, rows, source, Date.now());
@@ -4682,8 +4681,8 @@
       return true;
     }
     const panel = panelForRoute(key);
-    let rows = isChipTradeRoute(key) ? [] : rowsForRoute(key);
-    if (!rows.length && !isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) {
+    let rows = rowsForRoute(key);
+    if (!rows.length && !isApiOnlySnapshotRoute(key)) {
       const domRows = extractLiteRows(panel);
       if (domRows.length) {
         setCanvasRows(key, domRows, "dom-hot", Date.now());
