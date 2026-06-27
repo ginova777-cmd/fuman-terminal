@@ -3677,9 +3677,7 @@
     const panels = ensureMarketApiPanels();
     if (!panels.ai) return;
     const sectors = normalizeArray(heatmapPayload?.sectors);
-    const radarRows = (normalizeArray(radarPayload?.rows).length
-      ? normalizeArray(radarPayload?.rows)
-      : normalizeArray(aiPayload?.realtimeRadar?.rows)).slice(0, 30);
+    const radarRows = normalizeArray(radarPayload?.rows);
     const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
     const pctOf = (item) => num(item?.pct ?? item?.avgPct ?? item?.percent);
     const nameOf = (item) => String(item?.name || item?.industry || item?.sector || "--");
@@ -3696,7 +3694,7 @@
       : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
     const up = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const down = sectors.reduce((sum, item) => sum + num(item.down), 0);
-    const sectorStocks = [];
+    const sectorStocks = sectors.flatMap((sector) => normalizeArray(sector.stocks).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
     const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count) || sectorStocks.length || up + down;
     const directional = Math.max(up + down, 1);
     const upRatio = sample ? up / sample * 100 : 0;
@@ -3784,7 +3782,19 @@
     if (!groups.legal.length) groups.legal = allStocks.slice(0, 10).map((stock) => ({ ...stock, tags: [...new Set([...stock.tags, "法人買超"])].slice(0, 5) }));
     if (!groups.momentum.length) groups.momentum = allStocks.slice(0, 10);
     if (!groups.intraday.length) groups.intraday = allStocks.slice(0, 10);
-    if (!groups.risk.length) groups.risk = [];
+    if (!groups.risk.length) groups.risk = weak.flatMap((sector) => normalizeArray(sector.stocks).slice(0, 2).map((stock) => ({
+      code: stockCode(stock),
+      name: stockName(stock) || stockCode(stock),
+      industry: nameOf(sector),
+      pct: pctOf(stock),
+      value: num(stock.value),
+      volume: num(stock.volume),
+      score: Math.max(1, Math.min(100, Math.round(55 + Math.abs(pctOf(stock)) * 5))),
+      side: "風險",
+      reason: "弱勢族群",
+      source: "熱力圖",
+      tags: ["風險高", nameOf(sector)],
+    }))).filter((row) => row.code).slice(0, 10);
     const strongNames = strong.map((item) => nameOf(item)).slice(0, 3).join("、") || "等待族群擴散";
     const weakNames = weak.map((item) => nameOf(item)).slice(0, 3).join("、") || "暫無明顯弱勢";
     const riskNames = groups.risk.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || weakNames;
