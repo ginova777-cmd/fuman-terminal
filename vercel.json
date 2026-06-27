@@ -11,6 +11,11 @@
       "schedule": "*/10 * * * *"
     }
   ],
+  "functions": {
+    "api/mobile-page.js": {
+      "includeFiles": "mobile.html"
+    }
+  },
   "rewrites": [
     {
       "source": "/88",

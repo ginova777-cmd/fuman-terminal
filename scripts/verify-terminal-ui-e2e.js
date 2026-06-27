@@ -545,6 +545,8 @@ async function prepareDesktopRoute(cdp, route) {
       { code: "2334", name: "旺宏", reason: "UI E2E 自選股既有卡片驗證", addedAt: new Date().toISOString() },
     ];
     const value = JSON.stringify(rows);
+    localStorage.removeItem("fuman_watchlist");
+    localStorage.removeItem("fuman_mobile_watchlist_v1");
     localStorage.setItem("fuman_watchlist", value);
     localStorage.setItem("fuman_mobile_watchlist_v1", value);
     localStorage.removeItem("fuman-terminal-ai-watchlist");
@@ -572,6 +574,8 @@ async function prepareMobileRoute(cdp, route) {
       ["2408", "南亞科"],
     ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股十檔上限驗證", addedAt: new Date().toISOString() }));
     const value = JSON.stringify(rows);
+    localStorage.removeItem("fuman_watchlist");
+    localStorage.removeItem("fuman_mobile_watchlist_v1");
     localStorage.setItem("fuman_watchlist", value);
     localStorage.setItem("fuman_mobile_watchlist_v1", value);
     localStorage.removeItem("fuman-terminal-ai-watchlist");
@@ -995,9 +999,25 @@ function collectMobileStats(route) {
     const watchRows = [...content.querySelectorAll(".watch-row")];
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
     const watchCodes = watchRows.map((row) => text(row).match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
+    const storageCodes = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
+      try {
+        const rows = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(rows) ? rows.map((item) => String(item?.code || "")).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    });
     const statusTextForWatch = statusText || panelText;
     if (watchRows.length !== 10) contractBlockers.push(`mobile watch tab must render exactly 10 watch rows actual=${watchRows.length}`);
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
+    if (!watchCodes.includes("2334")) contractBlockers.push(`mobile watch seeded code 2334 missing actual=${watchCodes.join(",")}`);
+    if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
+    storageCodes.forEach((codes, index) => {
+      const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
+      if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
+      if (!codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} missing 2334 actual=${codes.join(",")}`);
+      if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
+    });
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
     if (!/自選\s+10/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count 10 actual=${statusTextForWatch || "<missing>"}`);
   }
@@ -1227,9 +1247,18 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await waitFor(cdp, () => {
             const rows = [...document.querySelectorAll("#content .watch-row")];
             const status = String(document.querySelector("#status")?.textContent || "");
+            const storageLengths = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
+              try {
+                const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+                return Array.isArray(parsed) ? parsed.length : -1;
+              } catch {
+                return -1;
+              }
+            });
             return {
-              ok: rows.length === 10 && /自選\s+10/.test(status),
+              ok: rows.length === 10 && storageLengths.every((length) => length === 10) && /自選\s+10/.test(status),
               rows: rows.length,
+              storageLengths,
               status,
             };
           }, null, 12000, 250);

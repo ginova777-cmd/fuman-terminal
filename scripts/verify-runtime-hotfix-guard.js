@@ -95,6 +95,9 @@ async function verifyLive() {
   assertLiveText("mobile-page", mobilePage, [
     "輔滿極速手機版",
     "API-only live",
+    "slice(0,10)",
+    "自選股已達 10 檔上限",
+    "data-watch-remove",
   ]);
   if (mobilePage.body.includes("輔滿 股票終端")) {
     issues.push("mobile-page live returned desktop terminal HTML");
@@ -163,6 +166,9 @@ async function main() {
   }
   requireMarker(path.join("api", "mobile-page.js"), "mobile.html");
   requireMarker(path.join("api", "mobile-page.js"), "text/html; charset=utf-8");
+  requireMarker("mobile.html", "slice(0,10)", "mobile watchlist cap slice");
+  requireMarker("mobile.html", "自選股已達 10 檔上限", "mobile watchlist cap toast");
+  requireMarker("mobile.html", "data-watch-remove", "mobile watchlist remove control");
 
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "source: \"terminal-fast-bundle\"");
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "partial");
@@ -176,6 +182,8 @@ async function main() {
 
   const vercel = read("vercel.json");
   requireMarker("vercel.json", "/api/mobile-page");
+  requireMarker("vercel.json", "includeFiles");
+  requireMarker("vercel.json", "mobile.html");
   requireJsonHeader(vercel, "/terminal-hotfix.js", "no-store");
   requireJsonHeader(vercel, "/fuman-sw.js", "no-store");
   if (!vercel.includes("terminal-hotfix\\\\.js$")) {
