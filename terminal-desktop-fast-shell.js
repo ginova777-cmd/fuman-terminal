@@ -4098,10 +4098,8 @@
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation();
-          const nextMode = mode.dataset.marketMode === "ai" ? "ai" : "overview";
-          const wasSameMode = nextMode === marketDesktopMode;
-          applyMarketDesktopMode(nextMode);
-          if (nextMode === "ai" && !wasSameMode && !hasMarketApiOnlyPayload(marketApiOnlyState.ai)) run(false);
+          applyMarketDesktopMode(mode.dataset.marketMode);
+          if (mode.dataset.marketMode === "ai") run(false);
           return;
         }
         const close = event.target.closest?.("[data-market-heatmap-close]");
@@ -4563,17 +4561,6 @@
     if (!key || isStrategyLink(link)) return false;
     const now = Date.now();
     if (source === "click" && key === fixedClickRoute && now - fixedClickAt < 360) return true;
-    if (isMarketRoute(key) && isMarketViewActive() && document.querySelector("#market-view")?.classList?.contains("fuman-market-overview-shell")) {
-      if (link) {
-        document.querySelectorAll("[data-view]").forEach((item) => {
-          const active = item === link;
-          item.classList.toggle("active", active);
-          if (active) item.setAttribute("aria-current", "page");
-          else item.removeAttribute("aria-current");
-        });
-      }
-      return true;
-    }
     fixedClickRoute = key;
     fixedClickAt = now;
     startLatency(link, source || "fixed");
