@@ -69,6 +69,7 @@
     "strategy2:readiness:strict": "node --use-system-ca scripts/check-strategy2-readiness-gate.js --fail-on-critical",
     "strategy2:trading-day": "node --use-system-ca scripts/check-strategy2-trading-day.js",
     "strategy2:readiness-source:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
+    "strategy2:snapshot:publish": "node --use-system-ca scripts/publish-strategy2-latest-snapshot.js",
     "strategy2:coverage": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js",
     "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:10",
     "verify:desktop-api-only": "node scripts/verify-desktop-api-only.js",

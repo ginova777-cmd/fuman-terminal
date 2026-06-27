@@ -1,9 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -141,6 +143,35 @@ async function postJson(url, key, body, prefer) {
   }
 }
 
+async function publishStrategy2Snapshot(report, runId, scanDate) {
+  const updatedAt = report.updatedAt || report.generatedAt || new Date().toISOString();
+  const payload = {
+    ...report,
+    ok: report.ok !== false,
+    complete: true,
+    runId,
+    date: scanDate,
+    updatedAt,
+    cacheSource: "supabase:strategy2_latest_snapshot",
+    snapshotFirst: true,
+    snapshotLabel: "最近快照，前端需背景 live 刷新",
+    transport: {
+      ...(report.transport || {}),
+      source: "strategy2_complete_run_snapshot",
+      snapshotKey: STRATEGY2_SNAPSHOT_KEY,
+      runId,
+      via: "scripts/publish-strategy2-complete-run.js",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+  return upsertSnapshot(STRATEGY2_SNAPSHOT_KEY, payload, {
+    source: "strategy2_complete_run_snapshot",
+    reason: "strategy2-snapshot-first-cache",
+    tradeDate: scanDate.replace(/\D/g, ""),
+    timeoutMs: Number(process.env.STRATEGY2_SNAPSHOT_WRITE_TIMEOUT_MS || 20000),
+  });
+}
+
 async function main() {
   const config = supabaseConfig();
   const { source, payload } = await readLatestReportFromSupabase(config);
@@ -169,6 +200,7 @@ async function main() {
     p_scan_date: scanDate,
     p_payload: report,
   });
+  const snapshot = await publishStrategy2Snapshot(report, runId, scanDate);
 
   await publishStrategyCacheStatus("strategy2", "策略2-盤中即時", report, {
     used_date: scanDate,
@@ -181,7 +213,7 @@ async function main() {
     log: `run_id=${runId}; events=${report.events.length}; source=${source}`,
   });
 
-  console.log(`[strategy2-complete-run] ok run=${runId} date=${scanDate} records=${report.records.length} events=${report.events.length}`);
+  console.log(`[strategy2-complete-run] ok run=${runId} date=${scanDate} records=${report.records.length} events=${report.events.length} snapshot=${snapshot.ok ? "ok" : snapshot.reason || snapshot.error || "failed"}`);
 }
 
 main().catch((error) => {

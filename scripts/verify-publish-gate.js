@@ -240,6 +240,9 @@ if (!String(packageJson.scripts?.["strategy2:trading-day"] || "").includes("scri
 if (!String(packageJson.scripts?.["strategy2:readiness-source:install"] || "").includes("Install-Strategy2ReadinessSourceTask.ps1")) {
   issues.push("package.json missing scripts.strategy2:readiness-source:install for Strategy2 source collector task");
 }
+if (!String(packageJson.scripts?.["strategy2:snapshot:publish"] || "").includes("scripts/publish-strategy2-latest-snapshot.js")) {
+  issues.push("package.json missing scripts.strategy2:snapshot:publish for Strategy2 snapshot-first cache");
+}
 if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
   issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
 }
@@ -366,6 +369,7 @@ const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
+const desktopFastShell = read("terminal-desktop-fast-shell.js");
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
 const mobileApiOnlyVerifier = read("scripts/verify-mobile-api-only.js");
 const mobileAiFragmentVerifier = read("scripts/verify-mobile-ai-fragment.js");
@@ -650,6 +654,9 @@ if (/readJson\("data\/open-buy-latest\.json"/.test(read("api/terminal-home.js"))
 if (!/publish_strategy2_complete_run/.test(strategy2CompleteRunPublisher) || !/strategy2_latest\?on_conflict=id/.test(strategy2CompleteRunPublisher)) {
   issues.push("publish-strategy2-complete-run.js must publish strategy2_latest and Supabase complete run RPC");
 }
+if (!/STRATEGY2_SNAPSHOT_KEY/.test(strategy2CompleteRunPublisher) || !/upsertSnapshot\(STRATEGY2_SNAPSHOT_KEY/.test(strategy2CompleteRunPublisher)) {
+  issues.push("publish-strategy2-complete-run.js must publish strategy2_latest_snapshot for opt-in snapshot-first display");
+}
 if (!/DIRECT_AUTHORITATIVE_KEYS\s*=\s*new Set\(\["strategy2"\]\)/.test(latestStrategyApi) || !/fetchDirectPayload/.test(latestStrategyApi) || !/direct-latest-run/.test(latestStrategyApi)) {
   issues.push("api/latest-strategy.js must treat Strategy2 as direct-authoritative and must not trust stale strategy_cache_status payloads");
 }
@@ -664,6 +671,12 @@ if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2Lat
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 readiness API marker ${marker}`);
+}
+for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", "snapshotFirst", "supabase:strategy2_latest_snapshot", "options.snapshot && !options.live"]) {
+  if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 snapshot-first marker ${marker}`);
+}
+for (const marker of ["strategy2SnapshotFirstEnabled", "strategy2SnapshotFirst", "snapshot-first-refreshing", "快照先顯示｜即時刷新中"]) {
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 snapshot-first marker ${marker}`);
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");

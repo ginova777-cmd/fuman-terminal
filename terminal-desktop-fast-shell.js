@@ -27,6 +27,7 @@
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
+  const STRATEGY2_SNAPSHOT_FIRST_PARAM = "strategy2SnapshotFirst";
   const DEFAULT_DESKTOP_ROUTE_KEY = "strategy|策略5";
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
@@ -983,6 +984,15 @@
     return LIVE_API_STRATEGY_ROUTES.includes(String(route || ""));
   }
 
+  function strategy2SnapshotFirstEnabled() {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      if (/^(1|true|yes)$/i.test(params.get(STRATEGY2_SNAPSHOT_FIRST_PARAM) || "")) return true;
+      if (/^(1|true|yes)$/i.test(sessionStorage.getItem("fuman-strategy2-snapshot-first") || "")) return true;
+    } catch (error) {}
+    return window.FUMAN_RUNTIME_CONFIG?.strategy2SnapshotFirst === true;
+  }
+
   function endpointForRoute(route) {
     if (isChipTradeRoute(route)) {
       const active = CHIP_TRADE_FILTERS.find((item) => item.key === canvasState.signalFilter);
@@ -1069,13 +1079,15 @@
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
+    const strategy2SnapshotFirst = isStrategy2Route(route) && strategy2SnapshotFirstEnabled() && !withBust;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
       shell: "1",
       limit: String(Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, options.limit || 60))),
     });
-    if (options.live) query.set("live", "1");
+    if (strategy2SnapshotFirst) query.set("snapshot", "1");
+    else if (options.live) query.set("live", "1");
     if (options.today) query.set("today", "1");
     if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
     if (withBust) query.set("t", String(Date.now()));
@@ -1568,7 +1580,8 @@
       .then((payload) => {
         const rows = normalizeCanvasRowsFromPayload(payload, route);
         if (rows.length) {
-          rememberCanvasRows(route, rows, "api", Date.now());
+          const source = payload?.snapshotFirst ? "snapshot-first-refreshing" : "api";
+          rememberCanvasRows(route, rows, source, Date.now());
         } else {
           const emptyState = routeEmptyStateFromPayload(payload, route);
           if (emptyState) {
@@ -1659,7 +1672,10 @@
       count.textContent = `${visible}/${total}`;
     }
     const mode = canvasWorkerReady ? canvasWorkerMode : source;
-    if (status) status.textContent = text || `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    const label = source.includes("snapshot-first")
+      ? "快照先顯示｜即時刷新中"
+      : `${mode} · ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    if (status) status.textContent = text || label;
     syncCanvasEmptyStateUi(shell);
     updateCanvasPagination(shell);
   }
@@ -4460,7 +4476,9 @@
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
     if (count) count.textContent = `${rows.length}筆`;
-    if (status) status.textContent = canvasState.source || "api";
+    if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
+      ? "快照先顯示｜即時刷新中"
+      : canvasState.source || "api";
     if (entryCountNode) entryCountNode.textContent = `${entryCount} 進場 / ${prepareCount} 預備`;
     if (entryNote) entryNote.textContent = entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
     if (historyCountNode) historyCountNode.textContent = `${rows.length} 筆`;
@@ -4703,12 +4721,26 @@
     renderStrategyRouteShell(link, source, rows);
     markLatency("shell", key);
     restoreStrategySnapshot(link);
+    const snapshotFirst = isStrategy2Route(key) && strategy2SnapshotFirstEnabled();
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
-      fetchCanvasRows(key, isLiveStrategyRoute(key)).then((apiRows) => {
+      fetchCanvasRows(key, isLiveStrategyRoute(key) && !snapshotFirst).then((apiRows) => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         if (apiRows?.length) {
-          scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "api", apiRows), "api");
+          const paintSource = snapshotFirst ? "snapshot-first-refreshing" : "api";
+          scheduleRoutePaint(key, seq, () => {
+            renderStrategyRouteShell(key, paintSource, apiRows);
+            if (snapshotFirst) setCanvasStatus("快照先顯示｜即時刷新中");
+          }, snapshotFirst ? "snapshot" : "api");
+          if (snapshotFirst) {
+            window.setTimeout(() => {
+              if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+              fetchCanvasRows(key, true).then((liveRows) => {
+                if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+                if (liveRows?.length) scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "api-live", liveRows), "api-live");
+              }).catch(() => setCanvasStatus("快照先顯示｜即時刷新稍後重試"));
+            }, 120);
+          }
         } else {
           scheduleCanvasDraw();
         }

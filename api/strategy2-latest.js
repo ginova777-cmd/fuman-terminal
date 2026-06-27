@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { readSnapshot } = require("../lib/supabase-snapshots");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 
 function readSecretText(file) {
@@ -16,6 +17,7 @@ const LATEST_RUN_VIEW = process.env.STRATEGY2_SUPABASE_LATEST_RUN_VIEW || "v_str
 const RUNS_TABLE = process.env.STRATEGY2_SUPABASE_RUNS_TABLE || "strategy2_scan_runs";
 const RESULTS_TABLE = process.env.STRATEGY2_SUPABASE_RESULTS_TABLE || "strategy2_scan_results";
 const READINESS_STATUS_VIEW = process.env.STRATEGY2_READINESS_STATUS_VIEW || "v_strategy2_readiness_status";
+const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
 const AUTHORITATIVE_GATE = "complete-run-authoritative";
 const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
@@ -180,6 +182,7 @@ function parseRequestOptions(request) {
     canvas: /^(1|true|yes)$/i.test(params.get("canvas") || ""),
     shell: /^(1|true|yes)$/i.test(params.get("shell") || ""),
     live: /^(1|true|yes)$/i.test(params.get("live") || ""),
+    snapshot: /^(1|true|yes)$/i.test(params.get("snapshot") || params.get("cache") || params.get("snapshotFirst") || ""),
     today: wantsAllToday,
     limit,
   };
@@ -255,9 +258,14 @@ function rankStrategy2Rows(rows) {
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return payload;
   const limit = options.limit || 60;
-  const events = rankStrategy2Rows(payload?.events).slice(0, limit);
+  const payloadRows = rankStrategy2Rows(payload?.rows);
+  const events = rankStrategy2Rows(
+    Array.isArray(payload?.events) && payload.events.length ? payload.events : payloadRows
+  ).slice(0, limit);
   const eventCodes = new Set(events.map((row) => row.code).filter(Boolean));
-  const rankedRecords = rankStrategy2Rows(payload?.records);
+  const rankedRecords = rankStrategy2Rows(
+    Array.isArray(payload?.records) && payload.records.length ? payload.records : payloadRows
+  );
   const records = rankedRecords.filter((row) => !eventCodes.has(row.code)).slice(0, limit);
   const seen = new Set();
   const rows = [...events, ...records]
@@ -282,6 +290,7 @@ function compactStrategy2Payload(payload, options) {
     battleMode: Boolean(options.today || options.live),
     mode: options.today || options.live ? "strategy2-live-battle" : "strategy2-live",
     cacheSource: payload?.cacheSource || "supabase-api",
+    snapshotFirst: Boolean(payload?.snapshotFirst || options.snapshot),
     gate: payload?.gate || AUTHORITATIVE_GATE,
     reason,
     noTodayDetections,
@@ -309,6 +318,7 @@ function compactStrategy2Payload(payload, options) {
       compact: true,
       canvas: Boolean(options.canvas),
       live: Boolean(options.live),
+      snapshotFirst: Boolean(options.snapshot),
       today: Boolean(options.today),
       limit,
       via: "api/strategy2-latest",
@@ -565,6 +575,32 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
   return compactStrategy2Payload(fullPayload, options);
 }
 
+async function readStrategy2SnapshotPayload(options = {}) {
+  const snapshot = await readSnapshot(STRATEGY2_SNAPSHOT_KEY, {
+    allowLatestFallback: true,
+    timeoutMs: Number(process.env.STRATEGY2_SNAPSHOT_READ_TIMEOUT_MS || 5000),
+  }).catch(() => null);
+  const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  if (!payload || !hasStrategy2PayloadRows(payload)) return null;
+  return compactStrategy2Payload({
+    ...payload,
+    ok: payload.ok !== false,
+    cacheSource: "supabase:strategy2_latest_snapshot",
+    snapshotFirst: true,
+    reason: payload.reason || "strategy2-snapshot-first",
+    updatedAt: payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+    transport: {
+      ...(payload.transport || {}),
+      source: "supabase:strategy2_latest_snapshot",
+      snapshotKey: STRATEGY2_SNAPSHOT_KEY,
+      snapshotUpdatedAt: snapshot.updatedAt || "",
+      snapshotFirst: true,
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  }, options);
+}
+
 async function fetchCompleteRunPayload(base, marketSession = null, options = null) {
   const latestRows = await fetchRows(
     base,
@@ -637,6 +673,16 @@ module.exports = async function handler(request, response) {
 
   try {
     const options = parseRequestOptions(request);
+    if (options.snapshot && !options.live) {
+      const snapshotPayload = await readStrategy2SnapshotPayload(options);
+      if (snapshotPayload) {
+        response.setHeader("Cache-Control", "public, max-age=8, stale-while-revalidate=30");
+        response.setHeader("CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+        response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+        response.status(200).json(snapshotPayload);
+        return;
+      }
+    }
     const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
     if (!base || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));

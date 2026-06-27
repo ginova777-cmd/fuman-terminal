@@ -246,7 +246,8 @@ async function waitFor(cdp, fn, arg, timeoutMs = 20000, intervalMs = 100) {
 
 async function navigate(cdp, routeKey) {
   const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
-  const url = `${BASE_URL.replace(/\/+$/, "")}/?desktop=1&theme=dark&cold=${Date.now()}-${encodeURIComponent(routeKey)}`;
+  const strategy2SnapshotFirst = STRICT_STRATEGY2 ? "&strategy2SnapshotFirst=1" : "";
+  const url = `${BASE_URL.replace(/\/+$/, "")}/?desktop=1&theme=dark${strategy2SnapshotFirst}&cold=${Date.now()}-${encodeURIComponent(routeKey)}`;
   await cdp.send("Page.navigate", { url }, 45000);
   await contextReady;
   await waitFor(cdp, () => ({ ok: document.readyState === "interactive" || document.readyState === "complete" }), null, 45000, 250);
