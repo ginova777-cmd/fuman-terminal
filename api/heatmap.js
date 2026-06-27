@@ -2789,6 +2789,47 @@ module.exports = async function handler(request, response) {
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
   const clock = taipeiClock();
+  const snapshotFirst = String(request.query?.snapshot || request.query?.cache || request.query?.fast || "") === "1";
+  if (snapshotFirst) {
+    const snapshot = await readSnapshot("heatmap_latest", {
+      tradeDate: clock.date,
+      allowLatestFallback: true,
+      timeoutMs: 900,
+    });
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+      response.status(200).json(snapshotHeatmapPayload({
+        ...snapshot,
+        reason: "snapshot-first",
+      }, clock));
+      return;
+    }
+
+    const localSnapshot = readLatestHeatmapSnapshot();
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+      response.status(200).json(attachHeatmapDetectWindow(
+        {
+          ...localSnapshot.payload,
+          cache: {
+            hit: true,
+            source: localSnapshot.file,
+            reason: "snapshot-first-local",
+          },
+        },
+        clock,
+        "snapshot-first-local"
+      ));
+      return;
+    }
+
+    if (isFreshHeatmapCache()) {
+      response.status(200).json({
+        ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "snapshot-first-memory-cache"),
+        cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS, reason: "snapshot-first-memory-cache" },
+      });
+      return;
+    }
+  }
+
   const detectWindowActive = isHeatmapDetectWindow(clock);
   if (!detectWindowActive) {
     const snapshot = await readSnapshot("heatmap_latest", {

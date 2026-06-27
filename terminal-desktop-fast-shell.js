@@ -4044,7 +4044,7 @@
     restoreMarketDesktopMode();
     marketApiOnlyLoading = true;
     const state = { market: null, heatmap: null, radar: null, ai: null };
-    let pending = 4;
+    let pending = 5;
     const done = () => {
       pending -= 1;
       if (pending <= 0) marketApiOnlyLoading = false;
@@ -4077,10 +4077,23 @@
         renderIfChanged(true);
       })
       .finally(done);
+    fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 1800)
+      .then((payload) => {
+        if (payload?.sectors?.length) {
+          state.heatmap = {
+            ...payload,
+            snapshotFirst: true,
+          };
+          renderIfChanged(true);
+        }
+      })
+      .finally(done);
     fetchMarketJson("/api/heatmap", 60, force, 6500)
       .then((payload) => {
-        state.heatmap = payload || {};
-        renderIfChanged(true);
+        if (payload?.sectors?.length) {
+          state.heatmap = payload || {};
+          renderIfChanged(true);
+        }
       })
       .finally(done);
     fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
