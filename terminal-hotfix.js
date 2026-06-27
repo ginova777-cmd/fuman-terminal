@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260627-03";
+    window.__fumanWatchlistAddBridge = "20260628-01";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const maxRows = 10;
@@ -136,6 +136,36 @@
       }).join("");
     };
     let lastBridgeAddAt = 0;
+    let addConfirmToken = 0;
+    const confirmCardStatus = (normalized, existedBefore) => {
+      const token = ++addConfirmToken;
+      const delays = [80, 240, 600, 1200];
+      delays.forEach((delay, index) => {
+        window.setTimeout(() => {
+          if (token !== addConfirmToken) return;
+          try {
+            const shell = window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+            shell?.ensureCode?.(normalized, { code: normalized, addedAt: Date.now() });
+            shell?.render?.();
+          } catch (error) {}
+          let card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
+          if (!card && index === delays.length - 1) {
+            const rows = readRows();
+            if (rows.some((row) => row.code === normalized)) {
+              fallbackRender(rows, normalized);
+              card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
+            }
+          }
+          if (card || index === delays.length - 1) {
+            setStatus(
+              card ? (existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`) : `${normalized} 新增後尚未同步，請重新整理自選股`,
+              card ? (existedBefore ? "exists" : "added") : "warn"
+            );
+            addConfirmToken += 1;
+          }
+        }, delay);
+      });
+    };
     const addCode = (code, source) => {
       const normalized = normalizeCode(code);
       if (!normalized) {
@@ -150,14 +180,7 @@
           if (ok) {
             lastBridgeAddAt = Date.now();
             setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
-            setTimeout(() => {
-              window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
-              const card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
-              setStatus(
-                card ? (existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`) : `${normalized} 新增後尚未同步，請重新整理自選股`,
-                card ? (existedBefore ? "exists" : "added") : "warn"
-              );
-            }, 120);
+            confirmCardStatus(normalized, existedBefore);
           }
           return ok;
         } catch (error) {

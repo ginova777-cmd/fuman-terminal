@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-13";
+  const VERSION = "watchlist-rich-shell-20260628-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -13,6 +13,7 @@
   let lastAddIntentAt = 0;
   let lastAddIntentCode = "";
   let watchlistMemory = null;
+  const watchlistEnsureTimers = new Map();
   const FEATURE_STATUS = [
     ["新增股票", "已開通"],
     ["全台上市上櫃", "已開通"],
@@ -40,6 +41,7 @@
       selectCode,
       refreshSelected,
       forceAddCode,
+      ensureCode,
     };
     window.FUMAN_WATCHLIST_SHELL_INSTANCE = instance;
     document.documentElement.dataset.fumanWatchlistModule = instance.mode;
@@ -242,19 +244,59 @@
     if (!code) return false;
     const rows = readList();
     const meta = findStockMetaSync(code);
+    const entry = { code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() };
     if (!rows.some((item) => item.code === code)) {
       if (rows.length >= WATCHLIST_MAX_ITEMS) {
         updateEntryLimitState(rows, `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`);
         return false;
       }
-      rows.unshift({ code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() });
+      rows.unshift(entry);
       writeList(rows);
     }
     selectedCode = code;
     render();
+    scheduleEnsureCode(code, entry);
     void enrichStockMeta(code);
     void hydrateQuote(code);
     return true;
+  }
+
+  function ensureCode(code, seed = {}) {
+    const target = normalizeCode(code);
+    if (!target) return false;
+    const rows = readList();
+    if (!rows.some((item) => item.code === target)) {
+      if (rows.length >= WATCHLIST_MAX_ITEMS) {
+        updateEntryLimitState(rows, `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`);
+        return false;
+      }
+      const meta = findStockMetaSync(target);
+      rows.unshift({
+        code: target,
+        name: seed.name || meta?.name || target,
+        market: seed.market || meta?.market || "",
+        addedAt: seed.addedAt || Date.now(),
+      });
+      writeList(rows);
+    }
+    selectedCode = target;
+    render();
+    return Boolean(document.querySelector(`.watchlist-card[data-code="${target}"]`));
+  }
+
+  function scheduleEnsureCode(code, seed = {}) {
+    const target = normalizeCode(code);
+    if (!target) return;
+    clearEnsureCode(target);
+    const timers = [0, 120, 360, 900].map((delay) => setTimeout(() => ensureCode(target, seed), delay));
+    watchlistEnsureTimers.set(target, timers);
+  }
+
+  function clearEnsureCode(code) {
+    const target = normalizeCode(code);
+    const timers = watchlistEnsureTimers.get(target) || [];
+    timers.forEach((timer) => clearTimeout(timer));
+    watchlistEnsureTimers.delete(target);
   }
 
   function showEntryStatus(message, kind = "info") {
@@ -309,6 +351,7 @@
   }
 
   function removeCode(code) {
+    clearEnsureCode(code);
     writeList(readList().filter((item) => item.code !== code));
     if (selectedCode === code) selectedCode = "";
     render();
