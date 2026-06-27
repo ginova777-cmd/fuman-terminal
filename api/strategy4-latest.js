@@ -331,6 +331,7 @@ module.exports = async function handler(request, response) {
       response.status(409).json(apiOnlyError("strategy4_supabase_contract_mismatch"));
       return;
     }
+    setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {
     response.status(502).json(apiOnlyError("strategy4_api_only_failed", error?.message || String(error)));

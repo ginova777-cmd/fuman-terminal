@@ -312,6 +312,7 @@ module.exports = async function handler(request, response) {
       response.status(404).json(apiOnlyError(latest.gate || "strategy5_scan_results_latest_empty"));
       return;
     }
+    setDesktopSnapshotCache(response);
     response.status(200).json(buildPayload(latest.rows, latest.run, options));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));

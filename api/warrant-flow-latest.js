@@ -599,6 +599,7 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
+    setDesktopSnapshotCache(response);
     sendJson(request, response, withMarketSession(payload, buildMarketSession(tradingDay, payload)), "warrant-flow");
   } catch (error) {
     if (options.snapshotFriendly) {
