@@ -1410,7 +1410,7 @@
     if (!force && desktopFastBundlePromise) return desktopFastBundlePromise;
     if (!force && now - desktopFastBundleAt < 45000) return Promise.resolve(0);
     desktopFastBundleAt = now;
-    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
+    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1${force ? `&t=${now}` : ""}`;
     desktopFastBundlePromise = fetch(url, { cache: force ? "no-store" : "default", priority: force ? "high" : "auto" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => primeRowsFromFastBundle(payload, `bundle-${reason}`))
@@ -1522,7 +1522,7 @@
     }
     const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
-    const url = compactCanvasUrlForRoute(route, true);
+    const url = compactCanvasUrlForRoute(route, force);
     const task = fetch(url, { cache: force ? "no-store" : "default" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => {
@@ -3298,9 +3298,9 @@
     });
   }
 
-  function marketApiUrl(path, limit = 60) {
+  function marketApiUrl(path, limit = 60, withBust = false) {
     const sep = path.includes("?") ? "&" : "?";
-    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}&t=${Date.now()}`;
+    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}${withBust ? `&t=${Date.now()}` : ""}`;
   }
 
   function formatYi(value) {
@@ -3373,7 +3373,7 @@
   }
 
   function fetchMarketJson(path, limit = 60, force = false, timeoutMs = 6500) {
-    const url = marketApiUrl(path, limit);
+    const url = marketApiUrl(path, limit, force);
     return new Promise((resolve) => {
       try {
         const xhr = new XMLHttpRequest();
@@ -4190,8 +4190,8 @@
     };
     const boot = () => {
       restoreMarketDesktopMode();
-      refreshMarketSnapshotFirst(true);
-      schedule(true, 120);
+      refreshMarketSnapshotFirst(false);
+      schedule(false, 120);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
     else boot();
@@ -4235,8 +4235,8 @@
     }
     window.addEventListener("fuman:desktop-route", (event) => {
       if (isMarketRoute(event?.detail?.key)) {
-        refreshMarketSnapshotFirst(true);
-        schedule(true, 120);
+        refreshMarketSnapshotFirst(false);
+        schedule(false, 120);
       }
     });
     window.addEventListener("focus", () => schedule(false, 2200));
