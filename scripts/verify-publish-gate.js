@@ -190,6 +190,24 @@ if (!packageJson.scripts?.["verify:fast-shell-regression-drill"] || !/verify-fas
 if (!packageJson.scripts?.["verify:post-scan-snapshot-refresh"] || !/verify-post-scan-snapshot-refresh-contract\.js/.test(packageJson.scripts["verify:post-scan-snapshot-refresh"])) {
   issues.push("package.json missing scripts.verify:post-scan-snapshot-refresh for scan-complete immediate-display contract");
 }
+if (!String(packageJson.scripts?.["verify:terminal-cold-start"] || "").includes("scripts/verify-terminal-cold-start-performance.js")) {
+  issues.push("package.json missing scripts.verify:terminal-cold-start for terminal cold-start performance gate");
+}
+if (!String(packageJson.scripts?.["verify:terminal-cold-start:strict"] || "").includes("--strict-strategy2")) {
+  issues.push("package.json missing scripts.verify:terminal-cold-start:strict for snapshot-first performance gate");
+}
+if (!String(packageJson.scripts?.["verify:terminal-perfect"] || "").includes("verify:terminal-cold-start")) {
+  issues.push("verify:terminal-perfect must include verify:terminal-cold-start");
+}
+const coldStartVerifierPath = path.join(ROOT, "scripts", "verify-terminal-cold-start-performance.js");
+if (!fs.existsSync(coldStartVerifierPath)) {
+  issues.push("scripts/verify-terminal-cold-start-performance.js missing terminal cold-start performance gate");
+} else {
+  const terminalColdStartVerifier = fs.readFileSync(coldStartVerifierPath, "utf8");
+  for (const marker of ["no-sacrifice-live", "snapshot-first-strict", "STRICT_STRATEGY2_BUDGET_MS", "ROUTE_BUDGETS_MS", "FUMAN_COLD_START_ROUTES"]) {
+    if (!terminalColdStartVerifier.includes(marker)) issues.push("verify-terminal-cold-start-performance.js missing " + marker);
+  }
+}
 for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {
   if (!packageJson.scripts?.[scriptName]) {
     issues.push(`package.json missing scripts.${scriptName}`);
