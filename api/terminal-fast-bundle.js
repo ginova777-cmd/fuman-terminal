@@ -152,8 +152,70 @@ function compactSnapshotEndpoints(request, endpoints = {}) {
   return compacted;
 }
 
+function isStrategy1Endpoint(endpoint) {
+  return String(endpoint || "").startsWith("/api/open-buy-latest");
+}
+
+function textFrom(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(textFrom).join(" ");
+  if (typeof value === "object") return Object.values(value).map(textFrom).join(" ");
+  return String(value);
+}
+
+function isEmptyStrategy1WaitingSnapshot(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const rows = Array.isArray(payload.matches) ? payload.matches
+    : Array.isArray(payload.rows) ? payload.rows
+      : Array.isArray(payload.records) ? payload.records
+        : [];
+  const count = Number(payload.count ?? payload.total ?? payload.returnedCount ?? rows.length) || 0;
+  if (count > 0 || rows.length > 0) return false;
+  const quality = String(payload.qualityStatus || payload.status || payload.displayMode || "").toLowerCase();
+  const text = textFrom({
+    quality,
+    reason: payload.reason,
+    detail: payload.detail,
+    gate: payload.gate,
+    transport: payload.transport,
+  }).toLowerCase();
+  if (text.includes("previous_2130_carry_forward") || text.includes("previous-2130-carry-forward")) {
+    return false;
+  }
+  const looksWaiting = quality.includes("waiting")
+    || quality.includes("snapshot")
+    || text.includes("waiting_snapshot")
+    || text.includes("not_trading_day")
+    || text.includes("preopen_not_ready")
+    || text.includes("futopt_not_ready")
+    || text.includes("decision");
+  return looksWaiting;
+}
+
+async function repairStrategy1WaitingSnapshot(request, endpoints) {
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!isStrategy1Endpoint(endpoint) || !isEmptyStrategy1WaitingSnapshot(payload)) continue;
+    const result = await callJson("/api/open-buy-latest", openBuyLatest, request, compactQuery(60), 2300);
+    const replacement = result?.payload;
+    const summary = summarize(replacement);
+    if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || summary.count <= 0) {
+      continue;
+    }
+    endpoints[endpoint] = shapeTopPayload(request, {
+      ...replacement,
+      transport: {
+        ...(replacement.transport || {}),
+        fastBundleRepair: "strategy1-previous-2130-carry-forward",
+        staleSnapshotEndpoint: endpoint,
+        fetchedAt: new Date().toISOString(),
+      },
+    });
+  }
+}
+
 function isSoftSnapshotEndpoint(endpoint) {
-  return String(endpoint || "").startsWith("/api/open-buy-latest")
+  return isStrategy1Endpoint(endpoint)
     || String(endpoint || "").startsWith("/api/warrant-flow-latest")
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
@@ -260,6 +322,7 @@ module.exports = async function handler(request, response) {
       response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
+      await repairStrategy1WaitingSnapshot(request, endpoints);
       const payload = {
         ...snapshot.payload,
         endpoints,

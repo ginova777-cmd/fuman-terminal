@@ -720,6 +720,11 @@ for (const [file, source] of [
 if (!/compactSnapshotEndpoints/.test(terminalFastBundleApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=45, stale-while-revalidate=240"/.test(terminalFastBundleApi)) {
   issues.push("api/terminal-fast-bundle.js must compact desktop snapshot payloads and keep enough edge cache for cold-start route switching");
 }
+if (!/isEmptyStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
+  || !/repairStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
+  || !/strategy1-previous-2130-carry-forward/.test(terminalFastBundleApi)) {
+  issues.push("api/terminal-fast-bundle.js must repair stale Strategy1 holiday/preopen waiting snapshots with the previous 21:30 carry-forward run");
+}
 if (!/function\s+setStrategy2LiveShellCache/.test(strategy2LatestApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=12, stale-while-revalidate=30"/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must micro-cache desktop shell live payloads so Strategy2 keeps realtime without cold-start stalls");
 }
