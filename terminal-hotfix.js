@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260627-02";
+    window.__fumanWatchlistAddBridge = "20260627-03";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const normalizeCode = (value) => String(value || "").trim().match(/\d{4}/)?.[0] || "";
@@ -146,6 +146,7 @@
         try {
           const ok = shellAdd(normalized);
           if (ok) {
+            lastBridgeAddAt = Date.now();
             setStatus(`${normalized} 已加入或選中自選股`, "added");
             return true;
           }
