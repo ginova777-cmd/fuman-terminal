@@ -1504,8 +1504,8 @@
     if (document.documentElement.dataset.fumanStrategy2SnapshotFirstPrimeReady === "1") return;
     document.documentElement.dataset.fumanStrategy2SnapshotFirstPrimeReady = "1";
     if (!strategy2SnapshotFirstEnabled()) return;
-    primeStrategy2SnapshotFirst(false, "script");
-    runIdle(() => primeStrategy2SnapshotFirst(false, "idle"), 180, 2600);
+    runIdle(() => primeStrategy2SnapshotFirst(false, "script-idle"), 420, 2600);
+    runIdle(() => primeStrategy2SnapshotFirst(false, "idle"), 1200, 3200);
     window.addEventListener("focus", () => runIdle(() => primeStrategy2SnapshotFirst(false, "focus"), 180, 2600));
   }
 
