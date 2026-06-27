@@ -336,7 +336,11 @@ const realtimeRadarApi = read("api/realtime-radar-latest.js");
 const openBuyLatestApi = read("api/open-buy-latest.js");
 const latestStrategyApi = read("api/latest-strategy.js");
 const strategy2LatestApi = read("api/strategy2-latest.js");
+const strategy3LatestApi = read("api/strategy3-latest.js");
 const strategy4LatestApi = read("api/strategy4-latest.js");
+const strategy5LatestApi = read("api/strategy5-latest.js");
+const warrantFlowLatestApi = read("api/warrant-flow-latest.js");
+const desktopRouteSnapshotCache = read("lib/desktop-route-snapshot-cache.js");
 const terminalHomeApi = read("api/terminal-home.js");
 const mobileBootApi = read("api/mobile-boot.js");
 const mobileFragmentApi = read("api/mobile-fragment.js");
@@ -686,6 +690,19 @@ for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2Snaps
 }
 for (const marker of ["installStrategy2LivePrime", "primeStrategy2LiveRows", "api-live-prime", "primeStrategy2LiveRows(false, \"script\")"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 live prime marker ${marker}`);
+}
+if (/Math\.max\(Number\(options\.timeoutMs/.test(desktopRouteSnapshotCache)) {
+  issues.push("readEndpointFromDesktopSnapshot must honor per-call timeoutMs instead of forcing the 12000ms default during route cold start");
+}
+for (const [file, source] of [
+  ["api/strategy3-latest.js", strategy3LatestApi],
+  ["api/strategy4-latest.js", strategy4LatestApi],
+  ["api/strategy5-latest.js", strategy5LatestApi],
+  ["api/warrant-flow-latest.js", warrantFlowLatestApi],
+]) {
+  if (!/function\s+setDesktopSnapshotCache/.test(source) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=10, stale-while-revalidate=45"/.test(source)) {
+    issues.push(`${file} must short-cache desktop snapshot hits so daily complete-run routes cold-start quickly without static JSON fallback`);
+  }
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");

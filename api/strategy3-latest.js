@@ -33,6 +33,12 @@ function apiOnlyError(reason = "") {
   };
 }
 
+function setDesktopSnapshotCache(response) {
+  response.setHeader("Cache-Control", "public, max-age=6, stale-while-revalidate=24");
+  response.setHeader("CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+}
+
 async function fetchRowsFrom(table, query) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     headers: {
@@ -254,6 +260,7 @@ module.exports = async function handler(request, response) {
     via: "api/strategy3-latest",
   });
   if (cached) {
+    setDesktopSnapshotCache(response);
     response.status(200).json(cached);
     return;
   }

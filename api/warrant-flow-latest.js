@@ -97,6 +97,12 @@ function apiOnlyError(reason = "", tradingDay = null) {
   };
 }
 
+function setDesktopSnapshotCache(response) {
+  response.setHeader("Cache-Control", "public, max-age=6, stale-while-revalidate=24");
+  response.setHeader("CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+}
+
 function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay = null, options = {}) {
   const marketSession = buildEmptyMarketSession(tradingDay);
   return {
@@ -511,6 +517,7 @@ module.exports = async function handler(request, response) {
     via: "api/warrant-flow-latest",
   });
   if (cached) {
+    setDesktopSnapshotCache(response);
     sendJson(request, response, cached, "warrant-flow");
     return;
   }
