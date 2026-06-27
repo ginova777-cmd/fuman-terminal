@@ -144,6 +144,32 @@ function runTradeDateKey(run = {}) {
   return compactDateKey(run.run_trade_date || run.trade_date || run.scan_date || "");
 }
 
+function readinessText(readyStatus = {}) {
+  return [
+    readyStatus.last_error,
+    readyStatus.lastError,
+    readyStatus.message,
+    readyStatus.reason,
+    readyStatus.flame_reason,
+    readyStatus.source_status,
+    readyStatus.current_phase,
+  ].filter(Boolean).join(" ");
+}
+
+function allowsPrevious2130Run(readyStatus = {}) {
+  const text = readinessText(readyStatus);
+  return readyStatus.is_trading_day === false
+    || /not_trading_day|market_closed|holiday/i.test(text)
+    || /preopen_not_ready|futopt_not_ready/i.test(text);
+}
+
+function carryForwardReason(readyStatus = {}, usedDate = "") {
+  const sourceDate = isoDateKey(usedDate) || usedDate || "latest trading day";
+  const prefix = readyStatus.is_trading_day === false ? "休假日沿用" : "盤前沿用";
+  const detail = decisionReadyError(readyStatus);
+  return `${prefix} ${sourceDate} 21:30 初篩名單；等待 08:45 個股期貨 / 08:55 搓合；${detail}`;
+}
+
 async function fetchReadyStatus() {
   try {
     const rows = await fetchRowsFrom(READY_STATUS_VIEW, "select=*&limit=1");
@@ -153,7 +179,7 @@ async function fetchReadyStatus() {
   }
 }
 
-async function fetchLatestCompleteRun(readyStatus, limit = 50) {
+async function fetchLatestCompleteRun(readyStatus, limit = 50, options = {}) {
   const latestTradingDay = compactDateKey(readyStatus?.latest_trading_day || readyStatus?.trade_date || "");
   const rows = await fetchRowsFrom(
     RUNS_TABLE,
@@ -166,11 +192,18 @@ async function fetchLatestCompleteRun(readyStatus, limit = 50) {
       `limit=${Math.max(1, Math.min(50, cleanNumber(limit) || 50))}`,
     ].join("&")
   );
-  return rows.find((run) => {
+  let previousAuthoritativeRun = null;
+  const currentTradingDayRun = rows.find((run) => {
     if (!run?.run_id || !runIsAuthoritative(run)) return false;
+    if (!previousAuthoritativeRun) previousAuthoritativeRun = run;
     const runDate = runTradeDateKey(run);
     return !latestTradingDay || !runDate || runDate === latestTradingDay;
-  }) || null;
+  });
+  if (currentTradingDayRun) return currentTradingDayRun;
+  if (options.allowPrevious2130Run && previousAuthoritativeRun && allowsPrevious2130Run(readyStatus)) {
+    return { ...previousAuthoritativeRun, __previous2130CarryForward: true };
+  }
+  return null;
 }
 
 async function fetchRowsForRun(runId, limit = 2000) {
@@ -226,6 +259,7 @@ function strategy1StageCards(resultCount, buyCount, readyStatus = {}) {
 }
 
 function buildPayload(rows, run, readyStatus, options = {}) {
+  const carryForward2130 = Boolean(options.previous2130CarryForward || run.__previous2130CarryForward);
   const normalized = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
@@ -243,6 +277,15 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   const blockCount = normalized.filter((row) => row.decision === "BLOCK").length;
   const runId = String(run.run_id || "");
   const usedDate = compactDateKey(run.run_trade_date || run.scan_date || rows[0]?.scan_date || "");
+  const displayMode = carryForward2130
+    ? "previous_2130_candidates"
+    : decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches";
+  const qualityStatus = carryForward2130
+    ? "previous_2130_carry_forward"
+    : decisionPending && options.pendingCandidateDisplay ? "decision_pending" : String(run.quality_status || rows[0]?.quality_status || "complete");
+  const reason = carryForward2130
+    ? carryForwardReason(readyStatus, usedDate)
+    : readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus);
 
   return {
     ok: true,
@@ -259,18 +302,18 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       marketDataDate: usedDate,
       marketDataIsoDate: isoDateKey(usedDate),
       hasTodayMarketData: usedDate === compactDateKey(taipeiDateKey()),
-      closed: false,
-      reason: "strategy1-run-date",
-      source: "strategy1-run-date",
+      closed: carryForward2130 || readyStatus?.is_trading_day === false,
+      reason: carryForward2130 ? "strategy1-previous-2130-carry-forward" : "strategy1-run-date",
+      source: carryForward2130 ? "strategy1-previous-2130-complete-run" : "strategy1-run-date",
     },
     complete: true,
     canvas: Boolean(options.canvas),
-    qualityStatus: decisionPending && options.pendingCandidateDisplay ? "decision_pending" : String(run.quality_status || rows[0]?.quality_status || "complete"),
+    qualityStatus,
     decisionReady: readyStatus?.decision_ready === true,
     decisionPending,
-    displayMode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
-    reason: readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus),
-    lastError: "",
+    displayMode,
+    reason,
+    lastError: carryForward2130 ? decisionReadyError(readyStatus) : "",
     count: displayRows.length,
     displayCount: displayRows.length,
     total: expectedTotal || resultCount,
@@ -294,9 +337,10 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       watch_count: watchCount,
       block_count: blockCount,
       display_count: displayRows.length,
-      display_mode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
+      display_mode: displayMode,
       decision_ready: readyStatus?.decision_ready === true,
       decision_pending: decisionPending,
+      previous_2130_carry_forward: carryForward2130,
       latest_run_source: RUNS_TABLE,
       ready_status_view: READY_STATUS_VIEW,
     },
@@ -309,7 +353,8 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       gate: STRATEGY1_GATE,
       decisionReady: readyStatus?.decision_ready === true,
       decisionPending,
-      displayMode: decisionPending && options.pendingCandidateDisplay ? "decision_pending_candidates" : "buy_matches",
+      displayMode,
+      previous2130CarryForward: carryForward2130,
       runId,
       via: "api/open-buy-latest",
       fetchedAt: new Date().toISOString(),
@@ -386,26 +431,31 @@ function decisionReadyError(readyStatus) {
 
 async function snapshotFriendlyPendingPayload(readyStatus, options) {
   const detail = decisionReadyError(readyStatus);
-  const run = await fetchLatestCompleteRun(readyStatus, 50);
+  const run = await fetchLatestCompleteRun(readyStatus, 50, { allowPrevious2130Run: true });
   if (!run?.run_id) return emptySnapshotPayload("strategy1_decision_not_ready", detail);
   const rows = await fetchRowsForRun(run.run_id, options.limit);
   if (!rows.length) return emptySnapshotPayload("strategy1_complete_run_empty", run.run_id);
-  const payload = buildPayload(rows, run, readyStatus, { ...options, pendingCandidateDisplay: true });
+  const previous2130CarryForward = Boolean(run.__previous2130CarryForward);
+  const payload = buildPayload(rows, run, readyStatus, { ...options, pendingCandidateDisplay: true, previous2130CarryForward });
+  const gate = previous2130CarryForward
+    ? `${STRATEGY1_GATE}+previous-2130-carry-forward`
+    : `${STRATEGY1_GATE}+decision-pending-display`;
   return {
     ...payload,
-    gate: `${STRATEGY1_GATE}+decision-pending-display`,
-    qualityStatus: "decision_pending",
-    reason: detail,
+    gate,
+    qualityStatus: previous2130CarryForward ? "previous_2130_carry_forward" : "decision_pending",
+    reason: previous2130CarryForward ? carryForwardReason(readyStatus, payload.usedDate) : detail,
     decisionPending: true,
     lastError: detail,
     meta: {
       ...(payload.meta || {}),
-      gate: `${STRATEGY1_GATE}+decision-pending-display`,
+      gate,
       decision_pending_display: true,
+      previous_2130_carry_forward: previous2130CarryForward,
     },
     transport: {
       ...(payload.transport || {}),
-      gate: `${STRATEGY1_GATE}+decision-pending-display`,
+      gate,
     },
   };
 }

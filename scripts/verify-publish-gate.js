@@ -605,6 +605,9 @@ if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.sn
 if (!/snapshotFriendlyPendingPayload/.test(openBuyLatestApi) || !/decision-pending-display/.test(openBuyLatestApi)) {
   issues.push("api/open-buy-latest.js compact snapshot response must show latest complete-run candidates when decision_ready is false, with decision-pending metadata");
 }
+if (!/previous_2130_carry_forward/.test(openBuyLatestApi) || !/previous-2130-carry-forward/.test(openBuyLatestApi) || !/21:30 初篩名單/.test(openBuyLatestApi) || !/allowPrevious2130Run/.test(openBuyLatestApi)) {
+  issues.push("api/open-buy-latest.js must carry forward the previous 21:30 Strategy1 complete run during holidays/preopen waits instead of showing an empty waiting snapshot");
+}
 if (!/canvas=1&compact=1&shell=1&limit=60&live=1/.test(runOpenBuy)) {
   issues.push("run-open-buy.ps1 must verify terminal compact Strategy1 API, not the strict full API, before refreshing desktop snapshot");
 }
