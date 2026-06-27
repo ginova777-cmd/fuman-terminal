@@ -84,6 +84,14 @@ if (runtimeOwnershipGuard.status !== 0) {
   issues.push(`verify-runtime-ownership failed: ${(runtimeOwnershipGuard.stderr || runtimeOwnershipGuard.stdout || "").trim()}`);
 }
 
+const fastShellSelfContainedGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-fast-shell-self-contained.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (fastShellSelfContainedGuard.status !== 0) {
+  issues.push(`verify-fast-shell-self-contained failed: ${(fastShellSelfContainedGuard.stderr || fastShellSelfContainedGuard.stdout || "").trim()}`);
+}
+
 const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-deploy-worktree-clean.js")], {
   cwd: ROOT,
   encoding: "utf8",
@@ -172,6 +180,12 @@ if (!packageJson.scripts?.["verify:scorecard-chain"] || !/verify-scorecard-resou
 }
 if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-surfaces-chain\.js/.test(packageJson.scripts["verify:market-surfaces-chain"])) {
   issues.push("package.json missing scripts.verify:market-surfaces-chain for market overview/heatmap/AI/realtime/watchlist");
+}
+if (!packageJson.scripts?.["verify:fast-shell-self-contained"] || !/verify-fast-shell-self-contained\.js/.test(packageJson.scripts["verify:fast-shell-self-contained"])) {
+  issues.push("package.json missing scripts.verify:fast-shell-self-contained for desktop fast shell helper isolation");
+}
+if (!packageJson.scripts?.["verify:fast-shell-regression-drill"] || !/verify-fast-shell-regression-drill\.js/.test(packageJson.scripts["verify:fast-shell-regression-drill"])) {
+  issues.push("package.json missing scripts.verify:fast-shell-regression-drill for closed-loop UI regression rehearsal");
 }
 if (!packageJson.scripts?.["verify:post-scan-snapshot-refresh"] || !/verify-post-scan-snapshot-refresh-contract\.js/.test(packageJson.scripts["verify:post-scan-snapshot-refresh"])) {
   issues.push("package.json missing scripts.verify:post-scan-snapshot-refresh for scan-complete immediate-display contract");

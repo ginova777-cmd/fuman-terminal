@@ -140,8 +140,17 @@ if (!serviceWorker.includes("desktop-fast-shell-core-")) {
 if (!String(packageJson.scripts?.["verify:runtime-ownership"] || "").includes("verify-runtime-ownership.js")) {
   issues.push("package.json missing scripts.verify:runtime-ownership");
 }
+if (!String(packageJson.scripts?.["verify:fast-shell-self-contained"] || "").includes("verify-fast-shell-self-contained.js")) {
+  issues.push("package.json missing scripts.verify:fast-shell-self-contained");
+}
+if (!String(packageJson.scripts?.["verify:fast-shell-regression-drill"] || "").includes("verify-fast-shell-regression-drill.js")) {
+  issues.push("package.json missing scripts.verify:fast-shell-regression-drill");
+}
 if (!publishGate.includes("verify-runtime-ownership.js")) {
   issues.push("scripts/verify-publish-gate.js must run verify-runtime-ownership.js");
+}
+if (!publishGate.includes("verify-fast-shell-self-contained.js")) {
+  issues.push("scripts/verify-publish-gate.js must run verify-fast-shell-self-contained.js");
 }
 
 if (issues.length) {
