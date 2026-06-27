@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-06";
+  const VERSION = "watchlist-rich-shell-20260627-07";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -38,6 +38,8 @@
     };
     window.FUMAN_WATCHLIST_SHELL_INSTANCE = instance;
     document.documentElement.dataset.fumanWatchlistModule = instance.mode;
+    const watchlistRoot = document.querySelector("#watchlist-view");
+    if (watchlistRoot) watchlistRoot.dataset.watchlistShellReady = "1";
     installStyle();
     installEvents();
     render();
