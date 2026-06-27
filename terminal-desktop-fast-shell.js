@@ -708,7 +708,7 @@
         icon: "☆",
         title: "自選股",
         badge: "FMN://watchlist.fast-shell",
-        summary: "自選股清單與個股分析先保留快照，點擊後背景補齊技術頁。",
+        summary: "新版自選股分析已開通，新增、個股分析、技術與籌碼狀態由同一個 rich shell 顯示。",
       };
     }
     const text = typeof linkOrKey === "string"
@@ -3299,6 +3299,10 @@
     const existingByAttr = attr ? document.querySelector(`script[${attr}]`) : null;
     const existing = existingByAttr || Array.from(document.scripts).find((script) => script.src === src);
     if (existing) {
+      if (attr === "data-fuman-watchlist-shell" && (window.FUMAN_WATCHLIST_SHELL_MODULE || window.FUMAN_WATCHLIST_SHELL_INSTANCE)) {
+        existing.dataset.fumanLoaded = "1";
+        return Promise.resolve(true);
+      }
       if (existing.dataset.fumanLoaded === "1") return Promise.resolve(true);
       return new Promise((resolve, reject) => {
         existing.addEventListener("load", () => {
@@ -3324,7 +3328,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = `${terminalFastVersion()}-watchlist-add-20260627-04`;
+    const version = `${terminalFastVersion()}-watchlist-add-20260627-05`;
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);

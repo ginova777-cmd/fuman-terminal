@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-05";
+  const VERSION = "watchlist-rich-shell-20260627-06";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -9,6 +9,18 @@
   let quoteCache = new Map();
   let stockUniverseCache = null;
   let stockUniversePromise = null;
+  const FEATURE_STATUS = [
+    ["新增股票", "已開通"],
+    ["全台上市上櫃", "已開通"],
+    ["右側個股分析", "已開通"],
+    ["技術分析", "已開通"],
+    ["籌碼判讀", "已開通"],
+    ["提醒功能", "已開通"],
+  ];
+
+  function featureStatusHtml() {
+    return FEATURE_STATUS.map(([name, status]) => `<span class="watch-feature-pill"><b>${escapeText(name)}</b><em>${escapeText(status)}</em></span>`).join("");
+  }
 
   function install() {
     if (installed) return window.FUMAN_WATCHLIST_SHELL_INSTANCE;
@@ -273,7 +285,7 @@
   function renderEmptyAnalysis() {
     const panel = document.querySelector("#watchlist-analysis");
     if (!panel) return;
-    panel.innerHTML = '<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>';
+    panel.innerHTML = `<div class="watch-mobile-empty"><section class="watch-feature-strip empty" aria-label="自選股功能開通狀態">${featureStatusHtml()}</section><p>點選股票查看 AI 個股判讀</p></div>`;
   }
 
   function renderAnalysis(item = {}) {
@@ -295,6 +307,7 @@
     const score = Math.max(0, Math.min(100, Math.round(50 + pct * 8)));
     panel.innerHTML = `
       <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
+        <section class="watch-feature-strip" aria-label="自選股功能開通狀態">${featureStatusHtml()}</section>
         <section class="watch-action-row">
           <label>股票代碼
             <input type="text" value="${escapeText(code)}" readonly>
@@ -469,6 +482,11 @@
       #watchlist-view .watch-up { color:#ff4f5f; }
       #watchlist-view .watch-alert, #watchlist-view .watch-remove { border:0; background:transparent; color:#b7a27d; cursor:pointer; font-size:18px; }
       #watchlist-view .watchlist-analysis-pane { min-width:0; }
+      #watchlist-view .watch-feature-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(142px,1fr)); gap:8px; margin-bottom:14px; }
+      #watchlist-view .watch-feature-pill { min-height:42px; border:1px solid rgba(46,213,142,.32); border-radius:8px; background:rgba(14,60,46,.34); display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; color:#d8fff0; font-size:12px; font-weight:900; min-width:0; }
+      #watchlist-view .watch-feature-pill b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      #watchlist-view .watch-feature-pill em { color:#25e891; font-style:normal; white-space:nowrap; }
+      #watchlist-view .watch-mobile-empty .watch-feature-strip { width:min(720px,100%); margin:0 auto 14px; }
       #watchlist-view .watch-action-row { display:grid; grid-template-columns:200px minmax(180px,1fr) minmax(180px,1fr); gap:12px; align-items:end; margin-bottom:18px; }
       #watchlist-view .watch-action-row label { display:grid; gap:6px; color:#9aa8bd; font-size:12px; }
       #watchlist-view .watch-action-row input, #watchlist-view .watch-action-row button { height:42px; border-radius:8px; border:1px solid rgba(226,178,87,.3); background:rgba(9,18,29,.92); color:#eef6ff; padding:0 14px; font-weight:900; }
@@ -493,12 +511,15 @@
       #watchlist-view .watch-mobile-empty { display:grid; place-items:center; min-height:220px; color:#91a0bb; font-weight:900; }
       @media (max-width: 980px) {
         #watchlist-view .watchlist-layout { grid-template-columns:1fr; }
-        #watchlist-view .watch-summary-grid, #watchlist-view .watch-detail-sections, #watchlist-view .watch-action-row { grid-template-columns:1fr; }
+        #watchlist-view .watch-summary-grid, #watchlist-view .watch-detail-sections, #watchlist-view .watch-action-row, #watchlist-view .watch-feature-strip { grid-template-columns:1fr; }
       }
     `;
     document.head.appendChild(style);
   }
 
+  try {
+    if (document.currentScript?.dataset) document.currentScript.dataset.fumanLoaded = "1";
+  } catch {}
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
   window.FUMAN_WATCHLIST_SHELL_FORCE_ADD = () => {
     try { install(); } catch (error) {}
