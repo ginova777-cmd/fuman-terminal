@@ -4,6 +4,7 @@
   const VERSION = "watchlist-rich-shell-20260627-13";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
+  const WATCHLIST_MAX_ITEMS = 10;
   let installed = false;
   let selectedCode = "";
   let quoteCache = new Map();
@@ -53,7 +54,8 @@
   function normalizeListRows(rows) {
     return Array.isArray(rows) ? rows
       .map((item) => ({ ...item, code: normalizeCode(item?.code || item?.symbol || item?.Code) }))
-      .filter((item) => item && item.code) : [];
+      .filter((item) => item && item.code)
+      .slice(0, WATCHLIST_MAX_ITEMS) : [];
   }
 
   function readList() {
@@ -71,7 +73,7 @@
   }
 
   function writeList(rows) {
-    const normalized = normalizeListRows(rows).slice(0, 80);
+    const normalized = normalizeListRows(rows).slice(0, WATCHLIST_MAX_ITEMS);
     watchlistMemory = normalized;
     const value = JSON.stringify(normalized);
     try {
@@ -241,6 +243,10 @@
     const rows = readList();
     const meta = findStockMetaSync(code);
     if (!rows.some((item) => item.code === code)) {
+      if (rows.length >= WATCHLIST_MAX_ITEMS) {
+        updateEntryLimitState(rows, `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`);
+        return false;
+      }
       rows.unshift({ code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() });
       writeList(rows);
     }
@@ -256,6 +262,24 @@
     if (!status) return;
     status.textContent = message;
     status.dataset.statusKind = kind;
+  }
+
+  function updateEntryLimitState(rows = readList(), message = "") {
+    const atLimit = rows.length >= WATCHLIST_MAX_ITEMS;
+    const input = document.querySelector("#watchlist-search-input");
+    const add = document.querySelector("#watchlist-add-btn");
+    const form = document.querySelector("#watchlist-view .watchlist-entry-form");
+    if (input) {
+      input.disabled = atLimit;
+      input.placeholder = atLimit ? `已達 ${WATCHLIST_MAX_ITEMS} 檔上限` : "股票代碼";
+    }
+    if (add) {
+      add.disabled = atLimit;
+      add.setAttribute("aria-disabled", atLimit ? "true" : "false");
+      add.title = atLimit ? `自選股已達 ${WATCHLIST_MAX_ITEMS} 檔上限` : "新增自選股";
+    }
+    form?.classList.toggle("watchlist-limit-reached", atLimit);
+    if (message || atLimit) showEntryStatus(message || `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`, atLimit ? "warn" : "info");
   }
 
   function addFromInput(anchor) {
@@ -296,8 +320,10 @@
   function render() {
     installStyle();
     const rows = listWithCache();
+    bindEntryControls();
+    updateEntryLimitState(rows);
     const count = document.querySelector("#watchlist-count");
-    if (count) count.textContent = String(rows.length);
+    if (count) count.textContent = `${rows.length}/${WATCHLIST_MAX_ITEMS}`;
     const refresh = document.querySelector("#watchlist-refresh");
     if (refresh) {
       const now = new Date();
@@ -313,7 +339,6 @@
     if (!selectedCode || !rows.some((row) => row.code === selectedCode)) selectedCode = rows[0].code;
     box.innerHTML = rows.map((item) => cardHtml(item)).join("");
     renderAnalysis(rows.find((item) => item.code === selectedCode) || rows[0]);
-    bindEntryControls();
     rows.slice(0, 8).forEach((item) => hydrateQuote(item.code));
   }
 
@@ -573,6 +598,7 @@
       #watchlist-view .watchlist-entry-form { display:grid; grid-template-columns:minmax(0,1fr)48px; gap:10px; margin:14px 0; }
       #watchlist-view .watchlist-entry-input { height:48px; border:1px solid rgba(119,146,184,.36); border-radius:8px; background:rgba(8,19,31,.92); color:#eef6ff; padding:0 14px; font-size:15px; font-weight:900; }
       #watchlist-view .watchlist-entry-add { width:48px; height:48px; border:0; border-radius:9px; background:linear-gradient(135deg,#f1b544,#f39a2f); color:#6d4212; font-size:26px; font-weight:950; cursor:pointer; }
+      #watchlist-view .watchlist-entry-input:disabled, #watchlist-view .watchlist-entry-add:disabled { opacity:.55; cursor:not-allowed; }
       #watchlist-view .watchlist-entry-status { min-height:18px; margin:-6px 0 10px; color:#92a3bb; font-size:12px; font-weight:900; }
       #watchlist-view .watchlist-entry-status[data-status-kind="added"] { color:#24e58c; }
       #watchlist-view .watchlist-entry-status[data-status-kind="exists"] { color:#f7c767; }
