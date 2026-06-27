@@ -11,6 +11,7 @@
   installWarmMainApp();
   installScriptPreload();
   installHotPathDataWarmup();
+  installWatchlistAddBridge();
   installHotfixStyle();
 
   function mark(name) {
@@ -72,6 +73,130 @@
     `;
     document.head.appendChild(style);
     document.documentElement.classList.add("fuman-desktop-fast-path");
+  }
+
+  function installWatchlistAddBridge() {
+    if (window.__fumanWatchlistAddBridge) return;
+    window.__fumanWatchlistAddBridge = "20260627-01";
+    const watchlistKey = "fuman_watchlist";
+    const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
+    const normalizeCode = (value) => String(value || "").trim().match(/\d{4}/)?.[0] || "";
+    const normalizeRows = (rows) => Array.isArray(rows)
+      ? rows.map((row) => ({
+        ...row,
+        code: normalizeCode(row?.code || row?.symbol || row?.Code),
+      })).filter((row) => row.code)
+      : [];
+    const readRows = () => {
+      try {
+        return normalizeRows(JSON.parse(window.localStorage?.getItem(watchlistKey) || "[]"));
+      } catch (error) {
+        return [];
+      }
+    };
+    const writeRows = (rows) => {
+      const normalized = normalizeRows(rows).slice(0, 80);
+      const value = JSON.stringify(normalized);
+      try {
+        window.localStorage?.setItem(watchlistKey, value);
+        window.localStorage?.setItem(mobileWatchlistKey, value);
+      } catch (error) {}
+      return normalized;
+    };
+    const setStatus = (message, kind) => {
+      const status = document.querySelector("#watchlist-entry-status");
+      if (!status) return;
+      status.textContent = message;
+      status.dataset.statusKind = kind || "info";
+    };
+    const fallbackRender = (rows, activeCode) => {
+      const count = document.querySelector("#watchlist-count");
+      if (count) count.textContent = String(rows.length);
+      const box = document.querySelector("#watchlist-stocks");
+      if (!box) return;
+      box.innerHTML = rows.map((row) => {
+        const code = row.code;
+        const name = row.name || code;
+        return `
+          <article class="watchlist-card ${code === activeCode ? "selected" : ""}" data-code="${code}" data-name="${name}">
+            <div class="watch-card-main">
+              <div class="watch-card-title">
+                <span class="watch-code">${code}</span>
+                <span class="watch-name">${name}</span>
+                <span class="watch-market-badge">${row.market || "台股"}</span>
+              </div>
+              <div class="watch-card-flow"><span>外 --</span><span>投 --</span></div>
+            </div>
+            <div class="watch-card-price"><strong>--</strong><small>+0.00%</small></div>
+            <button class="watch-alert" type="button" aria-label="提醒 ${code}">♧</button>
+            <button class="watch-remove" type="button" data-watch-remove="${code}" aria-label="移除 ${code}">×</button>
+          </article>
+        `;
+      }).join("");
+    };
+    const addCode = (code, source) => {
+      const normalized = normalizeCode(code);
+      if (!normalized) {
+        setStatus("請輸入四碼股票代號", "warn");
+        return false;
+      }
+      const shellAdd = window.FUMAN_WATCHLIST_FORCE_ADD_CODE;
+      if (typeof shellAdd === "function") {
+        try {
+          const ok = shellAdd(normalized);
+          if (ok) {
+            setStatus(`${normalized} 已加入或選中自選股`, "added");
+            return true;
+          }
+        } catch (error) {}
+      }
+      const rows = readRows();
+      const existed = rows.some((row) => row.code === normalized);
+      const nextRows = existed
+        ? rows
+        : [{ code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }, ...rows];
+      writeRows(nextRows);
+      fallbackRender(nextRows, normalized);
+      setStatus(existed ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existed ? "exists" : "added");
+      return true;
+    };
+    const findInput = (target) => {
+      const scoped = target?.closest?.(".watchlist-entry-form")?.querySelector?.("#watchlist-search-input, .watchlist-entry-input");
+      if (scoped) return scoped;
+      return document.querySelector("#watchlist-search-input");
+    };
+    const handleAdd = (event) => {
+      const button = event.target?.closest?.("#watchlist-add-btn, .watchlist-entry-add");
+      if (!button) return;
+      const input = findInput(button);
+      const code = normalizeCode(input?.value);
+      if (!code) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      if (addCode(code, "button")) {
+        if (input) {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.focus?.();
+        }
+      }
+    };
+    document.addEventListener("pointerdown", handleAdd, true);
+    document.addEventListener("click", handleAdd, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.target?.id !== "watchlist-search-input") return;
+      const code = normalizeCode(event.target.value);
+      if (!code) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      if (addCode(code, "enter")) {
+        event.target.value = "";
+        event.target.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }, true);
+    window.FUMAN_WATCHLIST_BRIDGE_ADD = addCode;
   }
 
   function installInstantViewSwitch() {
