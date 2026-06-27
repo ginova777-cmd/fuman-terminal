@@ -109,6 +109,7 @@
   let marketApiOnlyLoading = false;
   let marketDesktopAiLoading = false;
   let marketDesktopMode = "overview";
+  let marketSnapshotFirstPayload = null;
   let marketHeatmapSectorRows = [];
   const canvasState = {
     route: "",
@@ -3406,16 +3407,31 @@
     if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
       shell.ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
     }
-    const state = { heatmap: null, radar: null, ai: null };
+    const state = { heatmap: marketSnapshotFirstPayload || null, radar: null, ai: null };
     let settled = 0;
     const paint = () => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
       renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
     };
+    if (state.heatmap?.sectors?.length) {
+      window.setTimeout(paint, 0);
+    }
     const done = () => {
       settled += 1;
-      if (settled >= 3) marketDesktopAiLoading = false;
+      if (settled >= 4) marketDesktopAiLoading = false;
     };
+    fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200)
+      .then((payload) => {
+        if (payload?.sectors?.length) {
+          marketSnapshotFirstPayload = {
+            ...payload,
+            snapshotFirst: true,
+          };
+          state.heatmap = marketSnapshotFirstPayload;
+          paint();
+        }
+      })
+      .finally(done);
     fetchMarketJson("/api/market-ai-live", 40, force, 5200)
       .then((payload) => {
         state.ai = payload || {};
@@ -3424,8 +3440,10 @@
       .finally(done);
     fetchMarketJson("/api/heatmap", 60, force, 6500)
       .then((payload) => {
-        state.heatmap = payload || {};
-        paint();
+        if (payload?.sectors?.length) {
+          state.heatmap = payload || {};
+          paint();
+        }
       })
       .finally(done);
     fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200)
@@ -3481,7 +3499,7 @@
   function scheduleMarketDesktopModeHydrate(mode, force = false) {
     if (mode !== "ai") return;
     window.clearTimeout(window.__fumanMarketAiHydrateTimer || 0);
-    const delay = isInteractionHoldActive() ? interactionHoldRemaining() + 120 : 80;
+    const delay = 40;
     window.__fumanMarketAiHydrateTimer = window.setTimeout(() => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
       marketApiOnlyLoading = false;
@@ -3749,6 +3767,7 @@
             ...payload,
             snapshotFirst: true,
           };
+          marketSnapshotFirstPayload = state.heatmap;
           paint();
         }
       })
@@ -4122,6 +4141,7 @@
             ...payload,
             snapshotFirst: true,
           };
+          marketSnapshotFirstPayload = state.heatmap;
           renderIfChanged(true);
         }
       })
@@ -4130,6 +4150,7 @@
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = payload || {};
+          marketSnapshotFirstPayload = state.heatmap;
           renderIfChanged(true);
         }
       })
