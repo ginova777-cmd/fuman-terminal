@@ -4728,10 +4728,14 @@
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         if (apiRows?.length) {
           const paintSource = snapshotFirst ? "snapshot-first-refreshing" : "api";
-          scheduleRoutePaint(key, seq, () => {
+          const paintSnapshotFirst = () => {
             renderStrategyRouteShell(key, paintSource, apiRows);
             if (snapshotFirst) setCanvasStatus("快照先顯示｜即時刷新中");
-          }, snapshotFirst ? "snapshot" : "api");
+            markLatency(snapshotFirst ? "snapshot" : "api", key);
+            updateLatencyPanel();
+          };
+          if (snapshotFirst) paintSnapshotFirst();
+          else scheduleRoutePaint(key, seq, paintSnapshotFirst, "api");
           if (snapshotFirst) {
             window.setTimeout(() => {
               if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
@@ -4739,7 +4743,7 @@
                 if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
                 if (liveRows?.length) scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "api-live", liveRows), "api-live");
               }).catch(() => setCanvasStatus("快照先顯示｜即時刷新稍後重試"));
-            }, 120);
+            }, 900);
           }
         } else {
           scheduleCanvasDraw();
