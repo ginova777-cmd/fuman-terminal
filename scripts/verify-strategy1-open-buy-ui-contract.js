@@ -98,7 +98,7 @@ if (!prepareDeploy.includes("verify:strategy1-open-buy-ui")) {
 
 const indexHtml = read("index.html");
 const terminalHotfix = read("terminal-hotfix.js");
-if (!indexHtml.includes('terminal-hotfix.js" data-fuman-terminal-hotfix="1"')) {
+if (!/terminal-hotfix\.js(?:\?[^"']+)?["']\s+data-fuman-terminal-hotfix=["']1["']/.test(indexHtml)) {
   pushIssue("index.html: terminal-hotfix.js must load before terminal-core.js");
 }
 if (!terminalHotfix.includes("installStrategy1OpenBuyRollbackGuard")) {

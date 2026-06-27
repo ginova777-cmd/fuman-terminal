@@ -76,6 +76,14 @@ if (terminalModulesGuard.status !== 0) {
   issues.push(`verify-terminal-modules-contract failed: ${(terminalModulesGuard.stderr || terminalModulesGuard.stdout || "").trim()}`);
 }
 
+const runtimeOwnershipGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-runtime-ownership.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (runtimeOwnershipGuard.status !== 0) {
+  issues.push(`verify-runtime-ownership failed: ${(runtimeOwnershipGuard.stderr || runtimeOwnershipGuard.stdout || "").trim()}`);
+}
+
 const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-deploy-worktree-clean.js")], {
   cwd: ROOT,
   encoding: "utf8",
