@@ -26,6 +26,7 @@
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
+  const MARKET_API_CACHE_KEY = "fuman-market-api-only-cache-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const DEFAULT_DESKTOP_ROUTE_KEY = "strategy|策略5";
   const CANVAS_ROW_HEIGHT = 46;
@@ -109,6 +110,8 @@
   let marketApiOnlyLoading = false;
   let marketDesktopMode = "overview";
   let marketHeatmapSectorRows = [];
+  let marketApiOnlyCacheHydrated = false;
+  let marketApiOnlyState = { market: null, heatmap: null, radar: null, ai: null };
   const canvasState = {
     route: "",
     source: "",
@@ -3290,7 +3293,8 @@
 
   function marketApiUrl(path, limit = 60) {
     const sep = path.includes("?") ? "&" : "?";
-    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}&t=${Date.now()}`;
+    const fast = /\/api\/(?:heatmap|market-ai-live)/.test(path) ? "&fast=1" : "";
+    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}${fast}&t=${Date.now()}`;
   }
 
   function formatYi(value) {
@@ -3391,6 +3395,64 @@
     });
   }
 
+  function hasMarketApiOnlyPayload(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    if (Array.isArray(payload.sectors) && payload.sectors.length) return true;
+    if (Array.isArray(payload.rows) && payload.rows.length) return true;
+    if (Array.isArray(payload.indexes) && payload.indexes.length) return true;
+    if (payload.market || payload.strategy2 || payload.realtimeRadar || payload.summary || payload.snapshot) return true;
+    return false;
+  }
+
+  function hydrateMarketApiOnlyCache() {
+    if (marketApiOnlyCacheHydrated) return;
+    marketApiOnlyCacheHydrated = true;
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(MARKET_API_CACHE_KEY) || "null");
+      if (!cached || Date.now() - Number(cached.at || 0) > 30 * 60 * 1000) return;
+      ["market", "heatmap", "radar", "ai"].forEach((key) => {
+        if (hasMarketApiOnlyPayload(cached[key])) marketApiOnlyState[key] = cached[key];
+      });
+    } catch (error) {}
+  }
+
+  function saveMarketApiOnlyCache() {
+    try {
+      sessionStorage.setItem(MARKET_API_CACHE_KEY, JSON.stringify({
+        at: Date.now(),
+        market: marketApiOnlyState.market,
+        heatmap: marketApiOnlyState.heatmap,
+        radar: marketApiOnlyState.radar,
+        ai: marketApiOnlyState.ai,
+      }));
+    } catch (error) {}
+  }
+
+  function marketApiOnlyStateSignature() {
+    const state = marketApiOnlyState;
+    return JSON.stringify({
+      market: normalizeArray(state.market?.indexes).map((item) => `${item["指數"]}:${item["收盤指數"]}:${item["漲跌"]}:${item["漲跌點數"]}:${item["漲跌百分比"]}`).join("|"),
+      futures: `${state.market?.futuresNear?.price || state.market?.futures?.price || ""}:${state.market?.futuresNext?.price || ""}`,
+      heatmap: normalizeArray(state.heatmap?.sectors).slice(0, 60).map((item) => `${item.name || item.industry}:${item.pct ?? item.avgPct}:${item.up}:${item.down}:${item.count}`).join("|"),
+      ai: state.ai?.snapshot?.snapshotId || state.ai?.aiDetectWindow?.reason || state.ai?.summary?.strategy2Count || "",
+      radar: state.radar?.runId || state.radar?.timestamp || state.radar?.rows?.[0]?.detectedAt || "",
+      heatmapCount: state.heatmap?.sectorCount || normalizeArray(state.heatmap?.sectors).length,
+      radarCount: normalizeArray(state.radar?.rows).length,
+    });
+  }
+
+  function renderCurrentMarketApiOnlyState(allowSame = false, force = false) {
+    const nextSignature = marketApiOnlyStateSignature();
+    if (!allowSame && !force && nextSignature === marketApiOnlySignature) return;
+    marketApiOnlySignature = nextSignature;
+    renderMarketOverviewApi(marketApiOnlyState.market || {}, marketApiOnlyState.heatmap || {});
+    if (marketApiOnlyState.heatmap?.sectors?.length) {
+      renderMarketHeatmapApi(marketApiOnlyState.heatmap.sectors, marketApiOnlyState.heatmap);
+    }
+    renderMarketApiAi(marketApiOnlyState.heatmap || {}, marketApiOnlyState.radar || {}, marketApiOnlyState.ai || {});
+    renderMarketApiRadar(marketApiOnlyState.radar || {});
+  }
+
   function ensureMarketDesktopShell() {
     const market = document.querySelector("#market-view");
     if (!market) return {};
@@ -3430,6 +3492,10 @@
   function applyMarketDesktopMode(mode) {
     marketDesktopMode = mode === "ai" ? "ai" : "overview";
     ensureMarketDesktopShell();
+    if (marketDesktopMode === "ai") {
+      hydrateMarketApiOnlyCache();
+      renderCurrentMarketApiOnlyState(true, false);
+    }
   }
 
   function restoreMarketDesktopMode() {
@@ -3942,55 +4008,43 @@
   }
 
   function refreshMarketApiOnly(force = false) {
-    if (!isMarketViewActive() || marketApiOnlyLoading) return;
+    if (!isMarketViewActive()) return;
+    hydrateMarketApiOnlyCache();
     restoreMarketDesktopMode();
+    renderCurrentMarketApiOnlyState(true, force);
+    if (marketApiOnlyLoading) return;
     marketApiOnlyLoading = true;
-    const state = { market: null, heatmap: null, radar: null, ai: null };
     let pending = 4;
     const done = () => {
       pending -= 1;
       if (pending <= 0) marketApiOnlyLoading = false;
     };
-    const signature = () => JSON.stringify({
-      market: normalizeArray(state.market?.indexes).map((item) => `${item["指數"]}:${item["收盤指數"]}:${item["漲跌"]}:${item["漲跌點數"]}:${item["漲跌百分比"]}`).join("|"),
-      futures: `${state.market?.futuresNear?.price || state.market?.futures?.price || ""}:${state.market?.futuresNext?.price || ""}`,
-      heatmap: normalizeArray(state.heatmap?.sectors).slice(0, 60).map((item) => `${item.name || item.industry}:${item.pct ?? item.avgPct}:${item.up}:${item.down}:${item.count}`).join("|"),
-      ai: state.ai?.snapshot?.snapshotId || state.ai?.aiDetectWindow?.active || state.ai?.summary?.strategy2Count || "",
-      radar: state.radar?.runId || state.radar?.timestamp || state.radar?.rows?.[0]?.detectedAt || "",
-      heatmapCount: state.heatmap?.sectorCount || normalizeArray(state.heatmap?.sectors).length,
-      radarCount: normalizeArray(state.radar?.rows).length,
-    });
-    const renderIfChanged = (allowSame = false) => {
-      const nextSignature = signature();
-      if (!allowSame && !force && nextSignature === marketApiOnlySignature) return;
-      marketApiOnlySignature = nextSignature;
-      renderMarketOverviewApi(state.market || {}, state.heatmap || {});
-      if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
-      renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
-      renderMarketApiRadar(state.radar || {});
-    };
-    fetchMarketJson("/api/market", 24, force, 6500)
+    fetchMarketJson("/api/market", 24, force, 2600)
       .then((payload) => {
-        state.market = payload || {};
-        renderIfChanged(true);
+        if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.market = payload;
+        saveMarketApiOnlyCache();
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
-    fetchMarketJson("/api/heatmap", 60, force, 6500)
+    fetchMarketJson("/api/heatmap", 60, force, 1800)
       .then((payload) => {
-        state.heatmap = payload || {};
-        renderIfChanged(true);
+        if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.heatmap = payload;
+        saveMarketApiOnlyCache();
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
+    fetchMarketJson("/api/realtime-radar-latest", 20, force, 2200)
       .then((payload) => {
-        state.radar = payload || {};
-        renderIfChanged(true);
+        if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.radar = payload;
+        saveMarketApiOnlyCache();
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
-    fetchMarketJson("/api/market-ai-live", 20, force, 5200)
+    fetchMarketJson("/api/market-ai-live", 20, force, 1800)
       .then((payload) => {
-        state.ai = payload || {};
-        renderIfChanged(true);
+        if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.ai = payload;
+        saveMarketApiOnlyCache();
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
   }
