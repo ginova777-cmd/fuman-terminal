@@ -3700,6 +3700,25 @@
     ensureMarketDesktopShell();
   }
 
+  function syncMarketAiDesktopModeIfVisible() {
+    const market = document.querySelector("#market-view");
+    const ai = market?.querySelector?.("[data-market-api-ai]");
+    const shouldSync = marketDesktopMode === "ai"
+      || document.documentElement.dataset.fumanMarketDesktopMode === "ai"
+      || (ai && ai.hidden === false && market?.classList.contains("market-ai-mode"));
+    if (!market || !shouldSync) return;
+    marketDesktopMode = "ai";
+    market.classList.add("market-ai-mode");
+    market.classList.remove("market-overview-mode");
+    market.querySelectorAll("[data-market-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.marketMode === "ai");
+    });
+    if (ai) ai.hidden = false;
+    const title = market.querySelector(".page-header h1");
+    if (title) title.textContent = "AI 判讀";
+    document.documentElement.dataset.fumanMarketDesktopMode = "ai";
+  }
+
   function scheduleMarketDesktopModeHydrate(mode, force = false) {
     if (mode !== "ai") return;
     window.clearTimeout(window.__fumanMarketAiHydrateTimer || 0);
@@ -4283,6 +4302,7 @@
         }
       });
     }
+    syncMarketAiDesktopModeIfVisible();
   }
 
   function renderMarketApiRadar(radarPayload) {
