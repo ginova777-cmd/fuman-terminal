@@ -4161,25 +4161,33 @@
     const strongNames = strong.map((item) => nameOf(item)).slice(0, 3).join("、") || "等待族群擴散";
     const weakNames = weak.map((item) => nameOf(item)).slice(0, 3).join("、") || "暫無明顯弱勢";
     const riskNames = groups.risk.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || weakNames;
-    const metricHtml = `
-      <div class="market-ai-metrics">
-        <span>樣本數<b>${sample.toLocaleString("zh-TW")}</b></span>
-        <span>上漲<b>${up.toLocaleString("zh-TW")}</b></span>
-        <span>下跌<b>${down.toLocaleString("zh-TW")}</b></span>
-        <span>信心<b>${escapeHtml(confidence)}</b></span>
+    const heroMetricsHtml = `
+      <div class="market-ai-hero-metrics">
+        <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
+        <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
+        <span><small>下跌</small><b>${down.toLocaleString("zh-TW")}</b></span>
+        <span><small>信心</small><b>${escapeHtml(confidence)}</b></span>
+        <div class="market-ai-hero-action"><small>操作建議</small><b>${up >= down ? "降低追價" : "等待方向"}</b><span>${up >= down ? "盤面風險偏高時，先把進場條件收緊，避免追高。" : "盤面偏弱時，只看逆勢強股與量價確認。"}</span></div>
       </div>`;
     const pointHtml = [
       `市場廣度顯示上漲家數占 ${upRatio.toFixed(1)}%，站在全市場角度先判斷為${bias}。`,
       `族群焦點落在 ${strongNames}，平均漲幅領先者優先觀察擴散。`,
       `熱門觀察股優先看 ${groups.all.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待雷達資料"}。`,
       `風險端留意 ${riskNames}，分數高也要等量價延續確認。`,
-    ].map((text, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeHtml(text)}</span></div>`).join("");
-    const evidenceHtml = [
-      ["廣度依據", `${up.toLocaleString("zh-TW")} 檔上漲 / ${down.toLocaleString("zh-TW")} 檔下跌`, `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。`],
-      ["訊號母體", `${radarRows.length.toLocaleString("zh-TW")} 檔即時雷達`, "只採 API-only polling 最新資料，不讀舊 DOM snapshot。"],
-      ["族群依據", `強族群前 3 名`, strongNames],
-      ["風險依據", groups.risk.length ? "風險高標的先排除" : "風險暫無集中", riskNames],
-    ].map(([kicker, title, text]) => `<article class="market-ai-block"><small>${escapeHtml(kicker)}</small><h3>${escapeHtml(title)}</h3><p>${escapeHtml(text)}</p></article>`).join("");
+    ].map((text, index) => `<p><b>${index + 1}</b><span>${escapeHtml(text)}</span></p>`).join("");
+    const evidenceCardsHtml = [
+      ["廣度檢核", `上漲 ${upRatio.toFixed(2)}% / 下跌 ${sample ? (down / sample * 100).toFixed(2) : "0.00"}%`, `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。`, "breadth"],
+      ["訊號母體", `${radarRows.length.toLocaleString("zh-TW")} 檔即時雷達`, "只採 API-only polling 最新資料，不讀舊 DOM snapshot。", "radar"],
+      ["族群結構", `強族群前 ${Math.min(3, strong.length)} 名`, strongNames, "sector"],
+      ["風險檢核", groups.risk.length ? "族群集中 / 融券壓力" : "風險暫無集中", riskNames, "risk"],
+    ].map(([kicker, title, text, key]) => `
+      <article data-market-ai-drilldown="${escapeHtml(key)}" role="button" tabindex="0">
+        <small>${escapeHtml(kicker)}</small>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(text)}</p>
+        <i>›</i>
+      </article>
+    `).join("");
     const tabs = [
       ["all", "全部", "market-ai-radio-tab", groups.all],
       ["momentum", "動能強", "market-ai-radio-tab market-ai-radio-tab-momentum", groups.momentum],
@@ -4207,81 +4215,74 @@
         </div>
       </article>
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
+    panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.innerHTML = `
-      <section class="market-ai-panel">
-        <div class="market-ai-sort-note"><strong>${escapeHtml(sessionTitle)} · AI 判讀 09:00-13:30</strong><span>${escapeHtml(sessionText)}</span><span>${escapeHtml(session.state || detectWindow.reason || "snapshot")}</span></div>
-        <section class="market-ai-summary">
-          <article class="market-ai-card hero">
+        <section class="market-ai-hero-board">
+          <div class="market-ai-hero-copy">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
-            <strong>${escapeHtml(bias)}</strong>
-            <p>${up >= down ? "多方候選與強勢延續標的較多" : "下跌家數偏多，先控風險與追價節奏"}，盤面可以先從領頭股與族群擴散觀察。</p>
-            ${metricHtml}
-          </article>
-          <article class="market-ai-card">
-            <small>趨勢廣度</small>
-            <strong>${escapeHtml(bias)}</strong>
-            <p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p>
-          </article>
-          <article class="market-ai-card warning">
-            <small>風險控管</small>
-            <strong>${groups.risk.length ? "先控風險" : "風險正常"}</strong>
-            <p>${escapeHtml(weakNames)} 需留意，風險高標的不放入第一優先追蹤。</p>
-          </article>
-          <article class="market-ai-card">
-            <small>優先觀察</small>
-            <strong>${escapeHtml(topStock ? `${topStock.code} ${topStock.name}` : "--")}</strong>
-            <p>${escapeHtml(topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。")}</p>
-          </article>
+            <strong>${escapeHtml(up >= down ? "多方壓制" : "空方壓制")}</strong>
+            <p>${up >= down ? "多方候選與強勢延續標的較多，仍需確認族群擴散與量價延續。" : "下跌家數偏多，盤面先以風險控管為主；強勢股需確認族群延續，不追高雜訊。"}</p>
+          </div>
+          ${heroMetricsHtml}
         </section>
-        <section class="market-ai-advice">
-          <article class="market-ai-card" data-ai-advice="entry"><small>操作建議</small><strong>${up >= down ? "降低追價" : "等待方向"}</strong><p>${up >= down ? "盤面風險偏高時，先把進場條件收緊，避免追高。" : "盤面偏弱時，只看逆勢強股與量價確認。"}</p></article>
-          <article class="market-ai-card" data-ai-advice="sector"><small>族群聚焦</small><strong>只看強族群前 3 名</strong><p>${escapeHtml(strongNames)}。</p></article>
-          <article class="market-ai-card" data-ai-advice="risk"><small>風險排除</small><strong>風險高標的先排除</strong><p>${escapeHtml(riskNames)}。</p></article>
+        <section class="market-ai-summary">
+          <article class="market-ai-card hero"><small>趨勢廣度</small><strong>${escapeHtml(up >= down ? "多方壓制" : "空方壓制")}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
+          <article class="market-ai-card warning"><small>風險控管</small><strong>${groups.risk.length ? "先控風險" : "風險正常"}</strong><p>${escapeHtml(weakNames)} 需留意，風險高標的不放入第一優先追蹤。</p></article>
+          <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(topStock ? `${topStock.code} ${topStock.name}` : "--")}</strong><p>${escapeHtml(topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。")}</p></article>
         </section>
-        <section class="market-ai-main">
-          ${evidenceHtml}
+        <section class="market-ai-decision-strip"><span>判讀依據與風險細節</span><small>${escapeHtml(sessionTitle)} · ${escapeHtml(sessionText)}</small></section>
+        <section class="market-ai-decision-grid">
+          <article data-market-ai-drilldown="focusStrong" role="button" tabindex="0"><small>族群聚焦</small><strong>只看強族群前 3 名</strong><i>›</i></article>
+          <article data-market-ai-drilldown="riskExclude" role="button" tabindex="0"><small>風險排除</small><strong>風險高標的先排除</strong><i>›</i></article>
         </section>
-        <section class="market-ai-main">
-          <article class="market-ai-block">
-            <h3>AI 今日重點</h3>
-            <small>${escapeHtml(dateLabel)} 最新資料</small>
-            <div class="market-ai-list">${pointHtml}</div>
+        <section class="market-ai-evidence">
+          <header><h4>AI 判讀依據</h4><span>只保留跟盤勢結論有關的關鍵線索</span></header>
+          <div>${evidenceCardsHtml}</div>
+        </section>
+        <section class="market-ai-lower-grid">
+          <article class="market-ai-points">
+            <header><h4>AI 今日重點</h4><span>${escapeHtml(dateLabel)} 最新資料</span></header>
+            ${pointHtml}
           </article>
-          <aside class="market-ai-block">
-            <h3>風險提醒</h3>
-            <small>${groups.risk.length} 則</small>
-            <div class="market-ai-risk">
-              <article>
-                <h4>族群集中</h4>
-                <p>主流若集中在少數族群，盤中容易出現追價後回落，先等第二波確認。</p>
-                <div class="market-ai-chips">${strong.slice(0, 4).map((sector) => `<span class="market-ai-chip">${escapeHtml(nameOf(sector))}</span>`).join("")}</div>
-              </article>
-              <article>
-                <h4>融券壓力</h4>
-                <p>${escapeHtml(riskNames)} 若出現偏空或券資壓力，追蹤軋空與急拉後反轉風險。</p>
-              </article>
-            </div>
-          </aside>
+          <article class="market-ai-risk-panel">
+            <header><h4>風險提醒</h4><span>${groups.risk.length} 則</span></header>
+            <div><strong>族群集中</strong><p>主流若集中在少數族群，盤中容易出現追價後回落，先等第二波確認。</p></div>
+            <div><strong>融券壓力</strong><p>${escapeHtml(riskNames)} 若出現偏空或券資壓力，追蹤軋空與急拉後反轉風險。</p></div>
+          </article>
         </section>
         <section class="market-ai-block market-ai-hot-section">
           <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API · ${escapeHtml(dateLabel)}</span></header>
-          <div class="market-ai-radio-tabs">
-            ${tabs.map(([key, label, klass, rows], index) => `
-              <input id="market-ai-radio-${key}" type="radio" name="market-ai-hot-filter" ${index === 0 ? "checked" : ""}>
-              <label class="${klass}" for="market-ai-radio-${key}">${escapeHtml(label)} <em>${rows.length}</em></label>
-            `).join("")}
-            <div class="market-ai-tab-panels">
-              ${tabs.map(([key, label, klass, rows]) => `
-                <section class="market-ai-tab-panel market-ai-hot-section" data-market-ai-hot-panel="${key}">
-                  <header><div><h4>${escapeHtml(label)}</h4><p>${key === "all" ? "依綜合分數排序，先看整體前 10 檔。" : key === "momentum" ? "依動能與漲幅排序，觀察價量是否延續。" : key === "legal" ? "依法人/資金訊號排序，用來觀察籌碼集中方向。" : key === "intraday" ? "依即時雷達與當沖熱度排序。" : "依風險訊號排序，先列需要控管追價的標的。"}</p></div><span>${rows.length} 檔</span></header>
-                  <div class="market-ai-hot">${rowHtml(rows, key)}</div>
-                </section>
-              `).join("")}
-            </div>
+          <div class="market-ai-filter-row">
+            ${tabs.map(([key, label, klass, rows], index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-market-ai-filter="${escapeHtml(key)}">${escapeHtml(label)} <b>${rows.length}</b></button>`).join("")}
           </div>
+          <div class="market-ai-current-rule"><small>目前排序</small><strong>綜合分數</strong><span>綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。</span></div>
+          <div class="market-ai-hot">${rowHtml(groups.all, "all")}</div>
         </section>
-      </section>
     `;
+    const hotSection = panels.ai.querySelector(".market-ai-hot-section");
+    if (hotSection) {
+      const hotList = hotSection.querySelector(".market-ai-hot");
+      const currentRule = hotSection.querySelector(".market-ai-current-rule");
+      const filterNotes = {
+        all: ["綜合分數", "綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。"],
+        momentum: ["動能強", "依動能與漲幅排序，觀察價量是否延續。"],
+        legal: ["法人買超", "依法人/資金訊號排序，用來觀察籌碼集中方向。"],
+        intraday: ["當沖熱", "依即時雷達與當沖熱度排序。"],
+        risk: ["風險高", "依風險訊號排序，先列需要控管追價的標的。"],
+      };
+      hotSection.addEventListener("click", (event) => {
+        const button = event.target.closest?.("[data-market-ai-filter]");
+        if (!button || !hotSection.contains(button)) return;
+        const key = button.dataset.marketAiFilter || "all";
+        const tab = tabs.find(([tabKey]) => tabKey === key) || tabs[0];
+        hotSection.querySelectorAll("[data-market-ai-filter]").forEach((item) => item.classList.toggle("active", item === button));
+        if (hotList) hotList.innerHTML = rowHtml(tab[3] || [], key);
+        if (currentRule) {
+          const [title, note] = filterNotes[key] || filterNotes.all;
+          currentRule.innerHTML = `<small>目前排序</small><strong>${escapeHtml(title)}</strong><span>${escapeHtml(note)}</span>`;
+        }
+      });
+    }
   }
 
   function renderMarketApiRadar(radarPayload) {
@@ -6436,6 +6437,415 @@
         #market-view .market-ai-sort-note span {
           color: #9fb3d9;
           font-size: 12px;
+        }
+        #market-view .market-ai-panel.market-ai-visual-dashboard {
+          display: grid !important;
+          gap: 14px !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          padding: 0 !important;
+        }
+        #market-view .market-ai-hero-board {
+          display: grid;
+          grid-template-columns: minmax(360px, 1fr) minmax(420px, 0.42fr);
+          gap: 14px;
+          align-items: stretch;
+          min-height: 142px;
+          border: 1px solid rgba(16, 185, 129, 0.52);
+          border-radius: 8px;
+          background:
+            radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.22), transparent 34%),
+            linear-gradient(135deg, rgba(6, 78, 59, 0.74), rgba(8, 15, 26, 0.94));
+          padding: 18px;
+        }
+        #market-view .market-ai-hero-copy {
+          align-self: center;
+          min-width: 0;
+        }
+        #market-view .market-ai-hero-copy small,
+        #market-view .market-ai-hero-action small {
+          display: block;
+          color: #8fb9ac;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        #market-view .market-ai-hero-copy strong {
+          display: block;
+          margin: 8px 0;
+          color: #4ade80;
+          font-size: clamp(32px, 4vw, 48px);
+          line-height: 1;
+          letter-spacing: 0;
+        }
+        #market-view .market-ai-hero-copy p {
+          max-width: 860px;
+          margin: 0;
+          color: #cfddd8;
+          font-size: 14px;
+          line-height: 1.7;
+        }
+        #market-view .market-ai-hero-metrics {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
+        }
+        #market-view .market-ai-hero-metrics span,
+        #market-view .market-ai-hero-action {
+          border: 1px solid rgba(234, 179, 8, 0.26);
+          border-radius: 8px;
+          background: rgba(8, 15, 26, 0.82);
+          padding: 12px;
+        }
+        #market-view .market-ai-hero-metrics b {
+          display: block;
+          margin-top: 4px;
+          color: #facc15;
+          font-size: 19px;
+          line-height: 1.1;
+        }
+        #market-view .market-ai-hero-action {
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: max-content 1fr;
+          align-items: center;
+          gap: 8px 12px;
+          min-height: 44px;
+        }
+        #market-view .market-ai-hero-action b {
+          color: #f8fafc;
+          font-size: 14px;
+        }
+        #market-view .market-ai-hero-action span {
+          grid-column: 1 / -1;
+          color: #aebfe0;
+          font-size: 12px;
+          line-height: 1.55;
+        }
+        #market-view .market-ai-summary {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin: 0;
+        }
+        #market-view .market-ai-summary .market-ai-card,
+        #market-view .market-ai-decision-grid article,
+        #market-view .market-ai-evidence,
+        #market-view .market-ai-points,
+        #market-view .market-ai-risk-panel,
+        #market-view .market-ai-current-rule,
+        #market-view .market-ai-hot-section {
+          border: 1px solid rgba(234, 179, 8, 0.26);
+          border-radius: 8px;
+          background: rgba(8, 15, 26, 0.78);
+        }
+        #market-view .market-ai-summary .market-ai-card {
+          min-height: 118px;
+          border-top: 3px solid #fb7185;
+          padding: 14px;
+        }
+        #market-view .market-ai-summary .market-ai-card.hero {
+          border-color: rgba(52, 211, 153, 0.34);
+          border-top-color: #fb7185;
+        }
+        #market-view .market-ai-summary .market-ai-card.warning {
+          border-color: rgba(248, 113, 113, 0.36);
+          border-top-color: #fb7185;
+        }
+        #market-view .market-ai-summary .market-ai-card small,
+        #market-view .market-ai-decision-grid small,
+        #market-view .market-ai-evidence small,
+        #market-view .market-ai-current-rule small {
+          display: block;
+          color: #8fa4c7;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        #market-view .market-ai-summary .market-ai-card strong,
+        #market-view .market-ai-decision-grid strong,
+        #market-view .market-ai-evidence strong,
+        #market-view .market-ai-current-rule strong {
+          display: block;
+          margin-top: 5px;
+          color: #f8fafc;
+          font-size: 18px;
+          line-height: 1.2;
+        }
+        #market-view .market-ai-summary .market-ai-card p,
+        #market-view .market-ai-evidence p {
+          margin: 8px 0 0;
+          color: #9fb0cd;
+          font-size: 12px;
+          line-height: 1.55;
+        }
+        #market-view .market-ai-decision-strip {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          border: 1px solid rgba(234, 179, 8, 0.42);
+          border-radius: 8px;
+          background: rgba(234, 179, 8, 0.08);
+          padding: 12px 14px;
+        }
+        #market-view .market-ai-decision-strip span {
+          color: #f8fafc;
+          font-weight: 900;
+        }
+        #market-view .market-ai-decision-strip small,
+        #market-view .market-ai-evidence header span,
+        #market-view .market-ai-points header span,
+        #market-view .market-ai-risk-panel header span {
+          color: #aebfe0;
+          font-size: 12px;
+        }
+        #market-view .market-ai-decision-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+        #market-view .market-ai-decision-grid article,
+        #market-view .market-ai-evidence article {
+          position: relative;
+          padding: 16px 42px 16px 16px;
+          border-top: 3px solid #fb7185;
+        }
+        #market-view .market-ai-decision-grid i,
+        #market-view .market-ai-evidence i {
+          position: absolute;
+          right: 16px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #facc15;
+          font-style: normal;
+          font-size: 20px;
+        }
+        #market-view .market-ai-evidence,
+        #market-view .market-ai-points,
+        #market-view .market-ai-risk-panel,
+        #market-view .market-ai-hot-section {
+          overflow: hidden;
+        }
+        #market-view .market-ai-evidence > header,
+        #market-view .market-ai-points > header,
+        #market-view .market-ai-risk-panel > header,
+        #market-view .market-ai-hot-section > header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 16px;
+          border-bottom: 1px solid rgba(234, 179, 8, 0.16);
+        }
+        #market-view .market-ai-evidence h4,
+        #market-view .market-ai-points h4,
+        #market-view .market-ai-risk-panel h4,
+        #market-view .market-ai-hot-section h4 {
+          margin: 0;
+          color: #f8fafc;
+          font-size: 15px;
+        }
+        #market-view .market-ai-evidence > div {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          padding: 12px;
+        }
+        #market-view .market-ai-evidence article {
+          min-height: 112px;
+          border: 1px solid rgba(234, 179, 8, 0.18);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.62);
+        }
+        #market-view .market-ai-lower-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
+          gap: 12px;
+        }
+        #market-view .market-ai-points > p {
+          display: grid;
+          grid-template-columns: 28px 1fr;
+          gap: 12px;
+          align-items: center;
+          margin: 0 14px 9px;
+          border: 1px solid rgba(148, 163, 184, 0.15);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.56);
+          padding: 12px;
+          color: #cbd7ee;
+          line-height: 1.55;
+        }
+        #market-view .market-ai-points > p:first-of-type {
+          margin-top: 12px;
+        }
+        #market-view .market-ai-points b {
+          display: grid;
+          place-items: center;
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: rgba(234, 179, 8, 0.16);
+          color: #facc15;
+        }
+        #market-view .market-ai-risk-panel > div {
+          margin: 12px 14px;
+          border: 1px solid rgba(234, 179, 8, 0.18);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.6);
+          padding: 14px;
+        }
+        #market-view .market-ai-risk-panel strong {
+          color: #f8fafc;
+          font-size: 17px;
+        }
+        #market-view .market-ai-risk-panel p {
+          margin: 7px 0 0;
+          color: #9fb0cd;
+          line-height: 1.55;
+        }
+        #market-view .market-ai-filter-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 12px 16px;
+          border-bottom: 1px solid rgba(234, 179, 8, 0.12);
+        }
+        #market-view .market-ai-filter-row button {
+          min-height: 30px;
+          border: 1px solid rgba(234, 179, 8, 0.32);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.76);
+          color: #f8fafc;
+          padding: 0 10px;
+          font-weight: 900;
+        }
+        #market-view .market-ai-filter-row button.active {
+          background: rgba(234, 179, 8, 0.18);
+          color: #facc15;
+        }
+        #market-view .market-ai-filter-row b {
+          display: inline-grid;
+          place-items: center;
+          min-width: 24px;
+          height: 18px;
+          margin-left: 6px;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.2);
+          color: #cbd5e1;
+          font-size: 11px;
+        }
+        #market-view .market-ai-current-rule {
+          display: grid;
+          grid-template-columns: max-content max-content 1fr;
+          gap: 10px;
+          align-items: center;
+          margin: 0 16px 12px;
+          padding: 12px;
+        }
+        #market-view .market-ai-current-rule strong {
+          margin: 0;
+          color: #facc15;
+        }
+        #market-view .market-ai-current-rule span {
+          color: #9fb0cd;
+          font-size: 12px;
+        }
+        #market-view .market-ai-hot {
+          display: grid;
+          gap: 10px;
+          padding: 0 12px 12px;
+        }
+        #market-view .market-ai-stock-row {
+          display: grid;
+          grid-template-columns: 54px minmax(0, 1fr) minmax(130px, auto) 86px minmax(160px, 0.28fr) 120px;
+          align-items: center;
+          gap: 12px;
+          border: 1px solid rgba(234, 179, 8, 0.22);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.6);
+          padding: 12px;
+        }
+        #market-view .market-ai-stock-row h4 {
+          margin: 0 0 4px;
+          color: #f8fafc;
+          font-size: 14px;
+        }
+        #market-view .market-ai-stock-row p {
+          margin: 2px 0;
+          color: #9fb0cd;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        #market-view .market-ai-rank {
+          display: grid;
+          place-items: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          background: rgba(234, 179, 8, 0.16);
+          color: #facc15;
+          font-weight: 900;
+        }
+        #market-view .market-ai-chip,
+        #market-view .market-ai-tags span {
+          display: inline-flex;
+          align-items: center;
+          min-height: 22px;
+          border: 1px solid rgba(234, 179, 8, 0.22);
+          border-radius: 999px;
+          color: #cbd5e1;
+          padding: 0 8px;
+          font-size: 11px;
+        }
+        #market-view .market-ai-score small {
+          display: block;
+          color: #8fa4c7;
+          font-size: 11px;
+        }
+        #market-view .market-ai-score strong {
+          color: #facc15;
+          font-size: 20px;
+        }
+        #market-view .market-ai-actions {
+          display: flex;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+        #market-view .market-ai-actions button {
+          min-height: 28px;
+          border: 1px solid rgba(234, 179, 8, 0.28);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.8);
+          color: #f8fafc;
+          padding: 0 8px;
+          font-weight: 800;
+        }
+        @media (max-width: 1180px) {
+          #market-view .market-ai-hero-board,
+          #market-view .market-ai-lower-grid {
+            grid-template-columns: 1fr;
+          }
+          #market-view .market-ai-summary,
+          #market-view .market-ai-evidence > div {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          #market-view .market-ai-stock-row {
+            grid-template-columns: 46px minmax(0, 1fr);
+          }
+          #market-view .market-ai-stock-row > div:nth-child(n+3) {
+            justify-self: start;
+          }
+        }
+        @media (max-width: 760px) {
+          #market-view .market-ai-hero-metrics,
+          #market-view .market-ai-summary,
+          #market-view .market-ai-decision-grid,
+          #market-view .market-ai-evidence > div {
+            grid-template-columns: 1fr;
+          }
+          #market-view .market-ai-current-rule {
+            grid-template-columns: 1fr;
+          }
         }
         body.fuman-light-theme #market-view .market-mode-tabs {
           border-color: rgba(249, 115, 22, 0.24) !important;
