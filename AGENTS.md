@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Last updated: 2026-06-25 Asia/Taipei
+Last updated: 2026-06-28 Asia/Taipei
 
 給後續接手本工作區的 Codex：這份只保留目前有效狀態。不要沿用舊 Google Sheet、舊 static JSON、舊同步路徑、舊版本 bump、舊黃框 UI、舊部署流程。
 
@@ -311,6 +311,56 @@ Strategy1 分成三個正式階段：
 - `WATCH` / `BLOCK` 不進主清單，只留在 Supabase results / audit / debug。
 - Strategy1 不可因 preopen / futopt 還沒 ready 就清空 latest complete run。
 - 非時間窗或 controlled not_ready 時，terminal 必須顯示 reason，不可誤判 source missing。
+
+### 休假日 / 非交易日 Carry-Forward
+
+休假日、週末、非交易日，或尚未到 08:45 / 08:55 source ready 的時間，不可把 Strategy1 顯示成 0 檔空白。
+
+正式口徑：
+
+```text
+星期五 21:30 complete run
+-> 週末 / 休假日 terminal 繼續顯示該 21:30 初篩名單
+-> 星期一 08:45 接續個股期貨 / preopen observe
+-> 星期一 08:55 再做 final flame gate
+```
+
+顯示時必須標明：
+
+```text
+previous_2130_carry_forward
+previous-2130-carry-forward
+休假日沿用 21:30 初篩名單
+等待 08:45 個股期貨 / 08:55 搓合
+```
+
+不可做：
+
+- 不可因 `not_trading_day` / `preopen_not_ready` / `futopt_not_ready` 清空 latest complete run。
+- 不可把 Friday 21:30 candidate 誤標成 Monday 08:55 BUY。
+- 不可讓 `desktop_route_snapshot` 的舊 `waiting_snapshot` 覆蓋 API live carry-forward。
+- 不可讓手機 fragment 顯示舊空 snapshot。
+
+必須保護的程式路徑：
+
+- `/api/open-buy-latest` 必須允許 `allowPrevious2130Run`。
+- `/api/mobile-fragment?tab=strategy1` 必須避開 Strategy1 stale waiting snapshot。
+- `/api/terminal-fast-bundle` 必須在 Strategy1 snapshot 是空 waiting 狀態時執行 `strategy1-previous-2130-carry-forward` repair。
+- `scripts/verify-publish-gate.js` 必須檢查以上 marker，少一個就擋 publish。
+
+### Strategy1 七關驗證
+
+Strategy1 修改後至少要過以下七關，不能只看 API：
+
+| 關卡 | 驗證重點 |
+|---|---|
+| 冷啟動 | `npm run verify:terminal-cold-start -- --routes=strategy1` |
+| 切頁互動 | `npm run verify:terminal-ui-e2e -- --routes=strategy1` |
+| 快取一致 | `/api/open-buy-latest`、`/api/terminal-fast-bundle`、`/api/mobile-fragment?tab=strategy1` 的 runId / count 必須一致 |
+| 空資料保護 | `npm run verify:strategy1-open-buy-ui`，且休假日不可回 0 檔 waiting snapshot |
+| 手機布局 | UI E2E 必須涵蓋手機直向 / 手機陽光 / 電腦看手機版 |
+| Runtime ownership | `npm run verify:runtime-ownership`、`npm run verify:fast-shell-self-contained` |
+| Live 驗證 | `npm run guard:production`，並確認正式站 Strategy1 API / fast bundle / mobile fragment 都有 rows |
 
 ### 21:30 Candidate Gate
 
