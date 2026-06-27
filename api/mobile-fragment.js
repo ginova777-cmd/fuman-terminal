@@ -202,6 +202,24 @@ function normalizeRows(payload, tab = "") {
   return rows.slice(0, 20);
 }
 
+function isEmptyStrategy1WaitingSnapshot(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  if (payload?.meta?.previous_2130_carry_forward || payload?.transport?.previous2130CarryForward) return false;
+  const rows = normalizeRows(payload, "strategy1");
+  const count = Number(payload.count ?? payload.displayCount ?? payload.resultCount ?? payload.result_count ?? 0) || 0;
+  if (rows.length || count > 0) return false;
+  const text = [
+    payload.qualityStatus,
+    payload.cacheSource,
+    payload.reason,
+    payload.error,
+    payload.detail,
+    payload.transport?.gate,
+    payload.transport?.source,
+  ].filter(Boolean).join(" ");
+  return /waiting|snapshot|not_trading_day|preopen_not_ready|futopt_not_ready|decision/i.test(text);
+}
+
 function firstValue(row, keys, fallback = "") {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], row);
@@ -369,8 +387,10 @@ module.exports = async function handler(request, response) {
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
-    const payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint)
-      || await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000);
+    const snapshotPayload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    const payload = !snapshotPayload || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
+      ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000)
+      : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
