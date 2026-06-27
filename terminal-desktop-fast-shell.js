@@ -4723,6 +4723,8 @@
     markLatency("nav", key);
     if (isMarketRoute(key)) {
       renderMarketOverviewShell(link, source || "market-click");
+      refreshMarketSnapshotFirst(false);
+      scheduleMarketDesktopModeHydrate(marketDesktopMode, false);
       markLatency("shell", key);
       return true;
     }
