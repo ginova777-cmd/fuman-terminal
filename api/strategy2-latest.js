@@ -689,8 +689,8 @@ module.exports = async function handler(request, response) {
       return;
     }
     const marketSession = marketSessionState();
-    const completeRun = await fetchCompleteRunPayload(base, marketSession, options);
-    const [readiness, tradingDay] = await Promise.all([
+    const [completeRun, readiness, tradingDay] = await Promise.all([
+      fetchCompleteRunPayload(base, marketSession, options),
       fetchStrategy2Readiness(base),
       strategy2TradingDayState(),
     ]);

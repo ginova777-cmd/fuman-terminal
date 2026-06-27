@@ -669,6 +669,9 @@ if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-
 if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2LatestApi) || !/const minLimit = hasTopLimit \? 1 : 20/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must honor top=1 for lightweight mobile health checks without shrinking normal terminal payloads");
 }
+if (!/\[completeRun,\s*readiness,\s*tradingDay\]\s*=\s*await Promise\.all/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must fetch complete run, readiness, and trading-day state in parallel so live Strategy2 cold start stays fast");
+}
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 readiness API marker ${marker}`);
 }
@@ -680,6 +683,9 @@ for (const marker of ["strategy2SnapshotFirstEnabled", "strategy2SnapshotFirst",
 }
 for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight", "primeDesktopFastBundle(false, \"script\")"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing cold-start snapshot/cache marker ${marker}`);
+}
+for (const marker of ["installStrategy2LivePrime", "primeStrategy2LiveRows", "api-live-prime", "primeStrategy2LiveRows(false, \"script\")"]) {
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 live prime marker ${marker}`);
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");

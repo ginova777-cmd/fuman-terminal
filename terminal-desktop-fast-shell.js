@@ -105,6 +105,7 @@
   const marketJsonInflight = new Map();
   const MARKET_JSON_CACHE_TTL_MS = 18000;
   let strategy2SnapshotFirstPrimePromise = null;
+  let strategy2LivePrimePromise = null;
   let desktopFastBundleAt = 0;
   let desktopFastBundlePromise = null;
   let originalDesktopMarketPromise = null;
@@ -148,6 +149,7 @@
   installMarketApiOnlyHydrator();
   installMarketColdPayloadPrime();
   installStrategy2SnapshotFirstPrime();
+  installStrategy2LivePrime();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
@@ -1505,6 +1507,34 @@
     primeStrategy2SnapshotFirst(false, "script");
     runIdle(() => primeStrategy2SnapshotFirst(false, "idle"), 180, 2600);
     window.addEventListener("focus", () => runIdle(() => primeStrategy2SnapshotFirst(false, "focus"), 180, 2600));
+  }
+
+  function primeStrategy2LiveRows(force = false, reason = "boot") {
+    if (strategy2SnapshotFirstEnabled()) return Promise.resolve([]);
+    const cached = canvasStore.get("strategy|策略2");
+    if (!force && cached?.rows?.length && /api|live-prime/.test(String(cached.source || "")) && Date.now() - Number(cached.at || 0) < 6500) {
+      return Promise.resolve(cached.rows);
+    }
+    if (!force && strategy2LivePrimePromise) return strategy2LivePrimePromise;
+    strategy2LivePrimePromise = fetchCanvasRows("strategy|策略2", true)
+      .then((rows) => {
+        if (rows?.length) rememberCanvasRows("strategy|策略2", rows, `api-live-prime-${reason}`, Date.now());
+        return rows || [];
+      })
+      .catch(() => [])
+      .finally(() => {
+        strategy2LivePrimePromise = null;
+      });
+    return strategy2LivePrimePromise;
+  }
+
+  function installStrategy2LivePrime() {
+    if (document.documentElement.dataset.fumanStrategy2LivePrimeReady === "1") return;
+    document.documentElement.dataset.fumanStrategy2LivePrimeReady = "1";
+    if (strategy2SnapshotFirstEnabled()) return;
+    primeStrategy2LiveRows(false, "script");
+    runIdle(() => primeStrategy2LiveRows(false, "idle"), 280, 3200);
+    window.addEventListener("focus", () => runIdle(() => primeStrategy2LiveRows(false, "focus"), 220, 3200));
   }
 
   function installDesktopFastBundlePrime() {
@@ -4830,6 +4860,8 @@
     const snapshotFirst = isStrategy2Route(key) && strategy2SnapshotFirstEnabled();
     const snapshotFirstRowsTask = snapshotFirst
       ? primeStrategy2SnapshotFirst(false, "route")
+      : isStrategy2Route(key)
+        ? primeStrategy2LiveRows(false, "route")
       : fetchCanvasRows(key, isLiveStrategyRoute(key));
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
