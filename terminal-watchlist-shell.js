@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-02";
+  const VERSION = "watchlist-rich-shell-20260628-03";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -722,9 +722,15 @@
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
   window.FUMAN_WATCHLIST_FORCE_ADD_CODE = (code) => {
     try { install(); } catch (error) {}
-    enforceListLimit(code);
+    const target = normalizeCode(code);
+    const rows = enforceListLimit(target);
+    if (target && !rows.some((item) => item.code === target) && rows.length >= WATCHLIST_MAX_ITEMS) {
+      updateEntryLimitState(rows, `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`);
+      render();
+      return false;
+    }
     const ok = forceAddCode(code);
-    enforceListLimit(code);
+    enforceListLimit(target);
     return ok;
   };
   window.FUMAN_WATCHLIST_CLICK_ADD = clickAddFromEvent;

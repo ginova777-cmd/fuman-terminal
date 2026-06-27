@@ -554,6 +554,31 @@ async function prepareDesktopRoute(cdp, route) {
   });
 }
 
+async function prepareMobileRoute(cdp, route) {
+  if (route.fragment !== "watch") return;
+  await evaluate(cdp, () => {
+    const rows = [
+      ["2334", "旺宏"],
+      ["1101", "台泥"],
+      ["2317", "鴻海"],
+      ["2303", "聯電"],
+      ["2330", "台積電"],
+      ["2454", "聯發科"],
+      ["2603", "長榮"],
+      ["2881", "富邦金"],
+      ["2327", "國巨"],
+      ["9904", "寶成"],
+      ["8112", "至上"],
+      ["2408", "南亞科"],
+    ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股十檔上限驗證", addedAt: new Date().toISOString() }));
+    const value = JSON.stringify(rows);
+    localStorage.setItem("fuman_watchlist", value);
+    localStorage.setItem("fuman_mobile_watchlist_v1", value);
+    localStorage.removeItem("fuman-terminal-ai-watchlist");
+    return true;
+  });
+}
+
 async function afterDesktopRouteActivate(cdp, route) {
   if (route.postClickSelector) {
     await clickSelector(cdp, route.postClickSelector);
@@ -969,10 +994,12 @@ function collectMobileStats(route) {
   if (route.fragment === "watch") {
     const watchRows = [...content.querySelectorAll(".watch-row")];
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
+    const watchCodes = watchRows.map((row) => text(row).match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
     const statusTextForWatch = statusText || panelText;
-    if (watchRows.length < 1) contractBlockers.push(`mobile watch tab must render watch rows actual=${watchRows.length}`);
+    if (watchRows.length !== 10) contractBlockers.push(`mobile watch tab must render exactly 10 watch rows actual=${watchRows.length}`);
+    if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
-    if (!/自選\s+\d+/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count actual=${statusTextForWatch || "<missing>"}`);
+    if (!/自選\s+10/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count 10 actual=${statusTextForWatch || "<missing>"}`);
   }
   const mobileAiDashboard = route.fragment === "ai" ? (() => {
     const filters = [...content.querySelectorAll("[data-market-ai-filter]")];
@@ -1189,6 +1216,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
     let stats = null;
     try {
       stats = await withTimeout((async () => {
+        await prepareMobileRoute(cdp, route);
         await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
         if (route.fragment !== "watch") {
           await waitFor(cdp, (fragment) => {
@@ -1196,7 +1224,15 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
             return { ok: root?.dataset?.mobileFragmentKey === fragment };
           }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
         } else {
-          await sleep(600);
+          await waitFor(cdp, () => {
+            const rows = [...document.querySelectorAll("#content .watch-row")];
+            const status = String(document.querySelector("#status")?.textContent || "");
+            return {
+              ok: rows.length === 10 && /自選\s+10/.test(status),
+              rows: rows.length,
+              status,
+            };
+          }, null, 12000, 250);
         }
         return evaluate(cdp, collectMobileStats, route).catch((error) => fallbackMobileStats(cdp, route, error));
       })(), ROUTE_TIMEOUT_MS, `mobile/${theme}/${route.key}`);

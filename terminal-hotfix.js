@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260628-01";
+    window.__fumanWatchlistAddBridge = "20260628-02";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const maxRows = 10;
@@ -104,6 +104,31 @@
       } catch (error) {}
       return normalized;
     };
+    const installStorageLimitGuard = () => {
+      const proto = window.Storage?.prototype;
+      const original = proto?.setItem;
+      if (!proto || typeof original !== "function" || original.__fumanWatchlistLimitGuard) return;
+      const guarded = function (key, value) {
+        const name = String(key || "");
+        if (name === watchlistKey || name === mobileWatchlistKey) {
+          try {
+            const incoming = normalizeRows(JSON.parse(String(value || "[]")));
+            const previous = normalizeRows(JSON.parse(String(this.getItem?.(name) || "[]")));
+            const previousCodes = new Set(previous.slice(0, maxRows).map((row) => row.code));
+            const hasNewCodeAtLimit = previous.length >= maxRows && incoming.some((row) => row.code && !previousCodes.has(row.code));
+            const next = hasNewCodeAtLimit ? previous.slice(0, maxRows) : incoming.slice(0, maxRows);
+            return original.call(this, name, JSON.stringify(next));
+          } catch (error) {}
+        }
+        return original.apply(this, arguments);
+      };
+      try {
+        Object.defineProperty(guarded, "__fumanWatchlistLimitGuard", { value: "watchlist-storage-guard-20260628-02" });
+        Object.defineProperty(guarded, "__fumanOriginalSetItem", { value: original });
+      } catch (error) {}
+      proto.setItem = guarded;
+    };
+    installStorageLimitGuard();
     const setStatus = (message, kind) => {
       const status = document.querySelector("#watchlist-entry-status");
       if (!status) return;
