@@ -3309,6 +3309,10 @@
     return n >= 1000 ? n.toLocaleString("zh-TW", { maximumFractionDigits: 1 }) : n.toFixed(n >= 100 ? 1 : 2);
   }
 
+  function normalizeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
   function marketNumber(value) {
     const n = Number(String(value ?? "").replace(/[,+%]/g, ""));
     return Number.isFinite(n) ? n : 0;
