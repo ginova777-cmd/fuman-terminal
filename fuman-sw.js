@@ -2,7 +2,7 @@ const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260623-09";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
-const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-01";
+const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260625-12";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
