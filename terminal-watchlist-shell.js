@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-11";
+  const VERSION = "watchlist-rich-shell-20260627-12";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -247,6 +247,7 @@
     const input = anchor?.matches?.("input") ? anchor : findEntryInput(anchor);
     const code = normalizeCode(input?.value || readInputCode(anchor));
     if (!code) {
+      if (Date.now() - lastAddIntentAt < 500) return true;
       showEntryStatus("請輸入四碼股票代號", "warn");
       return false;
     }

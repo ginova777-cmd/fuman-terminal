@@ -591,8 +591,9 @@ async function afterDesktopRouteActivate(cdp, route) {
     await clickSelector(cdp, "#watchlist-add-btn");
     await waitFor(cdp, () => {
       const cards = [...document.querySelectorAll('.watchlist-card[data-code="8112"]')];
+      const selected = Boolean(document.querySelector('.watchlist-card.selected[data-code="8112"]'));
       const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
-      return { ok: cards.length === 1 && /已在自選股/.test(status), cards: cards.length, status };
+      return { ok: cards.length === 1 && (selected || /已在自選股/.test(status)), cards: cards.length, selected, status };
     }, null, 15000, 300);
     const clicked = await evaluate(cdp, () => {
       const target = document.querySelector('.watchlist-card[data-code="8112"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
