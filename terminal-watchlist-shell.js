@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-02";
+  const VERSION = "watchlist-rich-shell-20260627-03";
   const WATCHLIST_KEY = "fuman_watchlist";
   let installed = false;
   let selectedCode = "";
@@ -71,15 +71,26 @@
     return n.toLocaleString("zh-TW");
   }
 
+  function findEntryInput() {
+    const inputs = [
+      document.querySelector("#watchlist-search-input"),
+      ...document.querySelectorAll("#watchlist-view .watchlist-entry-input"),
+      ...document.querySelectorAll("#watchlist-view input[type='text']"),
+    ].filter(Boolean);
+    return inputs.find((input) => !input.readOnly && !input.disabled && String(input.value || "").match(/\d{4}/))
+      || inputs.find((input) => !input.readOnly && !input.disabled)
+      || null;
+  }
+
   function readInputCode() {
-    const input = document.querySelector("#watchlist-search-input");
+    const input = findEntryInput();
     return String(input?.value || "").trim().match(/\d{4}/)?.[0] || "";
   }
 
   function addFromInput() {
     const code = readInputCode();
     if (!code) return false;
-    const input = document.querySelector("#watchlist-search-input");
+    const input = findEntryInput();
     const rows = readList();
     if (!rows.some((item) => item.code === code)) {
       rows.unshift({ code, name: code, addedAt: Date.now() });
@@ -384,6 +395,7 @@
     try { install(); } catch (error) {}
     return addFromInput();
   };
+  window.FUMAN_WATCHLIST_FORCE_ADD = window.FUMAN_WATCHLIST_SHELL_FORCE_ADD;
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => install(), { once: true });
   } else {

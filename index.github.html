@@ -234,8 +234,8 @@
                   </div>
                   <p>點選股票後同步載入右側分析</p>
                   <div class="watchlist-entry-form">
-                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric" onkeydown="if(event.key==='Enter'){ window.FUMAN_WATCHLIST_SHELL_FORCE_ADD?.(); return false; }">
-                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股" onpointerdown="window.FUMAN_WATCHLIST_SHELL_FORCE_ADD?.(); return false;" onmousedown="window.FUMAN_WATCHLIST_SHELL_FORCE_ADD?.(); return false;" ontouchstart="window.FUMAN_WATCHLIST_SHELL_FORCE_ADD?.(); return false;" onclick="window.FUMAN_WATCHLIST_SHELL_FORCE_ADD?.(); return false;">+</button>
+                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric" onkeydown="if(event.key==='Enter'){ (window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD)?.(); return false; }">
+                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股" onpointerdown="(window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD)?.(); return false;" onmousedown="(window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD)?.(); return false;" ontouchstart="(window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD)?.(); return false;" onclick="(window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD)?.(); return false;">+</button>
                   </div>
                   <div id="watchlist-stocks" class="watchlist-stock-list">
                     <div class="watch-mobile-empty">尚未新增自選股，請輸入股票代號後點新增</div>

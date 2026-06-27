@@ -36,6 +36,22 @@
       localStorage.setItem("fuman_watchlist", JSON.stringify(list));
     }
 
+    function findWatchlistEntryInput() {
+      const inputs = [
+        watchlistSearchInput,
+        ...document.querySelectorAll("#watchlist-view .watchlist-entry-input"),
+        ...document.querySelectorAll("#watchlist-view input[type='text']"),
+      ].filter(Boolean);
+      return inputs.find((input) => !input.readOnly && !input.disabled && String(input.value || "").match(/\d{4}/))
+        || inputs.find((input) => !input.readOnly && !input.disabled)
+        || null;
+    }
+
+    function readWatchlistEntryCode() {
+      const input = findWatchlistEntryInput();
+      return String(input?.value || "").trim().replace(/\D/g, "").slice(0, 4);
+    }
+
     function isMobileWatchlistViewport() {
       const width = window.innerWidth || document.documentElement.clientWidth || 0;
       const height = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -930,7 +946,7 @@
     }
     
     async function renderWatchlist() {
-      if (!isViewActive("watchlist") || !isTerminalUnlocked()) return;
+      if (!isViewActive("watchlist")) return;
       setWatchlistDetailOpen(false);
       updateWatchlistEntryStatus();
       const list = getWatchlist();
@@ -1039,28 +1055,34 @@
     }
     
     async function addToWatchlist() {
-      if (!isTerminalUnlocked()) return;
-      const code = watchlistSearchInput.value.trim().replace(/\D/g, "");
+      const input = findWatchlistEntryInput();
+      const code = readWatchlistEntryCode();
       if (!code) return;
     
       const list = getWatchlist();
       if (list.find(w => w.code === code)) {
-        watchlistSearchInput.value = "";
-        alert("此股票已在自選股中");
-        return;
+        if (input) input.value = "";
+        window.FUMAN_WATCHLIST_SHELL_INSTANCE?.selectCode?.(code);
+        await renderWatchlist();
+        return true;
       }
     
-      list.push({ code, name: code });
+      list.unshift({ code, name: code, addedAt: Date.now() });
       saveWatchlist(list);
-      watchlistSearchInput.value = "";
-      await renderWatchlist();
+      if (input) input.value = "";
+      if (window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render) {
+        window.FUMAN_WATCHLIST_SHELL_INSTANCE.selectCode?.(code);
+        window.FUMAN_WATCHLIST_SHELL_INSTANCE.render();
+      } else {
+        await renderWatchlist();
+      }
     
       const firstCard = document.querySelector(".watchlist-card");
       if (firstCard) firstCard.click();
+      return true;
     }
     
     function removeFromWatchlist(code) {
-      if (!isTerminalUnlocked()) return;
       const list = getWatchlist().filter(w => w.code !== code);
       saveWatchlist(list);
       renderWatchlist();
@@ -1068,7 +1090,7 @@
     }
 
     async function refreshSelectedWatchlistQuote() {
-      if (isDocumentHidden() || !isViewActive("watchlist") || !isTerminalUnlocked()) return;
+      if (isDocumentHidden() || !isViewActive("watchlist")) return;
       if (watchlistRefreshLoading) return;
       const card = document.querySelector(".watchlist-card.selected");
       if (!card) return;
@@ -1134,10 +1156,32 @@
     arrangeWatchlistSearch();
     window.addEventListener("resize", () => deferUiWork(syncMobileStrategyVisibility, 80));
     
+    function handleWatchlistAddIntent(event) {
+      const add = event.target.closest?.("#watchlist-add-btn");
+      if (!add) return false;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      addToWatchlist();
+      return true;
+    }
+
+    document.addEventListener("pointerdown", handleWatchlistAddIntent, true);
+    document.addEventListener("mousedown", handleWatchlistAddIntent, true);
+    document.addEventListener("touchstart", handleWatchlistAddIntent, { capture: true, passive: false });
     watchlistSearchInput?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") addToWatchlist();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation?.();
+        addToWatchlist();
+      }
     });
-    watchlistAddBtn?.addEventListener("click", addToWatchlist);
+    watchlistAddBtn?.addEventListener("click", (event) => {
+      handleWatchlistAddIntent(event) || addToWatchlist();
+    }, true);
+
+    window.FUMAN_WATCHLIST_MODULE_FORCE_ADD = addToWatchlist;
+    window.FUMAN_WATCHLIST_FORCE_ADD = addToWatchlist;
     
     
 
