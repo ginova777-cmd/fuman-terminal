@@ -110,6 +110,8 @@
   let marketDesktopAiLoading = false;
   let marketDesktopMode = "overview";
   let marketSnapshotFirstPayload = null;
+  let marketAiBundlePayload = null;
+  let marketRadarBundlePayload = null;
   let marketHeatmapSectorRows = [];
   const canvasState = {
     route: "",
@@ -1388,10 +1390,48 @@
     return [];
   }
 
+  function bundleEndpointPath(endpoint) {
+    try {
+      return new URL(endpoint, window.location.origin).pathname;
+    } catch (error) {
+      return String(endpoint || "").split("?")[0];
+    }
+  }
+
+  function rememberMarketPayloadFromBundle(endpoint, payload) {
+    if (!payload || typeof payload !== "object") return;
+    const pathname = bundleEndpointPath(endpoint);
+    if (pathname === "/api/heatmap" && Array.isArray(payload.sectors) && payload.sectors.length) {
+      marketSnapshotFirstPayload = { ...payload, snapshotFirst: true };
+      if (isMarketViewActive()) {
+        renderMarketOverviewApi({}, marketSnapshotFirstPayload);
+        renderMarketHeatmapApi(marketSnapshotFirstPayload.sectors, marketSnapshotFirstPayload);
+        if (marketDesktopMode === "ai") {
+          renderMarketApiAi(marketSnapshotFirstPayload, marketRadarBundlePayload || {}, marketAiBundlePayload || {});
+        }
+      }
+      return;
+    }
+    if (pathname === "/api/market-ai-live") {
+      marketAiBundlePayload = payload;
+      if (isMarketViewActive() && marketDesktopMode === "ai") {
+        renderMarketApiAi(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, marketAiBundlePayload);
+      }
+      return;
+    }
+    if (pathname === "/api/realtime-radar-latest") {
+      marketRadarBundlePayload = payload;
+      if (isMarketViewActive() && marketDesktopMode === "ai") {
+        renderMarketApiAi(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {});
+      }
+    }
+  }
+
   function primeRowsFromFastBundle(payload, source = "fast-bundle") {
     const endpoints = payload?.endpoints && typeof payload.endpoints === "object" ? payload.endpoints : {};
     let count = 0;
     Object.entries(endpoints).forEach(([endpoint, endpointPayload]) => {
+      rememberMarketPayloadFromBundle(endpoint, endpointPayload);
       const route = routeForCompactEndpoint(endpoint);
       if (!route) return;
       const rows = normalizeCanvasRowsFromPayload(endpointPayload, route);
@@ -3408,13 +3448,17 @@
     if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
       shell.ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
     }
-    const state = { heatmap: marketSnapshotFirstPayload || null, radar: null, ai: null };
+    const state = {
+      heatmap: marketSnapshotFirstPayload || null,
+      radar: marketRadarBundlePayload || null,
+      ai: marketAiBundlePayload || null,
+    };
     let settled = 0;
     const paint = () => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
       renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
     };
-    if (state.heatmap?.sectors?.length) {
+    if (state.heatmap?.sectors?.length || state.radar || state.ai) {
       window.setTimeout(paint, 0);
     }
     const done = () => {
