@@ -1161,7 +1161,7 @@ function isStrategy3NotificationWindow(date = new Date()) {
   if (!STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW) return true;
   const t = taipeiTimeParts(date);
   const minutes = t.hour * 60 + t.minute;
-  return minutes >= (12 * 60 + 55) && minutes <= (13 * 60 + 30);
+  return minutes >= (13 * 60) && minutes <= (13 * 60 + 30);
 }
 
 function compactPercent(value) {
