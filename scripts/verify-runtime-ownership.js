@@ -82,6 +82,7 @@ for (const marker of [
   "fumanFastMarketModeReady",
   "selectMarketDesktopMode",
   "scheduleMarketDesktopModeHydrate",
+  "hydrateMarketDesktopAiDirect",
 ]) {
   if (!fastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing market mode ownership marker: ${marker}`);
 }

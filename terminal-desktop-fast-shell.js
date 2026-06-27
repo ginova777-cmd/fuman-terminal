@@ -107,6 +107,7 @@
   let originalDesktopMarketRetryTimer = 0;
   let marketApiOnlySignature = "";
   let marketApiOnlyLoading = false;
+  let marketDesktopAiLoading = false;
   let marketDesktopMode = "overview";
   let marketHeatmapSectorRows = [];
   const canvasState = {
@@ -3391,6 +3392,25 @@
     });
   }
 
+  function hydrateMarketDesktopAiDirect(force = false) {
+    if (!isMarketViewActive() || marketDesktopMode !== "ai" || marketDesktopAiLoading) return;
+    marketDesktopAiLoading = true;
+    const shell = ensureMarketDesktopShell();
+    if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
+      shell.ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
+    }
+    Promise.allSettled([
+      fetchMarketJson("/api/heatmap", 60, force, 6500),
+      fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200),
+      fetchMarketJson("/api/market-ai-live", 20, force, 6500),
+    ]).then(([heatmap, radar, ai]) => {
+      if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+      renderMarketApiAi(heatmap.value || {}, radar.value || {}, ai.value || {});
+    }).finally(() => {
+      marketDesktopAiLoading = false;
+    });
+  }
+
   function ensureMarketDesktopShell() {
     const market = document.querySelector("#market-view");
     if (!market) return {};
@@ -3440,6 +3460,7 @@
     window.__fumanMarketAiHydrateTimer = window.setTimeout(() => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
       marketApiOnlyLoading = false;
+      hydrateMarketDesktopAiDirect(force);
       refreshMarketApiOnly(force);
     }, Math.max(80, delay));
   }
