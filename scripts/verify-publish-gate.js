@@ -722,7 +722,8 @@ if (!/compactSnapshotEndpoints/.test(terminalFastBundleApi) || !/Vercel-CDN-Cach
 }
 if (!/isEmptyStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
   || !/repairStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
-  || !/strategy1-previous-2130-carry-forward/.test(terminalFastBundleApi)) {
+  || !/strategy1-previous-2130-carry-forward/.test(terminalFastBundleApi)
+  || !/strategy1Previous2130Repair/.test(terminalFastBundleApi)) {
   issues.push("api/terminal-fast-bundle.js must repair stale Strategy1 holiday/preopen waiting snapshots with the previous 21:30 carry-forward run");
 }
 if (!/function\s+setStrategy2LiveShellCache/.test(strategy2LatestApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=12, stale-while-revalidate=30"/.test(strategy2LatestApi)) {

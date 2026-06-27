@@ -196,7 +196,11 @@ function isEmptyStrategy1WaitingSnapshot(payload) {
 async function repairStrategy1WaitingSnapshot(request, endpoints) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!isStrategy1Endpoint(endpoint) || !isEmptyStrategy1WaitingSnapshot(payload)) continue;
-    const result = await callJson("/api/open-buy-latest", openBuyLatest, request, compactQuery(60), 2300);
+    const result = await callJson("/api/open-buy-latest", openBuyLatest, request, {
+      ...compactQuery(60),
+      live: "1",
+      strategy1Previous2130Repair: "1",
+    }, 6500);
     const replacement = result?.payload;
     const summary = summarize(replacement);
     if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || summary.count <= 0) {
