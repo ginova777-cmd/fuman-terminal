@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-04";
+  const VERSION = "watchlist-rich-shell-20260627-05";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -18,6 +18,9 @@
       mode: "rich-watchlist-shell",
       render,
       addFromInput,
+      removeCode,
+      removeFromWatchlist: removeCode,
+      enrichStockMeta,
       selectCode,
       refreshSelected,
     };
