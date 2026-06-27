@@ -1,4 +1,9 @@
 (function restoreMarketOverviewLegacySurface() {
+  if (window.__fumanDesktopFastShell) {
+    window.__fumanMarketOverviewRestoreReady = true;
+    document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell";
+    return;
+  }
   if (window.__fumanDesktopFastShell === "20260623-09") {
     window.__fumanMarketOverviewRestoreReady = true;
     document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell";
