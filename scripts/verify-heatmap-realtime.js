@@ -155,14 +155,6 @@ function fail(message, detail) {
   const requiredCodes = ["3037", "2492", "2327", "2059"];
   const required = Object.fromEntries(requiredCodes.map((target) => [target, rows.find((stock) => String(stock.code) === target) || null]));
   const missingRequired = Object.entries(required).filter(([, stock]) => !stock || stock.isRealtime !== true || !Number(stock.close));
-  const detectWindow = payload.heatmapDetectWindow || {};
-  const snapshotMode = detectWindow.active === false || /cache|snapshot/i.test(String(detectWindow.reason || payload.cache?.reason || payload.cacheSource || ""));
-  const coverageCount = Math.max(rows.length, toNumber(payload.stockCount), toNumber(payload.health?.stockCount));
-
-  if (snapshotMode && coverageCount >= 500 && rows.length > 0 && !badDate.length && !noPrice.length) {
-    console.log(`[heatmap-realtime] ok source=${live ? "live" : "local"} mode=snapshot-first stocks=${rows.length} coverage=${coverageCount} reason=${detectWindow.reason || payload.cache?.reason || ""} ms=${Date.now() - startedAt}`);
-    return;
-  }
 
   if (rows.length < 500 || badDate.length || notRealtime.length || noPrice.length || missingRequired.length) {
     fail("heatmap contains stale or invalid quotes", {

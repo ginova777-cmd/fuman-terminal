@@ -73,11 +73,6 @@ function shouldRefresh(request) {
   return request.method === "POST" || query.refresh === "1" || query.fresh === "1";
 }
 
-function wantsFastMarketAi(request) {
-  const query = request.query || {};
-  return query.fast === "1" || query.shell === "1" || query.compact === "1";
-}
-
 function taipeiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -106,7 +101,7 @@ function taipeiClock(now = new Date()) {
 }
 
 function isMarketAiDetectWindow(clock = taipeiClock()) {
-  return !isWeekend(clock) && clock.seconds >= AI_WINDOW_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
+  return clock.seconds >= AI_WINDOW_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
 }
 
 function compactDate(value) {
@@ -285,14 +280,6 @@ module.exports = async function handler(request, response) {
   const marketSummary = readCachedMarketSummary();
   const stocksSlim = readCachedStocksSlim();
   const session = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
-
-  if (cached && wantsFastMarketAi(request) && !shouldRefresh(request)) {
-    response.status(200).json({
-      ...cachedResponsePayload(cached, breadth, clock, "fast-cache"),
-      marketSession: session,
-    });
-    return;
-  }
 
   if (cached && session.closed && !shouldRefresh(request)) {
     response.status(200).json(normalizeNonTradingCachePayload(

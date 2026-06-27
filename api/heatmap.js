@@ -68,7 +68,6 @@ function taipeiClock(now = new Date()) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -84,22 +83,11 @@ function taipeiClock(now = new Date()) {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     time: `${parts.hour}:${parts.minute}:${parts.second}`,
     seconds: hour * 60 * 60 + minute * 60 + second,
-    weekday: String(parts.weekday || ""),
   };
 }
 
-function isWeekend(clock = taipeiClock()) {
-  const weekday = String(clock?.weekday || "").toLowerCase();
-  return weekday.startsWith("sat") || weekday.startsWith("sun");
-}
-
 function isHeatmapDetectWindow(clock = taipeiClock()) {
-  return !isWeekend(clock) && clock.seconds >= HEATMAP_WINDOW_START_SECONDS && clock.seconds <= HEATMAP_WINDOW_END_SECONDS;
-}
-
-function wantsFastHeatmapSnapshot(request) {
-  const query = request.query || {};
-  return query.fast === "1" || query.snapshot === "1";
+  return clock.seconds >= HEATMAP_WINDOW_START_SECONDS && clock.seconds <= HEATMAP_WINDOW_END_SECONDS;
 }
 
 function attachHeatmapDetectWindow(payload, clock, reason) {
@@ -2802,7 +2790,7 @@ module.exports = async function handler(request, response) {
 
   const clock = taipeiClock();
   const detectWindowActive = isHeatmapDetectWindow(clock);
-  if (!detectWindowActive || wantsFastHeatmapSnapshot(request)) {
+  if (!detectWindowActive) {
     const snapshot = await readSnapshot("heatmap_latest", {
       tradeDate: clock.date,
       allowLatestFallback: true,
