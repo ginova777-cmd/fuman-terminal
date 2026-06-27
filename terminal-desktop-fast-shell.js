@@ -112,9 +112,6 @@
   let marketHeatmapSectorRows = [];
   let marketApiOnlyCacheHydrated = false;
   let marketApiOnlyState = { market: null, heatmap: null, radar: null, ai: null };
-  let marketApiOnlyRenderFrame = 0;
-  let marketApiOnlyRenderAllowSame = false;
-  let marketApiOnlyRenderForce = false;
   const canvasState = {
     route: "",
     source: "",
@@ -3460,25 +3457,6 @@
     renderMarketApiRadar(marketApiOnlyState.radar || {});
   }
 
-  function scheduleMarketApiOnlyRender(allowSame = false, force = false) {
-    marketApiOnlyRenderAllowSame = marketApiOnlyRenderAllowSame || Boolean(allowSame);
-    marketApiOnlyRenderForce = marketApiOnlyRenderForce || Boolean(force);
-    if (marketApiOnlyRenderFrame) return;
-    const run = () => {
-      marketApiOnlyRenderFrame = 0;
-      const nextAllowSame = marketApiOnlyRenderAllowSame;
-      const nextForce = marketApiOnlyRenderForce;
-      marketApiOnlyRenderAllowSame = false;
-      marketApiOnlyRenderForce = false;
-      renderCurrentMarketApiOnlyState(nextAllowSame, nextForce);
-    };
-    if (typeof window.requestAnimationFrame === "function") {
-      marketApiOnlyRenderFrame = window.requestAnimationFrame(run);
-    } else {
-      marketApiOnlyRenderFrame = window.setTimeout(run, 0);
-    }
-  }
-
   function ensureMarketDesktopShell() {
     const market = document.querySelector("#market-view");
     if (!market) return {};
@@ -3520,7 +3498,7 @@
     ensureMarketDesktopShell();
     if (marketDesktopMode === "ai") {
       hydrateMarketApiOnlyCache();
-      scheduleMarketApiOnlyRender(true, false);
+      renderCurrentMarketApiOnlyState(true, false);
     }
   }
 
@@ -3785,9 +3763,7 @@
       : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
     const up = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const down = sectors.reduce((sum, item) => sum + num(item.down), 0);
-    const sectorStocks = sectors
-      .slice(0, 60)
-      .flatMap((sector) => normalizeArray(sector.stocks).slice(0, 12).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
+    const sectorStocks = sectors.flatMap((sector) => normalizeArray(sector.stocks).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
     const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count) || sectorStocks.length || up + down;
     const directional = Math.max(up + down, 1);
     const upRatio = sample ? up / sample * 100 : 0;
@@ -4039,7 +4015,7 @@
     if (!isMarketViewActive()) return;
     hydrateMarketApiOnlyCache();
     restoreMarketDesktopMode();
-    scheduleMarketApiOnlyRender(true, force);
+    renderCurrentMarketApiOnlyState(true, force);
     if (marketApiOnlyLoading) return;
     marketApiOnlyLoading = true;
     let pending = 4;
@@ -4051,28 +4027,28 @@
       .then((payload) => {
         if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.market = payload;
         saveMarketApiOnlyCache();
-        scheduleMarketApiOnlyRender(true, force);
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
     fetchMarketJson("/api/heatmap", 60, force, 1800)
       .then((payload) => {
         if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.heatmap = payload;
         saveMarketApiOnlyCache();
-        scheduleMarketApiOnlyRender(true, force);
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
     fetchMarketJson("/api/realtime-radar-latest", 20, force, 2200)
       .then((payload) => {
         if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.radar = payload;
         saveMarketApiOnlyCache();
-        scheduleMarketApiOnlyRender(true, force);
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
     fetchMarketJson("/api/market-ai-live", 20, force, 1800)
       .then((payload) => {
         if (hasMarketApiOnlyPayload(payload)) marketApiOnlyState.ai = payload;
         saveMarketApiOnlyCache();
-        scheduleMarketApiOnlyRender(true, force);
+        renderCurrentMarketApiOnlyState(true, force);
       })
       .finally(done);
   }
