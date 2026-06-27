@@ -235,8 +235,8 @@
                   </div>
                   <p>點選股票後同步載入右側分析</p>
                   <div class="watchlist-entry-form">
-                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric">
-                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股">+</button>
+                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric" onkeydown="return window.FUMAN_WATCHLIST_ENTER_ADD ? window.FUMAN_WATCHLIST_ENTER_ADD(event) : true">
+                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股" onclick="return window.FUMAN_WATCHLIST_CLICK_ADD ? window.FUMAN_WATCHLIST_CLICK_ADD(event) : false">+</button>
                   </div>
                   <div id="watchlist-entry-status" class="watchlist-entry-status" role="status" aria-live="polite"></div>
                   <div id="watchlist-stocks" class="watchlist-stock-list">
@@ -567,9 +567,9 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="terminal-hotfix.js?route-switch=20260627-01" data-fuman-terminal-hotfix="1"></script>
-    <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260627-12" data-fuman-watchlist-shell="1"></script>
+    <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260627-13" data-fuman-watchlist-shell="1"></script>
     <script src="terminal-desktop-fast-shell.js?route-switch=20260627-24" data-fuman-desktop-fast-shell="1"></script>
-    <script src="terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260627-01"></script>
+    <script src="terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260627-02"></script>
     <script src="terminal-ai-risk-guard.js?v=public-terminal-fast-20260623-09"></script>
     <script src="terminal-market-overview-restore.js?v=market-overview-restore-20260627-02"></script>
   </body>

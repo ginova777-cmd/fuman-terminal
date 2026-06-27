@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-12";
+  const VERSION = "watchlist-rich-shell-20260627-13";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -11,6 +11,7 @@
   let stockUniversePromise = null;
   let lastAddIntentAt = 0;
   let lastAddIntentCode = "";
+  let watchlistMemory = null;
   const FEATURE_STATUS = [
     ["新增股票", "已開通"],
     ["全台上市上櫃", "已開通"],
@@ -49,21 +50,35 @@
     return instance;
   }
 
+  function normalizeListRows(rows) {
+    return Array.isArray(rows) ? rows
+      .map((item) => ({ ...item, code: normalizeCode(item?.code || item?.symbol || item?.Code) }))
+      .filter((item) => item && item.code) : [];
+  }
+
   function readList() {
     try {
       const rows = JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]");
-      return Array.isArray(rows) ? rows
-        .map((item) => ({ ...item, code: normalizeCode(item?.code || item?.symbol || item?.Code) }))
-        .filter((item) => item && item.code) : [];
+      const normalized = normalizeListRows(rows);
+      if (normalized.length || !watchlistMemory) {
+        watchlistMemory = normalized;
+        return normalized;
+      }
+      return normalizeListRows(watchlistMemory);
     } catch {
-      return [];
+      return normalizeListRows(watchlistMemory);
     }
   }
 
   function writeList(rows) {
-    const value = JSON.stringify(rows.slice(0, 80));
-    localStorage.setItem(WATCHLIST_KEY, value);
-    localStorage.setItem(MOBILE_WATCHLIST_KEY, value);
+    const normalized = normalizeListRows(rows).slice(0, 80);
+    watchlistMemory = normalized;
+    const value = JSON.stringify(normalized);
+    try {
+      localStorage.setItem(WATCHLIST_KEY, value);
+      localStorage.setItem(MOBILE_WATCHLIST_KEY, value);
+    } catch {}
+    return normalized;
   }
 
   function escapeText(value) {
@@ -480,6 +495,25 @@
     }
   }
 
+  function clickAddFromEvent(event) {
+    try { install(); } catch {}
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    const target = event?.currentTarget || event?.target || document.querySelector("#watchlist-add-btn");
+    return addFromInput(target) ? false : false;
+  }
+
+  function enterAddFromEvent(event) {
+    if (event?.key && event.key !== "Enter") return true;
+    try { install(); } catch {}
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    const target = event?.currentTarget || event?.target || document.querySelector("#watchlist-search-input");
+    return addFromInput(target) ? false : false;
+  }
+
   function installEvents() {
     bindEntryControls();
     document.addEventListener("pointerdown", handleAddIntent, true);
@@ -600,6 +634,17 @@
     try { install(); } catch (error) {}
     return forceAddCode(code);
   };
+  window.FUMAN_WATCHLIST_CLICK_ADD = clickAddFromEvent;
+  window.FUMAN_WATCHLIST_ENTER_ADD = enterAddFromEvent;
+  window.FUMAN_WATCHLIST_DEBUG_STATE = () => ({
+    version: VERSION,
+    selectedCode,
+    memory: normalizeListRows(watchlistMemory).map((row) => row.code),
+    storage: readList().map((row) => row.code),
+    input: document.querySelector("#watchlist-search-input")?.value || "",
+    status: document.querySelector("#watchlist-entry-status")?.textContent || "",
+    cards: [...document.querySelectorAll(".watchlist-card[data-code]")].map((el) => el.dataset.code),
+  });
   window.FUMAN_WATCHLIST_SHELL_FORCE_ADD = () => {
     try { install(); } catch (error) {}
     return addFromInput();
