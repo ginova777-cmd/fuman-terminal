@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260627-route-switch-03"
+    window.__fumanDesktopFastShell === "20260627-route-switch-04"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260627-route-switch-03";
+  window.__fumanDesktopFastShell = "20260627-route-switch-04";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -4778,10 +4778,18 @@
         rows = domRows;
       }
     }
-    renderFixedPageShell(link, source, rows);
     if (key === "watchlist|自選股") {
-      ensureWatchlistShell().then((api) => api?.render?.()).catch(() => undefined);
+      removeFixedPageShell(key);
+      ensureWatchlistShell().then((api) => {
+        api?.render?.();
+        if (typeof window.FUMAN_WATCHLIST_SHELL_FORCE_ADD === "function") {
+          document.documentElement.dataset.fumanWatchlistFallbackReady = "1";
+        }
+      }).catch(() => undefined);
+      markLatency("shell", key);
+      return true;
     }
+    renderFixedPageShell(link, source, rows);
     markLatency("shell", key);
     if (!isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) restoreFixedPageSnapshot(link);
     window.setTimeout(() => {

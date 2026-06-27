@@ -201,33 +201,46 @@
         </section>
 
         <!-- 自選股 -->
-        <section class="view-panel" id="watchlist-view" hidden>
-          <header class="page-header watchlist-entry-header">
-            <div class="watchlist-entry-card">
-              <div class="watchlist-entry-copy">
-                <h1>自選股</h1>
-                <p>點選股票後同步載入右側分析</p>
-              </div>
-              <div class="watchlist-entry-form">
-                <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off">
-                <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股">+</button>
-              </div>
+        <section class="view-panel watchlist-view-rich" id="watchlist-view" hidden>
+          <header class="page-header watchlist-rich-header">
+            <div>
+              <h1>自選股分析</h1>
+              <span class="refresh-line" id="watchlist-refresh">等待資料載入</span>
             </div>
+            <button class="watchlist-refresh-button" type="button" data-watchlist-refresh aria-label="重新整理自選股">⟳</button>
           </header>
 
-          <div class="watchlist-layout">
-            <!-- 左側：自選股清單 -->
-            <div class="watchlist-list-pane">
-              <div id="watchlist-stocks" class="watchlist-stock-list">
-                <div style="text-align:center; padding:40px; color:#555;">尚未新增自選股，請輸入股票代號後點新增</div>
+          <section class="watchlist-rich-shell" aria-label="自選股個股分析">
+            <header class="watchlist-rich-shell-head">
+              <div>
+                <h2>自選股 / 個股分析</h2>
+                <p>左側管理追蹤清單，右側查看選中股票的 AI 個股判讀。</p>
               </div>
-            </div>
+            </header>
 
-            <!-- 右側：TradingView 技術分析 -->
-            <div id="watchlist-analysis" class="watchlist-analysis-pane">
-              <div style="color:#555; font-size:14px;">點擊左側股票查看技術分析</div>
+            <div class="watchlist-layout">
+              <aside class="watchlist-list-pane">
+                <div class="watchlist-list-card">
+                  <div class="watchlist-list-title">
+                    <h3>自選股</h3>
+                    <span id="watchlist-count">0</span>
+                  </div>
+                  <p>點選股票後同步載入右側分析</p>
+                  <div class="watchlist-entry-form">
+                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric">
+                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股">+</button>
+                  </div>
+                  <div id="watchlist-stocks" class="watchlist-stock-list">
+                    <div class="watch-mobile-empty">尚未新增自選股，請輸入股票代號後點新增</div>
+                  </div>
+                </div>
+              </aside>
+
+              <section id="watchlist-analysis" class="watchlist-analysis-pane">
+                <div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>
+              </section>
             </div>
-          </div>
+          </section>
         </section>
 
         <!-- 買賣超 -->
