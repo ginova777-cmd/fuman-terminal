@@ -3554,7 +3554,7 @@
     window.__fumanMarketOverviewRefreshTimer = window.setTimeout(() => {
       if (!isMarketViewActive() || isInteractionHoldActive()) return;
       refreshMarketApiOnly(true);
-    }, 6200);
+    }, 120);
     return true;
   }
 
@@ -4130,7 +4130,7 @@
     };
     const boot = () => {
       restoreMarketDesktopMode();
-      schedule(true, 6200);
+      schedule(true, 120);
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
     else boot();
@@ -4173,7 +4173,7 @@
       }, true);
     }
     window.addEventListener("fuman:desktop-route", (event) => {
-      if (isMarketRoute(event?.detail?.key)) schedule(true, 6200);
+      if (isMarketRoute(event?.detail?.key)) schedule(true, 120);
     });
     window.addEventListener("focus", () => schedule(false, 2200));
     document.addEventListener("visibilitychange", () => {
