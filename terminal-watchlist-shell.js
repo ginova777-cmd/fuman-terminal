@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-01";
+  const VERSION = "watchlist-rich-shell-20260628-02";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -49,15 +49,25 @@
     if (watchlistRoot) watchlistRoot.dataset.watchlistShellReady = "1";
     installStyle();
     installEvents();
+    enforceListLimit();
     render();
     return instance;
   }
 
-  function normalizeListRows(rows) {
-    return Array.isArray(rows) ? rows
+  function normalizeListRows(rows, limit = WATCHLIST_MAX_ITEMS) {
+    const normalized = Array.isArray(rows) ? rows
       .map((item) => ({ ...item, code: normalizeCode(item?.code || item?.symbol || item?.Code) }))
       .filter((item) => item && item.code)
-      .slice(0, WATCHLIST_MAX_ITEMS) : [];
+      : [];
+    return Number.isFinite(limit) ? normalized.slice(0, limit) : normalized;
+  }
+
+  function readRawList() {
+    try {
+      return normalizeListRows(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]"), Infinity);
+    } catch {
+      return normalizeListRows(watchlistMemory, Infinity);
+    }
   }
 
   function readList() {
@@ -83,6 +93,16 @@
       localStorage.setItem(MOBILE_WATCHLIST_KEY, value);
     } catch {}
     return normalized;
+  }
+
+  function enforceListLimit(activeCode = "") {
+    const raw = readRawList();
+    if (raw.length <= WATCHLIST_MAX_ITEMS) return readList();
+    const target = normalizeCode(activeCode);
+    const keep = raw.slice(0, WATCHLIST_MAX_ITEMS);
+    writeList(keep);
+    if (target && !keep.some((item) => item.code === target)) selectedCode = keep[0]?.code || "";
+    return keep;
   }
 
   function escapeText(value) {
@@ -242,7 +262,7 @@
   function forceAddCode(value) {
     const code = normalizeCode(value);
     if (!code) return false;
-    const rows = readList();
+    const rows = enforceListLimit(code);
     const meta = findStockMetaSync(code);
     const entry = { code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() };
     if (!rows.some((item) => item.code === code)) {
@@ -264,7 +284,7 @@
   function ensureCode(code, seed = {}) {
     const target = normalizeCode(code);
     if (!target) return false;
-    const rows = readList();
+    const rows = enforceListLimit(target);
     if (!rows.some((item) => item.code === target)) {
       if (rows.length >= WATCHLIST_MAX_ITEMS) {
         updateEntryLimitState(rows, `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`);
@@ -702,7 +722,10 @@
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
   window.FUMAN_WATCHLIST_FORCE_ADD_CODE = (code) => {
     try { install(); } catch (error) {}
-    return forceAddCode(code);
+    enforceListLimit(code);
+    const ok = forceAddCode(code);
+    enforceListLimit(code);
+    return ok;
   };
   window.FUMAN_WATCHLIST_CLICK_ADD = clickAddFromEvent;
   window.FUMAN_WATCHLIST_ENTER_ADD = enterAddFromEvent;
@@ -710,6 +733,7 @@
     version: VERSION,
     selectedCode,
     memory: normalizeListRows(watchlistMemory).map((row) => row.code),
+    rawStorage: readRawList().map((row) => row.code),
     storage: readList().map((row) => row.code),
     input: document.querySelector("#watchlist-search-input")?.value || "",
     status: document.querySelector("#watchlist-entry-status")?.textContent || "",

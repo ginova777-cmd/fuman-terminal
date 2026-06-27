@@ -93,8 +93,8 @@ async function verifyLive() {
 
   const mobilePage = await fetchText("/api/mobile-page");
   assertLiveText("mobile-page", mobilePage, [
-    "輔滿手機終端",
-    "API only polling",
+    "輔滿極速手機版",
+    "API-only live",
   ]);
   if (mobilePage.body.includes("輔滿 股票終端")) {
     issues.push("mobile-page live returned desktop terminal HTML");

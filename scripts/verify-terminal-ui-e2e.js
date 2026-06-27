@@ -547,6 +547,9 @@ async function prepareDesktopRoute(cdp, route) {
     const value = JSON.stringify(rows);
     localStorage.setItem("fuman_watchlist", value);
     localStorage.setItem("fuman_mobile_watchlist_v1", value);
+    localStorage.removeItem("fuman-terminal-ai-watchlist");
+    document.querySelector("#watchlist-entry-status")?.replaceChildren();
+    window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
     return true;
   });
 }
@@ -557,8 +560,7 @@ async function afterDesktopRouteActivate(cdp, route) {
     await sleep(1200);
   }
   if (route.key === "watchlist") {
-    const addedCodes = ["8112", "2327", "9904"];
-    for (const addedCode of addedCodes) {
+    const typeWatchlistCode = async (code) => {
       await evaluate(cdp, (code) => {
         const input = document.querySelector("#watchlist-search-input");
         if (input) {
@@ -568,35 +570,123 @@ async function afterDesktopRouteActivate(cdp, route) {
           input.dispatchEvent(new Event("change", { bubbles: true }));
         }
         return true;
-      }, addedCode);
+      }, code);
+    };
+    const addWatchlistCode = async (code) => {
+      await typeWatchlistCode(code);
       await clickSelector(cdp, "#watchlist-add-btn");
       await waitFor(cdp, (code) => {
         let rows = [];
         try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
         const storageOk = Array.isArray(rows) && rows.some((item) => String(item?.code || "") === code);
         const cardOk = Boolean(document.querySelector(`.watchlist-card[data-code="${code}"]`));
-        return { ok: storageOk && cardOk, storageOk, cardOk, rows: rows.map((item) => item?.code).join(",") };
-      }, addedCode, 15000, 300);
+        const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
+        return { ok: storageOk && cardOk && !/尚未同步/.test(status), storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
+      }, code, 15000, 300);
+    };
+    const addedCodes = ["8112", "2327", "9904"];
+    for (const addedCode of addedCodes) {
+      await addWatchlistCode(addedCode);
     }
-    await evaluate(cdp, () => {
-      const input = document.querySelector("#watchlist-search-input");
-      if (input) {
-        input.focus();
-        input.value = "8112";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      return true;
-    });
+    await typeWatchlistCode("8112");
     await clickSelector(cdp, "#watchlist-add-btn");
     await waitFor(cdp, () => {
       const cards = [...document.querySelectorAll('.watchlist-card[data-code="8112"]')];
       const selected = Boolean(document.querySelector('.watchlist-card.selected[data-code="8112"]'));
       const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
-      return { ok: cards.length === 1 && (selected || /已在自選股/.test(status)), cards: cards.length, selected, status };
+      return { ok: cards.length === 1 && (selected || /已在自選股/.test(status)) && !/尚未同步/.test(status), cards: cards.length, selected, status };
+    }, null, 15000, 300);
+    for (const addedCode of ["2317", "2303", "2330", "2454", "2603", "2881"]) {
+      await addWatchlistCode(addedCode);
+    }
+    await waitFor(cdp, () => {
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      const codes = rows.map((item) => String(item?.code || ""));
+      const cards = [...document.querySelectorAll(".watchlist-card[data-code]")].map((item) => item.dataset.code || "");
+      const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
+      const countText = String(document.querySelector("#watchlist-count")?.textContent || "").trim();
+      return {
+        ok: rows.length === 10
+          && cards.length === 10
+          && new Set(codes).size === 10
+          && new Set(cards).size === 10
+          && /^10(?:\/10)?$/.test(countText)
+          && !/尚未同步/.test(status),
+        rows: codes.join(","),
+        cards: cards.join(","),
+        count: countText,
+        inputDisabled: document.querySelector("#watchlist-search-input")?.disabled === true,
+        addDisabled: document.querySelector("#watchlist-add-btn")?.disabled === true,
+        status,
+      };
+    }, null, 15000, 300);
+    await evaluate(cdp, () => {
+      const ok = window.FUMAN_WATCHLIST_FORCE_ADD_CODE?.("1101");
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      return { ok: ok === false || rows.length <= 10, result: ok, rows: rows.length };
+    });
+    await waitFor(cdp, () => {
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      return {
+        ok: rows.length === 10 && !rows.some((item) => String(item?.code || "") === "1101") && !document.querySelector('.watchlist-card[data-code="1101"]'),
+        rows: rows.map((item) => item?.code).join(","),
+        has1101: Boolean(document.querySelector('.watchlist-card[data-code="1101"]')),
+      };
+    }, null, 10000, 250);
+    await evaluate(cdp, () => {
+      const button = document.querySelector('[data-watch-remove="8112"]');
+      button?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      return Boolean(button);
+    });
+    await waitFor(cdp, () => {
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      const cards = [...document.querySelectorAll(".watchlist-card[data-code]")].map((item) => item.dataset.code || "");
+      return {
+        ok: rows.length === 9 && cards.length === 9 && !cards.includes("8112") && document.querySelector("#watchlist-search-input")?.disabled === false,
+        rows: rows.map((item) => item?.code).join(","),
+        cards: cards.join(","),
+        inputDisabled: document.querySelector("#watchlist-search-input")?.disabled === true,
+      };
+    }, null, 15000, 300);
+    await addWatchlistCode("1101");
+    await waitFor(cdp, () => {
+      const card = document.querySelector('.watchlist-card[data-code="1101"]');
+      card?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const analysis = document.querySelector("#watchlist-analysis");
+      const text = String(analysis?.textContent || "");
+      const metrics = analysis?.querySelectorAll(".watch-metric").length || 0;
+      const details = analysis?.querySelectorAll(".watch-detail-section-card").length || 0;
+      const notes = analysis?.querySelectorAll(".watch-note-row article").length || 0;
+      const featurePills = analysis?.querySelectorAll(".watch-feature-pill").length || 0;
+      const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      const countText = String(document.querySelector("#watchlist-count")?.textContent || "").trim();
+      return {
+        ok: Boolean(card)
+          && rows.length === 10
+          && /^10(?:\/10)?$/.test(countText)
+          && text.includes("1101")
+          && metrics >= 4
+          && details >= 5
+          && notes >= 3
+          && featurePills >= 6
+          && !/尚未同步/.test(status),
+        count: countText,
+        text: text.slice(0, 200),
+        metrics,
+        details,
+        notes,
+        featurePills,
+        status,
+      };
     }, null, 15000, 300);
     const clicked = await evaluate(cdp, () => {
-      const target = document.querySelector('.watchlist-card[data-code="8112"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
+      const target = document.querySelector('.watchlist-card[data-code="1101"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
       target?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
       return Boolean(target);
     }).catch(() => false);
@@ -720,6 +810,36 @@ function collectDesktopStats(route) {
   const fieldBlockers = rowsVisible > 0
     ? requiredFieldSignals.filter((key) => !fieldSignals[key]).map((key) => `visible field signal missing: ${key}`)
     : [];
+  const contractBlockers = [];
+  if (route.key === "watchlist") {
+    const cards = [...activePanel.querySelectorAll(".watchlist-card[data-code]")];
+    const cardCodes = cards.map((card) => card.dataset.code || "").filter(Boolean);
+    const selectedCard = activePanel.querySelector(".watchlist-card.selected[data-code]") || cards[0];
+    const analysis = activePanel.querySelector("#watchlist-analysis");
+    const analysisText = text(analysis);
+    const countText = text(activePanel.querySelector("#watchlist-count"));
+    const featurePills = analysis?.querySelectorAll(".watch-feature-pill").length || 0;
+    const metrics = analysis?.querySelectorAll(".watch-metric").length || 0;
+    const details = analysis?.querySelectorAll(".watch-detail-section-card").length || 0;
+    const notes = analysis?.querySelectorAll(".watch-note-row article").length || 0;
+    const actionControls = analysis?.querySelectorAll(".watch-action-row input,.watch-action-row button").length || 0;
+    const input = activePanel.querySelector("#watchlist-search-input");
+    const add = activePanel.querySelector("#watchlist-add-btn");
+    const status = text(activePanel.querySelector("#watchlist-entry-status"));
+    if (cards.length !== 10) contractBlockers.push(`watchlist must finish at 10 cards actual=${cards.length}`);
+    if (new Set(cardCodes).size !== cardCodes.length) contractBlockers.push(`watchlist card codes must be unique actual=${cardCodes.join(",")}`);
+    if (!/^10(?:\/10)?$/.test(countText)) contractBlockers.push(`watchlist count must be 10 or 10/10 actual=${countText || "<missing>"}`);
+    if (!selectedCard?.dataset?.code || !analysisText.includes(selectedCard.dataset.code)) {
+      contractBlockers.push(`watchlist analysis must match selected card actual=${selectedCard?.dataset?.code || "<missing>"}`);
+    }
+    if (featurePills < 6) contractBlockers.push(`watchlist feature pills below 6 actual=${featurePills}`);
+    if (metrics < 4) contractBlockers.push(`watchlist summary metrics below 4 actual=${metrics}`);
+    if (details < 5) contractBlockers.push(`watchlist detail cards below 5 actual=${details}`);
+    if (notes < 3) contractBlockers.push(`watchlist AI note rows below 3 actual=${notes}`);
+    if (actionControls < 3) contractBlockers.push(`watchlist analysis action controls below 3 actual=${actionControls}`);
+    if (/尚未同步/.test(status)) contractBlockers.push(`watchlist status still shows unsynced: ${status}`);
+  }
+  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers])];
   return {
     kind: "desktop",
     routeKey: route.key,
@@ -745,9 +865,9 @@ function collectDesktopStats(route) {
     dateSignals,
     fieldSignals,
     missingRequiredText,
-    blockerMatches: [...new Set([...hardBlockers, ...fieldBlockers])],
+    blockerMatches: blockers,
     warnings,
-    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && hardBlockers.length === 0 && fieldBlockers.length === 0 && missingRequiredText.length === 0,
+    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && blockers.length === 0 && missingRequiredText.length === 0,
   };
 }
 
@@ -793,6 +913,7 @@ function collectMobileStats(route) {
     horizontalOverflow,
   };
   const layoutBlockers = [];
+  const contractBlockers = [];
   const actionText = [...document.querySelectorAll(".actions a,.actions button")].map((el) => text(el)).join(" ");
   const actionHref = [...document.querySelectorAll(".actions a")].map((el) => el.getAttribute("href") || "").join(" ");
   if (!shell || !tabs || !hero) layoutBlockers.push("mobile shell missing core layout nodes");
@@ -811,9 +932,18 @@ function collectMobileStats(route) {
   if (layout.shellWidth <= 0) layoutBlockers.push("mobile shell width is zero");
   if (layout.shellWidth > Math.min(window.innerWidth, 860)) layoutBlockers.push(`mobile shell is too wide actual=${layout.shellWidth} viewport=${window.innerWidth}`);
   if (horizontalOverflow > 8) layoutBlockers.push(`mobile page has horizontal overflow ${horizontalOverflow}px`);
+  if (route.fragment === "watch") {
+    const watchRows = [...content.querySelectorAll(".watch-row")];
+    const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
+    const statusTextForWatch = statusText || panelText;
+    if (watchRows.length < 1) contractBlockers.push(`mobile watch tab must render watch rows actual=${watchRows.length}`);
+    if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
+    if (!/自選\s+\d+/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count actual=${statusTextForWatch || "<missing>"}`);
+  }
   const keyOk = route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
+  const blockers = [...new Set([...blockerMatches, ...layoutBlockers, ...contractBlockers])];
   return {
     kind: "mobile",
     routeKey: route.key,
@@ -828,13 +958,12 @@ function collectMobileStats(route) {
     dateSignals,
     layout,
     layoutBlockers,
-    blockerMatches: [...new Set([...blockerMatches, ...layoutBlockers])],
+    blockerMatches: blockers,
     warnings,
     ok: keyOk
       && (route.allowEmpty || rows.length > 0)
       && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
-      && blockerMatches.length === 0
-      && layoutBlockers.length === 0,
+      && blockers.length === 0,
   };
 }
 
