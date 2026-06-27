@@ -3222,6 +3222,14 @@
     });
   }
 
+  function ensureWatchlistShell() {
+    if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
+    const version = terminalFastVersion();
+    return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
+      .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
+      .catch(() => null);
+  }
+
   function clearDesktopMarketCachesAndReload(reason = "market") {
     const key = "fuman-desktop-market-fresh-reload:20260624-02";
     try {
@@ -4739,6 +4747,9 @@
       }
     }
     renderFixedPageShell(link, source, rows);
+    if (key === "watchlist|自選股") {
+      ensureWatchlistShell().then((api) => api?.render?.()).catch(() => undefined);
+    }
     markLatency("shell", key);
     if (!isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) restoreFixedPageSnapshot(link);
     window.setTimeout(() => {
