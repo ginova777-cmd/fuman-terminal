@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260626-strategy2-history-01"
+    window.__fumanDesktopFastShell === "20260627-route-switch-01"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260626-strategy2-history-01";
+  window.__fumanDesktopFastShell = "20260627-route-switch-01";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -3961,6 +3961,10 @@
       radarCount: normalizeArray(state.radar?.rows).length,
     });
     const renderIfChanged = (allowSame = false) => {
+      if (!isMarketViewActive()) {
+        marketApiOnlyLoading = false;
+        return;
+      }
       const nextSignature = signature();
       if (!allowSame && !force && nextSignature === marketApiOnlySignature) return;
       marketApiOnlySignature = nextSignature;
@@ -4362,6 +4366,8 @@
 
   function renderFixedPageShell(link, source, rows = []) {
     const key = fixedRouteKey(link);
+    window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
+    marketApiOnlyLoading = false;
     const panel = panelForRoute(key);
     if (!key || !panel) return false;
     if (isMarketRoute(key)) return renderMarketOverviewShell(link, source);
