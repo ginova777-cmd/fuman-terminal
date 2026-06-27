@@ -27,13 +27,116 @@
     const watchlistSearchInput = document.querySelector("#watchlist-search-input");
     const watchlistAddBtn = document.querySelector("#watchlist-add-btn");
     const watchlistRefresh = document.querySelector("#watchlist-refresh");
+    let stockUniverseCache = null;
+    let stockUniversePromise = null;
+
+    function normalizeWatchlistCode(value) {
+      return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
+    }
+
+    function normalizeWatchlistMarket(value) {
+      const text = String(value ?? "").trim().toUpperCase();
+      if (["TPEX", "OTC", "TWO", "上櫃"].some((key) => text.includes(key))) return "TPEX";
+      if (["TWSE", "TSE", "上市"].some((key) => text.includes(key))) return "TWSE";
+      return text || "";
+    }
+
+    function watchlistMarketLabel(value) {
+      const market = normalizeWatchlistMarket(value);
+      if (market === "TPEX") return "上櫃";
+      if (market === "TWSE") return "上市";
+      return "台股";
+    }
+
+    function extractWatchlistStockRows(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (!payload || typeof payload !== "object") return [];
+      return [
+        payload.stocks,
+        payload.rows,
+        payload.data,
+        payload.items,
+        payload.quotes,
+      ].find(Array.isArray) || [];
+    }
+
+    function normalizeWatchlistStockMeta(row) {
+      const code = normalizeWatchlistCode(row?.code || row?.Code || row?.symbol || row?.Symbol || row?.stock_id || row?.stockNo);
+      if (!code) return null;
+      return {
+        code,
+        name: String(row?.name || row?.Name || row?.stockName || row?.stock_name || row?.["證券名稱"] || row?.["名稱"] || code).trim(),
+        market: normalizeWatchlistMarket(row?.market || row?.Market || row?.exchange || row?.type || row?.["市場"] || row?.["上市櫃"]),
+        close: cleanNumber(row?.close ?? row?.Close ?? row?.price ?? row?.z),
+        change: cleanNumber(row?.change ?? row?.Change),
+        percent: cleanNumber(row?.percent ?? row?.pct ?? row?.changePercent ?? row?.漲跌幅),
+        tradeVolume: cleanNumber(row?.tradeVolume ?? row?.volume ?? row?.total_volume),
+        value: cleanNumber(row?.value ?? row?.tradeValue ?? row?.trade_value),
+      };
+    }
+
+    function findWatchlistStockMetaSync(code) {
+      const target = normalizeWatchlistCode(code);
+      if (!target) return null;
+      if (stockUniverseCache?.has(target)) return stockUniverseCache.get(target);
+      for (const row of latestStocks) {
+        const meta = normalizeWatchlistStockMeta(row);
+        if (meta?.code === target) return meta;
+      }
+      return null;
+    }
+
+    async function loadWatchlistStockUniverse() {
+      if (stockUniverseCache) return stockUniverseCache;
+      if (stockUniversePromise) return stockUniversePromise;
+      stockUniversePromise = (async () => {
+        const map = new Map();
+        for (const url of [
+          `/data/stocks-slim.json?t=${Date.now()}`,
+          `/api/stocks?watchlist=1&t=${Date.now()}`,
+        ]) {
+          try {
+            const response = await window.fetch(url, { cache: "no-store" });
+            if (!response.ok) continue;
+            const payload = await response.json();
+            for (const row of extractWatchlistStockRows(payload)) {
+              const meta = normalizeWatchlistStockMeta(row);
+              if (meta) map.set(meta.code, { ...(map.get(meta.code) || {}), ...meta });
+            }
+            if (map.size >= 1000) break;
+          } catch {}
+        }
+        stockUniverseCache = map;
+        return map;
+      })();
+      return stockUniversePromise;
+    }
+
+    async function enrichWatchlistStock(code) {
+      const target = normalizeWatchlistCode(code);
+      if (!target) return null;
+      const universe = await loadWatchlistStockUniverse();
+      const meta = universe.get(target) || null;
+      if (!meta) return null;
+      const rows = getWatchlist().map((item) => item.code === target ? { ...item, ...meta, code: target } : item);
+      saveWatchlist(rows);
+      await renderWatchlist();
+      return meta;
+    }
     
     function getWatchlist() {
-      try { return JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch { return []; }
+      try {
+        const rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]");
+        return Array.isArray(rows) ? rows
+          .map((item) => ({ ...item, code: normalizeWatchlistCode(item?.code || item?.symbol || item?.Code) }))
+          .filter((item) => item.code) : [];
+      } catch { return []; }
     }
     
     function saveWatchlist(list) {
-      localStorage.setItem("fuman_watchlist", JSON.stringify(list));
+      const value = JSON.stringify(list.slice(0, 80));
+      localStorage.setItem("fuman_watchlist", value);
+      localStorage.setItem("fuman_mobile_watchlist_v1", value);
     }
 
     function findWatchlistEntryInput() {
@@ -49,7 +152,7 @@
 
     function readWatchlistEntryCode() {
       const input = findWatchlistEntryInput();
-      return String(input?.value || "").trim().replace(/\D/g, "").slice(0, 4);
+      return normalizeWatchlistCode(input?.value);
     }
 
     function isMobileWatchlistViewport() {
@@ -962,7 +1065,7 @@
               <div class="watch-card-title">
                 <span class="watch-code">${stock.code}</span>
                 <span class="watch-name">${stock.name || ""}</span>
-                <span class="watch-market-badge">上市</span>
+                <span class="watch-market-badge">${watchlistMarketLabel(stock.market)}</span>
               </div>
               <div class="watch-card-price">
                 <span id="wprice-${stock.code}">${stock.close ? stock.close.toLocaleString("zh-TW") : "--"}</span>
@@ -981,11 +1084,11 @@
               <div class="watch-card-title">
                 <span class="watch-code">${item.code}</span>
                 <span class="watch-name">${item.name || ""}</span>
-                <span class="watch-market-badge">上市</span>
+                <span class="watch-market-badge">${watchlistMarketLabel(item.market)}</span>
               </div>
               <div class="watch-card-price">
-                <span id="wprice-${item.code}">--</span>
-                <small id="wchange-${item.code}">載入中...</small>
+                <span id="wprice-${item.code}">${item.close ? Number(item.close).toLocaleString("zh-TW") : "--"}</span>
+                <small id="wchange-${item.code}" class="${Number(item.percent || 0) >= 0 ? "watch-up" : "watch-down"}">${item.percent || item.close ? pctText(item.percent || 0) : "載入中..."}</small>
               </div>
               <div class="watch-card-flow" id="winst-${item.code}">
                 <span>外資 <b>--</b></span>
@@ -1058,16 +1161,18 @@
       const input = findWatchlistEntryInput();
       const code = readWatchlistEntryCode();
       if (!code) return;
+      const meta = findWatchlistStockMetaSync(code);
     
       const list = getWatchlist();
       if (list.find(w => w.code === code)) {
         if (input) input.value = "";
         window.FUMAN_WATCHLIST_SHELL_INSTANCE?.selectCode?.(code);
+        void enrichWatchlistStock(code);
         await renderWatchlist();
         return true;
       }
     
-      list.unshift({ code, name: code, addedAt: Date.now() });
+      list.unshift({ code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() });
       saveWatchlist(list);
       if (input) input.value = "";
       if (window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render) {
@@ -1076,6 +1181,7 @@
       } else {
         await renderWatchlist();
       }
+      void enrichWatchlistStock(code);
     
       const firstCard = document.querySelector(".watchlist-card");
       if (firstCard) firstCard.click();

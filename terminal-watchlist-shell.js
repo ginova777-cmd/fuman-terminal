@@ -1,11 +1,14 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-03";
+  const VERSION = "watchlist-rich-shell-20260627-04";
   const WATCHLIST_KEY = "fuman_watchlist";
+  const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
   let selectedCode = "";
   let quoteCache = new Map();
+  let stockUniverseCache = null;
+  let stockUniversePromise = null;
 
   function install() {
     if (installed) return window.FUMAN_WATCHLIST_SHELL_INSTANCE;
@@ -29,14 +32,18 @@
   function readList() {
     try {
       const rows = JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]");
-      return Array.isArray(rows) ? rows.filter((item) => item && item.code) : [];
+      return Array.isArray(rows) ? rows
+        .map((item) => ({ ...item, code: normalizeCode(item?.code || item?.symbol || item?.Code) }))
+        .filter((item) => item && item.code) : [];
     } catch {
       return [];
     }
   }
 
   function writeList(rows) {
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(rows.slice(0, 80)));
+    const value = JSON.stringify(rows.slice(0, 80));
+    localStorage.setItem(WATCHLIST_KEY, value);
+    localStorage.setItem(MOBILE_WATCHLIST_KEY, value);
   }
 
   function escapeText(value) {
@@ -52,6 +59,102 @@
   function number(value) {
     const n = Number(String(value ?? "").replace(/,/g, ""));
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function normalizeCode(value) {
+    return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
+  }
+
+  function normalizeMarket(value) {
+    const text = String(value ?? "").trim().toUpperCase();
+    if (["TPEX", "OTC", "TWO", "上櫃"].some((key) => text.includes(key))) return "TPEX";
+    if (["TWSE", "TSE", "上市"].some((key) => text.includes(key))) return "TWSE";
+    return text || "";
+  }
+
+  function marketLabel(value) {
+    const market = normalizeMarket(value);
+    if (market === "TPEX") return "上櫃";
+    if (market === "TWSE") return "上市";
+    return "台股";
+  }
+
+  function extractStockRows(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== "object") return [];
+    return [
+      payload.stocks,
+      payload.rows,
+      payload.data,
+      payload.items,
+      payload.quotes,
+    ].find(Array.isArray) || [];
+  }
+
+  function normalizeStockMeta(row) {
+    const code = normalizeCode(row?.code || row?.Code || row?.symbol || row?.Symbol || row?.stock_id || row?.stockNo);
+    if (!code) return null;
+    return {
+      code,
+      name: String(row?.name || row?.Name || row?.stockName || row?.stock_name || row?.["證券名稱"] || row?.["名稱"] || code).trim(),
+      market: normalizeMarket(row?.market || row?.Market || row?.exchange || row?.type || row?.["市場"] || row?.["上市櫃"]),
+      close: number(row?.close ?? row?.Close ?? row?.price ?? row?.z),
+      change: number(row?.change ?? row?.Change),
+      percent: number(row?.percent ?? row?.pct ?? row?.changePercent ?? row?.漲跌幅),
+      tradeVolume: number(row?.tradeVolume ?? row?.volume ?? row?.total_volume),
+      value: number(row?.value ?? row?.tradeValue ?? row?.trade_value),
+    };
+  }
+
+  function findStockMetaSync(code) {
+    const target = normalizeCode(code);
+    if (!target) return null;
+    if (stockUniverseCache?.has(target)) return stockUniverseCache.get(target);
+    const bootRows = extractStockRows(window.FUMAN_STOCKS_PAYLOAD || window.FUMAN_MARKET_STOCKS || window.__FUMAN_STOCKS__);
+    for (const row of bootRows) {
+      const meta = normalizeStockMeta(row);
+      if (meta?.code === target) return meta;
+    }
+    return null;
+  }
+
+  async function loadStockUniverse() {
+    if (stockUniverseCache) return stockUniverseCache;
+    if (stockUniversePromise) return stockUniversePromise;
+    stockUniversePromise = (async () => {
+      const map = new Map();
+      for (const url of [
+        `/data/stocks-slim.json?t=${Date.now()}`,
+        `/api/stocks?watchlist=1&t=${Date.now()}`,
+      ]) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) continue;
+          const payload = await response.json();
+          for (const row of extractStockRows(payload)) {
+            const meta = normalizeStockMeta(row);
+            if (meta) map.set(meta.code, { ...(map.get(meta.code) || {}), ...meta });
+          }
+          if (map.size >= 1000) break;
+        } catch {}
+      }
+      stockUniverseCache = map;
+      return map;
+    })();
+    return stockUniversePromise;
+  }
+
+  async function enrichStockMeta(code) {
+    const target = normalizeCode(code);
+    if (!target) return null;
+    const universe = await loadStockUniverse();
+    const meta = universe.get(target) || null;
+    if (!meta) return null;
+    const rows = readList().map((row) => row.code === target ? { ...row, ...meta, code: target } : row);
+    writeList(rows);
+    quoteCache.set(target, { ...(quoteCache.get(target) || {}), ...meta, code: target, quoteAt: Date.now() });
+    render();
+    return meta;
   }
 
   function formatPrice(value) {
@@ -84,7 +187,7 @@
 
   function readInputCode() {
     const input = findEntryInput();
-    return String(input?.value || "").trim().match(/\d{4}/)?.[0] || "";
+    return normalizeCode(input?.value);
   }
 
   function addFromInput() {
@@ -92,14 +195,16 @@
     if (!code) return false;
     const input = findEntryInput();
     const rows = readList();
+    const meta = findStockMetaSync(code);
     if (!rows.some((item) => item.code === code)) {
-      rows.unshift({ code, name: code, addedAt: Date.now() });
+      rows.unshift({ code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() });
       writeList(rows);
     }
     if (input) input.value = "";
     selectedCode = code;
     render();
-    hydrateQuote(code);
+    void enrichStockMeta(code);
+    void hydrateQuote(code);
     return true;
   }
 
@@ -145,7 +250,7 @@
           <div class="watch-card-title">
             <span class="watch-code">${escapeText(item.code)}</span>
             <span class="watch-name">${escapeText(item.name || item.code)}</span>
-            <span class="watch-market-badge">上市</span>
+            <span class="watch-market-badge">${escapeText(marketLabel(item.market))}</span>
           </div>
           <div class="watch-card-flow">
             <span>外 ${item.foreignText || "--"}</span>
@@ -237,7 +342,8 @@
       const percent = prev ? (change / prev) * 100 : 0;
       const quote = {
         code,
-        name: item.n || code,
+        name: item.n || findStockMetaSync(code)?.name || code,
+        market: findStockMetaSync(code)?.market || "",
         close,
         prevClose: prev,
         change,
@@ -246,7 +352,7 @@
         quoteAt: Date.now(),
       };
       quoteCache.set(code, quote);
-      const rows = readList().map((row) => row.code === code ? { ...row, name: quote.name || row.name } : row);
+      const rows = readList().map((row) => row.code === code ? { ...row, name: quote.name || row.name, market: quote.market || row.market } : row);
       writeList(rows);
       const activeBefore = selectedCode;
       render();

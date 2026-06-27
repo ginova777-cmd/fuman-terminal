@@ -557,27 +557,26 @@ async function afterDesktopRouteActivate(cdp, route) {
     await sleep(1200);
   }
   if (route.key === "watchlist") {
+    const addedCode = "2327";
     await evaluate(cdp, () => {
       const input = document.querySelector("#watchlist-search-input");
       if (input) {
-        input.value = "2330";
+        input.value = "2327";
         input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
       }
       return true;
     });
     await clickSelector(cdp, "#watchlist-add-btn");
-    await sleep(800);
-    await evaluate(cdp, () => {
-      const rows = [
-        { code: "2330", name: "台積電", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
-        { code: "2317", name: "鴻海", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
-      ];
-      localStorage.setItem("fuman_watchlist", JSON.stringify(rows));
-      window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
-      return true;
-    });
+    await waitFor(cdp, (code) => {
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      const storageOk = Array.isArray(rows) && rows.some((item) => String(item?.code || "") === code);
+      const cardOk = Boolean(document.querySelector(`.watchlist-card[data-code="${code}"]`));
+      return { ok: storageOk && cardOk, storageOk, cardOk, rows: rows.map((item) => item?.code).join(",") };
+    }, addedCode, 15000, 300);
     const clicked = await evaluate(cdp, () => {
-      const target = document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
+      const target = document.querySelector('.watchlist-card[data-code="2327"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
       target?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
       return Boolean(target);
     }).catch(() => false);
