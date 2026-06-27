@@ -107,7 +107,42 @@ function assertReservedProductionRoutes() {
   }
 }
 
+function assertLocalAssetCacheKey() {
+  const result = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-asset-cache-key.js")], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    issues.push(`verify-terminal-asset-cache-key failed: ${(result.stderr || result.stdout || "").trim()}`);
+  }
+}
+
 async function assertLiveState(version) {
+  const indexPage = await fetchText("/", 25000);
+  if (indexPage.status < 200 || indexPage.status >= 300) {
+    issues.push(`live index HTTP ${indexPage.status}`);
+  } else {
+    const scriptMatch = indexPage.body.match(/<script\b[^>]*\bsrc=["']([^"']*terminal-desktop-fast-shell\.js[^"']*)["'][^>]*>/i);
+    const shellSrc = scriptMatch?.[1] || "";
+    if (!shellSrc) {
+      issues.push("live index must load terminal-desktop-fast-shell.js");
+    } else {
+      if (/strategy2-history=20260626-01/.test(shellSrc)) {
+        issues.push(`live index still uses retired desktop shell cache key: ${shellSrc}`);
+      }
+      if (!/(?:desktop-hotfix|desktop-shell|terminal-shell|cache-fix)=\d{8}-\d{2}/.test(shellSrc)) {
+        issues.push(`live desktop shell src must use a reasoned cache key; current=${shellSrc}`);
+      }
+      const shellPath = shellSrc.startsWith("/") ? shellSrc : `/${shellSrc}`;
+      const liveShell = await fetchText(shellPath, 25000);
+      if (liveShell.status < 200 || liveShell.status >= 300) {
+        issues.push(`live desktop shell HTTP ${liveShell.status}: ${shellSrc}`);
+      } else if (!/function\s+normalizeArray\s*\(\s*value\s*\)/.test(liveShell.body)) {
+        issues.push("live desktop shell missing normalizeArray(value) helper");
+      }
+    }
+  }
+
   const versionJson = await fetchText("/version.json");
   if (versionJson.status < 200 || versionJson.status >= 300) {
     issues.push(`live version.json HTTP ${versionJson.status}`);
@@ -183,6 +218,7 @@ async function assertLiveState(version) {
 async function main() {
   const version = detectVersion();
   assertReservedProductionRoutes();
+  assertLocalAssetCacheKey();
   const gitState = assertGitState();
   if (CHECK_LIVE) await assertLiveState(version);
   if (issues.length) {
