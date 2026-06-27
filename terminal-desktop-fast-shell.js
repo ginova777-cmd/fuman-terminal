@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260627-route-switch-02"
+    window.__fumanDesktopFastShell === "20260627-route-switch-03"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260627-route-switch-02";
+  window.__fumanDesktopFastShell = "20260627-route-switch-03";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -187,7 +187,7 @@
       deferWarm(link, source, interactionHoldRemaining() + CLICK_WARM_IDLE_MS);
       return;
     }
-    if (window.__fumanDesktopFastShell === "20260623-09") {
+    if (window.__fumanDesktopFastShell) {
       window.FUMAN_TERMINAL_PREFETCH_APP?.();
       window.FUMAN_HOTFIX_WARM_ROUTE?.(link, `desktop-fast-shell-${source}`);
       return;
