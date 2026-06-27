@@ -1354,11 +1354,12 @@
       canvasState.rows = cleanRows;
       canvasState.source = source;
       applyCanvasFilter();
+      const shell = currentCanvasShell();
       if (isStrategy2Route(route)) {
-        updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+        updateStrategy2BattleShell(shell, route, strategyMeta(route));
         return true;
       }
-      updateStrategyFilterControls(currentCanvasShell());
+      updateCanvasShell(shell, route, strategyMeta(route));
       scheduleCanvasDraw();
     }
     return true;
@@ -1410,7 +1411,7 @@
     if (!force && now - desktopFastBundleAt < 45000) return Promise.resolve(0);
     desktopFastBundleAt = now;
     const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
-    desktopFastBundlePromise = fetch(url, { cache: force ? "no-store" : "default", priority: "low" })
+    desktopFastBundlePromise = fetch(url, { cache: force ? "no-store" : "default", priority: force ? "high" : "auto" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => primeRowsFromFastBundle(payload, `bundle-${reason}`))
       .catch(() => 0)
@@ -1425,6 +1426,7 @@
     document.documentElement.dataset.fumanFastBundlePrimeReady = "1";
     window.FUMAN_DESKTOP_FAST_BUNDLE_PRIME = (force = true) => primeDesktopFastBundle(Boolean(force), force ? "manual" : "cache");
     const schedule = () => {
+      primeDesktopFastBundle(false, "boot");
       runIdle(() => {
         if (document.hidden || isInteractionHoldActive()) {
           window.setTimeout(schedule, Math.max(1200, interactionHoldRemaining() + 700));
