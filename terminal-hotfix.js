@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260627-01";
+    window.__fumanWatchlistAddBridge = "20260627-02";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const normalizeCode = (value) => String(value || "").trim().match(/\d{4}/)?.[0] || "";
@@ -134,6 +134,7 @@
         `;
       }).join("");
     };
+    let lastBridgeAddAt = 0;
     const addCode = (code, source) => {
       const normalized = normalizeCode(code);
       if (!normalized) {
@@ -158,6 +159,7 @@
       writeRows(nextRows);
       fallbackRender(nextRows, normalized);
       setStatus(existed ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existed ? "exists" : "added");
+      lastBridgeAddAt = Date.now();
       return true;
     };
     const findInput = (target) => {
@@ -170,6 +172,12 @@
       if (!button) return;
       const input = findInput(button);
       const code = normalizeCode(input?.value);
+      if (!code && Date.now() - lastBridgeAddAt < 700) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        return;
+      }
       if (!code) return;
       event.preventDefault?.();
       event.stopPropagation?.();
@@ -183,6 +191,7 @@
       }
     };
     document.addEventListener("pointerdown", handleAdd, true);
+    document.addEventListener("mousedown", handleAdd, true);
     document.addEventListener("click", handleAdd, true);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" || event.target?.id !== "watchlist-search-input") return;
