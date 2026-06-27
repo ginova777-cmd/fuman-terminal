@@ -101,6 +101,10 @@
   const canvasMetricsCache = new Map();
   const canvasPreRenderedRoutes = new Set();
   const fixedSnapshotTimers = new Map();
+  const marketJsonCache = new Map();
+  const marketJsonInflight = new Map();
+  const MARKET_JSON_CACHE_TTL_MS = 18000;
+  let strategy2SnapshotFirstPrimePromise = null;
   let desktopFastBundleAt = 0;
   let desktopFastBundlePromise = null;
   let originalDesktopMarketPromise = null;
@@ -142,6 +146,8 @@
   installPerformanceLogExport();
   installPersistentFixedCanvases();
   installMarketApiOnlyHydrator();
+  installMarketColdPayloadPrime();
+  installStrategy2SnapshotFirstPrime();
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
@@ -1473,6 +1479,34 @@
     return desktopFastBundlePromise;
   }
 
+  function primeStrategy2SnapshotFirst(force = false, reason = "boot") {
+    if (!strategy2SnapshotFirstEnabled()) return Promise.resolve([]);
+    const cached = canvasStore.get("strategy|策略2");
+    if (!force && cached?.rows?.length && String(cached.source || "").includes("snapshot-first")) {
+      return Promise.resolve(cached.rows);
+    }
+    if (!force && strategy2SnapshotFirstPrimePromise) return strategy2SnapshotFirstPrimePromise;
+    strategy2SnapshotFirstPrimePromise = fetchCanvasRows("strategy|策略2", false)
+      .then((rows) => {
+        if (rows?.length) rememberCanvasRows("strategy|策略2", rows, `snapshot-first-prime-${reason}`, Date.now());
+        return rows || [];
+      })
+      .catch(() => [])
+      .finally(() => {
+        strategy2SnapshotFirstPrimePromise = null;
+      });
+    return strategy2SnapshotFirstPrimePromise;
+  }
+
+  function installStrategy2SnapshotFirstPrime() {
+    if (document.documentElement.dataset.fumanStrategy2SnapshotFirstPrimeReady === "1") return;
+    document.documentElement.dataset.fumanStrategy2SnapshotFirstPrimeReady = "1";
+    if (!strategy2SnapshotFirstEnabled()) return;
+    primeStrategy2SnapshotFirst(false, "script");
+    runIdle(() => primeStrategy2SnapshotFirst(false, "idle"), 180, 2600);
+    window.addEventListener("focus", () => runIdle(() => primeStrategy2SnapshotFirst(false, "focus"), 180, 2600));
+  }
+
   function installDesktopFastBundlePrime() {
     if (document.documentElement.dataset.fumanFastBundlePrimeReady === "1") return;
     document.documentElement.dataset.fumanFastBundlePrimeReady = "1";
@@ -1571,6 +1605,25 @@
     const bypassRouteCache = isChipTradeRoute(route) && Boolean(canvasState.signalFilter);
     if (!force && !bypassRouteCache && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
       return Promise.resolve(cached.rows);
+    }
+    if (!force && route === REALTIME_RADAR_ROUTE) {
+      const radarKey = marketJsonCacheKey("/api/realtime-radar-latest", 80);
+      const radarCached = marketJsonCache.get(radarKey);
+      if (radarCached?.payload && Date.now() - Number(radarCached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
+        const rows = normalizeCanvasRowsFromPayload(radarCached.payload, REALTIME_RADAR_ROUTE);
+        if (rows.length) {
+          rememberCanvasRows(route, rows, "market-prime-cache", radarCached.at || Date.now());
+          return Promise.resolve(rows);
+        }
+      }
+      const radarInflight = marketJsonInflight.get(radarKey);
+      if (radarInflight) {
+        return radarInflight.then((payload) => {
+          const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
+          if (rows.length) rememberCanvasRows(route, rows, "market-prime-inflight", Date.now());
+          return rows.length ? rows : rowsForRoute(route);
+        });
+      }
     }
     const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
@@ -3436,9 +3489,50 @@
     card.classList.toggle("market-card-down", positive === false);
   }
 
+  function marketJsonCacheKey(path, limit = 60) {
+    return `${path}|${limit}`;
+  }
+
+  function rememberRealtimeRadarPayload(payload, source = "market-prime") {
+    if (!payload || typeof payload !== "object") return 0;
+    marketRadarBundlePayload = payload;
+    const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
+    if (rows.length) rememberCanvasRows(REALTIME_RADAR_ROUTE, rows, source, Date.now());
+    return rows.length;
+  }
+
+  function primeMarketColdPayloads(force = false, reason = "boot") {
+    const tasks = [
+      fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200).then((payload) => {
+        if (payload?.sectors?.length) marketSnapshotFirstPayload = { ...payload, snapshotFirst: true };
+      }),
+      fetchMarketJson("/api/realtime-radar-latest", 80, force, 4200).then((payload) => {
+        rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
+      }),
+      fetchMarketJson("/api/market-ai-live", 20, force, 5200).then((payload) => {
+        if (payload && typeof payload === "object") marketAiBundlePayload = payload;
+      }),
+      fetchMarketJson("/api/market", 24, force, 2200),
+    ];
+    return Promise.allSettled(tasks);
+  }
+
+  function installMarketColdPayloadPrime() {
+    if (document.documentElement.dataset.fumanMarketColdPayloadPrimeReady === "1") return;
+    document.documentElement.dataset.fumanMarketColdPayloadPrimeReady = "1";
+    primeMarketColdPayloads(false, "script");
+    runIdle(() => primeMarketColdPayloads(false, "idle"), 180, 3600);
+  }
+
   function fetchMarketJson(path, limit = 60, force = false, timeoutMs = 6500) {
     const url = marketApiUrl(path, limit, force);
-    return new Promise((resolve) => {
+    const key = marketJsonCacheKey(path, limit);
+    const cached = marketJsonCache.get(key);
+    if (!force && cached?.payload && Date.now() - Number(cached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
+      return Promise.resolve(cached.payload);
+    }
+    if (!force && marketJsonInflight.has(key)) return marketJsonInflight.get(key);
+    const task = new Promise((resolve) => {
       try {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", url, true);
@@ -3450,7 +3544,9 @@
             return;
           }
           try {
-            resolve(JSON.parse(xhr.responseText || "{}"));
+            const payload = JSON.parse(xhr.responseText || "{}");
+            if (payload && typeof payload === "object") marketJsonCache.set(key, { payload, at: Date.now() });
+            resolve(payload);
           } catch (error) {
             resolve(null);
           }
@@ -3462,7 +3558,11 @@
       } catch (error) {
         resolve(null);
       }
+    }).finally(() => {
+      if (!force) marketJsonInflight.delete(key);
     });
+    if (!force) marketJsonInflight.set(key, task);
+    return task;
   }
 
   function hydrateMarketDesktopAiDirect(force = false) {
@@ -3812,8 +3912,13 @@
 
   let marketSnapshotFirstLoading = false;
   function refreshMarketSnapshotFirst(force = false) {
-    if (!isMarketViewActive() || marketSnapshotFirstLoading) return;
+    if (!isMarketViewActive()) return;
     restoreMarketDesktopMode();
+    if (marketSnapshotFirstPayload?.sectors?.length) {
+      renderMarketOverviewApi({}, marketSnapshotFirstPayload);
+      renderMarketHeatmapApi(marketSnapshotFirstPayload.sectors, marketSnapshotFirstPayload);
+    }
+    if (marketSnapshotFirstLoading) return;
     marketSnapshotFirstLoading = true;
     const state = { market: null, heatmap: null };
     let pending = 2;
@@ -4722,9 +4827,12 @@
     markLatency("shell", key);
     restoreStrategySnapshot(link);
     const snapshotFirst = isStrategy2Route(key) && strategy2SnapshotFirstEnabled();
+    const snapshotFirstRowsTask = snapshotFirst
+      ? primeStrategy2SnapshotFirst(false, "route")
+      : fetchCanvasRows(key, isLiveStrategyRoute(key));
     window.setTimeout(() => {
       if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
-      fetchCanvasRows(key, isLiveStrategyRoute(key) && !snapshotFirst).then((apiRows) => {
+      snapshotFirstRowsTask.then((apiRows) => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         if (apiRows?.length) {
           const paintSource = snapshotFirst ? "snapshot-first-refreshing" : "api";
@@ -4749,7 +4857,7 @@
           scheduleCanvasDraw();
         }
       }).catch(() => setCanvasStatus("沿用快照"));
-    }, rows.length ? 80 : 140);
+    }, snapshotFirst ? 0 : rows.length ? 80 : 140);
   }
 
   function activateFixedPageRoute(link, source) {

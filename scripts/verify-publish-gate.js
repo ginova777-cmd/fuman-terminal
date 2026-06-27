@@ -678,6 +678,9 @@ for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", 
 for (const marker of ["strategy2SnapshotFirstEnabled", "strategy2SnapshotFirst", "snapshot-first-refreshing", "快照先顯示｜即時刷新中"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 snapshot-first marker ${marker}`);
 }
+for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight"]) {
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing cold-start snapshot/cache marker ${marker}`);
+}
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");
 }
