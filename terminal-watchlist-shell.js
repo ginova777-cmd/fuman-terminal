@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-09";
+  const VERSION = "watchlist-rich-shell-20260627-10";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -9,6 +9,8 @@
   let quoteCache = new Map();
   let stockUniverseCache = null;
   let stockUniversePromise = null;
+  let lastAddIntentAt = 0;
+  let lastAddIntentCode = "";
   const FEATURE_STATUS = [
     ["新增股票", "已開通"],
     ["全台上市上櫃", "已開通"],
@@ -192,19 +194,29 @@
     return n.toLocaleString("zh-TW");
   }
 
-  function findEntryInput() {
+  function isUsableInput(input) {
+    if (!input || input.readOnly || input.disabled) return false;
+    const style = window.getComputedStyle?.(input);
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    const rect = input.getBoundingClientRect?.();
+    return !rect || (rect.width > 1 && rect.height > 1);
+  }
+
+  function findEntryInput(anchor) {
+    const scoped = anchor?.closest?.(".watchlist-entry-form")?.querySelector?.("#watchlist-search-input, .watchlist-entry-input, input[type='text']");
+    if (isUsableInput(scoped)) return scoped;
     const inputs = [
       document.querySelector("#watchlist-search-input"),
       ...document.querySelectorAll("#watchlist-view .watchlist-entry-input"),
       ...document.querySelectorAll("#watchlist-view input[type='text']"),
     ].filter(Boolean);
-    return inputs.find((input) => !input.readOnly && !input.disabled && String(input.value || "").match(/\d{4}/))
-      || inputs.find((input) => !input.readOnly && !input.disabled)
+    return inputs.find((input) => isUsableInput(input) && String(input.value || "").match(/\d{4}/))
+      || inputs.find((input) => isUsableInput(input))
       || null;
   }
 
-  function readInputCode() {
-    const input = findEntryInput();
+  function readInputCode(anchor) {
+    const input = findEntryInput(anchor);
     return normalizeCode(input?.value);
   }
 
@@ -224,12 +236,20 @@
     return true;
   }
 
-  function addFromInput() {
-    const code = readInputCode();
+  function addFromInput(anchor) {
+    const input = anchor?.matches?.("input") ? anchor : findEntryInput(anchor);
+    const code = normalizeCode(input?.value || readInputCode(anchor));
     if (!code) return false;
-    const input = findEntryInput();
+    const now = Date.now();
+    if (lastAddIntentCode === code && now - lastAddIntentAt < 350) return true;
+    lastAddIntentCode = code;
+    lastAddIntentAt = now;
     const ok = forceAddCode(code);
-    if (ok && input) input.value = "";
+    if (ok && input) {
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus?.();
+    }
     return ok;
   }
 
@@ -417,7 +437,7 @@
     event.preventDefault?.();
     event.stopPropagation?.();
     event.stopImmediatePropagation?.();
-    addFromInput();
+    addFromInput(add);
     return true;
   }
 
@@ -430,21 +450,26 @@
         if (event.key !== "Enter") return;
         event.preventDefault();
         event.stopPropagation?.();
-        addFromInput();
+        addFromInput(input);
       });
     }
     if (add && add.dataset.watchlistEntryBound !== VERSION) {
       add.dataset.watchlistEntryBound = VERSION;
-      add.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation?.();
-        addFromInput();
-      });
+      for (const type of ["pointerdown", "mousedown", "touchstart", "click"]) {
+        add.addEventListener(type, (event) => {
+          event.preventDefault();
+          event.stopPropagation?.();
+          addFromInput(add);
+        }, type === "touchstart" ? { passive: false } : false);
+      }
     }
   }
 
   function installEvents() {
     bindEntryControls();
+    document.addEventListener("pointerdown", handleAddIntent, true);
+    document.addEventListener("mousedown", handleAddIntent, true);
+    document.addEventListener("touchstart", handleAddIntent, { capture: true, passive: false });
     document.addEventListener("click", (event) => {
       if (handleAddIntent(event)) return;
       const remove = event.target.closest?.("[data-watch-remove]");
@@ -472,7 +497,7 @@
       if (event.target?.id === "watchlist-search-input") {
         event.preventDefault();
         event.stopPropagation?.();
-        addFromInput();
+        addFromInput(event.target);
       }
     }, true);
   }

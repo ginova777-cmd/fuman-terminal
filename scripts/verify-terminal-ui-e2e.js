@@ -542,8 +542,7 @@ async function prepareDesktopRoute(cdp, route) {
   if (route.key !== "watchlist") return;
   await evaluate(cdp, () => {
     const rows = [
-      { code: "2330", name: "台積電", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
-      { code: "2317", name: "鴻海", reason: "UI E2E 自選股卡片驗證", addedAt: new Date().toISOString() },
+      { code: "2334", name: "旺宏", reason: "UI E2E 自選股既有卡片驗證", addedAt: new Date().toISOString() },
     ];
     const value = JSON.stringify(rows);
     localStorage.setItem("fuman_watchlist", value);
@@ -558,7 +557,7 @@ async function afterDesktopRouteActivate(cdp, route) {
     await sleep(1200);
   }
   if (route.key === "watchlist") {
-    const addedCodes = ["2327", "9904", "8112"];
+    const addedCodes = ["8112", "2327", "9904"];
     for (const addedCode of addedCodes) {
       await evaluate(cdp, (code) => {
         const input = document.querySelector("#watchlist-search-input");
