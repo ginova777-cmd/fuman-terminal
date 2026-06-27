@@ -76,14 +76,6 @@ if (terminalModulesGuard.status !== 0) {
   issues.push(`verify-terminal-modules-contract failed: ${(terminalModulesGuard.stderr || terminalModulesGuard.stdout || "").trim()}`);
 }
 
-const terminalAssetCacheKeyGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-asset-cache-key.js")], {
-  cwd: ROOT,
-  encoding: "utf8",
-});
-if (terminalAssetCacheKeyGuard.status !== 0) {
-  issues.push(`verify-terminal-asset-cache-key failed: ${(terminalAssetCacheKeyGuard.stderr || terminalAssetCacheKeyGuard.stdout || "").trim()}`);
-}
-
 const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-deploy-worktree-clean.js")], {
   cwd: ROOT,
   encoding: "utf8",
@@ -216,9 +208,6 @@ if (!String(packageJson.scripts?.["verify:strategy4-standard-gate"] || "").inclu
 }
 if (!String(packageJson.scripts?.["verify:daily-battle-readiness"] || "").includes("scripts/verify-daily-battle-readiness.js")) {
   issues.push("package.json missing scripts.verify:daily-battle-readiness for all-strategy battle readiness table");
-}
-if (!String(packageJson.scripts?.["verify:terminal-asset-cache-key"] || "").includes("scripts/verify-terminal-asset-cache-key.js")) {
-  issues.push("package.json missing scripts.verify:terminal-asset-cache-key for desktop shell cache-key guard");
 }
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");

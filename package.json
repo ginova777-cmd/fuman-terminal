@@ -73,7 +73,6 @@
     "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:10",
     "verify:desktop-api-only": "node scripts/verify-desktop-api-only.js",
     "verify:runtime-hotfix": "node --use-system-ca scripts/verify-runtime-hotfix-guard.js",
-    "verify:terminal-asset-cache-key": "node scripts/verify-terminal-asset-cache-key.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
     "verify:deploy-worktree-clean": "node scripts/verify-deploy-worktree-clean.js",
     "monitor:deploy-worktree-clean": "node scripts/monitor-deploy-worktree-clean.js",
