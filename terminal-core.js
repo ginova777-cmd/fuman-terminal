@@ -1,6 +1,6 @@
 (function () {
   const version = "public-terminal-fast-20260623-09";
-  const runtimeAssetEpoch = "market-overview-restore-20260625-12";
+  const runtimeAssetEpoch = "market-overview-restore-20260627-02";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_RUNTIME_ASSET_EPOCH = runtimeAssetEpoch;
   window.FUMAN_TERMINAL_BOOT = {
@@ -46,7 +46,10 @@
     try {
       const key = "fuman-terminal-runtime-asset-epoch";
       const previous = localStorage.getItem(key);
-      if (previous === runtimeAssetEpoch) return;
+      if (!previous || previous === runtimeAssetEpoch) {
+        localStorage.setItem(key, runtimeAssetEpoch);
+        return;
+      }
       localStorage.setItem(key, runtimeAssetEpoch);
       const reloadKey = "fuman-terminal-runtime-asset-reload:" + runtimeAssetEpoch;
       if (sessionStorage.getItem(reloadKey) === "1") return;
