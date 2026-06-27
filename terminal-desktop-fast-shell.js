@@ -809,6 +809,13 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function normalizeArray(value) {
+    if (Array.isArray(value)) return value;
+    if (!value) return [];
+    if (typeof value === "object") return Object.values(value);
+    return [];
+  }
+
   function pickFirstValue(...values) {
     return values.find((value) => value !== undefined && value !== null && value !== "");
   }
@@ -3399,16 +3406,34 @@
     if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
       shell.ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
     }
-    Promise.allSettled([
-      fetchMarketJson("/api/heatmap", 60, force, 6500),
-      fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200),
-      fetchMarketJson("/api/market-ai-live", 20, force, 6500),
-    ]).then(([heatmap, radar, ai]) => {
+    const state = { heatmap: null, radar: null, ai: null };
+    let settled = 0;
+    const paint = () => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
-      renderMarketApiAi(heatmap.value || {}, radar.value || {}, ai.value || {});
-    }).finally(() => {
-      marketDesktopAiLoading = false;
-    });
+      renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
+    };
+    const done = () => {
+      settled += 1;
+      if (settled >= 3) marketDesktopAiLoading = false;
+    };
+    fetchMarketJson("/api/market-ai-live", 40, force, 5200)
+      .then((payload) => {
+        state.ai = payload || {};
+        paint();
+      })
+      .finally(done);
+    fetchMarketJson("/api/heatmap", 60, force, 6500)
+      .then((payload) => {
+        state.heatmap = payload || {};
+        paint();
+      })
+      .finally(done);
+    fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200)
+      .then((payload) => {
+        state.radar = payload || {};
+        paint();
+      })
+      .finally(done);
   }
 
   function ensureMarketDesktopShell() {
@@ -3740,6 +3765,15 @@
     if (!panels.ai) return;
     const sectors = normalizeArray(heatmapPayload?.sectors);
     const radarRows = normalizeArray(radarPayload?.rows);
+    const aiRows = [
+      ...normalizeArray(aiPayload?.rows),
+      ...normalizeArray(aiPayload?.items),
+      ...normalizeArray(aiPayload?.signals),
+      ...normalizeArray(aiPayload?.data),
+      ...normalizeArray(aiPayload?.snapshot?.rows),
+      ...normalizeArray(aiPayload?.market?.stocks),
+      ...normalizeArray(aiPayload?.breadth?.stocks),
+    ];
     const num = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
     const pctOf = (item) => num(item?.pct ?? item?.avgPct ?? item?.percent);
     const nameOf = (item) => String(item?.name || item?.industry || item?.sector || "--");
@@ -3757,7 +3791,7 @@
     const up = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const down = sectors.reduce((sum, item) => sum + num(item.down), 0);
     const sectorStocks = sectors.flatMap((sector) => normalizeArray(sector.stocks).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
-    const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count) || sectorStocks.length || up + down;
+    const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || aiPayload?.breadth?.sample || aiPayload?.summary?.sample) || sectorStocks.length || aiRows.length || up + down;
     const directional = Math.max(up + down, 1);
     const upRatio = sample ? up / sample * 100 : 0;
     const directionalRatio = up / directional * 100;
@@ -3771,10 +3805,10 @@
     const addStock = (stock, source, extraTags = []) => {
       const code = stockCode(stock);
       if (!code) return;
-      const pct = num(stock.percent ?? stock.pct ?? stock.changePercent);
-      const value = num(stock.value ?? stock.tradeValue ?? stock.amount);
-      const volume = num(stock.volume ?? stock.tradeVolume);
-      const baseScore = num(stock.score || stock.radarScore || stock.aiScore);
+      const pct = num(stock.percent ?? stock.pct ?? stock.changePercent ?? stock.Change ?? stock.change ?? stock.change_pct);
+      const value = num(stock.value ?? stock.tradeValue ?? stock.TradeValue ?? stock.amount ?? stock.amountYi);
+      const volume = num(stock.volume ?? stock.tradeVolume ?? stock.TradeVolume ?? stock.totalVolume);
+      const baseScore = num(stock.score || stock.radarScore || stock.aiScore || stock.finalScore || stock.rankScore);
       const score = Math.max(1, Math.min(100, Math.round(baseScore || 55 + Math.max(pct, 0) * 6 + Math.min(value / 100000000, 18))));
       const tags = [
         ...normalizeArray(stock.signalTags).slice(0, 3),
@@ -3784,13 +3818,13 @@
       const next = {
         code,
         name: stockName(stock) || code,
-        industry: stock.industry || stock.sector || "--",
+        industry: stock.industry || stock.sector || stock.category || stock.group || "--",
         pct,
         value,
         volume,
         score,
         side: stock.side || stock.direction || "多",
-        reason: stock.reason || stock.signal || stock.description || source,
+        reason: stock.reason || stock.signal || stock.description || stock.summary || source,
         source,
         tags: [...new Set(tags.length ? tags : [source])].slice(0, 5),
       };
@@ -3798,6 +3832,7 @@
       if (!old || next.score > old.score) stockMap.set(code, next);
     };
     radarRows.forEach((row) => addStock(row, "即時雷達", [String(row.side || "多")]));
+    aiRows.slice(0, 80).forEach((row) => addStock(row, "AI 判讀", ["AI 判讀", row.source || row.cacheSource || "Supabase/API"]));
     sectorStocks.sort((a, b) => pctOf(b) - pctOf(a)).slice(0, 40).forEach((stock) => {
       const pct = pctOf(stock);
       addStock(stock, "熱力圖", [stock.industry, pct >= 0 ? "動能強" : "風險高"]);

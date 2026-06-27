@@ -83,6 +83,7 @@ for (const marker of [
   "selectMarketDesktopMode",
   "scheduleMarketDesktopModeHydrate",
   "hydrateMarketDesktopAiDirect",
+  "function normalizeArray",
 ]) {
   if (!fastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing market mode ownership marker: ${marker}`);
 }
