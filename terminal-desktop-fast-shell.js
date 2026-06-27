@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260627-route-switch-04"
+    window.__fumanDesktopFastShell === "20260627-route-switch-05"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260627-route-switch-04";
+  window.__fumanDesktopFastShell = "20260627-route-switch-05";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";

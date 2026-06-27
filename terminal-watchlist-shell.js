@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-01";
+  const VERSION = "watchlist-rich-shell-20260627-02";
   const WATCHLIST_KEY = "fuman_watchlist";
   let installed = false;
   let selectedCode = "";
@@ -267,19 +267,27 @@
     else render();
   }
 
+  function handleAddIntent(event) {
+    const add = event.target.closest?.("#watchlist-add-btn");
+    if (!add) return false;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    addFromInput();
+    return true;
+  }
+
   function installEvents() {
+    document.addEventListener("pointerdown", handleAddIntent, true);
+    document.addEventListener("mousedown", handleAddIntent, true);
+    document.addEventListener("touchstart", handleAddIntent, { capture: true, passive: false });
     document.addEventListener("click", (event) => {
-      const add = event.target.closest?.("#watchlist-add-btn");
-      if (add) {
-        event.preventDefault();
-        event.stopPropagation();
-        addFromInput();
-        return;
-      }
+      if (handleAddIntent(event)) return;
       const remove = event.target.closest?.("[data-watch-remove]");
       if (remove) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation?.();
         removeCode(remove.dataset.watchRemove || "");
         return;
       }
@@ -299,6 +307,7 @@
       if (event.key !== "Enter") return;
       if (event.target?.id === "watchlist-search-input") {
         event.preventDefault();
+        event.stopPropagation?.();
         addFromInput();
       }
     }, true);
@@ -371,7 +380,10 @@
   }
 
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
-  window.FUMAN_WATCHLIST_SHELL_FORCE_ADD = addFromInput;
+  window.FUMAN_WATCHLIST_SHELL_FORCE_ADD = () => {
+    try { install(); } catch (error) {}
+    return addFromInput();
+  };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => install(), { once: true });
   } else {
