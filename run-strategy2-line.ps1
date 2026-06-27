@@ -4,7 +4,9 @@ $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
 $env:FUMAN_STATE_DIR = "C:\fuman-runtime\state"
 $env:NODE_OPTIONS = "--use-system-ca"
-$env:STRATEGY2_LIVE_STARTED_AT = "09:00:00"
+$env:STRATEGY2_LIVE_STARTED_AT = "08:45:00"
+$env:STRATEGY2_LIVE_STOP_AT = "12:00:00"
+$env:STRATEGY2_LIVE_DISABLE_ENHANCEMENTS = "1"
 foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TO", "LINE_USER_ID", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_TO")) {
   if (-not [Environment]::GetEnvironmentVariable($name, "Process")) {
     $value = [Environment]::GetEnvironmentVariable($name, "User")

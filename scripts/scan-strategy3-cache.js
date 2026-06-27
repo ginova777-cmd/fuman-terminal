@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const {
   fetchStrategy3CapitalMap,
@@ -24,6 +25,7 @@ const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
 const OUT_FILE = path.join(DATA_DIR, "strategy3-latest.json");
 const BACKUP_FILE = path.join(DATA_DIR, "strategy3-backup.json");
 const SCORECARD_SOURCE_FILE = path.join(DATA_DIR, "strategy3-scorecard-source.json");
+const STRATEGY3_NOTIFICATION_RECEIPT_FILE = path.join(DATA_DIR, "scan-receipts", "strategy3-notification-receipts.json");
 const CHIP_EXCLUSIONS_FILE = path.join(DATA_DIR, "chip-trade-exclusions.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
@@ -67,8 +69,9 @@ const STRATEGY3_DRIFT_MIN_QUOTE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_QU
 const STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_FUGLE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_FUGLE_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS || 1000);
-
-
+const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISABLED === "1";
+const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 12);
+const STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW = process.env.STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW !== "0";
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
@@ -1106,6 +1109,174 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     });
 }
 
+
+
+function readNotificationSecret(envName, fileName) {
+  const value = String(process.env[envName] || "").trim();
+  if (value) return value;
+  try {
+    return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", fileName), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function notificationHash(payload) {
+  return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function loadStrategy3NotificationReceipts() {
+  const raw = readJson(STRATEGY3_NOTIFICATION_RECEIPT_FILE, { receipts: {} });
+  return raw && typeof raw === "object" && raw.receipts && typeof raw.receipts === "object"
+    ? raw
+    : { receipts: {} };
+}
+
+function saveStrategy3NotificationReceipts(receipts) {
+  fs.mkdirSync(path.dirname(STRATEGY3_NOTIFICATION_RECEIPT_FILE), { recursive: true });
+  fs.writeFileSync(STRATEGY3_NOTIFICATION_RECEIPT_FILE, JSON.stringify(receipts, null, 2) + "\n");
+}
+
+function taipeiTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+}
+
+function isStrategy3NotificationWindow(date = new Date()) {
+  if (!STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW) return true;
+  const t = taipeiTimeParts(date);
+  const minutes = t.hour * 60 + t.minute;
+  return minutes >= (12 * 60 + 55) && minutes <= (13 * 60 + 30);
+}
+
+function compactPercent(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(2)}%` : "-";
+}
+
+function compactPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  return n >= 100 ? n.toFixed(1) : n.toFixed(2);
+}
+
+function buildStrategy3NotificationPayload(output, runId, snapshotResult) {
+  const matches = Array.isArray(output?.matches) ? output.matches : [];
+  const top = matches.slice(0, STRATEGY3_NOTIFICATION_MAX_SYMBOLS).map((stock, index) => ({
+    rank: index + 1,
+    symbol: String(stock.code || stock.symbol || "").trim(),
+    name: String(stock.rawName || stock.name || stock.displayName || "").replace(/🔥/g, "").trim(),
+    close: compactPrice(stock.close),
+    changePercent: compactPercent(stock.changePercent ?? stock.change_percent ?? stock.change),
+    tvOk: Boolean(stock.tvOk || stock.tvFlame || stock.tvOvernightEntry?.ok),
+  }));
+  return {
+    strategy: "Strategy3",
+    event: "strategy3_1300_complete_run",
+    runId,
+    tradeDate: output?.usedDate || output?.tradeDate || "",
+    count: Number(output?.count || matches.length || 0),
+    tvPassCount: Number(output?.tvPassCount || top.filter((row) => row.tvOk).length || 0),
+    source: output?.source || "strategy3_scan_results",
+    snapshotStatus: snapshotResult?.ok ? "ok" : "not_ok",
+    symbols: top,
+    updatedAt: output?.updatedAt || new Date().toISOString(),
+  };
+}
+
+function strategy3NotificationText(payload, channel) {
+  const rows = (payload.symbols || []).map((row) => {
+    const flame = row.tvOk ? " 🔥" : "";
+    return `${row.rank}. ${row.symbol} ${row.name}${flame} ${row.close} ${row.changePercent}`;
+  }).join("\n");
+  const header = channel === "line"
+    ? `Strategy3 13:00 隔日沖\n${payload.tradeDate}｜${payload.count}檔｜TV火焰${payload.tvPassCount}檔`
+    : `[Strategy3 隔日沖 13:00]\n日期: ${payload.tradeDate}\n正式檔數: ${payload.count}\nTV火焰: ${payload.tvPassCount}\nrunId: ${payload.runId}`;
+  return `${header}\n${rows}`.trim();
+}
+
+async function sendTelegramStrategy3Notification(payload) {
+  const token = readNotificationSecret("TELEGRAM_BOT_TOKEN", "telegram-bot-token.txt");
+  const chatId = readNotificationSecret("TELEGRAM_CHAT_ID", "telegram-chat-id.txt");
+  if (!token || !chatId) return { status: "disabled", reason: "missing telegram token/chat id" };
+  const response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: strategy3NotificationText(payload, "telegram"),
+      disable_web_page_preview: true,
+    }),
+  });
+  const responseText = await response.text().catch(() => "");
+  if (!response.ok) throw new Error(`telegram HTTP ${response.status} ${responseText.slice(0, 300)}`);
+  return { status: "sent" };
+}
+
+async function sendLineStrategy3Notification(payload) {
+  const token = readNotificationSecret("LINE_CHANNEL_ACCESS_TOKEN", "line-channel-access-token.txt");
+  const targetId = readNotificationSecret("LINE_TARGET_ID", "line-target-id.txt");
+  if (!token || !targetId) return { status: "disabled", reason: "missing line token/target id" };
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      to: targetId,
+      messages: [{ type: "text", text: strategy3NotificationText(payload, "line").slice(0, 4800) }],
+    }),
+  });
+  const responseText = await response.text().catch(() => "");
+  if (!response.ok) throw new Error(`line HTTP ${response.status} ${responseText.slice(0, 300)}`);
+  return { status: "sent" };
+}
+
+async function sendStrategy3CompleteNotifications(output, runId, snapshotResult) {
+  if (STRATEGY3_NOTIFICATION_DISABLED) return { ok: true, skipped: true, reason: "disabled" };
+  if (!runId) return { ok: true, skipped: true, reason: "missing runId" };
+  if (!output?.complete || !output?.count) return { ok: true, skipped: true, reason: "no complete strategy3 matches" };
+  if (output?.selfTest && output.selfTest.ok !== true) return { ok: true, skipped: true, reason: "self-test not ok" };
+  if (!snapshotResult?.ok) return { ok: true, skipped: true, reason: "snapshot not ok" };
+  if (!isStrategy3NotificationWindow()) return { ok: true, skipped: true, reason: "outside 13:00 notification window" };
+
+  const payload = buildStrategy3NotificationPayload(output, runId, snapshotResult);
+  const receiptKey = `strategy3:${payload.tradeDate}:1300:${runId}`;
+  const receipts = loadStrategy3NotificationReceipts();
+  if (receipts.receipts[receiptKey]) return { ok: true, skipped: true, reason: "duplicate", receiptKey };
+
+  const result = { ok: true, receiptKey, channels: {}, payloadHash: notificationHash(payload), sentAt: new Date().toISOString() };
+  for (const channel of ["telegram", "line"]) {
+    try {
+      result.channels[channel] = channel === "telegram"
+        ? await sendTelegramStrategy3Notification(payload)
+        : await sendLineStrategy3Notification(payload);
+    } catch (error) {
+      result.ok = false;
+      result.channels[channel] = { status: "failed", reason: error?.message || String(error) };
+    }
+  }
+  receipts.receipts[receiptKey] = result;
+  saveStrategy3NotificationReceipts(receipts);
+  return result;
+}
+
 async function main() {
   const startedAt = new Date().toISOString();
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
@@ -1211,6 +1382,8 @@ async function main() {
     } else {
       console.warn(`strategy3 snapshot upsert failed: ${snapshotResult.error || "unknown_error"}`);
     }
+    const notificationResult = await sendStrategy3CompleteNotifications(output, runId, snapshotResult);
+    console.log(`strategy3 notification result: ${JSON.stringify(notificationResult)}`);
   }
   await publishStrategyCacheStatus("strategy3", "策略3-隔日沖", output, {
     used_date: output.usedDate,

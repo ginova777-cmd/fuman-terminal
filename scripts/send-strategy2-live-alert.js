@@ -10,6 +10,8 @@ const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
 const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
+const STRATEGY2_LIVE_STOP_AT = String(process.env.STRATEGY2_LIVE_STOP_AT || "12:00:00").trim();
+const STRATEGY2_LIVE_DISABLE_ENHANCEMENTS = process.env.STRATEGY2_LIVE_DISABLE_ENHANCEMENTS !== "0";
 const ENHANCEMENT_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_ENHANCEMENT_COOLDOWN_MS || 5 * 60 * 1000));
 const ENHANCEMENT_BREAKOUT_PERCENT_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_PERCENT_DELTA || 1);
 const ENHANCEMENT_BREAKOUT_VOLUME_RATIO = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_VOLUME_RATIO || 0.5);
@@ -51,8 +53,34 @@ function strategy2EventVolume(event) {
   return cleanNumber(event?.tradeVolume ?? event?.volume ?? event?.latestRecord?.tradeVolume ?? event?.latestRecord?.volume ?? event?.record?.tradeVolume ?? event?.record?.volume);
 }
 
+function strategy2OuterInner(event) {
+  const record = event?.latestRecord || event?.record || {};
+  const outer = cleanNumber(
+    event?.cumulativeBidVolume
+      ?? event?.cumulative_bid_volume
+      ?? event?.outerVolume
+      ?? event?.outer_volume
+      ?? record?.cumulativeBidVolume
+      ?? record?.cumulative_bid_volume
+      ?? record?.outerVolume
+      ?? record?.outer_volume
+  );
+  const inner = cleanNumber(
+    event?.cumulativeAskVolume
+      ?? event?.cumulative_ask_volume
+      ?? event?.innerVolume
+      ?? event?.inner_volume
+      ?? record?.cumulativeAskVolume
+      ?? record?.cumulative_ask_volume
+      ?? record?.innerVolume
+      ?? record?.inner_volume
+  );
+  return { outer, inner, ok: outer > inner && outer > 0 };
+}
+
 function isStrategy2LiveDisplayEvent(event) {
-  return strategy2EventPercent(event) >= STRATEGY2_LIVE_MIN_PERCENT;
+  return strategy2EventPercent(event) > STRATEGY2_LIVE_MIN_PERCENT
+    && strategy2OuterInner(event).ok;
 }
 
 function normalizeKeyNumber(value) {
@@ -70,10 +98,11 @@ function ma35SourceLabel(source) {
   return "";
 }
 
-function isAtOrAfterCutoff(timeText) {
-  const cutoff = String(process.env.STRATEGY2_LIVE_STARTED_AT || "").trim();
-  if (!cutoff) return true;
-  return String(timeText || "") >= cutoff;
+function isWithinStrategy2NotificationWindow(timeText) {
+  const value = String(timeText || "");
+  const start = String(process.env.STRATEGY2_LIVE_STARTED_AT || "08:45:00").trim();
+  const stop = STRATEGY2_LIVE_STOP_AT || "12:00:00";
+  return (!start || value >= start) && (!stop || value <= stop);
 }
 
 function eventLine(event, index) {
@@ -265,16 +294,19 @@ async function main() {
   const sent = new Set(state.date === today ? (state.sent || []) : []);
   const enhancementCooldown = state.date === today ? { ...(state.enhancementCooldown || {}) } : {};
   const nowMs = Date.now();
-  const newEvents = aEvents.filter((event) => isAtOrAfterCutoff(event.firstAAt) && !sent.has(eventKey(event)));
+  const newEvents = aEvents.filter((event) => isWithinStrategy2NotificationWindow(event.firstAAt) && !sent.has(eventKey(event)));
   const newEnhancements = [];
-  aEvents.forEach((event) => {
+  if (STRATEGY2_LIVE_DISABLE_ENHANCEMENTS) {
+    console.log("strategy2 live alert: enhancement notifications disabled by whitelist");
+  }
+  if (!STRATEGY2_LIVE_DISABLE_ENHANCEMENTS) aEvents.forEach((event) => {
     (event.enhancements || []).forEach((enhancement) => {
       const key = enhancementKey(event, enhancement);
       const cooldownKey = enhancementCooldownKey(event, enhancement);
       const lastSentAt = recentEnhancementSentAt(state, cooldownKey, today, event, enhancement);
       const cooldownPassed = !ENHANCEMENT_COOLDOWN_MS || !lastSentAt || nowMs - lastSentAt >= ENHANCEMENT_COOLDOWN_MS;
       const breakoutReason = cooldownPassed ? "" : enhancementBreakoutReason(state, cooldownKey, event);
-      if (isAtOrAfterCutoff(enhancement.at) && !sent.has(key) && (cooldownPassed || breakoutReason)) {
+      if (isWithinStrategy2NotificationWindow(enhancement.at) && !sent.has(key) && (cooldownPassed || breakoutReason)) {
         newEnhancements.push({ event, enhancement: { ...enhancement, breakoutReason }, key, cooldownKey });
       }
     });
