@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-07";
+  const VERSION = "watchlist-rich-shell-20260627-08";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -35,6 +35,7 @@
       enrichStockMeta,
       selectCode,
       refreshSelected,
+      forceAddCode,
     };
     window.FUMAN_WATCHLIST_SHELL_INSTANCE = instance;
     document.documentElement.dataset.fumanWatchlistModule = instance.mode;
@@ -207,22 +208,29 @@
     return normalizeCode(input?.value);
   }
 
-  function addFromInput() {
-    const code = readInputCode();
+  function forceAddCode(value) {
+    const code = normalizeCode(value);
     if (!code) return false;
-    const input = findEntryInput();
     const rows = readList();
     const meta = findStockMetaSync(code);
     if (!rows.some((item) => item.code === code)) {
       rows.unshift({ code, name: meta?.name || code, market: meta?.market || "", addedAt: Date.now() });
       writeList(rows);
     }
-    if (input) input.value = "";
     selectedCode = code;
     render();
     void enrichStockMeta(code);
     void hydrateQuote(code);
     return true;
+  }
+
+  function addFromInput() {
+    const code = readInputCode();
+    if (!code) return false;
+    const input = findEntryInput();
+    const ok = forceAddCode(code);
+    if (ok && input) input.value = "";
+    return ok;
   }
 
   function removeCode(code) {
@@ -523,6 +531,10 @@
     if (document.currentScript?.dataset) document.currentScript.dataset.fumanLoaded = "1";
   } catch {}
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
+  window.FUMAN_WATCHLIST_FORCE_ADD_CODE = (code) => {
+    try { install(); } catch (error) {}
+    return forceAddCode(code);
+  };
   window.FUMAN_WATCHLIST_SHELL_FORCE_ADD = () => {
     try { install(); } catch (error) {}
     return addFromInput();

@@ -3328,7 +3328,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = `${terminalFastVersion()}-watchlist-add-20260627-06`;
+    const version = `${terminalFastVersion()}-watchlist-add-20260627-07`;
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);
