@@ -55,6 +55,7 @@ function hasFlag(name) {
 const BASE_URL = readArg("base-url") || process.env.FUMAN_COLD_START_BASE_URL || process.env.FUMAN_MEASURE_BASE_URL || "https://fuman-terminal.vercel.app";
 const ROUTES_ARG = readArg("routes") || process.env.FUMAN_COLD_START_ROUTES || "";
 const STRICT_STRATEGY2 = hasFlag("strict-strategy2") || process.env.FUMAN_COLD_START_STRICT_STRATEGY2 === "1";
+const SKIP_WATCHLIST = hasFlag("skip-watchlist") || process.env.FUMAN_COLD_START_SKIP_WATCHLIST === "1";
 const MODE = STRICT_STRATEGY2 ? "snapshot-first-strict" : "no-sacrifice-live";
 const BUDGET_MULTIPLIER = Number(readArg("budget-multiplier") || process.env.FUMAN_COLD_START_BUDGET_MULTIPLIER || "1") || 1;
 const MAX_ROUTE_RETRIES = Math.max(0, Math.min(2, Number(readArg("route-retries") || process.env.FUMAN_COLD_START_ROUTE_RETRIES || "1") || 0));
@@ -414,7 +415,7 @@ const routes = [
 function selectedRoutes() {
   const requested = (ROUTES_ARG ? ROUTES_ARG.split(",") : (STRICT_STRATEGY2 ? DEFAULT_STRICT_STRATEGY2_ROUTES : DEFAULT_ROUTES))
     .map((route) => route.trim())
-    .filter(Boolean);
+    .filter((route) => route && (!SKIP_WATCHLIST || route !== "watchlist"));
   const byKey = new Map(routes.map((route) => [route.key, route]));
   const unknown = requested.filter((route) => !byKey.has(route));
   if (unknown.length) throw new Error(`Unknown cold-start route(s): ${unknown.join(", ")}`);

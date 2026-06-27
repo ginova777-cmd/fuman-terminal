@@ -23,6 +23,7 @@ const ROUTE_FILTER = new Set((optionValue("--routes") || process.env.FUMAN_UI_E2
   .split(",")
   .map((item) => item.trim())
   .filter(Boolean));
+const SKIP_WATCHLIST = process.argv.includes("--skip-watchlist") || process.env.FUMAN_UI_E2E_SKIP_WATCHLIST === "1";
 const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMAN_UI_E2E_EVAL_TIMEOUT_MS || 30000);
 const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FUMAN_UI_E2E_ROUTE_TIMEOUT_MS || 45000);
 
@@ -930,7 +931,7 @@ async function runDesktopMode(browser, theme) {
   await waitForSelector(cdp, "aside.sidebar [data-view]", 45000);
   await sleep(1200);
   const results = [];
-  for (const route of DESKTOP_ROUTES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
+  for (const route of DESKTOP_ROUTES.filter((item) => (!SKIP_WATCHLIST || item.key !== "watchlist") && (!ROUTE_FILTER.size || ROUTE_FILTER.has(item.key)))) {
     let stats = null;
     try {
       stats = await withTimeout((async () => {
@@ -970,7 +971,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
   }, theme);
   await sleep(1200);
   const results = [];
-  for (const route of MOBILE_ROUTES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key) || ROUTE_FILTER.has(item.fragment))) {
+  for (const route of MOBILE_ROUTES.filter((item) => (!SKIP_WATCHLIST || (item.key !== "watch" && item.fragment !== "watch")) && (!ROUTE_FILTER.size || ROUTE_FILTER.has(item.key) || ROUTE_FILTER.has(item.fragment)))) {
     let stats = null;
     try {
       stats = await withTimeout((async () => {

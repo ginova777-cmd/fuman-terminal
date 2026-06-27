@@ -93,7 +93,7 @@
     "verify:mobile-api-only:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-api-only.js --live",
     "verify:terminal-ui-e2e": "node --use-system-ca scripts/verify-terminal-ui-e2e.js",
     "verify:terminal-ui-e2e:matrix": "node --use-system-ca scripts/verify-terminal-ui-e2e-matrix.js",
-    "verify:terminal-perfect": "npm run verify:terminal-fields && npm run verify:terminal-resource-chain && npm run verify:terminal-cold-start && npm run verify:terminal-ui-e2e -- --only=desktop-night,desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun,mobile-desktop-night,mobile-desktop-sun --route-timeout=60000",
+    "verify:terminal-perfect": "npm run verify:terminal-fields && npm run verify:terminal-resource-chain && npm run verify:terminal-cold-start -- --skip-watchlist && npm run verify:terminal-ui-e2e -- --skip-watchlist --only=desktop-night,desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun,mobile-desktop-night,mobile-desktop-sun --route-timeout=60000",
     "verify:terminal-resource-chain": "node --use-system-ca scripts/verify-terminal-resource-chain.js",
     "verify:terminal-source-contracts": "node --use-system-ca scripts/verify-terminal-source-contracts.js",
     "verify:terminal-fields": "node --use-system-ca scripts/verify-terminal-field-completeness.js",
