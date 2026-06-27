@@ -193,6 +193,11 @@ if (!packageJson.scripts?.["verify:post-scan-snapshot-refresh"] || !/verify-post
 if (!String(packageJson.scripts?.["verify:terminal-cold-start"] || "").includes("scripts/verify-terminal-cold-start-performance.js")) {
   issues.push("package.json missing scripts.verify:terminal-cold-start for terminal cold-start performance gate");
 }
+if (!String(packageJson.scripts?.["warm:terminal-cold-start"] || "").includes("scripts/warm-terminal-cold-start-cache.js")
+  || !String(packageJson.scripts?.["verify:terminal-cold-start"] || "").includes("warm:terminal-cold-start")
+  || !String(packageJson.scripts?.["verify:terminal-cold-start:strict"] || "").includes("warm:terminal-cold-start")) {
+  issues.push("terminal cold-start gates must warm production API/CDN route cache before measuring fresh-browser paint");
+}
 if (!String(packageJson.scripts?.["verify:terminal-cold-start:strict"] || "").includes("--strict-strategy2")) {
   issues.push("package.json missing scripts.verify:terminal-cold-start:strict for snapshot-first performance gate");
 }

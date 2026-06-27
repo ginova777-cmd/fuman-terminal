@@ -273,6 +273,7 @@ module.exports = async function handler(request, response) {
     const options = parseRequestOptions(request);
     const snapshot = await readLatestSnapshot(options);
     if (snapshot) {
+      setDesktopSnapshotCache(response);
       response.status(200).json(snapshot);
       return;
     }
