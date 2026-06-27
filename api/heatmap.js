@@ -90,6 +90,13 @@ function isHeatmapDetectWindow(clock = taipeiClock()) {
   return clock.seconds >= HEATMAP_WINDOW_START_SECONDS && clock.seconds <= HEATMAP_WINDOW_END_SECONDS;
 }
 
+function setHeatmapSnapshotCacheHeaders(response) {
+  response.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.removeHeader?.("Pragma");
+}
+
 function attachHeatmapDetectWindow(payload, clock, reason) {
   return {
     ...payload,
@@ -2791,6 +2798,7 @@ module.exports = async function handler(request, response) {
   const clock = taipeiClock();
   const snapshotFirst = String(request.query?.snapshot || request.query?.cache || request.query?.fast || "") === "1";
   if (snapshotFirst) {
+    setHeatmapSnapshotCacheHeaders(response);
     const snapshot = await readSnapshot("heatmap_latest", {
       tradeDate: clock.date,
       allowLatestFallback: true,

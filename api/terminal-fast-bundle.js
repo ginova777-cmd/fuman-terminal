@@ -247,6 +247,9 @@ module.exports = async function handler(request, response) {
   if (!wantsLive) {
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
     if (snapshot?.payload?.endpoints) {
+      response.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=60");
+      response.setHeader("CDN-Cache-Control", "public, max-age=15, stale-while-revalidate=90");
+      response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=15, stale-while-revalidate=90");
       const payload = {
         ...snapshot.payload,
         ok: snapshot.payload.ok !== false,
