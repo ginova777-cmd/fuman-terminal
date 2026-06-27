@@ -518,12 +518,27 @@ function obviousFallback(summary) {
     || (summary?.snapshotFallback && !officialDesktopSnapshot);
 }
 
+function downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile) {
+  const reason = `${receipt?.blockingReason || ""} ${(receipt?.warnings || []).join(" ")}`;
+  if (!/desktop snapshot refresh/i.test(reason)) return false;
+  if (!supabase?.runId || cleanNumber(supabase.count) <= 0) return false;
+  if (live?.status >= 500 || live?.ok === false || live.runId !== supabase.runId) return false;
+  if (compact?.status >= 500 || compact?.ok === false || compact.runId !== supabase.runId) return false;
+  if (snapshot?.status >= 500 || snapshot?.ok === false || snapshot.runId !== supabase.runId) return false;
+  if (mobile?.runId && !String(mobile.runId).includes("waiting") && mobile.runId !== supabase.runId) return false;
+  return cleanNumber(live.count || live.returnedCount) > 0
+    && cleanNumber(compact.count || compact.returnedCount) > 0
+    && (config.allowMissingDesktopSnapshot || cleanNumber(snapshot.count || snapshot.returnedCount) > 0);
+}
+
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {
   const issues = [];
   if (receipt) {
     if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
     if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
-      issues.push(`scanner receipt failed: ${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""} ${receipt.blockingReason || ""}`.trim());
+      if (!downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile)) {
+        issues.push(`scanner receipt failed: ${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""} ${receipt.blockingReason || ""}`.trim());
+      }
     } else if (receipt.status && receipt.status !== "complete") {
       issues.push(`scanner receipt not clean: ${receipt.status}`);
     }

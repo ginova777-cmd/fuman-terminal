@@ -71,17 +71,6 @@ try {
     Write-CbDetectReceipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode"
     exit $exitCode
   }
-  $snapshotScript = Join-Path $codeRepo "refresh-desktop-route-snapshot.ps1"
-  if (Test-Path -LiteralPath $snapshotScript) {
-    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
-    if ($LASTEXITCODE -ne 0) {
-      "CB detect desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
-      Write-CbDetectReceipt "failed" $LASTEXITCODE $false 0 "" @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
-      exit $LASTEXITCODE
-    }
-  } else {
-    "CB detect desktop snapshot refresh skipped; helper not found." >> $log
-  }
   try {
     $verifiedPayload = Assert-CbDetectApi
   } catch {
@@ -89,7 +78,19 @@ try {
     Write-CbDetectReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
     exit 1
   }
-  Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+  $warnings = @()
+  $snapshotScript = Join-Path $codeRepo "refresh-desktop-route-snapshot.ps1"
+  if (Test-Path -LiteralPath $snapshotScript) {
+    & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
+    if ($LASTEXITCODE -ne 0) {
+      "CB detect desktop snapshot refresh warning with exit code $LASTEXITCODE" >> $log
+      $warnings += "desktop snapshot refresh exit code $LASTEXITCODE"
+    }
+  } else {
+    "CB detect desktop snapshot refresh skipped; helper not found." >> $log
+    $warnings += "desktop snapshot refresh helper not found"
+  }
+  Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) $warnings
 } finally {
   Pop-Location
 }
