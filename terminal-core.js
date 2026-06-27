@@ -1,6 +1,6 @@
 (function () {
   const version = "public-terminal-fast-20260623-09";
-  const runtimeAssetEpoch = "market-overview-restore-20260627-02";
+  const runtimeAssetEpoch = "desktop-fast-shell-core-20260627-01";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_RUNTIME_ASSET_EPOCH = runtimeAssetEpoch;
   window.FUMAN_TERMINAL_BOOT = {
@@ -104,6 +104,16 @@
   const mark = (name) => {
     if (!("performance" in window) || !performance.mark) return;
     try { performance.mark(`fuman:${name}`); } catch (error) {}
+  };
+
+  const desktopFastShellOwnsRuntime = () => {
+    try {
+      if (!window.__fumanDesktopFastShell) return false;
+      if (new URLSearchParams(location.search).get("legacy") === "1") return false;
+      return true;
+    } catch (error) {
+      return Boolean(window.__fumanDesktopFastShell);
+    }
   };
 
   const registerServiceWorker = () => {
@@ -210,6 +220,12 @@
   };
 
   registerServiceWorker();
+  if (desktopFastShellOwnsRuntime()) {
+    window.FUMAN_TERMINAL_BOOT.mainApp = "skipped-desktop-fast-shell";
+    window.FUMAN_TERMINAL_BOOT.modules = "skipped-desktop-fast-shell";
+    mark("legacy-main-skipped");
+    return;
+  }
   loadModuleRegistry();
 
   if ("requestIdleCallback" in window) {
