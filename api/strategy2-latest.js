@@ -601,6 +601,19 @@ async function readStrategy2SnapshotPayload(options = {}) {
   }, options);
 }
 
+function setStrategy2SnapshotCache(response) {
+  response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+}
+
+function setStrategy2LiveShellCache(response, options = {}) {
+  if (!options.canvas && !options.compact && !options.shell) return;
+  response.setHeader("Cache-Control", "public, max-age=12, stale-while-revalidate=24");
+  response.setHeader("CDN-Cache-Control", "public, max-age=12, stale-while-revalidate=30");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=12, stale-while-revalidate=30");
+}
+
 async function fetchCompleteRunPayload(base, marketSession = null, options = null) {
   const latestRows = await fetchRows(
     base,
@@ -676,9 +689,7 @@ module.exports = async function handler(request, response) {
     if (options.snapshot && !options.live) {
       const snapshotPayload = await readStrategy2SnapshotPayload(options);
       if (snapshotPayload) {
-        response.setHeader("Cache-Control", "public, max-age=8, stale-while-revalidate=30");
-        response.setHeader("CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
-        response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+        setStrategy2SnapshotCache(response);
         response.status(200).json(snapshotPayload);
         return;
       }
@@ -695,6 +706,7 @@ module.exports = async function handler(request, response) {
       strategy2TradingDayState(),
     ]);
     if (completeRun) {
+      setStrategy2LiveShellCache(response, options);
       response.status(200).json(attachStrategy2Readiness(completeRun, readiness, tradingDay));
       return;
     }

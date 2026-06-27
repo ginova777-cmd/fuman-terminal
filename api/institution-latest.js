@@ -14,6 +14,12 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const LATEST_RUN_VIEW = process.env.INSTITUTION_SUPABASE_LATEST_RUN_VIEW || "v_institution_latest_complete_run";
 
+function setDesktopSnapshotCache(response) {
+  response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+}
+
 function apiOnlyError(reason = "") {
   return {
     ok: false,
@@ -223,6 +229,7 @@ module.exports = async function handler(request, response) {
     via: "api/institution-latest",
   });
   if (cached) {
+    setDesktopSnapshotCache(response);
     response.status(200).json(cached);
     return;
   }
@@ -238,6 +245,7 @@ module.exports = async function handler(request, response) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
+    setDesktopSnapshotCache(response);
     response.status(200).json(buildPayload(latest.rows, latest.run, options));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));

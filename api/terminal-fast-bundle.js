@@ -12,6 +12,7 @@ const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
+const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 
@@ -143,6 +144,14 @@ function publicEndpointMap(results) {
   return map;
 }
 
+function compactSnapshotEndpoints(request, endpoints = {}) {
+  const compacted = {};
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    compacted[endpoint] = shapeTopPayload(request, payload);
+  }
+  return compacted;
+}
+
 function isSoftSnapshotEndpoint(endpoint) {
   return String(endpoint || "").startsWith("/api/open-buy-latest")
     || String(endpoint || "").startsWith("/api/warrant-flow-latest")
@@ -247,11 +256,14 @@ module.exports = async function handler(request, response) {
   if (!wantsLive) {
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
     if (snapshot?.payload?.endpoints) {
-      response.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=60");
-      response.setHeader("CDN-Cache-Control", "public, max-age=15, stale-while-revalidate=90");
-      response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=15, stale-while-revalidate=90");
+      response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+      response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+      response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+      const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       const payload = {
         ...snapshot.payload,
+        endpoints,
+        summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
         ok: snapshot.payload.ok !== false,
         source: "terminal-fast-bundle",
         cacheSource: "supabase:desktop_route_snapshot",

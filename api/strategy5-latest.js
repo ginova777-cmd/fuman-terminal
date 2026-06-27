@@ -56,9 +56,9 @@ function apiOnlyError(reason = "") {
 }
 
 function setDesktopSnapshotCache(response) {
-  response.setHeader("Cache-Control", "public, max-age=6, stale-while-revalidate=24");
-  response.setHeader("CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
-  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=10, stale-while-revalidate=45");
+  response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
 }
 
 async function fetchRowsFrom(table, query) {

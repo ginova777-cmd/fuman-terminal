@@ -345,6 +345,8 @@ const strategy3LatestApi = read("api/strategy3-latest.js");
 const strategy4LatestApi = read("api/strategy4-latest.js");
 const strategy5LatestApi = read("api/strategy5-latest.js");
 const warrantFlowLatestApi = read("api/warrant-flow-latest.js");
+const institutionLatestApi = read("api/institution-latest.js");
+const terminalFastBundleApi = read("api/terminal-fast-bundle.js");
 const desktopRouteSnapshotCache = read("lib/desktop-route-snapshot-cache.js");
 const terminalHomeApi = read("api/terminal-home.js");
 const mobileBootApi = read("api/mobile-boot.js");
@@ -703,11 +705,20 @@ for (const [file, source] of [
   ["api/strategy3-latest.js", strategy3LatestApi],
   ["api/strategy4-latest.js", strategy4LatestApi],
   ["api/strategy5-latest.js", strategy5LatestApi],
+  ["api/institution-latest.js", institutionLatestApi],
+  ["api/cb-detect-latest.js", cbDetectLatestApi],
   ["api/warrant-flow-latest.js", warrantFlowLatestApi],
 ]) {
-  if (!/function\s+setDesktopSnapshotCache/.test(source) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=10, stale-while-revalidate=45"/.test(source)) {
-    issues.push(`${file} must short-cache desktop snapshot hits so daily complete-run routes cold-start quickly without static JSON fallback`);
+  const cacheMatch = source.match(/Vercel-CDN-Cache-Control",\s*"public, max-age=(\d+), stale-while-revalidate=(\d+)"/);
+  if (!/function\s+setDesktopSnapshotCache/.test(source) || !cacheMatch || Number(cacheMatch[1]) < 45 || Number(cacheMatch[2]) < 180) {
+    issues.push(`${file} must short-cache desktop snapshot/complete-run hits long enough for full terminal cold-start verification without static JSON fallback`);
   }
+}
+if (!/compactSnapshotEndpoints/.test(terminalFastBundleApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=45, stale-while-revalidate=240"/.test(terminalFastBundleApi)) {
+  issues.push("api/terminal-fast-bundle.js must compact desktop snapshot payloads and keep enough edge cache for cold-start route switching");
+}
+if (!/function\s+setStrategy2LiveShellCache/.test(strategy2LatestApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=12, stale-while-revalidate=30"/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must micro-cache desktop shell live payloads so Strategy2 keeps realtime without cold-start stalls");
 }
 if (!/strategy2:\s*"\/api\/strategy2-latest"/.test(mobileBootApi) || /strategy2:\s*"\/api\/latest-strategy\?key=strategy2"/.test(mobileBootApi)) {
   issues.push("api/mobile-boot.js must load Strategy2 from /api/strategy2-latest, not the legacy latest-strategy wrapper");

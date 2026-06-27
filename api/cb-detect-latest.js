@@ -10,6 +10,12 @@ const SUPABASE_KEY = process.env.FUMAN_TERMINAL_SUPABASE_SERVICE_ROLE_KEY
 const CB_DETECT_RUNS_TABLE = process.env.CB_DETECT_SUPABASE_RUNS_TABLE || "cb_detect_scan_runs";
 const CB_DETECT_RESULTS_TABLE = process.env.CB_DETECT_SUPABASE_RESULTS_TABLE || "cb_detect_scan_results";
 
+function setDesktopSnapshotCache(response) {
+  response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+}
+
 function apiOnlyError(reason = "") {
   return {
     ok: false,
@@ -187,6 +193,7 @@ module.exports = async function handler(request, response) {
     via: "api/cb-detect-latest",
   });
   if (cached) {
+    setDesktopSnapshotCache(response);
     response.status(200).json(cached);
     return;
   }
@@ -195,6 +202,7 @@ module.exports = async function handler(request, response) {
     const options = readRequestOptions(request);
     const completeRunPayload = await readLatestCompleteRun(options);
     if (completeRunPayload) {
+      setDesktopSnapshotCache(response);
       response.status(200).json(completeRunPayload);
       return;
     }
@@ -209,6 +217,7 @@ module.exports = async function handler(request, response) {
         ? snapshot.payload.matches
         : [];
     const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
+    setDesktopSnapshotCache(response);
     response.status(200).json({
       ...snapshot.payload,
       ok: snapshot.payload.ok !== false,
