@@ -235,8 +235,8 @@
                   </div>
                   <p>點選股票後同步載入右側分析</p>
                   <div class="watchlist-entry-form">
-                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric" onkeydown="if(event.key==='Enter'){ (function(){var input=document.querySelector('#watchlist-search-input');var code=(input&&input.value)||'';var add=window.FUMAN_WATCHLIST_FORCE_ADD_CODE;if(typeof add==='function'){var ok=add(code);if(ok&&input)input.value='';return false;}var fallback=window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;if(typeof fallback==='function'){fallback();return false;}return false;})(); return false; }">
-                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股" onpointerdown="(function(){var input=document.querySelector('#watchlist-search-input');var code=(input&&input.value)||'';var add=window.FUMAN_WATCHLIST_FORCE_ADD_CODE;if(typeof add==='function'){var ok=add(code);if(ok&&input)input.value='';return false;}var fallback=window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;if(typeof fallback==='function'){fallback();return false;}return false;})()" onmousedown="(function(){var input=document.querySelector('#watchlist-search-input');var code=(input&&input.value)||'';var add=window.FUMAN_WATCHLIST_FORCE_ADD_CODE;if(typeof add==='function'){var ok=add(code);if(ok&&input)input.value='';return false;}var fallback=window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;if(typeof fallback==='function'){fallback();return false;}return false;})()" ontouchstart="(function(){var input=document.querySelector('#watchlist-search-input');var code=(input&&input.value)||'';var add=window.FUMAN_WATCHLIST_FORCE_ADD_CODE;if(typeof add==='function'){var ok=add(code);if(ok&&input)input.value='';return false;}var fallback=window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;if(typeof fallback==='function'){fallback();return false;}return false;})()" onclick="(function(){var input=document.querySelector('#watchlist-search-input');var code=(input&&input.value)||'';var add=window.FUMAN_WATCHLIST_FORCE_ADD_CODE;if(typeof add==='function'){var ok=add(code);if(ok&&input)input.value='';return false;}var fallback=window.FUMAN_WATCHLIST_FORCE_ADD||window.FUMAN_WATCHLIST_SHELL_FORCE_ADD||window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;if(typeof fallback==='function'){fallback();return false;}return false;})()">+</button>
+                    <input id="watchlist-search-input" class="watchlist-entry-input" type="text" placeholder="股票代碼" autocomplete="off" inputmode="numeric">
+                    <button id="watchlist-add-btn" class="watchlist-entry-add" type="button" aria-label="新增自選股">+</button>
                   </div>
                   <div id="watchlist-stocks" class="watchlist-stock-list">
                     <div class="watch-mobile-empty">尚未新增自選股，請輸入股票代號後點新增</div>
@@ -566,7 +566,7 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="terminal-hotfix.js?route-switch=20260627-01" data-fuman-terminal-hotfix="1"></script>
-    <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260627-08" data-fuman-watchlist-shell="1"></script>
+    <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260627-09" data-fuman-watchlist-shell="1"></script>
     <script src="terminal-desktop-fast-shell.js?route-switch=20260627-24" data-fuman-desktop-fast-shell="1"></script>
     <script src="terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260627-01"></script>
     <script src="terminal-ai-risk-guard.js?v=public-terminal-fast-20260623-09"></script>

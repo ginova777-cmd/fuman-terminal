@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-08";
+  const VERSION = "watchlist-rich-shell-20260627-09";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -263,6 +263,7 @@
     if (!selectedCode || !rows.some((row) => row.code === selectedCode)) selectedCode = rows[0].code;
     box.innerHTML = rows.map((item) => cardHtml(item)).join("");
     renderAnalysis(rows.find((item) => item.code === selectedCode) || rows[0]);
+    bindEntryControls();
     rows.slice(0, 8).forEach((item) => hydrateQuote(item.code));
   }
 
@@ -420,10 +421,30 @@
     return true;
   }
 
+  function bindEntryControls() {
+    const input = document.querySelector("#watchlist-search-input");
+    const add = document.querySelector("#watchlist-add-btn");
+    if (input && input.dataset.watchlistEntryBound !== VERSION) {
+      input.dataset.watchlistEntryBound = VERSION;
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        event.stopPropagation?.();
+        addFromInput();
+      });
+    }
+    if (add && add.dataset.watchlistEntryBound !== VERSION) {
+      add.dataset.watchlistEntryBound = VERSION;
+      add.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation?.();
+        addFromInput();
+      });
+    }
+  }
+
   function installEvents() {
-    document.addEventListener("pointerdown", handleAddIntent, true);
-    document.addEventListener("mousedown", handleAddIntent, true);
-    document.addEventListener("touchstart", handleAddIntent, { capture: true, passive: false });
+    bindEntryControls();
     document.addEventListener("click", (event) => {
       if (handleAddIntent(event)) return;
       const remove = event.target.closest?.("[data-watch-remove]");

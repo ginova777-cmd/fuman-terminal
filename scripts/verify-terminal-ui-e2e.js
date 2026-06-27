@@ -558,26 +558,29 @@ async function afterDesktopRouteActivate(cdp, route) {
     await sleep(1200);
   }
   if (route.key === "watchlist") {
-    const addedCode = "2327";
-    await evaluate(cdp, () => {
-      const input = document.querySelector("#watchlist-search-input");
-      if (input) {
-        input.value = "2327";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      return true;
-    });
-    await clickSelector(cdp, "#watchlist-add-btn");
-    await waitFor(cdp, (code) => {
-      let rows = [];
-      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
-      const storageOk = Array.isArray(rows) && rows.some((item) => String(item?.code || "") === code);
-      const cardOk = Boolean(document.querySelector(`.watchlist-card[data-code="${code}"]`));
-      return { ok: storageOk && cardOk, storageOk, cardOk, rows: rows.map((item) => item?.code).join(",") };
-    }, addedCode, 15000, 300);
+    const addedCodes = ["2327", "9904", "8112"];
+    for (const addedCode of addedCodes) {
+      await evaluate(cdp, (code) => {
+        const input = document.querySelector("#watchlist-search-input");
+        if (input) {
+          input.focus();
+          input.value = code;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        return true;
+      }, addedCode);
+      await clickSelector(cdp, "#watchlist-add-btn");
+      await waitFor(cdp, (code) => {
+        let rows = [];
+        try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+        const storageOk = Array.isArray(rows) && rows.some((item) => String(item?.code || "") === code);
+        const cardOk = Boolean(document.querySelector(`.watchlist-card[data-code="${code}"]`));
+        return { ok: storageOk && cardOk, storageOk, cardOk, rows: rows.map((item) => item?.code).join(",") };
+      }, addedCode, 15000, 300);
+    }
     const clicked = await evaluate(cdp, () => {
-      const target = document.querySelector('.watchlist-card[data-code="2327"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
+      const target = document.querySelector('.watchlist-card[data-code="8112"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
       target?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
       return Boolean(target);
     }).catch(() => false);
