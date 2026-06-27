@@ -31,7 +31,7 @@ function allowlist() {
 }
 
 function git(args, cwd = DEPLOY_ROOT) {
-  return spawnSync("git", args, {
+  return spawnSync("git", ["-c", `safe.directory=${DEPLOY_ROOT}`, ...args], {
     cwd,
     encoding: "utf8",
     windowsHide: true,

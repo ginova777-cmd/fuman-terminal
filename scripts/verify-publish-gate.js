@@ -181,6 +181,9 @@ if (!packageJson.scripts?.["verify:scorecard-chain"] || !/verify-scorecard-resou
 if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-surfaces-chain\.js/.test(packageJson.scripts["verify:market-surfaces-chain"])) {
   issues.push("package.json missing scripts.verify:market-surfaces-chain for market overview/heatmap/AI/realtime/watchlist");
 }
+if (!packageJson.scripts?.["verify:market-ai-dashboard-ui"] || !/verify-terminal-ui-e2e\.js/.test(packageJson.scripts["verify:market-ai-dashboard-ui"]) || !/market-ai/.test(packageJson.scripts["verify:market-ai-dashboard-ui"])) {
+  issues.push("package.json missing scripts.verify:market-ai-dashboard-ui for AI dashboard hero/cards/evidence/filter E2E");
+}
 if (!packageJson.scripts?.["verify:fast-shell-self-contained"] || !/verify-fast-shell-self-contained\.js/.test(packageJson.scripts["verify:fast-shell-self-contained"])) {
   issues.push("package.json missing scripts.verify:fast-shell-self-contained for desktop fast shell helper isolation");
 }

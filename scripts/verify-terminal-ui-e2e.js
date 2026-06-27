@@ -772,9 +772,29 @@ function collectDesktopStats(route) {
   const canvasCountText = text(activePanel.querySelector(".desktop-canvas-count"));
   const countMatch = canvasCountText.match(/(\d+)\s*\/\s*(\d+)/) || canvasCountText.match(/(\d+)\s*筆/);
   const canvasRows = countMatch ? Number(countMatch[1]) || 0 : 0;
-  const filterCounts = [...activePanel.querySelectorAll("[data-chip-canvas-filter] b,[data-strategy4-signal-filter] b,[data-warrant-flow-tab] b")]
+  const filterCounts = [...activePanel.querySelectorAll("[data-chip-canvas-filter] b,[data-strategy4-signal-filter] b,[data-warrant-flow-tab] b,[data-market-ai-filter] b")]
     .map((el) => Number(text(el).replace(/\D/g, "")) || 0)
     .filter((value) => value > 0);
+  const marketAiDashboard = route.key === "market-ai" ? (() => {
+    const filterButtons = [...activePanel.querySelectorAll("[data-market-ai-filter]")];
+    const labels = filterButtons.map((button) => text(button).replace(/\s+\d+$/, "").trim());
+    const clicked = [];
+    filterButtons.forEach((button) => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      clicked.push({ key: button.dataset.marketAiFilter || "", active: button.classList.contains("active") });
+    });
+    const overflow = Math.max(0, Math.ceil((document.documentElement.scrollWidth || document.body.scrollWidth || 0) - window.innerWidth));
+    return {
+      heroBoard: visible(activePanel.querySelector(".market-ai-hero-board")),
+      metricCards: [...activePanel.querySelectorAll(".market-ai-hero-metrics > span")].filter(visible).length,
+      keyCards: [...activePanel.querySelectorAll(".market-ai-summary .market-ai-card")].filter(visible).length,
+      evidenceCards: [...activePanel.querySelectorAll(".market-ai-evidence article")].filter(visible).length,
+      filters: labels,
+      clicked,
+      stockRows: [...activePanel.querySelectorAll(".market-ai-stock-row")].filter(visible).length,
+      horizontalOverflow: overflow,
+    };
+  })() : null;
   const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|資料載入失敗|讀取失敗|載入失敗|買賣超模組載入失敗|權證資料檔讀取失敗|手機 API fragment 暫時無法取得|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)/gi)].map((match) => match[0]);
   const freshnessText = [
     text(activePanel.querySelector(".data-freshness-bar")),
@@ -839,7 +859,20 @@ function collectDesktopStats(route) {
     if (actionControls < 3) contractBlockers.push(`watchlist analysis action controls below 3 actual=${actionControls}`);
     if (/尚未同步/.test(status)) contractBlockers.push(`watchlist status still shows unsynced: ${status}`);
   }
-  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers])];
+  const marketAiBlockers = [];
+  if (route.key === "market-ai") {
+    const requiredFilters = ["全部", "動能強", "法人買超", "當沖熱", "風險高"];
+    if (!marketAiDashboard?.heroBoard) marketAiBlockers.push("market AI hero board missing");
+    if ((marketAiDashboard?.metricCards || 0) < 4) marketAiBlockers.push(`market AI metric cards ${marketAiDashboard?.metricCards || 0}<4`);
+    if ((marketAiDashboard?.keyCards || 0) < 3) marketAiBlockers.push(`market AI key cards ${marketAiDashboard?.keyCards || 0}<3`);
+    if ((marketAiDashboard?.evidenceCards || 0) < 4) marketAiBlockers.push(`market AI evidence cards ${marketAiDashboard?.evidenceCards || 0}<4`);
+    for (const label of requiredFilters) {
+      if (!marketAiDashboard?.filters?.some((item) => item.includes(label))) marketAiBlockers.push(`market AI filter missing ${label}`);
+    }
+    if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
+    if ((marketAiDashboard?.horizontalOverflow || 0) > 8) marketAiBlockers.push(`market AI desktop horizontal overflow ${marketAiDashboard.horizontalOverflow}px`);
+  }
+  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketAiBlockers])];
   return {
     kind: "desktop",
     routeKey: route.key,
@@ -864,6 +897,7 @@ function collectDesktopStats(route) {
     waitingEmptyOk,
     dateSignals,
     fieldSignals,
+    marketAiDashboard,
     missingRequiredText,
     blockerMatches: blockers,
     warnings,
@@ -940,6 +974,37 @@ function collectMobileStats(route) {
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
     if (!/自選\s+\d+/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count actual=${statusTextForWatch || "<missing>"}`);
   }
+  const mobileAiDashboard = route.fragment === "ai" ? (() => {
+    const filters = [...content.querySelectorAll("[data-market-ai-filter]")];
+    const clicked = [];
+    filters.forEach((button) => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const key = button.dataset.marketAiFilter || "";
+      const list = content.querySelector(`[data-market-ai-mobile-list="${key}"]`);
+      clicked.push({ key, active: button.classList.contains("active"), visibleList: Boolean(list && !list.hidden) });
+    });
+    return {
+      root: Boolean(content?.querySelector(".mobile-ai-fragment[data-mobile-ai-fragment='1']")),
+      cards: [...content.querySelectorAll(".market-ai-card")].filter((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 1 && rect.height > 1 && getComputedStyle(el).display !== "none";
+      }).length,
+      blocks: content.querySelectorAll(".market-ai-block").length,
+      stockRows: content.querySelectorAll(".market-ai-stock-row").length,
+      filters: filters.map((el) => text(el)),
+      clicked,
+    };
+  })() : null;
+  if (route.fragment === "ai") {
+    if (!mobileAiDashboard.root) layoutBlockers.push("mobile AI fragment must come from API fragment root");
+    if (mobileAiDashboard.cards < 4) layoutBlockers.push(`mobile AI cards ${mobileAiDashboard.cards}<4`);
+    if (mobileAiDashboard.blocks < 4) layoutBlockers.push(`mobile AI blocks ${mobileAiDashboard.blocks}<4`);
+    if (mobileAiDashboard.stockRows < 1) layoutBlockers.push("mobile AI stock rows missing");
+    for (const label of ["全部", "動能強", "法人買超", "當沖熱", "風險高"]) {
+      if (!mobileAiDashboard.filters.some((item) => item.includes(label))) layoutBlockers.push(`mobile AI filter missing ${label}`);
+    }
+    if (!mobileAiDashboard.clicked.every((item) => item.active && item.visibleList)) layoutBlockers.push("mobile AI capsule filter click did not reveal every list");
+  }
   const keyOk = route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
@@ -957,6 +1022,7 @@ function collectMobileStats(route) {
     statusText,
     dateSignals,
     layout,
+    mobileAiDashboard,
     layoutBlockers,
     blockerMatches: blockers,
     warnings,

@@ -4064,7 +4064,7 @@
     const nameOf = (item) => String(item?.name || item?.industry || item?.sector || "--");
     const stockName = (item) => String(item?.name || item?.Name || "");
     const stockCode = (item) => String(item?.code || item?.Code || item?.stockId || "").trim();
-    const tradeDate = String(aiPayload?.aiDetectWindow?.taipeiDate || aiPayload?.snapshot?.tradeDate || heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.date || "").replace(/-/g, "");
+    const tradeDate = String(aiPayload?.dashboard?.tradeDate || aiPayload?.aiDetectWindow?.taipeiDate || aiPayload?.snapshot?.tradeDate || heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.date || "").replace(/-/g, "");
     const dateLabel = tradeDate.length >= 8 ? `${tradeDate.slice(4, 6)}/${tradeDate.slice(6, 8)}` : compactMarketTime(aiPayload?.updatedAt || heatmapPayload?.updatedAt || "");
     const detectWindow = aiPayload?.aiDetectWindow || {};
     const session = aiPayload?.marketSession || {};
@@ -4073,15 +4073,17 @@
     const sessionText = isLiveWindow
       ? "09:00-13:30 AI 盤中巡邏，資料更新才重建判讀。"
       : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
-    const up = sectors.reduce((sum, item) => sum + num(item.up), 0);
-    const down = sectors.reduce((sum, item) => sum + num(item.down), 0);
+    const heatmapUp = sectors.reduce((sum, item) => sum + num(item.up), 0);
+    const heatmapDown = sectors.reduce((sum, item) => sum + num(item.down), 0);
+    const up = heatmapUp || num(aiPayload?.dashboard?.up || aiPayload?.summary?.up);
+    const down = heatmapDown || num(aiPayload?.dashboard?.down || aiPayload?.summary?.down);
     const sectorStocks = sectors.flatMap((sector) => normalizeArray(sector.stocks).map((stock) => ({ ...stock, industry: nameOf(sector), sectorPct: pctOf(sector) })));
-    const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || aiPayload?.breadth?.sample || aiPayload?.summary?.sample) || sectorStocks.length || aiRows.length || up + down;
+    const sample = num(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || aiPayload?.dashboard?.sample || aiPayload?.breadth?.sample || aiPayload?.summary?.sample) || sectorStocks.length || aiRows.length || up + down;
     const directional = Math.max(up + down, 1);
     const upRatio = sample ? up / sample * 100 : 0;
     const directionalRatio = up / directional * 100;
-    const confidence = Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
-    const bias = up >= down ? "短線偏多" : "短線偏空";
+    const confidence = aiPayload?.dashboard?.confidence || (Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察");
+    const bias = aiPayload?.dashboard?.bias || (up >= down ? "短線偏多" : "短線偏空");
     const strong = sectors.filter((item) => pctOf(item) > 0).sort((a, b) => pctOf(b) - pctOf(a)).slice(0, 5);
     const weak = sectors.filter((item) => pctOf(item) < 0).sort((a, b) => pctOf(a) - pctOf(b)).slice(0, 5);
     const radarLongs = radarRows.filter((row) => !String(row.side || row.direction || "").toLowerCase().includes("short")).slice(0, 10);
@@ -4139,7 +4141,7 @@
       })).filter((row) => row.code);
     }
     const topStock = allStocks[0] || null;
-    const groups = {
+    let groups = {
       all: allStocks.slice(0, 10),
       momentum: allStocks.filter((stock) => stock.pct > 0 || stock.tags.includes("動能強")).slice(0, 10),
       legal: allStocks.filter((stock) => /法|外資|投信|法人/.test(stock.tags.join("") + stock.reason)).slice(0, 10),
@@ -4161,10 +4163,54 @@
         };
       }).filter((row) => row.code), ...allStocks.filter((stock) => stock.pct < 0)].slice(0, 10),
     };
-    if (!groups.legal.length) groups.legal = allStocks.slice(0, 10).map((stock) => ({ ...stock, tags: [...new Set([...stock.tags, "法人買超"])].slice(0, 5) }));
-    if (!groups.momentum.length) groups.momentum = allStocks.slice(0, 10);
-    if (!groups.intraday.length) groups.intraday = allStocks.slice(0, 10);
-    if (!groups.risk.length) groups.risk = weak.flatMap((sector) => normalizeArray(sector.stocks).slice(0, 2).map((stock) => ({
+    const normalizeDisplayStock = (stock, fallbackSource) => {
+      const code = stockCode(stock);
+      if (!code) return null;
+      const tags = [
+        ...normalizeArray(stock.signalTags),
+        ...normalizeArray(stock.tags),
+        stock.aiTag,
+        stock.groupLabel,
+        fallbackSource,
+      ].filter(Boolean);
+      return {
+        code,
+        name: stockName(stock) || code,
+        industry: stock.industry || stock.sector || stock.category || stock.group || "--",
+        pct: num(stock.percent ?? stock.pct ?? stock.changePercent ?? stock.Change ?? stock.change ?? stock.change_pct),
+        value: num(stock.value ?? stock.tradeValue ?? stock.TradeValue ?? stock.amount ?? stock.amountYi),
+        volume: num(stock.volume ?? stock.tradeVolume ?? stock.TradeVolume ?? stock.totalVolume),
+        score: Math.max(1, Math.min(100, Math.round(num(stock.score || stock.radarScore || stock.aiScore || stock.finalScore || stock.rankScore) || 55))),
+        side: stock.side || stock.direction || "多",
+        reason: stock.reason || stock.signal || stock.description || stock.summary || fallbackSource,
+        source: stock.source || fallbackSource,
+        tags: [...new Set(tags.length ? tags : [fallbackSource])].slice(0, 5),
+      };
+    };
+    const apiFilterRows = (key, aliases = []) => {
+      const keys = [key, ...aliases];
+      const group = keys.map((item) => aiPayload?.groups?.[item]).find(Boolean);
+      const filter = normalizeArray(aiPayload?.filters).find((item) => keys.includes(item?.key));
+      return normalizeArray(group?.rows || group?.stocks || filter?.rows || filter?.stocks)
+        .map((stock) => normalizeDisplayStock(stock, group?.label || filter?.label || key))
+        .filter(Boolean)
+        .slice(0, 10);
+    };
+    const hasApiGroups = Boolean(aiPayload?.groups || normalizeArray(aiPayload?.filters).length);
+    if (hasApiGroups) {
+      groups = {
+        all: apiFilterRows("all"),
+        momentum: apiFilterRows("momentum"),
+        legal: apiFilterRows("institution", ["legal"]),
+        intraday: apiFilterRows("intraday"),
+        risk: apiFilterRows("risk"),
+      };
+      if (!groups.all.length) groups.all = allStocks.slice(0, 10);
+    }
+    if (!hasApiGroups && !groups.legal.length) groups.legal = [];
+    if (!hasApiGroups && !groups.momentum.length) groups.momentum = allStocks.slice(0, 10);
+    if (!hasApiGroups && !groups.intraday.length) groups.intraday = allStocks.slice(0, 10);
+    if (!hasApiGroups && !groups.risk.length) groups.risk = weak.flatMap((sector) => normalizeArray(sector.stocks).slice(0, 2).map((stock) => ({
       code: stockCode(stock),
       name: stockName(stock) || stockCode(stock),
       industry: nameOf(sector),
@@ -4180,26 +4226,34 @@
     const strongNames = strong.map((item) => nameOf(item)).slice(0, 3).join("、") || "等待族群擴散";
     const weakNames = weak.map((item) => nameOf(item)).slice(0, 3).join("、") || "暫無明顯弱勢";
     const riskNames = groups.risk.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || weakNames;
+    const biasTitle = /等待方向/.test(String(bias)) ? "等待方向" : up >= down ? "多方壓制" : "空方壓制";
     const heroMetricsHtml = `
       <div class="market-ai-hero-metrics">
         <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
         <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
         <span><small>下跌</small><b>${down.toLocaleString("zh-TW")}</b></span>
         <span><small>信心</small><b>${escapeHtml(confidence)}</b></span>
-        <div class="market-ai-hero-action"><small>操作建議</small><b>${up >= down ? "降低追價" : "等待方向"}</b><span>${up >= down ? "盤面風險偏高時，先把進場條件收緊，避免追高。" : "盤面偏弱時，只看逆勢強股與量價確認。"}</span></div>
+        <div class="market-ai-hero-action"><small>操作建議</small><b>${escapeHtml(aiPayload?.dashboard?.action || (up >= down ? "降低追價" : "等待方向"))}</b><span>${up >= down ? "盤面風險偏高時，先把進場條件收緊，避免追高。" : "盤面偏弱時，只看逆勢強股與量價確認。"}</span></div>
       </div>`;
-    const pointHtml = [
+    const pointTexts = normalizeArray(aiPayload?.todayPoints).length >= 4 ? normalizeArray(aiPayload.todayPoints) : [
       `市場廣度顯示上漲家數占 ${upRatio.toFixed(1)}%，站在全市場角度先判斷為${bias}。`,
       `族群焦點落在 ${strongNames}，平均漲幅領先者優先觀察擴散。`,
       `熱門觀察股優先看 ${groups.all.slice(0, 3).map((stock) => `${stock.code} ${stock.name}`).join("、") || "等待雷達資料"}。`,
       `風險端留意 ${riskNames}，分數高也要等量價延續確認。`,
-    ].map((text, index) => `<p><b>${index + 1}</b><span>${escapeHtml(text)}</span></p>`).join("");
-    const evidenceCardsHtml = [
+    ];
+    const pointHtml = pointTexts.slice(0, 6).map((text, index) => `<p><b>${index + 1}</b><span>${escapeHtml(text)}</span></p>`).join("");
+    const evidenceRows = normalizeArray(aiPayload?.reasoning).length >= 4 ? normalizeArray(aiPayload.reasoning).slice(0, 4).map((item) => [
+      item.kicker || item.key || "AI 依據",
+      item.title || "--",
+      item.text || item.reason || "",
+      item.key || "ai",
+    ]) : [
       ["廣度檢核", `上漲 ${upRatio.toFixed(2)}% / 下跌 ${sample ? (down / sample * 100).toFixed(2) : "0.00"}%`, `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。`, "breadth"],
       ["訊號母體", `${radarRows.length.toLocaleString("zh-TW")} 檔即時雷達`, "只採 API-only polling 最新資料，不讀舊 DOM snapshot。", "radar"],
       ["族群結構", `強族群前 ${Math.min(3, strong.length)} 名`, strongNames, "sector"],
       ["風險檢核", groups.risk.length ? "族群集中 / 融券壓力" : "風險暫無集中", riskNames, "risk"],
-    ].map(([kicker, title, text, key]) => `
+    ];
+    const evidenceCardsHtml = evidenceRows.map(([kicker, title, text, key]) => `
       <article data-market-ai-drilldown="${escapeHtml(key)}" role="button" tabindex="0">
         <small>${escapeHtml(kicker)}</small>
         <strong>${escapeHtml(title)}</strong>
@@ -4239,15 +4293,15 @@
         <section class="market-ai-hero-board">
           <div class="market-ai-hero-copy">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
-            <strong>${escapeHtml(up >= down ? "多方壓制" : "空方壓制")}</strong>
+            <strong>${escapeHtml(biasTitle)}</strong>
             <p>${up >= down ? "多方候選與強勢延續標的較多，仍需確認族群擴散與量價延續。" : "下跌家數偏多，盤面先以風險控管為主；強勢股需確認族群延續，不追高雜訊。"}</p>
           </div>
           ${heroMetricsHtml}
         </section>
         <section class="market-ai-summary">
-          <article class="market-ai-card hero"><small>趨勢廣度</small><strong>${escapeHtml(up >= down ? "多方壓制" : "空方壓制")}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
+          <article class="market-ai-card hero"><small>趨勢廣度</small><strong>${escapeHtml(biasTitle)}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
           <article class="market-ai-card warning"><small>風險控管</small><strong>${groups.risk.length ? "先控風險" : "風險正常"}</strong><p>${escapeHtml(weakNames)} 需留意，風險高標的不放入第一優先追蹤。</p></article>
-          <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(topStock ? `${topStock.code} ${topStock.name}` : "--")}</strong><p>${escapeHtml(topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。")}</p></article>
+          <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(aiPayload?.priorityObservation?.title || (topStock ? `${topStock.code} ${topStock.name}` : "--"))}</strong><p>${escapeHtml(aiPayload?.priorityObservation?.text || (topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。"))}</p></article>
         </section>
         <section class="market-ai-decision-strip"><span>判讀依據與風險細節</span><small>${escapeHtml(sessionTitle)} · ${escapeHtml(sessionText)}</small></section>
         <section class="market-ai-decision-grid">
@@ -4265,8 +4319,10 @@
           </article>
           <article class="market-ai-risk-panel">
             <header><h4>風險提醒</h4><span>${groups.risk.length} 則</span></header>
-            <div><strong>族群集中</strong><p>主流若集中在少數族群，盤中容易出現追價後回落，先等第二波確認。</p></div>
-            <div><strong>融券壓力</strong><p>${escapeHtml(riskNames)} 若出現偏空或券資壓力，追蹤軋空與急拉後反轉風險。</p></div>
+            ${(normalizeArray(aiPayload?.riskNotes).length ? normalizeArray(aiPayload.riskNotes).slice(0, 3) : [
+              { title: "族群集中", text: "主流若集中在少數族群，盤中容易出現追價後回落，先等第二波確認。" },
+              { title: "融券壓力", text: `${riskNames} 若出現偏空或券資壓力，追蹤軋空與急拉後反轉風險。` },
+            ]).map((item) => `<div><strong>${escapeHtml(item.title || "風險")}</strong><p>${escapeHtml(item.text || item.reason || "")}</p></div>`).join("")}
           </article>
         </section>
         <section class="market-ai-block market-ai-hot-section">

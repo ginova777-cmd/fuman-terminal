@@ -166,6 +166,13 @@ async function main() {
     cacheSource: ai.json?.cacheSource || "",
     updatedAt: ai.json?.updatedAt || "",
     rows: aiRows.length,
+    hotStocks: Array.isArray(ai.json?.hotStocks) ? ai.json.hotStocks.length : 0,
+    filterCount: Array.isArray(ai.json?.filters) ? ai.json.filters.length : 0,
+    groupKeys: ai.json?.groups && typeof ai.json.groups === "object" ? Object.keys(ai.json.groups) : [],
+    todayPoints: Array.isArray(ai.json?.todayPoints) ? ai.json.todayPoints.length : 0,
+    riskNotes: Array.isArray(ai.json?.riskNotes) ? ai.json.riskNotes.length : 0,
+    reasoning: Array.isArray(ai.json?.reasoning) ? ai.json.reasoning.length : 0,
+    fieldCompleteness: ai.json?.fieldCompleteness || {},
     summary: ai.json?.summary || {},
     breadthSample: cleanNumber(ai.json?.breadth?.sample),
     strategy2Count: cleanNumber(ai.json?.summary?.strategy2Count),
@@ -174,7 +181,11 @@ async function main() {
     marketSession: ai.json?.marketSession || {},
   };
   addCheck(checks, ai.ok && ai.json?.ok !== false, "ai-api-ok", "AI 判讀 /api/market-ai-live must return ok 2xx", details.ai);
-  addCheck(checks, details.ai.breadthSample > 0 || details.ai.strategy2Count > 0 || details.ai.realtimeRadarCount > 0, "ai-api-content", "AI 判讀 must expose breadth, strategy2, or realtime radar content", details.ai);
+  addCheck(checks, details.ai.breadthSample > 0 || details.ai.strategy2Count > 0 || details.ai.realtimeRadarCount > 0 || details.ai.rows > 0, "ai-api-content", "AI 判讀 must expose breadth, strategy2, realtime radar, or AI rows", details.ai);
+  addCheck(checks, details.ai.rows > 0 && details.ai.hotStocks > 0, "ai-api-own-rows", "AI 判讀 must produce its own rows/hotStocks, not only frontend heatmap/radar derivation", details.ai);
+  addCheck(checks, details.ai.filterCount >= 5 && ["all", "momentum", "institution", "intraday", "risk"].every((key) => details.ai.groupKeys.includes(key)), "ai-filter-groups", "AI 判讀 must expose all five capsule groups", details.ai);
+  addCheck(checks, details.ai.todayPoints >= 4 && details.ai.riskNotes >= 2 && details.ai.reasoning >= 4, "ai-judgement-fields", "AI 判讀 must expose 今日重點/風險提醒/判讀理由 fields", details.ai);
+  addCheck(checks, Object.values(details.ai.fieldCompleteness || {}).every(Boolean), "ai-field-completeness", "AI 判讀 fieldCompleteness must be true for required dashboard fields", details.ai);
   addCheck(checks, !obviousStaticFallback(ai.json), "ai-no-static-fallback", "AI 判讀 must not use static/local fallback as authority", details.ai);
 
   const realtime = await fetchJson("/api/realtime-radar-latest", 35000);

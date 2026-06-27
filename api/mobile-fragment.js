@@ -5,6 +5,12 @@ const {
 } = require("../lib/desktop-route-snapshot-cache");
 
 const TAB_CONFIG = {
+  ai: {
+    title: "AI 判讀",
+    subtitle: "市場總覽 AI dashboard",
+    endpoint: "/api/market-ai-live",
+    points: ["今日重點", "風險提醒", "優先觀察", "熱門觀察股"],
+  },
   strategy1: {
     title: "策略1 開盤入",
     subtitle: "Supabase complete run",
@@ -302,6 +308,7 @@ function rowHtml(row, index, tab = "") {
 }
 
 function renderFragment(tab, config, payload) {
+  if (tab === "ai") return renderAiFragment(tab, config, payload);
   const rows = normalizeRows(payload, tab);
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
@@ -323,6 +330,105 @@ function renderFragment(tab, config, payload) {
       </article>
       <section class="mobile-terminal-points">${points}</section>
       <section class="mobile-terminal-list">${list}</section>
+    </section>`;
+}
+
+function groupRows(payload, key, aliases = []) {
+  const keys = [key, ...aliases];
+  const group = keys.map((item) => payload?.groups?.[item]).find(Boolean);
+  const filter = arrayAt(payload, ["filters"]).find((item) => keys.includes(item?.key));
+  return arrayAt(group || filter || {}, ["rows", "stocks"]).slice(0, 8);
+}
+
+function renderAiStockRow(row, index) {
+  const code = firstValue(row, ["code", "Code", "symbol", "stockId", "stock_id"], "--");
+  const name = firstValue(row, ["name", "Name", "stockName", "stock_name"], "");
+  const pct = firstValue(row, ["pct", "percent", "changePercent"], null);
+  const score = firstValue(row, ["score", "rankScore", "finalScore"], "--");
+  const source = firstValue(row, ["source", "cacheSource"], "AI");
+  const industry = firstValue(row, ["industry", "sector", "group"], "--");
+  const reason = firstValue(row, ["reason", "summary", "description", "signal"], "");
+  const pctText = pct === null ? "--" : `${numberText(pct)}%`;
+  return `
+    <article class="market-ai-stock-row">
+      <b class="market-ai-rank">#${index + 1}</b>
+      <div>
+        <h4>${esc(code)} ${esc(name)}</h4>
+        <p>${esc(source)}｜${esc(industry)}｜${esc(pctText)}｜分數 ${esc(score)}</p>
+        <small>${esc(String(reason).slice(0, 150))}</small>
+      </div>
+      <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
+      <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${esc(code)}" data-ai-watch-name="${esc(name)}">加入自選</button>
+    </article>`;
+}
+
+function renderAiFragment(tab, config, payload) {
+  const dashboard = payload?.dashboard || {};
+  const summary = payload?.summary || {};
+  const hotStocks = arrayAt(payload, ["hotStocks"]);
+  const apiRows = arrayAt(payload, ["rows"]);
+  const rows = hotStocks.length ? hotStocks : apiRows.length ? apiRows : groupRows(payload, "all");
+  const updatedAt = payload?.updatedAt || payload?.servedAt || payload?.generatedAt || "";
+  const runId = extractRunId({ runId: payload?.snapshot?.snapshotId || payload?.snapshot?.key || payload?.cacheSource || "market-ai-live", updatedAt }, tab);
+  const sample = Number(dashboard.sample || summary.sample || payload?.breadth?.sample || 0) || rows.length;
+  const up = Number(dashboard.up || summary.up || 0);
+  const down = Number(dashboard.down || summary.down || 0);
+  const bias = dashboard.bias || summary.bias || "AI 判讀";
+  const action = dashboard.action || summary.action || "等待方向";
+  const confidence = dashboard.confidence || summary.confidence || "觀察";
+  const todayPoints = arrayAt(payload, ["todayPoints"]).slice(0, 4);
+  const riskNotes = arrayAt(payload, ["riskNotes"]).slice(0, 3);
+  const reasoning = arrayAt(payload, ["reasoning"]).slice(0, 4);
+  const filters = [
+    ["all", "全部", groupRows(payload, "all")],
+    ["momentum", "動能強", groupRows(payload, "momentum")],
+    ["institution", "法人買超", groupRows(payload, "institution", ["legal"])],
+    ["intraday", "當沖熱", groupRows(payload, "intraday")],
+    ["risk", "風險高", groupRows(payload, "risk")],
+  ];
+  const pointHtml = todayPoints.length ? todayPoints.map((point, index) => `
+    <p class="market-ai-point"><b>${index + 1}</b><span>${esc(point)}</span></p>
+  `).join("") : config.points.map((point, index) => `
+    <p class="market-ai-point"><b>${index + 1}</b><span>${esc(point)}</span></p>
+  `).join("");
+  const riskHtml = riskNotes.length ? riskNotes.map((note) => `
+    <article class="market-ai-card"><small>${esc(note.title || "風險")}</small><p>${esc(note.text || note.reason || "")}</p></article>
+  `).join("") : '<article class="market-ai-card"><small>風險</small><p>等待 AI 判讀風險資料。</p></article>';
+  const reasoningHtml = reasoning.length ? reasoning.map((item) => `
+    <article class="market-ai-card"><small>${esc(item.key || "依據")}</small><strong>${esc(item.title || "--")}</strong><p>${esc(item.text || "")}</p></article>
+  `).join("") : '<article class="market-ai-card"><small>依據</small><strong>等待資料</strong><p>AI 判讀依據尚未補齊。</p></article>';
+  return `<section class="mobile-terminal-fragment mobile-ai-fragment" data-mobile-terminal-fragment="1" data-mobile-ai-fragment="1" data-mobile-ai-contract="root" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}">
+      <article class="market-ai-card mobile-ai-hero">
+        <small>市場總覽 AI｜${esc(shortTime(updatedAt))}</small>
+        <strong>${esc(bias)}</strong>
+        <p>${esc(action)}｜信心 ${esc(confidence)}</p>
+        <div class="metrics">
+          <span>樣本<b>${esc(sample.toLocaleString("zh-TW"))}</b></span>
+          <span>上漲<b>${esc(up.toLocaleString("zh-TW"))}</b></span>
+          <span>下跌<b>${esc(down.toLocaleString("zh-TW"))}</b></span>
+        </div>
+      </article>
+      <section class="market-ai-block">
+        <h3>AI 今日重點</h3>
+        <div class="market-ai-list">${pointHtml}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>風險提醒</h3>
+        <div class="market-ai-list">${riskHtml}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>AI 判讀依據</h3>
+        <div class="market-ai-list">${reasoningHtml}</div>
+      </section>
+      <section class="market-ai-block">
+        <h3>熱門觀察股</h3>
+        <div class="market-ai-actions">${filters.map(([key, label, items], index) => `<button type="button" ${index === 0 ? 'class="active"' : ""} data-market-ai-filter="${esc(key)}">${esc(label)} ${items.length}</button>`).join("")}</div>
+        <div class="market-ai-sort-note">目前排序：綜合分數，來源 ${esc(payload?.source || payload?.cacheSource || "api/market-ai-live")}</div>
+        ${filters.map(([key, label, items], index) => {
+          const list = key === "all" && rows.length ? rows : items;
+          return `<div class="market-ai-hot" data-market-ai-mobile-list="${esc(key)}" ${index === 0 ? "" : "hidden"} aria-label="${esc(label)}">${list.length ? list.slice(0, 10).map(renderAiStockRow).join("") : '<div class="empty-state">目前這組沒有符合標的。</div>'}</div>`;
+        }).join("")}
+      </section>
     </section>`;
 }
 
@@ -387,7 +493,7 @@ module.exports = async function handler(request, response) {
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
-    const snapshotPayload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
     const payload = !snapshotPayload || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
       ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000)
       : snapshotPayload;
