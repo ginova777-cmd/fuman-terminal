@@ -578,6 +578,22 @@ async function afterDesktopRouteActivate(cdp, route) {
         return { ok: storageOk && cardOk, storageOk, cardOk, rows: rows.map((item) => item?.code).join(",") };
       }, addedCode, 15000, 300);
     }
+    await evaluate(cdp, () => {
+      const input = document.querySelector("#watchlist-search-input");
+      if (input) {
+        input.focus();
+        input.value = "8112";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return true;
+    });
+    await clickSelector(cdp, "#watchlist-add-btn");
+    await waitFor(cdp, () => {
+      const cards = [...document.querySelectorAll('.watchlist-card[data-code="8112"]')];
+      const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
+      return { ok: cards.length === 1 && /已在自選股/.test(status), cards: cards.length, status };
+    }, null, 15000, 300);
     const clicked = await evaluate(cdp, () => {
       const target = document.querySelector('.watchlist-card[data-code="8112"]') || document.querySelector(".watchlist-card[data-code]") || document.querySelector(".desktop-route-shell tbody tr");
       target?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));

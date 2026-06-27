@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260627-10";
+  const VERSION = "watchlist-rich-shell-20260627-11";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   let installed = false;
@@ -236,19 +236,33 @@
     return true;
   }
 
+  function showEntryStatus(message, kind = "info") {
+    const status = document.querySelector("#watchlist-entry-status");
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.statusKind = kind;
+  }
+
   function addFromInput(anchor) {
     const input = anchor?.matches?.("input") ? anchor : findEntryInput(anchor);
     const code = normalizeCode(input?.value || readInputCode(anchor));
-    if (!code) return false;
+    if (!code) {
+      showEntryStatus("請輸入四碼股票代號", "warn");
+      return false;
+    }
     const now = Date.now();
     if (lastAddIntentCode === code && now - lastAddIntentAt < 350) return true;
     lastAddIntentCode = code;
     lastAddIntentAt = now;
+    const existed = readList().some((item) => item.code === code);
     const ok = forceAddCode(code);
     if (ok && input) {
       input.value = "";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.focus?.();
+    }
+    if (ok) {
+      showEntryStatus(existed ? `${code} 已在自選股，已幫你選中` : `${code} 已新增到下方清單`, existed ? "exists" : "added");
     }
     return ok;
   }
@@ -524,6 +538,10 @@
       #watchlist-view .watchlist-entry-form { display:grid; grid-template-columns:minmax(0,1fr)48px; gap:10px; margin:14px 0; }
       #watchlist-view .watchlist-entry-input { height:48px; border:1px solid rgba(119,146,184,.36); border-radius:8px; background:rgba(8,19,31,.92); color:#eef6ff; padding:0 14px; font-size:15px; font-weight:900; }
       #watchlist-view .watchlist-entry-add { width:48px; height:48px; border:0; border-radius:9px; background:linear-gradient(135deg,#f1b544,#f39a2f); color:#6d4212; font-size:26px; font-weight:950; cursor:pointer; }
+      #watchlist-view .watchlist-entry-status { min-height:18px; margin:-6px 0 10px; color:#92a3bb; font-size:12px; font-weight:900; }
+      #watchlist-view .watchlist-entry-status[data-status-kind="added"] { color:#24e58c; }
+      #watchlist-view .watchlist-entry-status[data-status-kind="exists"] { color:#f7c767; }
+      #watchlist-view .watchlist-entry-status[data-status-kind="warn"] { color:#ff815f; }
       #watchlist-view .watchlist-stock-list { display:grid; gap:8px; max-height:560px; overflow:auto; padding-right:4px; }
       #watchlist-view .watchlist-card { position:relative; display:grid; grid-template-columns:minmax(0,1fr)96px 22px 18px; align-items:center; gap:8px; border:1px solid rgba(226,178,87,.28); border-radius:8px; background:rgba(15,26,36,.92); color:#eaf1ff; padding:12px; cursor:pointer; }
       #watchlist-view .watchlist-card.selected { border-color:#ef6a23; box-shadow:inset 0 0 0 1px rgba(239,106,35,.4); }
