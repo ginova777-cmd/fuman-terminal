@@ -280,6 +280,7 @@
     }
     form?.classList.toggle("watchlist-limit-reached", atLimit);
     if (message || atLimit) showEntryStatus(message || `已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`, atLimit ? "warn" : "info");
+    else if (/已達\s*\d+\s*檔上限/.test(document.querySelector("#watchlist-entry-status")?.textContent || "")) showEntryStatus("", "info");
   }
 
   function addFromInput(anchor) {

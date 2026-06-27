@@ -142,6 +142,7 @@
         setStatus("請輸入四碼股票代號", "warn");
         return false;
       }
+      const existedBefore = readRows().some((row) => row.code === normalized);
       const shellAdd = window.FUMAN_WATCHLIST_FORCE_ADD_CODE;
       if (typeof shellAdd === "function") {
         try {
@@ -149,7 +150,14 @@
           if (ok) {
             lastBridgeAddAt = Date.now();
             setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
-            setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 120);
+            setTimeout(() => {
+              window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
+              const card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
+              setStatus(
+                card ? (existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`) : `${normalized} 新增後尚未同步，請重新整理自選股`,
+                card ? (existedBefore ? "exists" : "added") : "warn"
+              );
+            }, 120);
           }
           return ok;
         } catch (error) {
