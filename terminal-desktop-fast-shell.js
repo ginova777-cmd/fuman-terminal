@@ -1511,6 +1511,7 @@
     if (document.documentElement.dataset.fumanFastBundlePrimeReady === "1") return;
     document.documentElement.dataset.fumanFastBundlePrimeReady = "1";
     window.FUMAN_DESKTOP_FAST_BUNDLE_PRIME = (force = true) => primeDesktopFastBundle(Boolean(force), force ? "manual" : "cache");
+    primeDesktopFastBundle(false, "script");
     const schedule = () => {
       primeDesktopFastBundle(false, "boot");
       runIdle(() => {
