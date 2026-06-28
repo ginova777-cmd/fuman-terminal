@@ -231,6 +231,12 @@ if (!String(packageJson.scripts?.["verify:terminal-cold-start:strict"] || "").in
 if (!String(packageJson.scripts?.["verify:terminal-perfect"] || "").includes("verify:terminal-cold-start")) {
   issues.push("verify:terminal-perfect must include verify:terminal-cold-start");
 }
+if (!String(packageJson.scripts?.["monitor:terminal-cold-start"] || "").includes("scripts/monitor-terminal-cold-start-stability.js")) {
+  issues.push("package.json missing scripts.monitor:terminal-cold-start for cold-start stability monitoring");
+}
+if (!String(packageJson.scripts?.["verify:terminal-route-stress"] || "").includes("scripts/verify-terminal-route-switch-stress.js")) {
+  issues.push("package.json missing scripts.verify:terminal-route-stress for repeated tab switching stability");
+}
 const coldStartVerifierPath = path.join(ROOT, "scripts", "verify-terminal-cold-start-performance.js");
 if (!fs.existsSync(coldStartVerifierPath)) {
   issues.push("scripts/verify-terminal-cold-start-performance.js missing terminal cold-start performance gate");
@@ -238,6 +244,24 @@ if (!fs.existsSync(coldStartVerifierPath)) {
   const terminalColdStartVerifier = fs.readFileSync(coldStartVerifierPath, "utf8");
   for (const marker of ["no-sacrifice-live", "snapshot-first-strict", "STRICT_STRATEGY2_BUDGET_MS", "ROUTE_BUDGETS_MS", "FUMAN_COLD_START_ROUTES"]) {
     if (!terminalColdStartVerifier.includes(marker)) issues.push("verify-terminal-cold-start-performance.js missing " + marker);
+  }
+}
+const coldStartMonitorPath = path.join(ROOT, "scripts", "monitor-terminal-cold-start-stability.js");
+if (!fs.existsSync(coldStartMonitorPath)) {
+  issues.push("scripts/monitor-terminal-cold-start-stability.js missing cold-start stability monitor");
+} else {
+  const coldStartMonitor = fs.readFileSync(coldStartMonitorPath, "utf8");
+  for (const marker of ["FUMAN_COLD_MONITOR_ROUNDS", "p95Ms", "budgetMultiplier", "scripts/verify-terminal-cold-start-performance.js"]) {
+    if (!coldStartMonitor.includes(marker)) issues.push("monitor-terminal-cold-start-stability.js missing " + marker);
+  }
+}
+const routeStressPath = path.join(ROOT, "scripts", "verify-terminal-route-switch-stress.js");
+if (!fs.existsSync(routeStressPath)) {
+  issues.push("scripts/verify-terminal-route-switch-stress.js missing route switching stress gate");
+} else {
+  const routeStress = fs.readFileSync(routeStressPath, "utf8");
+  for (const marker of ["FUMAN_STRESS_LOOPS", "market-ai", "realtime-radar", "modeTabs <= 1", "aiPanels <= 1"]) {
+    if (!routeStress.includes(marker)) issues.push("verify-terminal-route-switch-stress.js missing " + marker);
   }
 }
 for (const scriptName of ["verify:mobile-layout", "verify:mobile-layout:live"]) {

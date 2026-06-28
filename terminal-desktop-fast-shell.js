@@ -3563,6 +3563,62 @@
       .catch(() => null);
   }
 
+  function readWatchlistInstantRows() {
+    try {
+      const raw = localStorage.getItem("fuman_watchlist") || localStorage.getItem("fuman_mobile_watchlist_v1") || "[]";
+      const rows = JSON.parse(raw);
+      return normalizeArray(rows).map((row) => ({
+        code: String(row?.code || row?.stockId || "").trim(),
+        name: String(row?.name || row?.stockName || row?.code || "").trim(),
+        reason: String(row?.reason || "自選股冷啟動快取").trim(),
+      })).filter((row) => row.code).slice(0, 20);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function renderWatchlistInstantRows() {
+    const panel = document.querySelector("#watchlist-view");
+    if (!panel) return false;
+    const rows = readWatchlistInstantRows();
+    const list = panel.querySelector("#watchlist-stocks");
+    const analysis = panel.querySelector("#watchlist-analysis");
+    const count = panel.querySelector("#watchlist-count");
+    const refresh = panel.querySelector("#watchlist-refresh");
+    if (count) count.textContent = `${rows.length}`;
+    if (refresh) refresh.textContent = `快取先顯示 ｜ ${new Date().toLocaleTimeString("zh-TW", { hour12: false })}`;
+    if (list) {
+      list.innerHTML = rows.length ? rows.map((row, index) => `
+        <article class="watchlist-card ${index === 0 ? "selected" : ""}" data-code="${escapeHtml(row.code)}" data-name="${escapeHtml(row.name || row.code)}">
+          <div class="watch-card-main">
+            <div class="watch-card-title">
+              <span class="watch-code">${escapeHtml(row.code)}</span>
+              <span class="watch-name">${escapeHtml(row.name || row.code)}</span>
+              <span class="watch-market-badge">自選</span>
+            </div>
+            <div class="watch-card-flow"><span>${escapeHtml(row.reason)}</span></div>
+          </div>
+          <div class="watch-card-price"><strong>--</strong><small>背景更新</small></div>
+        </article>
+      `).join("") : '<div class="watch-mobile-empty">尚未新增自選股，請輸入股票代號後點新增</div>';
+    }
+    if (analysis) {
+      const first = rows[0];
+      analysis.innerHTML = first ? `
+        <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
+          <section class="watch-action-row">
+            <label>股票代碼<input type="text" value="${escapeHtml(first.code)}" readonly></label>
+            <label>名稱<input type="text" value="${escapeHtml(first.name || first.code)}" readonly></label>
+          </section>
+          <section class="watch-analysis-grid">
+            <article><small>狀態</small><strong>快取先顯示</strong><p>rich shell 背景接手後會補完整技術、籌碼與提醒。</p></article>
+          </section>
+        </div>
+      ` : '<div class="watch-mobile-empty">點選股票查看 AI 個股判讀</div>';
+    }
+    return rows.length > 0;
+  }
+
   function clearDesktopMarketCachesAndReload(reason = "market") {
     const key = "fuman-desktop-market-fresh-reload:20260624-02";
     try {
@@ -3897,9 +3953,9 @@
 
   function primeMarketColdPayloads(force = false, reason = "boot") {
     const tasks = [
-      fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200).then((payload) => {
+      fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800).then((payload) => {
         if (payload?.sectors?.length) {
-          marketSnapshotFirstPayload = { ...payload, snapshotFirst: true };
+          marketSnapshotFirstPayload = { ...payload, snapshotFirst: true, firstPaint: true };
           paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload);
         }
       }),
@@ -4072,22 +4128,32 @@
         delay: delay == null ? (hasMarketAiPayload(state.ai) ? 90 : 220) : delay,
       });
     };
+    paint(true, 40);
     if (state.heatmap?.sectors?.length || state.radar || state.ai) {
-      window.setTimeout(() => paint(false, hasMarketAiPayload(state.ai) ? 40 : 160), 0);
+      window.setTimeout(() => paint(false, hasMarketAiPayload(state.ai) ? 30 : 70), 0);
+    } else if (!force) {
+      primeDesktopFastBundle(false, "market-ai-first-paint").then(() => {
+        if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+        state.heatmap = marketSnapshotFirstPayload || state.heatmap;
+        state.radar = marketRadarBundlePayload || state.radar;
+        state.ai = marketAiBundlePayload || state.ai;
+        if (state.heatmap?.sectors?.length || state.radar || state.ai) paint(false, hasMarketAiPayload(state.ai) ? 30 : 80);
+      });
     }
     const done = () => {
       settled += 1;
       if (settled >= 4) marketDesktopAiLoading = false;
     };
-    fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200)
+    fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800)
       .then((payload) => {
         if (payload?.sectors?.length) {
           marketSnapshotFirstPayload = {
             ...payload,
             snapshotFirst: true,
+            firstPaint: true,
           };
           state.heatmap = marketSnapshotFirstPayload;
-          if (!hasMarketAiPayload(state.ai)) paint(false, 160);
+          if (!hasMarketAiPayload(state.ai)) paint(false, 70);
         }
       })
       .finally(done);
@@ -4101,8 +4167,8 @@
     fetchMarketJson("/api/heatmap", 60, force, 6500)
       .then((payload) => {
         if (payload?.sectors?.length) {
-          state.heatmap = payload || {};
-          if (!hasMarketAiPayload(state.ai)) paint(false, 180);
+          state.heatmap = { ...(payload || {}), firstPaint: false };
+          if (!hasMarketAiPayload(state.ai)) paint(false, 120);
         }
       })
       .finally(done);
@@ -4179,6 +4245,13 @@
   function scheduleMarketDesktopModeHydrate(mode, force = false) {
     if (mode !== "ai") return;
     window.clearTimeout(window.__fumanMarketAiHydrateTimer || 0);
+    if (!force && !(marketSnapshotFirstPayload?.sectors?.length || marketAiBundlePayload || marketRadarBundlePayload)) {
+      primeDesktopFastBundle(false, "market-ai-mode").then(() => {
+        if (isMarketViewActive() && marketDesktopMode === "ai") {
+          scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, marketAiBundlePayload || {}, { delay: 40 });
+        }
+      });
+    }
     const delay = 40;
     window.__fumanMarketAiHydrateTimer = window.setTimeout(() => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
@@ -4219,6 +4292,15 @@
       if (event.key !== "Enter" && event.key !== " ") return;
       choose(event, "tabs-keydown");
     }, true);
+    if (document.documentElement.dataset.fumanMarketModeGlobalHandler !== "1") {
+      document.documentElement.dataset.fumanMarketModeGlobalHandler = "1";
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest?.("[data-market-mode]");
+        if (!button || !document.querySelector("#market-view")?.contains(button)) return;
+        event.preventDefault();
+        selectMarketDesktopMode(button.dataset.marketMode, "global-click");
+      }, true);
+    }
   }
 
   function restoreMarketDesktopMode() {
@@ -4473,12 +4555,13 @@
         done();
         return;
       }
-      fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200)
+      fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800)
         .then((payload) => {
           if (payload?.sectors?.length) {
             state.heatmap = {
               ...payload,
               snapshotFirst: true,
+              firstPaint: true,
             };
             marketSnapshotFirstPayload = state.heatmap;
             paint();
@@ -4487,6 +4570,16 @@
         .finally(done);
     };
     window.setTimeout(fetchHeatmap, (!force && !paintedFromMemory) ? 140 : 0);
+    if (!force) {
+      window.setTimeout(() => {
+        fetchMarketJson("/api/heatmap?snapshot=1", 60, false, 2600).then((payload) => {
+          if (payload?.sectors?.length && isMarketViewActive()) {
+            marketSnapshotFirstPayload = { ...payload, snapshotFirst: true, firstPaint: false };
+            paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload, state.market || {});
+          }
+        });
+      }, 850);
+    }
     fetchMarketJson("/api/market", 24, force, 2200)
       .then((payload) => {
         state.market = payload || {};
@@ -4507,7 +4600,8 @@
     }
     const mode = marketHeatmapGroups[marketHeatmapMode] ? marketHeatmapMode : "all";
     marketHeatmapMode = mode;
-    const rows = normalizeArray(marketHeatmapGroups[mode] || rawSectors).slice(0, mode === "all" ? 60 : 80);
+    const firstPaintLimit = payload?.firstPaint === true;
+    const rows = normalizeArray(marketHeatmapGroups[mode] || rawSectors).slice(0, firstPaintLimit && mode === "all" ? 36 : mode === "all" ? 60 : 80);
     if (!rows.length) return;
     marketHeatmapSectorRows = rows;
     setMarketHeatmapModeButtons(market, mode);
@@ -5770,6 +5864,7 @@
     }
     if (key === "watchlist|自選股") {
       removeFixedPageShell(key);
+      renderWatchlistInstantRows();
       ensureWatchlistShell().then((api) => {
         api?.render?.();
         if (typeof window.FUMAN_WATCHLIST_SHELL_FORCE_ADD === "function") {

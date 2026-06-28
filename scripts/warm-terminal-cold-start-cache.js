@@ -1,14 +1,28 @@
 const BASE_URL = (process.env.FUMAN_COLD_START_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_TERMINAL_WARM_TIMEOUT_MS || 20000);
+const args = process.argv.slice(2);
+const readArg = (name) => {
+  const prefix = `--${name}=`;
+  const inline = args.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = args.indexOf(`--${name}`);
+  return index >= 0 ? args[index + 1] || "" : "";
+};
+const PROFILE = readArg("profile") || process.env.FUMAN_TERMINAL_WARM_PROFILE || "core";
 
-const ENDPOINTS = [
+const CORE_ENDPOINTS = [
   ["/api/terminal-fast-bundle?canvas=1&compact=1&shell=1", "fast-bundle"],
   ["/api/market?canvas=1&compact=1&shell=1&limit=24", "market"],
-  ["/api/heatmap?snapshot=1&canvas=1&compact=1&shell=1&limit=60", "heatmap"],
+  ["/api/heatmap?snapshot=1&canvas=1&compact=1&shell=1&limit=36", "heatmap-first"],
   ["/api/market-ai-live?canvas=1&compact=1&shell=1&limit=20", "market-ai"],
-  ["/api/realtime-radar-latest?canvas=1&compact=1&shell=1&limit=1200&full=1", "realtime-radar"],
-  ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&live=1&today=1", "strategy2-live"],
+  ["/api/realtime-radar-latest?canvas=1&compact=1&shell=1&limit=80", "realtime-radar"],
   ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&snapshot=1&today=1", "strategy2-snapshot"],
+];
+
+const FULL_ENDPOINTS = [
+  ...CORE_ENDPOINTS,
+  ["/api/realtime-radar-latest?canvas=1&compact=1&shell=1&limit=1200&full=1", "realtime-radar-full"],
+  ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&live=1&today=1", "strategy2-live"],
   ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60", "strategy3"],
   ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "strategy4"],
   ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70", "strategy5"],
@@ -16,6 +30,8 @@ const ENDPOINTS = [
   ["/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60", "cb"],
   ["/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60", "warrant"],
 ];
+
+const ENDPOINTS = PROFILE === "full" ? FULL_ENDPOINTS : CORE_ENDPOINTS;
 
 function rowsOf(payload = {}) {
   if (Array.isArray(payload.matches)) return payload.matches.length;
@@ -75,7 +91,7 @@ async function warm(pathname, label) {
   }
   const slowest = results.slice().sort((a, b) => b.ms - a.ms).slice(0, 4)
     .map((row) => `${row.label}:${row.ms}ms`).join(" ");
-  console.log(`[warm-terminal] ok endpoints=${results.length} slowest=${slowest}`);
+  console.log(`[warm-terminal] ok profile=${PROFILE} endpoints=${results.length} slowest=${slowest}`);
 })().catch((error) => {
   console.error(`[warm-terminal] failed ${error.stack || error.message || error}`);
   process.exit(1);

@@ -115,7 +115,9 @@
     "verify:terminal-modules": "node scripts/verify-terminal-modules-contract.js",
     "warm:terminal-cold-start": "node --use-system-ca scripts/warm-terminal-cold-start-cache.js",
     "verify:terminal-cold-start": "npm run warm:terminal-cold-start && node --use-system-ca scripts/verify-terminal-cold-start-performance.js",
-    "verify:terminal-cold-start:strict": "npm run warm:terminal-cold-start && node --use-system-ca scripts/verify-terminal-cold-start-performance.js --strict-strategy2"
+    "verify:terminal-cold-start:strict": "npm run warm:terminal-cold-start && node --use-system-ca scripts/verify-terminal-cold-start-performance.js --strict-strategy2",
+    "monitor:terminal-cold-start": "node --use-system-ca scripts/monitor-terminal-cold-start-stability.js",
+    "verify:terminal-route-stress": "node --use-system-ca scripts/verify-terminal-route-switch-stress.js"
   },
   "engines": {
     "node": "24.x"
