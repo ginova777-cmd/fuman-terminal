@@ -930,6 +930,9 @@ for (const marker of [
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing full scan marker ${marker}`);
 }
+if (!/FUMAN_SCAN_RECEIPTS_WRITE_CODE_REPO/.test(fullScan) || !/\$writeCodeRepoReceipts/.test(fullScan) || !/runtime-only/.test(fullScan)) {
+  issues.push("run-full-scan.ps1 must write scan receipts to runtime only unless FUMAN_SCAN_RECEIPTS_WRITE_CODE_REPO=1 is explicitly set");
+}
 for (const marker of [
   "\"strategy3\"",
   "stale scan receipt",

@@ -14,7 +14,8 @@ $syncRoot = $PSScriptRoot
 $runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $logDir = Join-Path $runtimeRoot "logs"
 $receiptDir = Join-Path $runtimeRoot "data\scan-receipts"
-$syncReceiptDir = Join-Path $syncRoot "data\scan-receipts"
+$writeCodeRepoReceipts = ($env:FUMAN_SCAN_RECEIPTS_WRITE_CODE_REPO -eq "1") -or ($env:FUMAN_WRITE_CODE_REPO_DATA -eq "1")
+$syncReceiptDir = if ($writeCodeRepoReceipts) { Join-Path $syncRoot "data\scan-receipts" } else { $null }
 $lockFile = Join-Path $runtimeRoot "locks\full-scan.lock"
 $log = Join-Path $logDir ("full-scan-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $nodeExe = "C:\Program Files\nodejs\node.exe"
@@ -24,7 +25,9 @@ $env:NOTIFY_FAST_MODE = "1"
 $env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
 $env:NOTIFY_PUSH_RETRIES = "1"
 
-New-Item -ItemType Directory -Force -Path $logDir, $receiptDir, $syncReceiptDir, (Split-Path -Parent $lockFile) | Out-Null
+$initDirs = @($logDir, $receiptDir, (Split-Path -Parent $lockFile))
+if ($syncReceiptDir) { $initDirs += $syncReceiptDir }
+New-Item -ItemType Directory -Force -Path $initDirs | Out-Null
 
 function Write-ScanLog($message) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $message
@@ -92,7 +95,7 @@ function Get-ReceiptStatus($exitCode, $tier, $payload, $warnings) {
 function Write-Receipt($receipt) {
   $file = "{0}.json" -f $receipt.strategy
   Write-JsonFile (Join-Path $receiptDir $file) $receipt
-  Write-JsonFile (Join-Path $syncReceiptDir $file) $receipt
+  if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir $file) $receipt }
   $receipts.Add($receipt) | Out-Null
 }
 
@@ -310,6 +313,7 @@ function Invoke-DesktopRouteSnapshotWrite {
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
+  Write-ScanLog "scan receipts mode=$(if ($syncReceiptDir) { 'runtime+code-repo' } else { 'runtime-only' })"
 
   if (-not $SkipRealtime) {
     Invoke-ScanTask "realtime-radar" "realtime radar raw refresh" "optional" "scripts\scan-realtime-radar-cache.js" (Join-Path $runtimeRoot "data\realtime-radar-latest.json") @{ REALTIME_RADAR_PATROL_INTERVAL_MS = "3000" }
@@ -356,7 +360,7 @@ try {
     log = $log
   }
   Write-JsonFile (Join-Path $receiptDir "scan-summary.json") $summary
-  Write-JsonFile (Join-Path $syncReceiptDir "scan-summary.json") $summary
+  if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir "scan-summary.json") $summary }
 
   if ($criticalFailures.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
     throw "Critical scans failed: $($criticalFailures -join '; ')"
