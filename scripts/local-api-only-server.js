@@ -6,6 +6,7 @@ const { URL } = require("url");
 const root = path.resolve(__dirname, "..");
 const host = process.env.FUMAN_LOCAL_HOST || "127.0.0.1";
 const port = Number(process.env.FUMAN_LOCAL_PORT || process.env.PORT || 8787);
+const proxyApiTo = String(process.env.FUMAN_LOCAL_PROXY_API_TO || "").replace(/\/+$/, "");
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -64,6 +65,10 @@ function safeStaticPath(pathname) {
 }
 
 async function handleApi(request, response, parsedUrl) {
+  if (proxyApiTo) {
+    await proxyApi(request, response, parsedUrl);
+    return;
+  }
   const apiName = parsedUrl.pathname.replace(/^\/api\//, "").replace(/\/+$/, "");
   if (!/^[a-zA-Z0-9._-]+$/.test(apiName)) {
     response.statusCode = 404;
@@ -93,6 +98,29 @@ async function handleApi(request, response, parsedUrl) {
     if (!response.writableEnded) {
       response.end(JSON.stringify({ ok: false, error: error?.message || String(error) }));
     }
+  }
+}
+
+async function proxyApi(request, response, parsedUrl) {
+  const target = new URL(`${parsedUrl.pathname}${parsedUrl.search}`, proxyApiTo);
+  try {
+    const upstream = await fetch(target, {
+      headers: {
+        Accept: request.headers.accept || "application/json",
+        "User-Agent": "fuman-local-api-only-proxy",
+      },
+    });
+    response.statusCode = upstream.status;
+    for (const header of ["content-type", "cache-control"]) {
+      const value = upstream.headers.get(header);
+      if (value) response.setHeader(header, value);
+    }
+    response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.end(Buffer.from(await upstream.arrayBuffer()));
+  } catch (error) {
+    response.statusCode = 502;
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.end(JSON.stringify({ ok: false, error: "local_api_proxy_failed", message: error?.message || String(error) }));
   }
 }
 
@@ -128,4 +156,5 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`[local-api-only] listening http://${host}:${port}`);
   console.log(`[local-api-only] root ${root}`);
+  if (proxyApiTo) console.log(`[local-api-only] proxy API to ${proxyApiTo}`);
 });

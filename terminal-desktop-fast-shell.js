@@ -3544,14 +3544,18 @@
       fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 2200).then((payload) => {
         if (payload?.sectors?.length) marketSnapshotFirstPayload = { ...payload, snapshotFirst: true };
       }),
-      fetchMarketJson("/api/realtime-radar-latest", 80, force, 4200).then((payload) => {
-        rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
-      }),
-      fetchMarketJson("/api/market-ai-live", 20, force, 5200).then((payload) => {
-        if (payload && typeof payload === "object") marketAiBundlePayload = payload;
-      }),
       fetchMarketJson("/api/market", 24, force, 2200),
     ];
+    if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
+      tasks.push(
+        fetchMarketJson("/api/realtime-radar-latest", 80, force, 4200).then((payload) => {
+          rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
+        }),
+        fetchMarketJson("/api/market-ai-live", 20, force, 5200).then((payload) => {
+          if (payload && typeof payload === "object") marketAiBundlePayload = payload;
+        }),
+      );
+    }
     return Promise.allSettled(tasks);
   }
 
@@ -3796,6 +3800,7 @@
   function syncMarketAiDesktopModeIfVisible() {
     const market = document.querySelector("#market-view");
     const ai = market?.querySelector?.("[data-market-api-ai]");
+    if (document.documentElement.dataset.fumanMarketDesktopMode && document.documentElement.dataset.fumanMarketDesktopMode !== "ai") return;
     const shouldSync = marketDesktopMode === "ai"
       || document.documentElement.dataset.fumanMarketDesktopMode === "ai"
       || (ai && ai.hidden === false && market?.classList.contains("market-ai-mode"));
@@ -3825,9 +3830,15 @@
 
   function selectMarketDesktopMode(mode, source = "market-mode") {
     const nextMode = mode === "ai" ? "ai" : "overview";
-    applyMarketDesktopMode(nextMode);
     document.documentElement.dataset.fumanMarketDesktopMode = nextMode;
     document.documentElement.dataset.fumanMarketDesktopModeSource = source;
+    if (nextMode !== "ai") {
+      window.clearTimeout(window.__fumanMarketAiHydrateTimer || 0);
+      window.clearTimeout(marketAiRenderTimer || 0);
+      marketAiRenderRequest = null;
+      marketDesktopAiLoading = false;
+    }
+    applyMarketDesktopMode(nextMode);
     scheduleMarketDesktopModeHydrate(nextMode, true);
   }
   window.FUMAN_SELECT_MARKET_DESKTOP_MODE = selectMarketDesktopMode;
@@ -4479,8 +4490,14 @@
     if (!isMarketViewActive() || marketApiOnlyLoading || isInteractionHoldActive()) return;
     restoreMarketDesktopMode();
     marketApiOnlyLoading = true;
-    const state = { market: null, heatmap: null, radar: null, ai: null };
-    let pending = 5;
+    const aiMode = marketDesktopMode === "ai";
+    const state = {
+      market: null,
+      heatmap: null,
+      radar: aiMode ? marketRadarBundlePayload : null,
+      ai: aiMode ? marketAiBundlePayload : null,
+    };
+    let pending = aiMode ? 5 : 3;
     const done = () => {
       pending -= 1;
       if (pending <= 0) marketApiOnlyLoading = false;
@@ -4504,13 +4521,15 @@
       marketApiOnlySignature = nextSignature;
       renderMarketOverviewApi(state.market || {}, state.heatmap || {});
       if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
-      scheduleMarketApiAiRender(
-        state.heatmap || marketSnapshotFirstPayload || {},
-        state.radar || marketRadarBundlePayload || {},
-        state.ai || marketAiBundlePayload || {},
-        { delay: hasMarketAiPayload(state.ai || marketAiBundlePayload) ? 110 : 240 },
-      );
-      renderMarketApiRadar(state.radar || {});
+      if (marketDesktopMode === "ai") {
+        scheduleMarketApiAiRender(
+          state.heatmap || marketSnapshotFirstPayload || {},
+          state.radar || marketRadarBundlePayload || {},
+          state.ai || marketAiBundlePayload || {},
+          { delay: hasMarketAiPayload(state.ai || marketAiBundlePayload) ? 110 : 240 },
+        );
+        renderMarketApiRadar(state.radar || {});
+      }
     };
     fetchMarketJson("/api/market", 24, force, 6500)
       .then((payload) => {
@@ -4539,18 +4558,20 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
-      .then((payload) => {
-        state.radar = payload || {};
-        renderIfChanged(true);
-      })
-      .finally(done);
-    fetchMarketJson("/api/market-ai-live", 20, force, 5200)
-      .then((payload) => {
-        state.ai = payload || {};
-        renderIfChanged(true);
-      })
-      .finally(done);
+    if (aiMode) {
+      fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
+        .then((payload) => {
+          state.radar = payload || {};
+          renderIfChanged(true);
+        })
+        .finally(done);
+      fetchMarketJson("/api/market-ai-live", 20, force, 5200)
+        .then((payload) => {
+          state.ai = payload || {};
+          renderIfChanged(true);
+        })
+        .finally(done);
+    }
   }
 
   window.FUMAN_MARKET_API_HYDRATE = function hydrateMarketApiOnly(force = true) {

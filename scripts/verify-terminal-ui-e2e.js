@@ -1284,6 +1284,19 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
           last.blockerMatches = [...new Set([...(last.blockerMatches || []), stability.blocker || "market AI layout jumped after ready"])];
         }
       }
+      if (last.ok && (route.key === "market-ai" || route.key === "heatmap" || route.key === "market")) {
+        const finalMode = route.key === "market-ai" ? "ai" : "overview";
+        const toggle = await collectMarketModeToggleContract(cdp, finalMode).catch((error) => ({
+          ok: false,
+          error: error.message,
+          blocker: `market mode toggle contract failed: ${error.message}`,
+        }));
+        last.marketModeToggle = toggle;
+        if (!toggle.ok) {
+          last.ok = false;
+          last.blockerMatches = [...new Set([...(last.blockerMatches || []), toggle.blocker || "market overview/AI mode cannot toggle freely"])];
+        }
+      }
       if (last.ok && !(last.blockerMatches || []).length) return last;
     }
     await sleep(900);
@@ -1340,6 +1353,65 @@ async function collectMarketAiLayoutStability(cdp) {
       blocker: ok ? "" : `market AI layout jumped top=${panelTopDelta}px hero=${heroTopDelta}px height=${panelHeightDelta}px hot=${hotHeightDelta}px`,
     };
   }, null, 10000);
+}
+
+async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
+  return evaluate(cdp, async (expectedFinalMode) => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
+    const visible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden" && el.hidden !== true;
+    };
+    const market = document.querySelector("#market-view");
+    if (!market) return { ok: false, blocker: "market view missing for mode toggle contract", steps: [] };
+    const read = (expectedMode, label) => {
+      const activeButton = market.querySelector(".market-mode-tabs [data-market-mode].active");
+      const aiPanel = market.querySelector("[data-market-api-ai],.market-ai-panel");
+      const metricCards = [...market.querySelectorAll(".metric-grid .metric-card")].filter(visible);
+      const sectorCards = [...market.querySelectorAll(".sector-section .sector-card")].filter(visible);
+      const state = {
+        label,
+        expectedMode,
+        activeButton: activeButton?.dataset?.marketMode || "",
+        datasetMode: document.documentElement.dataset.fumanMarketDesktopMode || "",
+        className: market.className || "",
+        title: text(market.querySelector(".page-header h1")),
+        aiVisible: visible(aiPanel),
+        heroVisible: visible(market.querySelector(".market-ai-hero-board")),
+        metricCards: metricCards.length,
+        firstMetricText: text(metricCards[0]).slice(0, 90),
+        sectorCards: sectorCards.length,
+      };
+      state.ok = expectedMode === "ai"
+        ? state.activeButton === "ai" && /market-ai-mode/.test(state.className) && state.aiVisible && /AI 判讀/.test(state.title)
+        : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 1 && /加權/.test(state.firstMetricText) && state.sectorCards >= 8;
+      return state;
+    };
+    const clickMode = async (mode, label) => {
+      const button = market.querySelector(`.market-mode-tabs [data-market-mode="${mode}"]`);
+      if (!button) return { ok: false, label, expectedMode: mode, blocker: `market mode button missing: ${mode}` };
+      button.click();
+      await wait(mode === "ai" ? 1200 : 520);
+      return read(mode, label);
+    };
+    const steps = [];
+    steps.push(await clickMode("ai", "ai-1"));
+    steps.push(await clickMode("overview", "overview-1"));
+    steps.push(await clickMode("ai", "ai-2"));
+    steps.push(await clickMode("overview", "overview-2"));
+    if (expectedFinalMode === "ai") steps.push(await clickMode("ai", "restore-ai"));
+    else steps.push(read("overview", "restore-overview"));
+    const failed = steps.find((item) => !item.ok);
+    return {
+      ok: !failed,
+      finalMode: expectedFinalMode,
+      steps,
+      blocker: failed ? `market mode toggle failed at ${failed.label}: active=${failed.activeButton || ""} classes=${failed.className || ""} title=${failed.title || ""}` : "",
+    };
+  }, finalMode, 15000);
 }
 
 async function runDesktopMode(browser, theme) {
