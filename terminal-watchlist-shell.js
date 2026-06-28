@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-05";
+  const VERSION = "watchlist-rich-shell-20260628-06";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -17,6 +17,7 @@
   let installed = false;
   let selectedCode = "";
   let metaPromise = null;
+  let memoryRows = [];
   const metaMap = new Map();
   const quoteMap = new Map();
   const metaHydratedCodes = new Set();
@@ -85,14 +86,17 @@
 
   function readRows() {
     const raw = parseStoredRows(WATCHLIST_KEY);
-    const fallback = raw.length ? raw : parseStoredRows(MOBILE_WATCHLIST_KEY);
-    const normalized = uniqueRows(fallback);
-    if (fallback.length !== normalized.length || fallback.length > WATCHLIST_MAX_ITEMS) writeRows(normalized);
+    const stored = raw.length ? raw : parseStoredRows(MOBILE_WATCHLIST_KEY);
+    const merged = memoryRows.length ? [...memoryRows, ...stored] : stored;
+    const normalized = uniqueRows(merged);
+    memoryRows = normalized;
+    if (stored.length !== normalized.length || stored.length > WATCHLIST_MAX_ITEMS) writeRows(normalized);
     return normalized;
   }
 
   function writeRows(rows) {
     const normalized = uniqueRows(rows);
+    memoryRows = normalized;
     const value = JSON.stringify(normalized);
     try {
       localStorage.setItem(WATCHLIST_KEY, value);
@@ -309,13 +313,14 @@
       return false;
     }
     if (!existed) {
-      rows = writeRows([{ ...fallbackRow(code), source }, ...rows]);
+      rows = writeRows([...rows, { ...fallbackRow(code), source }]);
       showStatus(`${code} 已新增到下方清單`, "added");
     } else {
       showStatus(`${code} 已在自選股，已幫你選中`, "exists");
     }
     selectedCode = code;
     render();
+    scrollCardIntoView(code);
     hydrateMeta(code);
     hydrateQuote(code);
     return true;
@@ -349,10 +354,11 @@
         showStatus(`已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`, "warn");
         return false;
       }
-      writeRows([{ ...fallbackRow(target), ...seed, code: target }, ...rows]);
+      writeRows([...rows, { ...fallbackRow(target), ...seed, code: target }]);
     }
     selectedCode = target;
     render();
+    scrollCardIntoView(target);
     return Boolean(document.querySelector(`.watchlist-card[data-code="${target}"]`));
   }
 
@@ -391,6 +397,14 @@
     renderAnalysis(active);
     rows.slice(0, 10).forEach((row) => {
       if (!metaHydratedCodes.has(row.code) && !metaHydratingCodes.has(row.code)) hydrateMeta(row.code);
+    });
+  }
+
+  function scrollCardIntoView(code) {
+    const target = normalizeCode(code);
+    if (!target) return;
+    requestAnimationFrame(() => {
+      document.querySelector(`.watchlist-card[data-code="${target}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     });
   }
 

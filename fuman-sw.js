@@ -3,6 +3,8 @@ const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
+const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260628-06";
+const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-05";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
@@ -23,7 +25,7 @@ const STATIC_ASSETS = [
   "/terminal-member-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
-  "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-05",
+  "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-06",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260623-09",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260623-09",
@@ -98,6 +100,7 @@ self.addEventListener("activate", (event) => {
         .filter((key) => key.startsWith("fuman-terminal-sw-") && (!key.startsWith(CACHE_VERSION) || key.endsWith("-data")))
         .map((key) => caches.delete(key))))
       .then(() => purgeOldMarketOverviewAssets())
+      .then(() => purgeOldWatchlistAssets())
       .then(() => prefetchCoreDataAssets())
       .then(() => self.clients.claim())
   );
@@ -221,6 +224,17 @@ async function purgeOldMarketOverviewAssets() {
   }));
 }
 
+async function purgeOldWatchlistAssets() {
+  const cache = await caches.open(STATIC_CACHE);
+  const requests = await cache.keys();
+  await Promise.allSettled(requests.map((request) => {
+    const url = new URL(request.url);
+    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH)) return cache.delete(request);
+    if (url.pathname === "/terminal-hotfix.js" && !url.search.includes(WATCHLIST_HOTFIX_BRIDGE_EPOCH)) return cache.delete(request);
+    return undefined;
+  }));
+}
+
 async function dataStaleWhileRevalidate(request) {
   const cache = await caches.open(DATA_CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
@@ -271,6 +285,7 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "CLEAR_DATA_CACHE") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchCoreDataAssets()));
   if (event.data && event.data.type === "CLEAR_DATA_CACHE_LOW_POWER") event.waitUntil(caches.delete(DATA_CACHE).then(() => prefetchLowPowerDataAssets()));
   if (event.data && event.data.type === "CLEAR_MARKET_OVERVIEW_CACHE") event.waitUntil(purgeOldMarketOverviewAssets());
+  if (event.data && event.data.type === "CLEAR_WATCHLIST_CACHE") event.waitUntil(purgeOldWatchlistAssets());
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;

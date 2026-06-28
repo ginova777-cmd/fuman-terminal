@@ -666,7 +666,7 @@ async function afterDesktopRouteActivate(cdp, route) {
         return { ok: shellReady && containerReady && storageOk && cardOk && !/尚未同步/.test(status), bridgeReady, shellReady, containerReady, storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
       }, code, 15000, 300);
     };
-    const addedCodes = ["6770", "8112", "2327", "9904"];
+    const addedCodes = ["2324", "6770", "8112", "2327", "9904"];
     for (const addedCode of addedCodes) {
       await addWatchlistCode(addedCode);
     }
@@ -677,7 +677,7 @@ async function afterDesktopRouteActivate(cdp, route) {
       const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
       return { ok: cards.length === 1 && (selected || /已在自選股/.test(status)) && !/尚未同步/.test(status), cards: cards.length, selected, status };
     }, null, 15000, 300);
-    for (const addedCode of ["2317", "2303", "2330", "2454", "2603"]) {
+    for (const addedCode of ["2317", "2303", "2330", "2454"]) {
       await addWatchlistCode(addedCode);
     }
     await waitFor(cdp, () => {
@@ -692,6 +692,8 @@ async function afterDesktopRouteActivate(cdp, route) {
           && cards.length === 10
           && codes.includes("6770")
           && cards.includes("6770")
+          && codes.includes("2324")
+          && cards.includes("2324")
           && new Set(codes).size === 10
           && new Set(cards).size === 10
           && /^10(?:\/10)?$/.test(countText)

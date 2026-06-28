@@ -77,10 +77,11 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260628-04";
+    window.__fumanWatchlistAddBridge = "20260628-05";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const maxRows = 10;
+    let bridgeRows = [];
     const normalizeCode = (value) => String(value || "").trim().match(/\d{4}/)?.[0] || "";
     const normalizeRows = (rows) => Array.isArray(rows)
       ? rows.map((row) => ({
@@ -90,13 +91,17 @@
       : [];
     const readRows = () => {
       try {
-        return normalizeRows(JSON.parse(window.localStorage?.getItem(watchlistKey) || "[]"));
+        const stored = normalizeRows(JSON.parse(window.localStorage?.getItem(watchlistKey) || "[]"));
+        const merged = bridgeRows.length ? [...bridgeRows, ...stored] : stored;
+        bridgeRows = normalizeRows(merged).slice(0, maxRows);
+        return bridgeRows;
       } catch (error) {
-        return [];
+        return bridgeRows;
       }
     };
     const writeRows = (rows) => {
       const normalized = normalizeRows(rows).slice(0, maxRows);
+      bridgeRows = normalized;
       const value = JSON.stringify(normalized);
       try {
         window.localStorage?.setItem(watchlistKey, value);
@@ -164,7 +169,7 @@
       let rows = readRows();
       if (!rows.some((row) => row.code === normalized)) {
         if (rows.length >= maxRows) return false;
-        rows = writeRows([{ code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }, ...rows]);
+        rows = writeRows([...rows, { code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }]);
       }
       try {
         const shell = window.FUMAN_WATCHLIST_SHELL_INSTANCE;
@@ -208,7 +213,7 @@
       }
       const nextRows = existed
         ? rows
-        : [{ code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }, ...rows];
+        : [...rows, { code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }];
       writeRows(nextRows);
       fallbackRender(nextRows, normalized);
       setStatus(existed ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existed ? "exists" : "added");
