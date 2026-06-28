@@ -1276,6 +1276,8 @@ function collectMobileStats(route) {
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
     const addInput = content.querySelector("#mobile-watch-input");
     const addButton = content.querySelector("[data-mobile-watch-add]");
+    const hotfixRoot = content.querySelector('[data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-01"]');
+    const hotfixReady = typeof window.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2 === "function";
     const watchCodes = watchRows.map((row) => text(row).match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
     const storageCodes = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
       try {
@@ -1288,6 +1290,7 @@ function collectMobileStats(route) {
     const statusTextForWatch = statusText || panelText;
     if (watchRows.length !== 10) contractBlockers.push(`mobile watch tab must render exactly 10 watch rows actual=${watchRows.length}`);
     if (!addInput || !addButton) contractBlockers.push("mobile watch tab add input/button missing");
+    if (!hotfixReady || !hotfixRoot) contractBlockers.push(`mobile watch tab must use V2 direct-render hotfix ready=${hotfixReady} root=${Boolean(hotfixRoot)}`);
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2327")) contractBlockers.push(`mobile watch manual add code 2327 missing actual=${watchCodes.join(",")}`);

@@ -85,6 +85,8 @@ function checkMobileShell() {
   requireText(mobile, 'html[data-sun="1"]', "mobile sunlight selector must quote attribute value so phones apply it");
   requireText(mobile, "FUMAN_MOBILE_ADD_WATCH", "mobile watchlist must expose a shared add-watch pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD", "mobile watchlist must expose a timeout-safe manual add pipeline");
+  requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD_V2", "mobile watchlist must expose the direct-render V2 manual add pipeline");
+  requireText(mobile, "mobile-watch-v2-direct-render-20260628-01", "mobile watchlist must carry the direct-render hotfix marker");
   requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
   requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
   requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");
@@ -184,6 +186,14 @@ async function checkLive() {
   }
   if (mobile.text.includes("/data/mobile-boot.json")) {
     pushIssue("live mobile shell must not reference /data/mobile-boot.json");
+  }
+  if (!mobile.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobile.text.includes("mobile-watch-v2-direct-render-20260628-01")) {
+    pushIssue("live /mobile must include the direct-render mobile watchlist V2 hotfix");
+  }
+  const mobilePage = await fetchLive("api/mobile-page");
+  if (!mobilePage.response.ok) pushIssue(`live /api/mobile-page returned ${mobilePage.response.status}`);
+  if (!mobilePage.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobilePage.text.includes("mobile-watch-v2-direct-render-20260628-01")) {
+    pushIssue("live /api/mobile-page must include the direct-render mobile watchlist V2 hotfix");
   }
   const boot = await fetchLive("api/mobile-boot");
   if (!boot.response.ok) pushIssue(`live /api/mobile-boot returned ${boot.response.status}`);

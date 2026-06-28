@@ -71,4 +71,239 @@
 (()=>{document.addEventListener("click",e=>{const b=e.target.closest?.("[data-ai-watch-code]");if(!b||b.disabled)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const old=b.textContent||"加入自選",code=b.dataset.aiWatchCode||"",name=b.dataset.aiWatchName||"",row=(b.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText||"").replace(/\s+/g," ").slice(0,220);b.disabled=!0;b.textContent="加入中";Promise.resolve(self.FUMAN_MOBILE_ADD_WATCH?.(code,name,row)).then(ok=>{b.textContent=ok?"已加入自選":old;b.disabled=!!ok;b.dataset.watchAdded=ok?"1":"0"}).catch(()=>{b.disabled=!1;b.textContent=old})},!0)})();
 </script><script>
 (()=>{const w="fuman_watchlist",l="fuman_mobile_watchlist_v1",meta=new Map;let metaPromise=null;const code4=v=>String(v||"").match(/\d{4}/)?.[0]||"",rowsOf=p=>Array.isArray(p)?p:[p?.stocks,p?.rows,p?.data,p?.items].find(Array.isArray)||[],norm=r=>{const code=code4(r?.code||r?.Code||r?.symbol||r?.stock_id||r?.stockNo);if(!code)return null;const name=String(r?.name||r?.Name||r?.stockName||r?.stock_name||r?.["證券名稱"]||r?.["名稱"]||"").trim();const market=String(r?.market||r?.Market||r?.exchange||r?.type||r?.["市場"]||r?.["上市櫃"]||"").trim();return code&&name&&name!==code&&market?{code,name,market}:null},status=msg=>{const s=document.querySelector("#mobile-watch-status");if(s)s.textContent=msg},toast=msg=>{let n=document.querySelector(".mobile-toast");if(!n){n=document.createElement("div");n.className="mobile-toast";document.body.appendChild(n)}n.textContent=msg;clearTimeout(toast.t);toast.t=setTimeout(()=>n.remove(),1400)},fetchJson=(url,ms=3200)=>new Promise((ok,fail)=>{const ac=new AbortController,t=setTimeout(()=>{ac.abort();fail(Error("timeout"))},ms);fetch(url+(url.includes("?")?"&":"?")+"t="+Date.now(),{cache:"no-store",signal:ac.signal}).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}).then(v=>{clearTimeout(t);ok(v)}).catch(e=>{clearTimeout(t);fail(e)})});async function loadMeta(){if(meta.size)return meta;if(metaPromise)return metaPromise;metaPromise=(async()=>{for(const url of ["/data/stocks-index.json","/data/stocks-slim.json"]){try{const p=await fetchJson(url);for(const row of rowsOf(p)){const m=norm(row);if(m)meta.set(m.code,m)}if(meta.size>1000)break}catch{}}return meta})();return metaPromise}function watches(){try{const a=JSON.parse(localStorage.getItem(w)||localStorage.getItem(l)||"[]");return Array.isArray(a)?a.slice(0,10):[]}catch{return[]}}function save(a){const out=[],seen=new Set;for(const x of Array.isArray(a)?a:[]){const code=code4(x?.code||x?.symbol||x);if(!code||seen.has(code))continue;seen.add(code);out.push({...x,code,name:String(x?.name||x?.Name||code).trim()});if(out.length>=10)break}const value=JSON.stringify(out);localStorage.setItem(w,value);localStorage.setItem(l,value);return out}async function addManual(raw,btn){const code=code4(raw);if(!code){status("請輸入四碼股票代號");toast("請輸入四碼股票代號");return!1}let list=watches();if(list.some(x=>String(x.code)===code)){status(`${code} 已在自選股`);toast(`${code} 已在自選股`);document.querySelector('#tabs button[data-fragment="watch"]')?.click();return!0}if(list.length>=10){status("自選股已達 10 檔上限");toast("自選股已達 10 檔上限");return!1}status(`${code} 正在確認台股代號`);if(btn)btn.disabled=!0;let m=null;try{await loadMeta();m=meta.get(code)}catch{}if(btn)btn.disabled=!1;if(!m){status(`${code} 不是有效上市/上櫃台股代號`);toast(`${code} 不是有效台股代號`);return!1}save([{code,name:m.name,market:m.market,reason:"手機手動新增",addedAt:new Date().toISOString()},...list]);status(`${code} ${m.name} 已加入自選`);toast(`+自選 ${code}`);document.querySelector('#tabs button[data-fragment="watch"]')?.click();return!0}document.addEventListener("click",e=>{const b=e.target.closest?.("[data-mobile-watch-add]");if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const input=document.querySelector("#mobile-watch-input");addManual(input?.value,b).then(ok=>{if(ok&&input&&!input.disabled)input.value=""})},!0);document.addEventListener("keydown",e=>{const input=e.target.closest?.("#mobile-watch-input");if(!input||e.key!=="Enter")return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();addManual(input.value,document.querySelector("[data-mobile-watch-add]")).then(ok=>{if(ok&&!input.disabled)input.value=""})},!0);self.FUMAN_MOBILE_MANUAL_WATCH_ADD=addManual;})();
+</script><script>
+(() => {
+  const HOTFIX = "mobile-watch-v2-direct-render-20260628-01";
+  const KEY = "fuman_watchlist";
+  const MOBILE_KEY = "fuman_mobile_watchlist_v1";
+  const meta = new Map();
+  let metaPromise = null;
+  let lastMessage = "";
+  const code4 = (value) => String(value || "").match(/\d{4}/)?.[0] || "";
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  const rowsOf = (payload) => Array.isArray(payload) ? payload : [payload?.stocks, payload?.rows, payload?.data, payload?.items].find(Array.isArray) || [];
+  const norm = (row) => {
+    const code = code4(row?.code || row?.Code || row?.symbol || row?.stock_id || row?.stockNo);
+    if (!code) return null;
+    const name = String(row?.name || row?.Name || row?.stockName || row?.stock_name || row?.["證券名稱"] || row?.["名稱"] || "").trim();
+    const market = String(row?.market || row?.Market || row?.exchange || row?.type || row?.["市場"] || row?.["上市櫃"] || "").trim();
+    return name && name !== code && market ? { code, name, market } : null;
+  };
+  function fetchJson(url, timeoutMs = 2800) {
+    return new Promise((resolve, reject) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => {
+        controller.abort();
+        reject(Error("timeout"));
+      }, timeoutMs);
+      fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, { cache: "no-store", signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) throw Error(String(response.status));
+          return response.json();
+        })
+        .then((payload) => {
+          clearTimeout(timer);
+          resolve(payload);
+        })
+        .catch((error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+    });
+  }
+  async function loadMeta() {
+    if (meta.size) return meta;
+    if (metaPromise) return metaPromise;
+    metaPromise = (async () => {
+      for (const url of ["/data/stocks-index.json", "/data/stocks-slim.json", "/api/stocks?watchlist=1"]) {
+        try {
+          const payload = await fetchJson(url);
+          for (const row of rowsOf(payload)) {
+            const item = norm(row);
+            if (item) meta.set(item.code, item);
+          }
+          if (meta.size > 1000) break;
+        } catch {}
+      }
+      return meta;
+    })();
+    return metaPromise;
+  }
+  function readList() {
+    try {
+      const rows = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY) || "[]");
+      return Array.isArray(rows) ? rows.slice(0, 10) : [];
+    } catch {
+      return [];
+    }
+  }
+  function writeList(rows) {
+    const next = [];
+    const seen = new Set();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const code = code4(row?.code || row?.symbol || row);
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      next.push({
+        ...row,
+        code,
+        name: String(row?.name || row?.Name || code).trim(),
+        reason: String(row?.reason || "手機自選股新增"),
+      });
+      if (next.length >= 10) break;
+    }
+    const value = JSON.stringify(next);
+    localStorage.setItem(KEY, value);
+    localStorage.setItem(MOBILE_KEY, value);
+    return next;
+  }
+  function toast(message) {
+    let node = document.querySelector(".mobile-toast");
+    if (!node) {
+      node = document.createElement("div");
+      node.className = "mobile-toast";
+      document.body.appendChild(node);
+    }
+    node.textContent = message;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => node.remove(), 1400);
+  }
+  function setShellCount(rows = readList()) {
+    const status = document.querySelector("#status");
+    if (status) {
+      status.dataset.freshness = "fresh";
+      status.textContent = `自選 ${rows.length}`;
+    }
+  }
+  function renderWatch(message = lastMessage) {
+    const content = document.querySelector("#content");
+    if (!content) return;
+    const rows = readList();
+    const atLimit = rows.length >= 10;
+    lastMessage = message || "";
+    setShellCount(rows);
+    const form = `<article class="mobile-terminal-head"><strong>自選</strong><p>${atLimit ? "已達 10 檔上限" : "輸入四碼台股代號新增"}</p><div class="watch-add"><input id="mobile-watch-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="${atLimit ? "已達上限" : "股票代碼"}" ${atLimit ? "disabled" : ""}><button type="button" data-mobile-watch-add ${atLimit ? "disabled" : ""}>新增</button></div><div class="watch-status" id="mobile-watch-status">${esc(lastMessage)}</div></article>`;
+    const list = rows.length
+      ? `<section class="mobile-terminal-list">${rows.map((row) => `<article class="watch-row"><div><h4>${esc(row.code)} ${esc(row.name)}</h4><small>${esc(row.reason || row.addedAt || "")}</small></div><button type="button" data-watch-remove="${esc(row.code)}">移除</button></article>`).join("")}</section>`
+      : '<div class="empty-state">尚未加入。</div>';
+    content.innerHTML = `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="watch" data-mobile-watch-hotfix="${HOTFIX}">${form}${list}</section>`;
+  }
+  async function resolveStock(code, fallbackName) {
+    const name = String(fallbackName || "").trim();
+    if (name && name !== code) return { code, name, market: "mobile-strategy" };
+    await loadMeta();
+    return meta.get(code) || null;
+  }
+  async function addStock(rawCode, options = {}) {
+    const code = code4(rawCode);
+    const render = options.render !== false;
+    const button = options.button || null;
+    if (!code) {
+      const message = "請輸入四碼股票代號";
+      render ? renderWatch(message) : (lastMessage = message);
+      toast(message);
+      return false;
+    }
+    const rows = readList();
+    if (rows.some((row) => String(row.code) === code)) {
+      const message = `${code} 已在自選股`;
+      render ? renderWatch(message) : setShellCount(rows);
+      toast(message);
+      return true;
+    }
+    if (rows.length >= 10) {
+      const message = "自選股已達 10 檔上限";
+      render ? renderWatch(message) : (lastMessage = message);
+      toast(message);
+      return false;
+    }
+    const checking = `${code} 正在確認台股代號`;
+    render ? renderWatch(checking) : (lastMessage = checking);
+    if (button) button.disabled = true;
+    let stock = null;
+    try {
+      stock = await resolveStock(code, options.name);
+    } catch {}
+    if (button) button.disabled = false;
+    if (!stock) {
+      const message = `${code} 不是有效上市/上櫃台股代號`;
+      render ? renderWatch(message) : (lastMessage = message);
+      toast(`${code} 不是有效台股代號`);
+      return false;
+    }
+    const next = writeList([{ code, name: stock.name, market: stock.market, reason: options.reason || "手機自選股新增", addedAt: new Date().toISOString() }, ...rows]);
+    const message = `${code} ${stock.name} 已加入自選`;
+    render ? renderWatch(message) : setShellCount(next);
+    toast(`+自選 ${code}`);
+    return true;
+  }
+  function rowReason(button) {
+    return (button?.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText || "手機策略卡加入").replace(/\s+/g, " ").slice(0, 220);
+  }
+  window.addEventListener("click", (event) => {
+    const target = event.target;
+    const watchTab = target.closest?.('#tabs button[data-fragment="watch"]');
+    if (watchTab) {
+      setTimeout(() => renderWatch(lastMessage), 0);
+      return;
+    }
+    const removeButton = target.closest?.("[data-watch-remove]");
+    if (removeButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const code = code4(removeButton.dataset.watchRemove);
+      writeList(readList().filter((row) => String(row.code) !== code));
+      renderWatch(`${code} 已移除`);
+      toast(`已移除 ${code}`);
+      return;
+    }
+    const manualButton = target.closest?.("[data-mobile-watch-add]");
+    if (manualButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const input = document.querySelector("#mobile-watch-input");
+      addStock(input?.value, { button: manualButton, reason: "手機手動新增", render: true }).then((ok) => {
+        const nextInput = document.querySelector("#mobile-watch-input");
+        if (ok && nextInput && !nextInput.disabled) nextInput.value = "";
+      });
+      return;
+    }
+    const strategyButton = target.closest?.("[data-ai-watch-code]");
+    if (strategyButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const oldText = strategyButton.textContent || "加入自選";
+      strategyButton.textContent = "加入中";
+      addStock(strategyButton.dataset.aiWatchCode, {
+        button: strategyButton,
+        name: strategyButton.dataset.aiWatchName,
+        reason: rowReason(strategyButton),
+        render: false,
+      }).then((ok) => {
+        strategyButton.textContent = ok ? "已加入自選" : oldText;
+        strategyButton.disabled = Boolean(ok);
+        strategyButton.dataset.watchAdded = ok ? "1" : "0";
+      }).catch(() => {
+        strategyButton.disabled = false;
+        strategyButton.textContent = oldText;
+      });
+    }
+  }, true);
+  window.addEventListener("keydown", (event) => {
+    const input = event.target.closest?.("#mobile-watch-input");
+    if (!input || event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    addStock(input.value, { button: document.querySelector("[data-mobile-watch-add]"), reason: "手機手動新增", render: true }).then((ok) => {
+      const nextInput = document.querySelector("#mobile-watch-input");
+      if (ok && nextInput && !nextInput.disabled) nextInput.value = "";
+    });
+  }, true);
+  self.FUMAN_MOBILE_MANUAL_WATCH_ADD = (rawCode, button) => addStock(rawCode, { button, reason: "手機手動新增", render: true });
+  self.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2 = addStock;
+})();
 </script></body></html>

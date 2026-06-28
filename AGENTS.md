@@ -336,6 +336,7 @@ marketSession.marketDataDate=2026-06-26
 - 舊 E2E 曾把 invalid `2334` seed 成 `旺宏`，導致測試誤把錯誤行為當成功。
 - 舊 storage key `fuman_watchlist` / `fuman_mobile_watchlist_v1` 內若已殘留 invalid rows，會讓畫面出現「已加入但沒有正常卡片」或「尚未同步」。
 - 只清 service worker cache 或 bump version 不能修掉資料驗證錯誤；真正問題在新增流程與 storage guard。
+- 手機版曾出現正式 `/mobile` HTML 已更新，但真人操作仍停在 `正在確認台股代號` 或新增後沒卡片；這表示不能只依賴舊 tab click 觸發重畫，手機新增成功後必須由新增流程直接重畫 `.watch-row`。
 
 正式修正：
 
@@ -350,6 +351,8 @@ marketSession.marketDataDate=2026-06-26
 - `terminal-hotfix.js` 必須保留 `watchlist-storage-guard-20260628-03`。
 - storage guard 必須攔截 placeholder row，並透過 `scheduleShellValidation` 交給 shell 驗證。
 - `fuman-sw.js` 必須保留 watchlist shell / hotfix asset epoch purge，讓正式站吃到新自選股資產。
+- 手機版 `mobile.html` 必須保留 `mobile-watch-v2-direct-render-20260628-01` 與 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2`。
+- 手機版手動新增與策略卡「加入自選」必須由 V2 capture handler 接管：驗證台股 universe、同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1`、成功後直接 render 自選 tab 卡片，不可只等待舊 fragment/tab click 重畫。
 
 不可恢復：
 
@@ -360,6 +363,7 @@ marketSession.marketDataDate=2026-06-26
 - 不得讓 bridge、mobile fragment 或 hotfix 直接繞過 shell 寫卡。
 - 不得把 `2334` 當 valid E2E seed。
 - 不得用 service worker cache、version bump、redeploy 來掩蓋 universe / meta 驗證問題。
+- 不得要求使用者用 PowerShell 手動刪 cache 才能讓自選股新增成立；若正式頁需要更新，應由 no-store route、asset epoch、service worker activate / purge 或 direct-render hotfix 自我處理。
 
 ### UI / E2E 固定規格
 
@@ -376,6 +380,7 @@ marketSession.marketDataDate=2026-06-26
 - 手機版所有策略卡的「加入自選」按鈕必須能寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，切到自選頁後要看得到卡片。
 - 手機版策略 1-5 的「加入自選」不可只檢查 selector 存在；E2E 必須實際點策略卡按鈕，確認兩個 storage key 寫入，再切到自選頁確認 `.watch-row` 顯示該代號。
 - 手機版新增也必須驗台股 universe；`2334` 這類 invalid code 不可進 storage，不可顯示卡片。
+- 手機版自選 tab 必須確認 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2` 是 function，且畫面根節點帶有 `data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-01"`。
 
 `scripts/verify-terminal-ui-e2e.js` 必須保留自選股 negative test：
 
@@ -388,6 +393,7 @@ marketSession.marketDataDate=2026-06-26
   - 先輸入 `2334`，確認拒絕且 storage / DOM 都不含 `2334`。
   - 再用真人鍵盤輸入有效台股，例如 `2327`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
   - 手機手動新增不可卡在 `正在確認台股代號`；台股 universe 讀取必須有 timeout / fallback，失敗也要顯示受控錯誤。
+  - 手機手動新增成功後必須直接重畫 `.watch-row`，不可只驗 storage 或 status。
   - 至少驗 night / sun 兩種手機模式。
 - 手機策略 E2E 必須覆蓋 `strategy1,strategy2,strategy3,strategy4,strategy5`：
   - 進策略分頁後清空手機自選 storage。
