@@ -340,7 +340,8 @@ fuman-sw.js
   - 至少驗 night / sun 兩種手機模式。
 - 手機策略 E2E 必須覆蓋 `strategy1,strategy2,strategy3,strategy4,strategy5`：
   - 進策略分頁後清空手機自選 storage。
-  - 點第一個 `[data-ai-watch-code]` 的「加入自選」。
+  - 用 Chrome `Input.dispatchMouseEvent` / 真實座標點擊第一個 `[data-ai-watch-code]` 的「加入自選」，不可只在頁面內呼叫 `button.click()`。
+  - 點擊後必須看到按鈕文案出現 `加入中` 或 `已加入自選`，確保真人操作有反饋。
   - 確認 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1` 同步包含該代號。
   - 切到自選頁後確認該代號已出現在 `.watch-row`。
 

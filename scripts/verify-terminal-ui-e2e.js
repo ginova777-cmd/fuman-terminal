@@ -598,8 +598,7 @@ async function prepareMobileRoute(cdp, route) {
 
 async function verifyMobileRouteWatchAdd(cdp, route) {
   if (!route.verifyWatchAdd) return null;
-  const added = await evaluate(cdp, async (fragment) => {
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const target = await evaluate(cdp, (fragment) => {
     const visible = (el) => {
       if (!el) return false;
       const rect = el.getBoundingClientRect();
@@ -614,6 +613,8 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
       storage: {},
       watchRows: [],
       reason: "",
+      buttonTextBefore: "",
+      buttonTextAfter: "",
     };
     const button = [...document.querySelectorAll("[data-ai-watch-code]")].find(visible);
     if (!button) {
@@ -629,7 +630,30 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
       return result;
     }
     button.scrollIntoView({ block: "center", inline: "center" });
-    button.click();
+    result.buttonTextBefore = String(button.textContent || "").replace(/\s+/g, " ").trim();
+    result.ok = true;
+    window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+    return result;
+  }, route.fragment, Math.max(EVAL_TIMEOUT_MS, 15000));
+  if (!target?.ok) throw new Error(`mobile ${route.fragment} strategy watch target failed: ${JSON.stringify(target)}`);
+
+  await clickSelector(cdp, `[data-ai-watch-code="${target.code}"]`);
+
+  const added = await evaluate(cdp, async (expected) => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const result = window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E || {
+      ok: false,
+      fragment: expected.fragment,
+      code: expected.code,
+      name: expected.name,
+      storage: {},
+      watchRows: [],
+      reason: "",
+      buttonTextBefore: expected.buttonTextBefore || "",
+      buttonTextAfter: "",
+    };
+    result.ok = false;
+    result.reason = "";
     for (let attempt = 0; attempt < 70; attempt += 1) {
       await wait(180);
       const storage = {};
@@ -642,18 +666,29 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
         }
       }
       result.storage = storage;
-      if (storage.fuman_watchlist?.includes(result.code) && storage.fuman_mobile_watchlist_v1?.includes(result.code)) {
+      const button = document.querySelector(`[data-ai-watch-code="${CSS.escape(result.code)}"]`);
+      result.buttonTextAfter = String(button?.textContent || "").replace(/\s+/g, " ").trim();
+      const feedbackOk = /加入中|已加入自選/.test(result.buttonTextAfter) || button?.dataset?.watchAdded === "1";
+      if (feedbackOk && storage.fuman_watchlist?.includes(result.code) && storage.fuman_mobile_watchlist_v1?.includes(result.code)) {
         result.ok = true;
         break;
       }
     }
     if (!result.ok) {
-      result.reason = "mobile strategy route watch button did not write both storage keys";
+      result.reason = "mobile strategy route real click did not show feedback and write both storage keys";
       window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
       return result;
     }
-    const watchTab = document.querySelector('#tabs button[data-fragment="watch"]');
-    watchTab?.click();
+    window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+    return result;
+  }, target, Math.max(EVAL_TIMEOUT_MS, 30000));
+  if (!added?.ok) throw new Error(`mobile ${route.fragment} strategy watch add failed: ${JSON.stringify(added)}`);
+
+  await clickSelector(cdp, '#tabs button[data-fragment="watch"]');
+
+  const watchVisible = await evaluate(cdp, async (expected) => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const result = window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E || expected;
     for (let attempt = 0; attempt < 50; attempt += 1) {
       await wait(180);
       const rows = [...document.querySelectorAll("#content .watch-row")].map((row) => String(row.textContent || "").replace(/\s+/g, " ").trim());
@@ -666,17 +701,17 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
       window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
       return result;
     }
-    const originalTab = document.querySelector(`#tabs button[data-fragment="${CSS.escape(fragment)}"]`);
-    originalTab?.click();
     window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
     return result;
-  }, route.fragment, Math.max(EVAL_TIMEOUT_MS, 30000));
-  if (!added?.ok) throw new Error(`mobile ${route.fragment} strategy watch add failed: ${JSON.stringify(added)}`);
+  }, target, Math.max(EVAL_TIMEOUT_MS, 20000));
+  if (!watchVisible?.ok) throw new Error(`mobile ${route.fragment} strategy watch visibility failed: ${JSON.stringify(watchVisible)}`);
+
+  await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
   await waitFor(cdp, (fragment) => {
     const root = document.querySelector("#content [data-mobile-terminal-fragment]");
     return { ok: root?.dataset?.mobileFragmentKey === fragment };
   }, route.fragment, 12000, 250);
-  return added;
+  return watchVisible;
 }
 
 async function afterDesktopRouteActivate(cdp, route) {
