@@ -134,6 +134,21 @@ npm run verify:market-surfaces-chain
 - 熱力圖區塊必須有標題、資料時間 / source、分類 tabs、產業 / 族群卡片。
 - 熱力圖不可退回泛用 `Rank / Code / Signal` 表格。
 
+### 2026-06-28 固化合約
+
+這輪市場總覽正式合約如下，不可再改回舊版：
+
+- 桌面市場總覽由 `terminal-desktop-fast-shell.js` 主控。
+- 正式 cache key 需使用具體修正理由，例如 `terminal-desktop-fast-shell.js?market-overview-core=20260628-01`。
+- 不可用主版本 bump、service worker bump、redeploy side effect 代替真正 UI 修正。
+- 市場總覽主卡固定只顯示三張：加權指數、櫃買指數、台指期夜。
+- 台指次月可保留在 fallback / 延伸資料中，但不可出現在市場總覽主卡前三張之外當主要畫面。
+- 熱力圖五個 tabs 必須全部存在且可切換：全部、官方產業、電子細分、群組概念、集團股。
+- 每個熱力圖 tab 點選後都必須有分類卡片或受控空狀態，不可空白、不可靠舊 DOM 補畫。
+- `terminal-market-overview-restore.js` 暫時保留 passive / fallback，不可讓它接管 fast shell 主畫面。
+- 不要手動刪 `terminal-market-overview-restore.js`、`terminal-core.js`、`terminal-hotfix.js`、`terminal-app.js` 這類舊 runtime；等全 route E2E 證明完全不依賴後再分階段拔除。
+- 若瀏覽器仍看到舊畫面，先確認正式 HTML 是否載到新的 fast shell query key；不要先叫使用者刪檔或手動清 production mirror。
+
 ### 熱力圖分類 tabs
 
 熱力圖分類 tabs 固定包含：
@@ -231,13 +246,22 @@ fuman-sw.js
 
 ### 發布 / 上傳限制
 
-- 修改熱力圖程式後，必須走正式發布 / 上傳硬規則。
-- 不要從 dirty 的 `C:\fuman-terminal` deploy。
-- 只能從乾淨 release clone / worktree 發布。
-- 發布前必跑 `git status -sb` 和 `npm run verify:publish-gate`。
-- publish gate 必須通過才可 `vercel --prod --yes`。
-- deploy 後必跑 `npm run guard:production`、`npm run verify:live-version`、`npm run monitor:production`。
+- 只改 `AGENTS.md`、策略文件、SQL patch、純操作說明時，不需要 Vercel deploy；只需 commit / push。
+- 修改正式站 UI / API / route / package scripts / runtime 程式後，才可走正式 Vercel production deploy。
+- 正式程式上傳固定流程：乾淨 worktree -> local gates -> commit -> push main -> `npm run verify:publish-gate` -> `npm run guard:production:pre` -> 確認 Vercel project -> `vercel --prod` -> live 驗證。
+- 嚴禁從 dirty worktree deploy。
+- 嚴禁從 `C:\fuman-terminal` 或 `C:\fuman-terminal-sync` deploy。
+- `C:\fuman-terminal` 只當 production mirror，只允許 `git pull --ff-only`，不可直接修改後當正式修復。
+- 上傳前必查 `.vercel/project.json`：projectName 必須是 `fuman-terminal`，projectId 必須是 `prj_x0R2mMFsL0Xto4whcbPTKQTKJRUl`，Node 必須是 `24.x`。
+- 不可讓 Vercel CLI 自動 link 到新 project、preview project、sync project 或任何非 `fuman-terminal` project。
+- 發布前必跑 `git status --short`、`npm run verify:publish-gate`、`npm run guard:production:pre`。
+- 修改市場總覽 / 熱力圖 / AI 判讀時，還必跑 `npm run verify:market-surfaces-chain` 與 `npm run verify:terminal-ui-e2e -- --routes=heatmap,market-ai --only=desktop-night,desktop-sun`。
+- 修改 fast shell / runtime ownership 時，還必跑 `npm run verify:runtime-ownership` 與 `npm run verify:fast-shell-self-contained`。
+- deploy 後必跑 `npm run guard:production`，並用 live UI E2E 驗正式 alias `https://fuman-terminal.vercel.app`。
+- 不可用 version bump、service worker bump、cache bump、redeploy side effect 假裝修好 UI 或資料問題。
+- 不可用 Google Sheet、Streamlit、static JSON manifest、`C:\fuman-terminal-sync` 當正式來源或正式部署路徑。
 - 不要把 `data/scan-receipts/*` 跟熱力圖程式修正混 commit。
+- 不要把 `data/*.json`、`data/mobile-*`、`data/terminal-home-*` 這類 static cache dirty 檔混進正式程式修正 commit。
 - 不要手動 full scan 來掩蓋熱力圖資料問題。
 
 ## AI 判讀
