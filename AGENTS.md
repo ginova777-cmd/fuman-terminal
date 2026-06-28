@@ -394,6 +394,7 @@ marketSession.marketDataDate=2026-06-26
 - invalid code 要停在輸入區狀態訊息，不得新增卡片。
 - 夜幕 / 陽光模式都不可爆版、重疊或讓文字溢出卡片。
 - 手機版自選股不可只顯示既有 storage；必須有 `mobile-watch-input` 與 `data-mobile-watch-add` 可手動新增。
+- 手機版自選股目前硬上限是 10 檔；到 10 檔時必須顯示 `已達 10 檔上限`，輸入框與新增按鈕 disabled。若要改上限，必須同步修改手機頁、桌機契約、storage cap、E2E 期待值與本 AGENTS 規則。
 - 手機版所有策略卡的「加入自選」按鈕必須能寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，切到自選頁後要看得到卡片。
 - 手機版策略 1-5 的「加入自選」不可只檢查 selector 存在；E2E 必須實際點策略卡按鈕，確認兩個 storage key 寫入，再切到自選頁確認 `.watch-row` 顯示該代號。
 - 手機版新增也必須驗台股 universe；`2334` 這類 invalid code 不可進 storage，不可顯示卡片。
@@ -408,17 +409,22 @@ marketSession.marketDataDate=2026-06-26
 - count 維持原本名額，例如 `1/10`。
 - 手機 watch E2E 不可只預塞 10 檔；必須實際點手機新增：
   - 先輸入 `2334`，確認拒絕且 storage / DOM 都不含 `2334`。
-  - 再用真人鍵盤輸入有效台股，例如 `3028`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
+  - 再用使用者流程輸入有效台股，例如 `3028`，確認手機自選頁新增第 10 張卡片，且兩個 storage key 都同步。
   - 手機手動新增不可卡在 `正在確認台股代號`；台股 universe 讀取必須有 timeout / fallback，失敗也要顯示受控錯誤。
   - 手機手動新增成功後必須直接重畫 `.watch-row`，不可只驗 storage 或 status。
   - 手機手動新增必須驗 `/api/mobile-watch-meta?code=3028` valid，並驗 `/api/mobile-watch-meta?code=2334` invalid。
-  - 至少驗 night / sun 兩種手機模式。
+  - watch tab 手動測試必須以 9 檔有效台股 seed 開始，拒絕 `2334` 後筆數維持 9，再新增 `3028` 補到 10；不可在滿 10 檔時測 invalid/valid，否則只會測到上限 guard。
+  - 至少驗 phone portrait、phone landscape、tablet 的 night / sun 六種手機 / 平板模式。
 - 手機策略 E2E 必須覆蓋 `strategy1,strategy2,strategy3,strategy4,strategy5`：
   - 進策略分頁後清空手機自選 storage。
   - 用 Chrome `Input.dispatchMouseEvent` / 真實座標點擊第一個 `[data-ai-watch-code]` 的「加入自選」，不可只在頁面內呼叫 `button.click()`。
-  - 點擊後必須看到按鈕文案出現 `加入中` 或 `已加入自選`，確保真人操作有反饋。
+  - 點擊後按鈕文案 `加入中` / `已加入自選` 可作輔助訊號，但不能作唯一通過條件；手機切頁或 fragment 重繪時按鈕可能被卸載，最終必須以兩個 storage key 寫入與 watch tab `.watch-row` 出現作準。
   - 確認 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1` 同步包含該代號。
   - 切到自選頁後確認該代號已出現在 `.watch-row`。
+- 手機 / 平板 E2E 必須避免跨 viewport 假陰性：
+  - 每個 mobile viewport / theme run 結束後，將當前 tab 導回 `data:text/html,FUMAN_E2E`，並用 `Storage.clearDataForOrigin` 清掉 `https://fuman-terminal.vercel.app` origin storage。
+  - watch tab 手動測試 seed 完 9 檔後必須重新載入 `/mobile`，讓頁面從乾淨 storage 啟動，避免前一個策略卡的延遲 recovery timer 把舊標的補回來。
+  - 手動 watch code submit 必須在同一個頁面事件中設定 `#mobile-watch-input`、派發 `input/change`，再點 `[data-mobile-watch-add]`；分成兩個 CDP 動作時，手機橫向 / 平板陽光模式可能被重新 render 清掉 input，造成假 `請輸入四碼股票代號`。
 
 E2E seed 必須使用有效台股，例如：
 
@@ -483,12 +489,17 @@ scheduleShellValidation
 - 本次實際問題：正式 `/mobile` 已顯示成功訊息，例如 `2327 國巨* 已加入自選`，但 `.watch-row` 仍為 0；代表舊 mobile handler 已寫狀態但沒有讓自選 tab 直渲染。修正方式是 composedPath capture bridge 加上 rescue renderer，而不是要求使用者手動清 cache。
 - 本次 route-stress 已改成單一 Chrome / 單一 tab 連續切頁；`Page.enable` 只記錄不作 fatal，避免每 route / 每輪重開 Chrome 造成假失敗。
 - 第二次正式站七關已過：`verify:mobile-api-only:live`、`guard:production`、`verify:mobile-cache-contract:live`、`verify:runtime-ownership`、`verify:terminal-resource-chain`、`verify:terminal-cold-start`、`verify:terminal-route-stress --loops=3`、`verify:mobile-layout:live`、手機 / 平板 `verify:terminal-ui-e2e` matrix。
-- 手機 / 平板自選股 live E2E 已覆蓋：phone portrait、phone landscape、tablet，night / sun，策略1-5 的「加入自選」與 watch tab；聚焦 watch route 也已驗 `2334` invalid reject 與 `2327` valid manual add。
+- 手機 / 平板自選股 live E2E 已覆蓋：phone portrait、phone landscape、tablet，night / sun，策略1-5 的「加入自選」與 watch tab；聚焦 watch route 也已驗 `2334` invalid reject 與 `3028` valid manual add。
 - 2026-06-28 第三次手機自選收斂 commit：`b8e9593b Recover mobile watch cards after strategy adds`，新增 `mobile-watch-v2-add-recovery-20260628-01`，避免 valid code 停在 `正在確認台股代號` 而沒有卡片。
 - 第三次正式部署：`dpl_2F7ZS5sKqDxvRKnJuvBXyFvxyx79`，但 live E2E 抓到舊策略 recovery timer 會在切到 watch / 重設 storage 後晚到，污染 watch 手動新增測試。
 - 最終手機自選收斂 commit：`16777e19 Prevent stale mobile strategy watch recovery`；策略 recovery 只允許原策略按鈕仍在 DOM 時執行，切頁後舊 timer 必須失效。
 - 最終正式部署：`dpl_G3R6fBM2eBaHSyGopvWjXHkBbpUY`，alias `https://fuman-terminal.vercel.app`。
-- 最終 live 驗證：`npm run verify:mobile-api-only:live` 通過、`npm run guard:production` 通過、手機 / 平板 `verify:terminal-ui-e2e` matrix 通過 `ok 36/36`。此矩陣實際點策略1-5「加入自選」，再切 watch tab 驗 `.watch-row` 出現，並驗 watch tab 手動 `2334` invalid reject / `2327` valid add。
+- 最終 live 驗證：`npm run verify:mobile-api-only:live` 通過、`npm run guard:production` 通過、手機 / 平板 `verify:terminal-ui-e2e` matrix 通過 `ok 36/36`。此矩陣實際點策略1-5「加入自選」，再切 watch tab 驗 `.watch-row` 出現，並驗 watch tab 手動 `2334` invalid reject / `3028` valid add。
+- 2026-06-28 手機手動 `3028 正在確認台股代號` 卡住收斂 commit：`0d875080 Recover stuck mobile manual watch adds`；正式部署 `dpl_5e7Pty7SD5fQk9pd23RTBWeeEZch`，alias `https://fuman-terminal.vercel.app`。
+- 本次根因確認：`/api/mobile-watch-meta?code=3028` live 回傳 valid，但舊 click promise / tab render 可能停在 `3028 正在確認台股代號`，所以手機 V2 stuck status recovery 必須從狀態文字抓代號、查 meta、寫入兩個 storage key 並直接補 `.watch-row`。
+- 2026-06-28 E2E 隔離收斂 commit：`3abbaaf6 Stabilize mobile watchlist E2E isolation`；這是測試器修正，不需要重新 deploy Vercel。
+- E2E 隔離根因：同一個 Chrome 連跑多個 mobile viewport 時，前一個 `/mobile` tab 沒真正關閉，origin storage 與 strategy recovery timer 會污染下一格 watch 手動新增，造成滿 10 檔或 `請輸入四碼股票代號` 的假失敗。處理方式是 watch tab 測試 seed 9 檔後 reload，submit 代號與 click 原子化，每個 mobile run 結束導回 blank 並清 origin storage。
+- 最新正式站手機 / 平板 live E2E 已於 `3abbaaf6` 後重跑通過：`npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun --routes=strategy1,strategy2,strategy3,strategy4,strategy5,watch --route-timeout=120000 --eval-timeout=60000`，結果 `ok 36/36`。此矩陣驗 strategy1-5 實際點「加入自選」後切 watch 看卡，並驗 watch tab `2334` invalid reject / `3028` valid add 到第 10 張。
 
 ### 驗證注意事項 / 已知坑
 
