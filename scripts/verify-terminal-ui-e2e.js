@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
 const BLANK_PAGE_URL = "data:text/html,FUMAN_E2E";
 const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL || DEFAULT_BASE_URL;
+const BASE_ORIGIN = new URL(BASE_URL).origin;
 const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
 const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
 const KEEP_BROWSER = process.argv.includes("--keep-browser");
@@ -268,6 +269,9 @@ async function createTab(browser) {
         await cdp.send("Runtime.enable", {}, 30000);
         await cdp.send("DOM.enable", {}, 30000);
         await cdp.send("Network.enable", {}, 30000);
+        await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
+        await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
+        await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
         await cdp.send("Page.enable", {}, 5000).catch((error) => debug(`Page.enable skipped: ${error.message}`));
         await cdp.send("Log.enable", {}, 10000).catch(() => null);
         return cdp;
