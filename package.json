@@ -9,7 +9,7 @@
     "release:main": "node scripts/require-version-bump-approval.js npm run release:main && pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-main-release-pipeline.ps1",
     "release": "node scripts/release.js",
     "snapshot:data": "node scripts/commit-data-snapshot.js",
-    "scorecard:sync": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-snapshot.ps1",
+    "scorecard:sync": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-daily-automation.ps1",
     "scorecard:terminal-source": "node --use-system-ca scripts/generate-terminal-scorecard-source.js",
     "scorecard:export-source": "node --use-system-ca scripts/export-scorecard-supabase-source.js",
     "scorecard:source:ops": "node --use-system-ca scripts/scorecard-source-supabase-ops.js",

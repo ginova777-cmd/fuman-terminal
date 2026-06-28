@@ -3,6 +3,7 @@ const https = require("https");
 const path = require("path");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -13,6 +14,27 @@ const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-te
 const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
 const RESERVED_PRODUCTION_ROUTES = [
   "/88",
+];
+const EXPECTED_SCORECARD_STRATEGIES = [
+  "策略1開盤入成績單",
+  "策略2成績單",
+  "策略3隔日沖成績單",
+  "策略4成績單",
+  "策略5成績單",
+  "買賣超成績單",
+  "權證成績單",
+  "CB成績單",
+  "即時雷達成績單",
+];
+const REQUIRED_SCORECARD_PAGE_MARKERS = [
+  "scorecard-history-date",
+  "scorecard-theme-toggle",
+  "scorecard-rule-group",
+  "scorecard-rule-tags",
+  "scorecard-followup",
+  "PNL_MULTIPLIER = 1000",
+  "損益(元)",
+  "cleanReason",
 ];
 const KEY_FILES = [
   "version.json",
@@ -36,6 +58,10 @@ function read(file) {
 
 function sha256(text) {
   return crypto.createHash("sha256").update(String(text || "").replace(/\r\n/g, "\n"), "utf8").digest("hex").toUpperCase();
+}
+
+function cleanText(value) {
+  return String(value ?? "").trim();
 }
 
 function git(args) {
@@ -140,6 +166,14 @@ async function assertLiveState(version) {
     issues.push(`reserved scorecard route /88 HTTP ${scorecardPage.status}`);
   } else if (!/FUMAN SCORECARD|\/api\/scorecard/.test(scorecardPage.body)) {
     issues.push("reserved scorecard route /88 must render the public scorecard shell and call /api/scorecard");
+  } else {
+    const missingScorecardMarkers = REQUIRED_SCORECARD_PAGE_MARKERS.filter((marker) => !scorecardPage.body.includes(marker));
+    if (missingScorecardMarkers.length) {
+      issues.push(`reserved scorecard route /88 missing no-rollback markers: ${missingScorecardMarkers.join(", ")}`);
+    }
+    if (/scorecard-basis/.test(scorecardPage.body)) {
+      issues.push("reserved scorecard route /88 must not restore scorecard-basis panel");
+    }
   }
 
   const scorecardApi = await fetchText("/api/scorecard", 35000);
@@ -148,11 +182,33 @@ async function assertLiveState(version) {
   } else {
     try {
       const payload = JSON.parse(scorecardApi.body);
-      const rows = Array.isArray(payload.records) ? payload.records.length : Number(payload.summary?.rows || 0);
+      const records = Array.isArray(payload.records) ? payload.records : [];
+      const rows = records.length || Number(payload.summary?.rows || 0);
+      const latestDate = cleanText(payload.latestDate || payload.summary?.latestDate);
+      const latestRows = latestDate ? records.filter((row) => cleanText(row.record_date) === latestDate) : records;
+      const byStrategy = latestRows.reduce((map, row) => {
+        const strategy = cleanText(row.strategy || "未分類");
+        map[strategy] = (map[strategy] || 0) + 1;
+        return map;
+      }, {});
+      const missingStrategies = EXPECTED_SCORECARD_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
       if (payload.ok === false) issues.push("scorecard API ok=false");
       if (rows <= 0) issues.push(`scorecard API row count invalid: ${rows}`);
-      if (!/supabase-snapshot|json-snapshot/.test(String(payload.cacheSource || ""))) {
-        issues.push(`scorecard API cacheSource must be supabase-snapshot or json-snapshot; current=${payload.cacheSource || "(missing)"}`);
+      if (payload.cacheSource !== "supabase-snapshot") {
+        issues.push(`scorecard API cacheSource must be supabase-snapshot; current=${payload.cacheSource || "(missing)"}`);
+      }
+      if (!Array.isArray(payload.historyDates) || payload.historyDates.length <= 0) {
+        issues.push("scorecard API must keep historyDates for /88 historical selector");
+      }
+      if (missingStrategies.length) {
+        issues.push(`scorecard API missing strategy groups on latestDate=${latestDate || "(missing)"}: ${missingStrategies.join(", ")}`);
+      }
+      const ruleReport = verifyScorecardStrategyRules(payload, {
+        source: "production-guard-live",
+        requireContract: true,
+      });
+      for (const check of ruleReport.checks || []) {
+        if (!check.ok) issues.push(`scorecard rule rollback: ${check.id}: ${check.message}`);
       }
     } catch (error) {
       issues.push(`scorecard API invalid JSON: ${error.message}`);

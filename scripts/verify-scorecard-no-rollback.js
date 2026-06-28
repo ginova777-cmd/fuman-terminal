@@ -25,6 +25,27 @@ const EXPECTED_STRATEGIES = [
   "CB成績單",
   "即時雷達成績單",
 ];
+const REQUIRED_SCORECARD_UI_MARKERS = [
+  "scorecard-history-date",
+  "scorecard-theme-toggle",
+  "scorecard-rule-group",
+  "scorecard-rule-tags",
+  "scorecard-followup",
+  "策略項目",
+  "策略細項",
+  "7日追蹤",
+  "rowRuleGroup",
+  "rowRuleTags",
+  "rowFollowup",
+  "cleanReason",
+];
+const MACHINE_MARKERS_CLEANED_FROM_REASON = [
+  "規則版本=",
+  "策略項目=",
+  "策略細項=",
+  "7日追蹤=",
+  "追蹤狀態=",
+];
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -195,8 +216,12 @@ function verifyPayload(checks, payload, source, baseline = null) {
 }
 
 function verifyHtml(checks, html, source) {
-  addCheck(checks, html.includes("scorecard-history-date"), `${source}-history-date`, `${source} must keep history selector`, {});
-  addCheck(checks, html.includes("scorecard-theme-toggle"), `${source}-theme-toggle`, `${source} must keep theme toggle`, {});
+  const missingMarkers = REQUIRED_SCORECARD_UI_MARKERS.filter((marker) => !html.includes(marker));
+  const missingCleanMarkers = MACHINE_MARKERS_CLEANED_FROM_REASON.filter((marker) => !html.includes(marker));
+  addCheck(checks, !missingMarkers.includes("scorecard-history-date"), `${source}-history-date`, `${source} must keep history selector`, { missingMarkers });
+  addCheck(checks, !missingMarkers.includes("scorecard-theme-toggle"), `${source}-theme-toggle`, `${source} must keep theme toggle`, { missingMarkers });
+  addCheck(checks, missingMarkers.length === 0, `${source}-rule-columns`, `${source} must keep strategy item/detail/7-day followup columns`, { missingMarkers });
+  addCheck(checks, missingCleanMarkers.length === 0, `${source}-clean-rule-markers`, `${source} must keep reason cleanup for rule machine markers`, { missingCleanMarkers });
   addCheck(checks, !html.includes("scorecard-basis"), `${source}-no-basis-panel`, `${source} must not restore scorecard-basis panel`, {});
   addCheck(checks, /PNL_MULTIPLIER\s*=\s*1000/.test(html) && /損益\(元\)/.test(html), `${source}-pnl-multiplier`, `${source} must display pnl * 1000`, {});
   addCheck(checks, html.includes("☀") && html.includes("☾") && html.includes("#facc15"), `${source}-symbol-theme`, `${source} must keep yellow symbol theme toggle`, {});
@@ -213,9 +238,12 @@ function queryTask(taskName) {
       `$task = Get-ScheduledTask -TaskName "${escaped}" -ErrorAction SilentlyContinue`,
       "if (-not $task) { 'MISSING' } else {",
       "$action = @($task.Actions)[0]",
+      "$trigger = @($task.Triggers)[0]",
       "'FOUND'",
       "[string]$task.State",
       "([string]$action.Execute + ' ' + [string]$action.Arguments).Trim()",
+      "[string]$trigger.StartBoundary",
+      "[string]$trigger",
       "}",
     ].join("; "),
   ], {
@@ -230,7 +258,9 @@ function queryTask(taskName) {
   return {
     TaskName: taskName,
     State: lines[1] || "",
-    TaskToRun: lines.slice(2).join(" "),
+    TaskToRun: lines[2] || "",
+    TriggerStart: lines[3] || "",
+    TriggerText: lines.slice(4).join(" "),
   };
 }
 
@@ -241,6 +271,7 @@ function verifySchedules(checks) {
   addCheck(checks, Boolean(daily), "schedule-daily-exists", "Fuman Scorecard Daily Automation 1400 must exist", { daily });
   addCheck(checks, !/disabled/i.test(cleanText(daily?.State)), "schedule-daily-enabled", "Fuman Scorecard Daily Automation 1400 must stay enabled", { state: daily?.State });
   addCheck(checks, /run-scorecard-daily-automation\.ps1/i.test(cleanText(daily?.TaskToRun)), "schedule-daily-runner", "scorecard daily task must run run-scorecard-daily-automation.ps1", { taskToRun: daily?.TaskToRun });
+  addCheck(checks, /(?:T|\s|^)14:00/i.test(cleanText(daily?.TriggerStart) || cleanText(daily?.TriggerText)), "schedule-daily-1400", "scorecard daily task must trigger at 14:00 Asia/Taipei", { triggerStart: daily?.TriggerStart, triggerText: daily?.TriggerText });
   addCheck(checks, !retired || /disabled/i.test(cleanText(retired.State)), "schedule-retired-1538-disabled", "Fuman Scorecard Snapshot 1538 must not exist or must be disabled", { retired });
   addCheck(checks, !autoRelease || /disabled/i.test(cleanText(autoRelease.State)), "schedule-auto-release-disabled", "Fuman Auto Main Release 1615 must stay disabled", { autoRelease });
 }

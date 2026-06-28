@@ -493,11 +493,25 @@ Set-Location -LiteralPath C:\fuman-terminal
 node --use-system-ca scripts\publish-scorecard-snapshot.js
 ```
 
-Snapshot runner：
+正式每日 runner：
 
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-snapshot.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
+```
+
+舊 `run-scorecard-snapshot.ps1` 只可保留為兼容 wrapper：
+
+```text
+run-scorecard-snapshot.ps1 -> run-scorecard-daily-automation.ps1
+```
+
+它不可再含 `scorecard.duckdb`、`export-scorecard-snapshot.py` 或 DuckDB fallback 發布流程；若有人帶 `-AllowDuckDbFallback` 或 `FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK=1`，必須直接失敗。
+
+`package.json` 也必須固定：
+
+```text
+scorecard:sync = pwsh.exe ... -File ./run-scorecard-daily-automation.ps1
 ```
 
 ## 驗證門檻
@@ -573,9 +587,9 @@ $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
 
 ```text
 checked date = 2026-06-28 Asia/Taipei
-closed-loop rehearsal checkedAt = 2026-06-28 12:32:02 +08:00
-last code deploy commit = 7bed2fda6fc9e306a21f12b835f51063b6a73a86
-last code deploy url = https://fuman-terminal-21x9ngo5x-ginova777-9771s-projects.vercel.app
+closed-loop rehearsal checkedAt = 2026-06-28 18:59:35 +08:00
+latest verified git base before this guard update = d19683c9
+last code deploy commit before this guard update = 8feb2cab / later GitHub main may include non-scorecard guard changes
 market state = weekend / non-trading day
 latestDate = 2026-06-26
 generator rows = 492
@@ -586,6 +600,11 @@ missing entry_time = 0
 UI E2E = ok
 resource chain = ok
 production guard = ok
+publish gate = ok
+scorecard no-rollback = ok
+scorecard strategy rules = ok
+scorecard:sync runner = run-scorecard-daily-automation.ps1
+retired run-scorecard-snapshot.ps1 = wrapper only, DuckDB fallback blocked
 terminal-fast-bundle snapshotHit = true
 terminal-fast-bundle snapshotFresh = true
 terminal-fast-bundle partial = false
@@ -830,7 +849,7 @@ scripts/verify-scorecard-no-rollback.js
 | --- | --- |
 | deploy | `/88` 必須保留 `scorecard-history-date`、`scorecard-theme-toggle`、`PNL_MULTIPLIER=1000`，且不可恢復 `scorecard-basis` |
 | data | `scorecard_latest` / candidate snapshot 必須有 9 策略、rows 不可低於 floor、`cacheSource=supabase-snapshot`、不可回 Google Sheet / Streamlit / DuckDB |
-| schedule | `Fuman Scorecard Daily Automation 1400` 必須存在且指向 `run-scorecard-daily-automation.ps1`；`Fuman Scorecard Snapshot 1538` 不可存在或必須停用；`Fuman Auto Main Release 1615` 必須停用 |
+| schedule | `Fuman Scorecard Daily Automation 1400` 必須存在、啟用、14:00 觸發，且指向 `run-scorecard-daily-automation.ps1`；`Fuman Scorecard Snapshot 1538` 不可存在或必須停用；`Fuman Auto Main Release 1615` 必須停用 |
 | source | 即時雷達只允許 `09:00-13:30`；策略1 `21:30` 進場、當日收盤後結算；策略2只允許 `09:00-12:00`；策略3必須 `13:00` 且來源日不是同日；CB 必須保留完整掃 `stockPrice` 進場；策略4/5/買賣超/權證/CB 必須帶 7 日正成長追蹤；`/88` 損益顯示必須是 `raw pnl * 1000` |
 
 `verify:publish-gate` 會跑：
@@ -841,6 +860,26 @@ node scripts\verify-scorecard-strategy-rules.js --no-live --no-output
 ```
 
 說明：publish gate 可能在無 Windows Task Scheduler 權限的環境執行，所以只檢查程式碼/UI/data rollback。完整排程防回滾由每日 runner 與手動 `npm run verify:scorecard-no-rollback` 執行。
+
+`verify:publish-gate` 也必須擋：
+
+```text
+package.json scorecard:sync 回到 run-scorecard-snapshot.ps1
+run-scorecard-snapshot.ps1 復活 scorecard.duckdb
+run-scorecard-snapshot.ps1 復活 export-scorecard-snapshot.py
+```
+
+`guard:production` live 檢查必須擋：
+
+```text
+/88 缺 scorecard-history-date
+/88 缺 scorecard-theme-toggle
+/88 缺 策略項目 / 策略細項 / 7日追蹤欄位
+/88 重新出現 scorecard-basis
+/api/scorecard cacheSource 不是 supabase-snapshot
+/api/scorecard 缺 historyDates
+/api/scorecard 缺 9 策略或 strategy rule contract
+```
 
 每日 14:00 runner 必須做兩次：
 

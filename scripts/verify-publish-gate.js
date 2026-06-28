@@ -172,8 +172,11 @@ for (const [scriptName, scriptBody] of Object.entries(packageJson.scripts || {})
 if (!packageJson.scripts?.["cleanup:api-only-retired"] || !/cleanup-api-only-retired-artifacts\.js/.test(packageJson.scripts["cleanup:api-only-retired"])) {
   issues.push("package.json missing scripts.cleanup:api-only-retired");
 }
-if (!packageJson.scripts?.["scorecard:sync"] || !/run-scorecard-snapshot\.ps1/.test(packageJson.scripts["scorecard:sync"])) {
-  issues.push("package.json missing scripts.scorecard:sync daily scorecard snapshot runner");
+if (!packageJson.scripts?.["scorecard:sync"] || !/run-scorecard-daily-automation\.ps1/.test(packageJson.scripts["scorecard:sync"])) {
+  issues.push("package.json scripts.scorecard:sync must run run-scorecard-daily-automation.ps1");
+}
+if (/run-scorecard-snapshot\.ps1/.test(String(packageJson.scripts?.["scorecard:sync"] || ""))) {
+  issues.push("package.json scripts.scorecard:sync must not call retired run-scorecard-snapshot.ps1");
 }
 if (!packageJson.scripts?.["scorecard:publish"] || !/publish-scorecard-snapshot\.js/.test(packageJson.scripts["scorecard:publish"])) {
   issues.push("package.json missing scripts.scorecard:publish");
@@ -446,6 +449,7 @@ const strategyWeightReportGenerator = read("scripts/generate-strategy-weight-rep
 const stocksSlimGenerator = read("scripts/generate-stocks-slim.js");
 const scorecardApi = read("api/scorecard.js");
 const scorecardPage = read("88.html");
+const scorecardSnapshotRunner = read("run-scorecard-snapshot.ps1");
 const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
@@ -501,6 +505,12 @@ for (const marker of ["scorecard-rule-group", "scorecard-rule-tags", "scorecard-
 }
 for (const marker of ["規則版本=", "策略項目=", "策略細項=", "7日追蹤=", "追蹤狀態="]) {
   if (!scorecardPage.includes(marker)) issues.push(`88.html must clean scorecard machine marker ${marker} from reason display`);
+}
+for (const marker of ["scorecard-snapshot-retired", "run-scorecard-daily-automation.ps1", "DuckDB fallback is disabled"]) {
+  if (!scorecardSnapshotRunner.includes(marker)) issues.push(`run-scorecard-snapshot.ps1 must stay retired wrapper and include ${marker}`);
+}
+for (const marker of ["scorecard.duckdb", "export-scorecard-snapshot.py"]) {
+  if (scorecardSnapshotRunner.includes(marker)) issues.push(`run-scorecard-snapshot.ps1 must not restore legacy ${marker} flow`);
 }
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
