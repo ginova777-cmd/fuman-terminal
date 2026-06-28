@@ -2,19 +2,36 @@
 
 ## 目標
 
-成績單 `/88` 必須從正式 Supabase source table 產生，不再依賴 Google Sheet、Streamlit，或默默回退到舊 DuckDB。
+成績單 `/88` 是正式公開成績單，不可再依賴 Google Sheet、Streamlit、舊 DuckDB、舊 static JSON，或任何會默默回退到舊日期的快取。
 
 正式水管：
 
 ```text
-每日成績單計算結果
+各策略 latest complete/live source
+  -> scripts/generate-terminal-scorecard-source.js
+  -> C:\fuman-runtime\data\scorecard-terminal-current.json
+  -> scripts/scorecard-source-supabase-ops.js
   -> public.trade_records
   -> public.strategy_daily_summary
   -> scripts/export-scorecard-supabase-source.js
   -> C:\fuman-terminal\data\scorecard-latest.json
+  -> scripts/publish-scorecard-snapshot.js
   -> scorecard_latest Supabase snapshot
-  -> /api/scorecard
+  -> /api/scorecard?date=YYYY-MM-DD
   -> /88
+```
+
+`/88` 是顯示層；資料正確性以 `/api/scorecard`、Supabase source tables、`scorecard_latest` snapshot、以及 E2E 驗證共同閉環。
+
+成績單歷史規格：
+
+```text
+每天 14:00 產出的「當天 /88 顯示內容」必須存入 Supabase。
+最多保留最近 30 日。
+/api/scorecard 預設只回最新日。
+/api/scorecard?date=YYYY-MM-DD 只回指定日期。
+/api/scorecard 必須另外回 historyDates，供 /88 日期下拉使用。
+/88 切換歷史日期時才拉該日期資料，不一次渲染 30 天。
 ```
 
 ## 固定 Supabase Source Contract
@@ -39,7 +56,7 @@ https://cpmpfhbzutkiecccekfr.supabase.co
 C:\fuman-terminal\ops\public-slot\ScorecardSourceContract.sql
 ```
 
-若要手動確認：
+手動確認：
 
 ```sql
 select
@@ -56,7 +73,7 @@ where table_schema = 'public'
 order by table_name;
 ```
 
-必須看到 3 列：
+必須看到：
 
 ```text
 strategy_daily_summary    BASE TABLE
@@ -98,21 +115,13 @@ to service_role;
 select pg_notify('pgrst', 'reload schema');
 ```
 
-若 REST 回：
+常見錯誤：
 
-```text
-permission denied for table trade_records
-```
-
-代表缺 `insert/update` 權限。
-
-若 REST 回：
-
-```text
-Could not find the table public.trade_records in the schema cache
-```
-
-代表 SQL 沒套到 terminal 正在讀的 project，或 PostgREST schema 尚未 reload。
+| error | meaning |
+| --- | --- |
+| `permission denied for table trade_records` | service role 缺 `insert/update/delete` |
+| `Could not find the table public.trade_records in the schema cache` | SQL 未套到正式 project，或 PostgREST schema 尚未 reload |
+| `/api/scorecard` rows 與 generator rows 不一致 | Supabase 舊同日同策略資料未清乾淨，需檢查清理邏輯 |
 
 ## 必要欄位
 
@@ -121,16 +130,16 @@ Could not find the table public.trade_records in the schema cache
 | column | required | meaning |
 | --- | --- | --- |
 | `record_id` | yes | primary key |
-| `record_date` | yes | 成績日期 |
+| `record_date` | yes | 成績日期 / 結算日 |
 | `strategy` | yes | 策略名稱 |
 | `ticker` | yes | 股票代號 / 標的代號 |
-| `name` | no | 股票名稱 |
-| `entry_time` | no | 進場時間 |
-| `entry_price` | no | 進場價 |
-| `high_price` | no | 當日高點 / 可評估高點 |
-| `pnl` | no | 報酬或保守成績值 |
+| `name` | yes for UI | 股票名稱 |
+| `entry_time` | yes for UI | 進場時間 |
+| `entry_price` | yes for calculation | 進場價 |
+| `high_price` | yes for calculation | 成績評估高點 |
+| `pnl` | yes | 原始價差，`high_price - entry_price` |
 | `source` | yes | source contract |
-| `reason` | no | 訊號原因 |
+| `reason` | yes for audit | 訊號原因與補值來源 |
 
 ### `public.strategy_daily_summary`
 
@@ -138,17 +147,17 @@ Could not find the table public.trade_records in the schema cache
 | --- | --- | --- |
 | `summary_date` | yes | 摘要日期 |
 | `strategy` | yes | 策略名稱 |
-| `signals` | no | 訊號筆數 |
-| `backtestable` | no | 可回測筆數 |
-| `wins` | no | 勝筆 |
-| `losses` | no | 敗筆 |
-| `flats` | no | 平手 / 未結算 |
-| `win_rate_pct` | no | 勝率 |
-| `total_pnl` | no | 總成績 |
-| `avg_pnl` | no | 平均成績 |
-| `max_profit` | no | 最大獲利 |
-| `max_loss` | no | 最大虧損 |
-| `status` | no | `complete` / `stale` / `partial` |
+| `signals` | yes | 訊號筆數 |
+| `backtestable` | yes | 可回測筆數 |
+| `wins` | yes | 勝筆 |
+| `losses` | yes | 敗筆 |
+| `flats` | yes | 平手 / 未結算 |
+| `win_rate_pct` | yes | 勝率 |
+| `total_pnl` | yes | 原始總價差 |
+| `avg_pnl` | yes | 平均原始價差 |
+| `max_profit` | yes | 最大原始價差獲利 |
+| `max_loss` | yes | 最大原始價差虧損 |
+| `status` | yes | `complete` / `stale` / `partial` |
 | `note` | no | 備註 |
 | `source` | yes | source contract |
 
@@ -158,210 +167,383 @@ Primary key:
 (summary_date, strategy)
 ```
 
-## Health View
+## 策略來源清單
 
-查詢：
+`scripts/generate-terminal-scorecard-source.js` 必須納入所有正式成績單來源。
 
-```sql
-select * from public.v_scorecard_source_health;
-```
+| key | source API / table | strategy label | limit / rule |
+| --- | --- | --- | --- |
+| `strategy1` | `/api/open-buy-latest` | `策略1開盤入成績單` | 120 |
+| `strategy2` | `/api/strategy2-latest` | `策略2成績單` | 只顯示 `09:00-12:00` |
+| `strategy3` | Supabase `strategy3_scan_runs/results` previous trading day | `策略3隔日沖成績單` | 來源日前一開盤日，進場 `13:00` |
+| `strategy4` | `/api/strategy4-latest` | `策略4成績單` | 70 |
+| `strategy5` | `/api/strategy5-latest` | `策略5成績單` | 25 |
+| `institution` | `/api/institution-latest` | `買賣超成績單` | 120 |
+| `warrant` | `/api/warrant-flow-latest` | `權證成績單` | 120 |
+| `cb` | `/api/cb-detect-latest` | `CB成績單` | 120 |
+| `realtime-radar` | `/api/realtime-radar-latest` | `即時雷達成績單` | 80 |
 
-必看欄位：
+任何策略若只存在於 Supabase 清舊名單，但沒有出現在 `TASKS` 或正式 source override，就是未接上成績單。
 
-| column | meaning |
+## 日期規則
+
+成績單必須能判斷交易日。
+
+| market state | `/88` and `/api/scorecard` date |
 | --- | --- |
-| `status` | `ready` / `not_ready` / `stale` / `failed` |
-| `latest_record_date` | `trade_records` 最新日期 |
-| `latest_summary_date` | `strategy_daily_summary` 最新日期 |
-| `record_count` | source records 總筆數 |
-| `summary_count` | daily summary 總筆數 |
-| `recent_record_count` | 近 2 天 records |
-| `recent_summary_count` | 近 2 天 summaries |
-| `missing_record_source_count` | records 缺 source 數 |
-| `missing_summary_source_count` | summary 缺 source 數 |
-| `reason` | readable health reason |
+| 正常開盤日 | 顯示當天開盤日 |
+| 休市 / 週末 / 連假 | 顯示最後一個開盤日 |
 
-Ready 條件：
+`marketStatus` 必須包含：
 
-```text
-status = ready
-latest_record_date within 2 days
-latest_summary_date within 2 days
-record_count > 0
-summary_count > 0
-missing source count = 0
-```
-
-## 現況基準
-
-已完成：
-
-| item | result |
+| field | meaning |
 | --- | --- |
-| Supabase source tables | ready |
-| REST visibility | ready |
-| source write permission | ready |
-| `v_scorecard_source_health` | ready |
-| `scorecard_latest` snapshot | published |
-| `/api/scorecard` | reads Supabase snapshot |
-| `/88` chain | verified |
+| `isTradingDay` | 今天是否開盤 |
+| `taipeiDate` | 台北今日日期 |
+| `latestOpenDate` | 成績單顯示日期 |
+| `batchDate` | source rows 最新日期 |
+| `sourceLatestDate` | source report 最新日期 |
+| `reason` | 休市 / 快取原因 |
 
-目前最新狀態：
+範例：`2026-06-28` 是週日，成績單顯示最後開盤日 `2026-06-26`。
+
+## 進場時間規則
+
+`entry_time` 是成績單必填欄位。不可留空白。
+
+| strategy | entry_time rule |
+| --- | --- |
+| 策略1開盤入 | `21:30` 初篩來源 |
+| 策略2 | 從 live rows 的 `entry_time` / `entryTime` / `latestRecord` 等欄位解析，只保留 `09:00-12:00` |
+| 策略3隔日沖 | 固定 `13:00` |
+| 策略4 | `13:30` |
+| 策略5 | `14:00` |
+| 買賣超 | `14:00` |
+| 權證 | `14:00` |
+| CB | payload `updatedAt/generatedAt/finishedAt/timestamp` 轉台北時間，fallback `14:00` |
+| 即時雷達 | 從 row timestamp / quote time 解析，fallback 不可空白 |
+
+`verify-scorecard-ui-e2e.js` 必須檢查所有 rows `entry_time` 不為空。
+
+## 進場價與最高價規則
+
+| field | rule |
+| --- | --- |
+| `entry_price` | 成績單進場價，不可為 0 |
+| `high_price` | 成績單評估高點，不可為 0 |
+| `pnl` | `high_price - entry_price`，API 層保留原始價差 |
+
+CB 特別規則：
 
 ```text
-latest_record_date = 2026-06-26
-latest_summary_date = 2026-06-26
-record_count = 1662
-summary_count = 22
-recent_record_count = 374
-recent_summary_count = 7
-status = ready
-reason = ready
+CB 進場價 = 完整掃偵測到的股價 = row.stockPrice
 ```
 
-## 今日 Terminal Complete Run Source
+不是 CB 價格、不是 0、不是暫定溢價率。
 
-因原始 DuckDB 成績單只到 `2026-06-22`，已補一條今日 source：
+最高價補值：
 
 ```text
-C:\fuman-terminal\scripts\generate-terminal-scorecard-source.js
+fugle_quotes_latest.high
 ```
 
-輸出：
+若 source high 缺失或低於最新 quote high，使用：
 
 ```text
-C:\fuman-terminal\data\scorecard-terminal-current.json
+max(source high, quote high, entry price)
+```
+
+補值時必須在 `reason` 補上：
+
+```text
+最高價補值=fugle_quotes_latest <high>
+```
+
+## 策略2成績單規格
+
+策略2 source 目前 live endpoint 偵測範圍可含 `08:45-12:00`，但成績單只顯示：
+
+```text
+09:00-12:00
+```
+
+任何 `entry_time < 09:00` 或 `entry_time > 12:00` 的策略2列都不可進入 `/api/scorecard`。
+
+E2E 必須檢查：
+
+```text
+策略2成績單 rows > 0
+所有策略2 entry_time between 09:00 and 12:00
+```
+
+## 策略3隔日沖成績單規格
+
+策略3不可用同日 latest run 直接當同日成績單。
+
+正式規則：
+
+```text
+record_date = 成績單結算日
+source_date = record_date 的前一個開盤日
+entry_time = 13:00
+entry_price = source_date 13:00 完整掃偵測價格
+high_price = record_date 當天最高價
+pnl = high_price - entry_price
 ```
 
 來源：
 
-| source API | strategy label |
-| --- | --- |
-| `/api/open-buy-latest` | `策略1開盤入成績單` |
-| `/api/strategy3-latest` | `策略3隔日沖成績單` |
-| `/api/strategy4-latest` | `策略4成績單` |
-| `/api/strategy5-latest` | `策略5成績單` |
-| `/api/institution-latest` | `買賣超成績單` |
-| `/api/cb-detect-latest` | `CB成績單` |
-| `/api/warrant-flow-latest` | `權證成績單` |
-
-這批資料的 source：
-
 ```text
-terminal-complete-run-scorecard
+strategy3_scan_runs
+strategy3_scan_results
 ```
 
-注意：
+查詢條件：
 
 ```text
-沒有已結算績效的項目，pnl 保守設為 0。
-這是「今日訊號成績單 source」，不是假裝已結算獲利。
+strategy=eq.strategy3
+status=eq.complete
+complete=eq.true
+scan_date=eq.<previous trading day>
 ```
 
-最後一次產生結果：
+策略3 row 必須可稽核來源日。若 DB 不新增 `source_date` 欄位，必須在 `reason` 補上：
 
 ```text
-latestDate = 2026-06-26
-records = 374
-dailyRows = 7
+策略3來源日=YYYY-MM-DD
 ```
 
-## 寫入 Supabase Source
+範例 `2026-06-26` 成績單：
 
-工具：
+| ticker | name | record_date | source_date | entry_time | entry | high | pnl |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2302 | 麗正 | 2026-06-26 | 2026-06-25 | 13:00 | 48 | 50.9 | 2.9 |
+| 2308 | 台達電 | 2026-06-26 | 2026-06-25 | 13:00 | 1980 | 1980 | 0 |
+| 8105 | 凌巨 | 2026-06-26 | 2026-06-25 | 13:00 | 25.15 | 25.15 | 0 |
+| 8261 | 富鼎 | 2026-06-26 | 2026-06-25 | 13:00 | 255.5 | 281 | 25.5 |
+
+E2E 必須檢查：
 
 ```text
-C:\fuman-terminal\scripts\scorecard-source-supabase-ops.js
+策略3隔日沖成績單 rows > 0
+所有策略3 entry_time = 13:00
+所有策略3 row 有 previous trading-day source marker
+策略3 source marker 不可等於 latestDate
 ```
 
-Probe REST 是否可見：
+## `/88` 顯示規則
+
+API 的 `pnl` 保留原始價差，勝敗判斷也用原始價差正負。
+
+`/88` 顯示給使用者的損益要換算為 1000 股金額：
+
+```text
+display pnl = pnl * 1000
+display total pnl = summary.totalPnl * 1000
+display strategy pnl = summary.byStrategy[].pnl * 1000
+```
+
+HTML 必須包含：
+
+```text
+PNL_MULTIPLIER = 1000
+損益(元)
+```
+
+範例：
+
+```text
+raw pnl = 25.5
+/88 display pnl = 25,500
+```
+
+不得把資料源 `pnl` 直接改成乘 1000 後的金額，否則會破壞 API 與 summary 既有勝敗檢查。乘數只屬於顯示層。
+
+## Supabase 回填清理規則
+
+`scripts/scorecard-source-supabase-ops.js` 在回填 terminal complete-run scorecard 前，必須清掉當天舊資料，並保留最近 30 日歷史。
+
+清理範圍：
+
+```text
+source=terminal-complete-run-scorecard and record_date = latestDate
+source=terminal-complete-run-scorecard and record_date < historyCutoff
+strategy in TERMINAL_SCORECARD_STRATEGIES and record_date = latestDate
+strategy in TERMINAL_SCORECARD_STRATEGIES and record_date < historyCutoff
+```
+
+daily summary 同理用：
+
+```text
+summary_date
+```
+
+目的：
+
+```text
+1. 避免同一天同策略舊列殘留。
+2. 保留最近 30 日，每天可從 /88 歷史下拉切換。
+3. 自動清掉 30 日以前資料，避免 Supabase 與 snapshot 長期膨脹。
+```
+
+曾發生 generator 產生 495 筆，但 Supabase snapshot 匯出 507 筆，原因就是同日舊策略3 12 筆沒有被清掉。這類錯誤必須靠「當天同策略先清再 upsert」解決，不可刪掉全部歷史。
+
+回填成功後：
+
+```text
+generator rows = latestDate rows
+exported snapshot rows = 最近 30 日 rows
+/api/scorecard rows = selected date rows
+/api/scorecard.historyDates = 最近 30 日有資料的日期
+```
+
+## 已停用 / 不可再依賴的舊資源
+
+以下不可作為正式成績單 source of truth：
+
+```text
+open-buy-scorecard-source.json
+realtime-radar-scorecard-latest.json
+star-preopen-scorecard-source.json
+strategy5-scorecard-latest.json
+scorecard-terminal-current-verify.json
+realtime-radar-scorecard-history
+strategy5-scorecard-history
+scorecard-ledger
+Fuman Scorecard Snapshot 1538
+Google Sheet scorecard
+Streamlit scorecard
+DuckDB fallback scorecard
+```
+
+如果看到這些檔案或排程被重新啟用，要停用或刪除，不能讓它們覆蓋 Supabase source chain。
+
+## 正式執行
+
+### 每日 14:00 runner
+
+正式腳本：
+
+```text
+C:\fuman-terminal\run-scorecard-daily-automation.ps1
+```
+
+手動執行：
 
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
-node --use-system-ca scripts\scorecard-source-supabase-ops.js probe
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
 ```
 
-回填舊 `data\scorecard-latest.json`：
+休市日若要允許沿用最後開盤日：
 
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
-node --use-system-ca scripts\scorecard-source-supabase-ops.js backfill
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1 -AllowPreviousTradeDate
 ```
 
-回填今日 terminal complete-run source：
+除錯時若不做 live verify：
 
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
-node --use-system-ca scripts\scorecard-source-supabase-ops.js backfill --source-file=C:\fuman-terminal\data\scorecard-terminal-current.json
-```
-
-查 health：
-
-```powershell
-Set-Location -LiteralPath C:\fuman-terminal
-node --use-system-ca scripts\scorecard-source-supabase-ops.js health
-```
-
-## 發布 Snapshot
-
-正式 runner：
-
-```text
-C:\fuman-terminal\run-scorecard-snapshot.ps1
-```
-
-執行：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-snapshot.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1 -NoLiveVerify
 ```
 
 流程：
 
 ```text
-export Supabase source
-publish scorecard_latest
-verify scorecard
+check TWSE trading day
+generate terminal scorecard source
+backfill Supabase source tables
+check v_scorecard_source_health
+export Supabase source snapshot
+publish scorecard_latest snapshot
+verify scorecard snapshot
+verify scorecard resource chain
+optional verify live /api/scorecard and /88
 ```
 
-成功輸出範例：
+### 手動 source / snapshot commands
 
-```text
-latestDate: 2026-06-26
-rows: 1000
-cacheSource: supabase-snapshot
-missingRecordSources: 0
-missingDailySources: 0
-```
-
-## 驗證
-
-驗證 snapshot 與 live API：
+Generate terminal source：
 
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
+node --use-system-ca scripts\generate-terminal-scorecard-source.js
+```
+
+Backfill Supabase：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+node --use-system-ca scripts\scorecard-source-supabase-ops.js backfill --source-file=C:\fuman-runtime\data\scorecard-terminal-current.json
+```
+
+Export Supabase source：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+node --use-system-ca scripts\export-scorecard-supabase-source.js
+```
+
+Publish snapshot：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+node --use-system-ca scripts\publish-scorecard-snapshot.js
+```
+
+Snapshot runner：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-snapshot.ps1
+```
+
+## 驗證門檻
+
+必跑：
+
+```powershell
+Set-Location -LiteralPath C:\fuman-terminal
+node --check scripts\generate-terminal-scorecard-source.js
+node --check scripts\scorecard-source-supabase-ops.js
+node --check scripts\verify-scorecard-ui-e2e.js
 node --use-system-ca scripts\verify-scorecard-snapshot.js
-```
-
-驗證完整 resource chain：
-
-```powershell
-Set-Location -LiteralPath C:\fuman-terminal
 node --use-system-ca scripts\verify-scorecard-resource-chain.js
+node --use-system-ca scripts\verify-scorecard-ui-e2e.js
 ```
 
-必須看到：
+`verify-scorecard-ui-e2e.js` 必須檢查：
+
+| check | required |
+| --- | --- |
+| `/api/scorecard` ok | true |
+| rows | `> 0` |
+| record_date | all equal `latestDate` |
+| strategies | 包含全部 9 個正式策略 |
+| 策略2 | rows > 0 and only `09:00-12:00` |
+| 策略3 | rows > 0, `entry_time=13:00`, previous source marker |
+| 權證 | rows > 0 |
+| CB | entry_price from detected stockPrice and calculable |
+| non-CB entry/high | all filled |
+| required fields | no missing `record_date/strategy/ticker/name/entry_time/entry_price/high_price/pnl/reason` |
+| summary | rows/wins/losses/flats/totalPnl match row data |
+| `/88` HTML | scorecard hooks, result pills, decimal pnl |
+| `/88` hidden panel | 不顯示資料來源 / 日期規則 / 最高價來源 / 損益公式 basis panel |
+| `/88` display pnl | `PNL_MULTIPLIER=1000`, `損益(元)` |
+| `/88` history selector | `scorecard-history-date`, `historyDates`, selected-date summaries |
+
+Resource chain 必須看到：
 
 ```text
 [scorecard-chain] ok
 ```
 
-目前已通過：
+UI E2E 必須看到：
 
 ```text
-/api/scorecard latestDate = 2026-06-26
-/api/scorecard cacheSource = supabase-snapshot
-/88 resource chain = ok
+[scorecard-ui-e2e] ok
 ```
 
 ## Freshness Gate
@@ -382,94 +564,55 @@ $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
 
 正式狀態不可用 stale 假裝通過。
 
-## 不可做的事
+## 目前閉環基準
 
-不要用以下方式假裝修好：
-
-- Google Sheet
-- Streamlit
-- 只改 `data\scorecard-latest.json`
-- 只發布舊 DuckDB fallback
-- 只 bump version
-- 只 redeploy Vercel
-- 跳過 `v_scorecard_source_health`
-- 跳過 `verify-scorecard-resource-chain.js`
-
-## 正確維護順序
-
-1. 產生每日成績單結果。
-2. 寫入 `public.trade_records`。
-3. 寫入 `public.strategy_daily_summary`。
-4. 確認 `v_scorecard_source_health.status = ready`。
-5. 跑 `run-scorecard-snapshot.ps1`。
-6. 跑 `verify-scorecard-snapshot.js`。
-7. 跑 `verify-scorecard-resource-chain.js`。
-8. 確認 `/api/scorecard` 與 `/88` 顯示新日期。
-
-## 14:00 Daily Automation Contract
-
-正式每日成績單自動流程固定在收盤後執行，建議時間：
+最後已驗證正式狀態：
 
 ```text
-14:00 Asia/Taipei
+checked date = 2026-06-28 Asia/Taipei
+market state = weekend / non-trading day
+latestDate = 2026-06-26
+generator rows = 492
+Supabase snapshot rows = 492
+/api/scorecard rows = 492
+summary.rows = 492
+missing entry_time = 0
+UI E2E = ok
+resource chain = ok
 ```
 
-14:00 排程只做成績單 source / snapshot / verification，不做 Vercel deploy，不跑 publish gate，不修改前端程式。
+策略分組：
 
-正式排程腳本：
+| strategy | rows |
+| --- | ---: |
+| CB成績單 | 10 |
+| 即時雷達成績單 | 80 |
+| 權證成績單 | 120 |
+| 策略1開盤入成績單 | 20 |
+| 策略2成績單 | 46 |
+| 策略3隔日沖成績單 | 4 |
+| 策略4成績單 | 70 |
+| 策略5成績單 | 22 |
+| 買賣超成績單 | 120 |
+
+策略3基準：
 
 ```text
-C:\fuman-terminal\run-scorecard-daily-automation.ps1
+runId = strategy3-20260625-20260625151019
+record_date = 2026-06-26
+source_date marker = 2026-06-25
+entry_time = 13:00
+rows = 4
 ```
 
-手動執行：
-
-```powershell
-Set-Location -LiteralPath C:\fuman-terminal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
-```
-
-正式流程：
+`8261 富鼎` 顯示基準：
 
 ```text
-generate terminal scorecard source
--> backfill Supabase source tables
--> check v_scorecard_source_health
--> export Supabase scorecard source
--> publish scorecard_latest snapshot
--> verify scorecard snapshot
--> verify-scorecard-resource-chain.js
+entry_price = 255.5
+high_price = 281
+raw pnl = 25.5
+/88 display pnl = 25,500
 ```
-
-## Automation Failure Guard
-
-`run-scorecard-daily-automation.ps1` 必須在 publish 前檢查：
-
-| check | required |
-| --- | --- |
-| generated source latestDate | must equal expected Taipei date |
-| generated source records | `> 0` |
-| `v_scorecard_source_health.status` | `ready` |
-| `latest_record_date` | must equal generated latestDate |
-| `latest_summary_date` | must equal generated latestDate when present |
-| snapshot verify | pass |
-| resource chain verify | pass |
-
-若任一條件失敗：
-
-```text
-do not publish scorecard_latest
-preserve latest complete scorecard snapshot
-surface warning / failed step in terminal logs
-```
-
-休市日或特殊補跑若要允許沿用最近交易日，必須人工顯式加：
-
-```powershell
--AllowPreviousTradeDate
-```
-
-正式每日排程不可預設使用 `-AllowPreviousTradeDate`。
 
 ## Windows Task Scheduler Contract
 
@@ -497,162 +640,78 @@ powershell.exe
 -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
 ```
 
-目前排程狀態：
-
-```text
-TaskName      = \Fuman Scorecard Daily Automation 1400
-Status        = Ready
-Schedule Type = Daily
-Start Time    = 14:00
-Run As User   = ginov
-```
-
-驗證排程是否存在：
+查詢排程：
 
 ```powershell
 schtasks /Query /TN "Fuman Scorecard Daily Automation 1400" /V /FO LIST
 ```
 
-手動觸發排程：
+手動觸發：
 
 ```powershell
 schtasks /Run /TN "Fuman Scorecard Daily Automation 1400"
 ```
 
-## 14:00 Automation Maintainer Notes
-
-每日自動化完成後 `/88` 應符合：
+若存在舊排程：
 
 ```text
-/api/scorecard latestDate = latest scorecard source date
-/api/scorecard cacheSource = supabase-snapshot
-/88 displays the same latestDate
-verify-scorecard-resource-chain.js = ok
+Fuman Scorecard Snapshot 1538
 ```
 
-若失敗，優先檢查：
+必須停用或刪除，不可讓它覆蓋 `scorecard_latest`。
 
-1. `C:\fuman-runtime\data\scorecard-terminal-current.json`
-2. `public.trade_records`
-3. `public.strategy_daily_summary`
-4. `public.v_scorecard_source_health`
-5. `C:\fuman-terminal\data\scorecard-latest.json`
-6. `scorecard_latest` Supabase snapshot
+## 部署規則
 
-不可為了讓 `/88` 看起來更新而繞過 source health。
+資料更新不需要 Vercel deploy；只要 source / snapshot 正確，`/api/scorecard` 會讀最新 Supabase snapshot。
 
-## 2026-06-26 Total Battle Test Result
+只有 `/88.html`、`api/scorecard.js`、或驗證腳本等程式碼改動才需要部署。
 
-2026-06-26 已完成成績單自動流程總考驗。
-
-測試方式：
+正式部署若 `/88` 靜態檔沒有更新，使用強制部署：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\fuman-terminal\run-scorecard-daily-automation.ps1
-schtasks /Run /TN "Fuman Scorecard Daily Automation 1400"
-schtasks /Query /TN "Fuman Scorecard Daily Automation 1400" /V /FO LIST
 Set-Location -LiteralPath C:\fuman-terminal
-node --use-system-ca scripts\verify-scorecard-resource-chain.js
+vercel --prod --yes --force
 ```
 
-通過結果：
-
-| item | result |
-| --- | --- |
-| direct script run | pass |
-| Windows scheduled task run | pass |
-| scheduled task Last Result | `0` |
-| next scheduled run | `2026-06-27 14:00` |
-| generated source latestDate | `2026-06-26` |
-| generated source rows | `374` |
-| Supabase backfill tradeRows | `374` |
-| Supabase backfill dailyRows | `7` |
-| exported snapshot rows | `1000` |
-| exported dailyRows | `23` |
-| published snapshot key | `scorecard_latest` |
-| published tradeDate | `20260626` |
-| published cacheSource | `supabase-snapshot` |
-| snapshot verify | pass |
-| live `/api/scorecard` verify | pass |
-| missing record sources | `0` |
-| missing daily sources | `0` |
-| resource chain | `ok` |
-
-本次修正的真實排程問題：
-
-1. PowerShell `ConvertFrom-Json` 讀大型中文 JSON 時可能失敗。
-   - 修正：`run-scorecard-daily-automation.ps1` 改用 Node 讀大型 JSON，PowerShell 只接收小型 ASCII summary。
-2. PowerShell `Out-File -Encoding utf8` 產生的 health 暫存 JSON 可能帶 BOM。
-   - 修正：Node summary reader 解析 JSON 前先移除 BOM。
-
-目前成績單自動流程狀態：
+部署後檢查：
 
 ```text
-complete-run APIs
--> C:\fuman-runtime\data\scorecard-terminal-current.json
--> public.trade_records
--> public.strategy_daily_summary
--> public.v_scorecard_source_health
--> C:\fuman-terminal\data\scorecard-latest.json
--> scorecard_latest
--> /api/scorecard
--> /88
+/88 HTML contains scorecard-hero
+/88 HTML contains PNL_MULTIPLIER = 1000
+/88 HTML contains scorecard-history-date
+/88 HTML does not contain scorecard-basis panel
+/api/scorecard latestDate and rows match selected latestDate rows
+verify-scorecard-ui-e2e.js ok
 ```
 
-狀態判定：
+## 不可做的事
 
-```text
-戰鬥狀態 = ready
-```
+不要用以下方式假裝修好：
 
-## Daily Scorecard Battle Checklist
+- 只改 `data\scorecard-latest.json`
+- 只發布舊 DuckDB fallback
+- 只 bump version
+- 只 redeploy Vercel
+- 跳過 Supabase source tables
+- 跳過 `v_scorecard_source_health`
+- 跳過 `verify-scorecard-resource-chain.js`
+- 跳過 `verify-scorecard-ui-e2e.js`
+- 讓同日同策略舊列殘留
+- 讓 `entry_time` 空白
+- 讓 CB 進場價變成 0 或 CB 價格
+- 讓策略3使用同日 latest run 作為同日成績單
+- 讓 `/88` 顯示原始價差而不是乘 1000 後金額
 
-每天檢查只看以下項目：
+## 正確維護順序
 
-| check | pass condition |
-| --- | --- |
-| Scheduler exists | `Fuman Scorecard Daily Automation 1400` exists |
-| Scheduler enabled | status is `Ready` or task is currently `Running` |
-| Scheduler result | last completed run has `Last Result = 0` |
-| Generated source | `scorecard-terminal-current.json` exists and records `> 0` |
-| Source latest date | latestDate equals expected latest trade date |
-| Supabase source health | `v_scorecard_source_health.status = ready` |
-| Snapshot JSON | `C:\fuman-terminal\data\scorecard-latest.json` exists |
-| Snapshot latestDate | equals Supabase source latestDate |
-| API source | `/api/scorecard.cacheSource = supabase-snapshot` |
-| API latestDate | equals snapshot latestDate |
-| Resource chain | `verify-scorecard-resource-chain.js = ok` |
-
-若任一項失敗：
-
-```text
-do not redeploy
-do not bump version
-do not use DuckDB fallback unless explicitly debugging
-do not overwrite scorecard_latest with stale data
-fix the failed source / health / scheduler step first
-```
-
-## Next System-Level Health Target
-
-下一層總控應把以下結果合併成一張每日戰鬥狀態總表：
-
-```text
-public.v_scanner_resource_health
-public.v_scorecard_source_health
-post-scan snapshot refresh verifier
-Fuman Scorecard Daily Automation 1400 Last Result
-verify-scorecard-resource-chain.js
-```
-
-目標：
-
-```text
-one daily dashboard:
-strategy readiness
-source freshness
-scorecard freshness
-snapshot publish status
-scheduler result
-terminal-visible reason
-```
+1. 確認今天是否開盤；休市日用最後開盤日。
+2. 產生 terminal complete-run scorecard source。
+3. 檢查策略2時間窗、策略3來源日、CB entry_price、全部 entry/high/pnl。
+4. 回填 `public.trade_records` 與 `public.strategy_daily_summary`，先清同日同策略舊列。
+5. 確認 `v_scorecard_source_health.status = ready`。
+6. 匯出 `data\scorecard-latest.json`。
+7. 發布 `scorecard_latest` Supabase snapshot。
+8. 跑 snapshot verify。
+9. 跑 resource chain verify。
+10. 跑 UI E2E。
+11. 確認 `/api/scorecard` 與 `/88` 顯示新日期與正確筆數。

@@ -17,8 +17,9 @@ if (-not (Test-Path -LiteralPath $ProjectRoot)) {
 }
 
 $duckdb = Join-Path $ScorecardRoot "scorecard.duckdb"
-if (-not (Test-Path -LiteralPath $duckdb)) {
-  throw "scorecard duckdb missing: $duckdb"
+$duckDbFallbackAllowed = $AllowDuckDbFallback -or $env:FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK -eq "1"
+if ($duckDbFallbackAllowed -and -not (Test-Path -LiteralPath $duckdb)) {
+  throw "scorecard duckdb fallback was requested but duckdb is missing: $duckdb"
 }
 
 if (-not $Python) {
@@ -46,7 +47,7 @@ if ($LASTEXITCODE -ne 0) { throw "scorecard Supabase source backfill failed with
 Write-Step "export Supabase scorecard source"
 & node --use-system-ca "scripts\export-scorecard-supabase-source.js" "--out=$outFile"
 if ($LASTEXITCODE -ne 0) {
-  if (-not $AllowDuckDbFallback -and $env:FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK -ne "1") {
+  if (-not $duckDbFallbackAllowed) {
     throw "scorecard Supabase source export failed with exit code $LASTEXITCODE; refusing to republish stale DuckDB fallback"
   }
   Write-Step "Supabase source unavailable; export DuckDB fallback because fallback was explicitly allowed"

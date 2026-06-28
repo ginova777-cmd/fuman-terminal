@@ -7,6 +7,7 @@ const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "scorecard-latest.json");
 const DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_DAYS || "30"));
+const RECORD_LIMIT = Math.max(1000, Number(process.env.FUMAN_SCORECARD_RECORD_LIMIT || String(DAYS * 800)));
 
 function argValue(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -170,7 +171,7 @@ async function main() {
   ].join(",");
   const records = (await supabaseGet(
     "trade_records",
-    `select=${selectRecords}&record_date=gte.${since}&order=record_date.desc,strategy.asc,ticker.asc&limit=5000`,
+    `select=${selectRecords}&record_date=gte.${since}&order=record_date.desc,strategy.asc,ticker.asc&limit=${RECORD_LIMIT}`,
   )).map(normalizeRecord).filter((row) => row.record_date && row.ticker);
   const dailyRows = (await supabaseGet(
     "strategy_daily_summary",
@@ -199,6 +200,7 @@ async function main() {
     latestDate,
     rows: records.length,
     dailyRows: dailyRows.length,
+    recordLimit: RECORD_LIMIT,
     cacheSource: payload.cacheSource,
     exportSource: payload.exportSource,
   }, null, 2));

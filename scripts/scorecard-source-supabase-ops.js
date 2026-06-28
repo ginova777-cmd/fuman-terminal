@@ -10,6 +10,22 @@ const CONTRACT_FILE = path.join(ROOT, "ops", "public-slot", "ScorecardSourceCont
 const SOURCE_FILE = process.env.FUMAN_SCORECARD_SOURCE_FILE || path.join(ROOT, "data", "scorecard-latest.json");
 const RECEIPT_FILE = process.env.FUMAN_SCORECARD_SOURCE_RECEIPT
   || path.join(RUNTIME_DIR, "data", "scan-receipts", "scorecard-source-supabase.json");
+const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
+const SCORECARD_HISTORY_DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_HISTORY_DAYS || "30"));
+const TERMINAL_SCORECARD_STRATEGIES = [
+  "即時雷達成績單",
+  "策略1成績單",
+  "策略1開盤入成績單",
+  "策略2成績單",
+  "策略2-A區進場",
+  "策略3成績單",
+  "策略3隔日沖成績單",
+  "策略4成績單",
+  "策略5成績單",
+  "買賣超成績單",
+  "權證成績單",
+  "CB成績單",
+];
 
 function arg(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -42,6 +58,12 @@ function dateOnly(value) {
   const digits = text.replace(/\D/g, "");
   if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
   return text.slice(0, 10);
+}
+
+function dateDaysAgo(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - Math.max(0, days - 1));
+  return date.toISOString().slice(0, 10);
 }
 
 function readJson(file) {
@@ -96,6 +118,21 @@ async function restUpsert(table, rows, conflict) {
     throw new Error(`${table} upsert HTTP ${response.status}: ${text.slice(0, 500)}`);
   }
   return { ok: true, status: response.status, rows: rows.length };
+}
+
+async function restDelete(table, query) {
+  const { url, key } = supabaseConfig();
+  const response = await fetch(`${url}/rest/v1/${table}?${query}`, {
+    method: "DELETE",
+    headers: headers(key, {
+      prefer: "return=minimal",
+    }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${table} delete HTTP ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return { ok: true, status: response.status };
 }
 
 async function pgMetaQuery(sql) {
@@ -274,11 +311,62 @@ async function backfill() {
   const { records, daily } = scorecardRowsFromPayload(payload);
   if (!records.length) throw new Error("source payload has no scorecard records");
   if (!daily.length) throw new Error("source payload has no daily summaries and could not derive any");
+  const latestDate = records.map((row) => row.record_date).sort().at(-1) || "";
+  const historyCutoff = dateDaysAgo(SCORECARD_HISTORY_DAYS);
+  const isTerminalCompleteRun = records.some((row) => row.source === TERMINAL_SCORECARD_SOURCE)
+    || cleanText(payload.exportSource) === TERMINAL_SCORECARD_SOURCE;
+  const cleanup = { skipped: true };
+  if (isTerminalCompleteRun && latestDate) {
+    cleanup.skipped = false;
+    cleanup.terminalSource = {
+      currentTradeRecords: await restDelete(
+        "trade_records",
+        `source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&record_date=eq.${encodeURIComponent(latestDate)}`,
+      ),
+      currentDailyRows: await restDelete(
+        "strategy_daily_summary",
+        `source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&summary_date=eq.${encodeURIComponent(latestDate)}`,
+      ),
+      tradeRecords: await restDelete(
+        "trade_records",
+        `source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&record_date=lt.${encodeURIComponent(historyCutoff)}`,
+      ),
+      dailyRows: await restDelete(
+        "strategy_daily_summary",
+        `source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&summary_date=lt.${encodeURIComponent(historyCutoff)}`,
+      ),
+    };
+    cleanup.legacyStrategies = [];
+    for (const strategy of TERMINAL_SCORECARD_STRATEGIES) {
+      cleanup.legacyStrategies.push({
+        strategy,
+        currentTradeRecords: await restDelete(
+          "trade_records",
+          `strategy=eq.${encodeURIComponent(strategy)}&record_date=eq.${encodeURIComponent(latestDate)}`,
+        ),
+        currentDailyRows: await restDelete(
+          "strategy_daily_summary",
+          `strategy=eq.${encodeURIComponent(strategy)}&summary_date=eq.${encodeURIComponent(latestDate)}`,
+        ),
+        tradeRecords: await restDelete(
+          "trade_records",
+          `strategy=eq.${encodeURIComponent(strategy)}&record_date=lt.${encodeURIComponent(historyCutoff)}`,
+        ),
+        dailyRows: await restDelete(
+          "strategy_daily_summary",
+          `strategy=eq.${encodeURIComponent(strategy)}&summary_date=lt.${encodeURIComponent(historyCutoff)}`,
+        ),
+      });
+    }
+  }
   const tradeRows = await chunkedUpsert("trade_records", records, "record_id");
   const dailyRows = await chunkedUpsert("strategy_daily_summary", daily, "summary_date,strategy");
   return {
     sourceFile: arg("source-file", SOURCE_FILE),
-    latestDate: records.map((row) => row.record_date).sort().at(-1) || "",
+    latestDate,
+    historyDays: SCORECARD_HISTORY_DAYS,
+    historyCutoff,
+    cleanup,
     tradeRows,
     dailyRows,
   };

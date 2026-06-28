@@ -152,9 +152,9 @@ async function fetchJson(pathname, timeoutMs = 30000) {
 function queryScorecardTask() {
   if (process.platform !== "win32") return { skipped: true, reason: "non_windows" };
   const command = [
-    "$task = Get-ScheduledTask -TaskName 'Fuman Scorecard Snapshot 1538' -ErrorAction SilentlyContinue",
+    "$task = Get-ScheduledTask -TaskName 'Fuman Scorecard Daily Automation 1400' -ErrorAction SilentlyContinue",
     "if (-not $task) { exit 2 }",
-    "$info = Get-ScheduledTaskInfo -TaskName 'Fuman Scorecard Snapshot 1538'",
+    "$info = Get-ScheduledTaskInfo -TaskName 'Fuman Scorecard Daily Automation 1400'",
     "$row = [pscustomobject]@{",
     "  TaskName = $task.TaskName",
     "  State = [string]$task.State",
@@ -231,38 +231,45 @@ async function main() {
     callsApi: /\/api\/scorecard/.test(page),
     hasTabs: /id="tabs"|class="tabs"/.test(page),
     hasSearch: /id="search"/.test(page),
-    hasFilter: /id="result"/.test(page),
+    hasFilter: /id="result"|id="resultPills"|data-testid="scorecard-result-pills"/.test(page),
     showsSource: /來源/.test(page),
   };
   addCheck(checks, Object.values(details.uiShell).every(Boolean), "ui-shell-contract", "/88 shell has title, API call, tabs, search/filter, source footer", details.uiShell);
 
-  const runner = readText("run-scorecard-snapshot.ps1");
+  const runner = readText("run-scorecard-daily-automation.ps1");
   details.runner = {
-    duckdbPath: DUCKDB_FILE,
-    duckdbExists: fs.existsSync(DUCKDB_FILE),
-    duckdbFile: fileInfo(DUCKDB_FILE),
-    workbookFile: fileInfo(path.join(SCORECARD_ROOT, "data", "fuman-scorecard.xlsx")),
+    terminalSourceFile: "C:\\fuman-runtime\\data\\scorecard-terminal-current.json",
+    healthFile: "C:\\fuman-runtime\\data\\scorecard-source-health-latest.json",
+    jsonFallbackFile: LOCAL_FILE,
+    generatesTerminalSource: runner.includes("generate-terminal-scorecard-source.js"),
+    backfillsSupabaseSource: runner.includes("scorecard-source-supabase-ops.js"),
+    checksSupabaseSourceHealth: /scorecard-source-supabase-ops\.js[\"']?\s*,?\s*[\"']health/i.test(runner) || runner.includes('"health"'),
     exportsSupabaseSource: runner.includes("export-scorecard-supabase-source.js"),
-    exportsDuckdb: runner.includes("export-scorecard-snapshot.py"),
-    duckdbFallbackRequiresExplicitAllow: /AllowDuckDbFallback|FUMAN_SCORECARD_ALLOW_DUCKDB_FALLBACK/.test(runner),
     publishesSnapshot: runner.includes("publish-scorecard-snapshot.js"),
     verifiesSnapshot: runner.includes("verify-scorecard-snapshot.js"),
+    verifiesResourceChain: runner.includes("verify-scorecard-resource-chain.js"),
+    supportsNonTradingDayCarryForward: /Get-TradingDayStatus|AllowPreviousTradeDate|allowPreviousForRun/.test(runner),
     noGoogleSheet: !/google\s*sheet/i.test(runner),
     noStreamlit: !/streamlit|8501/i.test(runner),
   };
-  addCheck(checks, details.runner.duckdbExists, "source-duckdb-exists", "scorecard DuckDB source exists", details.runner);
   addCheck(
     checks,
-    details.runner.exportsSupabaseSource && details.runner.publishesSnapshot && details.runner.verifiesSnapshot,
+    details.runner.generatesTerminalSource
+      && details.runner.backfillsSupabaseSource
+      && details.runner.checksSupabaseSourceHealth
+      && details.runner.exportsSupabaseSource
+      && details.runner.publishesSnapshot
+      && details.runner.verifiesSnapshot
+      && details.runner.verifiesResourceChain,
     "runner-export-publish-verify",
-    "run-scorecard-snapshot.ps1 exports Supabase scorecard source, publishes Supabase snapshot, then verifies",
+    "run-scorecard-daily-automation.ps1 generates terminal source, backfills Supabase, exports, publishes, then verifies",
     details.runner,
   );
   addCheck(
     checks,
-    details.runner.duckdbFallbackRequiresExplicitAllow,
-    "runner-duckdb-explicit-fallback",
-    "DuckDB scorecard export is only an explicit fallback, not the default production source",
+    details.runner.supportsNonTradingDayCarryForward,
+    "runner-non-trading-day-carry-forward",
+    "daily runner allows previous terminal batch only on non-trading days or explicit override",
     details.runner,
   );
   addCheck(checks, details.runner.noGoogleSheet && details.runner.noStreamlit, "runner-no-retired-source", "scorecard runner does not use Google Sheet or Streamlit as production source", details.runner);
@@ -303,8 +310,8 @@ async function main() {
   addCheck(checks, details.supabaseSnapshot.missingRecordSources === 0 && details.supabaseSnapshot.missingDailySources === 0, "supabase-snapshot-source-fields", "Supabase scorecard rows have source fields", details.supabaseSnapshot);
 
   details.schedule = queryScorecardTask();
-  addCheck(checks, details.schedule.ok === true, "schedule-exists", "Windows task Fuman Scorecard Snapshot 1538 exists", details.schedule);
-  addCheck(checks, /run-scorecard-snapshot\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs run-scorecard-snapshot.ps1", details.schedule);
+  addCheck(checks, details.schedule.ok === true, "schedule-exists", "Windows task Fuman Scorecard Daily Automation 1400 exists", details.schedule);
+  addCheck(checks, /run-scorecard-daily-automation\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs run-scorecard-daily-automation.ps1", details.schedule);
   addCheck(checks, String(details.schedule.lastResult || "").trim() === "0", "schedule-last-result-zero", "scorecard task Last Result=0", details.schedule);
 
   if (CHECK_LIVE) {
@@ -346,9 +353,9 @@ async function main() {
     localLatestDate: details.localFallback.latestDate,
     supabaseLatestDate: details.supabaseSnapshot.latestDate,
     liveLatestDate: CHECK_LIVE ? details.liveApi?.latestDate || "" : "skipped",
-    duckdbPath: DUCKDB_FILE,
-    duckdbFile: details.runner.duckdbFile,
-    workbookFile: details.runner.workbookFile,
+    terminalSourceFile: details.runner.terminalSourceFile,
+    healthFile: details.runner.healthFile,
+    jsonFallbackFile: details.runner.jsonFallbackFile,
   };
   addCheck(
     checks,

@@ -24,6 +24,44 @@ function Get-TaipeiDate() {
   return [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString("yyyy-MM-dd")
 }
 
+function Get-TradingDayStatus($ProjectRoot) {
+  $checker = Join-Path $ProjectRoot "scripts\twse-trading-day.js"
+  if (-not (Test-Path -LiteralPath $checker)) {
+    return [pscustomobject]@{
+      isTradingDay = $true
+      date = Get-TaipeiDate
+      reason = "checker_missing"
+      source = "scorecard-daily"
+    }
+  }
+
+  $script = @"
+const { isTwseTradingDay } = require(process.argv[1]);
+isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuman-runtime/state' })
+  .then((result) => console.log(JSON.stringify(result)))
+  .catch((error) => {
+    console.log(JSON.stringify({
+      isTradingDay: true,
+      date: '',
+      reason: 'trading_day_check_failed',
+      source: 'scorecard-daily',
+      error: error && error.message ? error.message : String(error)
+    }));
+  });
+"@
+
+  $output = & node -e $script $checker
+  if ($LASTEXITCODE -ne 0) {
+    return [pscustomobject]@{
+      isTradingDay = $true
+      date = Get-TaipeiDate
+      reason = "checker_exit_$LASTEXITCODE"
+      source = "scorecard-daily"
+    }
+  }
+  return ($output | Out-String | ConvertFrom-Json)
+}
+
 function Read-JsonFile($Path) {
   if (-not (Test-Path -LiteralPath $Path)) {
     throw "json file missing: $Path"
@@ -73,6 +111,10 @@ if (-not $ExpectedDate) {
   $ExpectedDate = Get-TaipeiDate
 }
 
+$tradingDayStatus = Get-TradingDayStatus $ProjectRoot
+$allowPreviousForRun = $AllowPreviousTradeDate -or (-not [bool]$tradingDayStatus.isTradingDay)
+Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
+
 $sourceFile = Join-Path $RuntimeRoot "data\scorecard-terminal-current.json"
 $snapshotFile = Join-Path $ProjectRoot "data\scorecard-latest.json"
 $healthFile = Join-Path $RuntimeRoot "data\scorecard-source-health-latest.json"
@@ -95,7 +137,7 @@ if (-not $sourceLatestDate) {
 if ($sourceRows -le 0) {
   throw "generated scorecard source has 0 records"
 }
-if (-not $AllowPreviousTradeDate -and $sourceLatestDate -ne $ExpectedDate) {
+if (-not $allowPreviousForRun -and $sourceLatestDate -ne $ExpectedDate) {
   throw "generated latestDate=$sourceLatestDate does not match expectedDate=$ExpectedDate; refusing to publish"
 }
 
@@ -127,7 +169,7 @@ if ($latestRecordDate -ne $sourceLatestDate) {
 if ($latestSummaryDate -and $latestSummaryDate -ne $sourceLatestDate) {
   throw "health latest_summary_date=$latestSummaryDate does not match generated latestDate=$sourceLatestDate; refusing to publish"
 }
-if (-not $AllowPreviousTradeDate -and $latestRecordDate -ne $ExpectedDate) {
+if (-not $allowPreviousForRun -and $latestRecordDate -ne $ExpectedDate) {
   throw "health latest_record_date=$latestRecordDate does not match expectedDate=$ExpectedDate; refusing to publish"
 }
 
@@ -153,9 +195,13 @@ if ($NoLiveVerify) {
 Invoke-Step "node" $verifyArgs
 
 Write-Step "verify scorecard resource chain"
-Invoke-Step "node" @(
+$chainVerifyArgs = @(
   "--use-system-ca",
   "scripts\verify-scorecard-resource-chain.js"
 )
+if ($NoLiveVerify) {
+  $chainVerifyArgs += "--no-live"
+}
+Invoke-Step "node" $chainVerifyArgs
 
 Write-Step ("ok latestDate={0} rows={1}" -f $sourceLatestDate, $sourceRows)
