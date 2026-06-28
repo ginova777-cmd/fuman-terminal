@@ -53,16 +53,27 @@ module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
-  response.setHeader("Content-Type", "application/json; charset=utf-8");
   const url = new URL(request.url || "/api/mobile-watch-meta", "https://fuman-terminal.vercel.app");
+  const rawCallback = String(request.query?.callback || url.searchParams.get("callback") || "").trim();
+  const callback = /^[A-Za-z_$][\w.$]{0,80}$/.test(rawCallback) ? rawCallback : "";
+  const send = (statusCode, payload) => {
+    response.status(statusCode);
+    if (callback) {
+      response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      response.send(`${callback}(${JSON.stringify(payload)});`);
+      return;
+    }
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.json(payload);
+  };
   const code = code4(request.query?.code || url.searchParams.get("code"));
   if (!code) {
-    response.status(400).json({ ok: false, valid: false, error: "missing_code" });
+    send(400, { ok: false, valid: false, error: "missing_code" });
     return;
   }
   const universe = loadUniverse();
   const stock = universe.map.get(code) || null;
-  response.status(200).json({
+  send(200, {
     ok: true,
     valid: Boolean(stock),
     code,

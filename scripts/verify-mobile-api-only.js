@@ -86,8 +86,10 @@ function checkMobileShell() {
   requireText(mobile, "FUMAN_MOBILE_ADD_WATCH", "mobile watchlist must expose a shared add-watch pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD", "mobile watchlist must expose a timeout-safe manual add pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD_V2", "mobile watchlist must expose the direct-render V2 manual add pipeline");
-  requireText(mobile, "mobile-watch-v2-direct-render-20260628-02", "mobile watchlist must carry the direct-render hotfix marker");
+  requireText(mobile, "mobile-watch-v2-direct-render-20260628-03", "mobile watchlist must carry the direct-render hotfix marker");
   requireText(mobile, "/api/mobile-watch-meta?code=", "mobile watchlist must validate one stock code through the small meta API before static fallback");
+  requireText(mobile, "MutationObserver", "mobile watchlist V2 must guard against the legacy watch renderer overwriting cards");
+  requireText(mobile, "callback=", "mobile watchlist V2 must keep JSONP fallback when fetch is unavailable");
   requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
   requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
   requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");
@@ -126,6 +128,7 @@ function checkApiBoot() {
   requireText(mobileWatchMeta, "stocks-index.json", "/api/mobile-watch-meta must read the compact stock index");
   requireText(mobileWatchMeta, "stocks-slim.json", "/api/mobile-watch-meta must fall back to the full stock universe");
   requireText(mobileWatchMeta, "valid", "/api/mobile-watch-meta must return a valid boolean");
+  requireText(mobileWatchMeta, "callback", "/api/mobile-watch-meta must support JSONP callback fallback");
   requireText(mobileWatchMeta, 'Cache-Control", "no-store', "/api/mobile-watch-meta must be no-store");
 }
 
@@ -193,12 +196,12 @@ async function checkLive() {
   if (mobile.text.includes("/data/mobile-boot.json")) {
     pushIssue("live mobile shell must not reference /data/mobile-boot.json");
   }
-  if (!mobile.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobile.text.includes("mobile-watch-v2-direct-render-20260628-02")) {
+  if (!mobile.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobile.text.includes("mobile-watch-v2-direct-render-20260628-03")) {
     pushIssue("live /mobile must include the direct-render mobile watchlist V2 hotfix");
   }
   const mobilePage = await fetchLive("api/mobile-page");
   if (!mobilePage.response.ok) pushIssue(`live /api/mobile-page returned ${mobilePage.response.status}`);
-  if (!mobilePage.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobilePage.text.includes("mobile-watch-v2-direct-render-20260628-02")) {
+  if (!mobilePage.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobilePage.text.includes("mobile-watch-v2-direct-render-20260628-03")) {
     pushIssue("live /api/mobile-page must include the direct-render mobile watchlist V2 hotfix");
   }
   const validMeta = await fetchLive("api/mobile-watch-meta?code=2327");

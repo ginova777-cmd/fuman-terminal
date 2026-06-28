@@ -353,8 +353,10 @@ marketSession.marketDataDate=2026-06-26
 - `terminal-hotfix.js` 必須保留 `watchlist-storage-guard-20260628-03`。
 - storage guard 必須攔截 placeholder row，並透過 `scheduleShellValidation` 交給 shell 驗證。
 - `fuman-sw.js` 必須保留 watchlist shell / hotfix asset epoch purge，讓正式站吃到新自選股資產。
-- 手機版 `mobile.html` 必須保留 `mobile-watch-v2-direct-render-20260628-02` 與 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2`。
+- 手機版 `mobile.html` 必須保留 `mobile-watch-v2-direct-render-20260628-03` 與 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2`。
 - 手機版手動新增與策略卡「加入自選」必須由 V2 capture handler 接管：先用 `/api/mobile-watch-meta?code=XXXX` 查單一代號並驗證台股 universe，再同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1`、成功後直接 render 自選 tab 卡片，不可只等待舊 fragment/tab click 重畫，也不可在手機端先拉整包股票清單才新增。
+- 手機版 V2 必須保留 JSONP fallback，因為部分真實 Chrome 分頁 / 受控環境可能沒有可用的 `fetch`；`/api/mobile-watch-meta` 也必須支援 `callback=`。
+- 手機版 V2 必須用 `MutationObserver` 防止舊 mobile watch renderer 晚到時覆蓋 V2 `.watch-row`。
 
 不可恢復：
 
@@ -382,7 +384,7 @@ marketSession.marketDataDate=2026-06-26
 - 手機版所有策略卡的「加入自選」按鈕必須能寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，切到自選頁後要看得到卡片。
 - 手機版策略 1-5 的「加入自選」不可只檢查 selector 存在；E2E 必須實際點策略卡按鈕，確認兩個 storage key 寫入，再切到自選頁確認 `.watch-row` 顯示該代號。
 - 手機版新增也必須驗台股 universe；`2334` 這類 invalid code 不可進 storage，不可顯示卡片。
-- 手機版自選 tab 必須確認 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2` 是 function，且畫面根節點帶有 `data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-02"`。
+- 手機版自選 tab 必須確認 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2` 是 function，且畫面根節點帶有 `data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-03"`。
 
 `scripts/verify-terminal-ui-e2e.js` 必須保留自選股 negative test：
 
