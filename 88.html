@@ -101,6 +101,9 @@
       border: 1px solid var(--line);
       color: var(--text);
     }
+    #themeToggle {
+      color: #facc15;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -241,7 +244,7 @@
         <option value="">最新日期</option>
       </select>
       <input id="search" type="search" placeholder="搜尋代號 / 名稱" aria-label="搜尋代號或名稱">
-      <button id="themeToggle" class="ghost" type="button" data-testid="scorecard-theme-toggle" aria-pressed="false">陽光</button>
+      <button id="themeToggle" class="ghost" type="button" data-testid="scorecard-theme-toggle" aria-pressed="false" aria-label="切換至陽光模式" title="切換至陽光模式">☀</button>
       <button id="reload" type="button">重新整理</button>
     </div>
   </section>
@@ -322,7 +325,10 @@ function applyTheme(theme) {
   localStorage.setItem(THEME_KEY, next);
   const button = byId("themeToggle");
   if (button) {
-    button.textContent = next === "sun" ? "夜幕" : "陽光";
+    const label = next === "sun" ? "切換至夜幕模式" : "切換至陽光模式";
+    button.textContent = next === "sun" ? "☾" : "☀";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
     button.setAttribute("aria-pressed", String(next === "sun"));
   }
 }
