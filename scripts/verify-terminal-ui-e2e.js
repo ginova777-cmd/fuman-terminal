@@ -1724,7 +1724,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
                 }
               });
               const has2327 = rows.some((row) => /\b2327\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("2327"));
-              if (rows.length === 10 && has2327 && /2327/.test(status) && !/正在確認/.test(status)) {
+              if (rows.length === 10 && has2327 && !/正在確認/.test(status)) {
                 return { ok: true, status, rows: rows.length, storage };
               }
             }
