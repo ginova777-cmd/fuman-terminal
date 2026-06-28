@@ -1,4 +1,5 @@
 const LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push";
+const { guardedSend, guardSummary } = require("./notification-guard");
 
 function lineTargets() {
   return String(process.env.LINE_TO || process.env.LINE_USER_ID || "")
@@ -49,34 +50,75 @@ function splitLineText(text, limit = 3200) {
   return chunks.filter(Boolean);
 }
 
-async function pushLineMessages(messages) {
+function requestTimeoutMs() {
+  return Math.max(500, Number(process.env.LINE_PUSH_TIMEOUT_MS || process.env.NOTIFY_PUSH_TIMEOUT_MS || 2500));
+}
+
+function retryCount() {
+  return Math.max(0, Number(process.env.LINE_PUSH_RETRIES || process.env.NOTIFY_PUSH_RETRIES || 1));
+}
+
+function shouldRetry(status) {
+  return status === 429 || status >= 500;
+}
+
+async function fetchLine(payload, token) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retryCount(); attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), requestTimeoutMs());
+    try {
+      const response = await fetch(LINE_PUSH_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (response.ok) return response;
+      const detail = await response.text().catch(() => "");
+      const error = new Error(`LINE push failed ${response.status}: ${detail}`);
+      if (!shouldRetry(response.status) || attempt >= retryCount()) throw error;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retryCount()) throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error("LINE push failed");
+}
+
+async function pushLineMessages(messages, options = {}) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   const targets = lineTargets();
   if (!token || !targets.length) {
     throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
   }
   for (const to of targets) {
-    const response = await fetch(LINE_PUSH_URL, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ to, messages }),
+    const payload = { to, messages };
+    const result = await guardedSend({
+      channel: "line",
+      target: to,
+      payload,
+      options,
+      send: () => fetchLine(payload, token),
     });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(`LINE push failed ${response.status}: ${detail}`);
+    if (!result.sent && process.env.NOTIFY_GUARD_VERBOSE === "1") {
+      console.log(`LINE notification skipped: ${guardSummary(result.claim)}`);
     }
   }
 }
 
-async function sendLineText(text) {
-  await pushLineMessages([{ type: "text", text: trimLineText(text) }]);
+async function sendLineText(text, options = {}) {
+  await pushLineMessages([{ type: "text", text: trimLineText(text) }], options);
 }
 
-async function sendLineFlex(altText, contents) {
-  await pushLineMessages([{ type: "flex", altText: trimAltText(altText), contents }]);
+async function sendLineFlex(altText, contents, options = {}) {
+  await pushLineMessages([{ type: "flex", altText: trimAltText(altText), contents }], options);
 }
 
 module.exports = {

@@ -217,6 +217,14 @@ function buildEnhancementMessage(items) {
     .join("\n");
 }
 
+function notificationOptions(kind, today, keys, eventTime = "") {
+  return {
+    idempotencyKey: ["strategy2-live", kind, today, ...keys].join("|"),
+    eventTime: eventTime || new Date().toISOString(),
+    dataConfirmed: true,
+  };
+}
+
 function intradayTimeText(value) {
   const match = String(value || "").match(/(\d{2}:\d{2}(?::\d{2})?)/);
   return match ? match[1] : "";
@@ -335,20 +343,22 @@ async function main() {
     throw new Error("Missing Telegram or LINE notification config");
   }
   if (latestEvents.length) {
+    const options = notificationOptions("entry", today, latestEvents.map(eventKey), `${today}T${latestEvents.at(-1)?.firstAAt || "09:00:00"}+08:00`);
     if (hasTelegramConfig()) {
-      await sendTelegramText(buildMessage(latestEvents));
+      await sendTelegramText(buildMessage(latestEvents), options);
     } else if (process.env.LINE_FLEX_DISABLED === "1") {
-      await sendLineText(buildMessage(latestEvents));
+      await sendLineText(buildMessage(latestEvents), options);
     } else {
-      await sendLineFlex(altText, strategy2LiveFlex(latestEvents, today));
+      await sendLineFlex(altText, strategy2LiveFlex(latestEvents, today), options);
     }
     latestEvents.forEach((event) => sent.add(eventKey(event)));
   }
   if (latestEnhancements.length) {
+    const options = notificationOptions("enhancement", today, latestEnhancements.map((item) => item.key), `${today}T${latestEnhancements.at(-1)?.enhancement?.at || "09:00:00"}+08:00`);
     if (hasTelegramConfig()) {
-      await sendTelegramText(buildEnhancementMessage(latestEnhancements));
+      await sendTelegramText(buildEnhancementMessage(latestEnhancements), options);
     } else {
-      await sendLineText(buildEnhancementMessage(latestEnhancements));
+      await sendLineText(buildEnhancementMessage(latestEnhancements), options);
     }
     latestEnhancements.forEach((item) => sent.add(item.key));
     latestEnhancements.forEach((item) => {

@@ -36,6 +36,7 @@
     "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
     "guard:source": "node scripts/guard-source-tree.js",
     "guard:buy-sell-no-rollback": "node scripts/guard-buy-sell-no-rollback.js",
+    "guard:notifications": "node scripts/verify-notification-guard.js",
     "guard:production": "node --use-system-ca scripts/verify-production-guard.js",
     "guard:production:pre": "node --use-system-ca scripts/verify-production-guard.js --pre-deploy",
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
