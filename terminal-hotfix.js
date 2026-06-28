@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260628-03";
+    window.__fumanWatchlistAddBridge = "20260628-04";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const maxRows = 10;
@@ -160,36 +160,24 @@
         `;
       }).join("");
     };
-    let lastBridgeAddAt = 0;
-    let addConfirmToken = 0;
-    const confirmCardStatus = (normalized, existedBefore) => {
-      const token = ++addConfirmToken;
-      const delays = [80, 240, 600, 1200];
-      delays.forEach((delay, index) => {
-        window.setTimeout(() => {
-          if (token !== addConfirmToken) return;
-          try {
-            const shell = window.FUMAN_WATCHLIST_SHELL_INSTANCE;
-            shell?.ensureCode?.(normalized, { code: normalized, addedAt: Date.now() });
-            shell?.render?.();
-          } catch (error) {}
-          let card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
-          const rows = readRows();
-          const storageHasCode = rows.some((row) => row.code === normalized);
-          if (!card && storageHasCode) {
-            fallbackRender(rows, normalized);
-            card = document.querySelector(`.watchlist-card[data-code="${normalized}"]`);
-          }
-          if (card || storageHasCode || index === delays.length - 1) {
-            setStatus(
-              card || storageHasCode ? (existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`) : `${normalized} 新增後尚未同步，請重新整理自選股`,
-              card || storageHasCode ? (existedBefore ? "exists" : "added") : "warn"
-            );
-            addConfirmToken += 1;
-          }
-        }, delay);
-      });
+    const ensureBridgeCard = (normalized, existedBefore, source) => {
+      let rows = readRows();
+      if (!rows.some((row) => row.code === normalized)) {
+        if (rows.length >= maxRows) return false;
+        rows = writeRows([{ code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }, ...rows]);
+      }
+      try {
+        const shell = window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+        shell?.ensureCode?.(normalized, { code: normalized, name: normalized, market: "台股", addedAt: Date.now() });
+        shell?.render?.();
+      } catch (error) {}
+      if (!document.querySelector(`.watchlist-card[data-code="${normalized}"]`)) {
+        fallbackRender(rows, normalized);
+      }
+      setStatus(existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existedBefore ? "exists" : "added");
+      return true;
     };
+    let lastBridgeAddAt = 0;
     const addCode = (code, source) => {
       const normalized = normalizeCode(code);
       if (!normalized) {
@@ -203,13 +191,8 @@
           const ok = shellAdd(normalized);
           if (ok) {
             lastBridgeAddAt = Date.now();
-            setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
-            const rows = readRows();
-            if (rows.some((row) => row.code === normalized)) {
-              fallbackRender(rows, normalized);
-              setStatus(existedBefore ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existedBefore ? "exists" : "added");
-            }
-            confirmCardStatus(normalized, existedBefore);
+            ensureBridgeCard(normalized, existedBefore, "shell-bridge");
+            setTimeout(() => ensureBridgeCard(normalized, existedBefore, "shell-bridge-confirm"), 80);
           }
           return ok;
         } catch (error) {

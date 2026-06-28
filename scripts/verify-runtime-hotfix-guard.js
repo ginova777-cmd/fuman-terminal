@@ -139,7 +139,7 @@ async function main() {
   requireMarker("terminal-hotfix.js", "installDesktopViewSnapshotCache");
   requireMarker("terminal-hotfix.js", "FUMAN_DESKTOP_VIEW_SNAPSHOT");
   requireMarker("terminal-hotfix.js", "FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT");
-  requireMarker("terminal-hotfix.js", "__fumanWatchlistAddBridge = \"20260628-03\"", "watchlist bridge 20260628-03");
+  requireMarker("terminal-hotfix.js", "__fumanWatchlistAddBridge = \"20260628-04\"", "watchlist bridge 20260628-04");
   requireMarker("terminal-hotfix.js", "fallbackRender(rows, normalized)", "watchlist immediate card fallback");
   requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260628-05", "watchlist redesigned shell 20260628-05");
   requireMarker("terminal-watchlist-shell.js", "mode: \"watchlist-redesign\"", "watchlist redesign mode");
@@ -153,7 +153,7 @@ async function main() {
   requireMarker("version.json", EXPECTED_FRONTEND_VERSION);
   requireMarker("terminal-core.js", `const version = "${EXPECTED_FRONTEND_VERSION}"`);
   requireMarker("index.html", `terminal-core.js?v=${EXPECTED_FRONTEND_VERSION}`);
-  requireMarker("index.html", "terminal-hotfix.js?route-switch=20260628-03");
+  requireMarker("index.html", "terminal-hotfix.js?watchlist-bridge=20260628-04");
   requireMarker("fuman-sw.js", `fuman-terminal-sw-${EXPECTED_FRONTEND_VERSION}`);
   for (const file of ["version.json", "index.html", "terminal-core.js", "fuman-sw.js"]) {
     if (read(file).includes("strategy1-two-cards-20260623-03")) {
