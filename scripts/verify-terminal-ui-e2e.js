@@ -593,21 +593,21 @@ async function afterDesktopRouteActivate(cdp, route) {
     await sleep(1200);
   }
   if (route.key === "watchlist") {
-    const typeWatchlistCode = async (code) => {
+    const submitWatchlistCode = async (code) => {
       await evaluate(cdp, (code) => {
         const input = document.querySelector("#watchlist-search-input");
-        if (input) {
-          input.focus();
-          input.value = code;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-          input.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-        return true;
+        const add = document.querySelector("#watchlist-add-btn");
+        if (!input || !add) return { ok: false, value: "", inputMissing: !input, addMissing: !add };
+        input.focus();
+        input.value = code;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        add.click();
+        return { ok: true, value: input.value, disabled: input.disabled === true, addDisabled: add.disabled === true };
       }, code);
     };
     const addWatchlistCode = async (code) => {
-      await typeWatchlistCode(code);
-      await clickSelector(cdp, "#watchlist-add-btn");
+      await submitWatchlistCode(code);
       await waitFor(cdp, (code) => {
         let rows = [];
         try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
@@ -621,8 +621,7 @@ async function afterDesktopRouteActivate(cdp, route) {
     for (const addedCode of addedCodes) {
       await addWatchlistCode(addedCode);
     }
-    await typeWatchlistCode("8112");
-    await clickSelector(cdp, "#watchlist-add-btn");
+    await submitWatchlistCode("8112");
     await waitFor(cdp, () => {
       const cards = [...document.querySelectorAll('.watchlist-card[data-code="8112"]')];
       const selected = Boolean(document.querySelector('.watchlist-card.selected[data-code="8112"]'));
