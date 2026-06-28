@@ -84,6 +84,7 @@ function checkMobileShell() {
   requireText(mobile, "location.reload", "mobile must have a hard reload path when the API-only contract reports a new incompatible run");
   requireText(mobile, 'html[data-sun="1"]', "mobile sunlight selector must quote attribute value so phones apply it");
   requireText(mobile, "FUMAN_MOBILE_ADD_WATCH", "mobile watchlist must expose a shared add-watch pipeline");
+  requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD", "mobile watchlist must expose a timeout-safe manual add pipeline");
   requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
   requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
   requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");

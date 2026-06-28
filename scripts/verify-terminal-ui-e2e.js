@@ -513,6 +513,15 @@ async function clickSelector(cdp, selector) {
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x, y: rect.y, button: "left", clickCount: 1 });
 }
 
+async function typeIntoSelector(cdp, selector, text) {
+  await clickSelector(cdp, selector);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 }).catch(() => null);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", windowsVirtualKeyCode: 65, modifiers: 2 }).catch(() => null);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 }).catch(() => null);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 }).catch(() => null);
+  await cdp.send("Input.insertText", { text: String(text || "") });
+}
+
 async function waitForDesktopRoute(cdp, route, timeoutMs = 7000) {
   return waitFor(cdp, (expected) => {
     const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden);
@@ -582,7 +591,7 @@ async function prepareMobileRoute(cdp, route) {
       ["2454", "聯發科"],
       ["2603", "長榮"],
       ["2881", "富邦金"],
-      ["2327", "國巨"],
+      ["2357", "華碩"],
       ["9904", "寶成"],
     ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股新增驗證", addedAt: new Date().toISOString() }));
     const value = JSON.stringify(rows);
@@ -1281,14 +1290,14 @@ function collectMobileStats(route) {
     if (!addInput || !addButton) contractBlockers.push("mobile watch tab add input/button missing");
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
-    if (!watchCodes.includes("1101")) contractBlockers.push(`mobile watch manual add code 1101 missing actual=${watchCodes.join(",")}`);
+    if (!watchCodes.includes("2327")) contractBlockers.push(`mobile watch manual add code 2327 missing actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("2334")) contractBlockers.push(`mobile watch invalid code 2334 rendered actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
     storageCodes.forEach((codes, index) => {
       const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
       if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
       if (!codes.includes("2344")) contractBlockers.push(`mobile watch storage ${key} missing 2344 actual=${codes.join(",")}`);
-      if (!codes.includes("1101")) contractBlockers.push(`mobile watch storage ${key} missing manual add 1101 actual=${codes.join(",")}`);
+      if (!codes.includes("2327")) contractBlockers.push(`mobile watch storage ${key} missing manual add 2327 actual=${codes.join(",")}`);
       if (codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} kept invalid 2334 actual=${codes.join(",")}`);
       if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
     });
@@ -1675,14 +1684,10 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await verifyMobileRouteWatchAdd(cdp, route);
         } else {
           await waitForSelector(cdp, "#mobile-watch-input", 12000);
+          await typeIntoSelector(cdp, "#mobile-watch-input", "2334");
+          await clickSelector(cdp, "[data-mobile-watch-add]");
           const invalidAdd = await evaluate(cdp, async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            const input = document.querySelector("#mobile-watch-input");
-            const add = document.querySelector("[data-mobile-watch-add]");
-            if (!input || !add) return { ok: false, reason: "mobile watch add controls missing" };
-            input.value = "2334";
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            add.click();
             for (let attempt = 0; attempt < 40; attempt += 1) {
               await wait(150);
               const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
@@ -1702,14 +1707,10 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           }, null, Math.max(EVAL_TIMEOUT_MS, 20000));
           if (!invalidAdd?.ok) throw new Error(`mobile watch invalid add failed: ${JSON.stringify(invalidAdd)}`);
 
+          await typeIntoSelector(cdp, "#mobile-watch-input", "2327");
+          await clickSelector(cdp, "[data-mobile-watch-add]");
           const validAdd = await evaluate(cdp, async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            const input = document.querySelector("#mobile-watch-input");
-            const add = document.querySelector("[data-mobile-watch-add]");
-            if (!input || !add) return { ok: false, reason: "mobile watch add controls missing" };
-            input.value = "1101";
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            add.click();
             for (let attempt = 0; attempt < 60; attempt += 1) {
               await wait(180);
               const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
@@ -1722,8 +1723,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
                   return [];
                 }
               });
-              const has1101 = rows.some((row) => /\b1101\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("1101"));
-              if (rows.length === 10 && has1101 && /1101/.test(status)) {
+              const has2327 = rows.some((row) => /\b2327\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("2327"));
+              if (rows.length === 10 && has2327 && /2327/.test(status) && !/正在確認/.test(status)) {
                 return { ok: true, status, rows: rows.length, storage };
               }
             }

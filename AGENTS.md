@@ -336,7 +336,8 @@ fuman-sw.js
 - count 維持原本名額，例如 `1/10`。
 - 手機 watch E2E 不可只預塞 10 檔；必須實際點手機新增：
   - 先輸入 `2334`，確認拒絕且 storage / DOM 都不含 `2334`。
-  - 再輸入有效台股，例如 `1101`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
+  - 再用真人鍵盤輸入有效台股，例如 `2327`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
+  - 手機手動新增不可卡在 `正在確認台股代號`；台股 universe 讀取必須有 timeout / fallback，失敗也要顯示受控錯誤。
   - 至少驗 night / sun 兩種手機模式。
 - 手機策略 E2E 必須覆蓋 `strategy1,strategy2,strategy3,strategy4,strategy5`：
   - 進策略分頁後清空手機自選 storage。
