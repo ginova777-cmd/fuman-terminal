@@ -127,6 +127,18 @@ function outboxStatus() {
 }
 
 function dataFileStatus(name) {
+  if (LEGACY_API_ONLY_DATA.has(name)) {
+    return {
+      file: name,
+      ok: true,
+      retired: true,
+      status: "api_only_retired_static_data",
+      date: "",
+      count: 0,
+      updatedAt: "",
+      bytes: 0,
+    };
+  }
   const candidates = [dataPath(name), path.join(ROOT, "data", name)];
   const file = candidates.find((candidate) => fs.existsSync(candidate));
   if (!file) return { file: name, ok: false, count: 0, updatedAt: "", bytes: 0 };
@@ -151,10 +163,6 @@ function riskItem(level, area, message, meta = {}) {
 }
 
 const DATA_SLA_HOURS = {
-  "market-summary.json": 12,
-  "strategy5-latest.json": 30,
-  "institution-summary.json": 42,
-  "warrant-flow-summary.json": 42,
   "strategy2-intraday-latest.json": 6,
   "realtime-radar-latest.json": 6,
   "performance-report.json": 36,
@@ -163,6 +171,23 @@ const DATA_SLA_HOURS = {
   "data-consistency-report.json": 36,
   "strategy-weight-report.json": 36,
 };
+
+const LEGACY_API_ONLY_DATA = new Set([
+  "market-summary.json",
+  "strategy5-latest.json",
+  "institution-summary.json",
+  "warrant-flow-summary.json",
+]);
+
+const HEALTH_DATA_FILES = [
+  "strategy2-intraday-latest.json",
+  "realtime-radar-latest.json",
+  "performance-report.json",
+  "signal-quality-report.json",
+  "data-quality-report.json",
+  "data-consistency-report.json",
+  "strategy-weight-report.json",
+];
 
 function isWeekendTaipei(date = new Date()) {
   const day = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(date);
@@ -199,6 +224,7 @@ function effectiveSlaHours(file) {
 
 function buildRisks({ badTasks, outbox, data }) {
   const risks = [];
+  const activeData = data.filter((item) => !item.retired);
   if (badTasks.length) {
     risks.push(riskItem("high", "schedule", `排程異常 ${badTasks.length} 個`, { items: badTasks.slice(0, 8) }));
   }
@@ -207,16 +233,16 @@ function buildRisks({ badTasks, outbox, data }) {
   } else if (outbox.pendingCount > 0) {
     risks.push(riskItem("medium", "github", `GitHub outbox 待補 ${outbox.pendingCount} 筆`));
   }
-  const missing = data.filter((item) => !item.ok);
+  const missing = activeData.filter((item) => !item.ok);
   if (missing.length) {
     risks.push(riskItem("high", "runtime", `資料檔缺失或不可解析 ${missing.length} 個`, { files: missing.map((item) => item.file) }));
   }
-  const missingIntradaySnapshots = data.filter((item) => item.status === "no_latest_intraday_snapshot");
+  const missingIntradaySnapshots = activeData.filter((item) => item.status === "no_latest_intraday_snapshot");
   if (missingIntradaySnapshots.length) {
     risks.push(riskItem("medium", "intraday", `最新交易日盤中快照未完成 ${missingIntradaySnapshots.length} 個`, { files: missingIntradaySnapshots.map((item) => item.file) }));
   }
   const now = Date.now();
-  const stale = data.map((item) => {
+  const stale = activeData.map((item) => {
     const at = Date.parse(item.updatedAt || "");
     const slaHours = effectiveSlaHours(item.file);
     const ageHours = Number.isFinite(at) ? (now - at) / 3600000 : null;
@@ -269,25 +295,15 @@ function main() {
       status: task.Status,
       handling: "replaced_by_official_freshness_gate_or_legacy_guard",
     }));
-  const data = [
-    "market-summary.json",
-    "strategy5-latest.json",
-    "institution-summary.json",
-    "warrant-flow-summary.json",
-    "strategy2-intraday-latest.json",
-    "realtime-radar-latest.json",
-    "performance-report.json",
-    "signal-quality-report.json",
-    "data-quality-report.json",
-    "data-consistency-report.json",
-    "strategy-weight-report.json",
-  ].map(dataFileStatus);
+  const retiredData = [...LEGACY_API_ONLY_DATA].map(dataFileStatus);
+  const data = HEALTH_DATA_FILES.map(dataFileStatus);
   const outbox = outboxStatus();
-  const risks = buildRisks({ badTasks, outbox, data });
+  const risks = buildRisks({ badTasks, outbox, data: [...data, ...retiredData] });
   const high = risks.filter((item) => item.level === "high").length;
   const medium = risks.filter((item) => item.level === "medium").length;
   const summary = {
     ok: high === 0 && badTasks.length === 0 && outbox.ok && data.every((item) => item.ok),
+    source: "api-only-health-summary",
     updatedAt: new Date().toISOString(),
     risk: high ? "high" : medium ? "medium" : "low",
     risks,
@@ -305,8 +321,15 @@ function main() {
     freshnessGate: {
       ok: true,
       mode: "api-only",
+      authoritative: true,
+      note: "Legacy static runtime data is retired. Use publish gate plus targeted Supabase/API verifiers as the production source of truth.",
     },
-    runtime: { ok: data.every((item) => item.ok), data },
+    runtime: {
+      ok: data.every((item) => item.ok),
+      mode: "api-only-diagnostic",
+      data,
+      retiredData,
+    },
   };
   writeJson(path.join(ROOT, "data", "health-summary.json"), summary);
   writeJson(dataPath("health-summary.json"), summary);
