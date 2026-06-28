@@ -614,10 +614,13 @@ async function afterDesktopRouteActivate(cdp, route) {
         const storageOk = Array.isArray(rows) && rows.some((item) => String(item?.code || "") === code);
         const cardOk = Boolean(document.querySelector(`.watchlist-card[data-code="${code}"]`));
         const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
-        return { ok: storageOk && cardOk && !/尚未同步/.test(status), storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
+        const bridgeReady = /^20260628-0[3-9]/.test(String(window.__fumanWatchlistAddBridge || ""));
+        const shellReady = Boolean(window.FUMAN_WATCHLIST_SHELL_INSTANCE || window.FUMAN_WATCHLIST_SHELL_MODULE);
+        const containerReady = Boolean(document.querySelector("#watchlist-stocks"));
+        return { ok: bridgeReady && shellReady && containerReady && storageOk && cardOk && !/尚未同步/.test(status), bridgeReady, shellReady, containerReady, storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
       }, code, 15000, 300);
     };
-    const addedCodes = ["8112", "2327", "9904"];
+    const addedCodes = ["6770", "8112", "2327", "9904"];
     for (const addedCode of addedCodes) {
       await addWatchlistCode(addedCode);
     }
@@ -628,7 +631,7 @@ async function afterDesktopRouteActivate(cdp, route) {
       const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
       return { ok: cards.length === 1 && (selected || /已在自選股/.test(status)) && !/尚未同步/.test(status), cards: cards.length, selected, status };
     }, null, 15000, 300);
-    for (const addedCode of ["2317", "2303", "2330", "2454", "2603", "2881"]) {
+    for (const addedCode of ["2317", "2303", "2330", "2454", "2603"]) {
       await addWatchlistCode(addedCode);
     }
     await waitFor(cdp, () => {
@@ -641,6 +644,8 @@ async function afterDesktopRouteActivate(cdp, route) {
       return {
         ok: rows.length === 10
           && cards.length === 10
+          && codes.includes("6770")
+          && cards.includes("6770")
           && new Set(codes).size === 10
           && new Set(cards).size === 10
           && /^10(?:\/10)?$/.test(countText)
@@ -864,6 +869,9 @@ function collectDesktopStats(route) {
     : [];
   const contractBlockers = [];
   if (route.key === "watchlist") {
+    const bridgeReady = /^20260628-0[3-9]/.test(String(window.__fumanWatchlistAddBridge || ""));
+    const shellReady = Boolean(window.FUMAN_WATCHLIST_SHELL_INSTANCE || window.FUMAN_WATCHLIST_SHELL_MODULE);
+    const containerReady = Boolean(activePanel.querySelector("#watchlist-stocks"));
     const cards = [...activePanel.querySelectorAll(".watchlist-card[data-code]")];
     const cardCodes = cards.map((card) => card.dataset.code || "").filter(Boolean);
     const selectedCard = activePanel.querySelector(".watchlist-card.selected[data-code]") || cards[0];
@@ -878,6 +886,9 @@ function collectDesktopStats(route) {
     const input = activePanel.querySelector("#watchlist-search-input");
     const add = activePanel.querySelector("#watchlist-add-btn");
     const status = text(activePanel.querySelector("#watchlist-entry-status"));
+    if (!bridgeReady) contractBlockers.push(`watchlist add bridge not ready actual=${window.__fumanWatchlistAddBridge || "<missing>"}`);
+    if (!shellReady) contractBlockers.push("watchlist rich shell not ready");
+    if (!containerReady) contractBlockers.push("watchlist card container missing");
     if (cards.length !== 10) contractBlockers.push(`watchlist must finish at 10 cards actual=${cards.length}`);
     if (new Set(cardCodes).size !== cardCodes.length) contractBlockers.push(`watchlist card codes must be unique actual=${cardCodes.join(",")}`);
     if (!/^10(?:\/10)?$/.test(countText)) contractBlockers.push(`watchlist count must be 10 or 10/10 actual=${countText || "<missing>"}`);
