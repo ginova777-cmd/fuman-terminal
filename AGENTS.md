@@ -70,6 +70,7 @@ fixed shell + Canvas / OffscreenCanvas + compact API + route snapshot
 - 不要把策略2放進冷 snapshot。
 - 不要把市場總覽退回泛用 `Rank / Code / Signal` 表格。
 - 不要把 AI 判讀退回純文字列表。
+- 不要讓自選股用任意四碼、placeholder 或 `name === code` 假卡新增成功。
 - 不要把舊黃框跑馬燈 / 強弱統計區塊加回來。
 
 ## 日期規則
@@ -263,6 +264,135 @@ fuman-sw.js
 - 不要把 `data/scan-receipts/*` 跟熱力圖程式修正混 commit。
 - 不要把 `data/*.json`、`data/mobile-*`、`data/terminal-home-*` 這類 static cache dirty 檔混進正式程式修正 commit。
 - 不要手動 full scan 來掩蓋熱力圖資料問題。
+
+## 自選股固定契約
+
+自選股是正式桌面終端功能，不是暫時 fragment，也不是任意四碼記帳器。任何自選股修改都要比照 AI 判讀的規格逐步檢查：資料、畫面、互動、夜幕 / 陽光、desktop E2E、正式站 live 都要驗。
+
+### 2026-06-28 事故紀錄
+
+問題：
+
+- 使用者輸入 `2334` 時，畫面曾顯示「已加入」或「尚未同步」，但左側卡片列表沒有可靠新增。
+- 某些路徑會新增成名稱等於代號的假卡，例如 `{ code: "2334", name: "2334", market: "台股" }`。
+- `2334` 不在 `data/stocks-slim.json` / `data/stocks-index.json` 台股 universe，正式行為必須拒絕。
+- `2344` 是有效台股 `華邦電`，正式行為必須能正常新增卡片。
+- 使用者常輸入很多台股，所以不能只處理單一代號或單次新增；列表必須可持續往下新增到上限。
+
+根因：
+
+- `terminal-watchlist-shell.js` 找不到股票 meta 時仍可能透過 fallback row 建立卡片。
+- `terminal-hotfix.js` bridge 曾有直接寫入 `localStorage` 的 fallback path，繞過 shell 驗證。
+- 舊 E2E 曾把 invalid `2334` seed 成 `旺宏`，導致測試誤把錯誤行為當成功。
+- 舊 storage key `fuman_watchlist` / `fuman_mobile_watchlist_v1` 內若已殘留 invalid rows，會讓畫面出現「已加入但沒有正常卡片」或「尚未同步」。
+- 只清 service worker cache 或 bump version 不能修掉資料驗證錯誤；真正問題在新增流程與 storage guard。
+
+正式修正：
+
+- `terminal-watchlist-shell.js` marker 必須保留 `watchlist-rich-shell-20260628-07`。
+- 新增前必須走 `resolveStockMeta` / `validateTaiwanStockCode`。
+- 股票 meta 優先從 `data/stocks-slim.json` 解析，備援 `/api/stocks?watchlist=1`。
+- 有效 meta 至少要符合：code 相同、name 不空、name 不等於 code、market 可辨識。
+- invalid code 必須顯示 `不是有效上市/上櫃台股代號`。
+- invalid code 不可寫入 `localStorage`，不可生成 `.watchlist-card`，不可佔用 `1/10` 到 `10/10` 名額。
+- `validateStoredRows()` 必須清除舊 storage 裡已殘留的 invalid rows。
+- `terminal-hotfix.js` bridge marker 必須保留 `20260628-06`，並等待 shell async add result。
+- `terminal-hotfix.js` 必須保留 `watchlist-storage-guard-20260628-03`。
+- storage guard 必須攔截 placeholder row，並透過 `scheduleShellValidation` 交給 shell 驗證。
+- `fuman-sw.js` 必須保留 watchlist shell / hotfix asset epoch purge，讓正式站吃到新自選股資產。
+
+不可恢復：
+
+- 不得恢復「任意四碼即可新增」。
+- 不得恢復 `fallbackRow(code)` 當作新增成功。
+- 不得恢復 `name === code` placeholder fake card。
+- 不得讓 invalid code 只顯示「尚未同步」但仍留在列表或 storage。
+- 不得讓 bridge、mobile fragment 或 hotfix 直接繞過 shell 寫卡。
+- 不得把 `2334` 當 valid E2E seed。
+- 不得用 service worker cache、version bump、redeploy 來掩蓋 universe / meta 驗證問題。
+
+### UI / E2E 固定規格
+
+自選股 UI 必須持續符合：
+
+- 左側自選股卡片可連續新增有效台股，卡片可往下堆疊，不得只顯示第一張。
+- 左側計數必須正確顯示，例如 `1/10`、`2/10`。
+- 有效台股卡片必須包含代號、名稱、市場 badge、價格或受控等待值、漲跌幅、移除按鈕。
+- 點左側卡片後，右側個股分析必須同步切到該股票。
+- 右側分析至少要有標的、趨勢判讀、漲跌幅、符合策略、價位、籌碼、風險、操作提醒與判讀理由。
+- invalid code 要停在輸入區狀態訊息，不得新增卡片。
+- 夜幕 / 陽光模式都不可爆版、重疊或讓文字溢出卡片。
+
+`scripts/verify-terminal-ui-e2e.js` 必須保留自選股 negative test：
+
+- 輸入 `2334`。
+- `localStorage` 不含 `2334`。
+- DOM 不含 `.watchlist-card[data-code="2334"]`。
+- status 含 `不是有效上市/上櫃台股代號`。
+- count 維持原本名額，例如 `1/10`。
+
+E2E seed 必須使用有效台股，例如：
+
+```text
+2344 華邦電
+```
+
+修改自選股後至少要跑：
+
+```powershell
+node --check terminal-watchlist-shell.js
+node --check terminal-hotfix.js
+node --check scripts/verify-terminal-ui-e2e.js
+npm run verify:runtime-hotfix
+npm run verify:sw
+npm run verify:publish-gate
+```
+
+正式部署後至少要跑：
+
+```powershell
+npm run guard:production
+npm run verify:runtime-hotfix -- --live
+npm run verify:terminal-ui-e2e -- --only=desktop-night,desktop-sun --routes=watchlist --route-timeout=90000 --eval-timeout=60000
+```
+
+runtime guard 必須檢查以下 marker：
+
+```text
+watchlist-rich-shell-20260628-07
+validateTaiwanStockCode
+watchlist-storage-guard-20260628-03
+scheduleShellValidation
+不是有效上市/上櫃台股代號
+```
+
+### 上傳 / 部署規則
+
+自選股屬於正式站 UI / runtime。修改 `terminal-watchlist-shell.js`、`terminal-hotfix.js`、`index.html`、`fuman-sw.js`、自選股 API 或相關 E2E 後，必須走正式發布 / 上傳硬規則。
+
+- 發布只能從乾淨 release clone / worktree。
+- 發布前必須確認 `git status -sb` 乾淨，且 `npm run verify:publish-gate` 通過。
+- 必須 commit 並 push 到 `origin/main`，不可只停在本機或 preview。
+- 正式部署只認 `https://fuman-terminal.vercel.app`，不可只看 Vercel preview URL。
+- `vercel --prod --yes` 後必須跑 production guard 與 live UI E2E。
+- 若只修改 `AGENTS.md` 或文件，不需要重新 deploy Vercel，但仍要 commit / push 讓契約留在 repo。
+- 使用者不需要用 PowerShell 手動刪 cache 才能讓正確功能成立；若需要換資產，應透過正式 asset epoch / service worker 規則處理。
+
+### 本次收斂紀錄
+
+- 最終修正 commit：`1fe811e4 Validate Taiwan stock watchlist adds`。
+- 正式部署：`dpl_A7BUAZa8GgQjtmSTaPhJGZsMUVB6`。
+- 正式網址：`https://fuman-terminal.vercel.app`。
+- live runtime hotfix 驗證已通過，`/api/mobile-page` 是 200，標題為「輔滿極速手機版」。
+- live desktop watchlist E2E 已通過 night / sun matrix，結果為 `ok desktop/night/watchlist rows=21`、`ok desktop/sun/watchlist rows=21`。
+
+### 驗證注意事項 / 已知坑
+
+- `verify:terminal-ui-e2e` 預設打正式網址 `https://fuman-terminal.vercel.app`；部署前用它驗新碼，會打到舊 production。
+- 本地 `scripts/local-api-only-server.js` 曾因 `/api/mobile-boot` handler 出現 `ERR_HTTP_HEADERS_SENT` 中斷；這是本地測試 server 限制，不代表自選股功能失敗。
+- `vercel dev` 曾因專案 dev script 遞迴呼叫自身而不可用，不要把這個當成自選股 runtime 失敗。
+- live UI E2E 偶爾會遇到 Chrome CDP 啟動瞬間拒連或第一輪事件時序抖動；以最終 desktop night / sun matrix 綠燈為準，必要時重跑確認。
+- 若使用者回報「尚未同步」或「加了很多台股但卡片沒增加」，先查新增流程、storage guard、invalid meta、E2E negative test，不要先叫使用者清 cache。
 
 ## AI 判讀
 
@@ -751,6 +881,24 @@ AI 判讀
 CB
 權證
 自選股
+```
+
+若修改自選股，追加：
+
+```powershell
+node --check terminal-watchlist-shell.js
+node --check terminal-hotfix.js
+node --check scripts/verify-terminal-ui-e2e.js
+npm run verify:runtime-hotfix
+npm run verify:sw
+npm run verify:terminal-ui-e2e -- --only=desktop-night,desktop-sun --routes=watchlist --route-timeout=90000 --eval-timeout=60000
+```
+
+自選股 deploy 後追加：
+
+```powershell
+npm run verify:runtime-hotfix -- --live
+npm run verify:terminal-ui-e2e -- --only=desktop-night,desktop-sun --routes=watchlist --route-timeout=90000 --eval-timeout=60000
 ```
 
 ### Commit / receipts 規則
