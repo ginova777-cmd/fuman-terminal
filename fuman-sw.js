@@ -8,7 +8,7 @@ const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
-  "/terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260627-02",
+  "/terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260628-01",
   "/terminal-modules.js?v=public-terminal-fast-20260623-09",
   "/terminal-sector-map.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-config.js?v=public-terminal-fast-20260623-09",
