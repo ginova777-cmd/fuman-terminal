@@ -13,10 +13,29 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 
 const QUOTE_TABLE = process.env.FUMAN_REALTIME_QUOTE_TABLE || "fugle_realtime_quote_latest";
+const DEFAULT_RADAR_LIMIT = 120;
+const FULL_SESSION_RADAR_LIMIT = 1200;
+const MAX_RADAR_LIMIT = 1500;
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function clampLimit(value, fallback = DEFAULT_RADAR_LIMIT) {
+  const number = Math.round(cleanNumber(value));
+  return Math.max(1, Math.min(MAX_RADAR_LIMIT, number || fallback));
+}
+
+function requestRadarLimit(request) {
+  try {
+    const url = new URL(request.url || "/", "http://localhost");
+    const full = /^(1|true|yes|all)$/i.test(url.searchParams.get("full") || "");
+    const fallback = full ? FULL_SESSION_RADAR_LIMIT : DEFAULT_RADAR_LIMIT;
+    return clampLimit(url.searchParams.get("limit"), fallback);
+  } catch {
+    return DEFAULT_RADAR_LIMIT;
+  }
 }
 
 function taipeiDateKey(date = new Date()) {
@@ -70,33 +89,39 @@ function buildMarketSession(tradingDay, payload) {
   };
 }
 
-function normalizeRadarRows(payload) {
+function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
   if (!Array.isArray(payload?.rows)) return payload;
+  const allRows = payload.rows.map((row) => {
+    if (!row || typeof row !== "object") return row;
+    const tags = Array.isArray(row.tags)
+      ? row.tags
+      : Array.isArray(row.signalTags)
+        ? row.signalTags
+        : [];
+    const signal = row.signal || tags[0] || row.stateId || row.side || "";
+    const state = row.state || row.side || row.radarMode || "";
+    const reason = row.reason || tags.join(" / ") || signal || state;
+    return {
+      ...row,
+      tags,
+      signal,
+      state,
+      reason,
+    };
+  });
+  const rows = allRows.slice(0, clampLimit(limit));
   return {
     ...payload,
-    rows: payload.rows.map((row) => {
-      if (!row || typeof row !== "object") return row;
-      const tags = Array.isArray(row.tags)
-        ? row.tags
-        : Array.isArray(row.signalTags)
-          ? row.signalTags
-          : [];
-      const signal = row.signal || tags[0] || row.stateId || row.side || "";
-      const state = row.state || row.side || row.radarMode || "";
-      const reason = row.reason || tags.join(" / ") || signal || state;
-      return {
-        ...row,
-        tags,
-        signal,
-        state,
-        reason,
-      };
-    }),
+    rows,
+    count: rows.length,
+    totalCount: allRows.length,
+    hasMore: allRows.length > rows.length,
+    displayWindow: "09:00-13:30",
   };
 }
 
-function withMarketSession(payload, marketSession, reason = "") {
-  const normalizedPayload = normalizeRadarRows(payload);
+function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_RADAR_LIMIT) {
+  const normalizedPayload = normalizeRadarRows(payload, limit);
   return {
     ...normalizedPayload,
     reason: reason || normalizedPayload?.reason,
@@ -117,7 +142,7 @@ function radarScore(row) {
   return Math.max(1, Math.min(100, Math.round(30 + pct * 9 + Math.log10(Math.max(value, 1)) * 4 + Math.log10(Math.max(volume, 1)) * 3)));
 }
 
-function quoteRowsToRadarPayload(rows = []) {
+function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
   const now = Date.now();
   const date = taipeiDateKey();
   const normalized = rows
@@ -159,7 +184,7 @@ function quoteRowsToRadarPayload(rows = []) {
     })
     .filter(Boolean)
     .sort((a, b) => cleanNumber(b.value) - cleanNumber(a.value))
-    .slice(0, 120);
+    .slice(0, clampLimit(limit));
   return {
     ok: normalized.length > 0,
     source: `supabase:${QUOTE_TABLE}`,
@@ -253,6 +278,7 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    const requestedLimit = requestRadarLimit(request);
     const tradingDay = await isTwseTradingDay(new Date(), {
       stateDir: process.env.FUMAN_STATE_DIR || path.join("/tmp", "fuman-state"),
     });
@@ -260,7 +286,7 @@ module.exports = async function handler(request, response) {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       const payload = unavailablePayload("supabase_not_configured");
       const session = buildMarketSession(tradingDay, payload);
-      response.status(503).json(withMarketSession(payload, session, "supabase_not_configured"));
+      response.status(503).json(withMarketSession(payload, session, "supabase_not_configured", requestedLimit));
       return;
     }
 
@@ -272,7 +298,7 @@ module.exports = async function handler(request, response) {
       if (!row?.payload) {
         const payload = unavailablePayload(primaryError || "non_trading_day_supabase_cache_empty");
         const session = buildMarketSession(tradingDay, payload);
-        response.status(503).json(withMarketSession(payload, session, "non_trading_day_supabase_cache_empty"));
+        response.status(503).json(withMarketSession(payload, session, "non_trading_day_supabase_cache_empty", requestedLimit));
         return;
       }
       const payload = {
@@ -286,17 +312,17 @@ module.exports = async function handler(request, response) {
         },
       };
       const session = buildMarketSession(tradingDay, payload);
-      response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache"));
+      response.status(200).json(withMarketSession(payload, session, "non-trading-day-cache", requestedLimit));
       return;
     }
 
     if (!row?.payload) {
       try {
-        const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=120`);
-        const quotePayload = quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : []);
+        const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=${clampLimit(requestedLimit)}`);
+        const quotePayload = quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : [], requestedLimit);
         if (quotePayload.rows.length) {
           const session = buildMarketSession(tradingDay, quotePayload);
-          response.status(200).json(withMarketSession(quotePayload, session));
+          response.status(200).json(withMarketSession(quotePayload, session, "", requestedLimit));
           return;
         }
       } catch (error) {
@@ -304,7 +330,7 @@ module.exports = async function handler(request, response) {
       }
       const payload = unavailablePayload(primaryError || "realtime_radar_latest_empty");
       const session = buildMarketSession(tradingDay, payload);
-      response.status(503).json(withMarketSession(payload, session, "realtime_radar_latest_empty"));
+      response.status(503).json(withMarketSession(payload, session, "realtime_radar_latest_empty", requestedLimit));
       return;
     }
 
@@ -321,10 +347,10 @@ module.exports = async function handler(request, response) {
       },
     };
     const session = buildMarketSession(tradingDay, payload);
-    response.status(200).json(withMarketSession(payload, session));
+    response.status(200).json(withMarketSession(payload, session, "", requestedLimit));
   } catch (error) {
     const payload = unavailablePayload(error?.message || String(error));
     const session = buildMarketSession({ isTradingDay: false, reason: "trading-day-check-failed", source: "api-only" }, payload);
-    response.status(503).json(withMarketSession(payload, session, "realtime_radar_api_error"));
+    response.status(503).json(withMarketSession(payload, session, "realtime_radar_api_error", DEFAULT_RADAR_LIMIT));
   }
 };

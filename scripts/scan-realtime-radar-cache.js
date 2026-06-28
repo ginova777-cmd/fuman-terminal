@@ -39,6 +39,9 @@ const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
+const MARKET_START_SECONDS = MARKET_START_MINUTES * 60;
+const MARKET_END_SECONDS = MARKET_END_MINUTES * 60;
+const REALTIME_RADAR_SESSION_LIMIT = Math.max(120, Number(process.env.REALTIME_RADAR_SESSION_LIMIT || 1200));
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -547,7 +550,7 @@ function radarSignalScore(stock) {
   return Math.max(1, Math.min(100, Math.round(tagScore + moveScore + valueScore + volumeScore - 42)));
 }
 
-function buildRadarRows(stocks, detectedAt) {
+function buildRadarRows(stocks, detectedAt, scanTimestamp = "") {
   return stocks
     .filter(isIntradayTradable)
     .map((stock) => {
@@ -569,6 +572,7 @@ function buildRadarRows(stocks, detectedAt) {
         (value >= 1000000000 && pct < 0) ||
         (volume >= 5000 && pct <= -1.2);
       const side = hasLongSignal && (!hasShortSignal || pct >= 0) ? "long" : hasShortSignal ? "short" : "";
+      const signalTime = stock.quoteTime || stock.time || String(scanTimestamp).match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || "";
       const row = {
         ...stock,
         pct,
@@ -581,14 +585,86 @@ function buildRadarRows(stocks, detectedAt) {
         totalInst: 0,
         signalTags,
         detectedAt,
+        firstSignalTime: stock.firstSignalTime || signalTime,
+        lastSignalTime: signalTime,
+        time: stock.firstSignalTime || signalTime,
+        quoteTime: stock.quoteTime || stock.time || signalTime,
       };
       row.score = radarSignalScore(row);
       row.flow = radarFlowValue(row);
       return row;
     })
     .filter((stock) => stock.value > 0 && stock.side && stock.signalTags.length)
-    .sort((a, b) => b.score - a.score || b.value - a.value)
-    .slice(0, 80);
+    .sort((a, b) => b.score - a.score || b.value - a.value);
+}
+
+function radarRowSessionSeconds(row) {
+  return secondsOfDay(row?.firstSignalTime || row?.time || row?.quoteTime || row?.lastSignalTime);
+}
+
+function isSessionRadarRow(row) {
+  const seconds = radarRowSessionSeconds(row);
+  return seconds == null || (seconds >= MARKET_START_SECONDS && seconds <= MARKET_END_SECONDS);
+}
+
+function radarRowKey(row) {
+  const time = String(row?.firstSignalTime || row?.time || row?.quoteTime || "").match(/\d{1,2}:\d{2}/)?.[0] || "open";
+  const tags = Array.isArray(row?.signalTags) ? row.signalTags : Array.isArray(row?.tags) ? row.tags : [];
+  const signal = tags.slice(0, 3).join("/") || row?.signal || row?.reason || "";
+  return [row?.code || "", row?.side || row?.state || "", signal, time].join("|");
+}
+
+function radarRowsSignature(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => [row?.code || "", row?.side || "", row?.firstSignalTime || row?.time || "", row?.score || "", row?.value || ""].join(":"))
+    .join("|");
+}
+
+function mergeRadarSessionRows(previousPayload, currentRows, scanTimestamp, tradeDate) {
+  const previousRows = previousPayload?.date === tradeDate && Array.isArray(previousPayload.rows)
+    ? previousPayload.rows
+    : [];
+  const rowsByKey = new Map();
+  const addRow = (row, preferLatest) => {
+    if (!row || !row.code || !isSessionRadarRow(row)) return;
+    const firstSignalTime = row.firstSignalTime || row.time || row.quoteTime || String(scanTimestamp).match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || "";
+    const normalized = {
+      ...row,
+      firstSignalTime,
+      lastSignalTime: row.lastSignalTime || row.quoteTime || row.time || firstSignalTime,
+      time: firstSignalTime,
+    };
+    const key = radarRowKey(normalized);
+    const existing = rowsByKey.get(key);
+    if (!existing) {
+      rowsByKey.set(key, normalized);
+      return;
+    }
+    const keep = preferLatest ? normalized : existing;
+    const firstSeconds = Math.min(radarRowSessionSeconds(existing) ?? Infinity, radarRowSessionSeconds(normalized) ?? Infinity);
+    const firstTime = [existing.firstSignalTime || existing.time, normalized.firstSignalTime || normalized.time]
+      .filter(Boolean)
+      .sort((a, b) => (secondsOfDay(a) ?? firstSeconds) - (secondsOfDay(b) ?? firstSeconds))[0] || keep.firstSignalTime || keep.time;
+    rowsByKey.set(key, {
+      ...existing,
+      ...keep,
+      firstSignalTime: firstTime,
+      lastSignalTime: normalized.lastSignalTime || existing.lastSignalTime || keep.quoteTime || keep.time,
+      time: firstTime,
+      score: Math.max(cleanNumber(existing.score), cleanNumber(normalized.score)),
+      value: Math.max(cleanNumber(existing.value), cleanNumber(normalized.value)),
+      flow: Math.max(cleanNumber(existing.flow), cleanNumber(normalized.flow)),
+    });
+  };
+  previousRows.forEach((row) => addRow(row, false));
+  currentRows.forEach((row) => addRow(row, true));
+  return [...rowsByKey.values()]
+    .filter(isSessionRadarRow)
+    .sort((a, b) => (radarRowSessionSeconds(b) ?? 0) - (radarRowSessionSeconds(a) ?? 0)
+      || cleanNumber(b.score) - cleanNumber(a.score)
+      || cleanNumber(b.value) - cleanNumber(a.value)
+      || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+    .slice(0, REALTIME_RADAR_SESSION_LIMIT);
 }
 
 async function main() {
@@ -618,7 +694,9 @@ async function main() {
   const staleQuoteDetails = buildStaleQuoteDetails(staleStocks, timestamp);
   const failedBatchDetails = buildFailedBatchDetails(realtime.failedBatches);
   const externalSourceIssues = buildExternalSourceIssues({ failedBatchDetails, staleQuoteDetails });
-  const rows = buildRadarRows(freshStocks, detectedAt);
+  const previousPayload = readJson(OUT_FILE, null);
+  const currentRows = buildRadarRows(freshStocks, detectedAt, timestamp);
+  const rows = mergeRadarSessionRows(previousPayload, currentRows, timestamp, key);
   let payload = {
     source: "mini-pc-realtime-radar",
     status: realtime.failedBatches.length ? "degraded" : "ok",
@@ -639,6 +717,10 @@ async function main() {
     failedBatchDetails,
     externalSourceIssues,
     rows,
+    sessionStart: "09:00",
+    sessionEnd: "13:30",
+    sessionLimit: REALTIME_RADAR_SESSION_LIMIT,
+    currentScanCount: currentRows.length,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
   };
@@ -680,12 +762,9 @@ async function main() {
     if (retry.quotes.size) {
       const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes)
         .filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
-      const retryRows = buildRadarRows(retryStocks, detectedAt);
-      const mergedRows = [...retryRows, ...payload.rows]
-        .filter((row, index, rows) => rows.findIndex((item) => item.code === row.code) === index)
-        .sort((a, b) => b.score - a.score || b.value - a.value)
-        .slice(0, 80);
-      if (mergedRows.length > payload.rows.length) {
+      const retryRows = buildRadarRows(retryStocks, detectedAt, timestamp);
+      const mergedRows = mergeRadarSessionRows(payload, retryRows, timestamp, key);
+      if (mergedRows.length > payload.rows.length || radarRowsSignature(mergedRows) !== radarRowsSignature(payload.rows)) {
         const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
         const patchedStaleQuoteDetails = buildStaleQuoteDetails(remainingStaleStocks, timestamp);

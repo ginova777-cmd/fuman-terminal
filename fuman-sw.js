@@ -8,7 +8,7 @@ const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
-  "/terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260628-02",
+  "/terminal-core.js?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-20260628-03",
   "/terminal-modules.js?v=public-terminal-fast-20260623-09",
   "/terminal-sector-map.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-config.js?v=public-terminal-fast-20260623-09",
@@ -30,7 +30,7 @@ const STATIC_ASSETS = [
   "/terminal-chip-flow.js?v=public-terminal-fast-20260623-09",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260623-09",
   "/terminal-watchlist-module.js?v=public-terminal-fast-20260623-09",
-  "/terminal-realtime-radar.css?v=public-terminal-fast-20260623-09",
+  "/terminal-realtime-radar.css?v=radar-dom-20260628-01",
   "/terminal-intraday-radar.css?v=public-terminal-fast-20260623-09",
   "/terminal-utility.css?v=public-terminal-fast-20260623-09",
   "/refresh.html?v=public-terminal-fast-20260623-09",

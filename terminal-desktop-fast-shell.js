@@ -49,7 +49,7 @@
   };
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
-    "realtime-radar|即時雷達": { limit: 80, ttl: 6500, live: true, today: true },
+    "realtime-radar|即時雷達": { limit: 1200, ttl: 6500, live: true, today: true, full: true },
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
@@ -125,6 +125,7 @@
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
   let marketHeatmapSectorRows = [];
+  let realtimeRadarDomSide = "long";
   const canvasState = {
     route: "",
     source: "",
@@ -973,6 +974,10 @@
     return String(route || "") === MARKET_ROUTE;
   }
 
+  function isRealtimeRadarRoute(route) {
+    return String(route || "") === REALTIME_RADAR_ROUTE;
+  }
+
   function isMarketViewActive() {
     const panel = document.querySelector("#market-view");
     return Boolean(panel?.classList?.contains("active") && !panel.hidden);
@@ -1094,12 +1099,14 @@
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const strategy2SnapshotFirst = isStrategy2Route(route) && strategy2SnapshotFirstEnabled() && !withBust;
+    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : 120;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
       shell: "1",
-      limit: String(Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, options.limit || 60))),
+      limit: String(Math.max(minLimit, Math.min(maxLimit, options.limit || 60))),
     });
+    if (options.full || isRealtimeRadarRoute(route)) query.set("full", "1");
     if (strategy2SnapshotFirst) query.set("snapshot", "1");
     else if (options.live) query.set("live", "1");
     if (options.today) query.set("today", "1");
@@ -1167,6 +1174,12 @@
     const swingZone = compactText(merged.swingZone || merged.zone || merged.swing_zone || payload.swingZone || payload.zone || active.swingZone || "", 2).toUpperCase();
     const swingZoneLabel = compactText(merged.swingZoneLabel || merged.zoneLabel || merged.zone_label || payload.swingZoneLabel || payload.zoneLabel || active.swingZoneLabel || (swingZone ? `${swingZone}區` : ""), 16);
     const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals, route);
+    const rawTags = [
+      ...normalizeArray(merged.tags),
+      ...normalizeArray(merged.signalTags),
+      ...normalizeArray(merged.signal_tags),
+    ].map((tag) => compactText(String(tag || "").trim(), 24)).filter(Boolean);
+    const uniqueTags = [...new Set(rawTags)];
     const primarySignal = signals[0] || null;
     const rawSubStrategy = merged.subStrategy || merged.strategyLabel || merged.signalLabel || merged.setupName || merged.setup_type || active.short || active.label || active.name || primarySignal?.label || "";
     const subStrategy = compactText(
@@ -1224,12 +1237,19 @@
       stateId: compactText(stateId, 40),
       intent: compactText(intent, 40),
       time: compactText(time, 32),
+      firstSignalTime: compactText(merged.firstSignalTime || merged.first_signal_time || time, 32),
+      lastSignalTime: compactText(merged.lastSignalTime || merged.last_signal_time || merged.quoteTime || merged.quote_time || time, 32),
+      quoteTime: compactText(merged.quoteTime || merged.quote_time || time, 32),
+      radarDate: compactText(merged.radarDate || merged.radar_date || merged.tradeDate || merged.trade_date || merged.quoteDate || merged.quote_date || "", 16),
+      side: compactText(merged.side || merged.direction || merged.state || "", 12),
       subStrategy,
       subStrategyId,
       strategyDisplay,
       signalLabel: subStrategy,
       signalLine,
       signals,
+      tags: uniqueTags,
+      signalTags: uniqueTags,
       price: price === "" || price == null ? "" : String(price),
       entryPrice: entryPrice === "" || entryPrice == null ? "" : String(entryPrice),
       volume: volume === "" || volume == null ? "" : String(volume),
@@ -1280,9 +1300,10 @@
     const best = arrays
       .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
+    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : 120;
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
-      .slice(0, Math.max(minLimit, Math.min(isLiveStrategyRoute(route) ? 240 : 120, limit)));
+      .slice(0, Math.max(minLimit, Math.min(maxLimit, limit)));
   }
 
   function strategy2TimeValue(row) {
@@ -1375,13 +1396,17 @@
     canvasStore.set(route, { rows: cleanRows, source, at });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
-    if (workerCanvasSupported()) {
+    if (workerCanvasSupported() && !isRealtimeRadarRoute(route)) {
       window.setTimeout(() => preRenderStrategyRoute(route, `rows-${source}`), 40);
     }
     if (canvasState.route === route) {
       canvasState.rows = cleanRows;
       canvasState.source = source;
       applyCanvasFilter();
+      if (isRealtimeRadarRoute(route)) {
+        renderRealtimeRadarDomShell(linkForRouteKey(route) || route, source, cleanRows);
+        return true;
+      }
       const shell = currentCanvasShell();
       if (isStrategy2Route(route)) {
         updateStrategy2BattleShell(shell, route, strategyMeta(route));
@@ -1643,7 +1668,7 @@
       return Promise.resolve(cached.rows);
     }
     if (!force && route === REALTIME_RADAR_ROUTE) {
-      const radarKey = marketJsonCacheKey("/api/realtime-radar-latest", 80);
+      const radarKey = marketJsonCacheKey("/api/realtime-radar-latest?full=1", 1200);
       const radarCached = marketJsonCache.get(radarKey);
       if (radarCached?.payload && Date.now() - Number(radarCached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
         const rows = normalizeCanvasRowsFromPayload(radarCached.payload, REALTIME_RADAR_ROUTE);
@@ -2075,7 +2100,7 @@
 
   function primeStrategyBuffers(reason = "idle") {
     window.clearTimeout(canvasPreRenderTimer);
-    const routes = [...SNAPSHOT_ROUTES, ...FIXED_ROUTE_KEYS.filter((route) => route !== "watchlist|自選股")];
+    const routes = [...SNAPSHOT_ROUTES, ...FIXED_ROUTE_KEYS.filter((route) => route !== "watchlist|自選股" && !isRealtimeRadarRoute(route))];
     canvasPreRenderTimer = window.setTimeout(() => {
       routes.forEach((route, index) => {
         runIdle(() => preRenderStrategyRoute(route, `${reason}-${index + 1}`), index * 220, 2600);
@@ -2502,6 +2527,32 @@
     }, true);
 
     document.addEventListener("click", (event) => {
+      const radarSide = event.target.closest?.("[data-radar-dom-side]");
+      if (radarSide) {
+        event.preventDefault();
+        realtimeRadarDomSide = radarSide.dataset.radarDomSide === "short" ? "short" : "long";
+        renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, canvasState.source || "dom", canvasState.rows);
+        return;
+      }
+      const radarRefresh = event.target.closest?.("[data-radar-dom-refresh]");
+      if (radarRefresh) {
+        event.preventDefault();
+        radarRefresh.disabled = true;
+        radarRefresh.textContent = "更新中";
+        fetchCanvasRows(REALTIME_RADAR_ROUTE, true).then((apiRows) => {
+          if (apiRows?.length) {
+            renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, "api", apiRows);
+          } else {
+            renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, canvasState.source || "api", canvasState.rows);
+          }
+        }).catch(() => {
+          renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, canvasState.source || "api", canvasState.rows);
+        }).finally(() => {
+          radarRefresh.disabled = false;
+          radarRefresh.textContent = "刷新";
+        });
+        return;
+      }
       const close = event.target.closest?.("[data-canvas-detail-close]");
       if (close) {
         event.preventDefault();
@@ -3856,7 +3907,7 @@
     ];
     if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
       tasks.push(
-        fetchMarketJson("/api/realtime-radar-latest", 80, force, 4200).then((payload) => {
+        fetchMarketJson("/api/realtime-radar-latest?full=1", 1200, force, 4200).then((payload) => {
           rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
         }),
         fetchMarketJson("/api/market-ai-live", 20, force, 5200).then((payload) => {
@@ -5181,6 +5232,215 @@
     if (historyRows) historyRows.innerHTML = strategy2RowsHtml(rows, "history");
   }
 
+  function radarDomTimeValue(row) {
+    const raw = String(row?.firstSignalTime || row?.time || row?.quoteTime || row?.lastSignalTime || "").trim();
+    const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (hms) return cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0);
+    const stamp = Date.parse(raw);
+    return Number.isFinite(stamp) ? stamp : 0;
+  }
+
+  function radarDomTimeLabel(row) {
+    const raw = String(row?.firstSignalTime || row?.time || row?.quoteTime || row?.lastSignalTime || "").trim();
+    const hms = raw.match(/\d{1,2}:\d{2}(?::\d{2})?/);
+    return hms ? hms[0] : raw || "--:--";
+  }
+
+  function radarDomSessionRows(rows = []) {
+    const start = 9 * 60 * 60;
+    const end = 13 * 60 * 60 + 30 * 60;
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row) => {
+        const seconds = radarDomTimeValue(row);
+        return !seconds || (seconds >= start && seconds <= end);
+      })
+      .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)
+        || cleanNumber(b.score) - cleanNumber(a.score)
+        || radarCanvasValue(b) - radarCanvasValue(a)
+        || String(a.code).localeCompare(String(b.code), "zh-Hant"));
+  }
+
+  function radarDomDateLabel(rows = []) {
+    const raw = (Array.isArray(rows) ? rows : []).map((row) => row?.radarDate || row?.tradeDate || row?.quoteDate).find(Boolean) || "";
+    const text = String(raw || "").trim();
+    const dashed = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (dashed) return `${dashed[2]}/${dashed[3]}`;
+    const compact = text.replace(/\D/g, "");
+    return compact.length >= 8 ? `${compact.slice(4, 6)}/${compact.slice(6, 8)}` : "--/--";
+  }
+
+  function radarDomTags(row, limit = 6) {
+    const tags = [
+      ...normalizeArray(row?.tags),
+      ...normalizeArray(row?.signalTags),
+      row?.signalLine,
+      row?.signal,
+      row?.reason,
+    ].flatMap((item) => Array.isArray(item) ? item : String(item || "").split(/[\/｜,，、]/u));
+    return [...new Set(tags.map((tag) => compactText(String(tag || "").trim(), 16)).filter(Boolean))].slice(0, limit);
+  }
+
+  function radarDomStockChips(row) {
+    return [
+      cleanNumber(row?.foreign) > 0 ? "外資買超" : cleanNumber(row?.foreign) < 0 ? "外資賣超" : "",
+      cleanNumber(row?.trust) > 0 ? "投信買超" : cleanNumber(row?.trust) < 0 ? "投信賣超" : "",
+      cleanNumber(row?.totalInst) > 0 ? "三大法人買超" : cleanNumber(row?.totalInst) < 0 ? "三大法人賣超" : "",
+      row?.quoteSource ? "即時報價" : "",
+      row?.score ? `分數 ${Math.round(cleanNumber(row.score))}` : "",
+    ].filter(Boolean).slice(0, 5);
+  }
+
+  function radarDomFlowSummary(rows = []) {
+    const longRows = rows.filter((row) => radarCanvasSide(row) === "long");
+    const shortRows = rows.filter((row) => radarCanvasSide(row) === "short");
+    const longFlow = longRows.reduce((sum, row) => sum + Math.max(radarCanvasValue(row), 0), 0);
+    const shortFlow = shortRows.reduce((sum, row) => sum + Math.max(radarCanvasValue(row), 0), 0);
+    const netFlow = longFlow - shortFlow;
+    const total = Math.max(longFlow + shortFlow, 1);
+    return {
+      longRows,
+      shortRows,
+      longFlow,
+      shortFlow,
+      netFlow,
+      longShare: Math.max(3, Math.min(97, (longFlow / total) * 100)),
+      confidence: Math.max(55, Math.min(95, Math.round(Math.max(longFlow / total, shortFlow / total) * 100))),
+    };
+  }
+
+  function radarDomAiPanel(title, rows, side) {
+    const short = side === "short";
+    const chips = rows.slice(0, 5).map((row) => `<span class="radar-ai-chip">${escapeHtml(`${row.code} ${row.title || ""}`.trim())}</span>`).join("");
+    const names = rows.slice(0, 5).map((row) => `${row.code} ${row.title || ""}`.trim()).join("、") || "等待訊號";
+    const note = short
+      ? `空方訊號集中在 ${names}，留意開低走弱、反彈失敗與籌碼壓力。`
+      : `多方訊號集中在 ${names}，留意續強、量能延伸與突破持續。`;
+    return `
+      <section class="radar-ai-panel ${short ? "short" : ""}">
+        <h3>${escapeHtml(title)} ${escapeHtml(String(rows.length))} 檔</h3>
+        <div class="radar-ai-chips">${chips || `<span class="radar-ai-chip">等待訊號</span>`}</div>
+        <p>${escapeHtml(note)}</p>
+      </section>
+    `;
+  }
+
+  function radarDomSignalCard(row) {
+    const side = radarCanvasSide(row);
+    const short = side === "short";
+    const tags = radarDomTags(row, 7);
+    const conditionTags = tags.slice(0, 6);
+    const chipTags = radarDomStockChips(row);
+    const pct = radarCanvasPct(row);
+    const pctText = `${pct >= 0 ? "▲ +" : "▼ "}${pct.toFixed(2)}%`;
+    const price = formatPriceValue(row?.price || row?.close) || String(row?.price || row?.close || "--");
+    return `
+      <article class="radar-signal-card ${short ? "short" : ""}" data-stock-code="${escapeHtml(row?.code || "")}">
+        <div class="radar-jump">
+          <span>跳出</span>
+          <strong>${escapeHtml(radarDomTimeLabel(row))}</strong>
+        </div>
+        <div class="radar-signal-main">
+          <div class="radar-signal-name">${escapeHtml(row?.title || row?.name || row?.code || "--")} <small>${escapeHtml(row?.code || "")}</small></div>
+          <div class="radar-signal-meta">成交金額 ${escapeHtml(radarCanvasMoney(radarCanvasValue(row)))} · 成交量 ${escapeHtml(formatCompactNumber(row?.volume || row?.tradeVolume) || "--")} · 分數 ${escapeHtml(String(Math.round(cleanNumber(row?.score))))}</div>
+          <div class="radar-signal-chips">${tags.slice(0, 5).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        </div>
+        <div class="radar-signal-price">
+          <strong>${escapeHtml(price)}</strong>
+          <small>${escapeHtml(pctText)}</small>
+        </div>
+        <div class="radar-condition-list">
+          ${(conditionTags.length ? conditionTags : [row?.reason || row?.signal || "--"]).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+        </div>
+        <div class="radar-chip-list">
+          ${(chipTags.length ? chipTags : [short ? "空方壓力" : "多方動能"]).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function ensureRealtimeRadarDomStyle() {
+    if (document.querySelector("#fuman-realtime-radar-dom-style")) return;
+    const link = document.createElement("link");
+    link.id = "fuman-realtime-radar-dom-style";
+    link.rel = "stylesheet";
+    link.href = "/terminal-realtime-radar.css?v=radar-dom-20260628-01";
+    document.head.appendChild(link);
+  }
+
+  function renderRealtimeRadarDomShell(link, source, rows = []) {
+    const panel = panelForRoute(REALTIME_RADAR_ROUTE);
+    if (!panel) return false;
+    ensureRealtimeRadarDomStyle();
+    const incomingRows = rows.length ? rows : rowsForRoute(REALTIME_RADAR_ROUTE);
+    const sessionRows = radarDomSessionRows(incomingRows.length ? incomingRows : canvasState.rows);
+    const flow = radarDomFlowSummary(sessionRows);
+    if (realtimeRadarDomSide !== "long" && realtimeRadarDomSide !== "short") realtimeRadarDomSide = "long";
+    if (realtimeRadarDomSide === "long" && !flow.longRows.length && flow.shortRows.length) realtimeRadarDomSide = "short";
+    if (realtimeRadarDomSide === "short" && !flow.shortRows.length && flow.longRows.length) realtimeRadarDomSide = "long";
+    const activeRows = realtimeRadarDomSide === "short" ? flow.shortRows : flow.longRows;
+    const meta = strategyMeta(link || REALTIME_RADAR_ROUTE);
+    const sourceLabel = String(source || canvasState.source || "api");
+    panel.dataset.fumanRouteSnapshotRestoring = "1";
+    panel.dataset.fumanRealtimeRadarDom = "1";
+    delete panel.dataset.fumanCanvasPersistent;
+    panel.classList.add("radar-dom-active");
+    panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+    panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app").forEach((node) => node.remove());
+    panel.innerHTML = `
+      <section class="radar-dom-shell" data-realtime-radar-dom-shell data-route-source="${escapeHtml(sourceLabel)}">
+        <header class="radar-topbar">
+          <div>
+            <small>${escapeHtml(meta.icon)} 即時多空資金雷達</small>
+            <h1>${escapeHtml(meta.title)}</h1>
+          </div>
+          <small>資料日期 ${escapeHtml(radarDomDateLabel(sessionRows))} · 今日掃描 09:00-13:30 · 總筆數 ${escapeHtml(String(sessionRows.length))} 筆 · ${escapeHtml(sourceLabel)}</small>
+          <button class="radar-action" type="button" data-radar-dom-refresh>刷新</button>
+        </header>
+        <section class="radar-ai-box overview">
+          <div class="radar-ai-head">
+            <span>◎ AI 即時判斷</span>
+            <span>信心 ${escapeHtml(String(flow.confidence))}%</span>
+          </div>
+          <div class="radar-ai-grid">
+            ${radarDomAiPanel("↗ 偏多 AI 分析", flow.longRows, "long")}
+            ${radarDomAiPanel("↘ 偏空 AI 分析", flow.shortRows, "short")}
+          </div>
+          <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:30 盤中訊號。</p>
+        </section>
+        <section class="radar-flow-grid" style="--long-share:${flow.longShare.toFixed(2)}%">
+          <article class="radar-flow-card">
+            <span>多方流入</span>
+            <strong>${escapeHtml(radarCanvasMoney(flow.longFlow))}</strong>
+            <small>${escapeHtml(String(flow.longRows.length))} 檔</small>
+          </article>
+          <article class="radar-flow-card short">
+            <span>空方流出</span>
+            <strong>${escapeHtml(radarCanvasMoney(flow.shortFlow))}</strong>
+            <small>${escapeHtml(String(flow.shortRows.length))} 檔</small>
+          </article>
+          <div class="radar-flow-net">
+            <span>淨流向</span>
+            <strong class="radar-flow-value net ${flow.netFlow >= 0 ? "positive" : ""}">${escapeHtml(radarCanvasMoney(flow.netFlow))}</strong>
+            <div class="radar-balance"><span></span></div>
+          </div>
+        </section>
+        <nav class="radar-board-tabs" aria-label="即時雷達多空切換">
+          <button type="button" data-radar-dom-side="long" class="${realtimeRadarDomSide === "long" ? "active" : ""}">多方 ${escapeHtml(String(flow.longRows.length))}</button>
+          <button type="button" data-radar-dom-side="short" class="${realtimeRadarDomSide === "short" ? "short-active active" : "short-active"}">空方 ${escapeHtml(String(flow.shortRows.length))}</button>
+        </nav>
+        <div class="radar-session-strip">
+          <span>今日完整顯示 09:00-13:30 · ${escapeHtml(realtimeRadarDomSide === "short" ? "空方" : "多方")} ${escapeHtml(String(activeRows.length))} 筆</span>
+          <span>最新在上</span>
+        </div>
+        <section class="radar-board-list" data-radar-dom-list>
+          ${activeRows.length ? activeRows.map(radarDomSignalCard).join("") : `<div class="radar-empty">目前沒有${realtimeRadarDomSide === "short" ? "空方" : "多方"}訊號</div>`}
+        </section>
+      </section>
+    `;
+    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    return true;
+  }
+
   function ensurePersistentFixedCanvas(route) {
     if (!FIXED_CANVAS_PERSIST_ROUTES.includes(route)) return false;
     const panel = panelForRoute(route);
@@ -5264,6 +5524,11 @@
       hideCanvasDetail();
     }
     applyCanvasFilter();
+    if (isRealtimeRadarRoute(key)) {
+      const rendered = renderRealtimeRadarDomShell(link, source, canvasState.filtered.length ? canvasState.filtered : canvasState.rows);
+      window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+      return rendered;
+    }
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
@@ -5336,6 +5601,11 @@
       hideCanvasDetail();
     }
     applyCanvasFilter();
+    if (isRealtimeRadarRoute(key)) {
+      const rendered = renderRealtimeRadarDomShell(link, source, canvasState.filtered.length ? canvasState.filtered : canvasState.rows);
+      window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+      return rendered;
+    }
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
@@ -5474,6 +5744,22 @@
     }
     const panel = panelForRoute(key);
     let rows = rowsForRoute(key);
+    if (isRealtimeRadarRoute(key)) {
+      renderFixedPageShell(link, source || "realtime", rows);
+      markLatency("shell", key);
+      window.setTimeout(() => {
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+        fetchCanvasRows(key, false).then((apiRows) => {
+          if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+          if (apiRows?.length) {
+            scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, "api", apiRows), "api");
+          } else {
+            renderRealtimeRadarDomShell(link, canvasState.source || "api", canvasState.rows);
+          }
+        }).catch(() => renderRealtimeRadarDomShell(link, canvasState.source || "snapshot", canvasState.rows));
+      }, rows.length ? 90 : 160);
+      return true;
+    }
     if (!rows.length && !isApiOnlySnapshotRoute(key)) {
       const domRows = extractLiteRows(panel);
       if (domRows.length) {
