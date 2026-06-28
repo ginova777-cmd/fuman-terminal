@@ -87,6 +87,7 @@ function checkMobileShell() {
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD", "mobile watchlist must expose a timeout-safe manual add pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD_V2", "mobile watchlist must expose the direct-render V2 manual add pipeline");
   requireText(mobile, "mobile-watch-v2-direct-render-20260628-04", "mobile watchlist must carry the direct-render hotfix marker");
+  requireText(mobile, "mobile-watch-v2-early-bridge-20260628-01", "mobile watchlist V2 must intercept clicks before legacy document-capture handlers");
   requireText(mobile, "mobile-tab-request-lock-20260628-01", "mobile tabs must keep the request-lock loader so old fragment loads cannot overwrite the newest tab");
   requireText(mobile, "/api/mobile-watch-meta?code=", "mobile watchlist must validate one stock code through the small meta API before static fallback");
   requireText(mobile, "MutationObserver", "mobile watchlist V2 must guard against the legacy watch renderer overwriting cards");
