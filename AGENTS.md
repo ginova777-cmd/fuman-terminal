@@ -502,6 +502,12 @@ scheduleShellValidation
 - 2026-06-28 E2E 隔離收斂 commit：`3abbaaf6 Stabilize mobile watchlist E2E isolation`；這是測試器修正，不需要重新 deploy Vercel。
 - E2E 隔離根因：同一個 Chrome 連跑多個 mobile viewport 時，前一個 `/mobile` tab 沒真正關閉，origin storage 與 strategy recovery timer 會污染下一格 watch 手動新增，造成滿 10 檔或 `請輸入四碼股票代號` 的假失敗。處理方式是 watch tab 測試 seed 9 檔後 reload，submit 代號與 click 原子化，每個 mobile run 結束導回 blank 並清 origin storage。
 - 最新正式站手機 / 平板 live E2E 已於 `3abbaaf6` 後重跑通過：`npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun --routes=strategy1,strategy2,strategy3,strategy4,strategy5,watch --route-timeout=120000 --eval-timeout=60000`，結果 `ok 36/36`。此矩陣驗 strategy1-5 實際點「加入自選」後切 watch 看卡，並驗 watch tab `2334` invalid reject / `3028` valid add 到第 10 張。
+- 2026-06-28 success status 無卡片收斂 commit：`4a2225ad Render mobile watch cards from success status`；正式部署 `dpl_GTgJtk8nxBPxc3hg7H5CoAcAAoXY`，alias `https://fuman-terminal.vercel.app`。
+- 本次真人截圖根因：手機自選 tab 上方已顯示 `3028 增你強 已加入自選`，代表舊流程已寫入成功狀態或 storage，但下方仍是 `尚未加入。`，因為既有 rescue 只看 pending click / storage，不會從成功狀態文字反推應補出的卡片。
+- 本次修正：`mobile.html` 新增 `mobile-watch-success-status-render-20260628-01`，當 `#mobile-watch-status` 出現 `XXXX 名稱 已加入自選` 或 `已在自選股` 且目前沒有該代號 `.watch-row` 時，必須從狀態文字、storage 與 meta fallback 合併資料並直接重畫 watch list；不可只顯示成功訊息。
+- `scripts/verify-mobile-api-only.js` 必須檢查 `mobile-watch-success-status-render-20260628-01`；`scripts/verify-terminal-ui-e2e.js` 必須模擬 `3028 增你強 已加入自選` + `尚未加入。` 的 legacy DOM 狀態，並確認 rescue 自動補出 `3028` `.watch-row`。
+- 本次正式站驗證：`npm run guard:production` 通過、`npm run verify:mobile-cache-contract:live` 通過、`npm run verify:mobile-api-only:live` 通過、聚焦 live watch E2E 通過 `ok mobile/phone-portrait/sun/watch rows=11`，完整手機 / 平板矩陣 `npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun --routes=strategy1,strategy2,strategy3,strategy4,strategy5,watch --route-timeout=120000 --eval-timeout=60000` 通過 `ok 36/36`。
+- 補充：沙盒內直接 `node fetch('https://fuman-terminal.vercel.app/mobile')` 曾因本機 sandbox network `EACCES` 失敗；改以正式 live gate 執行後通過，這不是 production `/mobile` 失敗。
 
 ### 驗證注意事項 / 已知坑
 
