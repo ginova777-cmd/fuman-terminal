@@ -1,7 +1,14 @@
 
 .radar-view {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(245, 158, 11, 0.05) 1px, transparent 1px),
+    #080d13;
+  background-size: 42px 42px, 42px 42px, auto;
+  color: #d9e6f7;
+  padding: 18px 24px 28px;
 }
 .realtime-radar-nav span {
   color: #ff7a45;
@@ -11,29 +18,30 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid rgba(134, 151, 190, 0.14);
-  padding-bottom: 14px;
+  border: 1px solid rgba(255, 193, 7, 0.14);
+  border-radius: 8px;
+  background: rgba(9, 14, 20, 0.88);
+  padding: 12px 16px;
 }
 .radar-topbar h1 {
   color: #f7fbff;
-  font-size: 26px;
+  font-size: 18px;
+  letter-spacing: 0;
 }
 .radar-topbar small {
   color: #8da1ca;
   font-size: 12px;
 }
 .radar-action {
-  position: fixed;
-  top: 76px;
-  right: 18px;
-  z-index: 9999;
-  border: 1px solid rgba(255, 122, 69, 0.35);
+  position: static;
+  z-index: 1;
+  border: 1px solid rgba(255, 177, 94, 0.38);
   border-radius: 8px;
-  background: rgba(255, 122, 69, 0.12);
-  color: #ffbd8a;
+  background: rgba(255, 177, 94, 0.08);
+  color: #ffd6a3;
   cursor: pointer;
   font-weight: 800;
-  padding: 10px 12px;
+  padding: 9px 12px;
 }
 body.fuman-light-theme .radar-action {
   background: #fff7ed !important;
@@ -45,19 +53,19 @@ body.fuman-light-theme .radar-action {
 .radar-team-box,
 .radar-flow-card,
 .radar-leader-card {
-  border: 1px solid rgba(134, 151, 190, 0.16);
-  border-radius: 10px;
-  background: rgba(12, 14, 28, 0.72);
+  border: 1px solid rgba(32, 201, 151, 0.18);
+  border-radius: 8px;
+  background: rgba(9, 14, 22, 0.9);
 }
 .radar-ai-box,
 .radar-team-box {
-  padding: 16px;
+  padding: 14px 16px 16px;
 }
 .radar-ai-box.overview {
-  border-color: rgba(255, 112, 77, 0.34);
-  background: rgba(18, 22, 36, 0.72);
+  border-color: rgba(32, 201, 151, 0.55);
+  background: rgba(8, 14, 21, 0.94);
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 .radar-ai-box.overview .radar-ai-head {
   padding-bottom: 2px;
@@ -70,22 +78,22 @@ body.fuman-light-theme .radar-action {
 .radar-ai-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 .radar-ai-panel {
   border: 1px solid rgba(255, 93, 108, 0.34);
-  border-radius: 8px;
-  background: rgba(255, 93, 108, 0.08);
-  padding: 14px;
+  border-radius: 7px;
+  background: rgba(255, 77, 92, 0.075);
+  padding: 12px;
 }
 .radar-ai-panel.short {
-  border-color: rgba(35, 213, 154, 0.34);
-  background: rgba(35, 213, 154, 0.07);
+  border-color: rgba(35, 213, 154, 0.36);
+  background: rgba(18, 115, 100, 0.14);
 }
 .radar-ai-panel h3 {
-  margin: 0 0 10px;
-  color: #ff7a82;
-  font-size: 14px;
+  margin: 0;
+  color: #ff747d;
+  font-size: 13px;
   font-weight: 950;
 }
 .radar-ai-panel.short h3 {
@@ -103,12 +111,12 @@ body.fuman-light-theme .radar-action {
 }
 .radar-ai-chip {
   border: 1px solid rgba(255, 93, 108, 0.35);
-  border-radius: 7px;
-  background: rgba(255, 93, 108, 0.16);
-  color: #ffd4d8;
-  font-size: 12px;
+  border-radius: 5px;
+  background: rgba(255, 93, 108, 0.2);
+  color: #ffe0e2;
+  font-size: 11px;
   font-weight: 900;
-  padding: 5px 8px;
+  padding: 5px 9px;
 }
 .radar-ai-panel.short .radar-ai-chip {
   border-color: rgba(35, 213, 154, 0.34);
@@ -117,8 +125,8 @@ body.fuman-light-theme .radar-action {
 }
 .radar-ai-panel p {
   margin: 0;
-  color: #dce7ff;
-  font-size: 13px;
+  color: #b8c7dc;
+  font-size: 12px;
   line-height: 1.55;
 }
 .radar-ai-head,
@@ -149,6 +157,13 @@ body.fuman-light-theme .radar-action {
   margin-top: 8px;
   color: #7790be;
   font-size: 12px;
+}
+.radar-ai-box.overview + .radar-flow-grid,
+.radar-flow-grid {
+  border: 1px solid rgba(255, 193, 7, 0.2);
+  border-radius: 8px;
+  background: rgba(9, 14, 20, 0.9);
+  padding: 16px;
 }
 body.fuman-light-theme .radar-ai-box.overview {
   background: #ffffff !important;
@@ -194,10 +209,16 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 .radar-flow-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 0;
 }
 .radar-flow-card {
-  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 16px 16px;
+}
+.radar-flow-card + .radar-flow-card {
+  border-left: 1px solid rgba(134, 151, 190, 0.18);
 }
 .radar-flow-card span {
   color: #8da1ca;
@@ -208,7 +229,7 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   display: block;
   margin-top: 8px;
   color: #ff5d6c;
-  font-size: 26px;
+  font-size: 27px;
   font-weight: 950;
 }
 .radar-flow-card.short strong {
@@ -221,7 +242,7 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 .radar-balance {
   height: 7px;
   border-radius: 999px;
-  background: rgba(35, 213, 154, 0.24);
+  background: rgba(11, 18, 33, 0.96);
   overflow: hidden;
 }
 .radar-balance span {
@@ -229,7 +250,7 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   width: var(--long-share, 50%);
   height: 100%;
   border-radius: inherit;
-  background: #ff5d6c;
+  background: linear-gradient(90deg, #21d19f, #18c79a);
 }
 .radar-tabs {
   display: grid;
@@ -332,8 +353,8 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
-  margin-top: 12px;
-  border-bottom: 1px solid rgba(134, 151, 190, 0.14);
+  margin-top: 0;
+  border-bottom: 1px solid rgba(255, 193, 7, 0.22);
   position: relative;
   z-index: 30;
   pointer-events: auto;
@@ -344,9 +365,9 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   background: transparent;
   color: #7182ab;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 950;
-  padding: 18px 10px;
+  padding: 12px 10px 10px;
   pointer-events: auto;
 }
 .radar-board-tabs button.active {
@@ -354,27 +375,27 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   color: #ff6674;
 }
 .radar-board-tabs button.short-active {
-  border-color: #7890bc;
+  border-color: rgba(120, 144, 188, 0.45);
   color: #8da1ca;
 }
 .radar-board-list {
   display: grid;
-  gap: 14px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 12px;
 }
 .radar-signal-card {
   display: grid;
-  grid-template-columns: 88px minmax(250px, 1.15fr) minmax(110px, 0.45fr) minmax(250px, 0.95fr) minmax(260px, 0.95fr);
-  gap: 26px;
+  grid-template-columns: 68px minmax(230px, 1.05fr) minmax(105px, 0.38fr) minmax(250px, 0.68fr) minmax(250px, 0.68fr);
+  gap: 18px;
   align-items: center;
-  min-height: 232px;
-  border: 1px solid rgba(255, 77, 92, 0.22);
-  border-radius: 14px;
-  background: rgba(10, 12, 24, 0.78);
-  padding: 20px;
+  min-height: 174px;
+  border: 1px solid rgba(255, 77, 92, 0.32);
+  border-radius: 8px;
+  background: rgba(8, 13, 20, 0.94);
+  padding: 12px 14px;
 }
 .radar-signal-card.short {
-  border-color: rgba(120, 144, 188, 0.22);
+  border-color: rgba(120, 144, 188, 0.24);
 }
 .radar-jump span {
   display: block;
@@ -386,7 +407,7 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
   display: block;
   margin-top: 4px;
   color: #ffd166;
-  font-size: 22px;
+  font-size: 13px;
   font-weight: 950;
 }
 .radar-signal-main {
@@ -394,33 +415,33 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 }
 .radar-signal-name {
   color: #fff;
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 950;
 }
 .radar-signal-name small {
   color: #61749a;
-  font-size: 20px;
+  font-size: 14px;
   margin-left: 8px;
 }
 .radar-signal-meta {
   color: #7890bc;
-  font-size: 15px;
-  margin-top: 12px;
+  font-size: 11px;
+  margin-top: 9px;
 }
 .radar-signal-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 10px;
 }
 .radar-signal-chips span {
   border: 1px solid rgba(255, 103, 116, 0.38);
-  border-radius: 8px;
+  border-radius: 5px;
   background: rgba(255, 77, 92, 0.13);
   color: #ffd4d8;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 950;
-  padding: 7px 10px;
+  padding: 5px 8px;
 }
 .radar-signal-price {
   text-align: right;
@@ -428,27 +449,27 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 .radar-signal-price strong {
   display: block;
   color: #ff6573;
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 950;
 }
 .radar-signal-price small {
   color: #ff6573;
-  font-size: 18px;
+  font-size: 11px;
   font-weight: 950;
 }
 .radar-condition-list,
 .radar-chip-list {
   display: grid;
-  gap: 12px;
-  border-left: 1px solid rgba(134, 151, 190, 0.12);
-  min-height: 192px;
+  gap: 8px;
+  border-left: 1px solid rgba(255, 193, 7, 0.22);
+  min-height: 150px;
   align-content: center;
-  padding-left: 26px;
+  padding-left: 18px;
 }
 .radar-condition-list span,
 .radar-chip-list span {
   color: #ff6573;
-  font-size: 21px;
+  font-size: 14px;
   font-weight: 950;
   line-height: 1.15;
 }
@@ -682,4 +703,39 @@ body.fuman-light-theme .radar-signal-card.short .radar-signal-chips span {
   .radar-chip-list span {
     font-size: 17px;
   }
+}
+
+
+.radar-flow-net {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(134, 151, 190, 0.18);
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding: 18px 0 0;
+  text-align: center;
+}
+.radar-flow-net > span {
+  color: #8da1ca;
+  font-size: 12px;
+  font-weight: 850;
+  text-align: left;
+}
+.radar-flow-value.net {
+  color: #23d59a;
+  font-size: 27px;
+  font-weight: 950;
+  line-height: 1;
+}
+.radar-flow-value.net.positive {
+  color: #ff5d6c;
+}
+body.fuman-light-theme .radar-flow-net {
+  border-top-color: #e2e8f0 !important;
+}
+body.fuman-light-theme .radar-flow-value.net {
+  color: #059669 !important;
+}
+body.fuman-light-theme .radar-flow-value.net.positive {
+  color: #dc2626 !important;
 }
