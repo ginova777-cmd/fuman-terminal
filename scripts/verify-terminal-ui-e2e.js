@@ -30,8 +30,8 @@ const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FU
 
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
-  { key: "heatmap", label: "heatmap", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "[data-market-mode=\"overview\"]", requiredText: ["熱力圖"], requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
-  { key: "market-ai", label: "market ai", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "[data-market-mode=\"ai\"]", requiredText: ["AI 判讀", "操作建議", "風險"] },
+  { key: "heatmap", label: "heatmap", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "#market-view .market-mode-tabs [data-market-mode=\"overview\"]", requiredText: ["熱力圖"], requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
+  { key: "market-ai", label: "market ai", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "#market-view .market-mode-tabs [data-market-mode=\"ai\"]", requiredText: ["AI 判讀", "操作建議", "風險"] },
   { key: "realtime-radar", label: "realtime radar", selector: "aside.sidebar a.realtime-radar-nav[data-view=\"realtime-radar\"]", expectedRouteKey: "realtime-radar|即時雷達", expectedPanelId: "realtime-radar-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
   { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true, fallbackNeedles: ["策略1-明日開盤入", "21:30初篩", "08:55搓合"] },
   { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
@@ -589,8 +589,52 @@ async function prepareMobileRoute(cdp, route) {
 
 async function afterDesktopRouteActivate(cdp, route) {
   if (route.postClickSelector) {
-    await clickSelector(cdp, route.postClickSelector);
-    await sleep(1200);
+    let active = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await waitFor(cdp, (selector) => {
+        const visible = (el) => {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          return rect.width > 2 && rect.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+        };
+        const button = [...document.querySelectorAll(selector)].find(visible);
+        return { ok: Boolean(button), text: String(button?.textContent || "").replace(/\s+/g, " ").trim() };
+      }, route.postClickSelector, attempt ? 7000 : 15000, 250).catch(() => null);
+      active = await evaluate(cdp, (selector) => {
+        const visible = (el) => {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          return rect.width > 2 && rect.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+        };
+        const button = [...document.querySelectorAll(selector)].find(visible) || document.querySelector(selector);
+        if (!button) return { ok: false, reason: "missing" };
+        button.scrollIntoView({ block: "center", inline: "center" });
+        button.click();
+        if (!button.classList.contains("active") && typeof window.FUMAN_SELECT_MARKET_DESKTOP_MODE === "function") {
+          window.FUMAN_SELECT_MARKET_DESKTOP_MODE(button.dataset.marketMode, "ui-e2e-visible-post-click");
+        }
+        return {
+          ok: Boolean(button.classList.contains("active") || button.getAttribute("aria-pressed") === "true"),
+          text: String(button.textContent || "").replace(/\s+/g, " ").trim(),
+          className: String(button.className || ""),
+        };
+      }, route.postClickSelector).catch((error) => ({ ok: false, error: error.message }));
+      await sleep(attempt ? 900 : 1200);
+      if (!active?.ok) {
+        active = await evaluate(cdp, (selector) => {
+          const button = document.querySelector(selector);
+          return {
+            ok: Boolean(button?.classList?.contains("active") || button?.getAttribute("aria-pressed") === "true"),
+            text: String(button?.textContent || "").replace(/\s+/g, " ").trim(),
+            className: String(button?.className || ""),
+          };
+        }, route.postClickSelector).catch((error) => ({ ok: false, error: error.message }));
+      }
+      if (active?.ok) break;
+    }
+    if (!active?.ok) await sleep(1200);
   }
   if (route.key === "watchlist") {
     const submitWatchlistCode = async (code) => {
@@ -749,6 +793,13 @@ function collectDesktopStats(route) {
   };
   const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
   const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document.body;
+  if (route.key === "market-ai" && activePanel.id === "market-view" && !activePanel.classList.contains("market-ai-mode")) {
+    if (typeof window.FUMAN_SELECT_MARKET_DESKTOP_MODE === "function") {
+      window.FUMAN_SELECT_MARKET_DESKTOP_MODE("ai", "ui-e2e-stats-guard");
+    } else {
+      activePanel.querySelector(".market-mode-tabs [data-market-mode=\"ai\"]")?.click?.();
+    }
+  }
   const activeRouteKey = document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
   const activeNav = document.querySelector("[data-view].active,[data-view][aria-current='page']");
   const routeIdentityOk = (!route.expectedPanelId || activePanel.id === route.expectedPanelId)
@@ -1191,10 +1242,75 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
   while (Date.now() - start < timeoutMs) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
-    if (last?.ok && !(last.blockerMatches || []).length) return last;
+    if (last?.ok && !(last.blockerMatches || []).length) {
+      if (route.key === "market-ai") {
+        const stability = await collectMarketAiLayoutStability(cdp).catch((error) => ({
+          ok: false,
+          error: error.message,
+          blocker: `market AI layout stability check failed: ${error.message}`,
+        }));
+        last.marketAiDashboard = { ...(last.marketAiDashboard || {}), stability };
+        if (!stability.ok) {
+          last.ok = false;
+          last.blockerMatches = [...new Set([...(last.blockerMatches || []), stability.blocker || "market AI layout jumped after ready"])];
+        }
+      }
+      if (last.ok && !(last.blockerMatches || []).length) return last;
+    }
     await sleep(900);
   }
   return last || { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: ["desktop stats missing"], warnings: [] };
+}
+
+async function collectMarketAiLayoutStability(cdp) {
+  return evaluate(cdp, async () => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const rectOf = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        top: Math.round(rect.top * 10) / 10,
+        height: Math.round(rect.height * 10) / 10,
+        width: Math.round(rect.width * 10) / 10,
+      };
+    };
+    const sample = () => {
+      const panel = document.querySelector("#market-view [data-market-api-ai]");
+      return {
+        at: Date.now(),
+        signature: panel?.dataset?.marketAiStableSignature || "",
+        panel: rectOf("#market-view [data-market-api-ai]"),
+        hero: rectOf("#market-view .market-ai-hero-board"),
+        hot: rectOf("#market-view .market-ai-hot"),
+        stockRows: document.querySelectorAll("#market-view .market-ai-stock-row").length,
+      };
+    };
+    const samples = [sample()];
+    await wait(700);
+    samples.push(sample());
+    await wait(900);
+    samples.push(sample());
+    const maxDelta = (selector, field) => {
+      const values = samples.map((item) => item?.[selector]?.[field]).filter((value) => Number.isFinite(value));
+      if (values.length < 2) return 0;
+      return Math.max(...values) - Math.min(...values);
+    };
+    const panelTopDelta = maxDelta("panel", "top");
+    const heroTopDelta = maxDelta("hero", "top");
+    const panelHeightDelta = maxDelta("panel", "height");
+    const hotHeightDelta = maxDelta("hot", "height");
+    const ok = panelTopDelta <= 4 && heroTopDelta <= 4 && panelHeightDelta <= 24 && hotHeightDelta <= 24;
+    return {
+      ok,
+      samples,
+      panelTopDelta,
+      heroTopDelta,
+      panelHeightDelta,
+      hotHeightDelta,
+      blocker: ok ? "" : `market AI layout jumped top=${panelTopDelta}px hero=${heroTopDelta}px height=${panelHeightDelta}px hot=${hotHeightDelta}px`,
+    };
+  }, null, 10000);
 }
 
 async function runDesktopMode(browser, theme) {

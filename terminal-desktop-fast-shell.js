@@ -104,6 +104,9 @@
   const marketJsonCache = new Map();
   const marketJsonInflight = new Map();
   const MARKET_JSON_CACHE_TTL_MS = 18000;
+  let marketAiRenderSignature = "";
+  let marketAiRenderTimer = 0;
+  let marketAiRenderRequest = null;
   let strategy2SnapshotFirstPrimePromise = null;
   let strategy2LivePrimePromise = null;
   let desktopFastBundleAt = 0;
@@ -1427,7 +1430,7 @@
         renderMarketOverviewApi({}, marketSnapshotFirstPayload);
         renderMarketHeatmapApi(marketSnapshotFirstPayload.sectors, marketSnapshotFirstPayload);
         if (marketDesktopMode === "ai") {
-          renderMarketApiAi(marketSnapshotFirstPayload, marketRadarBundlePayload || {}, marketAiBundlePayload || {});
+          scheduleMarketApiAiRender(marketSnapshotFirstPayload, marketRadarBundlePayload || {}, marketAiBundlePayload || {}, { delay: 160 });
         }
       }
       return;
@@ -1435,14 +1438,14 @@
     if (pathname === "/api/market-ai-live") {
       marketAiBundlePayload = payload;
       if (isMarketViewActive() && marketDesktopMode === "ai") {
-        renderMarketApiAi(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, marketAiBundlePayload);
+        scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, marketAiBundlePayload, { delay: 70 });
       }
       return;
     }
     if (pathname === "/api/realtime-radar-latest") {
       marketRadarBundlePayload = payload;
       if (isMarketViewActive() && marketDesktopMode === "ai") {
-        renderMarketApiAi(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {});
+        scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {}, { delay: 160 });
       }
     }
   }
@@ -3600,6 +3603,92 @@
     return task;
   }
 
+  function hasMarketAiPayload(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    return Boolean(
+      payload.dashboard
+      || payload.groups
+      || payload.fieldCompleteness
+      || normalizeArray(payload.filters).length
+      || normalizeArray(payload.rows).length
+      || normalizeArray(payload.hotStocks).length
+      || normalizeArray(payload.todayPoints).length
+      || normalizeArray(payload.reasoning).length
+    );
+  }
+
+  function marketAiStockSignature(row) {
+    const code = String(row?.code || row?.Code || row?.stockId || "").trim();
+    const score = Number(row?.score || row?.radarScore || row?.aiScore || row?.finalScore || row?.rankScore || 0) || 0;
+    const pct = Number(row?.pct ?? row?.percent ?? row?.changePercent ?? row?.Change ?? row?.change ?? 0) || 0;
+    return `${code}:${Math.round(score)}:${pct.toFixed(2)}`;
+  }
+
+  function marketAiRowsSignature(rows) {
+    return normalizeArray(rows).slice(0, 10).map(marketAiStockSignature).join(",");
+  }
+
+  function marketAiStableSignature(heatmapPayload, radarPayload, aiPayload = {}) {
+    const aiReady = hasMarketAiPayload(aiPayload);
+    const groups = aiPayload?.groups && typeof aiPayload.groups === "object" ? aiPayload.groups : {};
+    const groupSignature = ["all", "momentum", "institution", "legal", "intraday", "risk"].map((key) => {
+      const group = groups[key] || {};
+      return `${key}:${marketAiRowsSignature(group.rows || group.stocks)}`;
+    }).join("|");
+    const filterSignature = normalizeArray(aiPayload?.filters).map((item) => {
+      return `${item?.key || ""}:${marketAiRowsSignature(item?.rows || item?.stocks)}`;
+    }).join("|");
+    const dashboard = aiPayload?.dashboard || {};
+    const base = {
+      aiReady,
+      updatedAt: aiPayload?.updatedAt || aiPayload?.servedAt || aiPayload?.snapshot?.updatedAt || "",
+      tradeDate: dashboard.tradeDate || aiPayload?.snapshot?.tradeDate || "",
+      sample: dashboard.sample || aiPayload?.summary?.sample || "",
+      up: dashboard.up || aiPayload?.summary?.up || "",
+      down: dashboard.down || aiPayload?.summary?.down || "",
+      bias: dashboard.bias || "",
+      confidence: dashboard.confidence || "",
+      rows: marketAiRowsSignature(aiPayload?.rows || aiPayload?.hotStocks || aiPayload?.items),
+      groups: groupSignature,
+      filters: filterSignature,
+      points: normalizeArray(aiPayload?.todayPoints).slice(0, 6).join("|"),
+      risks: normalizeArray(aiPayload?.riskNotes).slice(0, 4).map((item) => `${item?.title || ""}:${item?.text || item?.reason || ""}`).join("|"),
+      reasoning: normalizeArray(aiPayload?.reasoning).slice(0, 4).map((item) => `${item?.key || ""}:${item?.title || ""}:${item?.text || item?.reason || ""}`).join("|"),
+    };
+    if (!aiReady) {
+      base.heatmap = normalizeArray(heatmapPayload?.sectors).slice(0, 12).map((item) => {
+        return `${item?.name || item?.industry || ""}:${item?.pct ?? item?.avgPct ?? ""}:${item?.up || 0}:${item?.down || 0}:${item?.count || ""}`;
+      }).join("|");
+      base.radar = `${radarPayload?.runId || radarPayload?.timestamp || ""}:${marketAiRowsSignature(radarPayload?.rows)}`;
+    }
+    return JSON.stringify(base);
+  }
+
+  function scheduleMarketApiAiRender(heatmapPayload, radarPayload, aiPayload = {}, options = {}) {
+    if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+    const request = {
+      heatmap: heatmapPayload || {},
+      radar: radarPayload || {},
+      ai: aiPayload || {},
+      force: Boolean(options.force),
+    };
+    marketAiRenderRequest = request;
+    window.clearTimeout(marketAiRenderTimer);
+    const delay = Number.isFinite(Number(options.delay)) ? Number(options.delay) : (hasMarketAiPayload(aiPayload) ? 90 : 220);
+    marketAiRenderTimer = window.setTimeout(() => {
+      const next = marketAiRenderRequest || request;
+      marketAiRenderRequest = null;
+      if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+      const signature = marketAiStableSignature(next.heatmap, next.radar, next.ai);
+      const panel = document.querySelector("#market-view [data-market-api-ai]");
+      if (!next.force && signature && signature === marketAiRenderSignature && panel?.dataset?.marketAiStableSignature === signature) return;
+      marketAiRenderSignature = signature;
+      renderMarketApiAi(next.heatmap, next.radar, next.ai);
+      const renderedPanel = document.querySelector("#market-view [data-market-api-ai]");
+      if (renderedPanel && signature) renderedPanel.dataset.marketAiStableSignature = signature;
+    }, Math.max(40, delay));
+  }
+
   function hydrateMarketDesktopAiDirect(force = false) {
     if (!isMarketViewActive() || marketDesktopMode !== "ai" || marketDesktopAiLoading) return;
     marketDesktopAiLoading = true;
@@ -3613,12 +3702,15 @@
       ai: marketAiBundlePayload || null,
     };
     let settled = 0;
-    const paint = () => {
+    const paint = (forcePaint = false, delay = null) => {
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
-      renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
+      scheduleMarketApiAiRender(state.heatmap || {}, state.radar || {}, state.ai || {}, {
+        force: forcePaint,
+        delay: delay == null ? (hasMarketAiPayload(state.ai) ? 90 : 220) : delay,
+      });
     };
     if (state.heatmap?.sectors?.length || state.radar || state.ai) {
-      window.setTimeout(paint, 0);
+      window.setTimeout(() => paint(false, hasMarketAiPayload(state.ai) ? 40 : 160), 0);
     }
     const done = () => {
       settled += 1;
@@ -3632,28 +3724,29 @@
             snapshotFirst: true,
           };
           state.heatmap = marketSnapshotFirstPayload;
-          paint();
+          if (!hasMarketAiPayload(state.ai)) paint(false, 160);
         }
       })
       .finally(done);
     fetchMarketJson("/api/market-ai-live", 40, force, 5200)
       .then((payload) => {
         state.ai = payload || {};
-        paint();
+        if (hasMarketAiPayload(state.ai)) marketAiBundlePayload = state.ai;
+        paint(false, 70);
       })
       .finally(done);
     fetchMarketJson("/api/heatmap", 60, force, 6500)
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = payload || {};
-          paint();
+          if (!hasMarketAiPayload(state.ai)) paint(false, 180);
         }
       })
       .finally(done);
     fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200)
       .then((payload) => {
         state.radar = payload || {};
-        paint();
+        if (!hasMarketAiPayload(state.ai)) paint(false, 180);
       })
       .finally(done);
   }
@@ -3727,7 +3820,6 @@
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
       marketApiOnlyLoading = false;
       hydrateMarketDesktopAiDirect(force);
-      refreshMarketApiOnly(force);
     }, Math.max(80, delay));
   }
 
@@ -3738,6 +3830,7 @@
     document.documentElement.dataset.fumanMarketDesktopModeSource = source;
     scheduleMarketDesktopModeHydrate(nextMode, true);
   }
+  window.FUMAN_SELECT_MARKET_DESKTOP_MODE = selectMarketDesktopMode;
 
   function installMarketDesktopModeHandlers(tabs) {
     if (!tabs || tabs.dataset.fumanFastMarketModeReady === "1") return;
@@ -4411,7 +4504,12 @@
       marketApiOnlySignature = nextSignature;
       renderMarketOverviewApi(state.market || {}, state.heatmap || {});
       if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
-      renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai || {});
+      scheduleMarketApiAiRender(
+        state.heatmap || marketSnapshotFirstPayload || {},
+        state.radar || marketRadarBundlePayload || {},
+        state.ai || marketAiBundlePayload || {},
+        { delay: hasMarketAiPayload(state.ai || marketAiBundlePayload) ? 110 : 240 },
+      );
       renderMarketApiRadar(state.radar || {});
     };
     fetchMarketJson("/api/market", 24, force, 6500)
@@ -6521,6 +6619,9 @@
           border-radius: 0 !important;
           background: transparent !important;
           padding: 0 !important;
+          min-height: 980px !important;
+          overflow-anchor: none !important;
+          contain: layout paint style !important;
         }
         #market-view .market-ai-hero-board {
           display: grid;
@@ -6534,6 +6635,8 @@
             radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.22), transparent 34%),
             linear-gradient(135deg, rgba(6, 78, 59, 0.74), rgba(8, 15, 26, 0.94));
           padding: 18px;
+          overflow-anchor: none;
+          contain: layout paint;
         }
         #market-view .market-ai-hero-copy {
           align-self: center;
@@ -6828,8 +6931,11 @@
         }
         #market-view .market-ai-hot {
           display: grid;
+          align-content: start;
           gap: 10px;
+          min-height: 720px;
           padding: 0 12px 12px;
+          overflow-anchor: none;
         }
         #market-view .market-ai-stock-row {
           display: grid;
@@ -6840,6 +6946,7 @@
           border-radius: 8px;
           background: rgba(15, 23, 42, 0.6);
           padding: 12px;
+          min-height: 96px;
         }
         #market-view .market-ai-stock-row h4 {
           margin: 0 0 4px;
