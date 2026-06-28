@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { isTwseTradingDay } = require("./twse-trading-day");
+const { RULE_CONTRACT, applyScorecardRuleMetadata } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -319,9 +320,9 @@ function highOf(row, entryPrice) {
 }
 
 function pnlOf(row, entryPrice, highPrice) {
-  const explicit = cleanNumber(row.pnl ?? row.profit ?? row.profit_loss ?? row.return_amount);
-  if (explicit) return roundPrice(explicit);
   if (entryPrice && highPrice) return roundPrice(highPrice - entryPrice);
+  const explicit = cleanNumber(row.pnl ?? row.profit ?? row.profit_loss ?? row.return_amount);
+  if (Number.isFinite(explicit)) return roundPrice(explicit);
   return 0;
 }
 
@@ -427,9 +428,14 @@ function entryTimeOf(task, payload, row) {
 }
 
 function includeInScorecard(row) {
-  if (row.strategy !== "策略2成績單") return true;
   const minutes = timeMinutes(row.entry_time);
-  return minutes !== null && minutes >= 9 * 60 && minutes <= 12 * 60;
+  if (row.strategy === "策略2成績單") {
+    return minutes !== null && minutes >= 9 * 60 && minutes <= 12 * 60;
+  }
+  if (row.strategy === "即時雷達成績單") {
+    return minutes !== null && minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+  }
+  return true;
 }
 
 async function fetchQuoteHighMap(records) {
@@ -608,7 +614,11 @@ function normalizeRecord(task, payload, row, index) {
   const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
   const source = "terminal-complete-run-scorecard";
   const reason = reasonOf(row, task);
-  return {
+  return applyScorecardRuleMetadata({
+    taskKey: task.key,
+    sourceRow: row,
+    payload,
+    record: {
     record_id: `${recordDate}-${task.key}-${code}-${index + 1}`,
     record_date: recordDate,
     source_date: sourceDate || recordDate,
@@ -622,7 +632,8 @@ function normalizeRecord(task, payload, row, index) {
     source,
     source_sheet: source,
     reason: task.key === "strategy3" && sourceDate ? `${reason}；策略3來源日=${sourceDate}`.slice(0, 500) : reason,
-  };
+    },
+  });
 }
 
 function summarize(records) {
@@ -736,7 +747,15 @@ async function main() {
       source: tradingDay.source,
     },
     displayRules: {
+      strategyRuleContract: RULE_CONTRACT,
+      realtimeRadarWindow: "09:00-13:30",
+      strategy1EntryTime: "21:30",
+      strategy1Settlement: "前一日21:30顯示，當日收盤後結算",
       strategy2Window: "09:00-12:00",
+      strategy3EntryTime: "13:00",
+      strategy3HighPrice: "隔天高點",
+      followupPositiveGrowthDays: 7,
+      followupPositiveGrowthRule: "close_or_high_T+7 > entry_price",
     },
     days: 1,
     records: filtered,

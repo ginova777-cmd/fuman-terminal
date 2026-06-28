@@ -55,6 +55,10 @@ if ($LASTEXITCODE -ne 0) {
   if ($LASTEXITCODE -ne 0) { throw "scorecard DuckDB fallback export failed with exit code $LASTEXITCODE" }
 }
 
+Write-Step "verify scorecard strategy rule locks candidate snapshot"
+& node --use-system-ca "scripts\verify-scorecard-strategy-rules.js" "--no-live" "--snapshot-file=$outFile" "--require-contract"
+if ($LASTEXITCODE -ne 0) { throw "scorecard strategy rule lock failed with exit code $LASTEXITCODE" }
+
 Write-Step "publish Supabase snapshot"
 & node --use-system-ca "scripts\publish-scorecard-snapshot.js" "--file=$outFile"
 if ($LASTEXITCODE -ne 0) { throw "scorecard publish failed with exit code $LASTEXITCODE" }
@@ -64,5 +68,11 @@ $verifyArgs = @("--use-system-ca", "scripts\verify-scorecard-snapshot.js")
 if ($NoLiveVerify) { $verifyArgs += "--no-live" }
 & node @verifyArgs
 if ($LASTEXITCODE -ne 0) { throw "scorecard verify failed with exit code $LASTEXITCODE" }
+
+Write-Step "verify live scorecard strategy rule locks"
+$ruleArgs = @("--use-system-ca", "scripts\verify-scorecard-strategy-rules.js")
+if ($NoLiveVerify) { $ruleArgs += "--no-live" }
+& node @ruleArgs
+if ($LASTEXITCODE -ne 0) { throw "live scorecard strategy rule lock failed with exit code $LASTEXITCODE" }
 
 Write-Step "ok"

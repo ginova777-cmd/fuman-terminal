@@ -829,12 +829,13 @@ scripts/verify-scorecard-no-rollback.js
 | deploy | `/88` 必須保留 `scorecard-history-date`、`scorecard-theme-toggle`、`PNL_MULTIPLIER=1000`，且不可恢復 `scorecard-basis` |
 | data | `scorecard_latest` / candidate snapshot 必須有 9 策略、rows 不可低於 floor、`cacheSource=supabase-snapshot`、不可回 Google Sheet / Streamlit / DuckDB |
 | schedule | `Fuman Scorecard Daily Automation 1400` 必須存在且指向 `run-scorecard-daily-automation.ps1`；`Fuman Scorecard Snapshot 1538` 不可存在或必須停用；`Fuman Auto Main Release 1615` 必須停用 |
-| source | 策略2只允許 `09:00-12:00`；策略3必須 `13:00` 且來源日不是同日；CB 必須保留可計算的偵測股價進場；`/88` 損益顯示必須是 `raw pnl * 1000` |
+| source | 即時雷達只允許 `09:00-13:30`；策略1 `21:30` 進場、當日收盤後結算；策略2只允許 `09:00-12:00`；策略3必須 `13:00` 且來源日不是同日；CB 必須保留完整掃 `stockPrice` 進場；策略4/5/買賣超/權證/CB 必須帶 7 日正成長追蹤；`/88` 損益顯示必須是 `raw pnl * 1000` |
 
 `verify:publish-gate` 會跑：
 
 ```powershell
 node scripts\verify-scorecard-no-rollback.js --no-live --no-output --skip-schedule
+node scripts\verify-scorecard-strategy-rules.js --no-live --no-output
 ```
 
 說明：publish gate 可能在無 Windows Task Scheduler 權限的環境執行，所以只檢查程式碼/UI/data rollback。完整排程防回滾由每日 runner 與手動 `npm run verify:scorecard-no-rollback` 執行。
@@ -844,7 +845,9 @@ node scripts\verify-scorecard-no-rollback.js --no-live --no-output --skip-schedu
 ```text
 export snapshot json
   -> verify-scorecard-no-rollback.js --no-live --snapshot-file=<candidate>
+  -> verify-scorecard-strategy-rules.js --no-live --snapshot-file=<candidate> --require-contract
   -> publish scorecard_latest
+  -> verify-scorecard-strategy-rules.js
   -> verify-scorecard-no-rollback.js
 ```
 
@@ -877,6 +880,62 @@ npm run verify:scorecard-health
 
 這個 API 是給你快速看導管哪一段紅燈，不取代 14:00 runner 的 publish 前防回滾。
 
+## 成績單策略規則硬鎖
+
+契約版本：
+
+```text
+scorecard-strategy-rule-lock-v1
+```
+
+正式驗證命令：
+
+```powershell
+npm run verify:scorecard-rules
+```
+
+publish 前候選 snapshot 必須用嚴格模式：
+
+```powershell
+node --use-system-ca scripts\verify-scorecard-strategy-rules.js --no-live --snapshot-file=<candidate> --require-contract
+```
+
+逐策略硬鎖：
+
+| strategy | hard rule |
+| --- | --- |
+| 即時雷達成績單 | 只允許 `09:00-13:30` 列入成績單 |
+| 策略1開盤入成績單 | `entry_time=21:30`；前一日 21:30 顯示，當日收盤後結算 |
+| 策略2成績單 | 只允許 `09:00-12:00` |
+| 策略3隔日沖成績單 | `entry_time=13:00`；來源日必須是前一開盤日；最高價使用隔天高點 proxy |
+| 策略4成績單 | 必須拆出 `策略項目` / `策略細項`，並掛 7 日正成長追蹤 |
+| 策略5成績單 | 必須拆出 `策略項目` / `策略細項`，並掛 7 日正成長追蹤 |
+| 買賣超成績單 | 必須拆出法人買超類型，並掛 7 日正成長追蹤 |
+| 權證成績單 | 必須拆出權證訊號類型，並掛 7 日正成長追蹤 |
+| CB成績單 | `entry_price` 必須來自完整掃偵測 `stockPrice`；必須拆出 CB 訊號類型，並掛 7 日正成長追蹤 |
+
+每筆新成績單 row 必須保留：
+
+| field / marker | meaning |
+| --- | --- |
+| `rule_contract` / `規則版本` | 必須是 `scorecard-strategy-rule-lock-v1` |
+| `rule_key` | strategy + strategy item key |
+| `rule_group` / `策略項目` | 用於後續分組追查 |
+| `rule_tags` / `策略細項` | 原始訊號拆分 |
+| `entry_price_source` / `進場價來源` | CB 必須是 `stockPrice` |
+| `followup_days` | 固定 `7` |
+| `followup_rule` / `7日追蹤` | `close_or_high_T+7 > entry_price` |
+| `followup_status` / `追蹤狀態` | 初始 `pending_7d_growth_check` |
+
+`pnl` 永遠是原始價差：
+
+```text
+pnl = high_price - entry_price
+/88 顯示 = pnl * 1000
+```
+
+任何時間窗錯誤、策略3來源日錯誤、CB 進場價來源錯誤、7 日追蹤欄位缺漏、或 `pnl` 與 `high_price - entry_price` 不一致，都不得發布 `scorecard_latest`。
+
 ## 不可做的事
 
 不要用以下方式假裝修好：
@@ -899,12 +958,13 @@ npm run verify:scorecard-health
 
 1. 確認今天是否開盤；休市日用最後開盤日。
 2. 產生 terminal complete-run scorecard source。
-3. 檢查策略2時間窗、策略3來源日、CB entry_price、全部 entry/high/pnl。
+3. 檢查即時雷達/策略1/策略2/策略3/CB 規則、全部 entry/high/pnl、策略4/5/買賣超/權證/CB 的 7 日追蹤契約。
 4. 回填 `public.trade_records` 與 `public.strategy_daily_summary`，先清同日同策略舊列。
 5. 確認 `v_scorecard_source_health.status = ready`。
 6. 匯出 `data\scorecard-latest.json`。
 7. 發布 `scorecard_latest` Supabase snapshot。
-8. 跑 snapshot verify。
-9. 跑 resource chain verify。
-10. 跑 UI E2E。
-11. 確認 `/api/scorecard` 與 `/88` 顯示新日期與正確筆數。
+8. 跑 strategy rule lock verify。
+9. 跑 snapshot verify。
+10. 跑 resource chain verify。
+11. 跑 UI E2E。
+12. 確認 `/api/scorecard` 與 `/88` 顯示新日期與正確筆數。

@@ -19,6 +19,7 @@
     "verify:scorecard-ui-e2e": "node --use-system-ca scripts/verify-scorecard-ui-e2e.js",
     "verify:scorecard-no-rollback": "node --use-system-ca scripts/verify-scorecard-no-rollback.js",
     "verify:scorecard-health": "node --use-system-ca scripts/verify-scorecard-health.js",
+    "verify:scorecard-rules": "node --use-system-ca scripts/verify-scorecard-strategy-rules.js",
     "cleanup:api-only-retired": "node scripts/cleanup-api-only-retired-artifacts.js",
     "verify:deploy": "node --use-system-ca scripts/verify-deployment.js",
     "verify:deployment": "node --use-system-ca scripts/verify-deployment.js",

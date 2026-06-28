@@ -2,6 +2,7 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
@@ -49,6 +50,7 @@ function countMissingDailySources(payload) {
 }
 
 function summarizePayload(payload, source) {
+  const strategyRules = verifyScorecardStrategyRules(payload || {}, { source });
   return {
     ok: Boolean(payload && payload.ok !== false),
     latestDate: payload?.latestDate || payload?.summary?.latestDate || "",
@@ -56,6 +58,11 @@ function summarizePayload(payload, source) {
     cacheSource: payload?.cacheSource || source,
     missingRecordSources: countMissingRecordSources(payload),
     missingDailySources: countMissingDailySources(payload),
+    strategyRules: {
+      ok: strategyRules.ok,
+      strict: strategyRules.strict,
+      issues: strategyRules.issues,
+    },
   };
 }
 
@@ -74,6 +81,7 @@ async function main() {
   if (snapshotSummary.rows <= 0) issues.push(`scorecard snapshot rows invalid: ${snapshotSummary.rows}`);
   if (snapshotSummary.missingRecordSources > 0) issues.push(`scorecard snapshot records missing source fields: ${snapshotSummary.missingRecordSources}`);
   if (snapshotSummary.missingDailySources > 0) issues.push(`scorecard snapshot daily rows missing source fields: ${snapshotSummary.missingDailySources}`);
+  if (!snapshotSummary.strategyRules.ok) issues.push(`scorecard snapshot strategy rule lock failed: ${snapshotSummary.strategyRules.issues.join(",")}`);
 
   let liveSummary = null;
   if (CHECK_LIVE) {
@@ -87,6 +95,7 @@ async function main() {
     if (liveSummary.rows <= 0) issues.push(`live /api/scorecard rows invalid: ${liveSummary.rows}`);
     if (liveSummary.missingRecordSources > 0) issues.push(`live /api/scorecard records missing source fields: ${liveSummary.missingRecordSources}`);
     if (liveSummary.missingDailySources > 0) issues.push(`live /api/scorecard daily rows missing source fields: ${liveSummary.missingDailySources}`);
+    if (!liveSummary.strategyRules.ok) issues.push(`live /api/scorecard strategy rule lock failed: ${liveSummary.strategyRules.issues.join(",")}`);
   }
 
   const report = {

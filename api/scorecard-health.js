@@ -1,5 +1,6 @@
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SOURCE_ENDPOINTS = [
@@ -142,6 +143,7 @@ function summarizeScorecard(payload) {
   const cbBad = selectedRows
     .filter((row) => cleanText(row.strategy) === "CB成績單")
     .filter((row) => !(cleanNumber(row.entry_price) > 0 && cleanNumber(row.high_price) > 0 && Number.isFinite(cleanNumber(row.pnl)))).length;
+  const strategyRules = verifyScorecardStrategyRules(payload || {}, { source: "scorecard-health" });
   return {
     latestDate,
     rows: selectedRows.length,
@@ -154,6 +156,13 @@ function summarizeScorecard(payload) {
     strategy2OutOfWindow,
     strategy3BadEntry,
     cbBad,
+    strategyRules: {
+      ok: strategyRules.ok,
+      strict: strategyRules.strict,
+      contract: strategyRules.contract,
+      issues: strategyRules.issues,
+      ruleGroupsByStrategy: strategyRules.ruleGroupsByStrategy,
+    },
   };
 }
 
@@ -245,7 +254,8 @@ module.exports = async function handler(request, response) {
     && snapshotSummary.missingRequiredFields === 0
     && snapshotSummary.strategy2OutOfWindow === 0
     && snapshotSummary.strategy3BadEntry === 0
-    && snapshotSummary.cbBad === 0;
+    && snapshotSummary.cbBad === 0
+    && snapshotSummary.strategyRules.ok;
   const apiOk = scorecardApi.ok
     && scorecardSummary.cacheSource === "supabase-snapshot"
     && scorecardSummary.rows > 0
@@ -253,7 +263,8 @@ module.exports = async function handler(request, response) {
     && scorecardSummary.missingRequiredFields === 0
     && scorecardSummary.strategy2OutOfWindow === 0
     && scorecardSummary.strategy3BadEntry === 0
-    && scorecardSummary.cbBad === 0;
+    && scorecardSummary.cbBad === 0
+    && scorecardSummary.strategyRules.ok;
   const pageOk = page.ok && Object.values(pageChecks).every(Boolean);
   const stages = {
     sources: stage(sourceOk, { endpoints: sources }),

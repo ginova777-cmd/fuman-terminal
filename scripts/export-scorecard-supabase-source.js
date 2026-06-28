@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { hydrateScorecardRuleMetadataFromReason } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "scorecard-latest.json");
@@ -62,20 +63,22 @@ function recordId(row) {
 }
 
 function normalizeRecord(row) {
-  return {
+  const entryPrice = cleanNumber(row.entry_price);
+  const highPrice = cleanNumber(row.high_price);
+  return hydrateScorecardRuleMetadataFromReason({
     record_id: recordId(row),
     record_date: cleanText(row.record_date).slice(0, 10),
     strategy: cleanText(row.strategy || "未分類"),
     ticker: cleanText(row.ticker),
     name: cleanText(row.name),
     entry_time: cleanText(row.entry_time),
-    entry_price: cleanNumber(row.entry_price),
-    high_price: cleanNumber(row.high_price),
-    pnl: cleanNumber(row.pnl),
+    entry_price: entryPrice,
+    high_price: highPrice,
+    pnl: entryPrice && highPrice ? Math.round((highPrice - entryPrice) * 10000) / 10000 : cleanNumber(row.pnl),
     source_sheet: cleanText(row.source || row.source_sheet || "supabase:trade_records"),
     source: cleanText(row.source || row.source_sheet || "supabase:trade_records"),
     reason: cleanText(row.reason),
-  };
+  });
 }
 
 function normalizeDaily(row) {

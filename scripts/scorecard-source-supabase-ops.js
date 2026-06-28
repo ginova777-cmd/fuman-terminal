@@ -173,6 +173,8 @@ function stableRecordId(row, index) {
 function normalizeRecord(row, index) {
   const recordDate = dateOnly(row.record_date || row.date || row.trade_date);
   const ticker = cleanText(row.ticker || row.code || row.symbol);
+  const entryPrice = cleanNumber(row.entry_price ?? row.entryPrice ?? row.price);
+  const highPrice = cleanNumber(row.high_price ?? row.highPrice ?? row.high);
   return {
     record_id: stableRecordId(row, index),
     record_date: recordDate,
@@ -180,9 +182,9 @@ function normalizeRecord(row, index) {
     ticker,
     name: cleanText(row.name || row.stock_name || row.ticker_name),
     entry_time: cleanText(row.entry_time || row.time || row.entryTime),
-    entry_price: cleanNumber(row.entry_price ?? row.entryPrice ?? row.price),
-    high_price: cleanNumber(row.high_price ?? row.highPrice ?? row.high),
-    pnl: cleanNumber(row.pnl ?? row.profit ?? row.return_pct ?? row.returnPct) ?? 0,
+    entry_price: entryPrice,
+    high_price: highPrice,
+    pnl: entryPrice && highPrice ? Math.round((highPrice - entryPrice) * 10000) / 10000 : (cleanNumber(row.pnl ?? row.profit ?? row.return_pct ?? row.returnPct) ?? 0),
     source: cleanText(row.source || row.source_sheet || "scorecard-latest-json"),
     reason: cleanText(row.reason || row.note || row.result),
   };

@@ -4,6 +4,7 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -173,6 +174,12 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, strategy3BadSource.length === 0, `${source}-strategy3-source-date`, `${source} strategy3 must use previous trading-day source marker`, { strategy3BadSource });
   addCheck(checks, cbBad.length === 0, `${source}-cb-stock-price`, `${source} CB rows must keep detected stockPrice-based calculable entry`, { cbBad });
   addCheck(checks, historyDates.length > 0, `${source}-history-dates`, `${source} historyDates must exist`, { historyDates, dates });
+
+  const strategyRules = verifyScorecardStrategyRules(payload, {
+    source,
+    requireContract: source === "candidate-snapshot",
+  });
+  for (const check of strategyRules.checks) checks.push(check);
 
   if (baseline) {
     const baselineDates = Array.isArray(baseline.historyDates) ? baseline.historyDates.map(cleanText).filter(Boolean) : uniqueDates(baseline);

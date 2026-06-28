@@ -188,6 +188,15 @@ Invoke-Step "node" @(
   "--snapshot-file=$snapshotFile"
 )
 
+Write-Step "verify scorecard strategy rule locks candidate snapshot"
+Invoke-Step "node" @(
+  "--use-system-ca",
+  "scripts\verify-scorecard-strategy-rules.js",
+  "--no-live",
+  "--snapshot-file=$snapshotFile",
+  "--require-contract"
+)
+
 Write-Step "publish scorecard_latest Supabase snapshot"
 Invoke-Step "node" @(
   "--use-system-ca",
@@ -211,6 +220,13 @@ if ($NoLiveVerify) {
   $chainVerifyArgs += "--no-live"
 }
 Invoke-Step "node" $chainVerifyArgs
+
+Write-Step "verify scorecard strategy rule locks live state"
+$strategyRuleArgs = @("--use-system-ca", "scripts\verify-scorecard-strategy-rules.js")
+if ($NoLiveVerify) {
+  $strategyRuleArgs += "--no-live"
+}
+Invoke-Step "node" $strategyRuleArgs
 
 Write-Step "verify scorecard no-rollback live state"
 $noRollbackArgs = @("--use-system-ca", "scripts\verify-scorecard-no-rollback.js")

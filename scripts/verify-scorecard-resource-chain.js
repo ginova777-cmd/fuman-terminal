@@ -264,6 +264,7 @@ async function main() {
     publishesSnapshot: runner.includes("publish-scorecard-snapshot.js"),
     verifiesSnapshot: runner.includes("verify-scorecard-snapshot.js"),
     verifiesResourceChain: runner.includes("verify-scorecard-resource-chain.js"),
+    verifiesStrategyRules: runner.includes("verify-scorecard-strategy-rules.js"),
     supportsNonTradingDayCarryForward: /Get-TradingDayStatus|AllowPreviousTradeDate|allowPreviousForRun/.test(runner),
     noGoogleSheet: !/google\s*sheet/i.test(runner),
     noStreamlit: !/streamlit|8501/i.test(runner),
@@ -276,9 +277,10 @@ async function main() {
       && details.runner.exportsSupabaseSource
       && details.runner.publishesSnapshot
       && details.runner.verifiesSnapshot
-      && details.runner.verifiesResourceChain,
+      && details.runner.verifiesResourceChain
+      && details.runner.verifiesStrategyRules,
     "runner-export-publish-verify",
-    "run-scorecard-daily-automation.ps1 generates terminal source, backfills Supabase, exports, publishes, then verifies",
+    "run-scorecard-daily-automation.ps1 generates terminal source, backfills Supabase, exports, publishes, then verifies chain and strategy rules",
     details.runner,
   );
   addCheck(

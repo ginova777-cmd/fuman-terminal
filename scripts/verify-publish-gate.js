@@ -107,6 +107,13 @@ const scorecardNoRollbackGuard = spawnSync(process.execPath, [path.join(ROOT, "s
 if (scorecardNoRollbackGuard.status !== 0) {
   issues.push(`verify-scorecard-no-rollback failed: ${(scorecardNoRollbackGuard.stderr || scorecardNoRollbackGuard.stdout || "").trim()}`);
 }
+const scorecardStrategyRulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-scorecard-strategy-rules.js"), "--no-live", "--no-output"], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (scorecardStrategyRulesGuard.status !== 0) {
+  issues.push(`verify-scorecard-strategy-rules failed: ${(scorecardStrategyRulesGuard.stderr || scorecardStrategyRulesGuard.stdout || "").trim()}`);
+}
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -191,6 +198,9 @@ if (!packageJson.scripts?.["verify:scorecard-no-rollback"] || !/verify-scorecard
 }
 if (!packageJson.scripts?.["verify:scorecard-health"] || !/verify-scorecard-health\.js/.test(packageJson.scripts["verify:scorecard-health"])) {
   issues.push("package.json missing scripts.verify:scorecard-health");
+}
+if (!packageJson.scripts?.["verify:scorecard-rules"] || !/verify-scorecard-strategy-rules\.js/.test(packageJson.scripts["verify:scorecard-rules"])) {
+  issues.push("package.json missing scripts.verify:scorecard-rules");
 }
 if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-surfaces-chain\.js/.test(packageJson.scripts["verify:market-surfaces-chain"])) {
   issues.push("package.json missing scripts.verify:market-surfaces-chain for market overview/heatmap/AI/realtime/watchlist");
@@ -1040,6 +1050,7 @@ for (const file of [
   "terminal-watchlist-module.js",
   "api/scorecard.js",
   "api/scorecard-health.js",
+  "lib/scorecard-rule-locks.js",
   "lib/supabase-public-slot.js",
   "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
@@ -1064,6 +1075,7 @@ for (const file of [
   "scripts/verify-production-guard.js",
   "scripts/verify-scorecard-snapshot.js",
   "scripts/verify-scorecard-resource-chain.js",
+  "scripts/verify-scorecard-strategy-rules.js",
   "scripts/verify-market-surfaces-chain.js",
   "scripts/export-scorecard-supabase-source.js",
   "scripts/generate-terminal-scorecard-source.js",
@@ -1440,8 +1452,10 @@ if (fetchResult.status !== 0) {
       "scripts/verify-scorecard-resource-chain.js",
       "scripts/verify-scorecard-no-rollback.js",
       "scripts/verify-scorecard-health.js",
+      "scripts/verify-scorecard-strategy-rules.js",
       "scripts/export-scorecard-supabase-source.js",
       "scripts/generate-terminal-scorecard-source.js",
+      "scripts/scorecard-source-supabase-ops.js",
       "scripts/export-scorecard-snapshot.py",
       "scripts/publish-scorecard-snapshot.js",
       "scripts/publish-mobile-update-event.js",
@@ -1483,6 +1497,7 @@ if (fetchResult.status !== 0) {
       "88.html",
       "api/scorecard.js",
       "api/scorecard-health.js",
+      "lib/scorecard-rule-locks.js",
       "api/open-buy-latest.js",
       "api/cb-detect-latest.js",
       "api/institution-latest.js",
@@ -1500,6 +1515,7 @@ if (fetchResult.status !== 0) {
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
       "STRATEGY2-FRESHNESS-GOVERNANCE.md",
       "lib/supabase-public-slot.js",
+      "lib/scorecard-rule-locks.js",
       "scripts/scan-intraday-signals.js",
       "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
       "ops/public-slot/Run-PublicSlotSharedSource.ps1",
