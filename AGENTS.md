@@ -483,6 +483,11 @@ scheduleShellValidation
 - 本次 route-stress 已改成單一 Chrome / 單一 tab 連續切頁；`Page.enable` 只記錄不作 fatal，避免每 route / 每輪重開 Chrome 造成假失敗。
 - 第二次正式站七關已過：`verify:mobile-api-only:live`、`guard:production`、`verify:mobile-cache-contract:live`、`verify:runtime-ownership`、`verify:terminal-resource-chain`、`verify:terminal-cold-start`、`verify:terminal-route-stress --loops=3`、`verify:mobile-layout:live`、手機 / 平板 `verify:terminal-ui-e2e` matrix。
 - 手機 / 平板自選股 live E2E 已覆蓋：phone portrait、phone landscape、tablet，night / sun，策略1-5 的「加入自選」與 watch tab；聚焦 watch route 也已驗 `2334` invalid reject 與 `2327` valid manual add。
+- 2026-06-28 第三次手機自選收斂 commit：`b8e9593b Recover mobile watch cards after strategy adds`，新增 `mobile-watch-v2-add-recovery-20260628-01`，避免 valid code 停在 `正在確認台股代號` 而沒有卡片。
+- 第三次正式部署：`dpl_2F7ZS5sKqDxvRKnJuvBXyFvxyx79`，但 live E2E 抓到舊策略 recovery timer 會在切到 watch / 重設 storage 後晚到，污染 watch 手動新增測試。
+- 最終手機自選收斂 commit：`16777e19 Prevent stale mobile strategy watch recovery`；策略 recovery 只允許原策略按鈕仍在 DOM 時執行，切頁後舊 timer 必須失效。
+- 最終正式部署：`dpl_G3R6fBM2eBaHSyGopvWjXHkBbpUY`，alias `https://fuman-terminal.vercel.app`。
+- 最終 live 驗證：`npm run verify:mobile-api-only:live` 通過、`npm run guard:production` 通過、手機 / 平板 `verify:terminal-ui-e2e` matrix 通過 `ok 36/36`。此矩陣實際點策略1-5「加入自選」，再切 watch tab 驗 `.watch-row` 出現，並驗 watch tab 手動 `2334` invalid reject / `2327` valid add。
 
 ### 驗證注意事項 / 已知坑
 
