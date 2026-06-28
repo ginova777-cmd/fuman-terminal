@@ -139,10 +139,14 @@ async function main() {
   requireMarker("terminal-hotfix.js", "installDesktopViewSnapshotCache");
   requireMarker("terminal-hotfix.js", "FUMAN_DESKTOP_VIEW_SNAPSHOT");
   requireMarker("terminal-hotfix.js", "FUMAN_HOTFIX_RESTORE_VIEW_SNAPSHOT");
-  requireMarker("terminal-hotfix.js", "__fumanWatchlistAddBridge = \"20260628-05\"", "watchlist bridge 20260628-05");
-  requireMarker("terminal-hotfix.js", "fallbackRender(rows, normalized)", "watchlist immediate card fallback");
-  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260628-06", "watchlist redesigned shell 20260628-06");
+  requireMarker("terminal-hotfix.js", "__fumanWatchlistAddBridge = \"20260628-06\"", "watchlist bridge 20260628-06");
+  requireMarker("terminal-hotfix.js", "finishShellAdd", "watchlist async shell add bridge");
+  requireMarker("terminal-hotfix.js", "watchlist-storage-guard-20260628-03", "watchlist placeholder storage blocker");
+  requireMarker("terminal-hotfix.js", "scheduleShellValidation", "watchlist storage validation handoff");
+  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260628-07", "watchlist redesigned shell 20260628-07");
   requireMarker("terminal-watchlist-shell.js", "memoryRows", "watchlist memory-backed rows");
+  requireMarker("terminal-watchlist-shell.js", "validateTaiwanStockCode", "watchlist Taiwan stock validation");
+  requireMarker("terminal-watchlist-shell.js", "不是有效上市/上櫃台股代號", "watchlist invalid stock blocker");
   requireMarker("terminal-watchlist-shell.js", "mode: \"watchlist-redesign\"", "watchlist redesign mode");
   requireMarker("fuman-sw.js", "purgeOldWatchlistAssets", "watchlist stale cache purge");
   requireMarker("fuman-sw.js", "CLEAR_WATCHLIST_CACHE", "watchlist cache clear message");
@@ -156,7 +160,7 @@ async function main() {
   requireMarker("version.json", EXPECTED_FRONTEND_VERSION);
   requireMarker("terminal-core.js", `const version = "${EXPECTED_FRONTEND_VERSION}"`);
   requireMarker("index.html", `terminal-core.js?v=${EXPECTED_FRONTEND_VERSION}`);
-  requireMarker("index.html", "terminal-hotfix.js?watchlist-bridge=20260628-05");
+  requireMarker("index.html", "terminal-hotfix.js?watchlist-bridge=20260628-06");
   requireMarker("fuman-sw.js", `fuman-terminal-sw-${EXPECTED_FRONTEND_VERSION}`);
   for (const file of ["version.json", "index.html", "terminal-core.js", "fuman-sw.js"]) {
     if (read(file).includes("strategy1-two-cards-20260623-03")) {

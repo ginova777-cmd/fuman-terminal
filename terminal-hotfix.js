@@ -77,7 +77,7 @@
 
   function installWatchlistAddBridge() {
     if (window.__fumanWatchlistAddBridge) return;
-    window.__fumanWatchlistAddBridge = "20260628-05";
+    window.__fumanWatchlistAddBridge = "20260628-06";
     const watchlistKey = "fuman_watchlist";
     const mobileWatchlistKey = "fuman_mobile_watchlist_v1";
     const maxRows = 10;
@@ -113,13 +113,40 @@
       const proto = window.Storage?.prototype;
       const original = proto?.setItem;
       if (!proto || typeof original !== "function" || original.__fumanWatchlistLimitGuard) return;
+      const isPlaceholderRow = (row) => {
+        const code = normalizeCode(row?.code || row?.symbol || row?.Code);
+        const name = String(row?.name || row?.Name || row?.stockName || "").trim();
+        return Boolean(code && (!name || name === code));
+      };
+      const scheduleShellValidation = (row) => {
+        const code = normalizeCode(row?.code || row?.symbol || row?.Code);
+        if (!code) return;
+        const shell = window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.() || window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+        const validate = shell?.validateTaiwanStockCode || window.FUMAN_WATCHLIST_VALIDATE_CODE;
+        if (typeof validate !== "function") {
+          setTimeout(() => scheduleShellValidation(row), 120);
+          return;
+        }
+        Promise.resolve(validate(code)).then((meta) => {
+          if (meta && shell?.ensureCode?.(code, { ...row, ...meta, code })) return;
+          setStatus(`${code} 不是有效上市/上櫃台股代號，請確認後再新增。`, "warn");
+          shell?.render?.();
+        }).catch(() => setStatus(`${code} 不是有效上市/上櫃台股代號，請確認後再新增。`, "warn"));
+      };
       const guarded = function (key, value) {
         const name = String(key || "");
         if (name === watchlistKey || name === mobileWatchlistKey) {
           try {
-            const incoming = normalizeRows(JSON.parse(String(value || "[]")));
+            const rawIncoming = normalizeRows(JSON.parse(String(value || "[]")));
             const previous = normalizeRows(JSON.parse(String(this.getItem?.(name) || "[]")));
             const previousCodes = new Set(previous.slice(0, maxRows).map((row) => row.code));
+            const incoming = rawIncoming.filter((row) => {
+              if (!previousCodes.has(row.code) && isPlaceholderRow(row)) {
+                scheduleShellValidation(row);
+                return false;
+              }
+              return true;
+            });
             const hasNewCodeAtLimit = previous.length >= maxRows && incoming.some((row) => row.code && !previousCodes.has(row.code));
             const next = hasNewCodeAtLimit ? previous.slice(0, maxRows) : incoming.slice(0, maxRows);
             return original.call(this, name, JSON.stringify(next));
@@ -128,7 +155,7 @@
         return original.apply(this, arguments);
       };
       try {
-        Object.defineProperty(guarded, "__fumanWatchlistLimitGuard", { value: "watchlist-storage-guard-20260628-02" });
+        Object.defineProperty(guarded, "__fumanWatchlistLimitGuard", { value: "watchlist-storage-guard-20260628-03" });
         Object.defineProperty(guarded, "__fumanOriginalSetItem", { value: original });
       } catch (error) {}
       proto.setItem = guarded;
@@ -190,35 +217,33 @@
         return false;
       }
       const existedBefore = readRows().some((row) => row.code === normalized);
-      const shellAdd = window.FUMAN_WATCHLIST_FORCE_ADD_CODE;
+      const shellInstance = window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.() || window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+      const shellAdd = window.FUMAN_WATCHLIST_FORCE_ADD_CODE || shellInstance?.addCode;
+      const finishShellAdd = (ok) => {
+        if (ok) {
+          lastBridgeAddAt = Date.now();
+          ensureBridgeCard(normalized, existedBefore, "shell-bridge");
+          setTimeout(() => ensureBridgeCard(normalized, existedBefore, "shell-bridge-confirm"), 80);
+        }
+        return Boolean(ok);
+      };
       if (typeof shellAdd === "function") {
         try {
-          const ok = shellAdd(normalized);
-          if (ok) {
-            lastBridgeAddAt = Date.now();
-            ensureBridgeCard(normalized, existedBefore, "shell-bridge");
-            setTimeout(() => ensureBridgeCard(normalized, existedBefore, "shell-bridge-confirm"), 80);
+          const result = shellAdd(normalized, source || "hotfix-bridge");
+          if (result && typeof result.then === "function") {
+            return result.then(finishShellAdd).catch(() => {
+              setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
+              return false;
+            });
           }
-          return ok;
+          return finishShellAdd(result);
         } catch (error) {
           setTimeout(() => window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.(), 0);
           return false;
         }
       }
-      const rows = readRows();
-      const existed = rows.some((row) => row.code === normalized);
-      if (!existed && rows.length >= maxRows) {
-        setStatus(`已達 ${maxRows} 檔上限，請先移除一檔再新增。`, "warn");
-        return false;
-      }
-      const nextRows = existed
-        ? rows
-        : [...rows, { code: normalized, name: normalized, market: "台股", addedAt: Date.now(), source: source || "hotfix-bridge" }];
-      writeRows(nextRows);
-      fallbackRender(nextRows, normalized);
-      setStatus(existed ? `${normalized} 已在自選股，已幫你選中` : `${normalized} 已新增到下方清單`, existed ? "exists" : "added");
-      lastBridgeAddAt = Date.now();
-      return true;
+      setStatus("自選股模組載入中，請稍候再新增。", "warn");
+      return false;
     };
     const findInput = (target) => {
       const scoped = target?.closest?.(".watchlist-entry-form")?.querySelector?.("#watchlist-search-input, .watchlist-entry-input");
@@ -240,12 +265,17 @@
       event.preventDefault?.();
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
-      if (addCode(code, "button")) {
-        if (input) {
-          input.value = "";
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-          input.focus?.();
-        }
+      const clearInput = (ok) => {
+        if (!ok || !input) return;
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus?.();
+      };
+      const result = addCode(code, "button");
+      if (result && typeof result.then === "function") {
+        result.then(clearInput).catch(() => {});
+      } else if (result) {
+        clearInput(true);
       }
     };
     document.addEventListener("pointerdown", handleAdd, true);
@@ -258,10 +288,14 @@
       event.preventDefault?.();
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
-      if (addCode(code, "enter")) {
+      const clearInput = (ok) => {
+        if (!ok) return;
         event.target.value = "";
         event.target.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+      };
+      const result = addCode(code, "enter");
+      if (result && typeof result.then === "function") result.then(clearInput).catch(() => {});
+      else clearInput(result);
     }, true);
     window.FUMAN_WATCHLIST_BRIDGE_ADD = addCode;
   }

@@ -3,8 +3,8 @@ const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
-const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260628-06";
-const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-05";
+const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260628-07";
+const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
   "/styles.css?v=public-terminal-fast-20260623-09",
@@ -25,7 +25,7 @@ const STATIC_ASSETS = [
   "/terminal-member-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
-  "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-06",
+  "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-07",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260623-09",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260623-09",

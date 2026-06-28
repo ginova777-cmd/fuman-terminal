@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-06";
+  const VERSION = "watchlist-rich-shell-20260628-07";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -22,6 +22,8 @@
   const quoteMap = new Map();
   const metaHydratedCodes = new Set();
   const metaHydratingCodes = new Set();
+  const pendingAddCodes = new Set();
+  let storedValidationPromise = null;
 
   function normalizeCode(value) {
     return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
@@ -134,6 +136,43 @@
       if (meta) metaMap.set(meta.code, meta);
     }
     return metaMap.get(target) || null;
+  }
+
+  function isValidStockMeta(meta, code) {
+    const target = normalizeCode(code || meta?.code);
+    if (!target || !meta || normalizeCode(meta.code) !== target) return false;
+    const name = String(meta.name || "").trim();
+    return Boolean(name && name !== target && normalizeMarket(meta.market));
+  }
+
+  async function resolveStockMeta(code) {
+    const target = normalizeCode(code);
+    if (!target) return null;
+    const cached = findMetaSync(target);
+    if (isValidStockMeta(cached, target)) return cached;
+    await loadMeta();
+    const meta = metaMap.get(target) || findMetaSync(target);
+    return isValidStockMeta(meta, target) ? meta : null;
+  }
+
+  async function validateStoredRows() {
+    if (storedValidationPromise) return storedValidationPromise;
+    storedValidationPromise = (async () => {
+      await loadMeta();
+      const rows = readRows();
+      const kept = rows.filter((row) => isValidStockMeta(metaMap.get(row.code), row.code));
+      if (kept.length !== rows.length) {
+        const removed = rows.filter((row) => !kept.some((item) => item.code === row.code)).map((row) => row.code);
+        const normalized = writeRows(kept);
+        if (!normalized.some((row) => row.code === selectedCode)) selectedCode = normalized[0]?.code || "";
+        showStatus(`${removed.join("、")} 不是有效上市/上櫃台股代號，已從自選股移除。`, "warn");
+        render();
+      }
+      return kept;
+    })().finally(() => {
+      storedValidationPromise = null;
+    });
+    return storedValidationPromise;
   }
 
   async function loadMeta() {
@@ -298,7 +337,7 @@
     }
   }
 
-  function addCode(value, source = "manual") {
+  async function addCode(value, source = "manual") {
     ensureSkeleton();
     const code = normalizeCode(value);
     if (!code) {
@@ -313,8 +352,38 @@
       return false;
     }
     if (!existed) {
-      rows = writeRows([...rows, { ...fallbackRow(code), source }]);
-      showStatus(`${code} 已新增到下方清單`, "added");
+      if (pendingAddCodes.has(code)) {
+        showStatus(`${code} 正在確認台股代號`, "info");
+        return false;
+      }
+      pendingAddCodes.add(code);
+      showStatus(`${code} 正在確認台股代號`, "info");
+      try {
+        const meta = await resolveStockMeta(code);
+        if (!meta) {
+          showStatus(`${code} 不是有效上市/上櫃台股代號，請確認後再新增。`, "warn");
+          render();
+          return false;
+        }
+        rows = readRows();
+        if (rows.some((row) => row.code === code)) {
+          selectedCode = code;
+          showStatus(`${code} 已在自選股，已幫你選中`, "exists");
+          render();
+          scrollCardIntoView(code);
+          hydrateQuote(code);
+          return true;
+        }
+        if (rows.length >= WATCHLIST_MAX_ITEMS) {
+          showStatus(`已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`, "warn");
+          updateLimitState(rows);
+          return false;
+        }
+        rows = writeRows([...rows, { ...fallbackRow(code), ...meta, source, addedAt: Date.now() }]);
+        showStatus(`${code} ${meta.name} 已新增到下方清單`, "added");
+      } finally {
+        pendingAddCodes.delete(code);
+      }
     } else {
       showStatus(`${code} 已在自選股，已幫你選中`, "exists");
     }
@@ -326,9 +395,9 @@
     return true;
   }
 
-  function addFromInput(anchor) {
+  async function addFromInput(anchor) {
     const input = anchor?.matches?.("#watchlist-search-input") ? anchor : document.querySelector("#watchlist-search-input");
-    const ok = addCode(input?.value || "", "input");
+    const ok = await addCode(input?.value || "", "input");
     if (ok && input && !input.disabled) {
       input.value = "";
       input.focus?.();
@@ -354,7 +423,15 @@
         showStatus(`已達 ${WATCHLIST_MAX_ITEMS} 檔上限，請先移除一檔再新增。`, "warn");
         return false;
       }
-      writeRows([...rows, { ...fallbackRow(target), ...seed, code: target }]);
+      const meta = normalizeMeta(seed) || findMetaSync(target);
+      if (!isValidStockMeta(meta, target)) {
+        resolveStockMeta(target).then((resolved) => {
+          if (resolved) ensureCode(target, { ...seed, ...resolved, code: target });
+          else showStatus(`${target} 不是有效上市/上櫃台股代號，請確認後再新增。`, "warn");
+        }).catch(() => showStatus(`${target} 不是有效上市/上櫃台股代號，請確認後再新增。`, "warn"));
+        return false;
+      }
+      writeRows([...rows, { ...fallbackRow(target), ...seed, ...meta, code: target }]);
     }
     selectedCode = target;
     render();
@@ -481,7 +558,7 @@
         <section class="watch-note-row">
           <article><b>1</b><small>${escapeText(row.code)} ${escapeText(row.name || row.code)}：${trend}，漲跌幅 ${formatPct(pct)}。</small></article>
           <article><b>2</b><small>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</small></article>
-          <article><b>3</b><small>卡片已先建立，名稱與行情會在資料回來後自動補上。</small></article>
+          <article><b>3</b><small>卡片已通過台股代號驗證，名稱與行情會在資料回來後自動補上。</small></article>
         </section>
         <section class="ta-period-panel">
           <nav class="ta-timeframes" aria-label="技術分析週期">
@@ -667,15 +744,18 @@
       selectCode,
       refreshSelected,
       enrichStockMeta: hydrateMeta,
+      validateTaiwanStockCode: resolveStockMeta,
     };
     window.FUMAN_WATCHLIST_SHELL_INSTANCE = instance;
     document.documentElement.dataset.fumanWatchlistModule = instance.mode;
     ensureSkeleton();
     render();
+    validateStoredRows().catch(() => {});
     return instance;
   }
 
   window.FUMAN_WATCHLIST_SHELL_MODULE = { version: VERSION, install };
+  window.FUMAN_WATCHLIST_VALIDATE_CODE = (code) => resolveStockMeta(code);
   window.FUMAN_WATCHLIST_FORCE_ADD_CODE = (code) => {
     install();
     return addCode(code, "force");

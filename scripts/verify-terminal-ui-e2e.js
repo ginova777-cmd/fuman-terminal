@@ -546,7 +546,7 @@ async function prepareDesktopRoute(cdp, route) {
   if (route.key !== "watchlist") return;
   await evaluate(cdp, () => {
     const rows = [
-      { code: "2334", name: "旺宏", reason: "UI E2E 自選股既有卡片驗證", addedAt: new Date().toISOString() },
+      { code: "2344", name: "華邦電", reason: "UI E2E 自選股既有卡片驗證", addedAt: new Date().toISOString() },
     ];
     const value = JSON.stringify(rows);
     const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
@@ -565,7 +565,7 @@ async function prepareMobileRoute(cdp, route) {
   if (route.fragment !== "watch") return;
   await evaluate(cdp, () => {
     const rows = [
-      ["2334", "旺宏"],
+      ["2344", "華邦電"],
       ["1101", "台泥"],
       ["2317", "鴻海"],
       ["2303", "聯電"],
@@ -666,6 +666,25 @@ async function afterDesktopRouteActivate(cdp, route) {
         return { ok: shellReady && containerReady && storageOk && cardOk && !/尚未同步/.test(status), bridgeReady, shellReady, containerReady, storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
       }, code, 15000, 300);
     };
+    await submitWatchlistCode("2334");
+    await waitFor(cdp, () => {
+      let rows = [];
+      try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+      const codes = rows.map((item) => String(item?.code || ""));
+      const cards = [...document.querySelectorAll(".watchlist-card[data-code]")].map((item) => item.dataset.code || "");
+      const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
+      const countText = String(document.querySelector("#watchlist-count")?.textContent || "").trim();
+      return {
+        ok: !codes.includes("2334")
+          && !cards.includes("2334")
+          && /不是有效上市\/上櫃台股代號/.test(status)
+          && /^1(?:\/10)?$/.test(countText),
+        rows: codes.join(","),
+        cards: cards.join(","),
+        status,
+        count: countText,
+      };
+    }, null, 15000, 300);
     const addedCodes = ["2324", "6770", "8112", "2327", "9904"];
     for (const addedCode of addedCodes) {
       await addWatchlistCode(addedCode);
@@ -706,8 +725,9 @@ async function afterDesktopRouteActivate(cdp, route) {
         status,
       };
     }, null, 15000, 300);
-    await evaluate(cdp, () => {
-      const ok = window.FUMAN_WATCHLIST_FORCE_ADD_CODE?.("1101");
+    await evaluate(cdp, async () => {
+      const result = window.FUMAN_WATCHLIST_FORCE_ADD_CODE?.("1101");
+      const ok = result && typeof result.then === "function" ? await result : result;
       let rows = [];
       try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
       return { ok: ok === false || rows.length <= 10, result: ok, rows: rows.length };
@@ -1132,12 +1152,12 @@ function collectMobileStats(route) {
     const statusTextForWatch = statusText || panelText;
     if (watchRows.length !== 10) contractBlockers.push(`mobile watch tab must render exactly 10 watch rows actual=${watchRows.length}`);
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
-    if (!watchCodes.includes("2334")) contractBlockers.push(`mobile watch seeded code 2334 missing actual=${watchCodes.join(",")}`);
+    if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
     storageCodes.forEach((codes, index) => {
       const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
       if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
-      if (!codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} missing 2334 actual=${codes.join(",")}`);
+      if (!codes.includes("2344")) contractBlockers.push(`mobile watch storage ${key} missing 2344 actual=${codes.join(",")}`);
       if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
     });
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
