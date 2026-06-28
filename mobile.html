@@ -201,7 +201,13 @@
     let failed = false;
     try { localStorage.setItem(KEY, value); wrote = true; } catch { failed = true; }
     try { localStorage.setItem(MOBILE_KEY, value); wrote = true; } catch { failed = true; }
-    storageFallback = !wrote || failed;
+    let saved = false;
+    try {
+      saved = localStorage.getItem(KEY) === value || localStorage.getItem(MOBILE_KEY) === value;
+    } catch {
+      failed = true;
+    }
+    storageFallback = !wrote || failed || !saved;
     return next;
   }
   function toast(message) {
