@@ -362,9 +362,12 @@ marketSession.marketDataDate=2026-06-26
 - `fuman-sw.js` 必須保留 watchlist shell / hotfix asset epoch purge，讓正式站吃到新自選股資產。
 - 手機版 `mobile.html` 必須保留 `mobile-watch-v2-direct-render-20260628-04` 與 `FUMAN_MOBILE_MANUAL_WATCH_ADD_V2`。
 - 手機版手動新增與策略卡「加入自選」必須由 V2 capture handler 接管：先用 `/api/mobile-watch-meta?code=XXXX` 查單一代號並驗證台股 universe，再同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1`、成功後直接 render 自選 tab 卡片，不可只等待舊 fragment/tab click 重畫，也不可在手機端先拉整包股票清單才新增。
+- 手機版 V2 capture bridge 必須保留 `mobile-watch-v2-early-bridge-20260628-01`，且用 `event.composedPath()` 找到真實點擊來源；不能只靠 `event.target.closest()`，因為真人點文字節點 / 內層節點時可能被舊 document-capture handler 搶走。
+- 手機版 V2 rescue renderer 必須保留 `mobile-watch-v2-rescue-render-20260628-01`；若畫面已出現「已加入自選 / 已在自選股」但舊流程沒有畫出 `.watch-row`，rescue 必須從 storage / pending click / DOM rows 合併資料並直接重畫自選 tab。
 - 手機版 V2 必須保留 JSONP fallback，因為部分真實 Chrome 分頁 / 受控環境可能沒有可用的 `fetch`；`/api/mobile-watch-meta` 也必須支援 `callback=`。
 - 手機版 V2 必須用 `MutationObserver` 防止舊 mobile watch renderer 晚到時覆蓋 V2 `.watch-row`。
 - 手機版 V2 必須保留 in-memory rows fallback；`localStorage.setItem` 失敗時仍要畫出 `.watch-row`，不可停在 `正在確認台股代號`。
+- storage 寫入必須 read-back 驗證，例如保留 `localStorage.getItem(KEY) === value`；只有真的寫回成功，才可關閉 memory fallback。
 
 不可恢復：
 
@@ -436,8 +439,12 @@ npm run verify:publish-gate
 
 ```powershell
 npm run guard:production
+npm run verify:mobile-api-only:live
+npm run verify:mobile-cache-contract:live
 npm run verify:runtime-hotfix -- --live
-npm run verify:terminal-ui-e2e -- --only=desktop-night,desktop-sun --routes=watchlist --route-timeout=90000 --eval-timeout=60000
+npm run verify:terminal-route-stress -- --base-url=https://fuman-terminal.vercel.app --loops=3 --routes=heatmap,market-ai,watchlist,realtime-radar --route-timeout=60000
+npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=desktop-night,desktop-sun --routes=watchlist --route-timeout=90000 --eval-timeout=60000
+npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun --routes=strategy1,strategy2,strategy3,strategy4,strategy5,watch --route-timeout=120000 --eval-timeout=60000
 ```
 
 runtime guard 必須檢查以下 marker：
@@ -469,10 +476,18 @@ scheduleShellValidation
 - 正式網址：`https://fuman-terminal.vercel.app`。
 - live runtime hotfix 驗證已通過，`/api/mobile-page` 是 200，標題為「輔滿極速手機版」。
 - live desktop watchlist E2E 已通過 night / sun matrix，結果為 `ok desktop/night/watchlist rows=21`、`ok desktop/sun/watchlist rows=21`。
+- 2026-06-28 第二次收斂 commit：`6d05af4a Stabilize mobile watchlist and route stress`。
+- 第二次正式部署：`dpl_AkNsX61NJGW8oE3WbNnUkvWfECDE`，alias `https://fuman-terminal.vercel.app`。
+- 本次實際問題：正式 `/mobile` 已顯示成功訊息，例如 `2327 國巨* 已加入自選`，但 `.watch-row` 仍為 0；代表舊 mobile handler 已寫狀態但沒有讓自選 tab 直渲染。修正方式是 composedPath capture bridge 加上 rescue renderer，而不是要求使用者手動清 cache。
+- 本次 route-stress 已改成單一 Chrome / 單一 tab 連續切頁；`Page.enable` 只記錄不作 fatal，避免每 route / 每輪重開 Chrome 造成假失敗。
+- 第二次正式站七關已過：`verify:mobile-api-only:live`、`guard:production`、`verify:mobile-cache-contract:live`、`verify:runtime-ownership`、`verify:terminal-resource-chain`、`verify:terminal-cold-start`、`verify:terminal-route-stress --loops=3`、`verify:mobile-layout:live`、手機 / 平板 `verify:terminal-ui-e2e` matrix。
+- 手機 / 平板自選股 live E2E 已覆蓋：phone portrait、phone landscape、tablet，night / sun，策略1-5 的「加入自選」與 watch tab；聚焦 watch route 也已驗 `2334` invalid reject 與 `2327` valid manual add。
 
 ### 驗證注意事項 / 已知坑
 
 - `verify:terminal-ui-e2e` 預設打正式網址 `https://fuman-terminal.vercel.app`；部署前用它驗新碼，會打到舊 production。
+- `verify:terminal-route-stress` 必須維持單一瀏覽器內連續切頁；不可回退成每輪或每 route spawn `verify-terminal-cold-start-performance.js` / 重開 Chrome。
+- route-stress 收斂前必須確認 active panel 仍是當前 route；正式站初始化可能在第一輪把頁面拉回前一個 route，壓測要在同一 tab 內重新點 nav / `showView`，不可把這誤判成資料列失敗。
 - 本地 `scripts/local-api-only-server.js` 曾因 `/api/mobile-boot` handler 出現 `ERR_HTTP_HEADERS_SENT` 中斷；這是本地測試 server 限制，不代表自選股功能失敗。
 - `vercel dev` 曾因專案 dev script 遞迴呼叫自身而不可用，不要把這個當成自選股 runtime 失敗。
 - live UI E2E 偶爾會遇到 Chrome CDP 啟動瞬間拒連或第一輪事件時序抖動；以最終 desktop night / sun matrix 綠燈為準，必要時重跑確認。
