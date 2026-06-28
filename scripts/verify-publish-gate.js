@@ -1085,6 +1085,7 @@ for (const file of [
   "scripts/verify-post-scan-snapshot-refresh-contract.js",
   "refresh-desktop-route-snapshot.ps1",
   "run-post-scan-snapshot-refresh-verify.ps1",
+  "run-scorecard-daily-automation.ps1",
   "run-scorecard-snapshot.ps1",
   "run-open-buy.ps1",
   "run-strategy3.ps1",

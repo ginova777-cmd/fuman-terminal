@@ -95,6 +95,7 @@ const KEY_FILES = [
   "run-chip-source-sync.ps1",
   "refresh-desktop-route-snapshot.ps1",
   "run-post-scan-snapshot-refresh-verify.ps1",
+  "run-scorecard-daily-automation.ps1",
   "run-scorecard-snapshot.ps1",
   "run-full-scan.ps1",
   "run-open-buy.ps1",
