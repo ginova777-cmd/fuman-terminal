@@ -324,6 +324,7 @@ fuman-sw.js
 - 夜幕 / 陽光模式都不可爆版、重疊或讓文字溢出卡片。
 - 手機版自選股不可只顯示既有 storage；必須有 `mobile-watch-input` 與 `data-mobile-watch-add` 可手動新增。
 - 手機版所有策略卡的「加入自選」按鈕必須能寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，切到自選頁後要看得到卡片。
+- 手機版策略 1-5 的「加入自選」不可只檢查 selector 存在；E2E 必須實際點策略卡按鈕，確認兩個 storage key 寫入，再切到自選頁確認 `.watch-row` 顯示該代號。
 - 手機版新增也必須驗台股 universe；`2334` 這類 invalid code 不可進 storage，不可顯示卡片。
 
 `scripts/verify-terminal-ui-e2e.js` 必須保留自選股 negative test：
@@ -337,6 +338,11 @@ fuman-sw.js
   - 先輸入 `2334`，確認拒絕且 storage / DOM 都不含 `2334`。
   - 再輸入有效台股，例如 `1101`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
   - 至少驗 night / sun 兩種手機模式。
+- 手機策略 E2E 必須覆蓋 `strategy1,strategy2,strategy3,strategy4,strategy5`：
+  - 進策略分頁後清空手機自選 storage。
+  - 點第一個 `[data-ai-watch-code]` 的「加入自選」。
+  - 確認 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1` 同步包含該代號。
+  - 切到自選頁後確認該代號已出現在 `.watch-row`。
 
 E2E seed 必須使用有效台股，例如：
 

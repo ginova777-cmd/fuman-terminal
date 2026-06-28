@@ -46,11 +46,11 @@ const DESKTOP_ROUTES = [
 
 const MOBILE_ROUTES = [
   { key: "ai", label: "market ai", fragment: "ai" },
-  { key: "strategy1", label: "strategy1", fragment: "strategy1", allowMissingRunId: true },
-  { key: "strategy2", label: "strategy2 live", fragment: "strategy2" },
-  { key: "strategy3", label: "strategy3", fragment: "strategy3" },
-  { key: "strategy4", label: "strategy4", fragment: "strategy4" },
-  { key: "strategy5", label: "strategy5", fragment: "strategy5" },
+  { key: "strategy1", label: "strategy1", fragment: "strategy1", allowMissingRunId: true, verifyWatchAdd: true },
+  { key: "strategy2", label: "strategy2 live", fragment: "strategy2", verifyWatchAdd: true },
+  { key: "strategy3", label: "strategy3", fragment: "strategy3", verifyWatchAdd: true },
+  { key: "strategy4", label: "strategy4", fragment: "strategy4", verifyWatchAdd: true },
+  { key: "strategy5", label: "strategy5", fragment: "strategy5", verifyWatchAdd: true },
   { key: "institution", label: "institution", fragment: "chip" },
   { key: "cb", label: "cb detect", fragment: "cb" },
   { key: "warrant", label: "warrant flow", fragment: "warrant" },
@@ -562,6 +562,16 @@ async function prepareDesktopRoute(cdp, route) {
 }
 
 async function prepareMobileRoute(cdp, route) {
+  if (route.verifyWatchAdd) {
+    await evaluate(cdp, () => {
+      localStorage.removeItem("fuman_watchlist");
+      localStorage.removeItem("fuman_mobile_watchlist_v1");
+      localStorage.removeItem("fuman-terminal-ai-watchlist");
+      delete window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E;
+      return true;
+    });
+    return;
+  }
   if (route.fragment !== "watch") return;
   await evaluate(cdp, () => {
     const rows = [
@@ -584,6 +594,89 @@ async function prepareMobileRoute(cdp, route) {
     localStorage.removeItem("fuman-terminal-ai-watchlist");
     return true;
   });
+}
+
+async function verifyMobileRouteWatchAdd(cdp, route) {
+  if (!route.verifyWatchAdd) return null;
+  const added = await evaluate(cdp, async (fragment) => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const visible = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 2 && rect.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+    };
+    const result = {
+      ok: false,
+      fragment,
+      code: "",
+      name: "",
+      storage: {},
+      watchRows: [],
+      reason: "",
+    };
+    const button = [...document.querySelectorAll("[data-ai-watch-code]")].find(visible);
+    if (!button) {
+      result.reason = "mobile strategy route watch button missing";
+      window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+      return result;
+    }
+    result.code = String(button.dataset.aiWatchCode || "").match(/\d{4}/)?.[0] || "";
+    result.name = String(button.dataset.aiWatchName || "").trim();
+    if (!result.code) {
+      result.reason = "mobile strategy route watch button code missing";
+      window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+      return result;
+    }
+    button.scrollIntoView({ block: "center", inline: "center" });
+    button.click();
+    for (let attempt = 0; attempt < 70; attempt += 1) {
+      await wait(180);
+      const storage = {};
+      for (const key of ["fuman_watchlist", "fuman_mobile_watchlist_v1"]) {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+          storage[key] = Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+        } catch {
+          storage[key] = [];
+        }
+      }
+      result.storage = storage;
+      if (storage.fuman_watchlist?.includes(result.code) && storage.fuman_mobile_watchlist_v1?.includes(result.code)) {
+        result.ok = true;
+        break;
+      }
+    }
+    if (!result.ok) {
+      result.reason = "mobile strategy route watch button did not write both storage keys";
+      window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+      return result;
+    }
+    const watchTab = document.querySelector('#tabs button[data-fragment="watch"]');
+    watchTab?.click();
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      await wait(180);
+      const rows = [...document.querySelectorAll("#content .watch-row")].map((row) => String(row.textContent || "").replace(/\s+/g, " ").trim());
+      result.watchRows = rows;
+      if (rows.some((text) => text.includes(result.code))) break;
+    }
+    if (!result.watchRows.some((text) => text.includes(result.code))) {
+      result.ok = false;
+      result.reason = "mobile strategy route watch add not visible in watch tab";
+      window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+      return result;
+    }
+    const originalTab = document.querySelector(`#tabs button[data-fragment="${CSS.escape(fragment)}"]`);
+    originalTab?.click();
+    window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
+    return result;
+  }, route.fragment, Math.max(EVAL_TIMEOUT_MS, 30000));
+  if (!added?.ok) throw new Error(`mobile ${route.fragment} strategy watch add failed: ${JSON.stringify(added)}`);
+  await waitFor(cdp, (fragment) => {
+    const root = document.querySelector("#content [data-mobile-terminal-fragment]");
+    return { ok: root?.dataset?.mobileFragmentKey === fragment };
+  }, route.fragment, 12000, 250);
+  return added;
 }
 
 async function afterDesktopRouteActivate(cdp, route) {
@@ -1198,6 +1291,20 @@ function collectMobileStats(route) {
     }
     if (!mobileAiDashboard.clicked.every((item) => item.active && item.visibleList)) layoutBlockers.push("mobile AI capsule filter click did not reveal every list");
   }
+  const mobileRouteWatchAdd = route.verifyWatchAdd ? (window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E || null) : null;
+  if (route.verifyWatchAdd) {
+    if (!mobileRouteWatchAdd?.ok) {
+      layoutBlockers.push(`mobile ${route.fragment} watch add contract failed ${mobileRouteWatchAdd?.reason || "<missing>"}`);
+    } else {
+      const storageCodes = Object.values(mobileRouteWatchAdd.storage || {});
+      if (!storageCodes.length || !storageCodes.every((codes) => Array.isArray(codes) && codes.includes(mobileRouteWatchAdd.code))) {
+        layoutBlockers.push(`mobile ${route.fragment} watch add storage missing code ${mobileRouteWatchAdd.code || "<missing>"}`);
+      }
+      if (!Array.isArray(mobileRouteWatchAdd.watchRows) || !mobileRouteWatchAdd.watchRows.some((row) => row.includes(mobileRouteWatchAdd.code))) {
+        layoutBlockers.push(`mobile ${route.fragment} watch tab missing added code ${mobileRouteWatchAdd.code || "<missing>"}`);
+      }
+    }
+  }
   const keyOk = route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
@@ -1216,6 +1323,7 @@ function collectMobileStats(route) {
     dateSignals,
     layout,
     mobileAiDashboard,
+    mobileRouteWatchAdd,
     layoutBlockers,
     blockerMatches: blockers,
     warnings,
@@ -1529,6 +1637,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
             const root = document.querySelector("#content [data-mobile-terminal-fragment]");
             return { ok: root?.dataset?.mobileFragmentKey === fragment };
           }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
+          await verifyMobileRouteWatchAdd(cdp, route);
         } else {
           await waitForSelector(cdp, "#mobile-watch-input", 12000);
           const invalidAdd = await evaluate(cdp, async () => {
