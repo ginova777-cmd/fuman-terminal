@@ -7,6 +7,9 @@ $env:FUMAN_DATA_DIR = "C:\fuman-runtime\data"
 $env:FUMAN_CACHE_DIR = "C:\fuman-runtime\cache"
 $env:FUMAN_STATE_DIR = "C:\fuman-runtime\state"
 $env:NODE_OPTIONS = "--use-system-ca"
+$env:NOTIFY_FAST_MODE = "1"
+$env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
+$env:NOTIFY_PUSH_RETRIES = "1"
 
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null

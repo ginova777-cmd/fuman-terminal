@@ -21,6 +21,9 @@ $log = Join-Path $logDir ("live-freshness-gate-{0}.log" -f (Get-Date -Format "yy
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitExe = "C:\Program Files\Git\cmd\git.exe"
 $rawRefreshResults = New-Object System.Collections.Generic.List[object]
+$env:NOTIFY_FAST_MODE = "1"
+$env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
+$env:NOTIFY_PUSH_RETRIES = "1"
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null

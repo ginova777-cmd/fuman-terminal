@@ -10,6 +10,9 @@ $env:FUMAN_STATE_DIR = "C:\fuman-runtime\state"
 $env:REALTIME_RADAR_PATROL_INTERVAL_MS = "3000"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $env:NODE_OPTIONS = "--use-system-ca"
+$env:NOTIFY_FAST_MODE = "1"
+$env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
+$env:NOTIFY_PUSH_RETRIES = "1"
 
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\realtime-radar-$(Get-Date -Format yyyyMMdd-HHmmss).log"
