@@ -421,6 +421,7 @@ const performanceReportGenerator = read("scripts/generate-performance-report.js"
 const strategyWeightReportGenerator = read("scripts/generate-strategy-weight-report.js");
 const stocksSlimGenerator = read("scripts/generate-stocks-slim.js");
 const scorecardApi = read("api/scorecard.js");
+const scorecardPage = read("88.html");
 const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
@@ -470,6 +471,12 @@ assertNoPatternInExistingFiles([
 ], /google\s*sheet|googlesheet|sheets\.googleapis|docs\.google\.com\/spreadsheets/i, "must not use Google Sheet as a production data source");
 if (!/scorecard_latest/.test(scorecardApi) || !/readSnapshot/.test(scorecardApi) || !/scorecard-latest\.json/.test(scorecardApi)) {
   issues.push("api/scorecard.js must read Supabase snapshot scorecard_latest and keep data/scorecard-latest.json only as fallback/bootstrap");
+}
+for (const marker of ["scorecard-rule-group", "scorecard-rule-tags", "scorecard-followup", "策略項目", "策略細項", "7日追蹤", "rowRuleGroup", "rowRuleTags", "rowFollowup", "cleanReason"]) {
+  if (!scorecardPage.includes(marker)) issues.push(`88.html missing scorecard rule-column UI marker ${marker}`);
+}
+for (const marker of ["規則版本=", "策略項目=", "策略細項=", "7日追蹤=", "追蹤狀態="]) {
+  if (!scorecardPage.includes(marker)) issues.push(`88.html must clean scorecard machine marker ${marker} from reason display`);
 }
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
@@ -1076,6 +1083,7 @@ for (const file of [
   "scripts/verify-scorecard-snapshot.js",
   "scripts/verify-scorecard-resource-chain.js",
   "scripts/verify-scorecard-strategy-rules.js",
+  "scripts/verify-scorecard-ui-e2e.js",
   "scripts/verify-market-surfaces-chain.js",
   "scripts/export-scorecard-supabase-source.js",
   "scripts/generate-terminal-scorecard-source.js",
@@ -1454,6 +1462,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-scorecard-no-rollback.js",
       "scripts/verify-scorecard-health.js",
       "scripts/verify-scorecard-strategy-rules.js",
+      "scripts/verify-scorecard-ui-e2e.js",
       "scripts/export-scorecard-supabase-source.js",
       "scripts/generate-terminal-scorecard-source.js",
       "scripts/scorecard-source-supabase-ops.js",

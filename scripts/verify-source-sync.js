@@ -68,6 +68,7 @@ const KEY_FILES = [
   "scripts/verify-scorecard-no-rollback.js",
   "scripts/verify-scorecard-health.js",
   "scripts/verify-scorecard-strategy-rules.js",
+  "scripts/verify-scorecard-ui-e2e.js",
   "scripts/verify-market-surfaces-chain.js",
   "scripts/verify-terminal-resource-chain.js",
   "scripts/verify-terminal-source-contracts.js",

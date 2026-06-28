@@ -221,6 +221,9 @@ function verifyHtmlContract(checks, html, source = "88.html") {
     "scorecard-metric-winrate",
     "scorecard-metric-wl",
     "scorecard-metric-pnl",
+    "scorecard-rule-group",
+    "scorecard-rule-tags",
+    "scorecard-followup",
   ];
   const missingTestIds = requiredTestIds.filter((id) => !html.includes(`data-testid="${id}"`) && !html.includes(id));
   const resultPills = ["all", "win", "loss", "flat"].filter((value) =>
@@ -251,6 +254,16 @@ function verifyHtmlContract(checks, html, source = "88.html") {
     && /maximumFractionDigits:\s*2/.test(html)
     && /pnlText\(row\.pnl\)/.test(html)
     && !/(money|count)\(row\.pnl\)/.test(html);
+  const hasRuleColumns = /策略項目/.test(html)
+    && /策略細項/.test(html)
+    && /7日追蹤/.test(html)
+    && /rowRuleGroup/.test(html)
+    && /rowRuleTags/.test(html)
+    && /rowFollowup/.test(html);
+  const cleansMachineMarkers = /cleanReason/.test(html)
+    && /規則版本=/.test(html)
+    && /策略項目=/.test(html)
+    && /追蹤狀態=/.test(html);
 
   addCheck(checks, missingTestIds.length === 0, `${source}-testids`, `${source} exposes scorecard UI E2E hooks`, { missingTestIds });
   addCheck(checks, resultPills.length === 4, `${source}-result-pills`, `${source} has result capsule filters all/win/loss/flat`, { resultPills });
@@ -262,6 +275,8 @@ function verifyHtmlContract(checks, html, source = "88.html") {
   addCheck(checks, hasThemeToggle, `${source}-theme-toggle`, `${source} has night/sun theme toggle`, { hasThemeToggle });
   addCheck(checks, preservesDecimalPnl, `${source}-decimal-pnl`, `${source} preserves decimal pnl instead of rounding table values to integers`, { preservesDecimalPnl });
   addCheck(checks, displaysLotPnl, `${source}-lot-pnl`, `${source} displays pnl as price spread multiplied by 1000 shares`, { displaysLotPnl });
+  addCheck(checks, hasRuleColumns, `${source}-rule-columns`, `${source} displays strategy item, strategy details, and 7-day followup as dedicated columns`, { hasRuleColumns });
+  addCheck(checks, cleansMachineMarkers, `${source}-clean-rule-markers`, `${source} removes rule machine markers from the reason column`, { cleansMachineMarkers });
 }
 
 async function main() {

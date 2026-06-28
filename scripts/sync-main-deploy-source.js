@@ -129,6 +129,7 @@ const FILES = [
   "scripts/verify-scorecard-no-rollback.js",
   "scripts/verify-scorecard-health.js",
   "scripts/verify-scorecard-strategy-rules.js",
+  "scripts/verify-scorecard-ui-e2e.js",
   "scripts/verify-warrant-freshness.js",
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",

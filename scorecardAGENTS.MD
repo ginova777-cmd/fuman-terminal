@@ -532,6 +532,8 @@ node --use-system-ca scripts\verify-scorecard-ui-e2e.js
 | `/88` HTML | scorecard hooks, result pills, decimal pnl |
 | `/88` hidden panel | 不顯示資料來源 / 日期規則 / 最高價來源 / 損益公式 basis panel |
 | `/88` display pnl | `PNL_MULTIPLIER=1000`, `損益(元)` |
+| `/88` rule columns | 必須有 `策略項目`、`策略細項`、`7日追蹤` 三欄 |
+| `/88` reason cleanup | `原因` 欄不可把 `規則版本=`、`策略項目=`、`策略細項=`、`7日追蹤=`、`追蹤狀態=` 這些機器標記直接塞給使用者 |
 | `/88` history selector | `scorecard-history-date`, `historyDates`, selected-date summaries |
 | `/88` theme toggle | `scorecard-theme-toggle`, visible symbol only `☀` / `☾`, yellow `#facc15`, no `陽光` / `夜幕` button text |
 
@@ -935,6 +937,15 @@ pnl = high_price - entry_price
 ```
 
 任何時間窗錯誤、策略3來源日錯誤、CB 進場價來源錯誤、7 日追蹤欄位缺漏、或 `pnl` 與 `high_price - entry_price` 不一致，都不得發布 `scorecard_latest`。
+
+`/88` 必須把規則資訊當成正式欄位顯示，不可只藏在原因長文字：
+
+| UI column | source |
+| --- | --- |
+| `策略項目` | `rule_group` or `原因` marker `策略項目=` |
+| `策略細項` | `rule_tags` or `原因` marker `策略細項=` |
+| `7日追蹤` | `followup_days/followup_status/followup_due_date` or `原因` markers |
+| `原因` | 只保留人看的判斷理由與補值來源，機器標記必須清掉 |
 
 ## 不可做的事
 

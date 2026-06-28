@@ -176,7 +176,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 880px;
+      min-width: 1280px;
     }
     th, td {
       padding: 10px 12px;
@@ -195,6 +195,37 @@
       white-space: normal;
       min-width: 260px;
       color: var(--muted);
+    }
+    td.rule-group {
+      white-space: normal;
+      min-width: 150px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    td.rule-tags {
+      white-space: normal;
+      min-width: 220px;
+    }
+    td.followup {
+      white-space: normal;
+      min-width: 150px;
+      color: var(--muted);
+    }
+    .tag {
+      display: inline-block;
+      margin: 0 4px 4px 0;
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+    .followup strong {
+      color: var(--good);
+      font-weight: 800;
     }
     .good { color: var(--good); font-weight: 800; }
     .bad { color: var(--bad); font-weight: 800; }
@@ -226,7 +257,7 @@
       .card strong {
         font-size: 22px;
       }
-      table { min-width: 760px; }
+      table { min-width: 1180px; }
       th, td { padding: 9px 10px; }
     }
   </style>
@@ -267,11 +298,14 @@
             <th>進場價</th>
             <th>最高價</th>
             <th>損益(元)</th>
+            <th data-testid="scorecard-rule-group">策略項目</th>
+            <th data-testid="scorecard-rule-tags">策略細項</th>
+            <th data-testid="scorecard-followup">7日追蹤</th>
             <th>原因</th>
           </tr>
         </thead>
         <tbody id="rows" data-testid="scorecard-rows">
-          <tr><td colspan="9" class="empty">載入中...</td></tr>
+          <tr><td colspan="12" class="empty">載入中...</td></tr>
         </tbody>
       </table>
     </div>
@@ -307,6 +341,66 @@ function esc(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[char]));
+}
+
+function markerValue(text, key) {
+  const escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = String(text ?? "").match(new RegExp(`${escaped}=([^；;]+)`));
+  return match ? match[1].trim() : "";
+}
+
+function splitReasonParts(text) {
+  return String(text ?? "").split(/[；;]/).map((part) => part.trim()).filter(Boolean);
+}
+
+function rowRuleGroup(row) {
+  return row.rule_group || markerValue(row.reason, "策略項目") || "--";
+}
+
+function rowRuleTags(row) {
+  const tags = Array.isArray(row.rule_tags) ? row.rule_tags : [];
+  const marker = markerValue(row.reason, "策略細項");
+  const fromMarker = marker ? marker.split("|").map((tag) => tag.trim()).filter(Boolean) : [];
+  return (tags.length ? tags : fromMarker).filter(Boolean).slice(0, 5);
+}
+
+function followupLabel(status) {
+  const value = String(status || "").trim();
+  if (value === "pending_7d_growth_check") return "待追蹤";
+  if (value === "positive_growth") return "正成長";
+  if (value === "negative_growth") return "未達標";
+  return value || "待追蹤";
+}
+
+function rowFollowup(row) {
+  const rule = row.followup_rule || markerValue(row.reason, "7日追蹤");
+  const days = Number(row.followup_days || 0) || (rule ? 7 : 0);
+  if (!rule && !days) return "--";
+  const status = row.followup_status || markerValue(row.reason, "追蹤狀態");
+  const due = row.followup_due_date ? `｜${row.followup_due_date}` : "";
+  return `<strong>T+${days || 7} 正成長</strong><br>${esc(followupLabel(status))}${esc(due)}`;
+}
+
+function renderRuleTags(row) {
+  const tags = rowRuleTags(row);
+  return tags.length ? tags.map((tag) => `<span class="tag">${esc(tag)}</span>`).join("") : "--";
+}
+
+function cleanReason(row) {
+  const hiddenPrefixes = [
+    "規則版本=",
+    "策略項目=",
+    "策略細項=",
+    "進場價來源=",
+    "7日追蹤=",
+    "追蹤狀態=",
+    "策略1結算=",
+    "策略3最高價=",
+  ];
+  const visible = splitReasonParts(row.reason).filter((part) =>
+    !hiddenPrefixes.some((prefix) => part.startsWith(prefix))
+  );
+  return visible.join("；") || "--";
 }
 
 function metric(label, value, cls = "", testid = "") {
@@ -436,15 +530,18 @@ function render() {
       <td>${price(row.entry_price)}</td>
       <td>${price(row.high_price)}</td>
       <td class="${Number(row.pnl) >= 0 ? "good" : "bad"}">${pnlText(row.pnl)}</td>
-      <td class="reason">${esc(row.reason)}</td>
+      <td class="rule-group">${esc(rowRuleGroup(row))}</td>
+      <td class="rule-tags">${renderRuleTags(row)}</td>
+      <td class="followup">${rowFollowup(row)}</td>
+      <td class="reason">${esc(cleanReason(row))}</td>
     </tr>
-  `).join("") : `<tr><td colspan="9" class="empty">沒有符合條件的資料</td></tr>`;
+  `).join("") : `<tr><td colspan="12" class="empty">沒有符合條件的資料</td></tr>`;
 
   byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
 }
 
 async function load(date = "") {
-  byId("rows").innerHTML = `<tr><td colspan="9" class="empty">載入中...</td></tr>`;
+  byId("rows").innerHTML = `<tr><td colspan="12" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
     const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
@@ -454,7 +551,7 @@ async function load(date = "") {
     render();
   } catch (error) {
     byId("subtitle").textContent = "成績單資料暫時無法讀取";
-    byId("rows").innerHTML = `<tr><td colspan="9" class="empty">${esc(error.message || error)}</td></tr>`;
+    byId("rows").innerHTML = `<tr><td colspan="12" class="empty">${esc(error.message || error)}</td></tr>`;
   }
 }
 
