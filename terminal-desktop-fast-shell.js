@@ -2184,6 +2184,175 @@
     lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
   }
 
+  function radarCanvasSide(row) {
+    const raw = String(row?.side || row?.direction || row?.bias || row?.type || "").toLowerCase();
+    if (/short|bear|空|down/.test(raw)) return "short";
+    if (/long|bull|多|up/.test(raw)) return "long";
+    const pct = Number(String(row?.pct ?? row?.percent ?? row?.changePercent ?? row?.change ?? "").replace(/[,+%]/g, ""));
+    return Number.isFinite(pct) && pct < 0 ? "short" : "long";
+  }
+
+  function radarCanvasMoney(value) {
+    const n = Number(String(value ?? "").replace(/[,+]/g, ""));
+    if (!Number.isFinite(n) || !n) return "--";
+    const sign = n < 0 ? "-" : "";
+    const abs = Math.abs(n);
+    if (abs >= 100000000) return `${sign}${(abs / 100000000).toFixed(abs >= 1000000000 ? 1 : 2)} 億`;
+    if (abs >= 10000) return `${sign}${Math.round(abs / 10000).toLocaleString("zh-TW")} 萬`;
+    return `${sign}${Math.round(abs).toLocaleString("zh-TW")}`;
+  }
+
+  function radarCanvasValue(row) {
+    return Number(row?.value || row?.tradeValue || row?.amount || row?.volumeValue || 0) || 0;
+  }
+
+  function radarCanvasPct(row) {
+    const pct = Number(String(row?.pct ?? row?.percent ?? row?.changePercent ?? row?.change ?? "").replace(/[,+%]/g, ""));
+    return Number.isFinite(pct) ? pct : 0;
+  }
+
+  function radarCanvasTags(row) {
+    const chunks = [row?.line, row?.reason, row?.signalLine, row?.signalsText, row?.tags]
+      .flatMap((item) => Array.isArray(item) ? item : String(item || "").split(/[\/｜,，、]/u));
+    return [...new Set(chunks.map((item) => compactText(String(item || "").trim(), 12)).filter(Boolean))].slice(0, 5);
+  }
+
+  function drawRealtimeRadarCanvasRows(ctx, colors, width, height, rows, source) {
+    const list = Array.isArray(rows) ? rows : [];
+    const longRows = list.filter((row) => radarCanvasSide(row) === "long").sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    const shortRows = list.filter((row) => radarCanvasSide(row) === "short").sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+    const longFlow = longRows.reduce((sum, row) => sum + Math.max(radarCanvasValue(row), 0), 0);
+    const shortFlow = shortRows.reduce((sum, row) => sum + Math.max(radarCanvasValue(row), 0), 0);
+    const netFlow = longFlow - shortFlow;
+    const totalFlow = Math.max(longFlow + shortFlow, 1);
+    const longShare = Math.max(5, Math.min(95, longFlow / totalFlow * 100));
+    const activeSide = longFlow >= shortFlow ? "long" : "short";
+    const activeRows = (activeSide === "long" ? longRows : shortRows).slice(0, Math.max(3, Math.floor((height - 360) / 76)));
+    const red = "#ff4d5c";
+    const green = "#23d59a";
+    const gold = "#fbbf24";
+    const panel = (x, y, w, h, stroke, fill) => {
+      ctx.fillStyle = fill;
+      roundRect(ctx, x, y, w, h, 8);
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      roundRect(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+      ctx.stroke();
+    };
+
+    panel(24, 86, width - 48, 104, "rgba(32,201,151,0.55)", "rgba(8,14,21,0.94)");
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("◎ AI 即時判斷", 42, 112);
+    ctx.textAlign = "right";
+    ctx.fillText(`信心 ${Math.max(55, Math.min(95, Math.round(Math.max(longShare, 100 - longShare))))}%`, width - 42, 112);
+    ctx.textAlign = "left";
+    const aiW = (width - 96) / 2;
+    panel(42, 124, aiW, 50, "rgba(255,77,92,0.34)", "rgba(255,77,92,0.08)");
+    panel(54 + aiW, 124, aiW, 50, "rgba(35,213,154,0.34)", "rgba(35,213,154,0.12)");
+    ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillStyle = red;
+    ctx.fillText(`↗ 偏多 AI 分析 ${longRows.length} 檔`, 58, 143);
+    ctx.fillStyle = green;
+    ctx.fillText(`↘ 偏空 AI 分析 ${shortRows.length} 檔`, 70 + aiW, 143);
+    ctx.font = "800 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillStyle = "#ffd8dc";
+    ctx.fillText(compactText(longRows.slice(0, 5).map((row) => `${row.code} ${row.title || row.name || ""}`).join("　") || "等待多方訊號", 68), 58, 162);
+    ctx.fillStyle = "#c7ffeb";
+    ctx.fillText(compactText(shortRows.slice(0, 5).map((row) => `${row.code} ${row.title || row.name || ""}`).join("　") || "等待空方訊號", 68), 70 + aiW, 162);
+
+    panel(24, 204, width - 48, 120, "rgba(251,191,36,0.24)", "rgba(9,14,20,0.92)");
+    const mid = width / 2;
+    ctx.strokeStyle = "rgba(134,151,190,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(mid, 220);
+    ctx.lineTo(mid, 268);
+    ctx.stroke();
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("多方流入", 42, 232);
+    ctx.fillText("空方流出", mid + 18, 232);
+    ctx.fillStyle = red;
+    ctx.font = "950 28px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(radarCanvasMoney(longFlow), 42, 264);
+    ctx.fillStyle = green;
+    ctx.fillText(radarCanvasMoney(shortFlow), mid + 18, 264);
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(`${longRows.length} 檔`, 42, 286);
+    ctx.fillText(`${shortRows.length} 檔`, mid + 18, 286);
+    ctx.fillText("淨流向", 42, 306);
+    ctx.textAlign = "center";
+    ctx.fillStyle = netFlow >= 0 ? red : green;
+    ctx.font = "950 26px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(radarCanvasMoney(netFlow), width / 2, 308);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(11,18,33,0.96)";
+    roundRect(ctx, 42, 314, width - 84, 7, 4);
+    ctx.fill();
+    ctx.fillStyle = green;
+    roundRect(ctx, 42, 314, (width - 84) * (longShare / 100), 7, 4);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(251,191,36,0.25)";
+    ctx.beginPath();
+    ctx.moveTo(24, 352);
+    ctx.lineTo(width - 24, 352);
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.fillStyle = activeSide === "long" ? red : colors.muted;
+    ctx.font = "950 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("多方", width * 0.25, 340);
+    ctx.fillStyle = activeSide === "short" ? colors.muted : "#7182ab";
+    ctx.fillText("空方", width * 0.75, 340);
+    ctx.fillStyle = activeSide === "long" ? red : "rgba(120,144,188,0.5)";
+    roundRect(ctx, activeSide === "long" ? 24 : width / 2, 350, width / 2 - 24, 3, 2);
+    ctx.fill();
+    ctx.textAlign = "left";
+
+    activeRows.forEach((row, index) => {
+      const y = 368 + index * 76;
+      if (y + 64 > height - 20) return;
+      const side = radarCanvasSide(row);
+      const tone = side === "short" ? green : red;
+      panel(24, y, width - 48, 64, side === "short" ? "rgba(120,144,188,0.24)" : "rgba(255,77,92,0.32)", "rgba(8,13,20,0.94)");
+      ctx.fillStyle = gold;
+      ctx.font = "950 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(row.time || row.updatedTime || row.signalTime || "--:--", 42, y + 35);
+      ctx.fillStyle = colors.title;
+      ctx.font = "950 16px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(`${row.title || row.name || row.code} ${row.code || ""}`, 18), 116, y + 25);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "800 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(compactText(`成交金額 ${radarCanvasMoney(radarCanvasValue(row))} · 分數 ${Math.round(Number(row.score || 0) || 0)}`, 42), 116, y + 44);
+      ctx.fillStyle = tone;
+      ctx.textAlign = "right";
+      ctx.font = "950 20px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(String(row.price || row.close || "--"), width - 520, y + 31);
+      ctx.font = "900 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      const pct = radarCanvasPct(row);
+      ctx.fillText(`${pct >= 0 ? "▲ +" : ""}${pct.toFixed(2)}%`, width - 520, y + 49);
+      ctx.textAlign = "left";
+      ctx.strokeStyle = "rgba(251,191,36,0.2)";
+      [width - 488, width - 250].forEach((x) => {
+        ctx.beginPath();
+        ctx.moveTo(x, y + 12);
+        ctx.lineTo(x, y + 52);
+        ctx.stroke();
+      });
+      ctx.fillStyle = tone;
+      ctx.font = "900 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      const tags = radarCanvasTags(row);
+      tags.slice(0, 3).forEach((tag, tagIndex) => ctx.fillText(tag, width - 468, y + 20 + tagIndex * 16));
+      tags.slice(3, 5).forEach((tag, tagIndex) => ctx.fillText(tag, width - 228, y + 20 + tagIndex * 16));
+    });
+
+    ctx.fillStyle = colors.muted;
+    ctx.font = "700 11px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText(compactText(source || "api", 42), 42, height - 14);
+  }
+
   function drawWideStrategyCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source, capacity, rowHeight, headerHeight) {
     const columns = wideStrategyColumnLayout(width, canvasState.route);
     const col = (key) => columns.find((item) => item.key === key) || { x: width - 120, width: 90 };
@@ -2862,6 +3031,10 @@
     }
     if (isChipTradeRoute(canvasState.route)) {
       drawChipTradeCanvasRows(ctx, colors, width, height, rows, rowsToDraw, source || "", capacity, rowHeight, headerHeight);
+      return;
+    }
+    if (canvasState.route === REALTIME_RADAR_ROUTE) {
+      drawRealtimeRadarCanvasRows(ctx, colors, width, height, rows, source || "");
       return;
     }
 
