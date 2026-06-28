@@ -180,6 +180,14 @@ Invoke-Step "node" @(
   "--out=$snapshotFile"
 )
 
+Write-Step "verify scorecard no-rollback candidate snapshot"
+Invoke-Step "node" @(
+  "--use-system-ca",
+  "scripts\verify-scorecard-no-rollback.js",
+  "--no-live",
+  "--snapshot-file=$snapshotFile"
+)
+
 Write-Step "publish scorecard_latest Supabase snapshot"
 Invoke-Step "node" @(
   "--use-system-ca",
@@ -203,5 +211,12 @@ if ($NoLiveVerify) {
   $chainVerifyArgs += "--no-live"
 }
 Invoke-Step "node" $chainVerifyArgs
+
+Write-Step "verify scorecard no-rollback live state"
+$noRollbackArgs = @("--use-system-ca", "scripts\verify-scorecard-no-rollback.js")
+if ($NoLiveVerify) {
+  $noRollbackArgs += "--no-live"
+}
+Invoke-Step "node" $noRollbackArgs
 
 Write-Step ("ok latestDate={0} rows={1}" -f $sourceLatestDate, $sourceRows)

@@ -184,7 +184,7 @@ async function main() {
   const payload = {
     ok: true,
     source: "supabase-scorecard-source",
-    cacheSource: "json-snapshot",
+    cacheSource: "supabase-snapshot",
     exportSource: "supabase:trade_records+strategy_daily_summary",
     updatedAt: new Date().toISOString(),
     latestDate,

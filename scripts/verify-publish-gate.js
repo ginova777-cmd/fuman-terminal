@@ -99,6 +99,14 @@ const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "s
 if (deployWorktreeCleanGuard.status !== 0) {
   issues.push(`verify-deploy-worktree-clean failed: ${(deployWorktreeCleanGuard.stderr || deployWorktreeCleanGuard.stdout || "").trim()}`);
 }
+
+const scorecardNoRollbackGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-scorecard-no-rollback.js"), "--no-live", "--no-output", "--skip-schedule"], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (scorecardNoRollbackGuard.status !== 0) {
+  issues.push(`verify-scorecard-no-rollback failed: ${(scorecardNoRollbackGuard.stderr || scorecardNoRollbackGuard.stdout || "").trim()}`);
+}
 function queryScheduledTask(taskName) {
   const escaped = taskName.replace(/'/g, "''");
   const result = spawnSync("powershell.exe", [
@@ -177,6 +185,12 @@ if (!packageJson.scripts?.["verify:scorecard"] || !/verify-scorecard-snapshot\.j
 }
 if (!packageJson.scripts?.["verify:scorecard-chain"] || !/verify-scorecard-resource-chain\.js/.test(packageJson.scripts["verify:scorecard-chain"])) {
   issues.push("package.json missing scripts.verify:scorecard-chain");
+}
+if (!packageJson.scripts?.["verify:scorecard-no-rollback"] || !/verify-scorecard-no-rollback\.js/.test(packageJson.scripts["verify:scorecard-no-rollback"])) {
+  issues.push("package.json missing scripts.verify:scorecard-no-rollback");
+}
+if (!packageJson.scripts?.["verify:scorecard-health"] || !/verify-scorecard-health\.js/.test(packageJson.scripts["verify:scorecard-health"])) {
+  issues.push("package.json missing scripts.verify:scorecard-health");
 }
 if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-surfaces-chain\.js/.test(packageJson.scripts["verify:market-surfaces-chain"])) {
   issues.push("package.json missing scripts.verify:market-surfaces-chain for market overview/heatmap/AI/realtime/watchlist");
@@ -427,6 +441,7 @@ assertNoPatternInExistingFiles([
   "api/desktop-route-snapshot.js",
   "api/terminal-fast-bundle.js",
   "api/scorecard.js",
+  "api/scorecard-health.js",
   "api/mobile-boot.js",
   "api/mobile-fragment.js",
   "api/open-buy-latest.js",
@@ -975,6 +990,7 @@ for (const file of [
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
   "api/scorecard.js",
+  "api/scorecard-health.js",
   "lib/supabase-public-slot.js",
   "scripts/intraday-radar-rules.js",
   "scripts/scan-intraday-signals.js",
@@ -1373,6 +1389,8 @@ if (fetchResult.status !== 0) {
       "scripts/verify-production-guard.js",
       "scripts/verify-scorecard-snapshot.js",
       "scripts/verify-scorecard-resource-chain.js",
+      "scripts/verify-scorecard-no-rollback.js",
+      "scripts/verify-scorecard-health.js",
       "scripts/export-scorecard-supabase-source.js",
       "scripts/generate-terminal-scorecard-source.js",
       "scripts/export-scorecard-snapshot.py",
@@ -1394,6 +1412,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-mobile-api-only.js",
       "scripts/verify-mobile-ai-fragment.js",
       "install-api-only-cleanup-task.ps1",
+      "run-scorecard-daily-automation.ps1",
       "run-scorecard-snapshot.ps1",
       "run-main-release-pipeline.ps1",
       "run-daily-release.ps1",
@@ -1414,6 +1433,7 @@ if (fetchResult.status !== 0) {
       "vercel.json",
       "88.html",
       "api/scorecard.js",
+      "api/scorecard-health.js",
       "api/open-buy-latest.js",
       "api/cb-detect-latest.js",
       "api/institution-latest.js",

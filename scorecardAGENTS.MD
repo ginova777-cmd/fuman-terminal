@@ -808,6 +808,75 @@ PNL_MULTIPLIER = 1000
 損益(元) column exists
 ```
 
+## 成績單防回滾 Gate
+
+正式 gate：
+
+```powershell
+npm run verify:scorecard-no-rollback
+```
+
+腳本：
+
+```text
+scripts/verify-scorecard-no-rollback.js
+```
+
+必須固定檢查 4 層：
+
+| layer | no-rollback rule |
+| --- | --- |
+| deploy | `/88` 必須保留 `scorecard-history-date`、`scorecard-theme-toggle`、`PNL_MULTIPLIER=1000`，且不可恢復 `scorecard-basis` |
+| data | `scorecard_latest` / candidate snapshot 必須有 9 策略、rows 不可低於 floor、`cacheSource=supabase-snapshot`、不可回 Google Sheet / Streamlit / DuckDB |
+| schedule | `Fuman Scorecard Daily Automation 1400` 必須存在且指向 `run-scorecard-daily-automation.ps1`；`Fuman Scorecard Snapshot 1538` 不可存在或必須停用；`Fuman Auto Main Release 1615` 必須停用 |
+| source | 策略2只允許 `09:00-12:00`；策略3必須 `13:00` 且來源日不是同日；CB 必須保留可計算的偵測股價進場；`/88` 損益顯示必須是 `raw pnl * 1000` |
+
+`verify:publish-gate` 會跑：
+
+```powershell
+node scripts\verify-scorecard-no-rollback.js --no-live --no-output --skip-schedule
+```
+
+說明：publish gate 可能在無 Windows Task Scheduler 權限的環境執行，所以只檢查程式碼/UI/data rollback。完整排程防回滾由每日 runner 與手動 `npm run verify:scorecard-no-rollback` 執行。
+
+每日 14:00 runner 必須做兩次：
+
+```text
+export snapshot json
+  -> verify-scorecard-no-rollback.js --no-live --snapshot-file=<candidate>
+  -> publish scorecard_latest
+  -> verify-scorecard-no-rollback.js
+```
+
+這可以防止壞 snapshot 先寫入 Supabase，也可以防止發布後 live `/api/scorecard` 或 `/88` 回滾。
+
+## 成績單健康 API
+
+正式健康 API：
+
+```text
+/api/scorecard-health
+```
+
+驗證命令：
+
+```powershell
+npm run verify:scorecard-health
+```
+
+`/api/scorecard-health` 必須回傳：
+
+| stage | required |
+| --- | --- |
+| `sources` | 9 個 source endpoint 全部 `ok=true` 且 rows > 0 |
+| `supabaseSource` | `trade_records` / `strategy_daily_summary` 可讀且有最新列 |
+| `scorecardLatest` | Supabase snapshot `scorecard_latest` 存在，`cacheSource=supabase-snapshot`，9 策略與必填欄位完整 |
+| `apiScorecard` | live `/api/scorecard` rows / 策略 / 欄位 / 策略2 / 策略3 / CB 檢查通過 |
+| `page88` | live `/88` 有歷史日期、黃色太陽/月亮、無 `scorecard-basis`、`PNL_MULTIPLIER=1000` |
+| `scheduler` | Vercel 上標示 `not_applicable_on_vercel`；Windows 排程由 `verify-scorecard-no-rollback.js` 在 PC 端檢查 |
+
+這個 API 是給你快速看導管哪一段紅燈，不取代 14:00 runner 的 publish 前防回滾。
+
 ## 不可做的事
 
 不要用以下方式假裝修好：
