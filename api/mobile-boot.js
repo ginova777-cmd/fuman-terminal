@@ -15,6 +15,7 @@ const TAB_ENDPOINTS = {
   cb: "/api/cb-detect-latest",
   warrant: "/api/warrant-flow-latest",
 };
+const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
@@ -113,9 +114,68 @@ function extractRunId(payload, tab = "") {
   return runId || waitingRunId(payload, tab);
 }
 
+function textValue(value, fallback = "--") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function signedText(sign, value, suffix = "") {
+  const raw = textValue(value, "");
+  if (!raw || raw === "--") return "--";
+  const normalizedSign = String(sign || "").includes("-") ? "-" : "+";
+  return `${normalizedSign}${raw.replace(/^[+-]/, "")}${suffix}`;
+}
+
+function marketRow(rows, code, namePattern) {
+  return (Array.isArray(rows) ? rows : []).find((row) => {
+    const rowCode = String(row?.code || "").toUpperCase();
+    const rowName = String(row?.name || row?.title || "");
+    return rowCode === code || namePattern.test(rowName);
+  }) || null;
+}
+
+function normalizeMarketCore(payload) {
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  const indexes = Array.isArray(payload?.indexes) ? payload.indexes : [];
+  const twse = indexes.find((item) => String(item?.["指數"] || "").includes("加權")) || marketRow(rows, "TWSE", /加權|發行量/);
+  const otc = indexes.find((item) => String(item?.["指數"] || "").includes("櫃買")) || marketRow(rows, "OTC", /櫃買/);
+  const futures = payload?.futuresNear || payload?.futures || marketRow(rows, "TXF", /台指|臺指|TXF/);
+  const indexItem = (key, label, item) => ({
+    key,
+    label,
+    value: textValue(item?.["收盤指數"] || item?.price),
+    change: signedText(item?.["漲跌"] || item?.pct, item?.["漲跌百分比"] || item?.pct, item?.["漲跌百分比"] ? "%" : ""),
+    detail: signedText(item?.["漲跌"] || item?.pct, item?.["漲跌點數"] || item?.score),
+    source: textValue(item?._source || item?.reason || payload?.source, "market-api"),
+  });
+  const futuresItem = {
+    key: "txf-night",
+    label: "台指期夜盤",
+    value: textValue(futures?.price),
+    change: textValue(futures?.pct),
+    detail: textValue(futures?.change || futures?.score),
+    source: textValue(futures?.basisLabel || futures?.reason || "TAIFEX"),
+  };
+  return [
+    indexItem("twse", "加權指數", twse),
+    indexItem("otc", "櫃買指數", otc),
+    futuresItem,
+  ];
+}
+
 async function buildBoot(request) {
   const origin = originFrom(request);
   const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
+  const marketPromise = (async () => {
+    let payload = endpointPayloadFromSnapshot(snapshot?.payload, MARKET_CORE_ENDPOINT)
+      || endpointPayloadFromSnapshot(snapshot?.payload, "/api/market");
+    try {
+      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${MARKET_CORE_ENDPOINT}`, 9000);
+    } catch {
+      payload = null;
+    }
+    return normalizeMarketCore(payload);
+  })();
   const results = await Promise.all(FRAGMENT_TABS.map(async (tab) => {
     const endpoint = appendQuery(TAB_ENDPOINTS[tab], {
       mobileBoot: 1,
@@ -154,6 +214,7 @@ async function buildBoot(request) {
   }
   const bootHash = crypto.createHash("sha1").update(JSON.stringify(fragments)).digest("hex").slice(0, 12);
   const updatedAt = new Date().toISOString();
+  const marketCore = await marketPromise;
   return {
     ok: true,
     source: "mobile-boot-api-only",
@@ -171,6 +232,7 @@ async function buildBoot(request) {
     },
     fragments,
     runs,
+    marketCore,
     digest: {
       fragmentVersion: "mobile-api-only-v1",
       freshness: "fresh",
