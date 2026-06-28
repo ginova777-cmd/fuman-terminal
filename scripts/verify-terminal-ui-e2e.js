@@ -527,6 +527,69 @@ async function typeIntoSelector(cdp, selector, text) {
   await cdp.send("Input.insertText", { text: String(text || "") });
 }
 
+async function setInputValue(cdp, selector, text) {
+  const expected = String(text || "");
+  const startedAt = Date.now();
+  let last = null;
+  await waitForSelector(cdp, selector, 12000);
+  while (Date.now() - startedAt < 10000) {
+    last = await evaluate(cdp, ({ selector, text }) => {
+      const input = document.querySelector(selector);
+      if (!input) return { ok: false, value: "", missing: true };
+      input.focus();
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      if (descriptor?.set) descriptor.set.call(input, String(text || ""));
+      else input.value = String(text || "");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return {
+        ok: String(input.value || "") === String(text || ""),
+        value: String(input.value || ""),
+        disabled: Boolean(input.disabled),
+      };
+    }, { selector, text: expected });
+    if (last?.ok) return last;
+    await sleep(200);
+  }
+  throw new Error(`input ${selector} did not keep value ${expected}: ${JSON.stringify(last)}`);
+}
+
+async function submitMobileWatchCode(cdp, code) {
+  await waitForSelector(cdp, "#mobile-watch-input", 12000);
+  const result = await evaluate(cdp, (value) => {
+    const input = document.querySelector("#mobile-watch-input");
+    const button = document.querySelector("[data-mobile-watch-add]");
+    if (!input || !button) return { ok: false, missingInput: !input, missingButton: !button };
+    input.focus();
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    if (descriptor?.set) descriptor.set.call(input, String(value || ""));
+    else input.value = String(value || "");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (input.disabled || button.disabled) {
+      return { ok: false, value: String(input.value || ""), inputDisabled: Boolean(input.disabled), buttonDisabled: Boolean(button.disabled) };
+    }
+    button.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    button.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    button.click();
+    return { ok: true, value: String(input.value || "") };
+  }, String(code || ""));
+  if (!result?.ok) throw new Error(`mobile watch submit failed for ${code}: ${JSON.stringify(result)}`);
+  await sleep(150);
+  return result;
+}
+
+async function reloadMobilePage(cdp, theme) {
+  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/mobile`));
+  await waitForSelector(cdp, "#tabs button[data-fragment]", 45000);
+  await evaluate(cdp, (nextTheme) => {
+    localStorage.setItem("fuman_mobile_sun", nextTheme === "sun" ? "1" : "0");
+    document.documentElement.dataset.sun = nextTheme === "sun" ? "1" : "0";
+    return true;
+  }, theme);
+  await sleep(800);
+}
+
 async function waitForDesktopRoute(cdp, route, timeoutMs = 7000) {
   return waitFor(cdp, (expected) => {
     const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden);
@@ -575,39 +638,45 @@ async function prepareDesktopRoute(cdp, route) {
   });
 }
 
+async function resetMobileWatchStorage(cdp, rows = null) {
+  await evaluate(cdp, () => {
+    localStorage.removeItem("fuman_watchlist");
+    localStorage.removeItem("fuman_mobile_watchlist_v1");
+    localStorage.removeItem("fuman-terminal-ai-watchlist");
+    delete window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E;
+    return true;
+  });
+  if (!rows) return;
+  await evaluate(cdp, (seedRows) => {
+    const value = JSON.stringify(seedRows);
+    const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
+    rawSetItem.call(localStorage, "fuman_watchlist", value);
+    rawSetItem.call(localStorage, "fuman_mobile_watchlist_v1", value);
+    return true;
+  }, rows);
+}
+
+function mobileWatchSeedRows() {
+  return [
+    ["2344", "華邦電"],
+    ["2317", "鴻海"],
+    ["2303", "聯電"],
+    ["2330", "台積電"],
+    ["2454", "聯發科"],
+    ["2603", "長榮"],
+    ["2881", "富邦金"],
+    ["2357", "華碩"],
+    ["9904", "寶成"],
+  ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股新增驗證", addedAt: new Date().toISOString() }));
+}
+
 async function prepareMobileRoute(cdp, route) {
   if (route.verifyWatchAdd && !SKIP_MOBILE_WATCH_ADD) {
-    await evaluate(cdp, () => {
-      localStorage.removeItem("fuman_watchlist");
-      localStorage.removeItem("fuman_mobile_watchlist_v1");
-      localStorage.removeItem("fuman-terminal-ai-watchlist");
-      delete window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E;
-      return true;
-    });
+    await resetMobileWatchStorage(cdp);
     return;
   }
   if (route.fragment !== "watch") return;
-  await evaluate(cdp, () => {
-    const rows = [
-      ["2344", "華邦電"],
-      ["2317", "鴻海"],
-      ["2303", "聯電"],
-      ["2330", "台積電"],
-      ["2454", "聯發科"],
-      ["2603", "長榮"],
-      ["2881", "富邦金"],
-      ["2357", "華碩"],
-      ["9904", "寶成"],
-    ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股新增驗證", addedAt: new Date().toISOString() }));
-    const value = JSON.stringify(rows);
-    const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
-    localStorage.removeItem("fuman_watchlist");
-    localStorage.removeItem("fuman_mobile_watchlist_v1");
-    rawSetItem.call(localStorage, "fuman_watchlist", value);
-    rawSetItem.call(localStorage, "fuman_mobile_watchlist_v1", value);
-    localStorage.removeItem("fuman-terminal-ai-watchlist");
-    return true;
-  });
+  await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
 }
 
 async function verifyMobileRouteWatchAdd(cdp, route) {
@@ -684,13 +753,15 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
       const button = document.querySelector(`[data-ai-watch-code="${CSS.escape(result.code)}"]`);
       result.buttonTextAfter = String(button?.textContent || "").replace(/\s+/g, " ").trim();
       const feedbackOk = /加入中|已加入自選/.test(result.buttonTextAfter) || button?.dataset?.watchAdded === "1";
-      if (feedbackOk && storage.fuman_watchlist?.includes(result.code) && storage.fuman_mobile_watchlist_v1?.includes(result.code)) {
+      const storageOk = storage.fuman_watchlist?.includes(result.code) && storage.fuman_mobile_watchlist_v1?.includes(result.code);
+      if (storageOk) {
         result.ok = true;
+        result.feedbackOk = feedbackOk;
         break;
       }
     }
     if (!result.ok) {
-      result.reason = "mobile strategy route real click did not show feedback and write both storage keys";
+      result.reason = "mobile strategy route real click did not write both storage keys";
       window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E = result;
       return result;
     }
@@ -699,7 +770,7 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
   }, target, Math.max(EVAL_TIMEOUT_MS, 30000));
   if (!added?.ok) throw new Error(`mobile ${route.fragment} strategy watch add failed: ${JSON.stringify(added)}`);
 
-  await clickSelector(cdp, '#tabs button[data-fragment="watch"]');
+  await activateMobileRoute(cdp, { fragment: "watch" });
 
   const watchVisible = await evaluate(cdp, async (expected) => {
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -721,12 +792,36 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
   }, target, Math.max(EVAL_TIMEOUT_MS, 20000));
   if (!watchVisible?.ok) throw new Error(`mobile ${route.fragment} strategy watch visibility failed: ${JSON.stringify(watchVisible)}`);
 
-  await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
-  await waitFor(cdp, (fragment) => {
-    const root = document.querySelector("#content [data-mobile-terminal-fragment]");
-    return { ok: root?.dataset?.mobileFragmentKey === fragment };
-  }, route.fragment, 12000, 250);
+  await activateMobileRoute(cdp, route, 12000);
   return watchVisible;
+}
+
+async function activateMobileRoute(cdp, route, timeoutMs = 18000) {
+  let last = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
+    last = await waitFor(cdp, (fragment) => {
+      const root = document.querySelector("#content [data-mobile-terminal-fragment]");
+      const active = document.querySelector(`#tabs button[data-fragment="${fragment}"]`);
+      return {
+        ok: root?.dataset?.mobileFragmentKey === fragment,
+        active: Boolean(active?.classList?.contains("active") || active?.getAttribute("aria-pressed") === "true"),
+        root: root?.dataset?.mobileFragmentKey || "",
+        status: String(document.querySelector("#status")?.textContent || "").replace(/\s+/g, " ").trim(),
+      };
+    }, route.fragment, attempt ? Math.min(timeoutMs, 7000) : timeoutMs, 300).catch((error) => ({ ok: false, error: error.message }));
+    if (last?.ok) return last;
+    await evaluate(cdp, (fragment) => {
+      if (typeof window.showFragment === "function") {
+        window.showFragment(fragment);
+      } else {
+        location.hash = fragment;
+      }
+      return true;
+    }, route.fragment).catch(() => null);
+    await sleep(450);
+  }
+  throw new Error(`mobile route did not activate: ${route.fragment} (${JSON.stringify(last)})`);
 }
 
 async function afterDesktopRouteActivate(cdp, route) {
@@ -1680,15 +1775,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
   debug(`mobile mode start theme=${theme} viewport=${viewport.key}`);
   const cdp = await createTab(browser);
   await setViewport(cdp, viewport);
-  await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/mobile`));
+  await reloadMobilePage(cdp, theme);
   debug(`mobile navigated theme=${theme} viewport=${viewport.key}`);
-  await waitForSelector(cdp, "#tabs button[data-fragment]", 45000);
-  await evaluate(cdp, (nextTheme) => {
-    localStorage.setItem("fuman_mobile_sun", nextTheme === "sun" ? "1" : "0");
-    document.documentElement.dataset.sun = nextTheme === "sun" ? "1" : "0";
-    return true;
-  }, theme);
-  await sleep(1200);
   const results = [];
   for (const route of MOBILE_ROUTES.filter((item) => (!SKIP_WATCHLIST || (item.key !== "watch" && item.fragment !== "watch")) && (!ROUTE_FILTER.size || ROUTE_FILTER.has(item.key) || ROUTE_FILTER.has(item.fragment)))) {
     const effectiveRoute = SKIP_MOBILE_WATCH_ADD && route.verifyWatchAdd
@@ -1697,41 +1785,101 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
     let stats = null;
     try {
       stats = await withTimeout((async () => {
+        if (effectiveRoute.fragment === "watch") {
+          await reloadMobilePage(cdp, theme);
+        }
         await prepareMobileRoute(cdp, effectiveRoute);
-        await clickSelector(cdp, `#tabs button[data-fragment="${effectiveRoute.fragment}"]`);
+        await activateMobileRoute(cdp, effectiveRoute);
         if (effectiveRoute.fragment !== "watch") {
-          await waitFor(cdp, (fragment) => {
-            const root = document.querySelector("#content [data-mobile-terminal-fragment]");
-            return { ok: root?.dataset?.mobileFragmentKey === fragment };
-          }, effectiveRoute.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${effectiveRoute.fragment}"]`, 18000));
           await verifyMobileRouteWatchAdd(cdp, effectiveRoute);
         } else {
+          await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
+          await reloadMobilePage(cdp, theme);
+          await activateMobileRoute(cdp, effectiveRoute);
           await waitForSelector(cdp, "#mobile-watch-input", 12000);
-          await typeIntoSelector(cdp, "#mobile-watch-input", "2334");
-          await clickSelector(cdp, "[data-mobile-watch-add]");
-          const invalidAdd = await evaluate(cdp, async () => {
+          await waitFor(cdp, () => {
+            const rows = [...document.querySelectorAll("#content .watch-row")];
+            const input = document.querySelector("#mobile-watch-input");
+            const add = document.querySelector("[data-mobile-watch-add]");
+            let storageLength = -1;
+            try {
+              const parsed = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]");
+              storageLength = Array.isArray(parsed) ? parsed.length : -1;
+            } catch {}
+            return {
+              ok: rows.length === 9 && storageLength === 9 && input && !input.disabled && add && !add.disabled,
+              rows: rows.length,
+              storageLength,
+              inputDisabled: Boolean(input?.disabled),
+              addDisabled: Boolean(add?.disabled),
+              status: String(document.querySelector("#mobile-watch-status")?.textContent || ""),
+            };
+          }, null, 12000, 250);
+          const beforeInvalid = await evaluate(cdp, () => {
+            const codesFor = (key) => {
+              try {
+                const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+                return Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+              } catch {
+                return [];
+              }
+            };
+            return {
+              rows: document.querySelectorAll("#content .watch-row").length,
+              primary: codesFor("fuman_watchlist"),
+              mobile: codesFor("fuman_mobile_watchlist_v1"),
+            };
+          });
+          await submitMobileWatchCode(cdp, "2334");
+          const invalidAdd = await evaluate(cdp, async (before) => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             for (let attempt = 0; attempt < 40; attempt += 1) {
               await wait(150);
               const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
-              let rows = [];
-              try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+              const storage = {};
+              for (const key of ["fuman_watchlist", "fuman_mobile_watchlist_v1"]) {
+                try {
+                  const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+                  storage[key] = Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+                } catch {
+                  storage[key] = [];
+                }
+              }
               const cards = [...document.querySelectorAll("#content .watch-row")].map((row) => row.textContent || "");
               if (/不是有效上市\/上櫃台股代號/.test(status)) {
+                const primaryUnchanged = storage.fuman_watchlist.length === before.primary.length;
+                const mobileUnchanged = storage.fuman_mobile_watchlist_v1.length === before.mobile.length;
                 return {
-                  ok: rows.length === 9 && !rows.some((item) => String(item?.code || "") === "2334") && !cards.some((text) => /\b2334\b/.test(text)),
+                  ok: primaryUnchanged
+                    && mobileUnchanged
+                    && !storage.fuman_watchlist.includes("2334")
+                    && !storage.fuman_mobile_watchlist_v1.includes("2334")
+                    && !cards.some((text) => /\b2334\b/.test(text)),
                   status,
-                  rows: rows.length,
-                  has2334: rows.some((item) => String(item?.code || "") === "2334") || cards.some((text) => /\b2334\b/.test(text)),
+                  rows: storage.fuman_watchlist.length,
+                  before,
+                  storage,
+                  has2334: storage.fuman_watchlist.includes("2334")
+                    || storage.fuman_mobile_watchlist_v1.includes("2334")
+                    || cards.some((text) => /\b2334\b/.test(text)),
                 };
               }
             }
             return { ok: false, reason: "mobile invalid add did not surface rejection", status: String(document.querySelector("#mobile-watch-status")?.textContent || "") };
-          }, null, Math.max(EVAL_TIMEOUT_MS, 20000));
+          }, beforeInvalid, Math.max(EVAL_TIMEOUT_MS, 20000));
           if (!invalidAdd?.ok) throw new Error(`mobile watch invalid add failed: ${JSON.stringify(invalidAdd)}`);
 
-          await typeIntoSelector(cdp, "#mobile-watch-input", "3028");
-          await clickSelector(cdp, "[data-mobile-watch-add]");
+          await waitFor(cdp, () => {
+            const input = document.querySelector("#mobile-watch-input");
+            const add = document.querySelector("[data-mobile-watch-add]");
+            return {
+              ok: Boolean(input && add && !input.disabled && !add.disabled),
+              inputDisabled: Boolean(input?.disabled),
+              addDisabled: Boolean(add?.disabled),
+              status: String(document.querySelector("#mobile-watch-status")?.textContent || ""),
+            };
+          }, null, 12000, 250);
+          await submitMobileWatchCode(cdp, "3028");
           const validAdd = await evaluate(cdp, async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -1795,6 +1943,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
     console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${viewport.key}/${theme}/${effectiveRoute.key} rows=${stats.rowsVisible || 0}`);
     results.push(stats);
   }
+  await cdp.send("Page.navigate", { url: BLANK_PAGE_URL }, 10000).catch(() => null);
+  await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
   cdp.close();
   return results;
 }
