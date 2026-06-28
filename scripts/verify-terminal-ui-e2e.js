@@ -679,6 +679,36 @@ async function prepareMobileRoute(cdp, route) {
   await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
 }
 
+async function verifyMobileLegacySuccessRescue(cdp) {
+  await evaluate(cdp, () => {
+    const row = { code: "3028", name: "增你強", reason: "手機手動新增", addedAt: new Date().toISOString() };
+    const value = JSON.stringify([row]);
+    const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
+    rawSetItem.call(localStorage, "fuman_watchlist", value);
+    rawSetItem.call(localStorage, "fuman_mobile_watchlist_v1", value);
+    const content = document.querySelector("#content");
+    if (content) {
+      content.innerHTML = `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="watch" data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-04"><article class="mobile-terminal-head"><strong>自選</strong><p>輸入四碼台股代號新增</p><div class="watch-add"><input id="mobile-watch-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="股票代碼"><button type="button" data-mobile-watch-add>新增</button></div><div class="watch-status" id="mobile-watch-status">3028 增你強 已加入自選</div></article><div class="empty-state">尚未加入。</div></section>`;
+    }
+    const status = document.querySelector("#status");
+    if (status) {
+      status.dataset.freshness = "fresh";
+      status.textContent = "自選 1";
+    }
+    return true;
+  });
+  await waitFor(cdp, () => {
+    const rows = [...document.querySelectorAll("#content .watch-row")];
+    const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+    return {
+      ok: rows.some((row) => /\b3028\b/.test(row.textContent || "")) && /已加入自選/.test(status),
+      rows: rows.length,
+      status,
+      contentText: String(document.querySelector("#content")?.textContent || "").replace(/\s+/g, " ").slice(0, 200),
+    };
+  }, null, 8000, 250);
+}
+
 async function verifyMobileRouteWatchAdd(cdp, route) {
   if (SKIP_MOBILE_WATCH_ADD) return null;
   if (!route.verifyWatchAdd) return null;
@@ -1793,6 +1823,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
         if (effectiveRoute.fragment !== "watch") {
           await verifyMobileRouteWatchAdd(cdp, effectiveRoute);
         } else {
+          await verifyMobileLegacySuccessRescue(cdp);
           await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
           await reloadMobilePage(cdp, theme);
           await activateMobileRoute(cdp, effectiveRoute);

@@ -648,15 +648,24 @@
     const match = text.match(new RegExp(`${code}\\s+([^\\s]+)\\s+已加入`));
     return match?.[1] || "";
   };
+  const successFromStatus = () => {
+    const text = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+    const match = text.match(/(\d{4})\s+([^\s]+)\s+(?:已加入自選|已在自選股)/);
+    if (!match || /不是有效/.test(text)) return null;
+    return { code: match[1], name: match[2], reason: "手機手動新增" };
+  };
   const ensureCard = () => {
+    const statusRow = successFromStatus();
+    if (!pending?.code && statusRow) pending = { ...statusRow, button: null };
     if (!pending?.code || !successVisible(pending.code)) return;
     const existing = uniqueRows(readStorageRows(), rescueRows, domRows());
     const already = existing.some((row) => row.code === pending.code);
-    const name = pending.name || nameFromSuccess(pending.code) || pending.code;
+    const name = pending.name || statusRow?.name || nameFromSuccess(pending.code) || pending.code;
     const rows = uniqueRows(already ? existing : [{ code: pending.code, name, reason: pending.reason || "手機自選股新增", addedAt: new Date().toISOString() }, ...existing]);
     rescueRows = rows;
     writeRows(rows);
-    if (watchActive() && !document.querySelector("#content .watch-row")) {
+    const hasVisibleCard = [...document.querySelectorAll("#content .watch-row")].some((row) => String(row.textContent || "").includes(pending.code));
+    if (watchActive() && !hasVisibleCard) {
       render(rows, `${pending.code} ${name} 已加入自選`);
     }
   };
@@ -675,6 +684,8 @@
     };
     for (const ms of [900, 1800, 3600, 5600]) setTimeout(ensureCard, ms);
   }, true);
+  setInterval(ensureCard, 1200);
   self.FUMAN_MOBILE_WATCH_RESCUE_RENDER = "mobile-watch-v2-rescue-render-20260628-01";
+  self.FUMAN_MOBILE_WATCH_SUCCESS_STATUS_RENDER = "mobile-watch-success-status-render-20260628-01";
 })();
 </script></body></html>

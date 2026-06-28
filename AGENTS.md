@@ -364,6 +364,7 @@ marketSession.marketDataDate=2026-06-26
 - 手機版手動新增與策略卡「加入自選」必須由 V2 capture handler 接管：先用 `/api/mobile-watch-meta?code=XXXX` 查單一代號並驗證台股 universe，再同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1`、成功後直接 render 自選 tab 卡片，不可只等待舊 fragment/tab click 重畫，也不可在手機端先拉整包股票清單才新增。
 - 手機版 V2 capture bridge 必須保留 `mobile-watch-v2-early-bridge-20260628-01`，且用 `event.composedPath()` 找到真實點擊來源；不能只靠 `event.target.closest()`，因為真人點文字節點 / 內層節點時可能被舊 document-capture handler 搶走。
 - 手機版 V2 rescue renderer 必須保留 `mobile-watch-v2-rescue-render-20260628-01`；若畫面已出現「已加入自選 / 已在自選股」但舊流程沒有畫出 `.watch-row`，rescue 必須從 storage / pending click / DOM rows 合併資料並直接重畫自選 tab。
+- 手機版 success status renderer 必須保留 `mobile-watch-success-status-render-20260628-01`；若 watch tab 已顯示 `XXXX 名稱 已加入自選`，但下方仍是 `尚未加入` 或沒有該代號 `.watch-row`，必須從狀態文字與 storage 直接補卡，不能只依賴 pending click。
 - 手機版 V2 add recovery 必須保留 `mobile-watch-v2-add-recovery-20260628-01`；若手動輸入或策略加入停在 `正在確認台股代號` / `加入中`，watchdog 必須再次查 `/api/mobile-watch-meta?code=XXXX`，valid 就同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1` 並直接補出 `.watch-row`，invalid 不可補卡。
 - 手機版 stuck status recovery 必須保留 `mobile-watch-v2-stuck-status-recovery-20260628-01`；若 watch tab 狀態文字停在 `XXXX 正在確認台股代號`，即使原本 click promise 沒回來，也必須從狀態文字抓代號、查 `/api/mobile-watch-meta?code=XXXX`，valid 直接補卡。
 - 手機版 V2 必須保留 JSONP fallback，因為部分真實 Chrome 分頁 / 受控環境可能沒有可用的 `fetch`；`/api/mobile-watch-meta` 也必須支援 `callback=`。
@@ -412,6 +413,7 @@ marketSession.marketDataDate=2026-06-26
   - 再用使用者流程輸入有效台股，例如 `3028`，確認手機自選頁新增第 10 張卡片，且兩個 storage key 都同步。
   - 手機手動新增不可卡在 `正在確認台股代號`；台股 universe 讀取必須有 timeout / fallback，失敗也要顯示受控錯誤。
   - 手機手動新增成功後必須直接重畫 `.watch-row`，不可只驗 storage 或 status。
+  - E2E 必須模擬 legacy 成功狀態：`3028 增你強 已加入自選` + 下方 `尚未加入`，並確認 rescue 自動補出 `3028` `.watch-row`。
   - 手機手動新增必須驗 `/api/mobile-watch-meta?code=3028` valid，並驗 `/api/mobile-watch-meta?code=2334` invalid。
   - watch tab 手動測試必須以 9 檔有效台股 seed 開始，拒絕 `2334` 後筆數維持 9，再新增 `3028` 補到 10；不可在滿 10 檔時測 invalid/valid，否則只會測到上限 guard。
   - 至少驗 phone portrait、phone landscape、tablet 的 night / sun 六種手機 / 平板模式。
