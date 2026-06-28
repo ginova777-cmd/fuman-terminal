@@ -1287,7 +1287,7 @@ function collectMobileStats(route) {
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
     const addInput = content.querySelector("#mobile-watch-input");
     const addButton = content.querySelector("[data-mobile-watch-add]");
-    const hotfixRoot = content.querySelector('[data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-03"]');
+    const hotfixRoot = content.querySelector('[data-mobile-watch-hotfix="mobile-watch-v2-direct-render-20260628-04"]');
     const hotfixReady = typeof window.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2 === "function";
     const watchCodes = watchRows.map((row) => text(row).match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
     const storageCodes = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
