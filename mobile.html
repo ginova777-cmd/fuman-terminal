@@ -407,6 +407,7 @@
           options.button?.textContent || "",
         ].join(" ");
         if (readList().some((row) => String(row.code) === code)) return;
+        if (options.fromStrategy && options.button && !document.body.contains(options.button)) return;
         if (/不是有效|已達 10/.test(stuckText)) return;
         recoverPendingAdd(code, options).catch(() => {});
       }, ms);
@@ -461,6 +462,7 @@
           reason: rowReason(strategyButton),
           render: false,
           disableButton: true,
+          fromStrategy: true,
         });
       }
       addStock(strategyButton.dataset.aiWatchCode, {
