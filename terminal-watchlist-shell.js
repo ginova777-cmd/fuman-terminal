@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-04";
+  const VERSION = "watchlist-rich-shell-20260628-05";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -19,6 +19,8 @@
   let metaPromise = null;
   const metaMap = new Map();
   const quoteMap = new Map();
+  const metaHydratedCodes = new Set();
+  const metaHydratingCodes = new Set();
 
   function normalizeCode(value) {
     return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
@@ -177,6 +179,16 @@
 
   function mergeQuote(row) {
     return { ...row, ...(quoteMap.get(row.code) || {}), ...(findMetaSync(row.code) || {}) };
+  }
+
+  function metaChanged(row, meta) {
+    if (!row || !meta) return false;
+    return String(row.name || "") !== String(meta.name || "")
+      || normalizeMarket(row.market) !== normalizeMarket(meta.market)
+      || number(row.close) !== number(meta.close)
+      || number(row.change) !== number(meta.change)
+      || number(row.percent) !== number(meta.percent)
+      || number(row.tradeVolume) !== number(meta.tradeVolume);
   }
 
   function showStatus(message, kind = "info") {
@@ -377,7 +389,9 @@
     }
     const active = rows.find((row) => row.code === selectedCode) || rows[0];
     renderAnalysis(active);
-    rows.slice(0, 10).forEach((row) => hydrateMeta(row.code));
+    rows.slice(0, 10).forEach((row) => {
+      if (!metaHydratedCodes.has(row.code) && !metaHydratingCodes.has(row.code)) hydrateMeta(row.code);
+    });
   }
 
   function cardHtml(row) {
@@ -467,13 +481,27 @@
   async function hydrateMeta(code) {
     const target = normalizeCode(code);
     if (!target) return null;
-    await loadMeta();
-    const meta = metaMap.get(target);
-    if (!meta) return null;
-    const rows = readRows().map((row) => row.code === target ? { ...row, ...meta, code: target } : row);
-    writeRows(rows);
-    render();
-    return meta;
+    if (metaHydratedCodes.has(target) || metaHydratingCodes.has(target)) return metaMap.get(target) || null;
+    metaHydratingCodes.add(target);
+    try {
+      await loadMeta();
+      const meta = metaMap.get(target);
+      metaHydratedCodes.add(target);
+      if (!meta) return null;
+      let changed = false;
+      const rows = readRows().map((row) => {
+        if (row.code !== target) return row;
+        changed = changed || metaChanged(row, meta);
+        return changed ? { ...row, ...meta, code: target } : row;
+      });
+      if (changed) {
+        writeRows(rows);
+        render();
+      }
+      return meta;
+    } finally {
+      metaHydratingCodes.delete(target);
+    }
   }
 
   async function hydrateQuote(code) {
