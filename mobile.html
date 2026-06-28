@@ -78,6 +78,7 @@
   const MOBILE_KEY = "fuman_mobile_watchlist_v1";
   const meta = new Map();
   let memoryRows = [];
+  let storageFallback = false;
   let metaPromise = null;
   let lastMessage = "";
   const code4 = (value) => String(value || "").match(/\d{4}/)?.[0] || "";
@@ -171,10 +172,11 @@
   function readList() {
     try {
       const stored = localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY) || "";
-      if (!stored && memoryRows.length) return memoryRows.slice(0, 10);
+      if (!stored) return storageFallback ? memoryRows.slice(0, 10) : [];
       const rows = JSON.parse(stored || "[]");
       return Array.isArray(rows) ? rows.slice(0, 10) : [];
     } catch {
+      storageFallback = true;
       return memoryRows.slice(0, 10);
     }
   }
@@ -195,8 +197,11 @@
     }
     const value = JSON.stringify(next);
     memoryRows = next;
-    try { localStorage.setItem(KEY, value); } catch {}
-    try { localStorage.setItem(MOBILE_KEY, value); } catch {}
+    let wrote = false;
+    let failed = false;
+    try { localStorage.setItem(KEY, value); wrote = true; } catch { failed = true; }
+    try { localStorage.setItem(MOBILE_KEY, value); wrote = true; } catch { failed = true; }
+    storageFallback = !wrote || failed;
     return next;
   }
   function toast(message) {
@@ -264,7 +269,8 @@
     const rows = readList();
     if (rows.some((row) => String(row.code) === code)) {
       const message = `${code} 已在自選股`;
-      render ? renderWatch(message) : setShellCount(rows);
+      const synced = writeList(rows);
+      render ? renderWatch(message) : setShellCount(synced);
       toast(message);
       return true;
     }

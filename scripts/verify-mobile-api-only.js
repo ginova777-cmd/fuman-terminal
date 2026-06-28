@@ -92,6 +92,7 @@ function checkMobileShell() {
   requireText(mobile, "MutationObserver", "mobile watchlist V2 must guard against the legacy watch renderer overwriting cards");
   requireText(mobile, "callback=", "mobile watchlist V2 must keep JSONP fallback when fetch is unavailable");
   requireText(mobile, "memoryRows", "mobile watchlist V2 must render cards even when localStorage setItem is unavailable");
+  requireText(mobile, "storageFallback", "mobile watchlist memory fallback must only take over after storage read/write failures");
   requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
   requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
   requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");
