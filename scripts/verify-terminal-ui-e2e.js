@@ -1304,14 +1304,14 @@ function collectMobileStats(route) {
     if (!hotfixReady || !hotfixRoot) contractBlockers.push(`mobile watch tab must use V2 direct-render hotfix ready=${hotfixReady} root=${Boolean(hotfixRoot)}`);
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
-    if (!watchCodes.includes("2327")) contractBlockers.push(`mobile watch manual add code 2327 missing actual=${watchCodes.join(",")}`);
+    if (!watchCodes.includes("3028")) contractBlockers.push(`mobile watch manual add code 3028 missing actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("2334")) contractBlockers.push(`mobile watch invalid code 2334 rendered actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
     storageCodes.forEach((codes, index) => {
       const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
       if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
       if (!codes.includes("2344")) contractBlockers.push(`mobile watch storage ${key} missing 2344 actual=${codes.join(",")}`);
-      if (!codes.includes("2327")) contractBlockers.push(`mobile watch storage ${key} missing manual add 2327 actual=${codes.join(",")}`);
+      if (!codes.includes("3028")) contractBlockers.push(`mobile watch storage ${key} missing manual add 3028 actual=${codes.join(",")}`);
       if (codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} kept invalid 2334 actual=${codes.join(",")}`);
       if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
     });
@@ -1721,7 +1721,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           }, null, Math.max(EVAL_TIMEOUT_MS, 20000));
           if (!invalidAdd?.ok) throw new Error(`mobile watch invalid add failed: ${JSON.stringify(invalidAdd)}`);
 
-          await typeIntoSelector(cdp, "#mobile-watch-input", "2327");
+          await typeIntoSelector(cdp, "#mobile-watch-input", "3028");
           await clickSelector(cdp, "[data-mobile-watch-add]");
           const validAdd = await evaluate(cdp, async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1737,8 +1737,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
                   return [];
                 }
               });
-              const has2327 = rows.some((row) => /\b2327\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("2327"));
-              if (rows.length === 10 && has2327 && !/正在確認/.test(status)) {
+              const has3028 = rows.some((row) => /\b3028\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("3028"));
+              if (rows.length === 10 && has3028 && !/正在確認/.test(status)) {
                 return { ok: true, status, rows: rows.length, storage };
               }
             }
