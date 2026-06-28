@@ -123,10 +123,10 @@ function sleep(ms) {
 function findBrowser() {
   const candidates = [
     process.env.CHROME_PATH,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
   ].filter(Boolean);
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) throw new Error("Chrome or Edge executable not found. Set CHROME_PATH to run route stress.");
@@ -266,7 +266,7 @@ async function launchBrowser() {
   ];
   if (!HEADFUL) {
     chromeArgs.unshift(
-      "--headless=new",
+      "--headless=chrome",
       "--disable-gpu",
       "--disable-gpu-sandbox",
       "--disable-features=Vulkan,DawnGraphite,DefaultANGLEVulkan,VulkanFromANGLE",
@@ -291,9 +291,10 @@ async function createTab(port, url) {
   if (!tab.webSocketDebuggerUrl) throw new Error("CDP page target missing websocket URL");
   const cdp = new Cdp(tab.webSocketDebuggerUrl);
   await cdp.connect();
-  await cdp.send("Runtime.enable", {}, 30000);
-  await cdp.send("DOM.enable", {}, 30000);
-  await cdp.send("Network.enable", {}, 30000).catch(() => null);
+  await cdp.send("Runtime.enable", {}, 5000).catch(() => null);
+  await cdp.send("Runtime.evaluate", { expression: "1", returnByValue: true }, 5000);
+  await cdp.send("DOM.enable", {}, 10000).catch(() => null);
+  await cdp.send("Network.enable", {}, 10000).catch(() => null);
   await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
   await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
   const pageEnable = await cdp.send("Page.enable", {}, 5000).then(() => ({ ok: true })).catch((error) => ({ ok: false, error: error.message }));

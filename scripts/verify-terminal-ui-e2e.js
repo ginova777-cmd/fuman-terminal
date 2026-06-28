@@ -25,6 +25,9 @@ const ROUTE_FILTER = new Set((optionValue("--routes") || process.env.FUMAN_UI_E2
   .map((item) => item.trim())
   .filter(Boolean));
 const SKIP_WATCHLIST = process.argv.includes("--skip-watchlist") || process.env.FUMAN_UI_E2E_SKIP_WATCHLIST === "1";
+const SKIP_MOBILE_WATCH_ADD = SKIP_WATCHLIST
+  || process.argv.includes("--skip-mobile-watch-add")
+  || process.env.FUMAN_UI_E2E_SKIP_MOBILE_WATCH_ADD === "1";
 const EVAL_TIMEOUT_MS = Number(optionValue("--eval-timeout") || process.env.FUMAN_UI_E2E_EVAL_TIMEOUT_MS || 30000);
 const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FUMAN_UI_E2E_ROUTE_TIMEOUT_MS || 45000);
 
@@ -134,10 +137,10 @@ function withCacheBust(url) {
 function findBrowser() {
   const candidates = [
     process.env.CHROME_PATH,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
   ].filter(Boolean);
   const fsSync = require("fs");
   const found = candidates.find((candidate) => fsSync.existsSync(candidate));
@@ -189,7 +192,8 @@ async function fetchJson(url, options = {}) {
   });
 }
 
-async function launchBrowser() {
+async function launchBrowser(options = {}) {
+  const headful = options.headful ?? HEADFUL;
   const port = await freePort();
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "fuman-ui-e2e-"));
   const browserPath = findBrowser();
@@ -204,15 +208,15 @@ async function launchBrowser() {
     "--window-size=1440,1000",
     BLANK_PAGE_URL,
   ];
-  if (!HEADFUL) {
+  if (!headful) {
     args.unshift(
-      "--headless=new",
+      "--headless=chrome",
       "--disable-gpu",
       "--disable-gpu-sandbox",
       "--disable-features=Vulkan,DawnGraphite,DefaultANGLEVulkan,VulkanFromANGLE",
     );
   }
-  debug(`launch browser=${browserPath} port=${port} headful=${HEADFUL ? "1" : "0"}`);
+  debug(`launch browser=${browserPath} port=${port} headful=${headful ? "1" : "0"}`);
   const child = childProcess.spawn(browserPath, args, { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (chunk) => {
@@ -248,7 +252,7 @@ async function createTab(browser) {
       debug(`create tab attempt=${attempt + 1} port=${port}`);
       let target = null;
       try {
-        const newUrl = `http://127.0.0.1:${port}/json/new?${encodeURIComponent(BLANK_PAGE_URL)}`;
+        const newUrl = `http://127.0.0.1:${port}/json/new`;
         target = await fetchJson(newUrl, { method: "PUT" });
         debug(`new target=${target.type || ""}:${target.title || target.url || ""}`);
       } catch (error) {
@@ -265,10 +269,11 @@ async function createTab(browser) {
       try {
         debug(`connect websocket attempt=${attempt + 1}`);
         await cdp.connect();
-        debug("enable Runtime/DOM/Network; Page.enable is optional");
-        await cdp.send("Runtime.enable", {}, 30000);
-        await cdp.send("DOM.enable", {}, 30000);
-        await cdp.send("Network.enable", {}, 30000);
+        debug("warm Runtime/DOM/Network/Page; Runtime.evaluate validates the target");
+        await cdp.send("Runtime.enable", {}, 5000).catch((error) => debug(`Runtime.enable skipped: ${error.message}`));
+        await cdp.send("Runtime.evaluate", { expression: "1", returnByValue: true }, 5000);
+        await cdp.send("DOM.enable", {}, 10000).catch((error) => debug(`DOM.enable skipped: ${error.message}`));
+        await cdp.send("Network.enable", {}, 10000).catch((error) => debug(`Network.enable skipped: ${error.message}`));
         await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
         await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
         await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
@@ -571,7 +576,7 @@ async function prepareDesktopRoute(cdp, route) {
 }
 
 async function prepareMobileRoute(cdp, route) {
-  if (route.verifyWatchAdd) {
+  if (route.verifyWatchAdd && !SKIP_MOBILE_WATCH_ADD) {
     await evaluate(cdp, () => {
       localStorage.removeItem("fuman_watchlist");
       localStorage.removeItem("fuman_mobile_watchlist_v1");
@@ -606,6 +611,7 @@ async function prepareMobileRoute(cdp, route) {
 }
 
 async function verifyMobileRouteWatchAdd(cdp, route) {
+  if (SKIP_MOBILE_WATCH_ADD) return null;
   if (!route.verifyWatchAdd) return null;
   const target = await evaluate(cdp, (fragment) => {
     const visible = (el) => {
@@ -1685,17 +1691,20 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
   await sleep(1200);
   const results = [];
   for (const route of MOBILE_ROUTES.filter((item) => (!SKIP_WATCHLIST || (item.key !== "watch" && item.fragment !== "watch")) && (!ROUTE_FILTER.size || ROUTE_FILTER.has(item.key) || ROUTE_FILTER.has(item.fragment)))) {
+    const effectiveRoute = SKIP_MOBILE_WATCH_ADD && route.verifyWatchAdd
+      ? { ...route, verifyWatchAdd: false }
+      : route;
     let stats = null;
     try {
       stats = await withTimeout((async () => {
-        await prepareMobileRoute(cdp, route);
-        await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
-        if (route.fragment !== "watch") {
+        await prepareMobileRoute(cdp, effectiveRoute);
+        await clickSelector(cdp, `#tabs button[data-fragment="${effectiveRoute.fragment}"]`);
+        if (effectiveRoute.fragment !== "watch") {
           await waitFor(cdp, (fragment) => {
             const root = document.querySelector("#content [data-mobile-terminal-fragment]");
             return { ok: root?.dataset?.mobileFragmentKey === fragment };
-          }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
-          await verifyMobileRouteWatchAdd(cdp, route);
+          }, effectiveRoute.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${effectiveRoute.fragment}"]`, 18000));
+          await verifyMobileRouteWatchAdd(cdp, effectiveRoute);
         } else {
           await waitForSelector(cdp, "#mobile-watch-input", 12000);
           await typeIntoSelector(cdp, "#mobile-watch-input", "2334");
@@ -1770,20 +1779,20 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
             };
           }, null, 12000, 250);
         }
-        return evaluate(cdp, collectMobileStats, route).catch((error) => fallbackMobileStats(cdp, route, error));
-      })(), ROUTE_TIMEOUT_MS, `mobile/${theme}/${route.key}`);
+        return evaluate(cdp, collectMobileStats, effectiveRoute).catch((error) => fallbackMobileStats(cdp, effectiveRoute, error));
+      })(), ROUTE_TIMEOUT_MS, `mobile/${theme}/${effectiveRoute.key}`);
     } catch (error) {
-      stats = { kind: "mobile", routeKey: route.key, label: route.label, fragment: route.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
+      stats = { kind: "mobile", routeKey: effectiveRoute.key, label: effectiveRoute.label, fragment: effectiveRoute.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
     stats.theme = theme;
     stats.viewportKey = viewport.key;
     stats.viewportLabel = viewport.label;
     stats.screenshot = await withTimeout(
-      screenshot(cdp, `mobile-${viewport.key}-${theme}-${route.key}.png`),
+      screenshot(cdp, `mobile-${viewport.key}-${theme}-${effectiveRoute.key}.png`),
       Math.min(ROUTE_TIMEOUT_MS, 30000),
-      `mobile/${viewport.key}/${theme}/${route.key}/screenshot`,
+      `mobile/${viewport.key}/${theme}/${effectiveRoute.key}/screenshot`,
     ).catch((error) => `screenshot failed: ${error.message}`);
-    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${viewport.key}/${theme}/${route.key} rows=${stats.rowsVisible || 0}`);
+    console.log(`[terminal-ui-e2e] ${stats.ok ? "ok" : "fail"} mobile/${viewport.key}/${theme}/${effectiveRoute.key} rows=${stats.rowsVisible || 0}`);
     results.push(stats);
   }
   cdp.close();
@@ -1814,9 +1823,13 @@ function markdownReport(report) {
   return `${lines.join("\n")}\n`;
 }
 
-async function main() {
-  await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
-  const browser = await launchBrowser();
+function isCdpStartupError(error) {
+  return /Runtime\.enable timed out|Runtime\.evaluate timed out|DOM\.enable timed out|Network\.enable timed out|Page\.enable timed out|Emulation\.setDeviceMetricsOverride timed out|CDP|websocket|browser did not expose/i
+    .test(String(error?.stack || error?.message || error || ""));
+}
+
+async function runE2eOnce(options = {}) {
+  const browser = await launchBrowser(options);
   const results = [];
   try {
     if (RUN_ONLY.has("desktop-night")) results.push(...await runDesktopMode(browser, "night"));
@@ -1835,6 +1848,27 @@ async function main() {
       await fs.rm(browser.userDataDir, { recursive: true, force: true }).catch(() => null);
     }
   }
+  return results;
+}
+
+async function main() {
+  await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+  let results = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const useHeadfulFallback = !HEADFUL && attempt === 3;
+      if (useHeadfulFallback) console.warn("[terminal-ui-e2e] falling back to headful browser after repeated headless CDP startup issues");
+      results = await runE2eOnce({ headful: HEADFUL || useHeadfulFallback });
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!isCdpStartupError(error) || attempt >= 3) throw error;
+      console.warn(`[terminal-ui-e2e] retry browser session ${attempt}/3 after CDP startup issue: ${error.message}`);
+      await sleep(700);
+    }
+  }
+  if (!results) throw lastError || new Error("terminal-ui-e2e did not produce results");
   const report = {
     ok: results.every((item) => item.ok),
     baseUrl: BASE_URL.replace(/\/+$/, ""),
