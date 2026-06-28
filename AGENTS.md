@@ -245,6 +245,56 @@ fuman-sw.js
 - `ticker-strip` 和 `strength-panel` 不存在。
 - 正式 alias `https://fuman-terminal.vercel.app` 有更新，不只看 preview URL。
 
+### 即時雷達七關驗收（2026-06-28）
+
+即時雷達目前正式版為 DOM 版雷達頁，不再使用 Canvas 外殼包住。修改即時雷達 UI / API / scanner 後，至少要跑以下七關與 UI E2E 實測：
+
+| 關卡 | 指令 / 檢查 | 2026-06-28 結果 |
+|---|---|---|
+| 1. worktree 同步 | `git status --short --branch` | PASS：`main...origin/main` |
+| 2. fast shell 語法 | `node --check terminal-desktop-fast-shell.js` | PASS |
+| 3. API 語法 | `node --check api/realtime-radar-latest.js` | PASS |
+| 4. scanner 語法 | `node --check scripts/scan-realtime-radar-cache.js` | PASS |
+| 5. publish governance | `npm run verify:publish-gate` | PASS |
+| 6. live deployment/version | `npm run verify:live-version` + `npm run verify:deploy` | PASS |
+| 7. market surfaces chain | `npm run verify:market-surfaces-chain` | PASS |
+
+本次 UI E2E 實測：
+
+```text
+npm run verify:terminal-ui-e2e -- --out=outputs/terminal-ui-e2e-realtime-radar-seven-gate-desktop --only=desktop-night --routes=market,realtime-radar
+npm run verify:terminal-ui-e2e -- --out=outputs/terminal-ui-e2e-realtime-radar-seven-gate-mobile --only=mobile-phone-portrait-night --routes=ai,watch
+```
+
+正式站桌面即時雷達驗證結果：
+
+```text
+baseUrl=https://fuman-terminal.vercel.app
+route=realtime-radar
+rowsVisible=15
+domRows=15
+canvasRows=0
+canvasSize=null
+result=PASS
+report=outputs/terminal-ui-e2e-realtime-radar-seven-gate-desktop/terminal-ui-e2e-report.json
+```
+
+正式 API 實測：
+
+```text
+/api/realtime-radar-latest?full=1&limit=1200
+status=200
+rows=80
+totalCount=80
+displayWindow=09:00-13:30
+cacheSource=supabase-radar-cache
+reason=non-trading-day-cache
+marketSession.taipeiDate=2026-06-28
+marketSession.marketDataDate=2026-06-26
+```
+
+注意：`2026-06-28` 是週日，正式站顯示 80 筆休市快取是正常狀態；下一個開盤日才會從 09:00 開始累積到 13:30。不可因週末快取 rows=80 誤判完整盤中功能失效。
+
 ### 發布 / 上傳限制
 
 - 只改 `AGENTS.md`、策略文件、SQL patch、純操作說明時，不需要 Vercel deploy；只需 commit / push。
