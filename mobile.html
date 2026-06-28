@@ -71,12 +71,17 @@
 (() => {
   const code4 = (value) => String(value || "").match(/\d{4}/)?.[0] || "";
   const rowReason = (button) => (button?.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText || "手機策略卡加入").replace(/\s+/g, " ").slice(0, 220);
+  const closest = (event, selector) => {
+    for (const node of event.composedPath?.() || []) {
+      if (node?.matches?.(selector)) return node;
+    }
+    return event.target?.closest?.(selector) || null;
+  };
   const addV2 = (...args) => typeof self.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2 === "function"
     ? self.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2(...args)
     : null;
   document.addEventListener("click", (event) => {
-    const target = event.target;
-    const manualButton = target.closest?.("[data-mobile-watch-add]");
+    const manualButton = closest(event, "[data-mobile-watch-add]");
     if (manualButton) {
       const input = document.querySelector("#mobile-watch-input");
       const run = addV2(input?.value, { button: manualButton, reason: "手機手動新增", render: true });
@@ -92,7 +97,7 @@
       });
       return;
     }
-    const strategyButton = target.closest?.("[data-ai-watch-code]");
+    const strategyButton = closest(event, "[data-ai-watch-code]");
     if (!strategyButton || strategyButton.disabled) return;
     const code = code4(strategyButton.dataset.aiWatchCode);
     const run = addV2(code, {
@@ -485,5 +490,111 @@
     });
   }, true);
   self.FUMAN_MOBILE_TAB_REQUEST_LOCK = "mobile-tab-request-lock-20260628-01";
+})();
+</script><script data-mobile-watch-rescue="mobile-watch-v2-rescue-render-20260628-01">
+(() => {
+  const HOTFIX = "mobile-watch-v2-direct-render-20260628-04";
+  const KEY = "fuman_watchlist";
+  const MOBILE_KEY = "fuman_mobile_watchlist_v1";
+  let rescueRows = [];
+  let pending = null;
+  const code4 = (value) => String(value || "").match(/\d{4}/)?.[0] || "";
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+  const closest = (event, selector) => {
+    for (const node of event.composedPath?.() || []) {
+      if (node?.matches?.(selector)) return node;
+    }
+    return event.target?.closest?.(selector) || null;
+  };
+  const readStorageRows = () => {
+    try {
+      const rows = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY) || "[]");
+      return Array.isArray(rows) ? rows : [];
+    } catch {
+      return [];
+    }
+  };
+  const domRows = () => [...document.querySelectorAll("#content .watch-row")].map((row) => {
+    const text = String(row.textContent || "");
+    const code = code4(text);
+    const name = text.replace(code, "").replace(/移除.*/g, "").trim() || code;
+    return code ? { code, name, reason: "手機自選股新增" } : null;
+  }).filter(Boolean);
+  const uniqueRows = (...groups) => {
+    const out = [];
+    const seen = new Set();
+    for (const row of groups.flat()) {
+      const code = code4(row?.code || row?.symbol || row);
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      out.push({ ...row, code, name: String(row?.name || row?.Name || code).trim(), reason: String(row?.reason || "手機自選股新增") });
+      if (out.length >= 10) break;
+    }
+    return out;
+  };
+  const writeRows = (rows) => {
+    const value = JSON.stringify(rows);
+    try { localStorage.setItem(KEY, value); } catch {}
+    try { localStorage.setItem(MOBILE_KEY, value); } catch {}
+  };
+  const watchActive = () => document.querySelector('#tabs button[data-fragment="watch"]')?.classList.contains("active")
+    || document.querySelector('#content [data-mobile-fragment-key="watch"]');
+  const render = (rows, message) => {
+    const content = document.querySelector("#content");
+    const status = document.querySelector("#status");
+    if (!content) return;
+    const atLimit = rows.length >= 10;
+    if (status) {
+      status.dataset.freshness = "fresh";
+      status.textContent = `自選 ${rows.length}`;
+    }
+    const form = `<article class="mobile-terminal-head"><strong>自選</strong><p>${atLimit ? "已達 10 檔上限" : "輸入四碼台股代號新增"}</p><div class="watch-add"><input id="mobile-watch-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="${atLimit ? "已達上限" : "股票代碼"}" ${atLimit ? "disabled" : ""}><button type="button" data-mobile-watch-add ${atLimit ? "disabled" : ""}>新增</button></div><div class="watch-status" id="mobile-watch-status">${esc(message || "")}</div></article>`;
+    const list = rows.length
+      ? `<section class="mobile-terminal-list">${rows.map((row) => `<article class="watch-row"><div><h4>${esc(row.code)} ${esc(row.name)}</h4><small>${esc(row.reason || row.addedAt || "")}</small></div><button type="button" data-watch-remove="${esc(row.code)}">移除</button></article>`).join("")}</section>`
+      : '<div class="empty-state">尚未加入。</div>';
+    content.innerHTML = `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="watch" data-mobile-watch-hotfix="${HOTFIX}">${form}${list}</section>`;
+  };
+  const successVisible = (code) => {
+    const text = [
+      document.querySelector("#mobile-watch-status")?.textContent || "",
+      document.querySelector("#status")?.textContent || "",
+      pending?.button?.textContent || "",
+    ].join(" ");
+    if (new RegExp(`${code}.*不是有效|不是有效.*${code}`).test(text)) return false;
+    return /已加入自選|已在自選股|已加入/.test(text) || pending?.button?.dataset?.watchAdded === "1";
+  };
+  const nameFromSuccess = (code) => {
+    const text = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+    const match = text.match(new RegExp(`${code}\\s+([^\\s]+)\\s+已加入`));
+    return match?.[1] || "";
+  };
+  const ensureCard = () => {
+    if (!pending?.code || !successVisible(pending.code)) return;
+    const existing = uniqueRows(readStorageRows(), rescueRows, domRows());
+    const already = existing.some((row) => row.code === pending.code);
+    const name = pending.name || nameFromSuccess(pending.code) || pending.code;
+    const rows = uniqueRows(already ? existing : [{ code: pending.code, name, reason: pending.reason || "手機自選股新增", addedAt: new Date().toISOString() }, ...existing]);
+    rescueRows = rows;
+    writeRows(rows);
+    if (watchActive() && !document.querySelector("#content .watch-row")) {
+      render(rows, `${pending.code} ${name} 已加入自選`);
+    }
+  };
+  window.addEventListener("click", (event) => {
+    const manual = closest(event, "[data-mobile-watch-add]");
+    const strategy = closest(event, "[data-ai-watch-code]");
+    if (!manual && !strategy) return;
+    const input = document.querySelector("#mobile-watch-input");
+    const code = code4(strategy?.dataset?.aiWatchCode || input?.value);
+    if (!code) return;
+    pending = {
+      code,
+      name: String(strategy?.dataset?.aiWatchName || "").trim(),
+      reason: strategy ? "手機策略卡加入" : "手機手動新增",
+      button: strategy || manual,
+    };
+    for (const ms of [900, 1800, 3600, 5600]) setTimeout(ensureCard, ms);
+  }, true);
+  self.FUMAN_MOBILE_WATCH_RESCUE_RENDER = "mobile-watch-v2-rescue-render-20260628-01";
 })();
 </script></body></html>
