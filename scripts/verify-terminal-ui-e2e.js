@@ -885,6 +885,21 @@ function collectDesktopStats(route) {
       horizontalOverflow: overflow,
     };
   })() : null;
+  const marketOverviewContract = route.key === "heatmap" || route.key === "market" ? (() => {
+    const metricCards = [...activePanel.querySelectorAll(".metric-grid .metric-card")].filter(visible);
+    const sectorCards = [...activePanel.querySelectorAll(".sector-section .sector-card")].filter(visible);
+    const aiPanel = activePanel.querySelector("[data-market-api-ai],.market-ai-panel");
+    const ticker = activePanel.querySelector(".ticker-strip");
+    const strength = activePanel.querySelector(".strength-panel");
+    return {
+      metricCards: metricCards.length,
+      firstMetricText: text(metricCards[0]).slice(0, 80),
+      sectorCards: sectorCards.length,
+      aiVisible: visible(aiPanel),
+      tickerVisible: visible(ticker),
+      strengthVisible: visible(strength),
+    };
+  })() : null;
   const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|資料載入失敗|讀取失敗|載入失敗|買賣超模組載入失敗|權證資料檔讀取失敗|手機 API fragment 暫時無法取得|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)/gi)].map((match) => match[0]);
   const freshnessText = [
     text(activePanel.querySelector(".data-freshness-bar")),
@@ -956,6 +971,15 @@ function collectDesktopStats(route) {
     if (/尚未同步/.test(status)) contractBlockers.push(`watchlist status still shows unsynced: ${status}`);
   }
   const marketAiBlockers = [];
+  const marketOverviewBlockers = [];
+  if (route.key === "heatmap" || route.key === "market") {
+    if ((marketOverviewContract?.metricCards || 0) !== 1) marketOverviewBlockers.push(`market overview metric cards must be 1 actual=${marketOverviewContract?.metricCards || 0}`);
+    if (!/加權/.test(marketOverviewContract?.firstMetricText || "")) marketOverviewBlockers.push(`market overview first metric must be weighted index actual=${marketOverviewContract?.firstMetricText || "<missing>"}`);
+    if ((marketOverviewContract?.sectorCards || 0) < 8) marketOverviewBlockers.push(`market overview heatmap sector cards ${marketOverviewContract?.sectorCards || 0}<8`);
+    if (marketOverviewContract?.aiVisible) marketOverviewBlockers.push("market overview must not show AI dashboard");
+    if (marketOverviewContract?.tickerVisible) marketOverviewBlockers.push("market overview must not show ticker strip");
+    if (marketOverviewContract?.strengthVisible) marketOverviewBlockers.push("market overview must not show strength panel");
+  }
   if (route.key === "market-ai") {
     const requiredFilters = ["全部", "動能強", "法人買超", "當沖熱", "風險高"];
     if (!marketAiDashboard?.heroBoard) marketAiBlockers.push("market AI hero board missing");
@@ -968,7 +992,7 @@ function collectDesktopStats(route) {
     if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
     if ((marketAiDashboard?.horizontalOverflow || 0) > 8) marketAiBlockers.push(`market AI desktop horizontal overflow ${marketAiDashboard.horizontalOverflow}px`);
   }
-  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketAiBlockers])];
+  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketOverviewBlockers, ...marketAiBlockers])];
   return {
     kind: "desktop",
     routeKey: route.key,
@@ -994,6 +1018,7 @@ function collectDesktopStats(route) {
     dateSignals,
     fieldSignals,
     marketAiDashboard,
+    marketOverviewContract,
     missingRequiredText,
     blockerMatches: blockers,
     warnings,

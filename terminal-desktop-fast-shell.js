@@ -6532,7 +6532,7 @@
         }
         #market-view.fuman-market-overview-shell > .metric-grid {
           display: grid !important;
-          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          grid-template-columns: minmax(280px, 420px) !important;
           gap: 12px !important;
           margin: 12px 0 16px !important;
         }
@@ -6544,10 +6544,10 @@
         }
         #market-view.market-overview-mode > .ticker-strip,
         #market-view.market-overview-mode > .strength-panel {
-          display: flex !important;
+          display: none !important;
         }
-        #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 4) {
-          display: block !important;
+        #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 2) {
+          display: none !important;
         }
         #market-view.market-overview-mode > .terminal-band,
         #market-view.market-overview-mode > .watch-section {
@@ -6622,6 +6622,12 @@
           min-height: 980px !important;
           overflow-anchor: none !important;
           contain: layout paint style !important;
+        }
+        #market-view.market-overview-mode > .market-ai-panel,
+        #market-view.market-overview-mode > [data-market-api-ai],
+        #market-view [data-market-api-ai][hidden] {
+          display: none !important;
+          visibility: hidden !important;
         }
         #market-view .market-ai-hero-board {
           display: grid;
