@@ -89,6 +89,7 @@ function checkMobileShell() {
   requireText(mobile, "mobile-watch-v2-direct-render-20260628-04", "mobile watchlist must carry the direct-render hotfix marker");
   requireText(mobile, "mobile-watch-v2-early-bridge-20260628-01", "mobile watchlist V2 must intercept clicks before legacy document-capture handlers");
   requireText(mobile, "mobile-watch-v2-rescue-render-20260628-01", "mobile watchlist V2 must rescue visible success states that old handlers leave without cards");
+  requireText(mobile, "mobile-watch-v2-add-recovery-20260628-01", "mobile watchlist V2 must recover valid adds that get stuck at confirming without rendering cards");
   requireText(mobile, "event.composedPath", "mobile watchlist V2 click bridge must detect button clicks through composedPath");
   requireText(mobile, "mobile-tab-request-lock-20260628-01", "mobile tabs must keep the request-lock loader so old fragment loads cannot overwrite the newest tab");
   requireText(mobile, "/api/mobile-watch-meta?code=", "mobile watchlist must validate one stock code through the small meta API before static fallback");

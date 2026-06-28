@@ -365,14 +365,60 @@
   function rowReason(button) {
     return (button?.closest(".market-ai-stock-row,.mobile-terminal-row,.watch-row")?.innerText || "手機策略卡加入").replace(/\s+/g, " ").slice(0, 220);
   }
+  function closestFromEvent(event, selector) {
+    for (const node of event.composedPath?.() || []) {
+      if (node?.matches?.(selector)) return node;
+    }
+    return event.target?.closest?.(selector) || null;
+  }
+  async function recoverPendingAdd(code, options = {}) {
+    if (!code || readList().some((row) => String(row.code) === code)) return true;
+    let stock = null;
+    try {
+      stock = await lookupMeta(code);
+    } catch {}
+    if (!stock && options.name && String(options.name).trim() !== code) {
+      stock = { code, name: String(options.name).trim(), market: "mobile-strategy" };
+    }
+    if (!stock) return false;
+    const next = writeList([{ code, name: stock.name, market: stock.market, reason: options.reason || "手機自選股新增", addedAt: new Date().toISOString() }, ...readList()]);
+    const message = `${code} ${stock.name} 已加入自選`;
+    if (options.button) {
+      options.button.disabled = Boolean(options.disableButton);
+      if (options.disableButton) {
+        options.button.textContent = "已加入自選";
+        options.button.dataset.watchAdded = "1";
+      }
+    }
+    if (options.render || watchTabActive()) renderWatch(message);
+    else {
+      lastMessage = message;
+      setShellCount(next);
+    }
+    toast(`+自選 ${code}`);
+    return true;
+  }
+  function scheduleAddRecovery(code, options = {}) {
+    for (const ms of [2400, 5200, 8200]) {
+      setTimeout(() => {
+        const stuckText = [
+          document.querySelector("#mobile-watch-status")?.textContent || "",
+          document.querySelector("#status")?.textContent || "",
+          options.button?.textContent || "",
+        ].join(" ");
+        if (readList().some((row) => String(row.code) === code)) return;
+        if (/不是有效|已達 10/.test(stuckText)) return;
+        recoverPendingAdd(code, options).catch(() => {});
+      }, ms);
+    }
+  }
   window.addEventListener("click", (event) => {
-    const target = event.target;
-    const watchTab = target.closest?.('#tabs button[data-fragment="watch"]');
+    const watchTab = closestFromEvent(event, '#tabs button[data-fragment="watch"]');
     if (watchTab) {
       setTimeout(() => renderWatch(lastMessage), 0);
       return;
     }
-    const removeButton = target.closest?.("[data-watch-remove]");
+    const removeButton = closestFromEvent(event, "[data-watch-remove]");
     if (removeButton) {
       event.preventDefault();
       event.stopPropagation();
@@ -383,12 +429,14 @@
       toast(`已移除 ${code}`);
       return;
     }
-    const manualButton = target.closest?.("[data-mobile-watch-add]");
+    const manualButton = closestFromEvent(event, "[data-mobile-watch-add]");
     if (manualButton) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
       const input = document.querySelector("#mobile-watch-input");
+      const code = code4(input?.value);
+      if (code) scheduleAddRecovery(code, { button: manualButton, reason: "手機手動新增", render: true });
       addStock(input?.value, { button: manualButton, reason: "手機手動新增", render: true }).then((ok) => {
         const nextInput = document.querySelector("#mobile-watch-input");
         if (ok && nextInput && !nextInput.disabled) nextInput.value = "";
@@ -398,13 +446,23 @@
       });
       return;
     }
-    const strategyButton = target.closest?.("[data-ai-watch-code]");
+    const strategyButton = closestFromEvent(event, "[data-ai-watch-code]");
     if (strategyButton) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
       const oldText = strategyButton.textContent || "加入自選";
       strategyButton.textContent = "加入中";
+      const code = code4(strategyButton.dataset.aiWatchCode);
+      if (code) {
+        scheduleAddRecovery(code, {
+          button: strategyButton,
+          name: strategyButton.dataset.aiWatchName,
+          reason: rowReason(strategyButton),
+          render: false,
+          disableButton: true,
+        });
+      }
       addStock(strategyButton.dataset.aiWatchCode, {
         button: strategyButton,
         name: strategyButton.dataset.aiWatchName,
@@ -422,11 +480,13 @@
     }
   }, true);
   window.addEventListener("keydown", (event) => {
-    const input = event.target.closest?.("#mobile-watch-input");
+    const input = closestFromEvent(event, "#mobile-watch-input");
     if (!input || event.key !== "Enter") return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
+    const code = code4(input.value);
+    if (code) scheduleAddRecovery(code, { button: document.querySelector("[data-mobile-watch-add]"), reason: "手機手動新增", render: true });
     addStock(input.value, { button: document.querySelector("[data-mobile-watch-add]"), reason: "手機手動新增", render: true }).then((ok) => {
       const nextInput = document.querySelector("#mobile-watch-input");
       if (ok && nextInput && !nextInput.disabled) nextInput.value = "";
@@ -437,6 +497,7 @@
   new MutationObserver(ensureV2WatchRender).observe(document.querySelector("#content") || document.body, { childList: true });
   self.FUMAN_MOBILE_MANUAL_WATCH_ADD = (rawCode, button) => addStock(rawCode, { button, reason: "手機手動新增", render: true });
   self.FUMAN_MOBILE_MANUAL_WATCH_ADD_V2 = addStock;
+  self.FUMAN_MOBILE_WATCH_ADD_RECOVERY = "mobile-watch-v2-add-recovery-20260628-01";
 })();
 </script><script data-mobile-tab-loader="mobile-tab-request-lock-20260628-01">
 (() => {

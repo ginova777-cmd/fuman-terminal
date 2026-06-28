@@ -364,6 +364,7 @@ marketSession.marketDataDate=2026-06-26
 - 手機版手動新增與策略卡「加入自選」必須由 V2 capture handler 接管：先用 `/api/mobile-watch-meta?code=XXXX` 查單一代號並驗證台股 universe，再同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1`、成功後直接 render 自選 tab 卡片，不可只等待舊 fragment/tab click 重畫，也不可在手機端先拉整包股票清單才新增。
 - 手機版 V2 capture bridge 必須保留 `mobile-watch-v2-early-bridge-20260628-01`，且用 `event.composedPath()` 找到真實點擊來源；不能只靠 `event.target.closest()`，因為真人點文字節點 / 內層節點時可能被舊 document-capture handler 搶走。
 - 手機版 V2 rescue renderer 必須保留 `mobile-watch-v2-rescue-render-20260628-01`；若畫面已出現「已加入自選 / 已在自選股」但舊流程沒有畫出 `.watch-row`，rescue 必須從 storage / pending click / DOM rows 合併資料並直接重畫自選 tab。
+- 手機版 V2 add recovery 必須保留 `mobile-watch-v2-add-recovery-20260628-01`；若手動輸入或策略加入停在 `正在確認台股代號` / `加入中`，watchdog 必須再次查 `/api/mobile-watch-meta?code=XXXX`，valid 就同步 `fuman_watchlist` / `fuman_mobile_watchlist_v1` 並直接補出 `.watch-row`，invalid 不可補卡。
 - 手機版 V2 必須保留 JSONP fallback，因為部分真實 Chrome 分頁 / 受控環境可能沒有可用的 `fetch`；`/api/mobile-watch-meta` 也必須支援 `callback=`。
 - 手機版 V2 必須用 `MutationObserver` 防止舊 mobile watch renderer 晚到時覆蓋 V2 `.watch-row`。
 - 手機版 V2 必須保留 in-memory rows fallback；`localStorage.setItem` 失敗時仍要畫出 `.watch-row`，不可停在 `正在確認台股代號`。
