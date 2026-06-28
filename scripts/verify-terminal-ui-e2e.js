@@ -890,13 +890,28 @@ function collectDesktopStats(route) {
   const marketOverviewContract = route.key === "heatmap" || route.key === "market" ? (() => {
     const metricCards = [...activePanel.querySelectorAll(".metric-grid .metric-card")].filter(visible);
     const sectorCards = [...activePanel.querySelectorAll(".sector-section .sector-card")].filter(visible);
+    const heatmapButtons = [...activePanel.querySelectorAll("[data-market-heatmap-mode]")];
+    const heatmapModeChecks = [];
+    heatmapButtons.forEach((button) => {
+      button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      heatmapModeChecks.push({
+        mode: button.dataset.marketHeatmapMode || "",
+        label: text(button),
+        active: button.classList.contains("active"),
+        sectorCards: [...activePanel.querySelectorAll(".sector-section .sector-card")].filter(visible).length,
+      });
+    });
+    activePanel.querySelector('[data-market-heatmap-mode="all"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     const aiPanel = activePanel.querySelector("[data-market-api-ai],.market-ai-panel");
     const ticker = activePanel.querySelector(".ticker-strip");
     const strength = activePanel.querySelector(".strength-panel");
     return {
       metricCards: metricCards.length,
+      metricTexts: metricCards.map((card) => text(card).slice(0, 120)),
       firstMetricText: text(metricCards[0]).slice(0, 80),
       sectorCards: sectorCards.length,
+      heatmapModes: heatmapButtons.map((button) => ({ mode: button.dataset.marketHeatmapMode || "", label: text(button) })),
+      heatmapModeChecks,
       aiVisible: visible(aiPanel),
       tickerVisible: visible(ticker),
       strengthVisible: visible(strength),
@@ -975,8 +990,21 @@ function collectDesktopStats(route) {
   const marketAiBlockers = [];
   const marketOverviewBlockers = [];
   if (route.key === "heatmap" || route.key === "market") {
-    if ((marketOverviewContract?.metricCards || 0) !== 1) marketOverviewBlockers.push(`market overview metric cards must be 1 actual=${marketOverviewContract?.metricCards || 0}`);
-    if (!/加權/.test(marketOverviewContract?.firstMetricText || "")) marketOverviewBlockers.push(`market overview first metric must be weighted index actual=${marketOverviewContract?.firstMetricText || "<missing>"}`);
+    const metricText = normalizeArray(marketOverviewContract?.metricTexts).join(" | ");
+    const requiredMetrics = ["加權指數", "櫃買指數", "台指期夜"];
+    if ((marketOverviewContract?.metricCards || 0) !== 3) marketOverviewBlockers.push(`market overview metric cards must be 3 actual=${marketOverviewContract?.metricCards || 0}`);
+    for (const label of requiredMetrics) {
+      if (!metricText.includes(label)) marketOverviewBlockers.push(`market overview metric missing ${label}: ${metricText || "<missing>"}`);
+    }
+    const requiredHeatmapTabs = ["全部", "官方產業", "電子細分", "群組概念", "集團股"];
+    const heatmapTabText = normalizeArray(marketOverviewContract?.heatmapModes).map((item) => item.label).join(" | ");
+    for (const label of requiredHeatmapTabs) {
+      if (!heatmapTabText.includes(label)) marketOverviewBlockers.push(`market overview heatmap tab missing ${label}: ${heatmapTabText || "<missing>"}`);
+    }
+    for (const check of normalizeArray(marketOverviewContract?.heatmapModeChecks)) {
+      if (!check.active) marketOverviewBlockers.push(`market overview heatmap tab did not activate ${check.label || check.mode}`);
+      if ((check.sectorCards || 0) < 1) marketOverviewBlockers.push(`market overview heatmap tab ${check.label || check.mode} has no sector cards`);
+    }
     if ((marketOverviewContract?.sectorCards || 0) < 8) marketOverviewBlockers.push(`market overview heatmap sector cards ${marketOverviewContract?.sectorCards || 0}<8`);
     if (marketOverviewContract?.aiVisible) marketOverviewBlockers.push("market overview must not show AI dashboard");
     if (marketOverviewContract?.tickerVisible) marketOverviewBlockers.push("market overview must not show ticker strip");
@@ -1372,6 +1400,7 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
       const aiPanel = market.querySelector("[data-market-api-ai],.market-ai-panel");
       const metricCards = [...market.querySelectorAll(".metric-grid .metric-card")].filter(visible);
       const sectorCards = [...market.querySelectorAll(".sector-section .sector-card")].filter(visible);
+      const metricTexts = metricCards.map((card) => text(card));
       const state = {
         label,
         expectedMode,
@@ -1382,12 +1411,14 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
         aiVisible: visible(aiPanel),
         heroVisible: visible(market.querySelector(".market-ai-hero-board")),
         metricCards: metricCards.length,
+        metricTexts,
         firstMetricText: text(metricCards[0]).slice(0, 90),
         sectorCards: sectorCards.length,
       };
+      const metricText = metricTexts.join(" | ");
       state.ok = expectedMode === "ai"
         ? state.activeButton === "ai" && /market-ai-mode/.test(state.className) && state.aiVisible && /AI 判讀/.test(state.title)
-        : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 1 && /加權/.test(state.firstMetricText) && state.sectorCards >= 8;
+        : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 3 && /加權指數/.test(metricText) && /櫃買指數/.test(metricText) && /台指期夜/.test(metricText) && state.sectorCards >= 8;
       return state;
     };
     const clickMode = async (mode, label) => {

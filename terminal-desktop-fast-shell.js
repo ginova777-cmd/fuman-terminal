@@ -121,6 +121,9 @@
   let marketSnapshotFirstPayload = null;
   let marketAiBundlePayload = null;
   let marketRadarBundlePayload = null;
+  let marketHeatmapMode = "all";
+  let marketHeatmapPayload = null;
+  let marketHeatmapGroups = {};
   let marketHeatmapSectorRows = [];
   const canvasState = {
     route: "",
@@ -3475,6 +3478,136 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  function cleanMarketHeatmapLabel(value) {
+    return String(value || "").trim().replace(/業$/u, "");
+  }
+
+  function firstMarketHeatmapLabel(...values) {
+    return values.map(cleanMarketHeatmapLabel).find(Boolean) || "";
+  }
+
+  function uniqueMarketHeatmapLabels(values) {
+    return [...new Set(normalizeArray(values).map(cleanMarketHeatmapLabel).filter(Boolean))];
+  }
+
+  function marketHeatmapStockPct(stock) {
+    return marketNumber(stock?.pct ?? stock?.changePct ?? stock?.changePercent ?? stock?.percent);
+  }
+
+  function marketHeatmapStockAmount(stock) {
+    return marketNumber(stock?.value || stock?.tradeValue || (marketNumber(stock?.amountYi) * 100000000));
+  }
+
+  function marketHeatmapStockUniverse(sectors) {
+    return normalizeArray(sectors).flatMap((sector) => {
+      const sectorName = sector?.name || sector?.industry || "--";
+      return normalizeArray(sector?.stocks).map((stock) => ({
+        ...stock,
+        _sourceSector: sectorName,
+      }));
+    });
+  }
+
+  function isMarketHeatmapElectronicsLabel(value) {
+    return /電子|半導體|IC|PCB|載板|光|網通|AI|CPU|ASIC|IP|記憶體|被動|伺服器|通路|零組件|電源|BBU|UPS|封測|晶圓|矽|面板|光通訊/u.test(String(value || ""));
+  }
+
+  function marketHeatmapLabelsForMode(stock, mode) {
+    const profile = stock?.industryProfile || {};
+    const themes = normalizeArray(stock?.themes || profile.themes);
+    const base = firstMarketHeatmapLabel(stock?.primaryIndustry, profile.primaryIndustry, stock?.industry, stock?._sourceSector);
+    const official = firstMarketHeatmapLabel(stock?.officialIndustry, profile.officialIndustry, stock?.primaryIndustry, stock?._sourceSector);
+    if (mode === "official") return [official || base || "未分類"];
+    if (mode === "electronics") {
+      return uniqueMarketHeatmapLabels([base, stock?.industry, stock?.primaryIndustry, stock?._sourceSector, ...themes])
+        .filter(isMarketHeatmapElectronicsLabel);
+    }
+    if (mode === "themes") {
+      const candidates = uniqueMarketHeatmapLabels([...themes, profile.theme, profile.concept, stock?.concept, base]);
+      return candidates.length ? candidates.slice(0, 2) : [base || official || "未分類"];
+    }
+    if (mode === "groups") {
+      const candidates = uniqueMarketHeatmapLabels([
+        stock?.companyGroup,
+        stock?.businessGroup,
+        stock?.conglomerate,
+        stock?.group,
+        profile.companyGroup,
+        profile.businessGroup,
+        profile.conglomerate,
+      ]);
+      return candidates.length ? candidates : [`${base || official || stock?._sourceSector || "市場"}系`];
+    }
+    return [base || official || "未分類"];
+  }
+
+  function aggregateMarketHeatmapSectors(rawSectors, mode) {
+    if (mode === "all") return normalizeArray(rawSectors);
+    const buckets = new Map();
+    marketHeatmapStockUniverse(rawSectors).forEach((stock) => {
+      marketHeatmapLabelsForMode(stock, mode).forEach((label) => {
+        if (!label) return;
+        if (!buckets.has(label)) buckets.set(label, { name: label, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 });
+        const bucket = buckets.get(label);
+        const pct = marketHeatmapStockPct(stock);
+        bucket.stocks.push(stock);
+        bucket.totalValue += marketHeatmapStockAmount(stock);
+        if (pct > 0) bucket.up += 1;
+        else if (pct < 0) bucket.down += 1;
+        else bucket.flat += 1;
+      });
+    });
+    return [...buckets.values()].filter((group) => group.stocks.length).map((group) => {
+      const totalValue = group.totalValue || 0;
+      const avgPct = group.stocks.reduce((sum, stock) => sum + marketHeatmapStockPct(stock), 0) / group.stocks.length;
+      const weightedPct = totalValue
+        ? group.stocks.reduce((sum, stock) => sum + marketHeatmapStockPct(stock) * marketHeatmapStockAmount(stock), 0) / totalValue
+        : avgPct;
+      const sortedStocks = [...group.stocks].sort((a, b) => marketHeatmapStockAmount(b) - marketHeatmapStockAmount(a));
+      const leader = sortedStocks[0];
+      return {
+        name: group.name,
+        pct: Number(weightedPct.toFixed(2)),
+        avgPct: Number(avgPct.toFixed(2)),
+        totalValue,
+        amountYi: Number((totalValue / 100000000).toFixed(1)),
+        count: group.stocks.length,
+        up: group.up,
+        down: group.down,
+        flat: group.flat,
+        leader: leader ? `${leader.name || leader.code} ${marketHeatmapStockPct(leader) >= 0 ? "+" : ""}${marketHeatmapStockPct(leader).toFixed(2)}%` : "--",
+        leaderCode: leader?.code || "",
+        stocks: sortedStocks,
+      };
+    }).sort((a, b) => marketNumber(b.pct ?? b.avgPct) - marketNumber(a.pct ?? a.avgPct));
+  }
+
+  function marketHeatmapModeLabel(mode) {
+    return {
+      all: "全部",
+      official: "官方產業",
+      electronics: "電子細分",
+      themes: "群組概念",
+      groups: "集團股",
+    }[mode] || "全部";
+  }
+
+  function buildMarketHeatmapGroups(rawSectors) {
+    return {
+      all: aggregateMarketHeatmapSectors(rawSectors, "all"),
+      official: aggregateMarketHeatmapSectors(rawSectors, "official"),
+      electronics: aggregateMarketHeatmapSectors(rawSectors, "electronics"),
+      themes: aggregateMarketHeatmapSectors(rawSectors, "themes"),
+      groups: aggregateMarketHeatmapSectors(rawSectors, "groups"),
+    };
+  }
+
+  function setMarketHeatmapModeButtons(market, mode) {
+    market?.querySelectorAll?.("[data-market-heatmap-mode]")?.forEach((button) => {
+      button.classList.toggle("active", button.dataset.marketHeatmapMode === mode);
+    });
+  }
+
   function formatMarketIndexValue(value) {
     const n = marketNumber(value);
     if (!n) return "--";
@@ -4011,7 +4144,7 @@
     );
     updateMarketMetricCard(
       cards[2],
-      "⇅ 台指期夜盤",
+      "⇅ 台指期夜",
       futuresNear?.price ? Number(futuresNear.price).toLocaleString("zh-TW") : txfRow?.price ? Number(txfRow.price).toLocaleString("zh-TW") : "--",
       futuresNear ? `${futuresNear.change || "--"}（${futuresNear.pct || "--"}）${futuresNear.basisLabel ? ` · ${futuresNear.basisLabel}` : ""}` : formatMarketRowDelta(txfRow),
       futuresNear ? !String(futuresNear?.change || "").includes("-") : !String(txfRow?.pct || txfRow?.score || "").includes("-")
@@ -4113,14 +4246,23 @@
   }
 
   function renderMarketHeatmapApi(sectors, payload) {
-    ensureMarketDesktopShell();
-    const heatmap = document.querySelector("#market-view #heatmap");
+    const shell = ensureMarketDesktopShell();
+    const market = shell.market || document.querySelector("#market-view");
+    const heatmap = market?.querySelector?.("#heatmap");
     if (!heatmap) return;
-    const rows = normalizeArray(sectors).slice(0, 60);
+    const rawSectors = normalizeArray(sectors);
+    if (rawSectors.length) {
+      marketHeatmapPayload = { ...(payload || {}), sectors: rawSectors };
+      marketHeatmapGroups = buildMarketHeatmapGroups(rawSectors);
+    }
+    const mode = marketHeatmapGroups[marketHeatmapMode] ? marketHeatmapMode : "all";
+    marketHeatmapMode = mode;
+    const rows = normalizeArray(marketHeatmapGroups[mode] || rawSectors).slice(0, mode === "all" ? 60 : 80);
     if (!rows.length) return;
     marketHeatmapSectorRows = rows;
+    setMarketHeatmapModeButtons(market, mode);
     heatmap.innerHTML = `
-      <div class="heatmap-health-bar"><strong>熱力圖 API</strong><span>${escapeHtml(String(payload?.updatedAt || payload?.servedAt || ""))}</span></div>
+      <div class="heatmap-health-bar"><strong>熱力圖 ${escapeHtml(marketHeatmapModeLabel(mode))}</strong><span>${escapeHtml(String(payload?.updatedAt || payload?.servedAt || ""))}</span></div>
       ${rows.map((sector, index) => {
         const pct = Number(sector.pct ?? sector.avgPct ?? 0) || 0;
         const leader = sector.leader || normalizeArray(sector.stocks)[0];
@@ -4141,7 +4283,7 @@
       }).join("")}
     `;
     const titleCount = document.querySelector("#market-view .sector-section .section-title > span");
-    if (titleCount) titleCount.textContent = `全部 · ${rows.length} 個`;
+    if (titleCount) titleCount.textContent = `${marketHeatmapModeLabel(mode)} · ${rows.length} 個`;
   }
 
   function ensureMarketApiPanels() {
@@ -4610,6 +4752,16 @@
           selectMarketDesktopMode(mode.dataset.marketMode, "document-click");
           return;
         }
+        const heatmapMode = event.target.closest?.("[data-market-heatmap-mode]");
+        if (heatmapMode) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          marketHeatmapMode = heatmapMode.dataset.marketHeatmapMode || "all";
+          const payload = marketHeatmapPayload || marketSnapshotFirstPayload || {};
+          renderMarketHeatmapApi(payload.sectors || marketHeatmapSectorRows, payload);
+          return;
+        }
         const close = event.target.closest?.("[data-market-heatmap-close]");
         if (close || event.target.matches?.("[data-market-heatmap-modal]")) {
           closeMarketHeatmapSectorModal();
@@ -4629,6 +4781,14 @@
         if (mode) {
           event.preventDefault();
           selectMarketDesktopMode(mode.dataset.marketMode, "document-keydown");
+          return;
+        }
+        const heatmapMode = event.target.closest?.("[data-market-heatmap-mode]");
+        if (heatmapMode) {
+          event.preventDefault();
+          marketHeatmapMode = heatmapMode.dataset.marketHeatmapMode || "all";
+          const payload = marketHeatmapPayload || marketSnapshotFirstPayload || {};
+          renderMarketHeatmapApi(payload.sectors || marketHeatmapSectorRows, payload);
           return;
         }
         const card = event.target.closest?.("[data-market-heatmap-sector]");
@@ -6553,7 +6713,7 @@
         }
         #market-view.fuman-market-overview-shell > .metric-grid {
           display: grid !important;
-          grid-template-columns: minmax(280px, 420px) !important;
+          grid-template-columns: repeat(3, minmax(220px, 1fr)) !important;
           gap: 12px !important;
           margin: 12px 0 16px !important;
         }
@@ -6567,7 +6727,7 @@
         #market-view.market-overview-mode > .strength-panel {
           display: none !important;
         }
-        #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 2) {
+        #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 4) {
           display: none !important;
         }
         #market-view.market-overview-mode > .terminal-band,

@@ -89,7 +89,7 @@
           metric.innerHTML = [
             '<article class="metric-card"><span>↗ 加權指數</span><strong>--</strong><em>等待官方資料</em></article>',
             '<article class="metric-card"><span>↗ 櫃買指數</span><strong>--</strong><em>等待官方資料</em></article>',
-            '<article class="metric-card"><span>⇅ 台指期夜盤</span><strong>--</strong><em>等待期交所資料</em></article>',
+            '<article class="metric-card"><span>⇅ 台指期夜</span><strong>--</strong><em>等待期交所資料</em></article>',
             '<article class="metric-card"><span>☾ 台指次月</span><strong>--</strong><em>等待期交所資料</em></article>'
           ].join("");
           tabs.insertAdjacentElement("afterend", metric);
@@ -297,7 +297,7 @@
         const cards = [...panel.querySelectorAll(".metric-grid .metric-card")];
         setCard(cards[0], "↗ 加權指數", num(twse?.["收盤指數"]).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), deltaText(twse), !safeText(twse?.["漲跌"]).includes("-"));
         setCard(cards[1], "↗ 櫃買指數", num(otc?.["收盤指數"]).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), deltaText(otc), !safeText(otc?.["漲跌"]).includes("-"));
-        setCard(cards[2], "⇅ 台指期夜盤", near?.price ? num(near.price).toLocaleString("zh-TW") : "--", near ? `${near.change || "--"}（${near.pct || "--"}）${near.basisLabel ? ` · ${near.basisLabel}` : ""}` : "等待期交所資料", !safeText(near?.change).includes("-"));
+        setCard(cards[2], "⇅ 台指期夜", near?.price ? num(near.price).toLocaleString("zh-TW") : "--", near ? `${near.change || "--"}（${near.pct || "--"}）${near.basisLabel ? ` · ${near.basisLabel}` : ""}` : "等待期交所資料", !safeText(near?.change).includes("-"));
         setCard(cards[3], "☾ 台指次月", next?.price ? num(next.price).toLocaleString("zh-TW") : "--", next ? `${next.change || "--"}（${next.pct || "--"}）${next.basisLabel ? ` · ${next.basisLabel}` : ""}` : "等待期交所資料", !safeText(next?.change).includes("-"));
         const rawSectors = list(heatPayload.sectors).slice(0, 80);
         if (!rawSectors.length) return;
