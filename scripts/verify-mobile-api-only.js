@@ -83,6 +83,10 @@ function checkMobileShell() {
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must render from hash contract instead of recalculating data");
   requireText(mobile, "location.reload", "mobile must have a hard reload path when the API-only contract reports a new incompatible run");
   requireText(mobile, 'html[data-sun="1"]', "mobile sunlight selector must quote attribute value so phones apply it");
+  requireText(mobile, "FUMAN_MOBILE_ADD_WATCH", "mobile watchlist must expose a shared add-watch pipeline");
+  requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
+  requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
+  requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");
 
   rejectText(mobile, 'bootUrl="/data/mobile-boot.json"', "mobile shell must not poll static /data/mobile-boot.json");
   rejectText(mobile, "/data/mobile-terminal-latest.json", "mobile shell must not use mobile-terminal-latest.json as runtime fallback");

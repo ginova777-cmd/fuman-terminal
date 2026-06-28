@@ -322,6 +322,9 @@ fuman-sw.js
 - 右側分析至少要有標的、趨勢判讀、漲跌幅、符合策略、價位、籌碼、風險、操作提醒與判讀理由。
 - invalid code 要停在輸入區狀態訊息，不得新增卡片。
 - 夜幕 / 陽光模式都不可爆版、重疊或讓文字溢出卡片。
+- 手機版自選股不可只顯示既有 storage；必須有 `mobile-watch-input` 與 `data-mobile-watch-add` 可手動新增。
+- 手機版所有策略卡的「加入自選」按鈕必須能寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，切到自選頁後要看得到卡片。
+- 手機版新增也必須驗台股 universe；`2334` 這類 invalid code 不可進 storage，不可顯示卡片。
 
 `scripts/verify-terminal-ui-e2e.js` 必須保留自選股 negative test：
 
@@ -330,6 +333,10 @@ fuman-sw.js
 - DOM 不含 `.watchlist-card[data-code="2334"]`。
 - status 含 `不是有效上市/上櫃台股代號`。
 - count 維持原本名額，例如 `1/10`。
+- 手機 watch E2E 不可只預塞 10 檔；必須實際點手機新增：
+  - 先輸入 `2334`，確認拒絕且 storage / DOM 都不含 `2334`。
+  - 再輸入有效台股，例如 `1101`，確認手機自選頁新增卡片，且兩個 storage key 都同步。
+  - 至少驗 night / sun 兩種手機模式。
 
 E2E seed 必須使用有效台股，例如：
 

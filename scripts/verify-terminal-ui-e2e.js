@@ -566,7 +566,6 @@ async function prepareMobileRoute(cdp, route) {
   await evaluate(cdp, () => {
     const rows = [
       ["2344", "華邦電"],
-      ["1101", "台泥"],
       ["2317", "鴻海"],
       ["2303", "聯電"],
       ["2330", "台積電"],
@@ -575,9 +574,7 @@ async function prepareMobileRoute(cdp, route) {
       ["2881", "富邦金"],
       ["2327", "國巨"],
       ["9904", "寶成"],
-      ["8112", "至上"],
-      ["2408", "南亞科"],
-    ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股十檔上限驗證", addedAt: new Date().toISOString() }));
+    ].map(([code, name]) => ({ code, name, reason: "UI E2E 手機自選股新增驗證", addedAt: new Date().toISOString() }));
     const value = JSON.stringify(rows);
     const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
     localStorage.removeItem("fuman_watchlist");
@@ -1140,6 +1137,8 @@ function collectMobileStats(route) {
   if (route.fragment === "watch") {
     const watchRows = [...content.querySelectorAll(".watch-row")];
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
+    const addInput = content.querySelector("#mobile-watch-input");
+    const addButton = content.querySelector("[data-mobile-watch-add]");
     const watchCodes = watchRows.map((row) => text(row).match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
     const storageCodes = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
       try {
@@ -1151,13 +1150,18 @@ function collectMobileStats(route) {
     });
     const statusTextForWatch = statusText || panelText;
     if (watchRows.length !== 10) contractBlockers.push(`mobile watch tab must render exactly 10 watch rows actual=${watchRows.length}`);
+    if (!addInput || !addButton) contractBlockers.push("mobile watch tab add input/button missing");
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
+    if (!watchCodes.includes("1101")) contractBlockers.push(`mobile watch manual add code 1101 missing actual=${watchCodes.join(",")}`);
+    if (watchCodes.includes("2334")) contractBlockers.push(`mobile watch invalid code 2334 rendered actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
     storageCodes.forEach((codes, index) => {
       const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
       if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
       if (!codes.includes("2344")) contractBlockers.push(`mobile watch storage ${key} missing 2344 actual=${codes.join(",")}`);
+      if (!codes.includes("1101")) contractBlockers.push(`mobile watch storage ${key} missing manual add 1101 actual=${codes.join(",")}`);
+      if (codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} kept invalid 2334 actual=${codes.join(",")}`);
       if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
     });
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
@@ -1526,6 +1530,68 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
             return { ok: root?.dataset?.mobileFragmentKey === fragment };
           }, route.fragment, 18000, 300).catch(() => waitForSelector(cdp, `#content [data-mobile-fragment-key="${route.fragment}"]`, 18000));
         } else {
+          await waitForSelector(cdp, "#mobile-watch-input", 12000);
+          const invalidAdd = await evaluate(cdp, async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const input = document.querySelector("#mobile-watch-input");
+            const add = document.querySelector("[data-mobile-watch-add]");
+            if (!input || !add) return { ok: false, reason: "mobile watch add controls missing" };
+            input.value = "2334";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            add.click();
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              await wait(150);
+              const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+              let rows = [];
+              try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
+              const cards = [...document.querySelectorAll("#content .watch-row")].map((row) => row.textContent || "");
+              if (/不是有效上市\/上櫃台股代號/.test(status)) {
+                return {
+                  ok: rows.length === 9 && !rows.some((item) => String(item?.code || "") === "2334") && !cards.some((text) => /\b2334\b/.test(text)),
+                  status,
+                  rows: rows.length,
+                  has2334: rows.some((item) => String(item?.code || "") === "2334") || cards.some((text) => /\b2334\b/.test(text)),
+                };
+              }
+            }
+            return { ok: false, reason: "mobile invalid add did not surface rejection", status: String(document.querySelector("#mobile-watch-status")?.textContent || "") };
+          }, null, Math.max(EVAL_TIMEOUT_MS, 20000));
+          if (!invalidAdd?.ok) throw new Error(`mobile watch invalid add failed: ${JSON.stringify(invalidAdd)}`);
+
+          const validAdd = await evaluate(cdp, async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const input = document.querySelector("#mobile-watch-input");
+            const add = document.querySelector("[data-mobile-watch-add]");
+            if (!input || !add) return { ok: false, reason: "mobile watch add controls missing" };
+            input.value = "1101";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            add.click();
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              await wait(180);
+              const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+              const rows = [...document.querySelectorAll("#content .watch-row")];
+              const storage = ["fuman_watchlist", "fuman_mobile_watchlist_v1"].map((key) => {
+                try {
+                  const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+                  return Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+                } catch {
+                  return [];
+                }
+              });
+              const has1101 = rows.some((row) => /\b1101\b/.test(row.textContent || "")) && storage.every((codes) => codes.includes("1101"));
+              if (rows.length === 10 && has1101 && /1101/.test(status)) {
+                return { ok: true, status, rows: rows.length, storage };
+              }
+            }
+            return {
+              ok: false,
+              reason: "mobile valid add did not reach 10 rows",
+              status: String(document.querySelector("#mobile-watch-status")?.textContent || ""),
+              rows: document.querySelectorAll("#content .watch-row").length,
+            };
+          }, null, Math.max(EVAL_TIMEOUT_MS, 30000));
+          if (!validAdd?.ok) throw new Error(`mobile watch valid add failed: ${JSON.stringify(validAdd)}`);
+
           await waitFor(cdp, () => {
             const rows = [...document.querySelectorAll("#content .watch-row")];
             const status = String(document.querySelector("#status")?.textContent || "");
