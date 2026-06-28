@@ -533,6 +533,7 @@ node --use-system-ca scripts\verify-scorecard-ui-e2e.js
 | `/88` hidden panel | 不顯示資料來源 / 日期規則 / 最高價來源 / 損益公式 basis panel |
 | `/88` display pnl | `PNL_MULTIPLIER=1000`, `損益(元)` |
 | `/88` history selector | `scorecard-history-date`, `historyDates`, selected-date summaries |
+| `/88` theme toggle | `scorecard-theme-toggle`, visible symbol only `☀` / `☾`, yellow `#facc15`, no `陽光` / `夜幕` button text |
 
 Resource chain 必須看到：
 
@@ -570,6 +571,9 @@ $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
 
 ```text
 checked date = 2026-06-28 Asia/Taipei
+closed-loop rehearsal checkedAt = 2026-06-28 12:32:02 +08:00
+last code deploy commit = 7bed2fda6fc9e306a21f12b835f51063b6a73a86
+last code deploy url = https://fuman-terminal-21x9ngo5x-ginova777-9771s-projects.vercel.app
 market state = weekend / non-trading day
 latestDate = 2026-06-26
 generator rows = 492
@@ -579,6 +583,11 @@ summary.rows = 492
 missing entry_time = 0
 UI E2E = ok
 resource chain = ok
+production guard = ok
+terminal-fast-bundle snapshotHit = true
+terminal-fast-bundle snapshotFresh = true
+terminal-fast-bundle partial = false
+terminal-fast-bundle endpointCount = 15
 ```
 
 策略分組：
@@ -594,6 +603,20 @@ resource chain = ok
 | 策略4成績單 | 70 |
 | 策略5成績單 | 22 |
 | 買賣超成績單 | 120 |
+
+Live source probe:
+
+| key | rows | runId | updatedAt |
+| --- | ---: | --- | --- |
+| strategy1 | 20 | `strategy1-20260626-20260626133042` | `2026-06-26T13:31:59.486+00:00` |
+| strategy2 | 46 | `strategy2-20260626-091024` | `2026-06-26T01:11:01.410099+00:00` |
+| strategy3 latest endpoint | 12 | `strategy3-20260626-20260626123108` | `2026-06-26T12:31:08.720Z` |
+| strategy4 | 70 | `strategy4-20260626-20260626122649` | `2026-06-26T12:26:49.545+00:00` |
+| strategy5 | 22 | `strategy5-20260628-20260627222045` | `2026-06-27T22:20:45.802+00:00` |
+| institution | 120 | `institution-20260626-20260627221922` | `2026-06-27T22:19:22.51+00:00` |
+| warrant | 120 | `warrant-flow-20260626-20260627222002` | `2026-06-27T22:20:02.117+00:00` |
+| cb | 10 | `cb-detect-20260628-062052` | `2026-06-27T22:20:52.082+00:00` |
+| realtime-radar | 80 | `(none)` | `2026-06-26T02:42:10.869Z` |
 
 策略3基準：
 
@@ -666,11 +689,19 @@ Fuman Scorecard Snapshot 1538
 
 只有 `/88.html`、`api/scorecard.js`、或驗證腳本等程式碼改動才需要部署。
 
-正式部署若 `/88` 靜態檔沒有更新，使用強制部署：
+正式程式上傳與 Vercel production deploy 不可從 `C:\fuman-terminal` 或 `C:\fuman-terminal-sync` 執行。`C:\fuman-terminal` 只能視為 production mirror / daily data runner 位置，不是正式發佈工作樹。
+
+正式部署必須使用乾淨 GitHub worktree：
 
 ```powershell
-Set-Location -LiteralPath C:\fuman-terminal
-vercel --prod --yes --force
+git status --short
+npm run verify:publish-gate
+npm run guard:production
+git add <changed files>
+git commit -m "<message>"
+git push origin main
+npm run guard:production
+vercel --prod
 ```
 
 部署後檢查：
@@ -682,6 +713,99 @@ vercel --prod --yes --force
 /88 HTML does not contain scorecard-basis panel
 /api/scorecard latestDate and rows match selected latestDate rows
 verify-scorecard-ui-e2e.js ok
+guard:production ok
+```
+
+若 production guard 擋下 `terminal-fast-bundle snapshot-only-miss`，不可跳過 guard。先跑既有 snapshot repair：
+
+```powershell
+npm run snapshot:desktop -- --remote --endpoint-snapshots --min-endpoints=10 --source=scorecard-production-guard-repair
+npm run guard:production
+```
+
+確認 `snapshotHit=true`、`snapshotFresh=true`、`partial=false`、`endpointCount>=10` 後才可部署。
+
+## 導管與接源閉環演練
+
+每次改動成績單導管、來源、UI 顯示或驗證腳本，都要跑完整閉環。只改文件時也至少要跑 live source/API/UI guard，確認文件記載仍符合正式站。
+
+### 1. Source contract
+
+`scripts/generate-terminal-scorecard-source.js` 必須維持 9 個正式來源，且 `TASKS` / source override / verifier 三者一致：
+
+| key | required source | required result |
+| --- | --- | --- |
+| `strategy1` | `/api/open-buy-latest` | rows > 0 |
+| `strategy2` | `/api/strategy2-latest` | rows > 0, only `09:00-12:00` after scorecard filter |
+| `strategy3` | `strategy3_scan_runs/results` previous trading day | rows > 0, `entry_time=13:00`, source date marker present |
+| `strategy4` | `/api/strategy4-latest` | rows > 0 |
+| `strategy5` | `/api/strategy5-latest` | rows > 0 |
+| `institution` | `/api/institution-latest` | rows > 0 |
+| `warrant` | `/api/warrant-flow-latest` | rows > 0 |
+| `cb` | `/api/cb-detect-latest` | rows > 0, `entry_price=row.stockPrice` |
+| `realtime-radar` | `/api/realtime-radar-latest` | rows > 0 |
+
+### 2. Pipeline contract
+
+閉環順序必須是：
+
+```text
+live complete source
+  -> generate-terminal-scorecard-source.js
+  -> scorecard-source-supabase-ops.js
+  -> trade_records / strategy_daily_summary
+  -> export-scorecard-supabase-source.js
+  -> publish-scorecard-snapshot.js
+  -> scorecard_latest
+  -> /api/scorecard
+  -> /88
+```
+
+不可只修最後一層 JSON 或只 redeploy Vercel。
+
+### 3. Required rehearsal commands
+
+```powershell
+node --check scripts\generate-terminal-scorecard-source.js
+node --check scripts\scorecard-source-supabase-ops.js
+node --check scripts\export-scorecard-supabase-source.js
+node --check scripts\verify-scorecard-resource-chain.js
+node --check scripts\verify-scorecard-ui-e2e.js
+npm run verify:scorecard
+npm run verify:scorecard-chain
+npm run verify:scorecard-ui-e2e
+npm run guard:production
+```
+
+### 4. Live API invariants
+
+`/api/scorecard` 必須同時滿足：
+
+```text
+ok = true
+latestDate = selectedDate on default request
+historyDates.length > 0
+records.length = summary.rows
+all required fields filled
+all 9 strategies present
+strategy2 rows only 09:00-12:00
+strategy3 rows entry_time = 13:00
+CB rows entry_price > 0 and not CB price
+display pnl on /88 = raw pnl * 1000
+```
+
+### 5. Live UI invariants
+
+`/88` 必須同時滿足：
+
+```text
+scorecard-history-date exists
+scorecard-theme-toggle exists
+theme toggle shows ☀ / ☾ only
+theme toggle color includes #facc15
+scorecard-basis panel does not exist
+PNL_MULTIPLIER = 1000
+損益(元) column exists
 ```
 
 ## 不可做的事
