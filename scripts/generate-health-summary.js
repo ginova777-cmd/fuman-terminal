@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { ROOT, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -47,6 +47,19 @@ function getFumanTasks() {
   if (result.status !== 0) throw new Error((result.stderr || result.stdout || "schtasks failed").trim());
   const rows = parseCsv(result.stdout).filter((row) => String(row.TaskName || "").startsWith("\\Fuman"));
   rows.queryMethod = "schtasks";
+  return rows;
+}
+
+function uniqueTasksByName(tasks) {
+  const byName = new Map();
+  for (const task of tasks) {
+    const name = String(task.TaskName || "").trim();
+    if (!name || byName.has(name)) continue;
+    byName.set(name, task);
+  }
+  const rows = [...byName.values()];
+  rows.queryMethod = tasks.queryMethod || "schtasks";
+  rows.rawCount = tasks.length;
   return rows;
 }
 
@@ -277,7 +290,8 @@ function classifyRawRefresh(rawRefresh = []) {
 }
 
 function main() {
-  const tasks = getFumanTasks();
+  const rawTasks = getFumanTasks();
+  const tasks = uniqueTasksByName(rawTasks);
   const badTasks = tasks
     .filter((task) => task["Scheduled Task State"] === "Enabled" && isBadResult(task["Last Result"]) && !isIgnorableTaskResult(task))
     .map((task) => ({
@@ -312,6 +326,7 @@ function main() {
       total: tasks.length,
       badCount: badTasks.length,
       badTasks,
+      rawTotal: rawTasks.length,
       replacedOrLegacyCount: replacedOrLegacyTasks.length,
       replacedOrLegacyTasks,
       queryMethod: tasks.queryMethod || "schtasks",
@@ -331,8 +346,9 @@ function main() {
       retiredData,
     },
   };
-  writeJson(path.join(ROOT, "data", "health-summary.json"), summary);
-  writeJson(dataPath("health-summary.json"), summary);
+  for (const outputPath of dataOutputPaths("health-summary.json", { repoEnv: "FUMAN_HEALTH_SUMMARY_WRITE_CODE_REPO" })) {
+    writeJson(outputPath, summary);
+  }
   console.log(`health summary wrote ok=${summary.ok} badTasks=${badTasks.length}`);
 }
 
