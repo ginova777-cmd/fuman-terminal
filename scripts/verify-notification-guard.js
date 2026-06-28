@@ -11,6 +11,7 @@ const {
   channelAllowed,
   claimNotification,
   compareVersionLike,
+  fastMode,
   guardedSend,
   localGate,
 } = require("./notification-guard");
@@ -48,6 +49,17 @@ async function main() {
     send: async () => { sent += 1; },
   });
   assert(!duplicate.sent && sent === 1, "duplicate guarded send should skip sender");
+
+  process.env.NOTIFY_FAST_MODE = "1";
+  assert(fastMode(), "fast mode should be enabled by env");
+  const fast = await guardedSend({
+    channel: "line",
+    target: "u2",
+    payload: { text: "fast" },
+    options: { dedupeScope: "fast-mode" },
+    send: async () => { sent += 1; },
+  });
+  assert(fast.sent && Number.isFinite(fast.latencyMs), "fast guarded send should return latency");
 
   console.log("[notification-guard] ok");
 }

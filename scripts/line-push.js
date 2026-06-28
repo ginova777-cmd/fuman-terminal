@@ -51,7 +51,8 @@ function splitLineText(text, limit = 3200) {
 }
 
 function requestTimeoutMs() {
-  return Math.max(500, Number(process.env.LINE_PUSH_TIMEOUT_MS || process.env.NOTIFY_PUSH_TIMEOUT_MS || 2500));
+  const fastDefault = /^(1|true|yes|on)$/i.test(String(process.env.NOTIFY_FAST_MODE || process.env.FUMAN_NOTIFY_FAST_MODE || ""));
+  return Math.max(500, Number(process.env.LINE_PUSH_TIMEOUT_MS || process.env.NOTIFY_PUSH_TIMEOUT_MS || (fastDefault ? 1500 : 2500)));
 }
 
 function retryCount() {

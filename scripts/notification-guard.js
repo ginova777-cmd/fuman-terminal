@@ -6,6 +6,7 @@ const { statePath, repoPath } = require("./runtime-paths");
 const CLAIM_DIR = statePath("notification-guard", "claims");
 const LOG_FILE = statePath("notification-guard", "sent-notifications.jsonl");
 const DEFAULT_MAX_EVENT_AGE_SEC = 6 * 60 * 60;
+let cachedRuntimeVersion = null;
 
 function envFlag(name, fallback = false) {
   const value = String(process.env[name] ?? "").trim();
@@ -15,6 +16,10 @@ function envFlag(name, fallback = false) {
 
 function disabledFlag(name) {
   return /^(0|false|no|off)$/i.test(String(process.env[name] ?? "").trim());
+}
+
+function fastMode() {
+  return envFlag("NOTIFY_FAST_MODE") || envFlag("FUMAN_NOTIFY_FAST_MODE");
 }
 
 function sha(value) {
@@ -38,7 +43,7 @@ function taipeiDateKey(date = new Date()) {
   return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
-function detectRuntimeVersion() {
+function readRuntimeVersion() {
   const fromEnv = process.env.NOTIFY_RUNTIME_VERSION
     || process.env.FUMAN_NOTIFY_RUNTIME_VERSION
     || process.env.FUMAN_EXPECTED_FRONTEND_VERSION
@@ -54,6 +59,12 @@ function detectRuntimeVersion() {
     if (match) return match[1];
   } catch {}
   return "";
+}
+
+function detectRuntimeVersion() {
+  if (cachedRuntimeVersion !== null) return cachedRuntimeVersion;
+  cachedRuntimeVersion = readRuntimeVersion();
+  return cachedRuntimeVersion;
 }
 
 function versionRank(value) {
@@ -163,6 +174,20 @@ function claimNotification({ channel, target, payload, options = {} }) {
   }
 }
 
+function writeNotificationRecord(payload, updateClaimFile = true) {
+  try {
+    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+    fs.appendFileSync(LOG_FILE, `${JSON.stringify(payload)}\n`, "utf8");
+  } catch (error) {
+    console.warn(`notification guard log skipped: ${error.message}`);
+  }
+  if (updateClaimFile && payload?.claimFile && payload.status !== "pending") {
+    try {
+      fs.writeFileSync(payload.claimFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    } catch {}
+  }
+}
+
 function recordNotification(claim, status, details = {}) {
   const payload = {
     ...claim,
@@ -170,17 +195,11 @@ function recordNotification(claim, status, details = {}) {
     ...details,
     recordedAt: new Date().toISOString(),
   };
-  try {
-    fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
-    fs.appendFileSync(LOG_FILE, `${JSON.stringify(payload)}\n`, "utf8");
-  } catch (error) {
-    console.warn(`notification guard log skipped: ${error.message}`);
+  if (fastMode() && status === "sent") {
+    setImmediate(() => writeNotificationRecord(payload, false));
+    return;
   }
-  if (claim?.claimFile && status !== "pending") {
-    try {
-      fs.writeFileSync(claim.claimFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    } catch {}
-  }
+  writeNotificationRecord(payload, true);
 }
 
 function guardSummary(claim) {
@@ -188,17 +207,19 @@ function guardSummary(claim) {
 }
 
 async function guardedSend({ channel, target, payload, options = {}, send }) {
+  const startedAt = Date.now();
   const claim = claimNotification({ channel, target, payload, options });
   if (!claim.ok) {
-    recordNotification(claim, "skipped");
+    recordNotification(claim, "skipped", { latencyMs: Date.now() - startedAt });
     return { sent: false, claim, reason: claim.reason };
   }
   try {
     const result = await send();
-    recordNotification(claim, "sent");
-    return { sent: true, claim, result };
+    const latencyMs = Date.now() - startedAt;
+    recordNotification(claim, "sent", { latencyMs });
+    return { sent: true, claim, result, latencyMs };
   } catch (error) {
-    recordNotification(claim, "failed", { error: error?.message || String(error) });
+    recordNotification(claim, "failed", { error: error?.message || String(error), latencyMs: Date.now() - startedAt });
     throw error;
   }
 }
@@ -208,6 +229,7 @@ module.exports = {
   claimNotification,
   compareVersionLike,
   detectRuntimeVersion,
+  fastMode,
   guardedSend,
   guardSummary,
   localGate,
