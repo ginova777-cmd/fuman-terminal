@@ -26,6 +26,7 @@ const STATIC_ASSETS = [
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-07",
+  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260623-09",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260623-09",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260623-09",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260623-09",
@@ -229,7 +230,7 @@ async function purgeOldWatchlistAssets() {
   const requests = await cache.keys();
   await Promise.allSettled(requests.map((request) => {
     const url = new URL(request.url);
-    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH)) return cache.delete(request);
+    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH) && !url.search.includes("public-terminal-fast-20260623-09")) return cache.delete(request);
     if (url.pathname === "/terminal-hotfix.js" && !url.search.includes(WATCHLIST_HOTFIX_BRIDGE_EPOCH)) return cache.delete(request);
     return undefined;
   }));
