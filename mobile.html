@@ -73,7 +73,7 @@
 (()=>{const w="fuman_watchlist",l="fuman_mobile_watchlist_v1",meta=new Map;let metaPromise=null;const code4=v=>String(v||"").match(/\d{4}/)?.[0]||"",rowsOf=p=>Array.isArray(p)?p:[p?.stocks,p?.rows,p?.data,p?.items].find(Array.isArray)||[],norm=r=>{const code=code4(r?.code||r?.Code||r?.symbol||r?.stock_id||r?.stockNo);if(!code)return null;const name=String(r?.name||r?.Name||r?.stockName||r?.stock_name||r?.["證券名稱"]||r?.["名稱"]||"").trim();const market=String(r?.market||r?.Market||r?.exchange||r?.type||r?.["市場"]||r?.["上市櫃"]||"").trim();return code&&name&&name!==code&&market?{code,name,market}:null},status=msg=>{const s=document.querySelector("#mobile-watch-status");if(s)s.textContent=msg},toast=msg=>{let n=document.querySelector(".mobile-toast");if(!n){n=document.createElement("div");n.className="mobile-toast";document.body.appendChild(n)}n.textContent=msg;clearTimeout(toast.t);toast.t=setTimeout(()=>n.remove(),1400)},fetchJson=(url,ms=3200)=>new Promise((ok,fail)=>{const ac=new AbortController,t=setTimeout(()=>{ac.abort();fail(Error("timeout"))},ms);fetch(url+(url.includes("?")?"&":"?")+"t="+Date.now(),{cache:"no-store",signal:ac.signal}).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}).then(v=>{clearTimeout(t);ok(v)}).catch(e=>{clearTimeout(t);fail(e)})});async function loadMeta(){if(meta.size)return meta;if(metaPromise)return metaPromise;metaPromise=(async()=>{for(const url of ["/data/stocks-index.json","/data/stocks-slim.json"]){try{const p=await fetchJson(url);for(const row of rowsOf(p)){const m=norm(row);if(m)meta.set(m.code,m)}if(meta.size>1000)break}catch{}}return meta})();return metaPromise}function watches(){try{const a=JSON.parse(localStorage.getItem(w)||localStorage.getItem(l)||"[]");return Array.isArray(a)?a.slice(0,10):[]}catch{return[]}}function save(a){const out=[],seen=new Set;for(const x of Array.isArray(a)?a:[]){const code=code4(x?.code||x?.symbol||x);if(!code||seen.has(code))continue;seen.add(code);out.push({...x,code,name:String(x?.name||x?.Name||code).trim()});if(out.length>=10)break}const value=JSON.stringify(out);localStorage.setItem(w,value);localStorage.setItem(l,value);return out}async function addManual(raw,btn){const code=code4(raw);if(!code){status("請輸入四碼股票代號");toast("請輸入四碼股票代號");return!1}let list=watches();if(list.some(x=>String(x.code)===code)){status(`${code} 已在自選股`);toast(`${code} 已在自選股`);document.querySelector('#tabs button[data-fragment="watch"]')?.click();return!0}if(list.length>=10){status("自選股已達 10 檔上限");toast("自選股已達 10 檔上限");return!1}status(`${code} 正在確認台股代號`);if(btn)btn.disabled=!0;let m=null;try{await loadMeta();m=meta.get(code)}catch{}if(btn)btn.disabled=!1;if(!m){status(`${code} 不是有效上市/上櫃台股代號`);toast(`${code} 不是有效台股代號`);return!1}save([{code,name:m.name,market:m.market,reason:"手機手動新增",addedAt:new Date().toISOString()},...list]);status(`${code} ${m.name} 已加入自選`);toast(`+自選 ${code}`);document.querySelector('#tabs button[data-fragment="watch"]')?.click();return!0}document.addEventListener("click",e=>{const b=e.target.closest?.("[data-mobile-watch-add]");if(!b)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();const input=document.querySelector("#mobile-watch-input");addManual(input?.value,b).then(ok=>{if(ok&&input&&!input.disabled)input.value=""})},!0);document.addEventListener("keydown",e=>{const input=e.target.closest?.("#mobile-watch-input");if(!input||e.key!=="Enter")return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();addManual(input.value,document.querySelector("[data-mobile-watch-add]")).then(ok=>{if(ok&&!input.disabled)input.value=""})},!0);self.FUMAN_MOBILE_MANUAL_WATCH_ADD=addManual;})();
 </script><script>
 (() => {
-  const HOTFIX = "mobile-watch-v2-direct-render-20260628-01";
+  const HOTFIX = "mobile-watch-v2-direct-render-20260628-02";
   const KEY = "fuman_watchlist";
   const MOBILE_KEY = "fuman_mobile_watchlist_v1";
   const meta = new Map();
@@ -128,6 +128,18 @@
       return meta;
     })();
     return metaPromise;
+  }
+  async function lookupMeta(code) {
+    try {
+      const payload = await fetchJson(`/api/mobile-watch-meta?code=${encodeURIComponent(code)}`, 1800);
+      if (payload?.ok && payload?.valid === false) return null;
+      const item = norm(payload?.stock || payload?.meta || payload);
+      if (item) {
+        meta.set(item.code, item);
+        return item;
+      }
+    } catch {}
+    return undefined;
   }
   function readList() {
     try {
@@ -191,6 +203,8 @@
   async function resolveStock(code, fallbackName) {
     const name = String(fallbackName || "").trim();
     if (name && name !== code) return { code, name, market: "mobile-strategy" };
+    const apiMeta = await lookupMeta(code);
+    if (apiMeta !== undefined) return apiMeta;
     await loadMeta();
     return meta.get(code) || null;
   }

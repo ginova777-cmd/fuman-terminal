@@ -86,7 +86,8 @@ function checkMobileShell() {
   requireText(mobile, "FUMAN_MOBILE_ADD_WATCH", "mobile watchlist must expose a shared add-watch pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD", "mobile watchlist must expose a timeout-safe manual add pipeline");
   requireText(mobile, "FUMAN_MOBILE_MANUAL_WATCH_ADD_V2", "mobile watchlist must expose the direct-render V2 manual add pipeline");
-  requireText(mobile, "mobile-watch-v2-direct-render-20260628-01", "mobile watchlist must carry the direct-render hotfix marker");
+  requireText(mobile, "mobile-watch-v2-direct-render-20260628-02", "mobile watchlist must carry the direct-render hotfix marker");
+  requireText(mobile, "/api/mobile-watch-meta?code=", "mobile watchlist must validate one stock code through the small meta API before static fallback");
   requireText(mobile, "mobile-watch-input", "mobile watchlist tab must render a stock-code input");
   requireText(mobile, "data-mobile-watch-add", "mobile watchlist tab must render an add button");
   requireText(mobile, "不是有效上市/上櫃台股代號", "mobile watchlist must reject invalid Taiwan stock codes");
@@ -104,6 +105,7 @@ function checkMobileShell() {
 function checkApiBoot() {
   const apiBoot = read("api/mobile-boot.js");
   const fragmentApi = read("api/mobile-fragment.js");
+  const mobileWatchMeta = read("api/mobile-watch-meta.js");
   requireText(apiBoot, 'Cache-Control", "no-store', "/api/mobile-boot must be browser no-store");
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must be CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
@@ -121,6 +123,10 @@ function checkApiBoot() {
   rejectText(apiBoot, "vercel --prod", "/api/mobile-boot must not trigger Vercel deploy as repair");
   requireText(fragmentApi, 'Cache-Control", "no-store', "/api/mobile-fragment must be browser no-store");
   requireText(fragmentApi, "data-run-id", "/api/mobile-fragment must expose API runId in the rendered fragment");
+  requireText(mobileWatchMeta, "stocks-index.json", "/api/mobile-watch-meta must read the compact stock index");
+  requireText(mobileWatchMeta, "stocks-slim.json", "/api/mobile-watch-meta must fall back to the full stock universe");
+  requireText(mobileWatchMeta, "valid", "/api/mobile-watch-meta must return a valid boolean");
+  requireText(mobileWatchMeta, 'Cache-Control", "no-store', "/api/mobile-watch-meta must be no-store");
 }
 
 function checkGeneratorAndContracts() {
@@ -187,13 +193,27 @@ async function checkLive() {
   if (mobile.text.includes("/data/mobile-boot.json")) {
     pushIssue("live mobile shell must not reference /data/mobile-boot.json");
   }
-  if (!mobile.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobile.text.includes("mobile-watch-v2-direct-render-20260628-01")) {
+  if (!mobile.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobile.text.includes("mobile-watch-v2-direct-render-20260628-02")) {
     pushIssue("live /mobile must include the direct-render mobile watchlist V2 hotfix");
   }
   const mobilePage = await fetchLive("api/mobile-page");
   if (!mobilePage.response.ok) pushIssue(`live /api/mobile-page returned ${mobilePage.response.status}`);
-  if (!mobilePage.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobilePage.text.includes("mobile-watch-v2-direct-render-20260628-01")) {
+  if (!mobilePage.text.includes("FUMAN_MOBILE_MANUAL_WATCH_ADD_V2") || !mobilePage.text.includes("mobile-watch-v2-direct-render-20260628-02")) {
     pushIssue("live /api/mobile-page must include the direct-render mobile watchlist V2 hotfix");
+  }
+  const validMeta = await fetchLive("api/mobile-watch-meta?code=2327");
+  if (!validMeta.response.ok) pushIssue(`live /api/mobile-watch-meta?code=2327 returned ${validMeta.response.status}`);
+  let validMetaJson = null;
+  try { validMetaJson = JSON.parse(validMeta.text); } catch {}
+  if (!validMetaJson?.valid || validMetaJson?.stock?.code !== "2327" || !validMetaJson?.stock?.name) {
+    pushIssue("live /api/mobile-watch-meta must validate 2327 with stock meta");
+  }
+  const invalidMeta = await fetchLive("api/mobile-watch-meta?code=2334");
+  if (!invalidMeta.response.ok) pushIssue(`live /api/mobile-watch-meta?code=2334 returned ${invalidMeta.response.status}`);
+  let invalidMetaJson = null;
+  try { invalidMetaJson = JSON.parse(invalidMeta.text); } catch {}
+  if (invalidMetaJson?.valid !== false || invalidMetaJson?.stock) {
+    pushIssue("live /api/mobile-watch-meta must reject invalid 2334");
   }
   const boot = await fetchLive("api/mobile-boot");
   if (!boot.response.ok) pushIssue(`live /api/mobile-boot returned ${boot.response.status}`);
