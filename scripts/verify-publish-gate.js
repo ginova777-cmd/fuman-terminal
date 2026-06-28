@@ -698,7 +698,7 @@ for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", 
 for (const marker of ["strategy2SnapshotFirstEnabled", "strategy2SnapshotFirst", "snapshot-first-refreshing", "快照先顯示｜即時刷新中"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 snapshot-first marker ${marker}`);
 }
-for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "script-idle", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight", "primeDesktopFastBundle(false, \"script\")"]) {
+for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "script-idle", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight", "primeDesktopFastBundle(false, \"script\")", "paintMarketSnapshotFirstPayload", "primeDesktopFastBundle(false, \"market-snapshot-first\")"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing cold-start snapshot/cache marker ${marker}`);
 }
 for (const marker of ["installStrategy2LivePrime", "primeStrategy2LiveRows", "api-live-prime", "primeStrategy2LiveRows(false, \"script\")"]) {
