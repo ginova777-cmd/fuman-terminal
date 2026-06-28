@@ -370,6 +370,7 @@ const mobileBootApi = read("api/mobile-boot.js");
 const mobileFragmentApi = read("api/mobile-fragment.js");
 const cbDetectLatestApi = read("api/cb-detect-latest.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
+const realtimeRadarScanner = read("scripts/scan-realtime-radar-cache.js");
 const strategy4StandardGate = read("scripts/verify-strategy4-standard-gate.js");
 const cbDetectScanner = read("scripts/generate-cb-detect.js");
 const runStrategy4 = read("run-strategy4.ps1");
@@ -800,6 +801,46 @@ for (const marker of [
 ]) {
   if (!realtimeRadarApi.includes(marker)) issues.push(`api/realtime-radar-latest.js missing fallback order marker ${marker}`);
 }
+for (const marker of [
+  "DEFAULT_RADAR_LIMIT = 120",
+  "FULL_SESSION_RADAR_LIMIT = 1200",
+  "MAX_RADAR_LIMIT = 1500",
+  "function requestRadarLimit",
+  "displayWindow: \"09:00-13:30\"",
+  "totalCount",
+  "hasMore",
+]) {
+  if (!realtimeRadarApi.includes(marker)) issues.push(`api/realtime-radar-latest.js missing full-session API marker ${marker}`);
+}
+for (const marker of [
+  "function renderRealtimeRadarDomShell",
+  "data-realtime-radar-dom-shell",
+  "radar-dom-shell",
+  "realtimeRadarDomSide",
+  "limit: 1200",
+  "full: true",
+  "/api/realtime-radar-latest?full=1",
+  "marketJsonCacheKey(\"/api/realtime-radar-latest?full=1\", 1200)",
+  "panel.querySelectorAll(\":scope > .desktop-route-shell.desktop-canvas-app\").forEach((node) => node.remove())",
+]) {
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing realtime radar DOM/full-session marker ${marker}`);
+}
+for (const marker of [
+  "REALTIME_RADAR_SESSION_LIMIT",
+  "function mergeRadarSessionRows",
+  "sessionStart: \"09:00\"",
+  "sessionEnd: \"13:30\"",
+  "currentScanCount",
+  ".slice(0, REALTIME_RADAR_SESSION_LIMIT)",
+]) {
+  if (!realtimeRadarScanner.includes(marker)) issues.push(`scan-realtime-radar-cache.js missing full-session scanner marker ${marker}`);
+}
+const buildRadarRowsMatch = realtimeRadarScanner.match(/function buildRadarRows[\s\S]*?function radarRowSessionSeconds/);
+if (!buildRadarRowsMatch) {
+  issues.push("scan-realtime-radar-cache.js must keep buildRadarRows before radarRowSessionSeconds for realtime radar no-rollback guard");
+} else if (/\.slice\s*\(\s*0\s*,\s*80\s*\)/.test(buildRadarRowsMatch[0])) {
+  issues.push("scan-realtime-radar-cache.js buildRadarRows must not roll realtime radar back to 80-row session cap");
+}
 
 for (const marker of [
   "Invoke-RepoSyncPreflight",
@@ -915,6 +956,14 @@ for (const marker of [
   "mobile CSS not applied",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing responsive mobile marker ${marker}`);
+}
+for (const marker of [
+  "realtime radar DOM shell missing",
+  "realtime radar must not render legacy desktop canvas shell",
+  "realtime radar must not expose canvasRows",
+  "realtime radar must show 09:00-13:30 session window",
+]) {
+  if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing realtime radar no-rollback marker ${marker}`);
 }
 
 const liveVersionVerifier = read("scripts/verify-live-version.js");

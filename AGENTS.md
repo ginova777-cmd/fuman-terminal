@@ -295,6 +295,8 @@ marketSession.marketDataDate=2026-06-26
 
 注意：`2026-06-28` 是週日，正式站顯示 80 筆休市快取是正常狀態；下一個開盤日才會從 09:00 開始累積到 13:30。不可因週末快取 rows=80 誤判完整盤中功能失效。
 
+防回滾設定（2026-06-28 已實作）：`scripts/verify-publish-gate.js` 會擋即時雷達 API full-session、DOM shell、scanner session limit 與 UI E2E marker 回退；`scripts/verify-terminal-ui-e2e.js` 會擋 `realtime-radar` 重新出現 legacy Canvas shell、canvas element、`canvasRows` 與缺少 `09:00-13:30`；`scripts/verify-market-surfaces-chain.js` 會打 `/api/realtime-radar-latest?full=1&limit=1200` 並檢查 `displayWindow=09:00-13:30` 與 `totalCount >= rows`。
+
 ### 發布 / 上傳限制
 
 - 只改 `AGENTS.md`、策略文件、SQL patch、純操作說明時，不需要 Vercel deploy；只需 commit / push。

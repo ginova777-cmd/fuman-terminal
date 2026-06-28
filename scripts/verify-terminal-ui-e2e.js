@@ -1107,6 +1107,17 @@ function collectDesktopStats(route) {
     ? requiredFieldSignals.filter((key) => !fieldSignals[key]).map((key) => `visible field signal missing: ${key}`)
     : [];
   const contractBlockers = [];
+  if (route.key === "realtime-radar") {
+    const radarDomShell = activePanel.querySelector("[data-realtime-radar-dom-shell]");
+    const legacyCanvasShell = activePanel.querySelector(".desktop-route-shell.desktop-canvas-app");
+    const routeCanvas = activePanel.querySelector("canvas.desktop-route-canvas, canvas");
+    if (!radarDomShell) contractBlockers.push("realtime radar DOM shell missing");
+    if (legacyCanvasShell) contractBlockers.push("realtime radar must not render legacy desktop canvas shell");
+    if (routeCanvas || canvasSize) contractBlockers.push("realtime radar must not render canvas element");
+    if (canvasRows !== 0) contractBlockers.push(`realtime radar must not expose canvasRows actual=${canvasRows}`);
+    if (!/09:00-13:30/.test(panelText)) contractBlockers.push("realtime radar must show 09:00-13:30 session window");
+    if (!domRows.some((row) => row.selector === ".radar-signal-card")) contractBlockers.push("realtime radar DOM signal cards missing");
+  }
   if (route.key === "watchlist") {
     const bridgeReady = /^20260628-0[3-9]/.test(String(window.__fumanWatchlistAddBridge || ""));
     const shellReady = Boolean(window.FUMAN_WATCHLIST_SHELL_INSTANCE || window.FUMAN_WATCHLIST_SHELL_MODULE);

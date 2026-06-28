@@ -188,7 +188,7 @@ async function main() {
   addCheck(checks, Object.values(details.ai.fieldCompleteness || {}).every(Boolean), "ai-field-completeness", "AI 判讀 fieldCompleteness must be true for required dashboard fields", details.ai);
   addCheck(checks, !obviousStaticFallback(ai.json), "ai-no-static-fallback", "AI 判讀 must not use static/local fallback as authority", details.ai);
 
-  const realtime = await fetchJson("/api/realtime-radar-latest", 35000);
+  const realtime = await fetchJson("/api/realtime-radar-latest?full=1&limit=1200", 35000);
   const realtimeRows = normalizeRows(realtime.json);
   details.realtime = {
     status: realtime.status,
@@ -197,11 +197,17 @@ async function main() {
     cacheSource: realtime.json?.cacheSource || "",
     transport: realtime.json?.transport || {},
     rows: realtimeRows.length || cleanNumber(realtime.json?.count),
+    count: cleanNumber(realtime.json?.count),
+    totalCount: cleanNumber(realtime.json?.totalCount),
+    hasMore: Boolean(realtime.json?.hasMore),
+    displayWindow: realtime.json?.displayWindow || "",
     date: realtime.json?.date || realtime.json?.tradeDate || "",
     marketSession: realtime.json?.marketSession || {},
   };
-  addCheck(checks, realtime.ok && realtime.json?.ok !== false, "realtime-api-ok", "即時雷達 /api/realtime-radar-latest must return ok 2xx", details.realtime);
+  addCheck(checks, realtime.ok && realtime.json?.ok !== false, "realtime-api-ok", "即時雷達 /api/realtime-radar-latest?full=1&limit=1200 must return ok 2xx", details.realtime);
   addCheck(checks, details.realtime.rows > 0, "realtime-api-content", "即時雷達 must expose rows/cards", details.realtime);
+  addCheck(checks, details.realtime.displayWindow === "09:00-13:30", "realtime-full-session-window", "即時雷達 full mode must expose 09:00-13:30 displayWindow", details.realtime);
+  addCheck(checks, details.realtime.totalCount >= details.realtime.rows, "realtime-full-session-count", "即時雷達 full mode totalCount must cover returned rows", details.realtime);
   addCheck(checks, /supabase/i.test(`${details.realtime.cacheSource} ${details.realtime.transport?.source || ""}`), "realtime-supabase-source", "即時雷達 must read Supabase cache/quote source", details.realtime);
   addCheck(checks, !obviousStaticFallback(realtime.json), "realtime-no-static-fallback", "即時雷達 must not use static/local fallback as authority", details.realtime);
 
