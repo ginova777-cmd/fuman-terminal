@@ -87,6 +87,12 @@ function countRows(value) {
   return 0;
 }
 
+function ageSeconds(value, now = new Date()) {
+  const time = Date.parse(String(value || ""));
+  if (!Number.isFinite(time)) return 999999;
+  return Math.max(0, Math.round((now.getTime() - time) / 1000));
+}
+
 async function checkOnce() {
   const checkedAt = new Date();
   const health = await getStrategy2SourceHealth({
@@ -135,9 +141,18 @@ async function checkOnce() {
   const dailyVolumeCoverage = quoteCodes.length ? dailyVolumeRows / Math.min(quoteCodes.length, 500) : 0;
   const minuteOfDay = taipeiMinuteOfDay(checkedAt);
   const strictQuoteFreshRequired = minuteOfDay >= 9 * 60 && minuteOfDay <= 13 * 60 + 40;
+  const intraday1mMa35Required = minuteOfDay >= 9 * 60 + 35 && minuteOfDay <= 13 * 60 + 35;
+  const sourceStatus = health.status?.status || sourceStatusResult.latest?.status || "";
+  const sourceUpdatedAt = health.status?.updated_at || sourceStatusResult.latest?.updated_at || "";
+  const sourceStatusAgeSeconds = ageSeconds(sourceUpdatedAt, checkedAt);
+  const sourceCoreOk = health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true;
+  const intraday1mOk = health.payload?.intraday_1m_ok === true || health.payload?.source_parts?.intraday_1m_ok === true;
+  const intraday1mReadyGe35 = cleanNumber(health.payload?.ready_ge_35);
 
   const issues = [
     issue(sourceStatusResult.ok !== false && Boolean(sourceStatusResult.latest || health.status), "critical", "source-status-missing", "source_status fugle_shared_source readback failed", { error: sourceStatusResult.error || "" }),
+    issue(!strictQuoteFreshRequired || sourceStatusAgeSeconds <= MIN_QUOTE_AGE_SECONDS, "critical", "source-status-stale", `source_status updated_at age ${sourceStatusAgeSeconds}s exceeds ${MIN_QUOTE_AGE_SECONDS}s during market session`, { sourceUpdatedAt, sourceStatusAgeSeconds, max: MIN_QUOTE_AGE_SECONDS }),
+    issue(!strictQuoteFreshRequired || sourceStatus === "ok" || sourceCoreOk, "critical", "source-status-not-ok", `source_status is ${sourceStatus || "missing"} during market session`, { sourceStatus, sourceCoreOk }),
     issue(
       health.payload?.quotes_ok === true
         || health.payload?.source_parts?.quotes_ok === true
@@ -153,6 +168,8 @@ async function checkOnce() {
     issue(Boolean(health.anonRead?.ok), "critical", "anon-read-failed", "anon read target check failed", { failed: health.anonRead?.failed || [] }),
     issue(quoteRows.length > 0, "critical", "active-quotes-empty", "fugle_quotes_live returned no active common stock quotes", { error: quoteResult.error || "" }),
     issue(intradayRowsReady > 0 || taipeiMinuteOfDay(checkedAt) < 9 * 60, "warning", "intraday-1m-not-ready", "fugle_intraday_1m status has no today rows yet", { intradayRowsReady, error: statusResult.error || "" }),
+    issue(!intraday1mMa35Required || intraday1mOk, "critical", "intraday-1m-source-not-ok", "source_status reports intraday_1m_ok=false after MA35 gate time", { intraday1mOk, sourceStatus, sourceUpdatedAt }),
+    issue(!intraday1mMa35Required || intraday1mReadyGe35 > 0, "critical", "intraday-1m-ready-ge35-zero", "ready_ge_35 is zero after MA35 gate time", { readyGe35: intraday1mReadyGe35, latestCandleTime: health.payload?.latest_candle_time || health.payload?.intraday_1m_latest_candle_time || "" }),
     issue(dailyVolumeCoverage >= MIN_DAILY_VOLUME_COVERAGE, "warning", "daily-volume-coverage-low", `daily volume coverage ${dailyVolumeCoverage.toFixed(4)} below ${MIN_DAILY_VOLUME_COVERAGE}`, { dailyVolumeRows, sampleSize: Math.min(quoteCodes.length, 500) }),
     issue(countRows(preopenResult.rows) >= MIN_PREOPEN_ROWS || taipeiMinuteOfDay(checkedAt) >= 9 * 60, "warning", "preopen-snapshot-low", "preopen snapshot rows are not ready", { rows: countRows(preopenResult.rows), error: preopenResult.error || "" }),
     issue(countRows(finalBlindBuyResult.rows) >= 0, "warning", "final-blind-buy-read-failed", "final blind buy ready read failed", { error: finalBlindBuyResult.error || "" }),
@@ -176,8 +193,10 @@ async function checkOnce() {
       minFutoptQuoteRows: MIN_FUTOPT_QUOTE_ROWS,
     },
     coverage: {
-      sourceStatus: health.status?.status || sourceStatusResult.latest?.status || "",
-      sourceUpdatedAt: health.status?.updated_at || sourceStatusResult.latest?.updated_at || "",
+      sourceStatus,
+      sourceUpdatedAt,
+      sourceStatusAgeSeconds,
+      sourceCoreOk,
       quotesOk: health.payload?.quotes_ok === true || health.payload?.source_parts?.quotes_ok === true,
       quoteAgeSeconds: quoteAge,
       strictQuoteFreshRequired,
@@ -186,6 +205,9 @@ async function checkOnce() {
       activeSymbols,
       activeCommonStockQuotes: quoteRows.length,
       intraday1mReadyRows: intradayRowsReady,
+      intraday1mOk,
+      intraday1mMa35Required,
+      intraday1mReadyGe35,
       dailyVolumeRows,
       dailyVolumeCoverage,
       preopenRows: countRows(preopenResult.rows),
@@ -200,7 +222,7 @@ async function checkOnce() {
     logFile: LOG_FILE,
   };
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  log(`coverage ok=${payload.ok} quotes=${quoteCount} coverage=${quoteCoverage || 0} age=${quoteAge || "--"} 1m=${intradayRowsReady} daily=${dailyVolumeRows} preopen=${payload.coverage.preopenRows} futopt=${payload.coverage.futoptQuoteRows} issues=${issues.length}`);
+  log(`coverage ok=${payload.ok} source=${sourceStatus || "--"} sourceAge=${sourceStatusAgeSeconds}s quotes=${quoteCount} coverage=${quoteCoverage || 0} age=${quoteAge || "--"} 1m=${intradayRowsReady} ready35=${intraday1mReadyGe35} daily=${dailyVolumeRows} preopen=${payload.coverage.preopenRows} futopt=${payload.coverage.futoptQuoteRows} issues=${issues.length}`);
   return payload;
 }
 
