@@ -10,6 +10,7 @@ $LogDir = Join-Path $RuntimeDir "logs"
 $LogFile = Join-Path $LogDir "public-slot-anti-rollback.log"
 $ConfigPath = Join-Path $RuntimeDir "config\public-slot-shared-source.json"
 $RunnerPath = Join-Path $FumanRoot "ops\public-slot\Run-PublicSlotSharedSource.ps1"
+$HelperPath = Join-Path $FumanRoot "ops\public-slot\SupabasePublicSlotSource.ps1"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Write-GuardLog {
@@ -51,7 +52,7 @@ function Write-DefaultRuntimeConfig {
 
 function Test-RepoRuntimeConfigSupport {
   $runner = Read-Text -Path $RunnerPath
-  $helper = Read-Text -Path (Join-Path $FumanRoot "ops\public-slot\SupabasePublicSlotSource.ps1")
+  $helper = Read-Text -Path $HelperPath
   $missing = New-Object System.Collections.Generic.List[string]
   foreach ($marker in @(
     "Apply-PublicSlotRuntimeConfig",
@@ -63,11 +64,30 @@ function Test-RepoRuntimeConfigSupport {
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
     "sourceCoreOk",
-    "intraday_1m_ma35_required"
+    "intraday_1m_ma35_required",
+    "fugle-source-contract-20260629-01",
+    "public-slot-shared-source-20260629-01",
+    "source_contract_version",
+    "writer_version",
+    "quote_status",
+    "preopen_status",
+    "intraday_1m_status",
+    "daily_volume_status",
+    "ready_ge_35_symbols",
+    "latest_candle_time_taipei",
+    "Write-PublicSlotSourceCoverageSnapshot"
   )) {
     if (-not $runner.Contains($marker)) { $missing.Add("runner:$marker") }
   }
-  foreach ($marker in @("FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC", "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE", "safeBatchSize")) {
+  foreach ($marker in @(
+    "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
+    "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE",
+    "safeBatchSize",
+    "Write-PublicSlotSourceCoverageSnapshot",
+    "fugle_source_coverage",
+    "ready_ge_35_symbols",
+    "latest_candle_time_taipei"
+  )) {
     if (-not $helper.Contains($marker)) { $missing.Add("helper:$marker") }
   }
   return $missing.ToArray()
@@ -126,7 +146,7 @@ function Test-RuntimeConfig {
 
 $repoMissing = @(Test-RepoRuntimeConfigSupport)
 if ($repoMissing.Count -gt 0 -and $Repair) {
-  Write-GuardLog "repo runtime config support missing; repair disabled for tracked files: $($repoMissing -join ', ')"
+  Write-GuardLog "repo runtime/source contract support missing; repair disabled for tracked files: $($repoMissing -join ', ')"
 }
 if ($repoMissing.Count -gt 0) {
   Write-GuardLog "FAILED repo runtime config support missing: $($repoMissing -join ', ')"

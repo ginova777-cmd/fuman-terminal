@@ -623,6 +623,10 @@ for (const marker of [
   "Write-DefaultRuntimeConfig",
   "public-slot-shared-source.json",
   "runtime config guard",
+  "fugle-source-contract-20260629-01",
+  "Write-PublicSlotSourceCoverageSnapshot",
+  "source_contract_version",
+  "latest_candle_time_taipei",
 ]) {
   if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);
 }
