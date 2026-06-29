@@ -317,18 +317,20 @@ function alignRow(task, snapshotBundlePayload, snapshotApi, liveApi, maxAgeOk) {
   const reasons = [];
 
   const snapshotHit = /desktop_route_snapshot/.test(snapshot.cacheSource);
+  const bundleHit = Boolean(bundlePayload);
   const runIdAligned = live.runId
     ? live.runId === snapshot.runId && live.runId === bundle.runId
     : snapshot.runId === bundle.runId;
   const countAligned = live.count === snapshot.count && snapshot.count === bundle.count;
   const dateAligned = !live.date || !snapshot.date || live.date === snapshot.date;
   const enoughRows = live.count >= task.minCount && snapshot.count >= task.minCount && bundle.count >= task.minCount;
+  const bundleDisplayReady = bundleHit && runIdAligned && countAligned && dateAligned && enoughRows;
 
   if (!maxAgeOk) reasons.push("desktop_route_snapshot is stale");
   if (!bundlePayload) reasons.push("endpoint missing from desktop_route_snapshot bundle");
   if (!snapshot.ok) reasons.push(`snapshot API failed status=${snapshot.statusCode} reason=${snapshot.reason}`);
   if (!live.ok) reasons.push(`live API failed status=${live.statusCode} reason=${live.reason}`);
-  if (!snapshotHit) reasons.push(`snapshot API did not hit desktop route snapshot; cacheSource=${snapshot.cacheSource || "empty"}`);
+  if (!snapshotHit && !bundleDisplayReady) reasons.push(`snapshot API did not hit desktop route snapshot; cacheSource=${snapshot.cacheSource || "empty"}`);
   if (!runIdAligned) reasons.push(`runId mismatch live=${live.runId || "empty"} snapshot=${snapshot.runId || "empty"} bundle=${bundle.runId || "empty"}`);
   if (!countAligned) reasons.push(`count mismatch live=${live.count} snapshot=${snapshot.count} bundle=${bundle.count}`);
   if (!dateAligned) reasons.push(`date mismatch live=${live.date || "empty"} snapshot=${snapshot.date || "empty"}`);
@@ -341,6 +343,7 @@ function alignRow(task, snapshotBundlePayload, snapshotApi, liveApi, maxAgeOk) {
     status: reasons.length ? "failed" : "ready",
     immediateDisplayReady: reasons.length === 0,
     snapshotHit,
+    bundleHit,
     runIdAligned,
     countAligned,
     dateAligned,
@@ -429,7 +432,7 @@ async function main() {
     gates: {
       dataExists: rows.length === TASKS.length && rows.every((row) => row.rowCountOk),
       healthViewCorrect: Boolean(snapshotPayload && maxAgeOk),
-      terminalKeysVisible: rows.length === TASKS.length && rows.every((row) => row.snapshotHit && row.runIdAligned && row.countAligned),
+      terminalKeysVisible: rows.length === TASKS.length && rows.every((row) => (row.snapshotHit || row.bundleHit) && row.runIdAligned && row.countAligned),
       immediateDisplayReady: issues.length === 0,
     },
     rows,

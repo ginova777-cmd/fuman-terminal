@@ -166,6 +166,8 @@ const ROUTES = [
     key: "market-ai",
     label: "AI判讀",
     endpoint: "/api/market-ai-live?limit=60&live=1",
+    allowZeroWhen: (payload) => payload?.dataFreshness?.priorityStaleBlocked === true
+      || payload?.priorityObservation?.staleBlocked === true,
     metaGroups: [
       ["日期/更新", ["updatedAt", "generatedAt", "snapshot.tradeDate", "aiDetectWindow.taipeiDate"]],
       ["來源/freshness", ["source", "cacheSource", "freshness", "snapshotFresh"]],

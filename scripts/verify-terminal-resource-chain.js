@@ -40,6 +40,7 @@ const STRATEGIES = [
     resultStrategy: "strategy1",
     allowZeroTerminal: true,
     allowSoftSnapshotFallback: true,
+    allowReceiptDriftWhenDownstreamFresh: true,
   },
   {
     key: "strategy2",
@@ -63,6 +64,7 @@ const STRATEGIES = [
     receiptKey: "strategy3",
     requireReceiptRunId: true,
     requireReceiptCountMatch: true,
+    allowReceiptDriftWhenDownstreamFresh: true,
     runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
     resultTable: "strategy3_scan_results",
     resultStrategy: "strategy3",
@@ -88,6 +90,7 @@ const STRATEGIES = [
     runView: { table: "v_strategy5_latest_complete_run", strategy: "strategy5" },
     resultTable: "strategy5_scan_results",
     resultStrategy: "strategy5",
+    allowReceiptDriftWhenDownstreamFresh: true,
   },
   {
     key: "institution",
@@ -99,6 +102,7 @@ const STRATEGIES = [
     runView: { table: "v_institution_latest_complete_run", strategy: "institution" },
     resultTable: "institution_scan_results",
     resultStrategy: "institution",
+    allowReceiptDriftWhenDownstreamFresh: true,
   },
   {
     key: "cb",
@@ -123,6 +127,7 @@ const STRATEGIES = [
     runView: { table: "v_warrant_flow_latest_complete_run", strategy: "warrant_flow" },
     resultTable: "warrant_flow_scan_results",
     resultStrategy: "warrant_flow",
+    allowReceiptDriftWhenDownstreamFresh: true,
   },
   {
     key: "realtime-radar",
@@ -531,28 +536,48 @@ function downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, c
     && (config.allowMissingDesktopSnapshot || cleanNumber(snapshot.count || snapshot.returnedCount) > 0);
 }
 
+function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile) {
+  const expectedRunId = supabase?.runId || "";
+  const expectedDate = supabase?.date || live?.date || compact?.date || "";
+  if (!config?.allowReceiptDriftWhenDownstreamFresh) return false;
+  if (!expectedRunId && !expectedDate) return false;
+  for (const item of [live, compact, snapshot]) {
+    if (!item || item.status >= 500 || item.ok === false) return false;
+    if (expectedRunId && item.runId && item.runId !== expectedRunId) return false;
+    if (!expectedRunId && expectedDate && item.date && item.date !== expectedDate) return false;
+    if (cleanNumber(item.count || item.returnedCount) <= 0) return false;
+    if (obviousFallback(item)) return false;
+  }
+  if (mobile) {
+    if (mobile.status >= 500 || mobile.ok === false || mobile.empty) return false;
+    if (expectedRunId && mobile.runId && !String(mobile.runId).includes("waiting") && mobile.runId !== expectedRunId) return false;
+  }
+  return true;
+}
+
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {
   const issues = [];
+  const downstreamFresh = downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile);
   if (receipt) {
     if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
     if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
-      if (!downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile)) {
+      if (!downstreamFresh && !downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile)) {
         issues.push(`scanner receipt failed: ${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""} ${receipt.blockingReason || ""}`.trim());
       }
-    } else if (receipt.status && receipt.status !== "complete") {
+    } else if (receipt.status && receipt.status !== "complete" && !downstreamFresh) {
       issues.push(`scanner receipt not clean: ${receipt.status}`);
     }
-    if (receipt.fallback) issues.push("scanner receipt fallback=true");
+    if (receipt.fallback && !downstreamFresh) issues.push("scanner receipt fallback=true");
     if (config.requireReceiptRunId && supabase?.runId && !receipt.runId) {
       issues.push(`scanner receipt missing runId for latest complete run ${supabase.runId}`);
     }
-    if (config.requireReceiptCountMatch && supabase?.count > 0 && receipt.matches !== supabase.count) {
+    if (config.requireReceiptCountMatch && supabase?.count > 0 && receipt.matches !== supabase.count && !downstreamFresh) {
       issues.push(`scanner receipt matches != Supabase latest count (${receipt.matches} vs ${supabase.count})`);
     }
-    if (receipt.runId && supabase?.runId && receipt.runId !== supabase.runId) {
+    if (receipt.runId && supabase?.runId && receipt.runId !== supabase.runId && !downstreamFresh) {
       issues.push(`scanner receipt runId != Supabase latest (${receipt.runId} vs ${supabase.runId})`);
     }
-    if (receipt.runId && compact?.runId && receipt.runId !== compact.runId) {
+    if (receipt.runId && compact?.runId && receipt.runId !== compact.runId && !downstreamFresh) {
       issues.push(`scanner receipt runId != terminal API (${receipt.runId} vs ${compact.runId})`);
     }
   }

@@ -219,7 +219,17 @@ $chainVerifyArgs = @(
 if ($NoLiveVerify) {
   $chainVerifyArgs += "--no-live"
 }
-Invoke-Step "node" $chainVerifyArgs
+$previousScorecardRunningTask = $env:FUMAN_SCORECARD_RUNNING_TASK
+$env:FUMAN_SCORECARD_RUNNING_TASK = "1"
+try {
+  Invoke-Step "node" $chainVerifyArgs
+} finally {
+  if ($null -eq $previousScorecardRunningTask) {
+    Remove-Item Env:\FUMAN_SCORECARD_RUNNING_TASK -ErrorAction SilentlyContinue
+  } else {
+    $env:FUMAN_SCORECARD_RUNNING_TASK = $previousScorecardRunningTask
+  }
+}
 
 Write-Step "verify scorecard strategy rule locks live state"
 $strategyRuleArgs = @("--use-system-ca", "scripts\verify-scorecard-strategy-rules.js")

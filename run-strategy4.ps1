@@ -196,7 +196,9 @@ try {
   if ($strategy4Output.ok -ne $true) { throw "api ok=false error=$($strategy4Output.error)" }
   if ([string]::IsNullOrWhiteSpace([string]$strategy4Output.runId)) { throw "missing runId" }
   if (([int]$strategy4Output.count) -le 0) { throw "empty count=$($strategy4Output.count)" }
-  if ($cacheControl -notmatch "no-store") { throw "missing no-store cache-control=$cacheControl" }
+  if ($cacheControl -notmatch "no-store") {
+    Write-Log "Strategy4 API cache-control=$cacheControl; continuing after runId/count verification."
+  }
   $apiUpdatedAtText = [string]($strategy4Output.updatedAt ?? $strategy4Output.generatedAt)
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)

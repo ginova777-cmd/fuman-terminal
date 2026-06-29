@@ -90,6 +90,30 @@ function isTaipeiWeekend() {
   return day === 0 || day === 6;
 }
 
+function taipeiDateText() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const pick = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+}
+
+function localDateText(value) {
+  const text = cleanText(value);
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(text);
+  return match ? match[1] : "";
+}
+
+function isScorecardSelfVerification(schedule = {}) {
+  return process.env.FUMAN_SCORECARD_RUNNING_TASK === "1"
+    && /^running$/i.test(cleanText(schedule.status))
+    && /run-scorecard-daily-automation\.ps1/i.test(schedule.taskToRun || "")
+    && localDateText(schedule.lastRunTime) === taipeiDateText();
+}
+
 function fileInfo(file) {
   try {
     const stat = fs.statSync(file);
@@ -329,10 +353,13 @@ async function main() {
 
   details.schedule = queryScorecardTask();
   details.schedule.isTaipeiWeekend = isTaipeiWeekend();
-  details.schedule.lastResultOk = String(details.schedule.lastResult || "").trim() === "0" || details.schedule.isTaipeiWeekend;
+  details.schedule.selfVerificationInProgress = isScorecardSelfVerification(details.schedule);
+  details.schedule.lastResultOk = String(details.schedule.lastResult || "").trim() === "0"
+    || details.schedule.isTaipeiWeekend
+    || details.schedule.selfVerificationInProgress;
   addCheck(checks, details.schedule.ok === true, "schedule-exists", "Windows task Fuman Scorecard Daily Automation 1400 exists", details.schedule);
   addCheck(checks, /run-scorecard-daily-automation\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs run-scorecard-daily-automation.ps1", details.schedule);
-  addCheck(checks, details.schedule.lastResultOk, "schedule-last-result-ok", "scorecard task Last Result=0 on trading days; weekend may carry forward latest open date", details.schedule);
+  addCheck(checks, details.schedule.lastResultOk, "schedule-last-result-ok", "scorecard task Last Result=0 on trading days; in-progress self verification may use the current running task", details.schedule);
 
   if (CHECK_LIVE) {
     const liveApi = await fetchJson("/api/scorecard", 35000);

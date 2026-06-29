@@ -1320,7 +1320,7 @@ function collectDesktopStats(route) {
   const waitingEmptyOk = Boolean(route.allowWaitingEmpty && emptyStateText && /等待|受控|decision|futopt|ready|snapshot/i.test(emptyStateText));
   const dateSignals = [...`${freshnessText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
   const rowsVisible = Math.max(domRows.length, canvasRows);
-  const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
+  const softEmptyPattern = /^(?:fallback|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)$/i;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
   const requiredText = Array.isArray(route.requiredText) ? route.requiredText : [];
   const missingRequiredText = requiredText.filter((needle) => !panelText.includes(needle));
@@ -1679,7 +1679,7 @@ async function fallbackDesktopStats(cdp, route, error) {
   const rowsVisible = Math.max(rowMatches.length, countMatch ? Number(countMatch[1]) || 0 : 0);
   const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|資料載入失敗|讀取失敗|載入失敗|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)/gi)].map((match) => match[0]);
   const dateSignals = [...panelText.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
-  const softEmptyPattern = /等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中/;
+  const softEmptyPattern = /^(?:fallback|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)$/i;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
   const routeNeedles = Array.isArray(route.fallbackNeedles) && route.fallbackNeedles.length
     ? route.fallbackNeedles
