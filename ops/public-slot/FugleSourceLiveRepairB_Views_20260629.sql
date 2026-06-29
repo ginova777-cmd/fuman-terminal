@@ -268,6 +268,8 @@ from public.source_status s
 left join public.v_fugle_source_latest_coverage c
   on c.source_name = s.source_name;
 
+drop function if exists public.get_fugle_intraday_1m_latest_n(text[], integer);
+
 create or replace function public.get_fugle_intraday_1m_latest_n(
   symbols text[],
   bars_per_symbol integer default 200
