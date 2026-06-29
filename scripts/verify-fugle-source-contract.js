@@ -6,6 +6,9 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const CONTRACT_VERSION = "fugle-source-contract-20260629-01";
 const STATIC_ONLY = process.argv.includes("--static-only");
 const LIVE = process.argv.includes("--live") || (!STATIC_ONLY && process.env.SUPABASE_SOURCE_CONTRACT_LIVE !== "0");
+const LIVE_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.FUGLE_SOURCE_CONTRACT_MIN_FRESH_QUOTE_COVERAGE_120S || 0.9);
+const LIVE_MIN_INTRADAY_1M_COVERAGE = Number(process.env.FUGLE_SOURCE_CONTRACT_MIN_INTRADAY_1M_COVERAGE || 1);
+const LIVE_MAX_INTRADAY_1M_STALE_SECONDS = Number(process.env.FUGLE_SOURCE_CONTRACT_MAX_INTRADAY_1M_STALE_SECONDS || 120);
 
 const issues = [];
 const EMPTY_PAYLOAD_OK = new Set(["scanner_block_reason"]);
@@ -40,6 +43,21 @@ function requireRegex(file, regex, label) {
 
 function forbidRegex(file, regex, label) {
   if (regex.test(read(file))) issues.push(`${file} must not contain ${label}`);
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || String(value).trim() === "") continue;
+    const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
+    if (Number.isFinite(number)) return number;
+  }
+  return 0;
+}
+
+function boolValue(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  return /^(1|true|yes|ready|ok)$/i.test(String(value ?? "").trim());
 }
 
 function staticChecks() {
@@ -176,6 +194,8 @@ function staticChecks() {
     "ready_ge_200_symbols",
     "latest_candle_time_taipei",
     "Write-PublicSlotSourceCoverageSnapshot",
+    "Get-Strategy2ReadyRefreshMaxPages",
+    "strategy2 ready cache partial refresh",
   ]);
 
   requireIncludes("ops/public-slot/Watchdog-PublicSlotSharedSource.ps1", [
@@ -297,11 +317,13 @@ async function liveChecks() {
     return;
   }
 
+  let sourceRegularSession = false;
   const statusRows = await restGet(baseUrl, key, "source_status?source_name=eq.fugle_shared_source&select=source_name,status,updated_at,message,payload&limit=1");
   if (!Array.isArray(statusRows) || !statusRows[0]) {
     issues.push("source_status missing fugle_shared_source row");
   } else {
     const payload = statusRows[0].payload || {};
+    sourceRegularSession = String(payload.session || "").toLowerCase() === "regular";
     requirePayload(payload, [
       "source_contract_version",
       "writer_version",
@@ -382,6 +404,38 @@ async function liveChecks() {
     if (readyGe80 > readyMacd) {
       issues.push(`source_status ready_macd_continuous_symbols ${readyMacd} below ready_ge_80_symbols ${readyGe80}`);
     }
+    if (sourceRegularSession) {
+      const activeSymbols = firstFiniteNumber(payload.active_symbols, payload.mother_pool_symbols, payload.eligible_symbols, payload.seeded_symbols);
+      const expectedIntradaySymbols = activeSymbols > 0 ? activeSymbols : firstFiniteNumber(payload.today_1m_symbols, payload.intraday_1m_symbols_today);
+      const today1mSymbols = firstFiniteNumber(payload.today_1m_symbols, payload.intraday_1m_symbols_today);
+      const staleSeconds = firstFiniteNumber(payload.intraday_1m_stale_seconds, 999999);
+      const freshQuoteCoverage120s = firstFiniteNumber(payload.fresh_quote_coverage_120s, payload.eligible_quote_coverage);
+      const hasCandidateLimit = payload.quote_derived_1m_candidate_limit !== undefined && payload.quote_derived_1m_candidate_limit !== null;
+      const fullUniverse = boolValue(payload.quote_derived_1m_full_universe) || (hasCandidateLimit && firstFiniteNumber(payload.quote_derived_1m_candidate_limit) <= 0);
+      const minIntradaySymbols = Math.ceil(expectedIntradaySymbols * LIVE_MIN_INTRADAY_1M_COVERAGE);
+      const intradayStatus = String(payload.intraday_1m_status || "").toLowerCase();
+      if (freshQuoteCoverage120s < LIVE_MIN_FRESH_QUOTE_COVERAGE_120S) {
+        issues.push(`source_status fresh_quote_coverage_120s ${freshQuoteCoverage120s} < ${LIVE_MIN_FRESH_QUOTE_COVERAGE_120S}`);
+      }
+      if (!fullUniverse) {
+        issues.push("source_status quote_derived_1m_full_universe is not true during regular session");
+      }
+      if (expectedIntradaySymbols >= 1000 && today1mSymbols < minIntradaySymbols) {
+        issues.push(`source_status today_1m_symbols ${today1mSymbols}/${expectedIntradaySymbols} below live gate ${LIVE_MIN_INTRADAY_1M_COVERAGE}`);
+      }
+      if (expectedIntradaySymbols >= 1000 && readyMa35 < minIntradaySymbols && boolValue(payload.intraday_1m_ma35_required)) {
+        issues.push(`source_status ready_ma35_continuous_symbols ${readyMa35}/${expectedIntradaySymbols} below live gate ${LIVE_MIN_INTRADAY_1M_COVERAGE}`);
+      }
+      if (staleSeconds > LIVE_MAX_INTRADAY_1M_STALE_SECONDS) {
+        issues.push(`source_status intraday_1m_stale_seconds ${staleSeconds} > ${LIVE_MAX_INTRADAY_1M_STALE_SECONDS}`);
+      }
+      if (intradayStatus && intradayStatus !== "ready") {
+        issues.push(`source_status intraday_1m_status=${payload.intraday_1m_status}`);
+      }
+      if (boolValue(payload.intraday_1m_ma35_required) && !boolValue(payload.scanner_can_run_ma35)) {
+        issues.push("source_status scanner_can_run_ma35 is false while MA35 is required");
+      }
+    }
   }
 
   const probes = [
@@ -430,6 +484,21 @@ async function liveChecks() {
     await rpc(baseUrl, key, "get_fugle_intraday_1m_latest_n", { symbols: ["2330"], bars_per_symbol: 1 });
   } catch (error) {
     issues.push(`get_fugle_intraday_1m_latest_n probe failed: ${error.message}`);
+  }
+
+  if (sourceRegularSession) {
+    try {
+      const readinessRows = await restGet(baseUrl, key, "v_strategy2_readiness_status?select=status,reason,detection_expected_count,intraday_1m_ready_count,intraday_1m_coverage,strategy2_ready_100,checked_at&limit=1");
+      const row = readinessRows[0] || {};
+      const expected = firstFiniteNumber(row.detection_expected_count);
+      const ready = firstFiniteNumber(row.intraday_1m_ready_count);
+      const minReady = Math.ceil(expected * LIVE_MIN_INTRADAY_1M_COVERAGE);
+      if (expected >= 1000 && ready < minReady) {
+        issues.push(`v_strategy2_readiness_status intraday_1m_ready_count ${ready}/${expected} below live gate ${LIVE_MIN_INTRADAY_1M_COVERAGE}`);
+      }
+    } catch (error) {
+      issues.push(`v_strategy2_readiness_status probe failed: ${error.message}`);
+    }
   }
 }
 

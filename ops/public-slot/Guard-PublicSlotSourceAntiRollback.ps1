@@ -32,7 +32,7 @@ function Write-DefaultRuntimeConfig {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ConfigPath) | Out-Null
   [ordered]@{
     loopSeconds = 10
-    stopAt = "12:05"
+    stopAt = "14:05"
     minAvgVolume5Lots = 0
     restQuoteBatchSize = 240
     restQuoteEverySeconds = 10
@@ -181,7 +181,7 @@ function Test-RuntimeConfig {
   }
   $expected = [ordered]@{
     loopSeconds = 10
-    stopAt = "12:05"
+    stopAt = "14:05"
     minAvgVolume5Lots = 0
     restQuoteBatchSize = 240
     restQuoteEverySeconds = 10

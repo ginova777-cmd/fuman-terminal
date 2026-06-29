@@ -302,7 +302,7 @@ language plpgsql
 security definer
 as $$
 begin
-  return public.refresh_strategy2_intraday_ready_cache(250, false);
+  return public.refresh_strategy2_intraday_ready_cache(500, false);
 end;
 $$;
 
@@ -1068,5 +1068,5 @@ grant select on public.v_strategy2_readiness_missing to service_role;
 notify pgrst, 'reload schema';
 
 select public.refresh_strategy2_preopen_hot_gate_cache();
-select public.refresh_strategy2_intraday_ready_cache(250, true);
+select public.refresh_strategy2_intraday_ready_cache(500, true);
 select public.refresh_strategy2_readiness_cache();

@@ -487,6 +487,7 @@ const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedS
 const publicSlotSupabaseSource = read("ops/public-slot/SupabasePublicSlotSource.ps1");
 const publicSlotRuntimeConfigExample = read("ops/public-slot/public-slot-shared-source.config.example.json");
 const publicSlotAntiRollbackGuard = read("ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1");
+const publicSlotSharedSourceStarter = read("ops/public-slot/Start-PublicSlotSharedSource.cmd");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
 const strategy2ReadinessSql = [
@@ -578,7 +579,7 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
   if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
 }
-for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "next_offset"]) {
+for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "next_offset", "Get-Strategy2ReadyRefreshMaxPages", "strategy2 ready cache partial refresh"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
 }
 for (const marker of [
@@ -628,6 +629,7 @@ for (const marker of [
   if (!publicSlotSupabaseSource.includes(marker)) issues.push(`SupabasePublicSlotSource.ps1 missing runtime upsert tuning marker ${marker}`);
 }
 for (const marker of [
+  "\"stopAt\": \"14:05\"",
   "publicSlotUpsertTimeoutSec",
   "publicSlotUpsertBatchSize",
   "futoptQuoteDelayMilliseconds",
@@ -654,11 +656,15 @@ for (const marker of [
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
+if (/\"stopAt\"\s*:\s*\"12:05\"/.test(publicSlotRuntimeConfigExample)) {
+  issues.push("public-slot-shared-source.config.example.json must not stop shared source at 12:05");
+}
 for (const marker of [
   "Test-RepoRuntimeConfigSupport",
   "Test-RuntimeConfig",
   "Write-DefaultRuntimeConfig",
   "public-slot-shared-source.json",
+  "stopAt = \"14:05\"",
   "runtime config guard",
   "fugle-source-contract-20260629-01",
   "Write-PublicSlotSourceCoverageSnapshot",
@@ -686,17 +692,29 @@ for (const marker of [
 ]) {
   if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);
 }
+if (/stopAt\s*=\s*"12:05"/.test(publicSlotAntiRollbackGuard)) {
+  issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not restore runtime stopAt=12:05");
+}
 if (/Set-Content\s+-LiteralPath\s+\$path|Repair-CmdEntrypoints|Repair-RunnerText|Repair-HelperText|Repair-RepoRuntimeConfigSupport|RunnerSnapshotPath|repo runner repaired|Copy-Item[\s\S]{0,160}-Destination\s+\$RunnerPath/.test(publicSlotAntiRollbackGuard)) {
   issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not rewrite tracked public-slot source files");
 }
-for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "08:45-12:00"]) {
+for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "08:45-13:35"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
+}
+if (/-StopAt 12:05/.test(publicSlotSharedSourceStarter) || /-StopAt 12:05/.test(strategy2ReadinessSourceStarter)) {
+  issues.push("public-slot source cmd entrypoints must not pass -StopAt 12:05");
 }
 for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
   if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
 }
 for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ma35_continuous", "continuous_candle_count", "ready_ma35_continuous", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
+}
+if (!strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, false)") || !strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, true)")) {
+  issues.push("Strategy2Readiness100SourcePatch.sql must use 500-row refresh wrappers for intraday ready cache");
+}
+if (/refresh_strategy2_intraday_ready_cache\(250,\s*(true|false)\)/.test(strategy2ReadinessSql)) {
+  issues.push("Strategy2Readiness100SourcePatch.sql must not use 250-row refresh wrappers");
 }
 for (const file of [
   "ops/public-slot/Strategy2Readiness100SourcePatch.sql",

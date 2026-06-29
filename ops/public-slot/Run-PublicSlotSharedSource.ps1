@@ -227,6 +227,12 @@ function Get-Strategy2ReadyRefreshBody {
   return @{}
 }
 
+function Get-Strategy2ReadyRefreshMaxPages {
+  $pageSize = [math]::Max(25, [int]$Strategy2ReadyPageSize)
+  $expectedPages = [int][math]::Ceiling([double]$SeedSymbolCount / [double]$pageSize)
+  return [math]::Max(12, [math]::Min(120, $expectedPages + 8))
+}
+
 function Convert-Market {
   param([string]$Market)
   switch -Regex ($Market) {
@@ -2980,17 +2986,23 @@ do {
     try {
       $strategy2ReadyPages = 0
       $strategy2ReadyProcessed = 0
+      $strategy2ReadyTotalExpected = 0
+      $strategy2ReadyNextOffset = 0
+      $strategy2ReadyMaxPages = Get-Strategy2ReadyRefreshMaxPages
       $strategy2ReadyLast = $null
-      for ($readyPage = 0; $readyPage -lt 12; $readyPage++) {
+      for ($readyPage = 0; $readyPage -lt $strategy2ReadyMaxPages; $readyPage++) {
         $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body (Get-Strategy2ReadyRefreshBody -ReadyPage $readyPage)
         $strategy2ReadyPages += 1
         $processedThisPage = [int](Get-Number $strategy2ReadyLast.processed)
         $strategy2ReadyProcessed += $processedThisPage
-        $nextOffset = [int](Get-Number $strategy2ReadyLast.next_offset)
-        $totalExpected = [int](Get-Number $strategy2ReadyLast.total_expected)
-        if ($nextOffset -eq 0 -or ($totalExpected -gt 0 -and $strategy2ReadyProcessed -ge $totalExpected)) { break }
+        $strategy2ReadyNextOffset = [int](Get-Number $strategy2ReadyLast.next_offset)
+        $strategy2ReadyTotalExpected = [int](Get-Number $strategy2ReadyLast.total_expected)
+        if ($strategy2ReadyNextOffset -eq 0 -or ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyProcessed -ge $strategy2ReadyTotalExpected)) { break }
       }
-      Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages processed=$strategy2ReadyProcessed last=$strategy2ReadyLast"
+      if ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyProcessed -lt $strategy2ReadyTotalExpected -and $strategy2ReadyNextOffset -ne 0) {
+        Write-Log "WARN strategy2 ready cache partial refresh pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset"
+      }
+      Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset last=$strategy2ReadyLast"
     } catch {
       Write-Log "WARN strategy2 ready cache refresh skipped: $($_.Exception.Message)"
     }

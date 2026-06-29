@@ -1,6 +1,6 @@
 {
   "loopSeconds": 10,
-  "stopAt": "12:05",
+  "stopAt": "14:05",
   "minAvgVolume5Lots": 0,
   "restQuoteBatchSize": 240,
   "restQuoteEverySeconds": 10,
