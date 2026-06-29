@@ -441,6 +441,8 @@ const fullScan = read("run-full-scan.ps1");
 const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
 const refreshDesktopSnapshot = read("refresh-desktop-route-snapshot.ps1");
+const agentsGuide = read("AGENTS.md");
+const postScanSnapshotAgents = read("post-scan-snapshot-refreshAGENTS.MD");
 const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
@@ -488,6 +490,8 @@ const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
 const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
 const strategy2ReadinessGate = read("scripts/check-strategy2-readiness-gate.js");
 const strategy2TradingDayGate = read("scripts/check-strategy2-trading-day.js");
+const postScanSnapshotVerifier = read("scripts/verify-post-scan-snapshot-refresh-contract.js");
+const strategy2BattleStateVerifier = read("scripts/verify-strategy2-battle-state.js");
 const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
@@ -792,6 +796,55 @@ for (const marker of [
   "scan-receipts",
 ]) {
   if (!refreshDesktopSnapshot.includes(marker)) issues.push(`refresh-desktop-route-snapshot.ps1 missing ${marker}`);
+}
+for (const marker of [
+  "$routeBySource",
+  "--routes=$routeKey",
+  "Desktop route snapshot refresh retry",
+  "Start-Sleep -Seconds 5",
+]) {
+  if (!refreshDesktopSnapshot.includes(marker)) issues.push(`refresh-desktop-route-snapshot.ps1 missing latest post-scan route-scoped anti-rollback marker ${marker}`);
+}
+for (const marker of [
+  "selectedTasks",
+  "FUMAN_POST_SCAN_SNAPSHOT_ROUTES",
+  "routes: tasks.map",
+  "rows.length === tasks.length",
+]) {
+  if (!postScanSnapshotVerifier.includes(marker)) issues.push(`verify-post-scan-snapshot-refresh-contract.js missing route-scoped marker ${marker}`);
+}
+if (!/bundleDisplayReady/.test(postScanSnapshotVerifier) || !/snapshotHit \|\| row\.bundleHit/.test(postScanSnapshotVerifier)) {
+  issues.push("verify-post-scan-snapshot-refresh-contract.js must keep bundleHit immediate-display readiness support");
+}
+if (!/ignored stale scanner receipt/.test(fullScan) || !/receiptIsStale/.test(fullScan)) {
+  issues.push("run-full-scan.ps1 must reject stale child receipts from previous scanner runs");
+}
+if (!/Write-OpenBuyReceipt "failed" \$LASTEXITCODE \$false 0 \$script:OpenBuyVerifiedRunId/.test(runOpenBuy)) {
+  issues.push("run-open-buy.ps1 must write a current failed receipt when desktop snapshot refresh fails");
+}
+if (!/STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK/.test(runStrategy4) || !/Strategy4 contract seed fallback enabled for cache-miss self-heal/.test(runStrategy4)) {
+  issues.push("run-strategy4.ps1 must keep Strategy4 contract seed fallback self-heal marker");
+}
+if (!/inferredRunIdFromLatestComplete/.test(strategy2BattleStateVerifier)) {
+  issues.push("verify-strategy2-battle-state.js must keep runtime-session-history latest-runId inference");
+}
+for (const marker of [
+  "Latest Operator Contract",
+  "Do Not Use As Read-Only Verification",
+  "Post-Scan Immediate Display",
+  "Strategy4 Latest Contract",
+  "Anti-Rollback",
+]) {
+  if (!agentsGuide.includes(marker)) issues.push(`AGENTS.md missing latest-only operator marker ${marker}`);
+}
+for (const marker of [
+  "Old all-route behavior is retired",
+  "selectedTasks()",
+  "FUMAN_POST_SCAN_SNAPSHOT_ROUTES",
+  "Single scanner runs must not fail because unrelated routes",
+  "bundleHit",
+]) {
+  if (!postScanSnapshotAgents.includes(marker)) issues.push(`post-scan-snapshot-refreshAGENTS.MD missing latest route-scoped contract marker ${marker}`);
 }
 if (!/Invoke-DesktopRouteSnapshotRefresh/.test(gate) || !/refresh-desktop-route-snapshot\.ps1/.test(gate) || !/Invoke-DesktopRouteSnapshotRefresh "live-freshness-gate-\$gateMode"/.test(gate)) {
   issues.push("run-live-freshness-gate.ps1 must refresh desktop route snapshot after Supabase/cache publish so terminal UI gets the latest complete runs");

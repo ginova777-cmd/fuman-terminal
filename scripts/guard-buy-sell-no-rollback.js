@@ -143,14 +143,11 @@ requireIncludes("index.html", [
 ]);
 
 const agents = requireIncludes("AGENTS.md", [
-  "Supabase only polling / snapshot",
-  "買賣超 | latest-complete",
-  "完整掃頁面顯示前一個交易日是正常狀態",
-  "不要用 cache bump / version bump 假裝修好資料或速度",
-  "買賣超 / Institution",
-  "foreignStreak / trustStreak / jointStreak",
-  "foreignTrustVolumePct",
-  "不能刪或退回的買賣超正式接線",
+  "Latest Operator Contract",
+  "Do Not Use As Read-Only Verification",
+  "Post-Scan Immediate Display",
+  "Strategy4 Latest Contract",
+  "Anti-Rollback",
 ]);
 
 requireIncludes("institutionAGENTS.MD", [
@@ -162,7 +159,7 @@ requireIncludes("institutionAGENTS.MD", [
   "guard:buy-sell-no-rollback",
 ]);
 
-if (/Strategy 1|Strategy 2|Strategy 3|Strategy 4|Strategy 5/.test(agents)) {
+if (/Supabase Shared Source 四層契約|買賣超 \/ Institution|Strategy 1|Strategy 2|Strategy 3|Strategy 4|Strategy 5/.test(agents)) {
   fail("AGENTS.md should stay on the new concise contract, not the old strategy long-form file");
 }
 
