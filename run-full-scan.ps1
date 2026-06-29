@@ -137,7 +137,7 @@ function Convert-ToStableArray($value) {
   } else {
     $items.Add($value) | Out-Null
   }
-  return @($items)
+  return $items.ToArray()
 }
 
 function Get-FullScanStrictFailures($items) {
