@@ -480,6 +480,9 @@ const productionHealthMonitor = read("scripts/monitor-production-health.js");
 const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
+const sourceSyncVerifier = read("scripts/verify-source-sync.js");
+const productionGuard = read("scripts/verify-production-guard.js");
+const releaseManifestApi = read("api/release-manifest.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
 const strategy2SharedSource = read("lib/supabase-public-slot.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
@@ -819,6 +822,14 @@ if (!/bundleDisplayReady/.test(postScanSnapshotVerifier) || !/snapshotHit \|\| r
 if (!/ignored stale scanner receipt/.test(fullScan) || !/receiptIsStale/.test(fullScan)) {
   issues.push("run-full-scan.ps1 must reject stale child receipts from previous scanner runs");
 }
+for (const marker of [
+  "strictRequiredStrategies",
+  "allCompleteOk",
+  "strictFailures",
+  "Full scan strict gate failed",
+]) {
+  if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing strict full scan marker ${marker}`);
+}
 if (!/Write-OpenBuyReceipt "failed" \$LASTEXITCODE \$false 0 \$script:OpenBuyVerifiedRunId/.test(runOpenBuy)) {
   issues.push("run-open-buy.ps1 must write a current failed receipt when desktop snapshot refresh fails");
 }
@@ -832,8 +843,11 @@ for (const marker of [
   "Latest Operator Contract",
   "Do Not Use As Read-Only Verification",
   "Post-Scan Immediate Display",
+  "Full Scan Strict Gate",
   "Strategy4 Latest Contract",
   "Anti-Rollback",
+  "allCompleteOk",
+  "strictFailures",
 ]) {
   if (!agentsGuide.includes(marker)) issues.push(`AGENTS.md missing latest-only operator marker ${marker}`);
 }
@@ -843,6 +857,10 @@ for (const marker of [
   "FUMAN_POST_SCAN_SNAPSHOT_ROUTES",
   "Single scanner runs must not fail because unrelated routes",
   "bundleHit",
+  "full-scan strict all-complete",
+  "strictRequiredStrategies",
+  "allCompleteOk",
+  "strictFailures",
 ]) {
   if (!postScanSnapshotAgents.includes(marker)) issues.push(`post-scan-snapshot-refreshAGENTS.MD missing latest route-scoped contract marker ${marker}`);
 }
@@ -1233,6 +1251,10 @@ for (const marker of [
   "run-strategy3-complete-scan.ps1",
   "data\\scan-receipts",
   "scan-summary.json",
+  "strictRequiredStrategies",
+  "allCompleteOk",
+  "strictFailures",
+  "Full scan strict gate failed",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing full scan marker ${marker}`);
 }
@@ -1241,6 +1263,11 @@ if (!/FUMAN_SCAN_RECEIPTS_WRITE_CODE_REPO/.test(fullScan) || !/\$writeCodeRepoRe
 }
 for (const marker of [
   "\"strategy3\"",
+  "\"institution\"",
+  "\"warrant-flow\"",
+  "\"cb-detect\"",
+  "allCompleteOk",
+  "strictFailures",
   "stale scan receipt",
   "blocking scan receipt",
   "run-live-freshness-gate.ps1",
@@ -1383,6 +1410,27 @@ for (const marker of [
 }
 
 const liveVersionVerifier = read("scripts/verify-live-version.js");
+for (const [fileName, text] of [
+  ["scripts/verify-production-guard.js", productionGuard],
+  ["scripts/verify-live-version.js", liveVersionVerifier],
+]) {
+  for (const marker of [
+    "FUMAN_RELEASE_SHA",
+    "FUMAN_DEPLOY_SHA",
+    "/api/release-manifest",
+    "gitSha",
+  ]) {
+    if (!text.includes(marker)) issues.push(`${fileName} missing release SHA manifest marker ${marker}`);
+  }
+}
+for (const marker of [
+  "VERCEL_GIT_COMMIT_SHA",
+  "FUMAN_RELEASE_SHA",
+  "FUMAN_DEPLOY_SHA",
+  "versionPayload.version",
+]) {
+  if (!releaseManifestApi.includes(marker)) issues.push(`api/release-manifest.js missing release manifest marker ${marker}`);
+}
 for (const marker of [
   "verifyMarketEventReminderGuard",
   "installMarketSettlementTitleBadgeGuard",
@@ -1451,6 +1499,8 @@ if (!/ETIMEDOUT|ECONNRESET|fetch failed|AbortError/.test(healthSummary)) {
 const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
 for (const file of [
   "88.html",
+  "AGENTS.md",
+  "post-scan-snapshot-refreshAGENTS.MD",
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
   "api/scorecard.js",
@@ -1478,6 +1528,10 @@ for (const file of [
   "api/realtime-radar-latest.js",
   "scripts/verify-desktop-api-only.js",
   "scripts/verify-production-guard.js",
+  "api/release-manifest.js",
+  "lib/desktop-route-snapshot-builder.js",
+  "lib/desktop-route-snapshot-cache.js",
+  "run-publish-gate.ps1",
   "scripts/verify-scorecard-snapshot.js",
   "scripts/verify-scorecard-resource-chain.js",
   "scripts/verify-scorecard-strategy-rules.js",
@@ -1523,6 +1577,16 @@ for (const file of [
   "install-api-only-cleanup-task.ps1",
 ]) {
   if (!sourceSyncScript.includes(file)) issues.push(`sync-main-deploy-source.js missing ${file}`);
+}
+for (const file of [
+  "AGENTS.md",
+  "post-scan-snapshot-refreshAGENTS.MD",
+  "api/release-manifest.js",
+  "lib/desktop-route-snapshot-builder.js",
+  "lib/desktop-route-snapshot-cache.js",
+  "run-publish-gate.ps1",
+]) {
+  if (!sourceSyncVerifier.includes(file)) issues.push(`verify-source-sync.js missing ${file}`);
 }
 
 const apiOnlyCleanup = read("scripts/cleanup-api-only-retired-artifacts.js");
@@ -1934,6 +1998,7 @@ if (fetchResult.status !== 0) {
     const allowedDirty = new Set([
       ".gitignore",
       "AGENTS.md",
+      "post-scan-snapshot-refreshAGENTS.MD",
       "scorecardAGENTS.MD",
       "scripts/verify-publish-gate.js",
       "fuman-sw.js",
@@ -1968,6 +2033,7 @@ if (fetchResult.status !== 0) {
       "scripts/fugle-websocket-collector.js",
       "scripts/sync-main-deploy-source.js",
       "scripts/verify-production-guard.js",
+      "scripts/verify-live-version.js",
       "scripts/verify-scorecard-snapshot.js",
       "scripts/verify-scorecard-resource-chain.js",
       "scripts/verify-scorecard-no-rollback.js",
@@ -2018,6 +2084,9 @@ if (fetchResult.status !== 0) {
       "88.html",
       "api/scorecard.js",
       "api/scorecard-health.js",
+      "api/release-manifest.js",
+      "lib/desktop-route-snapshot-builder.js",
+      "lib/desktop-route-snapshot-cache.js",
       "lib/scorecard-rule-locks.js",
       "api/open-buy-latest.js",
       "api/cb-detect-latest.js",

@@ -10,6 +10,7 @@ const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCT
 const CHECK_LIVE = !process.argv.includes("--pre-deploy");
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const ALLOW_AHEAD = process.argv.includes("--allow-ahead");
+const RELEASE_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA);
 const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
 const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
 const RESERVED_PRODUCTION_ROUTES = [
@@ -62,6 +63,10 @@ function sha256(text) {
 
 function cleanText(value) {
   return String(value ?? "").trim();
+}
+
+function normalizeSha(value) {
+  return cleanText(value).toLowerCase();
 }
 
 function git(args) {
@@ -117,12 +122,22 @@ function assertGitState() {
     issues.push(`working tree is dirty; commit or stash before deploy:\n${status.stdout.split(/\r?\n/).slice(0, 20).join("\n")}`);
   }
   const localHead = git(["rev-parse", "HEAD"]);
-  const origin = git(["ls-remote", "origin", "refs/heads/main"]);
-  const originHead = origin.stdout.split(/\s+/)[0] || "";
+  let originHead = "";
   if (!localHead.ok) issues.push(`git rev-parse failed: ${localHead.stderr}`);
-  if (!origin.ok) issues.push(`git ls-remote origin main failed: ${origin.stderr}`);
-  if (localHead.ok && origin.ok && originHead && localHead.stdout !== originHead && !ALLOW_AHEAD) {
-    issues.push(`local HEAD must equal origin/main before guarded deploy: local=${localHead.stdout.slice(0, 8)} origin=${originHead.slice(0, 8)}`);
+  if (RELEASE_SHA) {
+    const localOrigin = git(["rev-parse", "--verify", "origin/main"]);
+    originHead = localOrigin.ok ? localOrigin.stdout : "";
+    const localSha = normalizeSha(localHead.stdout);
+    if (localHead.ok && localSha !== RELEASE_SHA) {
+      issues.push(`local HEAD must equal release SHA before guarded deploy: local=${localSha.slice(0, 8)} release=${RELEASE_SHA.slice(0, 8)}`);
+    }
+  } else {
+    const origin = git(["ls-remote", "origin", "refs/heads/main"]);
+    originHead = origin.stdout.split(/\s+/)[0] || "";
+    if (!origin.ok) issues.push(`git ls-remote origin main failed: ${origin.stderr}`);
+    if (localHead.ok && origin.ok && originHead && normalizeSha(localHead.stdout) !== normalizeSha(originHead) && !ALLOW_AHEAD) {
+      issues.push(`local HEAD must equal origin/main before guarded deploy: local=${localHead.stdout.slice(0, 8)} origin=${originHead.slice(0, 8)}`);
+    }
   }
   return { localHead: localHead.stdout || "", originHead };
 }
@@ -134,6 +149,25 @@ function assertReservedProductionRoutes() {
 }
 
 async function assertLiveState(version) {
+  if (RELEASE_SHA) {
+    const manifest = await fetchText("/api/release-manifest", 25000);
+    if (manifest.status < 200 || manifest.status >= 300) {
+      issues.push(`release manifest HTTP ${manifest.status}`);
+    } else {
+      try {
+        const payload = JSON.parse(manifest.body);
+        if (payload.version !== version) {
+          issues.push(`release manifest version mismatch: live=${payload.version || "(missing)"} local=${version}`);
+        }
+        if (normalizeSha(payload.gitSha) !== RELEASE_SHA) {
+          issues.push(`release manifest SHA mismatch: live=${String(payload.gitSha || "").slice(0, 8) || "(missing)"} release=${RELEASE_SHA.slice(0, 8)}`);
+        }
+      } catch (error) {
+        issues.push(`release manifest invalid JSON: ${error.message}`);
+      }
+    }
+  }
+
   const versionJson = await fetchText("/version.json");
   if (versionJson.status < 200 || versionJson.status >= 300) {
     issues.push(`live version.json HTTP ${versionJson.status}`);
@@ -246,7 +280,7 @@ async function main() {
     for (const issue of issues) console.error(`- ${issue}`);
     process.exit(1);
   }
-  console.log(`[production-guard] ok version=${version} head=${gitState.localHead.slice(0, 8)} origin=${gitState.originHead.slice(0, 8)} live=${CHECK_LIVE ? "checked" : "skipped"}`);
+  console.log(`[production-guard] ok version=${version} head=${gitState.localHead.slice(0, 8)} origin=${gitState.originHead.slice(0, 8)} release=${RELEASE_SHA ? RELEASE_SHA.slice(0, 8) : "none"} live=${CHECK_LIVE ? "checked" : "skipped"}`);
 }
 
 main().catch((error) => {

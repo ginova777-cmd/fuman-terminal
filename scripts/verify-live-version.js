@@ -8,6 +8,7 @@ const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.v
 const RETRY = process.argv.includes("--retry");
 const ATTEMPTS = Number(process.env.FUMAN_VERIFY_LIVE_ATTEMPTS || (RETRY ? 12 : 1));
 const DELAY_MS = Number(process.env.FUMAN_VERIFY_LIVE_DELAY_MS || 10000);
+const RELEASE_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA);
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -15,6 +16,10 @@ function read(file) {
 
 function sha256(text) {
   return crypto.createHash("sha256").update(text.replace(/\r\n/g, "\n"), "utf8").digest("hex").toUpperCase();
+}
+
+function normalizeSha(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function fetchText(pathname, timeoutMs = 20000) {
@@ -91,6 +96,16 @@ async function verifyOnce() {
       return false;
     }
   });
+  if (RELEASE_SHA) {
+    await expectOk("release-manifest", "/api/release-manifest", (body) => {
+      try {
+        const payload = JSON.parse(body);
+        return payload?.version === version && normalizeSha(payload?.gitSha) === RELEASE_SHA;
+      } catch {
+        return false;
+      }
+    });
+  }
   const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`terminal-ai-risk-guard.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
   await expectOk("core", `/terminal-core.js?v=${version}`, (body) => body.includes(`const version = "${version}"`) && body.includes("FUMAN_TERMINAL_VERSION"));
   await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes("terminal-app.js"));
@@ -104,7 +119,7 @@ async function verifyOnce() {
   verifyMarketEventReminderGuard(app);
   const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
   verifyMarketAiPriorityRiskGuard(riskGuard);
-  console.log(`[live-version] ok version=${version} terminal-app=${liveAppHash}`);
+  console.log(`[live-version] ok version=${version} release=${RELEASE_SHA ? RELEASE_SHA.slice(0, 8) : "none"} terminal-app=${liveAppHash}`);
 }
 
 async function main() {

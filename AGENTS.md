@@ -109,6 +109,55 @@ C:\fuman-runtime\data\scan-receipts
 
 Do not commit runtime receipts or logs with code fixes unless explicitly creating a baseline.
 
+## Full Scan Strict Gate
+
+Complete scan means every required strategy/chip/CB receipt completed for this scan. `criticalFailures=0` alone is not enough.
+
+`run-full-scan.ps1` must keep these strict fields and failure text:
+
+- `strictRequiredStrategies`: `open-buy`, `strategy3`, `institution`, `warrant-flow`, `strategy4`, `strategy5`, `cb-detect`;
+- `allCompleteOk`: must be `true` before publish;
+- `strictFailures`: must be empty before publish;
+- `Full scan strict gate failed`: the blocking error when any required receipt is degraded, fallback, partial, stale, warned, missing, or non-zero exit.
+
+`run-publish-gate.ps1` must reject publish unless the latest `scan-summary.json` has `allCompleteOk=true`, empty `strictFailures`, and complete receipts for `institution`, `warrant-flow`, and `cb-detect` as well as the strategy receipts.
+
+Each required receipt must be from the current scan window and must have:
+
+```text
+status=complete
+exitCode=0
+complete=true
+fallback=false
+warnings=[]
+qualityStatus not partial/degraded/incomplete
+blockingReason empty
+```
+
+Publishable scan-summary fields:
+
+```text
+scan-summary.json ok=true
+scan-summary.json allCompleteOk=true
+scan-summary.json strictFailures=[]
+```
+
+## Release SHA Verification
+
+Formal verification may pin the deployment with:
+
+```powershell
+$env:FUMAN_RELEASE_SHA = git rev-parse HEAD
+```
+
+`FUMAN_DEPLOY_SHA` is accepted as an equivalent fallback. When a release SHA is set, production guards must compare local `HEAD` and live `/api/release-manifest.gitSha` with that release SHA, not with a later moving `origin/main` commit.
+
+## Verification Fence And Mirror
+
+During a final verification window, use a scheduler fence: do not allow another full scan or publish gate to start while UI E2E, health, readiness, freshness, and post-scan snapshot validation are reading the release state. After validation, restore the production schedules and verify next run times.
+
+`C:\fuman-terminal` is a production mirror only. Do not treat it as the formal source of truth and do not deploy from it when dirty. Source changes must be made in the release clone, committed, pushed, deployed from a clean release clone, then synchronized through the official source-sync path if the mirror needs updating.
+
 ## Strategy4 Latest Contract
 
 Strategy4 is API-only:
@@ -154,13 +203,16 @@ git status --short
 git rev-parse HEAD origin/main
 ```
 
-Both hashes must match when the fix must survive future sync.
+When no release SHA is pinned, both hashes must match before reporting stable. When a release SHA is pinned, local `HEAD` and live `/api/release-manifest.gitSha` must match the pinned release SHA; a newer `origin/main` is a separate post-validation fact, not a failure of the pinned release.
 
 `scripts\verify-publish-gate.js` must protect these markers:
 
 - route-scoped post-scan verifier: `selectedTasks`, `--routes=$routeKey`, `FUMAN_POST_SCAN_SNAPSHOT_ROUTES`;
 - snapshot retry: `Desktop route snapshot refresh retry`;
 - stale receipt guard: `ignored stale scanner receipt`;
+- full scan strict gate: `strictRequiredStrategies`, `allCompleteOk`, `strictFailures`, `Full scan strict gate failed`;
+- publish receipt strict gate: `institution`, `warrant-flow`, `cb-detect`, `allCompleteOk`, `strictFailures`;
+- release SHA guard: `FUMAN_RELEASE_SHA`, `FUMAN_DEPLOY_SHA`, `/api/release-manifest`;
 - open-buy failed snapshot receipt write;
 - Strategy4 fallback marker: `STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK`;
 - Strategy2 inferred runId marker: `inferredRunIdFromLatestComplete`;
@@ -197,7 +249,8 @@ Expected: `False`.
 
 When reporting to the user, include only current facts:
 
-- latest full scan `scan-summary.json` ok / criticalFailures;
+- release SHA and live manifest SHA match;
+- latest full scan `scan-summary.json` ok / criticalFailures / allCompleteOk / strictFailures;
 - latest desktop snapshot updatedAt / endpointCount / misses;
 - post-scan contract gates;
 - data freshness result;

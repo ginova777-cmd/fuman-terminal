@@ -78,6 +78,8 @@ If snapshot refresh fails, scanner runners must write a current failure receipt 
 
 `run-full-scan.ps1` must reject stale child receipts where `finishedAt` is before the current task `startedAt`.
 
+For full-scan immediate display, snapshot readiness is necessary but not sufficient. The full scan summary must also keep `strictRequiredStrategies`, `allCompleteOk`, and `strictFailures`, and `status=degraded` on institution/warrant/CB/required strategy receipts must block 100% completion.
+
 ## Manual Checks
 
 All routes:
@@ -100,4 +102,4 @@ node --use-system-ca scripts\verify-post-scan-snapshot-refresh-contract.js --rou
 
 ## Anti-Rollback
 
-`scripts\verify-publish-gate.js` must fail if route-scoped verifier, snapshot retry, Strategy4 fallback, or stale receipt protection markers are removed.
+`scripts\verify-publish-gate.js` must fail if route-scoped verifier, snapshot retry, Strategy4 fallback, stale receipt protection, or full-scan strict all-complete markers are removed.

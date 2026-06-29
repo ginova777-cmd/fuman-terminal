@@ -21,6 +21,7 @@ $log = Join-Path $logDir ("full-scan-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHm
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $receipts = New-Object System.Collections.Generic.List[object]
 $criticalFailures = New-Object System.Collections.Generic.List[string]
+$strictRequiredStrategies = @("open-buy", "strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
 $env:NOTIFY_FAST_MODE = "1"
 $env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
 $env:NOTIFY_PUSH_RETRIES = "1"
@@ -92,6 +93,86 @@ function Get-ReceiptStatus($exitCode, $tier, $payload, $warnings) {
   return "complete"
 }
 
+function Get-ReceiptValue($receipt, $name, $default = $null) {
+  if (-not $receipt) { return $default }
+  if ($receipt -is [System.Collections.IDictionary] -and $receipt.Contains($name)) {
+    $value = $receipt[$name]
+    if ($null -ne $value) { return $value }
+  }
+  $property = $receipt.PSObject.Properties[$name]
+  if ($property -and $null -ne $property.Value) { return $property.Value }
+  return $default
+}
+
+function Get-ReceiptWarnings($receipt) {
+  $value = Get-ReceiptValue $receipt "warnings" @()
+  if ($null -eq $value) { return @() }
+  return @($value)
+}
+
+function Get-ReceiptBool($receipt, $name, $default = $false) {
+  $value = Get-ReceiptValue $receipt $name $default
+  return [bool]$value
+}
+
+function Get-ReceiptInt($receipt, $name, $default = 0) {
+  $propertyValue = Get-ReceiptValue $receipt $name $default
+  $value = 0
+  if ([int]::TryParse([string]$propertyValue, [ref]$value)) { return $value }
+  return [int]$default
+}
+
+function Get-ReceiptString($receipt, $name, $default = "") {
+  $value = Get-ReceiptValue $receipt $name $default
+  if ($null -eq $value) { return [string]$default }
+  return [string]$value
+}
+
+function Get-FullScanStrictFailures($items) {
+  $byStrategy = @{}
+  foreach ($receipt in @($items)) {
+    $strategyName = Get-ReceiptString $receipt "strategy"
+    if (-not $strategyName) { continue }
+    $byStrategy[$strategyName] = $receipt
+  }
+
+  $failures = New-Object System.Collections.Generic.List[string]
+  foreach ($strategy in $strictRequiredStrategies) {
+    if (-not $byStrategy.ContainsKey($strategy)) {
+      $failures.Add("${strategy}: missing required receipt") | Out-Null
+      continue
+    }
+
+    $receipt = $byStrategy[$strategy]
+    $status = Get-ReceiptString $receipt "status"
+    $complete = Get-ReceiptBool $receipt "complete" $false
+    $exitCode = Get-ReceiptInt $receipt "exitCode" 1
+    $fallback = Get-ReceiptBool $receipt "fallback" $false
+    $quality = Get-ReceiptString $receipt "qualityStatus"
+    $warnings = Get-ReceiptWarnings $receipt
+
+    if ($status -ne "complete") {
+      $failures.Add("${strategy}: status=$status") | Out-Null
+    }
+    if (-not $complete) {
+      $failures.Add("${strategy}: complete=false") | Out-Null
+    }
+    if ($exitCode -ne 0) {
+      $failures.Add("${strategy}: exitCode=$exitCode") | Out-Null
+    }
+    if ($fallback) {
+      $failures.Add("${strategy}: fallback=true") | Out-Null
+    }
+    if ($quality -in @("partial", "degraded", "incomplete")) {
+      $failures.Add("${strategy}: qualityStatus=$quality") | Out-Null
+    }
+    if (@($warnings).Count -gt 0) {
+      $failures.Add("${strategy}: warnings=$(@($warnings).Count)") | Out-Null
+    }
+  }
+  return $failures
+}
+
 function Write-Receipt($receipt) {
   $file = "{0}.json" -f $receipt.strategy
   Write-JsonFile (Join-Path $receiptDir $file) $receipt
@@ -113,28 +194,28 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
     Push-Location $syncRoot
     try {
       if ($TimeoutSeconds -gt 0) {
-        $psi = [System.Diagnostics.ProcessStartInfo]::new()
-        $psi.FileName = $nodeExe
-        $psi.ArgumentList.Add($script)
-        $psi.WorkingDirectory = $syncRoot
-        $psi.UseShellExecute = $false
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $proc = [System.Diagnostics.Process]::Start($psi)
+        $stamp = "{0}-{1}" -f $strategy, (Get-Date -Format "yyyyMMddHHmmssfff")
+        $stdoutFile = Join-Path $logDir ("full-scan-child-{0}.out.log" -f $stamp)
+        $stderrFile = Join-Path $logDir ("full-scan-child-{0}.err.log" -f $stamp)
+        $proc = Start-Process -FilePath $nodeExe -ArgumentList @($script) -WorkingDirectory $syncRoot -PassThru -NoNewWindow -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
         if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
           try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
           $exitCode = 124
           $warnings.Add("timeout after ${TimeoutSeconds}s") | Out-Null
           Write-ScanLog "TIMEOUT [$tier] $label after ${TimeoutSeconds}s"
         } else {
+          $proc.Refresh()
           $exitCode = $proc.ExitCode
         }
-        foreach ($text in @($proc.StandardOutput.ReadToEnd(), $proc.StandardError.ReadToEnd()) -join "`n" -split "`r?`n") {
-          if (-not $text) { continue }
-          Write-Host $text
-          Add-Content -LiteralPath $log -Value $text -Encoding utf8
-          if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|HTTP 429|fallback|partial|incomplete|source warnings)\b") {
-            $warnings.Add($text) | Out-Null
+        foreach ($streamFile in @($stdoutFile, $stderrFile)) {
+          if (-not (Test-Path -LiteralPath $streamFile)) { continue }
+          foreach ($text in (Get-Content -LiteralPath $streamFile -ErrorAction SilentlyContinue)) {
+            if (-not $text) { continue }
+            Write-Host $text
+            Add-Content -LiteralPath $log -Value $text -Encoding utf8
+            if ($text -match "(?i)\b(warn|warning|failed|timeout|timed out|ETIMEDOUT|ECONNRESET|fetch failed|HTTP 403|HTTP 404|HTTP 429|fallback|partial|incomplete|source warnings)\b") {
+              $warnings.Add($text) | Out-Null
+            }
           }
         }
       } else {
@@ -246,9 +327,9 @@ function Invoke-RunnerTask($strategy, $label, $tier, $runner) {
   } else {
     $receipts.Add($receipt) | Out-Null
   }
-  $status = [string]($receipt.status ?? "")
-  $complete = [bool]($receipt.complete ?? $false)
-  $blockingReason = [string]($receipt.blockingReason ?? "")
+  $status = Get-ReceiptString $receipt "status"
+  $complete = Get-ReceiptBool $receipt "complete" $false
+  $blockingReason = Get-ReceiptString $receipt "blockingReason"
   if ($exitCode -ne 0 -or $status -eq "failed" -or -not $complete) {
     if ([string]::IsNullOrWhiteSpace($blockingReason)) { $blockingReason = "critical scan failed with exit code $exitCode" }
     if ($tier -eq "critical") { $criticalFailures.Add("${strategy}: $blockingReason") | Out-Null }
@@ -358,22 +439,29 @@ try {
   Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
   Invoke-DesktopRouteSnapshotWrite
 
+  $strictFailures = Get-FullScanStrictFailures @($receipts.ToArray())
   $summary = [ordered]@{
-    ok = ($criticalFailures.Count -eq 0)
+    ok = ($criticalFailures.Count -eq 0 -and $strictFailures.Count -eq 0)
     source = "scan-full"
     updatedAt = (Get-Date).ToString("o")
     receiptCount = $receipts.Count
     criticalFailures = @($criticalFailures.ToArray())
+    strictRequiredStrategies = @($strictRequiredStrategies)
+    allCompleteOk = ($strictFailures.Count -eq 0)
+    strictFailures = @($strictFailures.ToArray())
     receipts = @($receipts.ToArray())
     log = $log
   }
   Write-JsonFile (Join-Path $receiptDir "scan-summary.json") $summary
   if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir "scan-summary.json") $summary }
 
+  if ($strictFailures.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
+    throw "Full scan strict gate failed: $($strictFailures -join '; ')"
+  }
   if ($criticalFailures.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
     throw "Critical scans failed: $($criticalFailures -join '; ')"
   }
-  Write-ScanLog "SUCCESS full scan completed criticalFailures=$($criticalFailures.Count)"
+  Write-ScanLog "SUCCESS full scan completed criticalFailures=$($criticalFailures.Count) strictFailures=$($strictFailures.Count) allCompleteOk=$($strictFailures.Count -eq 0)"
   exit 0
 } catch {
   Write-ScanLog "FAILED $($_.Exception.Message)"
