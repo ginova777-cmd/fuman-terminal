@@ -8,22 +8,22 @@ param(
   [int]$SeedSymbolCount = 2000,
   [int]$QuoteKeepMinutes = 480,
   [int]$DailyVolumeRetainTradeDays = 20,
-  [int]$Direct1mBatchSize = 3,
-  [int]$Direct1mEverySeconds = 300,
-  [int]$RestQuoteBatchSize = 20,
-  [int]$RestQuoteEverySeconds = 30,
-  [int]$MinAvgVolume5Lots = 3000,
+  [int]$Direct1mBatchSize = 8,
+  [int]$Direct1mEverySeconds = 20,
+  [int]$RestQuoteBatchSize = 80,
+  [int]$RestQuoteEverySeconds = 10,
+  [int]$MinAvgVolume5Lots = 0,
   [int]$MinCumulativeBidAskLots = 3000,
-  [int]$FutoptQuoteBatchSize = 20,
-  [int]$FutoptQuoteEverySeconds = 60,
-  [int]$FutoptQuoteDelayMilliseconds = 600,
-  [int]$FutoptTickersEverySeconds = 1800,
-  [int]$PublicSlotUpsertTimeoutSec = 20,
+  [int]$FutoptQuoteBatchSize = 120,
+  [int]$FutoptQuoteEverySeconds = 20,
+  [int]$FutoptQuoteDelayMilliseconds = 100,
+  [int]$FutoptTickersEverySeconds = 300,
+  [int]$PublicSlotUpsertTimeoutSec = 45,
   [int]$PublicSlotUpsertBatchSize = 300,
   [bool]$WritePreopenRows = $true,
   [ValidateSet("always", "preopen", "never")]
-  [string]$WritePreopenRowsMode = "always",
-  [int]$Strategy2ReadyPageSize = 0,
+  [string]$WritePreopenRowsMode = "preopen",
+  [int]$Strategy2ReadyPageSize = 250,
   [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
@@ -940,7 +940,7 @@ function Invoke-Direct1mWarmupBatch {
       Write-Log "WARN direct_1m rate limited; stopping current batch and cooling down."
       break
     }
-    Start-Sleep -Milliseconds 2000
+    Start-Sleep -Milliseconds 300
   }
   $nextCursor = ($cursor + [math]::Max(1, $fetched)) % $Symbols.Count
   Write-JsonFile -Path $Direct1mStateFile -Value ([ordered]@{

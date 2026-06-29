@@ -54,7 +54,7 @@ function Invoke-PublicSlotUpsert {
     [Parameter(Mandatory = $true)][string]$OnConflict,
     [Parameter(Mandatory = $true)][object[]]$Rows,
     [int]$RetryCount = 2,
-    [int]$TimeoutSec = 20,
+    [int]$TimeoutSec = 45,
     [int]$BatchSize = 300
   )
 

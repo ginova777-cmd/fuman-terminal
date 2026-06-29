@@ -12,5 +12,5 @@ rem - 09:00-12:00: keep full quote universe and 1m aggregation warm for ready_ge
 node "%SCRIPT_DIR%..\..\scripts\check-strategy2-trading-day.js" --closed-exit-code=10
 if %ERRORLEVEL% EQU 10 exit /b 0
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
-"%PWSH%" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Run-PublicSlotSharedSource.ps1" -LoopSeconds 10 -StopAt 12:05 -RestQuoteBatchSize 80 -RestQuoteEverySeconds 10 -Direct1mBatchSize 8 -Direct1mEverySeconds 20 -FutoptQuoteBatchSize 80 -FutoptQuoteEverySeconds 20 -FutoptTickersEverySeconds 300
+"%PWSH%" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Run-PublicSlotSharedSource.ps1" -LoopSeconds 10 -StopAt 12:05 -MinAvgVolume5Lots 0 -RestQuoteBatchSize 80 -RestQuoteEverySeconds 10 -Direct1mBatchSize 8 -Direct1mEverySeconds 20 -FutoptQuoteBatchSize 120 -FutoptQuoteEverySeconds 20 -FutoptQuoteDelayMilliseconds 100 -FutoptTickersEverySeconds 300 -PublicSlotUpsertTimeoutSec 45 -PublicSlotUpsertBatchSize 300 -WritePreopenRowsMode preopen -Strategy2ReadyPageSize 250
 endlocal
