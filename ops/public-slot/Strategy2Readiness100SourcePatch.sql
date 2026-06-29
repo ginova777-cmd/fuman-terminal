@@ -57,7 +57,7 @@ begin
   where id = 'strategy2'
   for update;
 
-  select count(*)
+  select count(distinct q.symbol)
   into v_total
   from public.fugle_quotes_live q
   left join public.stock_universe u
@@ -87,7 +87,7 @@ begin
     v_offset := 0;
   end if;
 
-  with universe as (
+  with universe_raw as (
     select
       q.symbol,
       coalesce(q.name, u.name) as name,
@@ -125,11 +125,27 @@ begin
       and coalesce(u.is_cb, false) = false
       and coalesce(u.is_blacklisted, false) = false
       and coalesce(u.is_daytrade_unsuitable, false) = false
-    order by q.symbol
+  ),
+  universe as (
+    select distinct on (symbol) *
+    from universe_raw
+    order by symbol, quote_updated_at desc nulls last
     limit v_page_size
     offset v_offset
   ),
-  candle_status as (
+  daily as (
+    select distinct on (symbol)
+      symbol,
+      avg_5d_volume,
+      avg_20d_volume,
+      days_5,
+      days_20,
+      latest_trade_date,
+      updated_at
+    from public.fugle_daily_volume_avg
+    order by symbol, latest_trade_date desc nulls last, updated_at desc nulls last
+  ),
+  candle_status_raw as (
     select
       p.symbol,
       coalesce(s.today_candle_count, 0)::integer as today_candle_count,
@@ -145,6 +161,11 @@ begin
     from universe p
     left join public.v_fugle_intraday_1m_status s
       on s.symbol = p.symbol
+  ),
+  candle_status as (
+    select distinct on (symbol) *
+    from candle_status_raw
+    order by symbol, latest_candle_time desc nulls last, continuous_candle_count desc
   )
   insert into public.strategy2_intraday_ready_cache (
     symbol,
@@ -224,7 +245,7 @@ begin
     s.updated_at,
     now()
   from universe p
-  left join public.fugle_daily_volume_avg d
+  left join daily d
     on d.symbol = p.symbol
   left join candle_status s
     on s.symbol = p.symbol
