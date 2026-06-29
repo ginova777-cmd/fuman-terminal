@@ -10,7 +10,6 @@ $LogDir = Join-Path $RuntimeDir "logs"
 $LogFile = Join-Path $LogDir "public-slot-anti-rollback.log"
 $ConfigPath = Join-Path $RuntimeDir "config\public-slot-shared-source.json"
 $RunnerPath = Join-Path $FumanRoot "ops\public-slot\Run-PublicSlotSharedSource.ps1"
-$RunnerSnapshotPath = Join-Path $RuntimeDir "guards\Run-PublicSlotSharedSource.required.ps1"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Write-GuardLog {
@@ -74,21 +73,6 @@ function Test-RepoRuntimeConfigSupport {
   return $missing.ToArray()
 }
 
-function Repair-RepoRuntimeConfigSupport {
-  if (-not (Test-Path -LiteralPath $RunnerSnapshotPath)) {
-    Write-GuardLog "repo repair skipped: missing runner snapshot $RunnerSnapshotPath"
-    return $false
-  }
-  try {
-    Copy-Item -LiteralPath $RunnerSnapshotPath -Destination $RunnerPath -Force
-    Write-GuardLog "repo runner repaired from $RunnerSnapshotPath"
-    return $true
-  } catch {
-    Write-GuardLog "repo repair failed: $($_.Exception.Message)"
-    return $false
-  }
-}
-
 function Test-RuntimeConfig {
   if (-not (Test-Path -LiteralPath $ConfigPath)) { return @("missing:$ConfigPath") }
   try {
@@ -142,9 +126,7 @@ function Test-RuntimeConfig {
 
 $repoMissing = @(Test-RepoRuntimeConfigSupport)
 if ($repoMissing.Count -gt 0 -and $Repair) {
-  Write-GuardLog "repo runtime config support missing before repair: $($repoMissing -join ', ')"
-  [void](Repair-RepoRuntimeConfigSupport)
-  $repoMissing = @(Test-RepoRuntimeConfigSupport)
+  Write-GuardLog "repo runtime config support missing; repair disabled for tracked files: $($repoMissing -join ', ')"
 }
 if ($repoMissing.Count -gt 0) {
   Write-GuardLog "FAILED repo runtime config support missing: $($repoMissing -join ', ')"
