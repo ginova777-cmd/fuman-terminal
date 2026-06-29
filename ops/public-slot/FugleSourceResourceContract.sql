@@ -97,6 +97,22 @@ begin
     from information_schema.columns
     where table_schema = 'public'
       and table_name = 'v_fugle_intraday_1m_status'
+      and column_name = 'today_candle_count'
+  ) and not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'v_fugle_intraday_1m_status'
+      and column_name = 'rows_today'
+  ) then
+    execute 'alter view public.v_fugle_intraday_1m_status rename column today_candle_count to rows_today';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'v_fugle_intraday_1m_status'
       and column_name = 'rows_today'
   ) and not exists (
     select 1
@@ -105,7 +121,7 @@ begin
       and table_name = 'v_fugle_intraday_1m_status'
       and column_name = 'today_candle_count'
   ) then
-    execute 'alter view public.v_fugle_intraday_1m_status rename column rows_today to today_candle_count';
+    null;
   end if;
 end $$;
 
@@ -139,12 +155,18 @@ grouped as (
     symbol,
     market,
     max(candle_time) as latest_candle_time,
-    count(*)::integer as candle_count,
-    count(*) filter (where trade_date = taipei_today)::integer as today_candle_count,
-    count(*) filter (where trade_date < taipei_today)::integer as warmup_candle_count,
-    count(*)::integer as continuous_candle_count,
+    count(*) as candle_count,
     bool_or(trade_date = taipei_today) as has_today_data,
     max(updated_at) as updated_at,
+    min(candle_time) as first_candle_time,
+    count(*) filter (where trade_date = taipei_today) as today_candle_count,
+    greatest(0, extract(epoch from (now() - max(candle_time)))::integer) as latest_candle_age_seconds,
+    count(*) filter (
+      where trade_date = taipei_today
+        and (candle_time at time zone 'Asia/Taipei')::time >= time '13:00'
+    ) as after_1300_candle_count,
+    count(*) filter (where trade_date < taipei_today) as warmup_candle_count,
+    count(*) as continuous_candle_count,
     (max(candle_time) at time zone 'Asia/Taipei')::text as latest_candle_time_taipei
   from windowed
   group by symbol, market
@@ -154,12 +176,19 @@ select
   market,
   latest_candle_time,
   candle_count,
+  has_today_data,
+  updated_at,
+  first_candle_time,
   today_candle_count,
+  latest_candle_age_seconds,
   (has_today_data and continuous_candle_count >= 35) as ready_ge_35,
   (has_today_data and continuous_candle_count >= 80) as ready_ge_80,
   (has_today_data and continuous_candle_count >= 200) as ready_ge_200,
-  has_today_data,
-  updated_at,
+  (has_today_data and continuous_candle_count >= 35) as ma35_available,
+  today_candle_count as rows_today,
+  after_1300_candle_count,
+  after_1300_candle_count as candles_after_1300,
+  (after_1300_candle_count > 0) as has_after_1300_candle,
   latest_candle_time_taipei,
   (has_today_data and continuous_candle_count >= 20) as ready_ge_20,
   warmup_candle_count,
