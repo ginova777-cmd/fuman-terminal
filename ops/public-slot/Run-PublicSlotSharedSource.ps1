@@ -2372,7 +2372,8 @@ function Update-MinuteRows {
     try { $quoteTime = [datetimeoffset]::Parse([string]$quote.updated_at) } catch {}
     if ($null -eq $quoteTime) { continue }
     $quoteAgeSeconds = [int][math]::Max(0, ($now.ToUniversalTime() - $quoteTime.UtcDateTime).TotalSeconds)
-    if ($quoteAgeSeconds -gt $QuoteDerived1mMaxQuoteAgeSeconds) { continue }
+    $quoteFreshForDerived1m = ($quoteAgeSeconds -le $QuoteDerived1mMaxQuoteAgeSeconds)
+    if (-not $quoteFreshForDerived1m -and -not $fullUniverseMode) { continue }
     if ($taipeiTimeOfDay -lt [TimeSpan]::Parse("09:00") -or $taipeiTimeOfDay -gt [TimeSpan]::Parse("13:35")) { continue }
     $minute = $currentMinute
     $price = Get-Number $quote.price
@@ -2408,7 +2409,8 @@ function Update-MinuteRows {
     $taipeiMinute = $currentTaipeiMinute
 
     $minuteVolume = [int64]([math]::Max(0, [int64]$bucket.last_volume - [int64]$bucket.start_volume))
-    $synthetic = ($minuteVolume -le 0)
+    $synthetic = ($minuteVolume -le 0 -or -not $quoteFreshForDerived1m)
+    $minuteSource = if ($quoteFreshForDerived1m) { "quote_derived_1m" } else { "synthetic_flat" }
     $rows.Add([ordered]@{
       symbol = $symbol
       market = [string]$quote.market
@@ -2421,7 +2423,7 @@ function Update-MinuteRows {
       volume = $minuteVolume
       updated_at = (Get-Date).ToUniversalTime().ToString("o")
       payload = @{
-        source = "quote_derived_1m"
+        source = $minuteSource
         total_volume = $totalVolume
         start_total_volume = [int64]$bucket.start_volume
         last_total_volume = [int64]$bucket.last_volume
@@ -2433,6 +2435,8 @@ function Update-MinuteRows {
         taipei_candle_time = $taipeiMinute
         quote_updated_at = $quoteTime.ToUniversalTime().ToString("o")
         quote_age_seconds = $quoteAgeSeconds
+        quote_fresh_for_1m = $quoteFreshForDerived1m
+        stale_quote_synthetic_flat = (-not $quoteFreshForDerived1m)
         candidate_pool = $candidatePoolLabel
         quote_derived_1m_full_universe = [bool]$fullUniverseMode
         opening_backfill = $false
@@ -2457,7 +2461,7 @@ function Update-MinuteRows {
           volume = 0
           updated_at = (Get-Date).ToUniversalTime().ToString("o")
           payload = @{
-            source = "quote_derived_1m"
+            source = $minuteSource
             total_volume = $totalVolume
             start_total_volume = $totalVolume
             last_total_volume = $totalVolume
@@ -2469,6 +2473,8 @@ function Update-MinuteRows {
             taipei_candle_time = [string]$openingMinute.taipei
             quote_updated_at = $quoteTime.ToUniversalTime().ToString("o")
             quote_age_seconds = $quoteAgeSeconds
+            quote_fresh_for_1m = $quoteFreshForDerived1m
+            stale_quote_synthetic_flat = (-not $quoteFreshForDerived1m)
             candidate_pool = $candidatePoolLabel
             quote_derived_1m_full_universe = [bool]$fullUniverseMode
             opening_backfill = $true
@@ -2481,14 +2487,16 @@ function Update-MinuteRows {
       [void]$openingBackfillSymbolsWritten.Add($symbol)
     }
 
-    $daily.Add([ordered]@{
-      symbol = $symbol
-      market = [string]$quote.market
-      trade_date = $today
-      volume = $totalVolume
-      updated_at = (Get-Date).ToUniversalTime().ToString("o")
-      payload = @{ source = "fugle-ws-aggregate"; volume_unit = "lots"; time_standard = "UTC" }
-    })
+    if ($quoteFreshForDerived1m) {
+      $daily.Add([ordered]@{
+        symbol = $symbol
+        market = [string]$quote.market
+        trade_date = $today
+        volume = $totalVolume
+        updated_at = (Get-Date).ToUniversalTime().ToString("o")
+        payload = @{ source = "fugle-ws-aggregate"; volume_unit = "lots"; time_standard = "UTC" }
+      })
+    }
   }
 
   if ($openingBackfillRows -gt 0) {
