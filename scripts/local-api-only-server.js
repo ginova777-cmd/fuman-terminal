@@ -59,7 +59,7 @@ function attachVercelResponseHelpers(response) {
 
 function safeStaticPath(pathname) {
   const decoded = decodeURIComponent(pathname.split("?")[0]);
-  const normalized = decoded === "/" ? "/index.html" : decoded;
+  const normalized = decoded === "/" ? "/index.html" : decoded === "/mobile" ? "/mobile.html" : decoded;
   const file = path.resolve(root, "." + normalized.replace(/\\/g, "/"));
   return file.startsWith(root + path.sep) || file === root ? file : null;
 }

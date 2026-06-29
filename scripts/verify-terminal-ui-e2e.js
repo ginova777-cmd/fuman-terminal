@@ -709,6 +709,114 @@ async function verifyMobileLegacySuccessRescue(cdp) {
   }, null, 8000, 250);
 }
 
+async function verifyMobileConsecutiveManualAdds(cdp) {
+  await resetMobileWatchStorage(cdp);
+  await reloadMobilePage(cdp, "sun");
+  await activateMobileRoute(cdp, { fragment: "watch" });
+  await waitForSelector(cdp, "#mobile-watch-input", 12000);
+  const codes = ["3504", "3028", "3717", "6174"];
+  const steps = [];
+  for (const code of codes) {
+    await waitFor(cdp, () => {
+      const input = document.querySelector("#mobile-watch-input");
+      const add = document.querySelector("[data-mobile-watch-add]");
+      return {
+        ok: Boolean(input && add && !input.disabled && !add.disabled),
+        inputDisabled: Boolean(input?.disabled),
+        addDisabled: Boolean(add?.disabled),
+        status: String(document.querySelector("#mobile-watch-status")?.textContent || ""),
+      };
+    }, null, 12000, 250);
+    await submitMobileWatchCode(cdp, code);
+    const expectedCodes = codes.slice(0, steps.length + 1);
+    const state = await evaluate(cdp, async ({ code, expectedCodes }) => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const codesFor = (key) => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+          return Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+        } catch {
+          return [];
+        }
+      };
+      let last = null;
+      for (let attempt = 0; attempt < 70; attempt += 1) {
+        await wait(180);
+        const rows = [...document.querySelectorAll("#content .watch-row")].map((row) => String(row.textContent || "").replace(/\s+/g, " ").trim());
+        const rowCodes = rows.map((row) => row.match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
+        const primary = codesFor("fuman_watchlist");
+        const mobile = codesFor("fuman_mobile_watchlist_v1");
+        const status = String(document.querySelector("#mobile-watch-status")?.textContent || "");
+        last = { ok: false, code, expectedCodes, rowCodes, primary, mobile, status, rows };
+        const domOk = expectedCodes.every((item) => rowCodes.includes(item)) && rowCodes.length === expectedCodes.length;
+        const storageOk = expectedCodes.every((item) => primary.includes(item) && mobile.includes(item))
+          && primary.length === expectedCodes.length
+          && mobile.length === expectedCodes.length;
+        const statusOk = !/不是有效|正在確認|新增流程逾時|請輸入/.test(status);
+        if (domOk && storageOk && statusOk) return { ...last, ok: true };
+      }
+      return last;
+    }, { code, expectedCodes }, Math.max(EVAL_TIMEOUT_MS, 32000));
+    steps.push(state);
+    if (!state?.ok) {
+      throw new Error(`mobile consecutive manual add failed: ${JSON.stringify({ code, steps })}`);
+    }
+  }
+  return steps;
+}
+
+async function verifyMobileDivergedStorageMerge(cdp) {
+  await resetMobileWatchStorage(cdp);
+  await evaluate(cdp, () => {
+    const primary = [
+      { code: "3504", name: "揚明光", reason: "手機手動新增", addedAt: new Date().toISOString() },
+    ];
+    const mobile = [
+      { code: "3028", name: "增你強", reason: "手機手動新增", addedAt: new Date().toISOString() },
+      { code: "3504", name: "揚明光", reason: "手機手動新增", addedAt: new Date().toISOString() },
+    ];
+    const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
+    rawSetItem.call(localStorage, "fuman_watchlist", JSON.stringify(primary));
+    rawSetItem.call(localStorage, "fuman_mobile_watchlist_v1", JSON.stringify(mobile));
+    return true;
+  });
+  await reloadMobilePage(cdp, "sun");
+  await activateMobileRoute(cdp, { fragment: "watch" });
+  return waitFor(cdp, () => {
+    const rows = [...document.querySelectorAll("#content .watch-row")].map((row) => String(row.textContent || "").replace(/\s+/g, " ").trim());
+    const codes = rows.map((row) => row.match(/\b\d{4}\b/)?.[0] || "").filter(Boolean);
+    const primary = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]");
+        return Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    })();
+    const mobile = (() => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem("fuman_mobile_watchlist_v1") || "[]");
+        return Array.isArray(parsed) ? parsed.map((item) => String(item?.code || "")).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    })();
+    return {
+      ok: codes.length === 2
+        && codes.includes("3504")
+        && codes.includes("3028")
+        && primary.length === 2
+        && mobile.length === 2
+        && primary.includes("3028")
+        && mobile.includes("3028"),
+      codes,
+      primary,
+      mobile,
+      content: String(document.querySelector("#content")?.textContent || "").replace(/\s+/g, " ").slice(0, 260),
+    };
+  }, null, 12000, 250);
+}
+
 async function verifyMobileRouteWatchAdd(cdp, route) {
   if (SKIP_MOBILE_WATCH_ADD) return null;
   if (!route.verifyWatchAdd) return null;
@@ -1824,6 +1932,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await verifyMobileRouteWatchAdd(cdp, effectiveRoute);
         } else {
           await verifyMobileLegacySuccessRescue(cdp);
+          await verifyMobileDivergedStorageMerge(cdp);
+          await verifyMobileConsecutiveManualAdds(cdp);
           await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
           await reloadMobilePage(cdp, theme);
           await activateMobileRoute(cdp, effectiveRoute);

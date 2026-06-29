@@ -370,7 +370,10 @@ marketSession.marketDataDate=2026-06-26
 - 手機版 V2 必須保留 JSONP fallback，因為部分真實 Chrome 分頁 / 受控環境可能沒有可用的 `fetch`；`/api/mobile-watch-meta` 也必須支援 `callback=`。
 - 手機版 V2 必須用 `MutationObserver` 防止舊 mobile watch renderer 晚到時覆蓋 V2 `.watch-row`。
 - 手機版 V2 必須保留 in-memory rows fallback；`localStorage.setItem` 失敗時仍要畫出 `.watch-row`，不可停在 `正在確認台股代號`。
+- in-memory rows fallback 只可在 storage 寫入或讀回失敗時使用；正常讀到任一 storage key 時，不可把舊 memory rows 混回列表，避免重設 storage 或切頁後舊股票復活。
 - storage 寫入必須 read-back 驗證，例如保留 `localStorage.getItem(KEY) === value`；只有真的寫回成功，才可關閉 memory fallback。
+- 手機版 V2 必須保留 `mobile-watch-merge-storage-20260629-01`；讀取自選股時必須合併 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`，不可用 `localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY)` 只讀第一個非空 key。
+- 若兩個 storage key 分裂，例如 `fuman_watchlist=["3504"]`、`fuman_mobile_watchlist_v1=["3028","3504"]`，watch tab 必須自動合併、寫回兩個 key，並顯示 `3504` 與 `3028` 兩張卡，不得只顯示第一個 key 的卡片。
 
 不可恢復：
 
@@ -414,6 +417,8 @@ marketSession.marketDataDate=2026-06-26
   - 手機手動新增不可卡在 `正在確認台股代號`；台股 universe 讀取必須有 timeout / fallback，失敗也要顯示受控錯誤。
   - 手機手動新增成功後必須直接重畫 `.watch-row`，不可只驗 storage 或 status。
   - E2E 必須模擬 legacy 成功狀態：`3028 增你強 已加入自選` + 下方 `尚未加入`，並確認 rescue 自動補出 `3028` `.watch-row`。
+  - E2E 必須模擬雙 storage key 分裂：`fuman_watchlist` 只有 `3504`、`fuman_mobile_watchlist_v1` 有 `3028,3504`，並確認 watch tab 顯示兩張卡且兩個 key 都被合併寫回。
+  - E2E 必須從空列表用真人式座標點擊連續新增 `3504 -> 3028 -> 3717 -> 6174`，每一步都要驗 DOM 卡片數與兩個 storage key 同步增加；不可只驗預塞 9 檔後新增第 10 檔。
   - 手機手動新增必須驗 `/api/mobile-watch-meta?code=3028` valid，並驗 `/api/mobile-watch-meta?code=2334` invalid。
   - watch tab 手動測試必須以 9 檔有效台股 seed 開始，拒絕 `2334` 後筆數維持 9，再新增 `3028` 補到 10；不可在滿 10 檔時測 invalid/valid，否則只會測到上限 guard。
   - 至少驗 phone portrait、phone landscape、tablet 的 night / sun 六種手機 / 平板模式。
