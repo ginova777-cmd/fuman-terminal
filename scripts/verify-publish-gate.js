@@ -561,6 +561,10 @@ for (const marker of [
   "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_DELAY_MS",
   "FutoptQuoteDelayMilliseconds",
   "WritePreopenRows",
+  "WritePreopenRowsMode",
+  "Test-ShouldWritePreopenRows",
+  "Strategy2ReadyPageSize",
+  "Get-Strategy2ReadyRefreshBody",
 ]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
 }
@@ -579,6 +583,8 @@ for (const marker of [
   "publicSlotUpsertBatchSize",
   "futoptQuoteDelayMilliseconds",
   "writePreopenRows",
+  "writePreopenRowsMode",
+  "strategy2ReadyPageSize",
   "minAvgVolume5Lots",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);

@@ -12,5 +12,7 @@
   "futoptTickersEverySeconds": 300,
   "publicSlotUpsertTimeoutSec": 45,
   "publicSlotUpsertBatchSize": 300,
-  "writePreopenRows": false
+  "writePreopenRows": true,
+  "writePreopenRowsMode": "preopen",
+  "strategy2ReadyPageSize": 250
 }

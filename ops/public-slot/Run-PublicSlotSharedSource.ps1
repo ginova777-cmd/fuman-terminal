@@ -21,6 +21,9 @@ param(
   [int]$PublicSlotUpsertTimeoutSec = 20,
   [int]$PublicSlotUpsertBatchSize = 300,
   [bool]$WritePreopenRows = $true,
+  [ValidateSet("always", "preopen", "never")]
+  [string]$WritePreopenRowsMode = "always",
+  [int]$Strategy2ReadyPageSize = 0,
   [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
@@ -160,8 +163,28 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertTimeoutSec" -ConfigNames @("publicSlotUpsertTimeoutSec", "upsertTimeoutSec", "PublicSlotUpsertTimeoutSec") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC"
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertBatchSize" -ConfigNames @("publicSlotUpsertBatchSize", "upsertBatchSize", "PublicSlotUpsertBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "WritePreopenRows" -ConfigNames @("writePreopenRows", "WritePreopenRows") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS" -Type "bool"
+  Set-RuntimeOverride -Config $config -VariableName "WritePreopenRowsMode" -ConfigNames @("writePreopenRowsMode", "WritePreopenRowsMode") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS_MODE" -Type "string"
+  Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyPageSize" -ConfigNames @("strategy2ReadyPageSize", "Strategy2ReadyPageSize") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_PAGE_SIZE"
   $env:FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC = [string]$PublicSlotUpsertTimeoutSec
   $env:FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE = [string]$PublicSlotUpsertBatchSize
+}
+
+function Test-ShouldWritePreopenRows {
+  param([string]$Session)
+  if (-not $WritePreopenRows) { return $false }
+  switch ($WritePreopenRowsMode) {
+    "never" { return $false }
+    "preopen" { return $Session -eq "preopen" }
+    default { return $true }
+  }
+}
+
+function Get-Strategy2ReadyRefreshBody {
+  param([int]$ReadyPage)
+  if ($Strategy2ReadyPageSize -gt 0) {
+    return @{ p_page_size = $Strategy2ReadyPageSize; p_reset = ($ReadyPage -eq 0) }
+  }
+  return @{}
 }
 
 function Convert-Market {
@@ -1845,7 +1868,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize direct1mBatch=$Direct1mBatchSize futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows minAvgVolume5Lots=$MinAvgVolume5Lots"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize direct1mBatch=$Direct1mBatchSize futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyPageSize=$Strategy2ReadyPageSize minAvgVolume5Lots=$MinAvgVolume5Lots"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -1882,9 +1905,10 @@ do {
 
     $quoteRows = Convert-QuotesToRows -Quotes $quotes -Payload $payload
     $preopenRows = Convert-QuotesToPreopenRows -Quotes $quotes -Payload $payload
+    $shouldWritePreopenRows = Test-ShouldWritePreopenRows -Session $session
     if ($quoteRows.Count -gt 0) {
       Write-PublicSlotQuotesLive -Rows $quoteRows
-      if ($WritePreopenRows -and $preopenRows.Count -gt 0) {
+      if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) {
         Write-PublicSlotPreopenSnapshot -Rows $preopenRows
         Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows
       }
@@ -1919,8 +1943,8 @@ do {
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     if ($direct1mDailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $direct1mDailyRows }
     if ($direct1mOhlcvRows.Count -gt 0) { Write-PublicSlotDailyOhlcv -Rows $direct1mOhlcvRows }
-    if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
-    if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
+    if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
+    if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
     if ($combinedFutoptQuoteRows.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $combinedFutoptQuoteRows }
     if ($shouldWriteFutoptTickers) { Write-PublicSlotFutoptTickers -Rows $combinedFutoptTickerRows }
     if (((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
@@ -1944,7 +1968,7 @@ do {
       $quoteRows = $latestQuoteRows
       $preopenRows = @(Convert-QuotesToPreopenRows -Quotes $latestQuoteObjects -Payload $latestQuotePayload)
       Write-PublicSlotQuotesLive -Rows $quoteRows
-      if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
+      if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
     }
 
     $lastQuoteAt = Get-LatestIsoUtc -Rows $quoteRows -PropertyName "updated_at"
@@ -2112,7 +2136,7 @@ do {
       $strategy2ReadyProcessed = 0
       $strategy2ReadyLast = $null
       for ($readyPage = 0; $readyPage -lt 12; $readyPage++) {
-        $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body @{}
+        $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body (Get-Strategy2ReadyRefreshBody -ReadyPage $readyPage)
         $strategy2ReadyPages += 1
         $processedThisPage = [int](Get-Number $strategy2ReadyLast.processed)
         $strategy2ReadyProcessed += $processedThisPage
