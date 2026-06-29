@@ -295,6 +295,11 @@ function Get-PublicSlotSession {
   return "afterhours"
 }
 
+function Test-Intraday1mMa35Required {
+  $tod = (Get-Date).TimeOfDay
+  return ($tod -ge [TimeSpan]::Parse("09:35") -and $tod -le [TimeSpan]::Parse("13:35"))
+}
+
 function Invoke-PublicSlotRestGet {
   param([string]$PathAndQuery)
   try {
@@ -735,12 +740,14 @@ function Write-QuoteHeartbeatStatus {
         }
       } catch {}
     }
-    $intraday1mOk = ($intradayStats.intraday_1m_rows_today -gt 0 -and $intradayStats.intraday_1m_stale_seconds -le 180)
+    $intraday1mFreshOk = ($intradayStats.intraday_1m_rows_today -gt 0 -and $intradayStats.intraday_1m_stale_seconds -le 180)
+    $intraday1mMa35Required = ($Session -eq "regular" -and (Test-Intraday1mMa35Required))
+    $intraday1mOk = ($intraday1mFreshOk -and (-not $intraday1mMa35Required -or $intradayStats.ready_ge_35 -gt 0))
     $dailyVolumeOk = ($script:ApiUniverseStats.avg_volume5_eligible -gt 0)
     $degradedButUsableForIntraday = ((-not $quotesOk) -and $quoteAgeSeconds -le $StaleSeconds -and $quoteCount -gt 0)
-    $status = if ($quotesOk) { "ok" } elseif ($degradedButUsableForIntraday) { "degraded" } else { "stale" }
+    $status = if ($quotesOk -and ($Session -ne "regular" -or $intraday1mOk)) { "ok" } elseif ($quotesOk -or $degradedButUsableForIntraday) { "degraded" } else { "stale" }
 
-    $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; daily_volume_ok=$dailyVolumeOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
+    $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
 
     Write-PublicSlotSourceStatus -SourceName $SourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       active_symbols = $SeededSymbols
@@ -759,6 +766,8 @@ function Write-QuoteHeartbeatStatus {
       quote_coverage_ratio = $effectiveQuoteCoverage
       quotes_ok = [bool]$quotesOk
       intraday_1m_ok = [bool]$intraday1mOk
+      intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
+      intraday_1m_ma35_required = [bool]$intraday1mMa35Required
       daily_volume_ok = [bool]$dailyVolumeOk
       avg_volume5_eligible = $script:ApiUniverseStats.avg_volume5_eligible
       avg_volume5_filtered = $script:ApiUniverseStats.avg_volume5_filtered
@@ -767,6 +776,8 @@ function Write-QuoteHeartbeatStatus {
       source_parts = @{
         quotes_ok = [bool]$quotesOk
         intraday_1m_ok = [bool]$intraday1mOk
+        intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
+        intraday_1m_ma35_required = [bool]$intraday1mMa35Required
         daily_volume_ok = [bool]$dailyVolumeOk
         degraded_but_usable_for_intraday = [bool]$degradedButUsableForIntraday
       }
@@ -1748,30 +1759,29 @@ function Update-MinuteRows {
     $taipeiMinute = ([datetimeoffset]::Parse([string]$minute)).ToOffset([timespan]::FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss")
 
     $minuteVolume = [int64]([math]::Max(0, [int64]$bucket.last_volume - [int64]$bucket.start_volume))
-    if ($minuteVolume -gt 0) {
-      $rows.Add([ordered]@{
-        symbol = $symbol
-        market = [string]$quote.market
-        trade_date = $today
-        candle_time = $minute
-        open = Get-Number $bucket.open
-        high = Get-Number $bucket.high
-        low = Get-Number $bucket.low
-        close = Get-Number $bucket.close
-        volume = $minuteVolume
-        updated_at = (Get-Date).ToUniversalTime().ToString("o")
-        payload = @{
-          source = "fugle-ws-aggregate"
-          total_volume = $totalVolume
-          start_total_volume = [int64]$bucket.start_volume
-          last_total_volume = [int64]$bucket.last_volume
-          volume_unit = "lots"
-          time_standard = "UTC"
-          taipei_candle_time = $taipeiMinute
-          session = Get-PublicSlotSession
-        }
-      })
-    }
+    $rows.Add([ordered]@{
+      symbol = $symbol
+      market = [string]$quote.market
+      trade_date = $today
+      candle_time = $minute
+      open = Get-Number $bucket.open
+      high = Get-Number $bucket.high
+      low = Get-Number $bucket.low
+      close = Get-Number $bucket.close
+      volume = $minuteVolume
+      updated_at = (Get-Date).ToUniversalTime().ToString("o")
+      payload = @{
+        source = "fugle-ws-aggregate"
+        total_volume = $totalVolume
+        start_total_volume = [int64]$bucket.start_volume
+        last_total_volume = [int64]$bucket.last_volume
+        zero_volume_hold = ($minuteVolume -le 0)
+        volume_unit = "lots"
+        time_standard = "UTC"
+        taipei_candle_time = $taipeiMinute
+        session = Get-PublicSlotSession
+      }
+    })
 
     $daily.Add([ordered]@{
       symbol = $symbol
@@ -1990,15 +2000,20 @@ do {
     $preopenHistoryOk = ($preopenRows.Count -gt 0)
     if ($session -eq "preopen") {
       $intraday1mOk = (($intradayStats.intraday_1m_rows_today -gt 0) -or ($direct1mPayload.rows.Count -gt 0))
+      $intraday1mFreshOk = [bool]$intraday1mOk
+      $intraday1mMa35Required = $false
     } else {
-      $intraday1mOk = ($intradayStats.intraday_1m_rows_today -gt 0 -and $intradayStats.intraday_1m_stale_seconds -le 180)
+      $intraday1mFreshOk = ($intradayStats.intraday_1m_rows_today -gt 0 -and $intradayStats.intraday_1m_stale_seconds -le 180)
+      $intraday1mMa35Required = (Test-Intraday1mMa35Required)
+      $intraday1mOk = ($intraday1mFreshOk -and (-not $intraday1mMa35Required -or $intradayStats.ready_ge_35 -gt 0))
     }
     $script:ApiUniverseStats.quotes_ok = [bool]$quotesOk
     $script:ApiUniverseStats.intraday_1m_ok = [bool]$intraday1mOk
     $script:ApiUniverseStats.daily_volume_ok = [bool]$dailyVolumeOk
     $degradedButUsableForIntraday = ((-not $quotesOk) -and $intraday1mOk -and $dailyVolumeOk -and $quoteAgeSeconds -le $StaleSeconds -and $eligibleQuoteCoverage.eligible_quote_rows -gt 0)
-    $status = if ($quotesOk) { "ok" } elseif ($degradedButUsableForIntraday) { "degraded" } else { "stale" }
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; daily_volume_ok=$dailyVolumeOk; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); ready_ge_35=$($intradayStats.ready_ge_35); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
+    $sourceCoreOk = ($quotesOk -and $dailyVolumeOk -and ($session -ne "regular" -or $intraday1mOk))
+    $status = if ($sourceCoreOk) { "ok" } elseif ($quotesOk -or $degradedButUsableForIntraday) { "degraded" } else { "stale" }
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); ready_ge_35=$($intradayStats.ready_ge_35); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mPayload.rows.Count)"
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload @{
       raw_symbols = $rawSymbols
       active_symbols = $seeded
@@ -2011,8 +2026,11 @@ do {
       priority_strong_symbols = $script:ApiUniverseStats.priority_strong_symbols
       eligible_quote_rows = $script:ApiUniverseStats.eligible_quote_rows
       eligible_quote_coverage = $script:ApiUniverseStats.eligible_quote_coverage
+      source_core_ok = [bool]$sourceCoreOk
       quotes_ok = [bool]$quotesOk
       intraday_1m_ok = [bool]$intraday1mOk
+      intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
+      intraday_1m_ma35_required = [bool]$intraday1mMa35Required
       daily_volume_ok = [bool]$dailyVolumeOk
       futopt_ok = [bool]$futoptOk
       preopen_ok = [bool]$preopenOk
@@ -2020,8 +2038,11 @@ do {
       degraded_but_usable_for_intraday = [bool]$degradedButUsableForIntraday
       readback_ok = [bool]($quotesOk -or $intraday1mOk -or $dailyVolumeOk)
       source_parts = @{
+        source_core_ok = [bool]$sourceCoreOk
         quotes_ok = [bool]$quotesOk
         intraday_1m_ok = [bool]$intraday1mOk
+        intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
+        intraday_1m_ma35_required = [bool]$intraday1mMa35Required
         daily_volume_ok = [bool]$dailyVolumeOk
         futopt_ok = [bool]$futoptOk
         preopen_ok = [bool]$preopenOk

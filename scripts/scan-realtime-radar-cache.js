@@ -34,11 +34,11 @@ const SUPABASE_TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime
 const STALE_AFTER_MS = Number(process.env.REALTIME_RADAR_STALE_MS || 20000);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SECONDS || 150);
 const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
-const REALTIME_BATCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_BATCH_TIMEOUT_MS || 10000);
-const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR_BATCH_CONCURRENCY || 6));
+const REALTIME_BATCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_BATCH_TIMEOUT_MS || 18000);
+const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR_BATCH_CONCURRENCY || 3));
 const REALTIME_BATCH_SIZE = Math.max(20, Number(process.env.REALTIME_RADAR_BATCH_SIZE || 100));
-const REALTIME_BATCH_RETRIES = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRIES || 1));
-const REALTIME_BATCH_RETRY_DELAY_MS = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRY_DELAY_MS || 500));
+const REALTIME_BATCH_RETRIES = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRIES || 2));
+const REALTIME_BATCH_RETRY_DELAY_MS = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRY_DELAY_MS || 700));
 const REALTIME_STALE_RESCAN_LIMIT = Math.max(0, Number(process.env.REALTIME_RADAR_STALE_RESCAN_LIMIT || 180));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 const MARKET_START_MINUTES = 9 * 60;
@@ -282,6 +282,11 @@ async function fetchJson(url, timeout = 30000) {
     const response = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "FumanRealtimeRadarCache/1.0" } });
     if (!response.ok) throw new Error(`${url} HTTP ${response.status}`);
     return await response.json();
+  } catch (error) {
+    if (error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""))) {
+      throw new Error(`timeout ${timeout}ms`);
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
   }

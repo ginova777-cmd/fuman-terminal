@@ -14,6 +14,8 @@ const STATUS_FILE = path.join(STATE_DIR, "realtime-radar-health-status.json");
 const ALERT_COOLDOWN_MS = Number(process.env.REALTIME_RADAR_HEALTH_ALERT_COOLDOWN_MS || 15 * 60 * 1000);
 const FRONTEND_VERSION = process.env.FUMAN_EXPECTED_FRONTEND_VERSION || "realtime-radar-core-20260601-04";
 const FRONTEND_SW_CACHE = process.env.FUMAN_EXPECTED_SW_CACHE || "fuman-terminal-sw-20260601-07";
+const MIN_INTRADAY_ROWS = Number(process.env.REALTIME_RADAR_HEALTH_MIN_ROWS || 1200);
+const MAX_HEALTH_FAILED_BATCHES = Number(process.env.REALTIME_RADAR_HEALTH_MAX_FAILED_BATCHES || 0);
 
 function readJson(file, fallback = null) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -246,6 +248,7 @@ async function main() {
 
   if (latest.date && latest.date !== date && phase !== "preopen") pushIssue(issues, "critical", "radar-date", `runtime latest date is ${latest.date}, expected ${date}`);
   if (!rows.length && phase !== "preopen") pushIssue(issues, "critical", "radar-empty", "runtime latest has no rows");
+  if (phase === "intraday" && rows.length < MIN_INTRADAY_ROWS) pushIssue(issues, "critical", "radar-row-count-low", `runtime latest rows ${rows.length} below ${MIN_INTRADAY_ROWS}`);
   if (phase === "intraday" && (!ageSeconds || ageSeconds > 180)) pushIssue(issues, "critical", "radar-stale-runtime", `runtime latest age ${ageSeconds ?? "--"}s exceeds 180s`);
   if (phase === "after_close" && updatedMs && latest.date === date) {
     const p = taipeiParts(new Date(updatedMs));
@@ -253,7 +256,9 @@ async function main() {
     if (minutes < 13 * 60 + 20) pushIssue(issues, "warning", "radar-early-close-snapshot", `last snapshot time ${latest.timestamp || latest.updatedAt} is before 13:20`);
   }
   if (failedBatchCount > 0) {
-    const severity = totalBatchCount && failedBatchCount / totalBatchCount >= 0.35 ? "critical" : "warning";
+    const severity = phase === "intraday" && failedBatchCount > MAX_HEALTH_FAILED_BATCHES
+      ? "critical"
+      : totalBatchCount && failedBatchCount / totalBatchCount >= 0.35 ? "critical" : "warning";
     pushIssue(issues, severity, "api-realtime-failed-batches", `${failedBatchCount}/${totalBatchCount || "--"} realtime batches failed`);
   }
   if (staleQuoteCount >= 80) pushIssue(issues, "critical", "stale-quotes-high", `staleQuoteCount=${staleQuoteCount}`);

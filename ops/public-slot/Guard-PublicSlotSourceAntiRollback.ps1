@@ -9,6 +9,8 @@ $ErrorActionPreference = "Continue"
 $LogDir = Join-Path $RuntimeDir "logs"
 $LogFile = Join-Path $LogDir "public-slot-anti-rollback.log"
 $ConfigPath = Join-Path $RuntimeDir "config\public-slot-shared-source.json"
+$RunnerPath = Join-Path $FumanRoot "ops\public-slot\Run-PublicSlotSharedSource.ps1"
+$RunnerSnapshotPath = Join-Path $RuntimeDir "guards\Run-PublicSlotSharedSource.required.ps1"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 function Write-GuardLog {
@@ -38,7 +40,7 @@ function Write-DefaultRuntimeConfig {
     direct1mEverySeconds = 20
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
-    futoptQuoteDelayMilliseconds = 300
+    futoptQuoteDelayMilliseconds = 100
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
     publicSlotUpsertBatchSize = 300
@@ -49,7 +51,7 @@ function Write-DefaultRuntimeConfig {
 }
 
 function Test-RepoRuntimeConfigSupport {
-  $runner = Read-Text -Path (Join-Path $FumanRoot "ops\public-slot\Run-PublicSlotSharedSource.ps1")
+  $runner = Read-Text -Path $RunnerPath
   $helper = Read-Text -Path (Join-Path $FumanRoot "ops\public-slot\SupabasePublicSlotSource.ps1")
   $missing = New-Object System.Collections.Generic.List[string]
   foreach ($marker in @(
@@ -57,7 +59,12 @@ function Test-RepoRuntimeConfigSupport {
     "public-slot-shared-source.json",
     "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
     "Test-ShouldWritePreopenRows",
-    "Get-Strategy2ReadyRefreshBody"
+    "Get-Strategy2ReadyRefreshBody",
+    "Test-Intraday1mMa35Required",
+    "zero_volume_hold",
+    "quoteFreshEnoughForRegular",
+    "sourceCoreOk",
+    "intraday_1m_ma35_required"
   )) {
     if (-not $runner.Contains($marker)) { $missing.Add("runner:$marker") }
   }
@@ -65,6 +72,21 @@ function Test-RepoRuntimeConfigSupport {
     if (-not $helper.Contains($marker)) { $missing.Add("helper:$marker") }
   }
   return $missing.ToArray()
+}
+
+function Repair-RepoRuntimeConfigSupport {
+  if (-not (Test-Path -LiteralPath $RunnerSnapshotPath)) {
+    Write-GuardLog "repo repair skipped: missing runner snapshot $RunnerSnapshotPath"
+    return $false
+  }
+  try {
+    Copy-Item -LiteralPath $RunnerSnapshotPath -Destination $RunnerPath -Force
+    Write-GuardLog "repo runner repaired from $RunnerSnapshotPath"
+    return $true
+  } catch {
+    Write-GuardLog "repo repair failed: $($_.Exception.Message)"
+    return $false
+  }
 }
 
 function Test-RuntimeConfig {
@@ -77,7 +99,12 @@ function Test-RuntimeConfig {
   $missing = New-Object System.Collections.Generic.List[string]
   foreach ($name in @(
     "minAvgVolume5Lots",
+    "restQuoteBatchSize",
+    "restQuoteEverySeconds",
+    "direct1mBatchSize",
+    "direct1mEverySeconds",
     "futoptQuoteBatchSize",
+    "futoptQuoteEverySeconds",
     "futoptQuoteDelayMilliseconds",
     "publicSlotUpsertTimeoutSec",
     "publicSlotUpsertBatchSize",
@@ -86,10 +113,39 @@ function Test-RuntimeConfig {
   )) {
     if ($null -eq $config.PSObject.Properties[$name]) { $missing.Add("config:$name") }
   }
+  $expected = [ordered]@{
+    loopSeconds = 10
+    stopAt = "12:05"
+    minAvgVolume5Lots = 0
+    restQuoteBatchSize = 80
+    restQuoteEverySeconds = 10
+    direct1mBatchSize = 8
+    direct1mEverySeconds = 20
+    futoptQuoteBatchSize = 120
+    futoptQuoteEverySeconds = 20
+    futoptQuoteDelayMilliseconds = 100
+    futoptTickersEverySeconds = 300
+    publicSlotUpsertTimeoutSec = 45
+    publicSlotUpsertBatchSize = 300
+    writePreopenRowsMode = "preopen"
+    strategy2ReadyPageSize = 250
+  }
+  foreach ($name in $expected.Keys) {
+    $prop = $config.PSObject.Properties[$name]
+    if ($null -eq $prop) { continue }
+    if ([string]$prop.Value -ne [string]$expected[$name]) {
+      $missing.Add("config-value:$name=$($prop.Value) expected=$($expected[$name])")
+    }
+  }
   return $missing.ToArray()
 }
 
 $repoMissing = @(Test-RepoRuntimeConfigSupport)
+if ($repoMissing.Count -gt 0 -and $Repair) {
+  Write-GuardLog "repo runtime config support missing before repair: $($repoMissing -join ', ')"
+  [void](Repair-RepoRuntimeConfigSupport)
+  $repoMissing = @(Test-RepoRuntimeConfigSupport)
+}
 if ($repoMissing.Count -gt 0) {
   Write-GuardLog "FAILED repo runtime config support missing: $($repoMissing -join ', ')"
   exit 2

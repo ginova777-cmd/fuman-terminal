@@ -16,10 +16,13 @@ const API_KEY_FILES = [
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 3000));
-const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
-const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 50));
-const CONCURRENCY = Math.max(1, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 20));
+const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 100));
+const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
+const CONCURRENCY = Math.max(1, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 10));
 const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 180000));
+const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
+const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
+const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
 
 let cursor = 0;
 let lastMessageAt = "";
@@ -69,6 +72,8 @@ function writeStatus(extra = {}) {
     batchSize: BATCH_SIZE,
     perSymbolDelayMs: PER_SYMBOL_DELAY_MS,
     concurrency: CONCURRENCY,
+    requestTimeoutMs: REQUEST_TIMEOUT_MS,
+    requestRetries: REQUEST_RETRIES,
     lastMessageAt,
     last429At,
     cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : "",
@@ -148,20 +153,36 @@ function normalizeQuote(payload, requestedCode) {
 
 async function fetchQuote(code, apiKey) {
   const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${encodeURIComponent(code)}`;
-  const response = await fetch(url, {
-    headers: {
-      "X-API-KEY": apiKey,
-      "User-Agent": "FumanPublicSlotRestCollector/1.0",
-      "Referer": "https://developer.fugle.tw/",
-    },
-  });
-  if (response.status === 429) {
-    last429At = nowIso();
-    cooldownUntil = Date.now() + 60000;
-    throw new Error("429 Too Many Requests");
+  let lastError = null;
+  for (let attempt = 0; attempt <= REQUEST_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "X-API-KEY": apiKey,
+          "User-Agent": "FumanPublicSlotRestCollector/1.0",
+          "Referer": "https://developer.fugle.tw/",
+        },
+      });
+      if (response.status === 429) {
+        last429At = nowIso();
+        cooldownUntil = Date.now() + 60000;
+        throw new Error("429 Too Many Requests");
+      }
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      return response.json();
+    } catch (error) {
+      lastError = error?.name === "AbortError" ? new Error(`timeout ${REQUEST_TIMEOUT_MS}ms`) : error;
+      const retryable = /timeout|aborted|429|5\d\d|ECONNRESET|ETIMEDOUT/i.test(String(lastError?.message || lastError || ""));
+      if (attempt >= REQUEST_RETRIES || !retryable) break;
+      await new Promise((resolve) => setTimeout(resolve, REQUEST_RETRY_BACKOFF_MS * (attempt + 1)));
+    } finally {
+      clearTimeout(timer);
+    }
   }
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.json();
+  throw lastError || new Error("quote fetch failed");
 }
 
 async function tick() {
