@@ -119,6 +119,11 @@ requireIncludes("scripts/verify-publish-gate.js", [
   "guard-buy-sell-no-rollback.js",
 ]);
 
+requireIncludes("index.html", [
+  "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01",
+  'data-fuman-desktop-fast-shell="1"',
+]);
+
 const agents = requireIncludes("AGENTS.md", [
   "Supabase only polling / snapshot",
   "買賣超 | latest-complete",
