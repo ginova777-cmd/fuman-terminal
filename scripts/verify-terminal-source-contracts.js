@@ -95,12 +95,12 @@ const CONTRACTS = [
         "trade_value", "quote_source", "quote_age_seconds", "session", "stock_type", "is_halted", "is_trial",
       ], { order: "updated_at.desc", requireToday: true }),
       sourceTable("v_strategy3_intraday_1m_status", [
-        "symbol", "latest_candle_time", "today_candle_count", "after_1300_candle_count", "has_after_1300_candle",
+        "symbol", "latest_candle_time", "today_candle_count",
       ], { level: "warning" }),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
       sourceTable("v_strategy3_quote_ready", [
-        "symbol", "code", "name", "close", "trade_volume", "trade_value", "updated_at", "after_1300_candle_count", "has_after_1300_candle",
+        "symbol", "code", "name", "close", "trade_volume", "trade_value", "updated_at", "today_candle_count", "latest_candle_time",
       ], { level: "warning", purpose: "preferred source; scanner may fall back to fugle_quotes_latest + RPC readback" }),
     ],
   },

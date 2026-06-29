@@ -103,7 +103,7 @@ async function main() {
   }
   const rows = await getRows([
     "/rest/v1/v_strategy3_intraday_1m_status",
-    "?select=symbol,latest_candle_time,today_candle_count,after_1300_candle_count,has_after_1300_candle,updated_at",
+    "?select=symbol,latest_candle_time,today_candle_count,updated_at",
     "&order=latest_candle_time.desc",
     "&limit=5000",
   ].join(""));
@@ -123,8 +123,6 @@ async function main() {
     minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
     minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
     sessionLatestMinute: SESSION_LATEST_MINUTE,
-    after1300ReadyCount: rows.filter((row) => Number(row.after_1300_candle_count || 0) > 0).length,
-    minAfter1300: 0,
     latestCandleTime,
     status: ready ? "ready" : "not_ready",
     reason: ready ? "09:00-12:59 intraday status ready" : `sessionReadyCount ${sessionRows.length} below ${MIN_INTRADAY_1M_CANDIDATES}`,

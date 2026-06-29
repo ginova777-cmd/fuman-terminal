@@ -91,8 +91,6 @@ function preserveScorecardSource(payload) {
 function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats = {}) {
   const issues = [];
   const warnings = [];
-  const after1300Count = cleanNumber(exclusionStats.resourceAfter1300Count)
-    || stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
   const intradayReadyCount = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
   const latestCandleTime = latestTime(stocks.map((stock) => stock.latestCandleTime));
   const latestCandleMinute = candleMinutes({ candleTime: latestCandleTime });
@@ -128,16 +126,13 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     latestCandleMinute,
     sessionWindow: "09:00-12:59",
     entryWindow: "12:50-12:59",
-    after1300ReadyCount: after1300Count,
     exclusionStats,
     warningCount,
     warningLimit: SOURCE_WARNING_LIMIT,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
-    minAfter1300Candidates: 0,
     requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
     requireVolumeAverage: STRATEGY3_REQUIRE_VOLUME_AVERAGE,
-    requireAfter1300: false,
     requireIntraday1m: STRATEGY3_REQUIRE_INTRADAY_1M,
     issues,
     warnings,
@@ -474,7 +469,6 @@ function buildSupabaseScanRows(output, runId) {
           degenerateRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.degenerateRows),
           sessionRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.sessionRows),
           entryWindowRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.entryWindowRows),
-          after1300Rows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.after1300Rows),
           formulaVersion: String(stock.tvOvernightEntry?.formulaVersion || ""),
           controlSource: String(stock.tvOvernightEntry?.controlSource || ""),
         },
@@ -631,16 +625,6 @@ function candleTaipeiDateKey(candle) {
   return match ? `${match[1]}${match[2]}${match[3]}` : "";
 }
 
-function after1300CandleRows(candles, quoteDate = "") {
-  const expectedDate = String(quoteDate || "").replace(/\D/g, "");
-  return (candles || []).filter((candle) => {
-    const minutes = candleMinutes(candle);
-    if (minutes == null || minutes < 13 * 60) return false;
-    const dateKey = candleTaipeiDateKey(candle);
-    return !expectedDate || !dateKey || dateKey === expectedDate;
-  });
-}
-
 function session1mCandleRows(candles, quoteDate = "") {
   const expectedDate = String(quoteDate || "").replace(/\D/g, "");
   return (candles || []).filter((candle) => {
@@ -681,7 +665,7 @@ function strategy3ReadbackCandidates(stocks) {
     .slice(0, Math.max(20, STRATEGY3_1M_READBACK_LIMIT));
 }
 
-async function repairAfter1300StatusFromRpc(stocks, warnings) {
+async function repairSession1mStatusFromRpc(stocks, warnings) {
   const currentReady = (stocks || []).filter((stock) => strategy3HasSession1m(stock)).length;
   if (currentReady >= STRATEGY3_MIN_INTRADAY_1M_CANDIDATES) return { repaired: 0, checked: 0 };
   const candidates = strategy3ReadbackCandidates(stocks);
@@ -695,10 +679,6 @@ async function repairAfter1300StatusFromRpc(stocks, warnings) {
       const candles = result.candles || result.rows || [];
       const sessionRows = session1mCandleRows(candles, stock.quoteDate);
       if (!sessionRows.length) return;
-      const afterRows = after1300CandleRows(candles, stock.quoteDate);
-      stock.after1300CandleCount = afterRows.length;
-      stock.hasAfter1300Candle = afterRows.length > 0;
-      stock.has1300Candle = afterRows.some((row) => candleMinutes(row) === 13 * 60);
       stock.intradayCandleCount = sessionRows.length;
       stock.latestCandleTime = sessionRows.at(-1)?.candleTime || sessionRows.at(-1)?.time || stock.latestCandleTime || "";
       stock.intradayStatusSource = "rpc-readback";
@@ -713,7 +693,7 @@ async function repairAfter1300StatusFromRpc(stocks, warnings) {
   return { repaired, checked };
 }
 
-async function hydrateAfter1300StatusFromSupabase(stocks, warnings) {
+async function hydrateSession1mStatusFromSupabase(stocks, warnings) {
   if (!Array.isArray(stocks) || !stocks.length) return { statusRows: 0, repaired: 0, checked: 0 };
   let statusRows = 0;
   try {
@@ -721,10 +701,6 @@ async function hydrateAfter1300StatusFromSupabase(stocks, warnings) {
     stocks.forEach((stock) => {
       const status = statusResult.byCode.get(stock.code);
       if (!status) return;
-      const after1300Count = cleanNumber(status.after_1300_candle_count ?? status.candles_after_1300);
-      stock.after1300CandleCount = after1300Count;
-      stock.hasAfter1300Candle = status.has_after_1300_candle === true || after1300Count > 0;
-      stock.has1300Candle = status.has_1300_candle === true;
       stock.intradayCandleCount = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
       stock.latestCandleTime = status.latest_candle_time || stock.latestCandleTime;
       stock.intradayStatusSource = statusResult.source || stock.intradayStatusSource || "supabase-status";
@@ -733,7 +709,7 @@ async function hydrateAfter1300StatusFromSupabase(stocks, warnings) {
   } catch (error) {
     warnings.push(`strategy3 intraday 1m status read skipped: ${error?.message || String(error)}`);
   }
-  const repaired = await repairAfter1300StatusFromRpc(stocks, warnings);
+  const repaired = await repairSession1mStatusFromRpc(stocks, warnings);
   return { statusRows, ...repaired };
 }
 
@@ -895,9 +871,6 @@ async function fetchSupabaseStrategy3Universe() {
     updatedAt: quote.updatedAt,
     quoteTimeRaw: quote.quoteTimeRaw,
     issuedShares: quote.issuedShares,
-    after1300CandleCount: quote.after1300CandleCount,
-    hasAfter1300Candle: quote.hasAfter1300Candle,
-    has1300Candle: quote.has1300Candle,
     intradayCandleCount: quote.intradayCandleCount,
     latestCandleTime: quote.latestCandleTime,
     quoteSource: quote.quoteReadySource,
@@ -911,7 +884,7 @@ async function fetchSupabaseStrategy3Universe() {
     is_warrant: quote.is_warrant,
     is_cb: quote.is_cb,
   }));
-  await hydrateAfter1300StatusFromSupabase(stocks, warnings);
+  await hydrateSession1mStatusFromSupabase(stocks, warnings);
   let capitalResult = { byCode: new Map() };
   try {
     capitalResult = await fetchStrategy3CapitalMap(stocks.map((stock) => stock.code));
@@ -1118,7 +1091,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       const result = await fetchStrategy3TvCandles(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
       const rawTvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
       const quality = result.quality || {};
-      const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、session=${quality.sessionRows ?? 0}、entryWindow=${quality.entryWindowRows ?? 0}、after1300=${quality.after1300Rows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
+      const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、session=${quality.sessionRows ?? 0}、entryWindow=${quality.entryWindowRows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
       const tvEntry = {
         ...rawTvEntry,
         reason: `${rawTvEntry.reason} ${sourceNote}。`,
@@ -1381,14 +1354,13 @@ async function main() {
       ...issuedSharesResult.warnings,
       ...volumeAverageResult.warnings,
     ];
-    await hydrateAfter1300StatusFromSupabase(stocks, sourceWarnings);
+    await hydrateSession1mStatusFromSupabase(stocks, sourceWarnings);
     await hydrateSideVolumeFromSupabase(stocks, sourceWarnings);
   }
   if (!stocks.length) throw new Error("No stock universe");
-  const resourceAfter1300Count = stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
   const exclusionResult = applyStrategy3Exclusions(stocks, loadStrategy3Blacklist());
   stocks = exclusionResult.stocks;
-  exclusionStats = { ...exclusionResult.stats, resourceAfter1300Count };
+  exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats);

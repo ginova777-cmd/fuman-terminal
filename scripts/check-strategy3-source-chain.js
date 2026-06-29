@@ -105,8 +105,6 @@ async function main() {
       cumulativeAskVolume: cleanNumber(sideRow.cumulativeAskVolume),
       cumulativeBidVolume: cleanNumber(sideRow.cumulativeBidVolume),
       cumulativeBidAskVolume: cleanNumber(sideRow.cumulativeBidAskVolume),
-      after1300CandleCount: cleanNumber(row.after_1300_candle_count ?? row.candles_after_1300),
-      hasAfter1300Candle: row.has_after_1300_candle === true || cleanNumber(row.after_1300_candle_count) > 0,
       intradayCandleCount: cleanNumber(row.today_candle_count ?? row.candle_count ?? row.rows_today),
       latestCandleTime: row.latest_candle_time || quote.latestCandleTime || "",
     };
@@ -119,7 +117,6 @@ async function main() {
   });
   const chipReady = merged.filter((quote) => !quote.chipExcluded);
   const sessionReady = chipReady.filter((quote) => cleanNumber(quote.intradayCandleCount) >= minIntraday1mCandles || quote.latestCandleTime);
-  const after1300 = chipReady.filter((quote) => quote.hasAfter1300Candle || cleanNumber(quote.after1300CandleCount) > 0);
   const fieldReady = sessionReady.filter((quote) => passesFieldGate(quote).ok);
   const ranked = rankCandidates(fieldReady).slice(0, tvLimit);
   let tvOk = 0;
@@ -144,7 +141,6 @@ async function main() {
         outsideInsideRatio: Number((cleanNumber(quote.insideVolume) > 0 ? cleanNumber(quote.outsideVolume) / cleanNumber(quote.insideVolume) : 0).toFixed(2)),
         latestQuoteDate: String(quote.updatedAt || quote.quoteTimeRaw || "").slice(0, 10),
         intradayCandleCount: quote.intradayCandleCount,
-        after1300CandleCount: quote.after1300CandleCount,
         latestCandleTime: quote.latestCandleTime,
         tvOk: tv.ok,
         tvReason: tv.reason,
@@ -182,7 +178,6 @@ async function main() {
     sessionReadyCount: sessionReady.length,
     minIntraday1mCandidates,
     minIntraday1mCandles,
-    after1300ReadyCount: after1300.length,
     fieldGateReadyCount: fieldReady.length,
     fieldGate: {
       minChangePercent: MIN_CHANGE_PERCENT,
@@ -192,7 +187,6 @@ async function main() {
       requireOutsideGtInside: REQUIRE_OUTSIDE_GT_INSIDE,
       sideVolumeRows: side.byCode.size,
     },
-    minAfter1300: 0,
     tvChecked: ranked.length,
     tvOk,
     status: ready ? "ready" : "not_ready",

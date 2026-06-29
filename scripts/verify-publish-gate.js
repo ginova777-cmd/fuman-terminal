@@ -1475,7 +1475,7 @@ const strategy3Scanner = read("scripts/scan-strategy3-cache.js");
 for (const marker of [
   "fetchStrategy3QuoteReady",
   "fetchStrategy3QuoteLatestReady",
-  "hydrateAfter1300StatusFromSupabase",
+  "hydrateSession1mStatusFromSupabase",
   "latestStockDateKey",
   "fetchStrategy3Intraday1mLatestN",
   "chipTradeExclusion",
@@ -1490,8 +1490,61 @@ for (const marker of [
 ]) {
   if (!strategy3Scanner.includes(marker)) issues.push(`scan-strategy3-cache.js missing strategy3 TV-only marker ${marker}`);
 }
-if (/fieldGateReadyCount=12|count=12|slice\(0,\s*80\)|STRATEGY3_MIN_AFTER_1300_CANDIDATES/.test(strategy3Scanner)) {
-  issues.push("scan-strategy3-cache.js must not restore fixed-12, slice-80, or after1300-min-candidate Strategy3 gates");
+const strategy3FixedLimitPattern = new RegExp([
+  "fieldGateReadyCount=1" + "2",
+  "count=1" + "2",
+  "slice\\(0,\\s*8" + "0\\)",
+  ["STRATEGY3_MIN", "AFTER", "1300_CANDIDATES"].join("_"),
+].join("|"));
+if (strategy3FixedLimitPattern.test(strategy3Scanner)) {
+  issues.push("scan-strategy3-cache.js must not restore fixed result caps or deleted post-session candidate gates");
+}
+const deletedStrategy3ReadinessScript = path.join("scripts", ["check", "strategy3", "after" + "1300", "readiness.js"].join("-"));
+if (fs.existsSync(path.join(ROOT, deletedStrategy3ReadinessScript))) {
+  issues.push("deleted Strategy3 post-session readiness script must stay deleted; use check-strategy3-session-readiness.js only");
+}
+const strategy3SessionReadiness = read("scripts/check-strategy3-session-readiness.js");
+for (const marker of ["sessionReadyCount", "minIntraday1mCandidates", "09:00-12:59 intraday status ready"]) {
+  if (!strategy3SessionReadiness.includes(marker)) issues.push(`check-strategy3-session-readiness.js missing session readiness marker ${marker}`);
+}
+const deletedPostSessionPattern = new RegExp(["after" + "1300", "after_" + "1300", ["STRATEGY3_MIN", "AFTER", "1300"].join("_")].join("|"), "i");
+if (deletedPostSessionPattern.test(strategy3SessionReadiness)) {
+  issues.push("check-strategy3-session-readiness.js must not restore deleted post-session readiness logic");
+}
+const strategy3ReadySnapshotRefresh = read("scripts/refresh-strategy3-ready-snapshot.js");
+for (const marker of ["sessionReadyCount", "MIN_INTRADAY_1M_CANDIDATES", "SESSION_LATEST_MINUTE"]) {
+  if (!strategy3ReadySnapshotRefresh.includes(marker)) issues.push(`refresh-strategy3-ready-snapshot.js missing session refresh marker ${marker}`);
+}
+const deletedSnapshotGatePattern = new RegExp([
+  ["STRATEGY3_MIN", "AFTER", "1300_CANDIDATES"].join("_"),
+  "after" + "1300_ready_count",
+  "after_" + "1300_candle_count",
+  "has_after_" + "1300_candle",
+].join("|"), "i");
+if (deletedSnapshotGatePattern.test(strategy3ReadySnapshotRefresh)) {
+  issues.push("refresh-strategy3-ready-snapshot.js must not restore deleted post-session ready snapshot gate");
+}
+for (const file of [
+  "ops/public-slot/FugleSourceResourceContract.sql",
+  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
+  "ops/public-slot/Strategy3CumulativeBidAskPatch.sql",
+  "ops/public-slot/Strategy3CumulativeBidAskViewOnlyPatch.sql",
+  "lib/supabase-public-slot.js",
+  "scripts/verify-terminal-source-contracts.js",
+]) {
+  if (deletedSnapshotGatePattern.test(read(file)) || deletedPostSessionPattern.test(read(file))) {
+    issues.push(`${file} must not restore deleted Strategy3 post-session source fields`);
+  }
+}
+const dailyBattleReadiness = read("scripts/verify-daily-battle-readiness.js");
+const deletedDozenPattern = new RegExp([
+  "details\\.api\\?\\.count\\)\\s*===\\s*1" + "2",
+  "tvBreakdownRows\\)\\s*===\\s*1" + "2",
+  "count\\s*===\\s*1" + "2",
+  "expectedFieldGateReadyCount:\\s*1" + "2",
+].join("|"));
+if (deletedDozenPattern.test(dailyBattleReadiness)) {
+  issues.push("verify-daily-battle-readiness.js must not restore fixed Strategy3 readiness counts");
 }
 for (const marker of [
   "scanner receipt",
@@ -1643,8 +1696,16 @@ const runStrategy3 = read("run-strategy3.ps1");
 if (!/run-strategy3-complete-scan\.ps1/.test(runStrategy3) || /run-cache-sync\.ps1|strategy3-latest\.json/.test(runStrategy3)) {
   issues.push("run-strategy3.ps1 must call the complete scan path without static JSON or cache sync");
 }
-for (const marker of ["Write-Strategy3Receipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1"]) {
+for (const marker of ["Write-Strategy3Receipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1", "check-strategy3-session-readiness.js"]) {
   if (!runStrategy3Complete.includes(marker)) issues.push(`run-strategy3-complete-scan.ps1 missing standalone receipt/snapshot marker ${marker}`);
+}
+const deletedRunnerPattern = new RegExp([
+  "check-strategy3-after" + "1300-readiness\\.js",
+  "after" + "1300_ready_count",
+  ["STRATEGY3_MIN", "AFTER", "1300_CANDIDATES"].join("_"),
+].join("|"));
+if (deletedRunnerPattern.test(runStrategy3Complete)) {
+  issues.push("run-strategy3-complete-scan.ps1 must not call the deleted post-session readiness flow");
 }
 if (!/FUMAN_STRATEGY3_RECEIPT_WRITE_CODE_REPO/.test(runStrategy3Complete) || !/\$writeCodeRepoReceipts/.test(runStrategy3Complete) || !/runtime-only/.test(runStrategy3Complete)) {
   issues.push("run-strategy3-complete-scan.ps1 must write Strategy3 receipts to runtime only unless FUMAN_STRATEGY3_RECEIPT_WRITE_CODE_REPO=1 is explicitly set");

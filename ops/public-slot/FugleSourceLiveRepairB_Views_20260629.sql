@@ -69,10 +69,6 @@ grouped as (
     min(candle_time) as first_candle_time,
     count(*) filter (where trade_date = taipei_today)%1$s as today_candle_count,
     greatest(0, extract(epoch from (now() - max(candle_time))))%2$s as latest_candle_age_seconds,
-    count(*) filter (
-      where trade_date = taipei_today
-        and (candle_time at time zone 'Asia/Taipei')::time >= time '13:00'
-    )%1$s as after_1300_candle_count,
     count(*) filter (where trade_date < taipei_today)%1$s as warmup_candle_count,
     count(*)%1$s as continuous_candle_count,
     (max(candle_time) at time zone 'Asia/Taipei')::text as latest_candle_time_taipei
@@ -94,9 +90,6 @@ select
   (has_today_data and continuous_candle_count >= 200) as ready_ge_200,
   (has_today_data and continuous_candle_count >= 35) as ma35_available,
   today_candle_count as rows_today,
-  after_1300_candle_count,
-  after_1300_candle_count as candles_after_1300,
-  (after_1300_candle_count > 0) as has_after_1300_candle,
   latest_candle_time_taipei,
   (has_today_data and continuous_candle_count >= 20) as ready_ge_20,
   warmup_candle_count,

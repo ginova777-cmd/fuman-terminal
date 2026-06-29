@@ -136,17 +136,17 @@ if ($refreshExitCode -ne 0) {
 }
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
-$after1300Gate = $null
-if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "after1300|intraday1m|latest_candle_date|ready_snapshot|snapshot_rows") {
-  $after1300Text = (& $nodeExe "scripts\check-strategy3-after1300-readiness.js" 2>&1) -join "`n"
-  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 session1m live-source gate output: $after1300Text"
+$sessionGate = $null
+if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "intraday1m|latest_candle_date|ready_snapshot|snapshot_rows|sessionReadyCount") {
+  $sessionText = (& $nodeExe "scripts\check-strategy3-session-readiness.js" 2>&1) -join "`n"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 session1m live-source gate output: $sessionText"
   try {
-    $after1300Gate = $after1300Text | ConvertFrom-Json -ErrorAction Stop
+    $sessionGate = $sessionText | ConvertFrom-Json -ErrorAction Stop
   } catch {
-    $after1300Gate = $null
+    $sessionGate = $null
   }
-  if ($after1300Gate -and $after1300Gate.ready -eq $true) {
-    Write-Strategy3CompleteLog "Strategy3 ready_snapshot health is stale, but live 09:00-12:59 source is ready; continuing scan. session1m=$($after1300Gate.sessionReadyCount)/$($after1300Gate.minIntraday1mCandidates) latest=$($after1300Gate.latestCandleTime)"
+  if ($sessionGate -and $sessionGate.ready -eq $true) {
+    Write-Strategy3CompleteLog "Strategy3 ready_snapshot health is stale, but live 09:00-12:59 source is ready; continuing scan. session1m=$($sessionGate.sessionReadyCount)/$($sessionGate.minIntraday1mCandidates) latest=$($sessionGate.latestCandleTime)"
     $resourceGate = [pscustomobject]@{
       PreserveLatest = $false
       Status = "ready"

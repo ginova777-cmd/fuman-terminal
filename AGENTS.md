@@ -1099,16 +1099,20 @@ do not show flame
 
 ## Strategy3 戰鬥契約
 
-策略3是隔日沖 API-only / Supabase complete-run 策略。2026-06-29 校正後，以下規則是正式口徑。
+策略3是隔日沖 API-only / Supabase complete-run 策略。以下只保留目前正式口徑。
 
 ### 顯示與 Publish 規則
 
-- 13:00 complete scan 必須完整掃 `09:00-12:59` 的今日 1 分 K；不可等待 `13:00` 後 K，也不可用 `after1300ReadyCount >= 20` 擋整批。
-- 候選清單不固定 12 檔；全台母池完整掃完後，只要符合 field gate 與 TV 判讀資料契約就必須出現。
-- TradingView / TV 條件負責判斷是否通過與是否加火焰；不可因固定名額、TV candidate limit 或 UI limit 截斷正式結果。
-- complete run 不可因 tvPassCount=0 而寫 0 筆；tvPassCount 可以是 0，但 count 必須等於實際符合條件並寫入 Supabase 的筆數。
-- 若來源未達 `09:00-12:59` session readiness、source drift failed、或 readback count 不一致，scanner 必須 failed/block，不可覆蓋 latest complete run。
-- API 最新來源是 `/api/strategy3-latest` 與 Supabase `strategy3_scan_runs` / `strategy3_scan_results`，不使用 static JSON 作為權威。
+- 掃描時間窗固定使用今日 `09:00-12:59` 的 1 分 K。
+- readiness 唯一檢查程式是 `scripts/check-strategy3-session-readiness.js`。
+- session readiness 條件：`sessionReadyCount >= STRATEGY3_MIN_INTRADAY_1M_CANDIDATES`。
+- 單檔 session 條件：至少 `STRATEGY3_MIN_INTRADAY_1M_CANDLES` 根，或最新 K 達 `12:50`。
+- 全台母池必須完整掃描；正式結果數以 latest complete run 的 `result_count` 為準。
+- field gate 通過且 TV 判讀資料契約完整的標的都必須進正式結果。
+- TradingView / TV 條件只負責 `tvPassCount`、`tvOk` 與火焰標記，不可截斷正式結果清單。
+- `count` 必須等於實際寫入 Supabase 的結果筆數；`tvPassCount` 可以為 0。
+- 若 session readiness、source drift、self-test、published readback 任一失敗，scanner 必須 failed/block，並保留 latest complete run。
+- 權威來源是 `/api/strategy3-latest`、Supabase `strategy3_scan_runs` 與 `strategy3_scan_results`。
 
 ### Field Gate 硬門檻
 
@@ -1116,14 +1120,14 @@ do not show flame
 - 量比 > 1，量比不足時以 `stock_daily_volume` 補 `avgVolume` 後計算。
 - 外盤 > 內盤。
 - 成交張數保留為欄位與評分資訊，不使用「內外盤累計 < 3000 張」作為硬剔除。
-- 已移除「貼近近 100 根收盤高點」硬剔除；`nearHigh` 只作為診斷欄位。
+- `nearHigh` 是診斷欄位，不是硬門檻。
 
 ### TV Close-Price Proxy
 
-- 控盤線與 OBV 以 close-price proxy 為正式口徑，避免 Supabase 1m high/low 大量退化造成誤判。
+- 控盤線與 OBV 以 close-price proxy 為正式口徑。
 - TV pass 條件：`controlOk=true` 且 `obvOk=true`，`nearHigh` 不作硬門檻，除非 `STRATEGY3_REQUIRE_NEAR_100_HIGH=1`。
-- TV entry 視窗固定為 `12:50-12:59` 尾盤代理；正式掃描時窗固定為 `09:00-12:59`。
-- 每檔 result payload 必須保留 `tvBreakdown`：`controlOk / obvOk / nearHigh / nearHighOk / candleRows / candleSource / degenerateRatio / sessionRows / entryWindowRows / after1300Rows / formulaVersion / controlSource`。
+- TV entry 視窗固定為 `12:50-12:59`。
+- 每檔 result payload 必須保留 `tvBreakdown`：`controlOk / obvOk / nearHigh / nearHighOk / candleRows / candleSource / degenerateRatio / sessionRows / entryWindowRows / formulaVersion / controlSource`。
 
 ### Source Drift Gate
 
@@ -1152,12 +1156,34 @@ node scripts\verify-strategy3-battle-state.js
 
 成功條件：`ok=true`、API `count == latest run result_count`、Supabase result exact count 等於 run result_count、`scanCoverage.completeScan=true`、`candidateLimitApplied=false`、`tvBreakdownRows == result rows`、`publishedSelfTest.ok=true`、`sourceDriftHealth.status=ready`。
 
+### Desktop Route Snapshot
+
+- `scripts/scan-strategy3-cache.js` 只負責產生 Supabase complete run / `strategy3_latest` snapshot；跑完 scanner 不代表桌面終端已更新。
+- `run-strategy3-complete-scan.ps1` 在 publish 成功、preserve latest、或 source gate controlled block 後，都必須呼叫 `refresh-desktop-route-snapshot.ps1`。
+- `refresh-desktop-route-snapshot.ps1` 必須跑 `scripts/write-desktop-route-snapshot.js --fail-on-partial`，並接著跑 `scripts/verify-post-scan-snapshot-refresh-contract.js`。
+- 桌面驗證必須打正式預設路由：
+
+```text
+/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60
+/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=80
+```
+
+成功條件：兩者 `runId` 都等於最新 complete run、`usedDate` 為該 run 日期、`count/returnedCount` 等於 `result_count`。
+
+更新 Strategy3 後必跑：
+
+```powershell
+node scripts\verify-strategy3-battle-state.js
+npm run verify:publish-gate
+npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=desktop-night,desktop-sun --routes=strategy3 --route-timeout=60000
+```
+
 ### 排程
 
-正式 Strategy3 建議三段：
+正式 Strategy3 排程：
 
-- 13:00 complete scan；掃描腳本使用 `09:00-12:59` 今日 1 分 K 完整掃全台母池，再跑 resource health gate / self-test，通過才 publish。
-- 13:05 battle verify / watchdog；必須在 13:30 收盤前完成，避免事後才發現壞 run。
+- 13:00 complete scan：使用 `09:00-12:59` 今日 1 分 K 完整掃全台母池，再跑 resource health gate / self-test，通過才 publish。
+- 13:05 battle verify / watchdog：必須在 13:30 收盤前完成。
 
 安裝腳本：
 

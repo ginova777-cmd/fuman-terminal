@@ -443,8 +443,8 @@ function sourceHealthSummary(payload = {}, supabase = {}) {
     warningCount: cleanNumber(health.warningCount),
     warningLimit: cleanNumber(health.warningLimit),
     stockUniverseCount: cleanNumber(health.stockUniverseCount),
-    after1300ReadyCount: cleanNumber(health.after1300ReadyCount),
-    minAfter1300Candidates: cleanNumber(health.minAfter1300Candidates),
+    intraday1mReadyCount: cleanNumber(health.intraday1mReadyCount),
+    minIntraday1mCandidates: cleanNumber(health.minIntraday1mCandidates),
     issuedSharesCount: cleanNumber(health.issuedSharesCount),
     volumeAverageCount: cleanNumber(health.volumeAverageCount),
   };
@@ -563,8 +563,8 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     if (sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
       issues.push(`sourceHealth warningCount ${sourceHealth.warningCount} > ${sourceHealth.warningLimit}`);
     }
-    if (sourceHealth.minAfter1300Candidates && sourceHealth.after1300ReadyCount < sourceHealth.minAfter1300Candidates) {
-      issues.push(`sourceHealth after1300ReadyCount ${sourceHealth.after1300ReadyCount} < ${sourceHealth.minAfter1300Candidates}`);
+    if (sourceHealth.minIntraday1mCandidates && sourceHealth.intraday1mReadyCount < sourceHealth.minIntraday1mCandidates) {
+      issues.push(`sourceHealth intraday1mReadyCount ${sourceHealth.intraday1mReadyCount} < ${sourceHealth.minIntraday1mCandidates}`);
     }
   }
   if (live?.status >= 500 || live?.ok === false) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
@@ -661,7 +661,7 @@ function markdown(results, desktopSnapshot, fastBundle) {
       ? `${row.receipt.status || "--"}<br>${row.receipt.runId || "--"}<br>${row.receipt.finishedAt || "--"}`
       : "n/a";
     const sourceHealth = row.sourceHealth
-      ? `${row.sourceHealth.status || "--"}<br>13:00=${row.sourceHealth.after1300ReadyCount || 0}/${row.sourceHealth.minAfter1300Candidates || "--"} warn=${row.sourceHealth.warningCount || 0}/${row.sourceHealth.warningLimit || "--"}`
+      ? `${row.sourceHealth.status || "--"}<br>session1m=${row.sourceHealth.intraday1mReadyCount || 0}/${row.sourceHealth.minIntraday1mCandidates || "--"} warn=${row.sourceHealth.warningCount || 0}/${row.sourceHealth.warningLimit || "--"}`
       : "n/a";
     const sup = row.supabase?.ok
       ? `${row.supabase.runId || row.supabase.date || "--"}<br>${row.supabase.count ?? "--"}`

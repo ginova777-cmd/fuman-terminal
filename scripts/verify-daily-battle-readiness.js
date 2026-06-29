@@ -204,15 +204,42 @@ function normalizeStrategy3(payload = {}) {
   const details = payload.details || {};
   const health = details.health || {};
   const results = details.results || {};
+  const run = details.run || {};
+  const api = details.api || {};
+  const runResultCount = cleanNumber(run.resultCount || run.result_count);
+  const apiCount = cleanNumber(api.count);
+  const exactCount = cleanNumber(results.exactCount);
+  const visibleRows = cleanNumber(results.visibleRows);
+  const resultRows = exactCount || visibleRows;
+  const expectedCount = runResultCount || resultRows || apiCount;
+  const countsAligned = expectedCount > 0
+    && apiCount === expectedCount
+    && resultRows === expectedCount
+    && visibleRows === expectedCount;
+  const scanCoverage = run.scanCoverage || {};
+  const sourceDriftHealth = run.sourceDriftHealth || {};
+  const publishedSelfTest = run.publishedSelfTest || {};
   return {
-    dataExists: payload.ok === true && cleanNumber(details.api?.count) === 12 && cleanNumber(results.exactCount || results.visibleRows) === 12,
-    healthViewCorrect: payload.ok === true && health.status === "ready",
-    terminalKeysVisible: payload.ok === true && cleanNumber(results.tvBreakdownRows) === 12,
+    dataExists: payload.ok === true && countsAligned,
+    healthViewCorrect: payload.ok === true
+      && health.status === "ready"
+      && scanCoverage.completeScan === true
+      && sourceDriftHealth.status === "ready"
+      && publishedSelfTest.ok === true,
+    terminalKeysVisible: payload.ok === true && resultRows > 0 && cleanNumber(results.tvBreakdownRows) === resultRows,
     status: health.status || (payload.ok ? "ready" : "failed"),
     reason: health.reason || "",
-    runId: details.run?.runId || details.api?.runId || "",
-    count: results.exactCount || details.api?.count || 0,
-    updatedAt: details.run?.updatedAt || payload.checkedAt || "",
+    runId: run.runId || api.runId || "",
+    count: resultRows || apiCount || 0,
+    updatedAt: run.updatedAt || payload.checkedAt || "",
+    rawSummary: {
+      runResultCount,
+      apiCount,
+      resultRows,
+      tvBreakdownRows: cleanNumber(results.tvBreakdownRows),
+      completeScan: scanCoverage.completeScan === true,
+      sourceDrift: sourceDriftHealth.status || "",
+    },
   };
 }
 

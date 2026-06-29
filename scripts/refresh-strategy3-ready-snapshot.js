@@ -18,7 +18,9 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecret("supabase-anon-key.txt");
 
 const PAGE_SIZE = Math.max(100, Math.min(Number(process.env.STRATEGY3_READY_SNAPSHOT_PAGE_SIZE || 1000), 1000));
-const MIN_AFTER_1300 = Math.max(1, Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20));
+const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
+const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
+const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 
 function readSecret(file) {
   try { return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", file), "utf8").trim(); } catch { return ""; }
@@ -110,6 +112,30 @@ function latestTime(...values) {
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null;
 }
 
+function candleMinutes(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Taipei",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(parsed));
+    const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+    return get("hour") * 60 + get("minute");
+  }
+  const match = text.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function sessionReady(status = {}) {
+  const count = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
+  if (count >= MIN_INTRADAY_1M_CANDLES) return true;
+  const minute = candleMinutes(status.latest_candle_time || status.updated_at);
+  return count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE;
+}
+
 function isEligibleQuote(row) {
   const code = normalizeCode(row.symbol || row.code);
   if (!/^\d{4}$/.test(code) || code.startsWith("00")) return false;
@@ -177,7 +203,7 @@ async function main() {
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("v_strategy3_intraday_1m_status", {
-      select: "symbol,code,latest_candle_time,today_candle_count,after_1300_candle_count,has_after_1300_candle,updated_at",
+      select: "symbol,code,latest_candle_time,today_candle_count,updated_at",
       order: "latest_candle_time.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("stock_capital_latest", {
@@ -189,16 +215,15 @@ async function main() {
   const statusByCode = new Map(statuses.map((row) => [normalizeCode(row.symbol || row.code), row]));
   const capitalByCode = new Map(capitals.map((row) => [normalizeCode(row.code), row]));
   const eligibleQuotes = quotes.filter(isEligibleQuote);
-  const after1300ReadyCount = eligibleQuotes.filter((row) => {
+  const sessionReadyCount = eligibleQuotes.filter((row) => {
     const code = normalizeCode(row.symbol || row.code);
-    const status = statusByCode.get(code);
-    return cleanNumber(status?.after_1300_candle_count) > 0 || status?.has_after_1300_candle === true;
+    return sessionReady(statusByCode.get(code));
   }).length;
   const maxLatestCandleTime = statuses.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null;
-  const sourceStatus = after1300ReadyCount >= MIN_AFTER_1300 ? "ready" : "not_ready";
+  const sourceStatus = sessionReadyCount >= MIN_INTRADAY_1M_CANDIDATES ? "ready" : "not_ready";
   const notReadyReason = sourceStatus === "ready"
     ? null
-    : `after1300_ready_count ${after1300ReadyCount} below ${MIN_AFTER_1300}`;
+    : `sessionReadyCount ${sessionReadyCount} below ${MIN_INTRADAY_1M_CANDIDATES}`;
 
   const rows = eligibleQuotes.map((quote) => {
     const code = normalizeCode(quote.symbol || quote.code);
@@ -214,7 +239,6 @@ async function main() {
       trade_value: cleanNumber(quote.trade_value),
       avg_volume: null,
       issued_shares: cleanNumber(capital.issued_shares) || null,
-      after_1300_candle_count: cleanNumber(status.after_1300_candle_count),
       latest_candle_time: status.latest_candle_time || null,
       quote_time: latestTime(quote.quote_time, quote.last_trade_time, quote.updated_at),
       updated_at: latestTime(quote.updated_at, status.updated_at, capital.updated_at, refreshedAt),
@@ -233,8 +257,10 @@ async function main() {
     tradeDate,
     insertedRows: rows.length,
     updatedRows,
-    after1300ReadyCount,
-    minAfter1300: MIN_AFTER_1300,
+    sessionReadyCount,
+    minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
+    minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
+    sessionLatestMinute: SESSION_LATEST_MINUTE,
     sourceStatus,
     latestCandleTime: maxLatestCandleTime,
     statusRefresh,
