@@ -128,6 +128,18 @@ function Get-ReceiptString($receipt, $name, $default = "") {
   return [string]$value
 }
 
+function Convert-ToStableArray($value) {
+  if ($null -eq $value) { return @() }
+  if ($value -is [string]) { return @($value) }
+  $items = New-Object System.Collections.Generic.List[object]
+  if ($value -is [System.Collections.IEnumerable]) {
+    foreach ($item in $value) { $items.Add($item) | Out-Null }
+  } else {
+    $items.Add($value) | Out-Null
+  }
+  return @($items)
+}
+
 function Get-FullScanStrictFailures($items) {
   $byStrategy = @{}
   foreach ($receipt in @($items)) {
@@ -423,45 +435,43 @@ try {
   Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"
 
   if (-not $SkipInstitution) {
-    Invoke-ScanTask "institution" "institution raw refresh" "degradable" "scripts\scan-institution-cache.js" (Join-Path $runtimeRoot "data\institution-latest.json") @{
-      INSTITUTION_SLOW_SCAN = "1"
-      INSTITUTION_REQUEST_DELAY_MS = "15000"
-      INSTITUTION_FETCH_RETRIES = "4"
-      SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-    } 900
+    Invoke-RunnerTask "institution" "institution full scan" "critical" "run-institution.ps1"
   }
   if (-not $SkipWarrant) {
-    Invoke-ScanTask "warrant-flow" "warrant flow raw refresh" "degradable" "scripts\scan-warrant-flow-cache.js" (Join-Path $runtimeRoot "data\warrant-flow-summary.json") @{} 240
+    Invoke-RunnerTask "warrant-flow" "warrant flow full scan" "critical" "run-warrant-flow.ps1"
   }
 
   Invoke-RunnerTask "strategy4" "strategy4 full scan" "critical" "run-strategy4.ps1"
-  Invoke-ScanTask "strategy5" "strategy5 raw refresh" "critical" "scripts\scan-strategy5-cache.js" (Join-Path $runtimeRoot "data\strategy5-latest.json") @{ STRATEGY5_USE_MIS = "0" }
-  Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
+  Invoke-RunnerTask "strategy5" "strategy5 full scan" "critical" "run-strategy5.ps1"
+  Invoke-RunnerTask "cb-detect" "CB detect full scan" "critical" "run-cb-detect.ps1"
   Invoke-DesktopRouteSnapshotWrite
 
-  $strictFailures = @(Get-FullScanStrictFailures @($receipts.ToArray()))
+  $receiptItems = @(Convert-ToStableArray $receipts)
+  $criticalFailureItems = @(Convert-ToStableArray $criticalFailures)
+  $strictFailures = @(Get-FullScanStrictFailures $receiptItems)
+  $strictFailureItems = @(Convert-ToStableArray $strictFailures)
   $summary = [ordered]@{
-    ok = ($criticalFailures.Count -eq 0 -and $strictFailures.Count -eq 0)
+    ok = ($criticalFailureItems.Count -eq 0 -and $strictFailureItems.Count -eq 0)
     source = "scan-full"
     updatedAt = (Get-Date).ToString("o")
-    receiptCount = $receipts.Count
-    criticalFailures = @($criticalFailures.ToArray())
+    receiptCount = $receiptItems.Count
+    criticalFailures = $criticalFailureItems
     strictRequiredStrategies = @($strictRequiredStrategies)
-    allCompleteOk = ($strictFailures.Count -eq 0)
-    strictFailures = @($strictFailures)
-    receipts = @($receipts.ToArray())
+    allCompleteOk = ($strictFailureItems.Count -eq 0)
+    strictFailures = $strictFailureItems
+    receipts = $receiptItems
     log = $log
   }
   Write-JsonFile (Join-Path $receiptDir "scan-summary.json") $summary
   if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir "scan-summary.json") $summary }
 
-  if ($strictFailures.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
-    throw "Full scan strict gate failed: $($strictFailures -join '; ')"
+  if ($strictFailureItems.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
+    throw "Full scan strict gate failed: $($strictFailureItems -join '; ')"
   }
-  if ($criticalFailures.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
-    throw "Critical scans failed: $($criticalFailures -join '; ')"
+  if ($criticalFailureItems.Count -gt 0 -and -not $ContinueOnCriticalFailure) {
+    throw "Critical scans failed: $($criticalFailureItems -join '; ')"
   }
-  Write-ScanLog "SUCCESS full scan completed criticalFailures=$($criticalFailures.Count) strictFailures=$($strictFailures.Count) allCompleteOk=$($strictFailures.Count -eq 0)"
+  Write-ScanLog "SUCCESS full scan completed criticalFailures=$($criticalFailureItems.Count) strictFailures=$($strictFailureItems.Count) allCompleteOk=$($strictFailureItems.Count -eq 0)"
   exit 0
 } catch {
   Write-ScanLog "FAILED $($_.Exception.Message)"
