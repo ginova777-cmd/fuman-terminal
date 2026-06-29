@@ -207,6 +207,8 @@ $rows = foreach ($task in ($taskQuery | Sort-Object TaskName)) {
     "OK-WAITING"
   } elseif ($taskStoppedOk) {
     "OK-STOPPED"
+  } elseif ($taskOk -and $script -eq "stop-strategy2-line.ps1") {
+    "OK"
   } elseif (-not $script) {
     if ($taskOk) { "OK-NO-PS1" } else { "TASK-FAIL" }
   } elseif (-not $rule) {
