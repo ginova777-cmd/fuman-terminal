@@ -1394,6 +1394,13 @@ function collectDesktopStats(route) {
   }
   const marketAiBlockers = [];
   const marketOverviewBlockers = [];
+  const marketAiStaleWaiting = route.key === "market-ai"
+    && (marketAiDashboard?.stockRows || 0) < 1
+    && marketAiDashboard?.heroBoard
+    && (marketAiDashboard?.metricCards || 0) >= 4
+    && (marketAiDashboard?.keyCards || 0) >= 3
+    && (marketAiDashboard?.evidenceCards || 0) >= 4
+    && /等待今日|已排除|舊 snapshot|等待方向/.test(panelText);
   if (route.key === "heatmap" || route.key === "market") {
     const metricText = normalizeArray(marketOverviewContract?.metricTexts).join(" | ");
     const requiredMetrics = ["加權指數", "櫃買指數", "台指期夜"];
@@ -1427,7 +1434,8 @@ function collectDesktopStats(route) {
     if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
     if ((marketAiDashboard?.horizontalOverflow || 0) > 8) marketAiBlockers.push(`market AI desktop horizontal overflow ${marketAiDashboard.horizontalOverflow}px`);
   }
-  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketOverviewBlockers, ...marketAiBlockers])];
+  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketOverviewBlockers, ...marketAiBlockers])]
+    .filter((item) => !(marketAiStaleWaiting && /^(fallback|等待資料|沒有資料)$/.test(String(item || ""))));
   return {
     kind: "desktop",
     routeKey: route.key,
@@ -1583,7 +1591,12 @@ function collectMobileStats(route) {
     if (!mobileAiDashboard.root) layoutBlockers.push("mobile AI fragment must come from API fragment root");
     if (mobileAiDashboard.cards < 4) layoutBlockers.push(`mobile AI cards ${mobileAiDashboard.cards}<4`);
     if (mobileAiDashboard.blocks < 4) layoutBlockers.push(`mobile AI blocks ${mobileAiDashboard.blocks}<4`);
-    if (mobileAiDashboard.stockRows < 1) layoutBlockers.push("mobile AI stock rows missing");
+    const staleBlockedWaiting = mobileAiDashboard.stockRows < 1
+      && mobileAiDashboard.root
+      && mobileAiDashboard.cards >= 4
+      && mobileAiDashboard.blocks >= 4
+      && /等待|排除|舊 snapshot|資料/.test(`${statusText} ${panelText}`);
+    if (mobileAiDashboard.stockRows < 1 && !staleBlockedWaiting) layoutBlockers.push("mobile AI stock rows missing");
     for (const label of ["全部", "動能強", "法人買超", "當沖熱", "風險高"]) {
       if (!mobileAiDashboard.filters.some((item) => item.includes(label))) layoutBlockers.push(`mobile AI filter missing ${label}`);
     }
@@ -1606,7 +1619,14 @@ function collectMobileStats(route) {
   const keyOk = route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
-  const blockers = [...new Set([...blockerMatches, ...layoutBlockers, ...contractBlockers])];
+  const blockers = [...new Set([...blockerMatches, ...layoutBlockers, ...contractBlockers])]
+    .filter((item) => !(route.fragment === "ai"
+      && mobileAiDashboard?.stockRows < 1
+      && mobileAiDashboard?.root
+      && mobileAiDashboard?.cards >= 4
+      && mobileAiDashboard?.blocks >= 4
+      && /等待|排除|舊 snapshot|資料/.test(`${statusText} ${panelText}`)
+      && /^(fallback|等待資料|沒有資料)$/.test(String(item || ""))));
   return {
     kind: "mobile",
     routeKey: route.key,

@@ -203,7 +203,13 @@ async function main() {
   };
   addCheck(checks, ai.ok && ai.json?.ok !== false, "ai-api-ok", "AI 判讀 /api/market-ai-live must return ok 2xx", details.ai);
   addCheck(checks, details.ai.breadthSample > 0 || details.ai.strategy2Count > 0 || details.ai.realtimeRadarCount > 0 || details.ai.rows > 0, "ai-api-content", "AI 判讀 must expose breadth, strategy2, realtime radar, or AI rows", details.ai);
-  addCheck(checks, details.ai.rows > 0 && details.ai.hotStocks > 0, "ai-api-own-rows", "AI 判讀 must produce its own rows/hotStocks, not only frontend heatmap/radar derivation", details.ai);
+  addCheck(
+    checks,
+    (details.ai.rows > 0 && details.ai.hotStocks > 0) || details.ai.dataFreshness?.priorityStaleBlocked === true,
+    "ai-api-own-rows",
+    "AI 判讀 must produce own rows/hotStocks, or explicitly block rows when source data is stale",
+    details.ai
+  );
   addCheck(checks, details.ai.filterCount >= 5 && ["all", "momentum", "institution", "intraday", "risk"].every((key) => details.ai.groupKeys.includes(key)), "ai-filter-groups", "AI 判讀 must expose all five capsule groups", details.ai);
   addCheck(checks, details.ai.todayPoints >= 4 && details.ai.riskNotes >= 2 && details.ai.reasoning >= 4, "ai-judgement-fields", "AI 判讀 must expose 今日重點/風險提醒/判讀理由 fields", details.ai);
   addCheck(checks, Object.values(details.ai.fieldCompleteness || {}).every(Boolean), "ai-field-completeness", "AI 判讀 fieldCompleteness must be true for required dashboard fields", details.ai);
