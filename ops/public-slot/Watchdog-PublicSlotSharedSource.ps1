@@ -7,6 +7,7 @@ param(
   [double]$MinQuoteCoverage120 = 0.85,
   [int]$MinFreshQuoteCount120 = 1200,
   [int]$MaxQuoteAgeSeconds = 60,
+  [int]$MaxIntraday1mStaleSeconds = 180,
   [string]$ActiveStart = "08:00",
   [string]$ActiveEnd = "14:10"
 )
@@ -84,6 +85,18 @@ function Get-SourceStatusAgeSeconds {
         $quoteAge = [int]$row.payload.quote_age_seconds
       }
     } catch {}
+    $intraday1mStale = $null
+    try {
+      if ($row.payload -and $null -ne $row.payload.intraday_1m_stale_seconds) {
+        $intraday1mStale = [int]$row.payload.intraday_1m_stale_seconds
+      }
+    } catch {}
+    $session = ""
+    try {
+      if ($row.payload -and $null -ne $row.payload.session) {
+        $session = [string]$row.payload.session
+      }
+    } catch {}
     $usableForIntraday = $false
     try {
       if ($row.payload -and $null -ne $row.payload.degraded_but_usable_for_intraday) {
@@ -95,6 +108,8 @@ function Get-SourceStatusAgeSeconds {
       Reason = "status=$($row.status); source_age=${age}s; quote_age=${quoteAge}s"
       AgeSeconds = $age
       QuoteAgeSeconds = $quoteAge
+      Intraday1mStaleSeconds = $intraday1mStale
+      Session = $session
       DegradedUsableForIntraday = $usableForIntraday
       Status = [string]$row.status
     }
@@ -224,9 +239,15 @@ function Restart-FugleQuoteCollector {
 }
 
 function Start-SharedSourceTask {
-  param([string]$Reason)
+  param([string]$Reason, [switch]$Restart)
   Write-WatchdogLog "需要重啟 shared source：$Reason"
   try {
+    if ($Restart) {
+      schtasks /End /TN $TaskName | Out-String | ForEach-Object {
+        if (-not [string]::IsNullOrWhiteSpace($_)) { Write-WatchdogLog $_.Trim() }
+      }
+      Start-Sleep -Seconds 2
+    }
     schtasks /Run /TN $TaskName | Out-String | ForEach-Object {
       if (-not [string]::IsNullOrWhiteSpace($_)) { Write-WatchdogLog $_.Trim() }
     }
@@ -274,7 +295,7 @@ if (-not $isRunning) {
 }
 
 if (-not $health.Ok) {
-  Start-SharedSourceTask -Reason $health.Reason
+  Start-SharedSourceTask -Reason $health.Reason -Restart
   exit 0
 }
 
@@ -284,12 +305,17 @@ if ($health.Status -eq "degraded" -and $health.DegradedUsableForIntraday -and $n
 }
 
 if ($health.Status -ne "ok") {
-  Start-SharedSourceTask -Reason "source_status 狀態不是 ok：$($health.Status)"
+  Start-SharedSourceTask -Reason "source_status 狀態不是 ok：$($health.Status)" -Restart
   exit 0
 }
 
 if ($health.AgeSeconds -gt $MaxSourceAgeSeconds) {
-  Start-SharedSourceTask -Reason "source_status 超過 $MaxSourceAgeSeconds 秒未更新，目前 $($health.AgeSeconds) 秒"
+  Start-SharedSourceTask -Reason "source_status 超過 $MaxSourceAgeSeconds 秒未更新，目前 $($health.AgeSeconds) 秒" -Restart
+  exit 0
+}
+
+if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
+  Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒" -Restart
   exit 0
 }
 

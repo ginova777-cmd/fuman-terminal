@@ -178,6 +178,15 @@ function staticChecks() {
     "Write-PublicSlotSourceCoverageSnapshot",
   ]);
 
+  requireIncludes("ops/public-slot/Watchdog-PublicSlotSharedSource.ps1", [
+    "MaxIntraday1mStaleSeconds",
+    "intraday_1m_stale_seconds",
+    "Intraday1mStaleSeconds",
+    "Start-SharedSourceTask -Reason",
+    "-Restart",
+    "schtasks /End /TN $TaskName",
+  ]);
+
   requireIncludes("ops/public-slot/Strategy2Readiness100SourcePatch.sql", [
     "warmup_candle_count",
     "continuous_candle_count",
