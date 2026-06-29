@@ -3,7 +3,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXPECTED_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
-const EXPECTED_FAST_SHELL_ASSET = "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01";
+const EXPECTED_FAST_SHELL_ASSET = "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01";
 const MIN_ROWS = 20;
 
 const issues = [];

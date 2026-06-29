@@ -138,7 +138,7 @@ requireIncludes("scripts/verify-buy-sell-field-contract.js", [
 ]);
 
 requireIncludes("index.html", [
-  "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01",
+  "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01",
   'data-fuman-desktop-fast-shell="1"',
 ]);
 
