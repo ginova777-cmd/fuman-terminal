@@ -420,6 +420,7 @@ const runStrategy5 = read("run-strategy5.ps1");
 const runInstitution = read("run-institution.ps1");
 const runWarrantFlow = read("run-warrant-flow.ps1");
 const runCbDetect = read("run-cb-detect.ps1");
+const runRealtimeRadar = read("run-realtime-radar.ps1");
 const runChipSourceSync = read("run-chip-source-sync.ps1");
 const productionHealthMonitor = read("scripts/monitor-production-health.js");
 const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
@@ -908,6 +909,9 @@ for (const marker of [
   ".slice(0, REALTIME_RADAR_SESSION_LIMIT)",
 ]) {
   if (!realtimeRadarScanner.includes(marker)) issues.push(`scan-realtime-radar-cache.js missing full-session scanner marker ${marker}`);
+}
+if (!/REALTIME_RADAR_NOTIFY\s*=\s*"0"/.test(runRealtimeRadar)) {
+  issues.push("run-realtime-radar.ps1 must disable realtime radar Telegram source alerts with REALTIME_RADAR_NOTIFY=0");
 }
 const buildRadarRowsMatch = realtimeRadarScanner.match(/function buildRadarRows[\s\S]*?function radarRowSessionSeconds/);
 if (!buildRadarRowsMatch) {
