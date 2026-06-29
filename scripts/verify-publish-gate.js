@@ -599,7 +599,7 @@ for (const marker of ["v_scanner_resource_health", "ready", "stale", "not_ready"
 for (const marker of ["v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 readiness marker ${marker}`);
 }
-for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "source_status", "sourceGate", "mother_pool_symbols", "fresh_quote_coverage_120s", "today_1m_symbols", "quote_derived_1m_full_universe", "intraday_1m_stale_seconds", "readiness"]) {
+for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "source_status", "sourceGate", "cleanNumber", "mother_pool_symbols", "fresh_quote_coverage_120s", "today_1m_symbols", "quote_derived_1m_full_universe", "intraday_1m_stale_seconds", "readiness"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 market/readiness marker ${marker}`);
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {

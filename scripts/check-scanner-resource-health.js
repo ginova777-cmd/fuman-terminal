@@ -156,6 +156,15 @@ function boolValue(value) {
   return /^(1|true|yes|on)$/i.test(String(value || "").trim());
 }
 
+function cleanNumber(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).replace(/,/g, "").trim();
+  if (!text) return fallback;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 function taipeiMinutes(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -284,8 +293,9 @@ async function main() {
     : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
   const reason = [row.reason || "", readinessReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
-  const suggestedScannerBehavior = sourceGateIssues.length
-    ? "preserve latest complete run; source_status quote/1m/preopen hard gate is not ready"
+  const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true);
+  const suggestedScannerBehavior = sourceGateIssues.length || readinessBlocked
+    ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
     : row.suggested_scanner_behavior || "";
   const payload = {
     ok,
