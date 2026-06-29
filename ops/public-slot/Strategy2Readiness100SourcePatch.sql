@@ -4,6 +4,8 @@
 --   2. refresh_strategy2_intraday_ready_cache is paged/cache based.
 --   3. v_futopt_stock_mapping_ready follows the current tradable stock-future contract.
 --   4. 08:55 preopen readiness reads a fixed gate cache, not a rolling last-1-minute view.
+--   5. Strategy2 readiness remains compatible with public.v_fugle_intraday_1m_status,
+--      but refresh derives the current page directly from fugle_intraday_1m to avoid full-view timeouts.
 
 alter table public.strategy2_intraday_ready_cache
   add column if not exists ready_ge_80 boolean,
@@ -13,6 +15,9 @@ alter table public.strategy2_intraday_ready_cache
   add column if not exists ready_ma20_continuous boolean not null default false,
   add column if not exists ready_ma35_continuous boolean not null default false,
   add column if not exists ready_macd_continuous boolean not null default false;
+
+create index if not exists idx_fugle_intraday_1m_symbol_candle_desc
+  on public.fugle_intraday_1m (symbol, candle_time desc);
 
 create table if not exists public.strategy2_intraday_ready_refresh_state (
   id text primary key,
@@ -133,39 +138,41 @@ begin
     limit v_page_size
     offset v_offset
   ),
-  daily as (
-    select distinct on (symbol)
-      symbol,
-      avg_5d_volume,
-      avg_20d_volume,
-      days_5,
-      days_20,
-      latest_trade_date,
-      updated_at
-    from public.fugle_daily_volume_avg
-    order by symbol, latest_trade_date desc nulls last, updated_at desc nulls last
-  ),
-  candle_status_raw as (
+  candle_status as (
     select
       p.symbol,
-      coalesce(s.today_candle_count, 0)::integer as today_candle_count,
-      coalesce(s.warmup_candle_count, 0)::integer as warmup_candle_count,
-      coalesce(s.continuous_candle_count, s.candle_count, 0)::integer as continuous_candle_count,
+      coalesce(s.today_candle_count, 0) as today_candle_count,
+      coalesce(s.warmup_candle_count, 0) as warmup_candle_count,
+      coalesce(s.continuous_candle_count, 0) as continuous_candle_count,
       s.latest_candle_time,
       s.updated_at,
-      coalesce(s.ready_ma20_continuous, s.ready_ge_20, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 20) as ready_ma20_continuous,
-      coalesce(s.ready_ma35_continuous, s.ready_ge_35, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 35) as ready_ma35_continuous,
-      coalesce(s.ready_macd_continuous, s.ready_ge_80, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 80) as ready_macd_continuous,
-      coalesce(s.ready_ge_80, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 80) as ready_ge_80,
-      coalesce(s.ready_ge_200, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 200) as ready_ge_200
+      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 20) as ready_ma20_continuous,
+      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 35) as ready_ma35_continuous,
+      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 80) as ready_macd_continuous,
+      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 80) as ready_ge_80,
+      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 200) as ready_ge_200
     from universe p
-    left join public.v_fugle_intraday_1m_status s
-      on s.symbol = p.symbol
-  ),
-  candle_status as (
-    select distinct on (symbol) *
-    from candle_status_raw
-    order by symbol, latest_candle_time desc nulls last, continuous_candle_count desc
+    left join lateral (
+      with recent as (
+        select
+          m.candle_time,
+          m.trade_date,
+          m.updated_at,
+          ((now() at time zone 'Asia/Taipei')::date) as taipei_today
+        from public.fugle_intraday_1m m
+        where m.symbol = p.symbol
+        order by m.candle_time desc
+        limit 200
+      )
+      select
+        max(candle_time) as latest_candle_time,
+        bool_or(trade_date = taipei_today) as has_today_data,
+        count(*) filter (where trade_date = taipei_today)::integer as today_candle_count,
+        count(*) filter (where trade_date < taipei_today)::integer as warmup_candle_count,
+        count(*)::integer as continuous_candle_count,
+        max(updated_at) as updated_at
+      from recent
+    ) s on true
   )
   insert into public.strategy2_intraday_ready_cache (
     symbol,
@@ -245,8 +252,17 @@ begin
     s.updated_at,
     now()
   from universe p
-  left join daily d
-    on d.symbol = p.symbol
+  left join lateral (
+    select
+      avg_5d_volume,
+      avg_20d_volume,
+      days_5,
+      days_20
+    from public.fugle_daily_volume_avg d
+    where d.symbol = p.symbol
+    order by latest_trade_date desc nulls last, updated_at desc nulls last
+    limit 1
+  ) d on true
   left join candle_status s
     on s.symbol = p.symbol
   on conflict (symbol) do update set
