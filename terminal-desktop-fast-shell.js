@@ -4661,7 +4661,7 @@
     const isLiveWindow = detectWindow.active === true;
     const sessionTitle = isLiveWindow ? "巡邏中" : "收盤快照";
     const sessionText = isLiveWindow
-      ? "09:00-13:30 AI 盤中巡邏，資料更新才重建判讀。"
+      ? "09:00-13:00 AI 盤中巡邏，資料更新才重建判讀。"
       : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
     const heatmapUp = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const heatmapDown = sectors.reduce((sum, item) => sum + num(item.down), 0);
@@ -5487,7 +5487,7 @@
             <small>${escapeHtml(meta.icon)} 即時多空資金雷達</small>
             <h1>${escapeHtml(meta.title)}</h1>
           </div>
-          <small>資料日期 ${escapeHtml(radarDomDateLabel(sessionRows))} · 今日掃描 09:00-13:30 · 總筆數 ${escapeHtml(String(sessionRows.length))} 筆 · ${escapeHtml(sourceLabel)}</small>
+          <small>資料日期 ${escapeHtml(radarDomDateLabel(sessionRows))} · 09:00-13:00 時間完整記錄 · 總筆數 ${escapeHtml(String(sessionRows.length))} 筆 · ${escapeHtml(sourceLabel)}</small>
           <button class="radar-action" type="button" data-radar-dom-refresh>刷新</button>
         </header>
         <section class="radar-ai-box overview">
@@ -5499,31 +5499,14 @@
             ${radarDomAiPanel("↗ 偏多 AI 分析", flow.longRows, "long")}
             ${radarDomAiPanel("↘ 偏空 AI 分析", flow.shortRows, "short")}
           </div>
-          <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:30 盤中訊號。</p>
-        </section>
-        <section class="radar-flow-grid" style="--long-share:${flow.longShare.toFixed(2)}%">
-          <article class="radar-flow-card">
-            <span>多方流入</span>
-            <strong>${escapeHtml(radarCanvasMoney(flow.longFlow))}</strong>
-            <small>${escapeHtml(String(flow.longRows.length))} 檔</small>
-          </article>
-          <article class="radar-flow-card short">
-            <span>空方流出</span>
-            <strong>${escapeHtml(radarCanvasMoney(flow.shortFlow))}</strong>
-            <small>${escapeHtml(String(flow.shortRows.length))} 檔</small>
-          </article>
-          <div class="radar-flow-net">
-            <span>淨流向</span>
-            <strong class="radar-flow-value net ${flow.netFlow >= 0 ? "positive" : ""}">${escapeHtml(radarCanvasMoney(flow.netFlow))}</strong>
-            <div class="radar-balance"><span></span></div>
-          </div>
+          <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:00 盤中訊號。</p>
         </section>
         <nav class="radar-board-tabs" aria-label="即時雷達多空切換">
           <button type="button" data-radar-dom-side="long" class="${realtimeRadarDomSide === "long" ? "active" : ""}">多方 ${escapeHtml(String(flow.longRows.length))}</button>
           <button type="button" data-radar-dom-side="short" class="${realtimeRadarDomSide === "short" ? "short-active active" : "short-active"}">空方 ${escapeHtml(String(flow.shortRows.length))}</button>
         </nav>
         <div class="radar-session-strip">
-          <span>今日完整顯示 09:00-13:30 · ${escapeHtml(realtimeRadarDomSide === "short" ? "空方" : "多方")} ${escapeHtml(String(activeRows.length))} 筆</span>
+          <span>09:00-13:00 時間完整記錄 · ${escapeHtml(realtimeRadarDomSide === "short" ? "空方" : "多方")} ${escapeHtml(String(activeRows.length))} 筆</span>
           <span>最新在上</span>
         </div>
         <section class="radar-board-list" data-radar-dom-list>

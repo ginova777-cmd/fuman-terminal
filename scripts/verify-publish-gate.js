@@ -866,7 +866,7 @@ for (const marker of [
   "FULL_SESSION_RADAR_LIMIT = 1200",
   "MAX_RADAR_LIMIT = 1500",
   "function requestRadarLimit",
-  "displayWindow: \"09:00-13:30\"",
+  "displayWindow: \"09:00-13:00\"",
   "totalCount",
   "hasMore",
 ]) {
@@ -884,6 +884,9 @@ for (const marker of [
   "panel.querySelectorAll(\":scope > .desktop-route-shell.desktop-canvas-app\").forEach((node) => node.remove())",
 ]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing realtime radar DOM/full-session marker ${marker}`);
+}
+if (/<section\s+class=["']radar-flow-grid/.test(desktopFastShell) || /<section\s+class=["']radar-flow-grid/.test(terminalApp)) {
+  issues.push("realtime radar DOM shell must not render the removed flow summary block");
 }
 for (const marker of [
   "REALTIME_RADAR_SESSION_LIMIT",
@@ -1052,7 +1055,8 @@ for (const marker of [
   "realtime radar DOM shell missing",
   "realtime radar must not render legacy desktop canvas shell",
   "realtime radar must not expose canvasRows",
-  "realtime radar must show 09:00-13:30 session window",
+  "realtime radar must show 09:00-13:00 session window",
+  "realtime radar flow summary block must stay removed",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing realtime radar no-rollback marker ${marker}`);
 }

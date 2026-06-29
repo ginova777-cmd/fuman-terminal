@@ -1130,9 +1130,9 @@ function renderRealtimeRadar() {
           <div>
             <small>即時雷達</small>
             <h1>即時多空資金流</h1>
-            <small>偵測時間 09:00-13:30｜收盤後停止偵測，正在讀取收盤資料</small>
+            <small>09:00-13:00 時間完整記錄｜收盤後停止偵測，正在讀取收盤資料</small>
           </div>
-          <button class="radar-action" type="button" disabled>09:00-13:30 偵測</button>
+          <button class="radar-action" type="button" disabled>09:00-13:00 記錄</button>
         </header>
         <div class="empty-state">正在讀取收盤資料，顯示盤中最後多空狀態...</div>
       `;
@@ -1198,9 +1198,9 @@ function renderRealtimeRadar() {
       <div>
         <small>即時雷達</small>
         <h1>即時多空資金流</h1>
-        <small>偵測時間 09:00-13:30${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
+        <small>09:00-13:00 時間完整記錄${radarOpen ? "" : `｜收盤後停止偵測，顯示盤中最後資料${realtimeRadarLastUpdatedAt ? ` ${new Date(realtimeRadarLastUpdatedAt).toLocaleTimeString("zh-TW", { hour12: false })}` : ""}`}</small>
       </div>
-      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:30 偵測"}</button>
+      <button class="radar-action" type="button" ${radarOpen ? "data-radar-refresh" : "disabled"}>${radarOpen ? "刷新雷達" : "09:00-13:00 記錄"}</button>
     </header>
     <section class="radar-ai-box">
       <div class="radar-ai-head"><span>AI 即時判斷</span><span>信心 ${Math.max(52, Math.min(95, Math.round(Math.abs(netFlow) / Math.max(longFlow + shortFlow, 1) * 100 + 55)))}%</span></div>

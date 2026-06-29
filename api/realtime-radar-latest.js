@@ -116,7 +116,7 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
     count: rows.length,
     totalCount: allRows.length,
     hasMore: allRows.length > rows.length,
-    displayWindow: "09:00-13:30",
+    displayWindow: "09:00-13:00",
   };
 }
 

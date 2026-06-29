@@ -1354,7 +1354,8 @@ function collectDesktopStats(route) {
     if (legacyCanvasShell) contractBlockers.push("realtime radar must not render legacy desktop canvas shell");
     if (routeCanvas || canvasSize) contractBlockers.push("realtime radar must not render canvas element");
     if (canvasRows !== 0) contractBlockers.push(`realtime radar must not expose canvasRows actual=${canvasRows}`);
-    if (!/09:00-13:30/.test(panelText)) contractBlockers.push("realtime radar must show 09:00-13:30 session window");
+    if (!/09:00-13:00/.test(panelText)) contractBlockers.push("realtime radar must show 09:00-13:00 session window");
+    if (activePanel.querySelector(".radar-flow-grid")) contractBlockers.push("realtime radar flow summary block must stay removed");
     if (!domRows.some((row) => row.selector === ".radar-signal-card")) contractBlockers.push("realtime radar DOM signal cards missing");
   }
   if (route.key === "watchlist") {
