@@ -153,6 +153,48 @@ function Write-PublicSlotSourceStatus {
   Invoke-PublicSlotUpsert -Table "source_status" -OnConflict "source_name" -Rows @($row)
 }
 
+function Write-PublicSlotSourceCoverageSnapshot {
+  param(
+    [string]$SourceName = "fugle_shared_source",
+    [string]$TradeDate = (Get-Date).ToString("yyyy-MM-dd"),
+    [string]$Status = "unknown",
+    [string]$Message = $null,
+    [hashtable]$Payload = @{}
+  )
+
+  if (-not (Test-PublicSlotColumnAvailable -Table "fugle_source_coverage" -Column "checked_at")) { return }
+
+  $now = ConvertTo-IsoUtc
+  $row = @{
+    source_name = $SourceName
+    trade_date = $TradeDate
+    checked_at = $now
+    status = $Status
+    quote_status = $Payload.quote_status
+    preopen_status = $Payload.preopen_status
+    intraday_1m_status = $Payload.intraday_1m_status
+    daily_volume_status = $Payload.daily_volume_status
+    active_symbols = [int]($Payload.active_symbols)
+    quotes_symbols = [int]($Payload.quotes)
+    preopen_symbols = [int]($Payload.preopen)
+    daily_volume_symbols = [int]($Payload.daily_volume_rows)
+    daily_volume_avg_symbols = [int]($Payload.daily_volume_avg_rows)
+    intraday_1m_symbols_today = [int]($Payload.intraday_1m_symbols_today)
+    intraday_1m_rows_today = [int]($Payload.intraday_1m_rows_today)
+    ready_ge_35_symbols = [int]($Payload.ready_ge_35_symbols)
+    ready_ge_80_symbols = [int]($Payload.ready_ge_80_symbols)
+    ready_ge_200_symbols = [int]($Payload.ready_ge_200_symbols)
+    latest_candle_time = $Payload.latest_candle_time
+    latest_candle_time_taipei = $Payload.latest_candle_time_taipei
+    quote_age_seconds = [int]($Payload.quote_age_seconds)
+    intraday_1m_stale_seconds = [int]($Payload.intraday_1m_stale_seconds)
+    message = $Message
+    payload = $Payload
+  }
+
+  Invoke-PublicSlotUpsert -Table "fugle_source_coverage" -OnConflict "source_name,checked_at" -Rows @($row)
+}
+
 function Write-PublicSlotMarketCalendar {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 

@@ -26,6 +26,91 @@ public-terminal-fast-20260623-09
 Supabase only polling / snapshot
 ```
 
+## Supabase Shared Source 四層契約
+
+開盤資料源不能再靠人工觀察補洞；正式 shared source 必須同時滿足四層：
+
+```text
+資源契約 -> 寫入心跳 -> 覆蓋率快照 -> publish gate
+```
+
+固定 contract version：
+
+```text
+fugle-source-contract-20260629-01
+```
+
+正式契約檔：
+
+```text
+ops/public-slot/FugleSourceResourceContract.sql
+```
+
+writer：
+
+```text
+ops/public-slot/Run-PublicSlotSharedSource.ps1
+ops/public-slot/SupabasePublicSlotSource.ps1
+```
+
+每輪 shared source 必須寫：
+
+```text
+source_status.payload.source_contract_version
+source_status.payload.writer_version
+source_status.payload.build_id
+source_status.payload.writer_pid
+source_status.payload.quote_status
+source_status.payload.preopen_status
+source_status.payload.intraday_1m_status
+source_status.payload.daily_volume_status
+source_status.payload.quote_age_seconds
+source_status.payload.last_quote_at
+source_status.payload.latest_candle_time
+source_status.payload.latest_candle_time_taipei
+source_status.payload.intraday_1m_stale_seconds
+source_status.payload.ready_ge_35_symbols
+source_status.payload.ready_ge_80_symbols
+source_status.payload.ready_ge_200_symbols
+```
+
+每輪也必須寫 `fugle_source_coverage`，用來回查 08:00、09:00、09:05、09:35 的覆蓋率。若 Supabase schema 還沒套 `FugleSourceResourceContract.sql`，writer 可以安全跳過 coverage 寫入，但 `npm run verify:fugle-source-contract -- --live` 必須失敗，不能進正式發布。
+
+最重要的資源不可盤中 500：
+
+```text
+source_status
+fugle_source_coverage
+v_fugle_quotes_commonstock_active
+fugle_quotes_live
+stock_tickers
+fugle_daily_volume_avg / fugle_daily_volume
+fugle_intraday_1m
+v_fugle_intraday_1m_status
+get_fugle_intraday_1m_latest_n
+v_stock_future_live_contract
+v_strategy12_stock_future_contract_health
+fugle_preopen_snapshot
+fugle_preopen_snapshot_history
+market_calendar
+```
+
+修改 Supabase source / public-slot writer / 盤中策略資料源後至少跑：
+
+```powershell
+node --check scripts\verify-fugle-source-contract.js
+npm run verify:fugle-source-contract -- --static-only
+npm run verify:publish-gate
+```
+
+若要確認遠端 Supabase 已套用且心跳正在寫入，跑：
+
+```powershell
+npm run verify:fugle-source-contract -- --live
+```
+
+`--live` 失敗代表 source 尚未真正接上，不可用 deploy、cache bump、version bump 掩蓋。
+
 ## 成績單 `/88`
 
 成績單公開網址固定：

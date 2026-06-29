@@ -84,6 +84,14 @@ if (buySellFieldContractGuard.status !== 0) {
   issues.push(`verify-buy-sell-field-contract failed: ${(buySellFieldContractGuard.stderr || buySellFieldContractGuard.stdout || "").trim()}`);
 }
 
+const fugleSourceContractGuard = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "verify-fugle-source-contract.js"), "--static-only"], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (fugleSourceContractGuard.status !== 0) {
+  issues.push(`verify-fugle-source-contract failed: ${(fugleSourceContractGuard.stderr || fugleSourceContractGuard.stdout || "").trim()}`);
+}
+
 const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-modules-contract.js")], {
   cwd: ROOT,
   encoding: "utf8",
@@ -302,6 +310,9 @@ if (!String(packageJson.scripts?.["sync:chip:sources"] || "").includes("run-chip
 }
 if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts/verify-chip-source-health.js")) {
   issues.push("package.json missing scripts.verify:chip-source for scoped chip source health verification");
+}
+if (!String(packageJson.scripts?.["verify:fugle-source-contract"] || "").includes("scripts/verify-fugle-source-contract.js")) {
+  issues.push("package.json missing scripts.verify:fugle-source-contract for four-layer shared source contract gate");
 }
 if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
   issues.push("package.json missing scripts.check:scanner-resource-health for scanner publish/preserve gate");
@@ -1441,6 +1452,21 @@ for (const marker of [
   const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
   if (!sourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
 }
+const fugleSourceContract = read("ops/public-slot/FugleSourceResourceContract.sql");
+for (const marker of [
+  "fugle-source-contract-20260629-01",
+  "source_status",
+  "fugle_source_coverage",
+  "v_fugle_source_contract_health",
+  "v_fugle_quotes_commonstock_active",
+  "fugle_intraday_1m",
+  "v_fugle_intraday_1m_status",
+  "get_fugle_intraday_1m_latest_n",
+  "ready_ge_35_symbols",
+  "latest_candle_time_taipei",
+]) {
+  if (!fugleSourceContract.includes(marker)) issues.push(`FugleSourceResourceContract.sql missing source contract marker ${marker}`);
+}
 const terminalFieldCompleteness = read("scripts/verify-terminal-field-completeness.js");
 for (const marker of [
   "strategy4",
@@ -1745,6 +1771,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-terminal-field-completeness.js",
       "scripts/verify-terminal-resource-chain.js",
       "scripts/verify-terminal-source-contracts.js",
+      "scripts/verify-fugle-source-contract.js",
       "scripts/verify-source-sync.js",
       "REALTIME-RADAR-FRESHNESS-GOVERNANCE.md",
       "STRATEGY5-FRESHNESS-GOVERNANCE.md",
@@ -1756,6 +1783,7 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
       "ops/public-slot/Run-PublicSlotSharedSource.ps1",
       "ops/public-slot/SupabasePublicSlotSource.ps1",
+      "ops/public-slot/FugleSourceResourceContract.sql",
       "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
