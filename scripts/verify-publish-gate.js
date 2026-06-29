@@ -459,6 +459,7 @@ const scorecardSnapshotRunner = read("run-scorecard-snapshot.ps1");
 const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
 const publicSlotSupabaseSource = read("ops/public-slot/SupabasePublicSlotSource.ps1");
 const publicSlotRuntimeConfigExample = read("ops/public-slot/public-slot-shared-source.config.example.json");
+const publicSlotAntiRollbackGuard = read("ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
 const strategy2ReadinessSql = [
@@ -588,6 +589,18 @@ for (const marker of [
   "minAvgVolume5Lots",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
+}
+for (const marker of [
+  "Test-RepoRuntimeConfigSupport",
+  "Test-RuntimeConfig",
+  "Write-DefaultRuntimeConfig",
+  "public-slot-shared-source.json",
+  "runtime config guard",
+]) {
+  if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);
+}
+if (/Set-Content\s+-LiteralPath\s+\$path|Repair-CmdEntrypoints|Repair-RunnerText|Repair-HelperText/.test(publicSlotAntiRollbackGuard)) {
+  issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not rewrite tracked public-slot source files");
 }
 for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
@@ -1269,6 +1282,7 @@ for (const file of [
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/ScorecardSourceContract.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+  "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/SupabasePublicSlotSource.ps1",
   "ops/public-slot/public-slot-shared-source.config.example.json",
@@ -1691,6 +1705,7 @@ if (fetchResult.status !== 0) {
       "lib/scorecard-rule-locks.js",
       "scripts/scan-intraday-signals.js",
       "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+      "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
       "ops/public-slot/Run-PublicSlotSharedSource.ps1",
       "ops/public-slot/SupabasePublicSlotSource.ps1",
       "ops/public-slot/public-slot-shared-source.config.example.json",

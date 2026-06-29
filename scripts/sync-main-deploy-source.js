@@ -160,6 +160,7 @@ const FILES = [
   "ops/public-slot/ScorecardSourceContract.sql",
   "ops/public-slot/WarrantFlowRunIdCompleteGate.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+  "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/SupabasePublicSlotSource.ps1",
   "ops/public-slot/public-slot-shared-source.config.example.json",
