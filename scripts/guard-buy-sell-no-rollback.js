@@ -114,11 +114,29 @@ if (/row\?\.foreignTrustBuyVolumePct\s*\|\|\s*row\?\.institutionBuyVolumePct/.te
   fail("terminal-desktop-fast-shell.js must not use || when reading buy/sell volume pct because valid zero/signed fields can be lost");
 }
 
+requireIncludes("scripts/verify-publish-gate.js", [
+  "buySellNoRollbackGuard",
+  "guard-buy-sell-no-rollback.js",
+]);
+
 const agents = requireIncludes("AGENTS.md", [
   "Supabase only polling / snapshot",
   "買賣超 | latest-complete",
   "完整掃頁面顯示前一個交易日是正常狀態",
   "不要用 cache bump / version bump 假裝修好資料或速度",
+  "買賣超 / Institution",
+  "foreignStreak / trustStreak / jointStreak",
+  "foreignTrustVolumePct",
+  "不能刪或退回的買賣超正式接線",
+]);
+
+requireIncludes("institutionAGENTS.MD", [
+  "API-only complete-run contract",
+  "衍生欄位契約",
+  "foreignStreak / trustStreak / jointStreak",
+  "foreignTrustVolumePct",
+  "terminal-desktop-fast-shell.js",
+  "guard:buy-sell-no-rollback",
 ]);
 
 if (/Strategy 1|Strategy 2|Strategy 3|Strategy 4|Strategy 5/.test(agents)) {

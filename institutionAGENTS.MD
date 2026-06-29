@@ -1,6 +1,6 @@
 # Institution / 買賣超 AGENTS.MD
 
-Last updated: 2026-06-26 Asia/Taipei
+Last updated: 2026-06-29 Asia/Taipei
 
 這份文件只描述「買賣超 / institution」的 Supabase / API / terminal 戰鬥契約。後續 Codex 接手 institution 時，必須以本文件為準，不要退回 static JSON、Google Sheet、人工暫存檔或舊 FinMind-only 判斷。
 
@@ -119,6 +119,111 @@ run_id
 updated_at
 ```
 
+## API-only complete-run contract
+
+買賣超正式 API 只能走 complete-run readback：
+
+```text
+v_institution_latest_complete_run
+-> institution_scan_results
+-> api/institution-latest.js
+```
+
+`api/institution-latest.js` 必須：
+
+- 查 `v_institution_latest_complete_run` 最新 `strategy=institution`、`status=complete`、`complete=true`。
+- 驗 `expected_total === scanned_count`。
+- 驗 `institution_scan_results` readback rows 等於 `run.result_count`。
+- 拒絕 incomplete row、`quality_status != complete`、空 rows。
+- 對外輸出 `no-store` API-only 錯誤，不可 fallback 到 static JSON。
+- 可讀 desktop route snapshot，但 snapshot 也只能是 `/api/institution-latest` 的 complete-run payload。
+
+不可復活：
+
+```text
+data/institution-latest.json
+data/institution-slim.json
+data/institution-mobile-top.json
+data/institution-tdcc-breakout-top.json
+institution-page-*
+```
+
+## 衍生欄位契約
+
+Supabase `institution_scan_results` 實體欄位必須有：
+
+```text
+close
+change_percent
+trade_volume
+trade_value
+foreign_net
+trust_net
+dealer_net
+total_net
+payload
+```
+
+連買資料在 `payload`：
+
+```text
+payload.foreignStreak / payload.trustStreak / payload.jointStreak
+```
+
+5 日均量與 5 日占比資料在 `payload`：
+
+```text
+payload.fiveDayAvgVolume
+payload.fiveDayPctSum
+```
+
+`foreignTrustVolumePct` / `foreignTrustBuyVolumePct` 不要求是 Supabase 原始欄位；若 payload 沒有直接存，API 必須用：
+
+```text
+(foreign_net + trust_net) / payload.fiveDayAvgVolume * 100
+```
+
+回算並輸出：
+
+```text
+foreignTrustBuyVolumePct
+foreignTrustVolumePct
+institutionBuyVolumePct
+```
+
+桌面快版 `terminal-desktop-fast-shell.js` 必須同時吃：
+
+```text
+foreignTrustBuyVolumePct
+foreignTrustVolumePct
+foreign_trust_buy_volume_pct
+fiveDayAvgVolume
+five_day_avg_volume
+avg_volume_5d
+```
+
+畫面上：
+
+```text
+連買 = foreignStreak / trustStreak / jointStreak
+佔均量 = foreignTrustVolumePct 或 API 回算值
+```
+
+若畫面出現 `0/0/0` 或 `0.00%`，先查 API 與 fast shell mapping，不要先判定 Supabase 沒資料。
+
+2026-06-29 已驗證：
+
+```text
+runId = institution-20260626-20260628121922
+Supabase rows = 306 / 306
+payload.foreignStreak = 306，非 0 有 117
+payload.trustStreak = 306，非 0 有 94
+payload.jointStreak = 306，非 0 有 34
+payload.fiveDayAvgVolume = 306
+payload.fiveDayPctSum = 306
+API foreignTrustVolumePct = 306 / 306
+```
+
 ## Ready 條件
 
 ready 必須同時符合：
@@ -149,6 +254,16 @@ unifiedRows = 1944
 validAfterExclusionRows = 1944
 complete run readback = 303 / 303
 terminal keys = 303 / 303 visible
+```
+
+2026-06-29 已驗證狀態：
+
+```text
+API runId = institution-20260626-20260628121922
+API count = 306
+source scan_date = 2026-06-26
+complete run readback = 306 / 306
+衍生欄位 API output = 306 / 306
 ```
 
 ## Not Ready / Stale 條件
@@ -195,6 +310,8 @@ failed     => do not publish; preserve latest complete run; show failed reason
 ```powershell
 Set-Location -LiteralPath C:\fuman-terminal
 .\run-institution-battle-verify.ps1
+npm run guard:buy-sell-no-rollback
+npm run verify:publish-gate
 ```
 
 成功條件：
@@ -219,3 +336,27 @@ gate.terminalKeysVisible=true
 ```
 
 runner 已接 `schedule-guard.ps1`，週末與 TWSE 休假日會跳過，不誤判壞資料。
+
+## 防回滾
+
+買賣超防回滾固定由以下兩層負責：
+
+```text
+scripts/guard-buy-sell-no-rollback.js
+scripts/verify-publish-gate.js
+```
+
+`verify-publish-gate.js` 必須呼叫 `guard-buy-sell-no-rollback.js`；`guard-buy-sell-no-rollback.js` 必須反查 publish gate 仍有 `buySellNoRollbackGuard`。任何移除這條 guard 的改動都視為回滾。
+
+每次修改以下檔案後都要跑 `guard:buy-sell-no-rollback`：
+
+```text
+api/institution-latest.js
+terminal-desktop-fast-shell.js
+terminal-chip-flow.js
+terminal-runtime-config.js
+scripts/verify-publish-gate.js
+scripts/guard-buy-sell-no-rollback.js
+AGENTS.md
+institutionAGENTS.MD
+```

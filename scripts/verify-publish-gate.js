@@ -68,6 +68,14 @@ if (desktopApiOnlyGuard.status !== 0) {
   issues.push(`verify-desktop-api-only failed: ${(desktopApiOnlyGuard.stderr || desktopApiOnlyGuard.stdout || "").trim()}`);
 }
 
+const buySellNoRollbackGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "guard-buy-sell-no-rollback.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (buySellNoRollbackGuard.status !== 0) {
+  issues.push(`guard-buy-sell-no-rollback failed: ${(buySellNoRollbackGuard.stderr || buySellNoRollbackGuard.stdout || "").trim()}`);
+}
+
 const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-modules-contract.js")], {
   cwd: ROOT,
   encoding: "utf8",

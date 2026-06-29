@@ -107,6 +107,95 @@ fixed shell + Canvas / OffscreenCanvas + compact API + route snapshot
 
 完整掃頁面顯示前一個交易日是正常狀態，不可誤判 stale。
 
+## 買賣超 / Institution
+
+買賣超是 `latest-complete` 頁，不要求盤中 same-day；正式資料權威是 Supabase complete run 與 `/api/institution-latest`，不是 static JSON。
+
+正式接線：
+
+```text
+v_institution_latest_complete_run
+-> institution_scan_results
+-> api/institution-latest.js
+-> terminal-runtime-config.js institutionCache / institutionSlim / institutionSummary / institutionMobileTop
+-> terminal-desktop-fast-shell.js
+-> terminal-chip-flow.js
+```
+
+Supabase 實體欄位至少要有：
+
+```text
+close
+change_percent
+trade_volume
+trade_value
+foreign_net
+trust_net
+dealer_net
+total_net
+payload
+```
+
+買賣超衍生欄位契約：
+
+```text
+payload.foreignStreak / payload.trustStreak / payload.jointStreak
+payload.fiveDayAvgVolume
+payload.fiveDayPctSum
+```
+
+`foreignTrustVolumePct` / `foreignTrustBuyVolumePct` 可以不是 Supabase 原始欄位；若 payload 沒直接存，API 必須用：
+
+```text
+(foreign_net + trust_net) / payload.fiveDayAvgVolume * 100
+```
+
+輸出給前端。桌面快版必須同時支援 camelCase、snake_case 與 legacy 名稱，例如：
+
+```text
+foreignTrustBuyVolumePct
+foreignTrustVolumePct
+foreign_trust_buy_volume_pct
+fiveDayAvgVolume
+five_day_avg_volume
+avg_volume_5d
+```
+
+畫面欄位不可退回：
+
+```text
+連買 = foreignStreak / trustStreak / jointStreak
+佔均量 = foreignTrustVolumePct 或 API 回算值
+```
+
+若畫面出現 `0/0/0` 或 `0.00%`，先查 `/api/institution-latest?live=1` 與 `terminal-desktop-fast-shell.js` mapping，不要先判定 Supabase 沒資料。2026-06-29 已驗證：Supabase 最新 complete run 有 306 筆，`foreignStreak / trustStreak / jointStreak / fiveDayAvgVolume / fiveDayPctSum` 都在 `payload`；API live 306 筆皆輸出 `foreignTrustVolumePct`。
+
+不能刪或退回的買賣超正式接線：
+
+```text
+api/institution-latest.js
+terminal-desktop-fast-shell.js
+terminal-chip-flow.js
+terminal-runtime-config.js
+scripts/guard-buy-sell-no-rollback.js
+institutionAGENTS.MD
+```
+
+可以清理的只限退休 static cache / runtime cache，例如 `data/institution-mobile-top.json`、`data/institution-latest.json`、`data/institution-slim.json`、`data/institution-tdcc-breakout-top.json`、舊 page cache。清理前先跑：
+
+```powershell
+npm run cleanup:api-only-retired -- --dry-run --json --root C:\fuman-terminal
+```
+
+買賣超相關修改後至少跑：
+
+```powershell
+node --check api\institution-latest.js
+node --check terminal-desktop-fast-shell.js
+npm run guard:buy-sell-no-rollback
+npm run verify:publish-gate
+```
+
 ## 市場總覽 / 熱力圖
 
 市場總覽是正式桌面終端主畫面，不是泛用策略頁，也不是純表格頁。
