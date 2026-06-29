@@ -402,6 +402,7 @@ const warrantFlowLatestApi = read("api/warrant-flow-latest.js");
 const institutionLatestApi = read("api/institution-latest.js");
 const terminalFastBundleApi = read("api/terminal-fast-bundle.js");
 const desktopRouteSnapshotCache = read("lib/desktop-route-snapshot-cache.js");
+const desktopRouteSnapshotBuilder = read("lib/desktop-route-snapshot-builder.js");
 const terminalHomeApi = read("api/terminal-home.js");
 const mobileBootApi = read("api/mobile-boot.js");
 const mobileFragmentApi = read("api/mobile-fragment.js");
@@ -775,6 +776,12 @@ for (const marker of ["installStrategy2LivePrime", "primeStrategy2LiveRows", "ap
 }
 if (/Math\.max\(Number\(options\.timeoutMs/.test(desktopRouteSnapshotCache)) {
   issues.push("readEndpointFromDesktopSnapshot must honor per-call timeoutMs instead of forcing the 12000ms default during route cold start");
+}
+if (!/DEFAULT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotCache) || !/FUMAN_DESKTOP_ROUTE_SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotCache) || /timeoutMs:\s*options\.timeoutMs\s*\|\|\s*20000/.test(desktopRouteSnapshotCache)) {
+  issues.push("lib/desktop-route-snapshot-cache.js must use configurable desktop snapshot write timeout instead of a hard 20s Supabase upsert timeout");
+}
+if (!/SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || !/FUMAN_DESKTOP_ROUTE_SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || /timeoutMs:\s*options\.timeoutMs\s*\|\|\s*20000/.test(desktopRouteSnapshotBuilder)) {
+  issues.push("lib/desktop-route-snapshot-builder.js must pass configurable desktop snapshot write timeout to all snapshot upserts");
 }
 for (const [file, source] of [
   ["api/strategy3-latest.js", strategy3LatestApi],
