@@ -1908,7 +1908,8 @@ do {
     $preQuoteRows = @(Convert-QuotesToRows -Quotes $quotes -Payload $payload)
     $priorityQuoteSymbols = @(Order-SymbolsForPriority -Symbols $warmupSymbols -QuoteRows $preQuoteRows)
     $restQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
-    if ($session -in @("preopen", "regular") -or $quotes.Count -eq 0) {
+    $quoteFreshEnoughForRegular = ($quotes.Count -ge 500 -and $age -le $StaleSeconds)
+    if ($session -eq "preopen" -or $quotes.Count -eq 0 -or -not $quoteFreshEnoughForRegular) {
       $restQuotePayload = Invoke-FugleStockQuoteBatch -Symbols $priorityQuoteSymbols -ApiKey $fugleApiKey
       $quotes = Merge-QuoteObjectsByCode -PrimaryQuotes $quotes -FallbackQuotes @($restQuotePayload.quotes)
     }
@@ -1926,6 +1927,8 @@ do {
       Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
     }
     $minutePayload = Update-MinuteRows -QuoteRows $quoteRows
+    if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
+    if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     $priorityWarmupSymbols = @(Order-SymbolsForPriority -Symbols $warmupSymbols -QuoteRows $quoteRows)
     [void](Filter-SymbolsByQuoteLiquidity -Symbols $priorityWarmupSymbols -QuoteRows $quoteRows)
     $direct1mSymbols = @($priorityWarmupSymbols)
@@ -1946,18 +1949,16 @@ do {
     }
 
     if ($quoteRows.Count -gt 0) { Write-PublicSlotQuotesLive -Rows $quoteRows }
-    if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
     $direct1mDailyRows = @(Convert-IntradayRowsToDailyVolumeRows -Rows $direct1mPayload.rows)
     $direct1mOhlcvRows = @(Convert-IntradayRowsToDailyOhlcvRows -Rows $direct1mPayload.rows)
     if ($direct1mPayload.rows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $direct1mPayload.rows }
-    if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     if ($direct1mDailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $direct1mDailyRows }
     if ($direct1mOhlcvRows.Count -gt 0) { Write-PublicSlotDailyOhlcv -Rows $direct1mOhlcvRows }
     if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
     if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
     if ($combinedFutoptQuoteRows.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $combinedFutoptQuoteRows }
     if ($shouldWriteFutoptTickers) { Write-PublicSlotFutoptTickers -Rows $combinedFutoptTickerRows }
-    if (((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
+    if ($session -in @("closed", "afterhours") -and ((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
       $deletedDaily = Invoke-PublicSlotRpc -FunctionName "cleanup_fugle_daily_volume" -Body @{ retain_trade_days = $DailyVolumeRetainTradeDays }
       $deleted1m = Invoke-PublicSlotRpc -FunctionName "cleanup_fugle_intraday_1m" -Body @{ retain_trade_days = 5 }
       Write-Log "maintenance daily_volume_deleted=$deletedDaily intraday_1m_deleted=$deleted1m"
