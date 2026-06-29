@@ -619,23 +619,45 @@ async function activateDesktopRoute(cdp, route) {
   throw new Error(`desktop route did not activate: ${route.key} (${JSON.stringify(last)})`);
 }
 
-async function prepareDesktopRoute(cdp, route) {
+async function prepareDesktopRoute(cdp, route, options = {}) {
   if (route.key !== "watchlist") return;
-  await evaluate(cdp, () => {
-    const rows = [
-      { code: "2344", name: "華邦電", reason: "UI E2E 自選股既有卡片驗證", addedAt: new Date().toISOString() },
-    ];
-    const value = JSON.stringify(rows);
+  const waitForReady = options.waitForReady !== false;
+  await evaluate(cdp, async () => {
+    const seed = {
+      code: "2344",
+      name: "華邦電",
+      market: "TWSE",
+      close: 27.75,
+      change: -0.25,
+      percent: -0.89,
+      reason: "UI E2E 自選股既有卡片驗證",
+      addedAt: new Date().toISOString(),
+    };
+    const value = JSON.stringify([seed]);
     const rawSetItem = Storage.prototype.setItem.__fumanOriginalSetItem || Storage.prototype.setItem;
     localStorage.removeItem("fuman_watchlist");
     localStorage.removeItem("fuman_mobile_watchlist_v1");
+    localStorage.removeItem("fuman-terminal-ai-watchlist");
     rawSetItem.call(localStorage, "fuman_watchlist", value);
     rawSetItem.call(localStorage, "fuman_mobile_watchlist_v1", value);
-    localStorage.removeItem("fuman-terminal-ai-watchlist");
     document.querySelector("#watchlist-entry-status")?.replaceChildren();
-    window.FUMAN_WATCHLIST_SHELL_INSTANCE?.render?.();
+    const shell = window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.() || window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+    shell?.ensureCode?.("2344", seed);
+    shell?.render?.();
     return true;
-  });
+  }, null, Math.max(EVAL_TIMEOUT_MS, 15000));
+  if (!waitForReady) return;
+  await waitFor(cdp, () => {
+    const cards = [...document.querySelectorAll(".watchlist-card[data-code]")].map((item) => item.dataset.code || "");
+    const count = String(document.querySelector("#watchlist-count")?.textContent || "").trim();
+    return {
+      ok: cards.includes("2344") && /^1(?:\/10)?$/.test(count),
+      cards: cards.join(","),
+      count,
+      shellReady: Boolean(window.FUMAN_WATCHLIST_SHELL_INSTANCE || window.FUMAN_WATCHLIST_SHELL_MODULE),
+      status: String(document.querySelector("#watchlist-entry-status")?.textContent || ""),
+    };
+  }, null, 15000, 300);
 }
 
 async function resetMobileWatchStorage(cdp, rows = null) {
@@ -1908,8 +1930,9 @@ async function runDesktopMode(browser, theme) {
     let stats = null;
     try {
       stats = await withTimeout((async () => {
-        await prepareDesktopRoute(cdp, route);
+        await prepareDesktopRoute(cdp, route, { waitForReady: false });
         await activateDesktopRoute(cdp, route);
+        await prepareDesktopRoute(cdp, route);
         await afterDesktopRouteActivate(cdp, route);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
         return collectDesktopStatsWhenReady(cdp, route);
