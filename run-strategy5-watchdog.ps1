@@ -64,7 +64,6 @@ function Get-Strategy5Payload {
     $cacheControl = [string]$response.Headers["Cache-Control"]
     if ($cacheControl -notmatch "no-store") {
       Write-WatchdogLog "strategy5 API missing no-store cache header: Cache-Control=$cacheControl"
-      return $null
     }
     return ([string]$response.Content | ConvertFrom-Json -ErrorAction Stop)
   } catch {
