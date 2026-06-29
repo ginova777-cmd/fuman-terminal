@@ -11,6 +11,8 @@
   "direct1mPrewarmSymbolCount": 300,
   "direct1mPrewarmBatchSize": 40,
   "direct1mPrewarmBars": 200,
+  "quoteDerived1mCandidateCount": 500,
+  "quoteDerived1mMaxQuoteAgeSeconds": 180,
   "futoptQuoteBatchSize": 120,
   "futoptQuoteEverySeconds": 10,
   "futoptQuoteDelayMilliseconds": 300,

@@ -43,6 +43,8 @@ function Write-DefaultRuntimeConfig {
     direct1mPrewarmSymbolCount = 300
     direct1mPrewarmBatchSize = 40
     direct1mPrewarmBars = 200
+    quoteDerived1mCandidateCount = 500
+    quoteDerived1mMaxQuoteAgeSeconds = 180
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
@@ -72,6 +74,10 @@ function Test-RepoRuntimeConfigSupport {
     "Direct1mPrewarmBars",
     "direct_1m_prewarm_target_symbols",
     "direct_1m_prewarm_complete",
+    "QuoteDerived1mCandidateCount",
+    "quote_derived_1m_current_minute",
+    "quote_derived_1m_rows",
+    "volume_strategy_usable",
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
     "sourceCoreOk",
@@ -132,6 +138,8 @@ function Test-RuntimeConfig {
     "direct1mPrewarmSymbolCount",
     "direct1mPrewarmBatchSize",
     "direct1mPrewarmBars",
+    "quoteDerived1mCandidateCount",
+    "quoteDerived1mMaxQuoteAgeSeconds",
     "futoptQuoteBatchSize",
     "futoptQuoteEverySeconds",
     "futoptQuoteDelayMilliseconds",
@@ -155,6 +163,8 @@ function Test-RuntimeConfig {
     direct1mPrewarmSymbolCount = 300
     direct1mPrewarmBatchSize = 40
     direct1mPrewarmBars = 200
+    quoteDerived1mCandidateCount = 500
+    quoteDerived1mMaxQuoteAgeSeconds = 180
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100

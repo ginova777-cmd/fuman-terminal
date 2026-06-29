@@ -598,6 +598,10 @@ for (const marker of [
   "Direct1mPrewarmBars",
   "direct_1m_prewarm_target_symbols",
   "direct_1m_prewarm_complete",
+  "QuoteDerived1mCandidateCount",
+  "quote_derived_1m_current_minute",
+  "quote_derived_1m_rows",
+  "volume_strategy_usable",
 ]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
 }
@@ -624,6 +628,8 @@ for (const marker of [
   "direct1mPrewarmSymbolCount",
   "direct1mPrewarmBatchSize",
   "direct1mPrewarmBars",
+  "quoteDerived1mCandidateCount",
+  "quoteDerived1mMaxQuoteAgeSeconds",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
@@ -644,6 +650,9 @@ for (const marker of [
   "Direct1mPrewarmBars",
   "direct_1m_prewarm_target_symbols",
   "direct_1m_prewarm_complete",
+  "QuoteDerived1mCandidateCount",
+  "quote_derived_1m_current_minute",
+  "quote_derived_1m_rows",
   "latest_candle_time_taipei",
 ]) {
   if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);

@@ -81,6 +81,10 @@ source_status.payload.direct_1m_prewarm_target_symbols
 source_status.payload.direct_1m_prewarm_completed_symbols
 source_status.payload.direct_1m_prewarm_rows
 source_status.payload.direct_1m_prewarm_complete
+source_status.payload.quote_derived_1m_candidate_symbols
+source_status.payload.quote_derived_1m_rows
+source_status.payload.quote_derived_1m_current_minute
+source_status.payload.quote_derived_1m_max_quote_age_seconds
 source_status.payload.ready_ge_35_symbols
 source_status.payload.ready_ge_80_symbols
 source_status.payload.ready_ge_200_symbols
@@ -105,6 +109,8 @@ ready_macd_continuous
 因此 `fugle_intraday_1m` 必須保留最近 80~200 根、至少 2~5 個交易日的 1 分 K。策略端技術指標 MA20 / MA35 / MACD / RSI / KD 使用跨日 continuous K；今日進場時間、今日成交量、今日訊號只看今天資料。
 
 08:00 shared source 啟動後必須先為當沖候選池做 direct 1m prewarm：優先抓 Fugle historical 1m，至少每檔最近 200 根，不能等 09:00 後才從今天第一根開始累積。prewarm 進度必須寫入 `source_status.payload.direct_1m_prewarm_*`，且 `Guard-PublicSlotSourceAntiRollback.ps1` 與 publish gate 必須防止這些欄位被拿掉。
+
+09:00 後熱門股 / 當沖候選股必須從 09:00 或 09:01 開始寫入今天 quote-derived 1m。writer 不可以用 quote 的 `updated_at` 當 candle minute 來等待第一筆成交；應以目前分鐘寫入 flat candle。若該分鐘沒有成交量，`fugle_intraday_1m.payload.synthetic=true` 且 `payload.volume_strategy_usable=false`，技術指標可用、量能條件不可用。`source_status.payload.quote_derived_1m_*` 必須顯示本輪候選池與寫入 rows，避免熱門股到 09:09 才有第一根今天 K。
 
 每輪也必須寫 `fugle_source_coverage`，用來回查 08:00、09:00、09:05、09:35 的覆蓋率。若 Supabase schema 還沒套 `FugleSourceResourceContract.sql`，writer 可以安全跳過 coverage 寫入，但 `npm run verify:fugle-source-contract -- --live` 必須失敗，不能進正式發布。
 
