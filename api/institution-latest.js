@@ -13,6 +13,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const LATEST_RUN_VIEW = process.env.INSTITUTION_SUPABASE_LATEST_RUN_VIEW || "v_institution_latest_complete_run";
+const INSTITUTION_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
 
 function setDesktopSnapshotCache(response) {
   response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
@@ -26,6 +27,7 @@ function apiOnlyError(reason = "") {
     error: "institution_api_only_unavailable",
     detail: reason,
     cacheSource: "none",
+    fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
     data: {},
     rows: [],
     transport: {
@@ -67,10 +69,16 @@ function readRequestOptions(request) {
     const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
     const smallPayload = canvas || compact;
     const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
-    return { canvas, compact, smallPayload, limit };
+    const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
+    return { canvas, compact, smallPayload, limit, fieldContract };
   } catch {
-    return { canvas: false, compact: false, smallPayload: false, limit: 3000 };
+    return { canvas: false, compact: false, smallPayload: false, limit: 3000, fieldContract: "" };
   }
+}
+
+function payloadMatchesFieldContract(payload, requestedContract = "") {
+  if (!requestedContract) return true;
+  return String(payload?.fieldContractVersion || "") === requestedContract;
 }
 
 function normalizeRow(row) {
@@ -146,6 +154,7 @@ function buildPayload(rows, run, options = {}) {
     qualityStatus: String(run?.quality_status || rows[0]?.quality_status || "complete"),
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || "institution-run-id-complete-v1"),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "institution-cache"),
+    fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
     count: resultCount,
     returnedCount: outputRows.length,
     canvas: Boolean(options.canvas),
@@ -164,6 +173,7 @@ function buildPayload(rows, run, options = {}) {
       table: TABLE,
       latestRunView: LATEST_RUN_VIEW,
       gate: "complete-run-readback",
+      fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
       runId: String(run?.run_id || rows[0]?.run_id || ""),
       via: "api/institution-latest",
       fetchedAt: new Date().toISOString(),
@@ -235,18 +245,18 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const options = readRequestOptions(request);
   const cached = await readEndpointFromDesktopSnapshot(request, {
     timeoutMs: 650,
     via: "api/institution-latest",
   });
-  if (cached) {
+  if (cached && payloadMatchesFieldContract(cached, options.fieldContract)) {
     setDesktopSnapshotCache(response);
     response.status(200).json(cached);
     return;
   }
 
   try {
-    const options = readRequestOptions(request);
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;

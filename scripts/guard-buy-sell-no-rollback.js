@@ -77,6 +77,9 @@ forbidIncludes("terminal-runtime-config.js", [
 ]);
 
 const institutionApi = requireIncludes("api/institution-latest.js", [
+  'const INSTITUTION_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01"',
+  "fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION",
+  "payloadMatchesFieldContract",
   "v_institution_latest_complete_run",
   "validateCompleteRun",
   "validateReadback",
@@ -102,6 +105,8 @@ requireIncludes("api/chip-trade-tdcc-breakout-latest.js", [
 ]);
 
 requireIncludes("terminal-desktop-fast-shell.js", [
+  'const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01"',
+  'query.set("fieldContract", CHIP_TRADE_FIELD_CONTRACT_VERSION)',
   "foreign_trust_buy_volume_pct",
   "foreignTrustVolumePct",
   "five_day_avg_volume",
@@ -116,7 +121,20 @@ if (/row\?\.foreignTrustBuyVolumePct\s*\|\|\s*row\?\.institutionBuyVolumePct/.te
 
 requireIncludes("scripts/verify-publish-gate.js", [
   "buySellNoRollbackGuard",
+  "buySellFieldContractGuard",
   "guard-buy-sell-no-rollback.js",
+  "verify-buy-sell-field-contract.js",
+]);
+
+requireIncludes("package.json", [
+  '"verify:buy-sell-field-contract": "node --use-system-ca scripts/verify-buy-sell-field-contract.js"',
+]);
+
+requireIncludes("scripts/verify-buy-sell-field-contract.js", [
+  'const EXPECTED_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01"',
+  "captureInstitutionApi",
+  "foreignTrustVolumePct",
+  "fiveDayAvgVolume",
 ]);
 
 requireIncludes("index.html", [

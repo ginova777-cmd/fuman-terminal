@@ -25,6 +25,7 @@
   const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
+  const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const STRATEGY2_SNAPSHOT_FIRST_PARAM = "strategy2SnapshotFirst";
@@ -1110,6 +1111,7 @@
     if (strategy2SnapshotFirst) query.set("snapshot", "1");
     else if (options.live) query.set("live", "1");
     if (options.today) query.set("today", "1");
+    if (isChipTradeRoute(route)) query.set("fieldContract", CHIP_TRADE_FIELD_CONTRACT_VERSION);
     if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
     if (withBust) query.set("t", String(Date.now()));
     return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;

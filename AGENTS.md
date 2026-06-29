@@ -139,6 +139,7 @@ payload
 買賣超衍生欄位契約：
 
 ```text
+fieldContractVersion = buy-sell-derived-fields-20260629-01
 payload.foreignStreak / payload.trustStreak / payload.jointStreak
 payload.fiveDayAvgVolume
 payload.fiveDayPctSum
@@ -153,6 +154,7 @@ payload.fiveDayPctSum
 輸出給前端。桌面快版必須同時支援 camelCase、snake_case 與 legacy 名稱，例如：
 
 ```text
+fieldContract=buy-sell-derived-fields-20260629-01
 foreignTrustBuyVolumePct
 foreignTrustVolumePct
 foreign_trust_buy_volume_pct
@@ -193,6 +195,7 @@ npm run cleanup:api-only-retired -- --dry-run --json --root C:\fuman-terminal
 node --check api\institution-latest.js
 node --check terminal-desktop-fast-shell.js
 npm run guard:buy-sell-no-rollback
+npm run verify:buy-sell-field-contract
 npm run verify:publish-gate
 ```
 

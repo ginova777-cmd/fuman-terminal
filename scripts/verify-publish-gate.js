@@ -76,6 +76,14 @@ if (buySellNoRollbackGuard.status !== 0) {
   issues.push(`guard-buy-sell-no-rollback failed: ${(buySellNoRollbackGuard.stderr || buySellNoRollbackGuard.stdout || "").trim()}`);
 }
 
+const buySellFieldContractGuard = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "verify-buy-sell-field-contract.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (buySellFieldContractGuard.status !== 0) {
+  issues.push(`verify-buy-sell-field-contract failed: ${(buySellFieldContractGuard.stderr || buySellFieldContractGuard.stdout || "").trim()}`);
+}
+
 const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-modules-contract.js")], {
   cwd: ROOT,
   encoding: "utf8",
