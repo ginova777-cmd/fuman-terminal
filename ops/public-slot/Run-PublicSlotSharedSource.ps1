@@ -39,7 +39,7 @@ param(
   [bool]$WritePreopenRows = $true,
   [ValidateSet("always", "preopen", "never")]
   [string]$WritePreopenRowsMode = "preopen",
-  [int]$Strategy2ReadyPageSize = 500,
+  [int]$Strategy2ReadyPageSize = 100,
   [int]$Strategy2ReadyMaxPages = 120,
   [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
@@ -232,7 +232,7 @@ function Get-Strategy2ReadyRefreshBody {
 
 function Get-Strategy2ReadyEffectivePageSize {
   if ($Strategy2ReadyPageSize -le 0) { return 0 }
-  return [math]::Max(250, [math]::Min(500, [int]$Strategy2ReadyPageSize))
+  return [math]::Max(25, [math]::Min(500, [int]$Strategy2ReadyPageSize))
 }
 
 function Get-Strategy2ReadyRefreshMaxPages {
