@@ -22,6 +22,7 @@
 - `v_strategy2_entry_events_today` 是 08:45-12:00 live 偵測歷史逐筆資料入口。
 - `strategy2_latest` 必須跟上最新 shared source；若 source 已恢復但 latest 落後，應刷新策略2 run。
 - 盤後 shared source `stopped` 不可被誤判成盤中 1 分 K 壞掉；盤後狀態應是 `afterhours_stopped_ok`。
+- ready cache 必須刷新全股票池：`refresh_strategy2_intraday_ready_cache` 需一路跑到 `next_offset=0`，不能用固定 12 頁或部分 processed 數量當成功；若 `processed < total_expected` 或 `next_offset != 0`，只能警告/阻擋 ready，不可發布成 100% coverage。
 
 ## 禁止恢復的舊路徑
 

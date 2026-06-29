@@ -40,6 +40,7 @@ param(
   [ValidateSet("always", "preopen", "never")]
   [string]$WritePreopenRowsMode = "preopen",
   [int]$Strategy2ReadyPageSize = 500,
+  [int]$Strategy2ReadyMaxPages = 120,
   [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
@@ -205,6 +206,7 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "WritePreopenRows" -ConfigNames @("writePreopenRows", "WritePreopenRows") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "WritePreopenRowsMode" -ConfigNames @("writePreopenRowsMode", "WritePreopenRowsMode") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS_MODE" -Type "string"
   Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyPageSize" -ConfigNames @("strategy2ReadyPageSize", "Strategy2ReadyPageSize") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_PAGE_SIZE"
+  Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyMaxPages" -ConfigNames @("strategy2ReadyMaxPages", "Strategy2ReadyMaxPages") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_MAX_PAGES"
   $env:FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC = [string]$PublicSlotUpsertTimeoutSec
   $env:FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE = [string]$PublicSlotUpsertBatchSize
 }
@@ -221,16 +223,22 @@ function Test-ShouldWritePreopenRows {
 
 function Get-Strategy2ReadyRefreshBody {
   param([int]$ReadyPage)
-  if ($Strategy2ReadyPageSize -gt 0) {
-    return @{ p_page_size = $Strategy2ReadyPageSize; p_reset = ($ReadyPage -eq 0) }
+  $effectivePageSize = Get-Strategy2ReadyEffectivePageSize
+  if ($effectivePageSize -gt 0) {
+    return @{ p_page_size = $effectivePageSize; p_reset = ($ReadyPage -eq 0) }
   }
   return @{}
 }
 
+function Get-Strategy2ReadyEffectivePageSize {
+  if ($Strategy2ReadyPageSize -le 0) { return 0 }
+  return [math]::Max(250, [math]::Min(500, [int]$Strategy2ReadyPageSize))
+}
+
 function Get-Strategy2ReadyRefreshMaxPages {
-  $pageSize = [math]::Max(25, [int]$Strategy2ReadyPageSize)
+  $pageSize = [math]::Max(1, [int](Get-Strategy2ReadyEffectivePageSize))
   $expectedPages = [int][math]::Ceiling([double]$SeedSymbolCount / [double]$pageSize)
-  return [math]::Max(12, [math]::Min(120, $expectedPages + 8))
+  return [math]::Max(12, [math]::Min([math]::Max(120, [int]$Strategy2ReadyMaxPages), $expectedPages + 8))
 }
 
 function Convert-Market {
@@ -2589,7 +2597,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyPageSize=$Strategy2ReadyPageSize minAvgVolume5Lots=$MinAvgVolume5Lots"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages minAvgVolume5Lots=$MinAvgVolume5Lots"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -2990,6 +2998,7 @@ do {
       $strategy2ReadyNextOffset = 0
       $strategy2ReadyMaxPages = Get-Strategy2ReadyRefreshMaxPages
       $strategy2ReadyLast = $null
+      $strategy2ReadyEffectivePageSize = Get-Strategy2ReadyEffectivePageSize
       for ($readyPage = 0; $readyPage -lt $strategy2ReadyMaxPages; $readyPage++) {
         $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body (Get-Strategy2ReadyRefreshBody -ReadyPage $readyPage)
         $strategy2ReadyPages += 1
@@ -2997,12 +3006,25 @@ do {
         $strategy2ReadyProcessed += $processedThisPage
         $strategy2ReadyNextOffset = [int](Get-Number $strategy2ReadyLast.next_offset)
         $strategy2ReadyTotalExpected = [int](Get-Number $strategy2ReadyLast.total_expected)
-        if ($strategy2ReadyNextOffset -eq 0 -or ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyProcessed -ge $strategy2ReadyTotalExpected)) { break }
+        $reportedPageSize = [int](Get-Number $strategy2ReadyLast.page_size)
+        if ($reportedPageSize -gt 0 -and $reportedPageSize -lt $strategy2ReadyEffectivePageSize) {
+          Write-Log "WARN strategy2 ready cache RPC page_size=$reportedPageSize below requested=$strategy2ReadyEffectivePageSize"
+        }
+        if ($strategy2ReadyTotalExpected -gt 0) {
+          $effectiveCycleSize = if ($reportedPageSize -gt 0) { $reportedPageSize } else { $strategy2ReadyEffectivePageSize }
+          $effectiveCycleSize = [math]::Max(1, [int]$effectiveCycleSize)
+          $expectedPages = [int][math]::Ceiling($strategy2ReadyTotalExpected / $effectiveCycleSize) + 2
+          if ($expectedPages -gt $strategy2ReadyMaxPages) {
+            $strategy2ReadyMaxPages = [math]::Min([math]::Max([int]$Strategy2ReadyMaxPages, $expectedPages), 240)
+          }
+        }
+        if ($strategy2ReadyNextOffset -eq 0) { break }
       }
-      if ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyProcessed -lt $strategy2ReadyTotalExpected -and $strategy2ReadyNextOffset -ne 0) {
-        Write-Log "WARN strategy2 ready cache partial refresh pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset"
+      if ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyNextOffset -ne 0) {
+        Write-Log "WARN strategy2 ready cache partial refresh; strategy2 ready cache incomplete full-cycle pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"
+      } else {
+        Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"
       }
-      Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset last=$strategy2ReadyLast"
     } catch {
       Write-Log "WARN strategy2 ready cache refresh skipped: $($_.Exception.Message)"
     }
