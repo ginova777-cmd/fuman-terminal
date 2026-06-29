@@ -1,10 +1,11 @@
 param(
-  [switch]$IncludeDisabled
+  [switch]$IncludeDisabled,
+  [switch]$StrictLogs
 )
 
 $ErrorActionPreference = "Continue"
 
-$logDir = "C:\fuman-runtime\logs"
+$logDir = if ($env:FUMAN_LOG_DIR) { $env:FUMAN_LOG_DIR } else { "C:\fuman-runtime\logs" }
 $taskNameFilter = "Fuman*"
 
 $rules = @{
@@ -18,15 +19,25 @@ $rules = @{
     Done = @("Open buy full scan end")
     Detail = @("full market scan", "scanned \d+/\d+", "matches \d+", "Open buy cache sync completed")
   }
+  "run-star-preopen-watch.ps1" = @{
+    Log = "strategy1-preopen-watch-*.log"
+    Done = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip")
+    Detail = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip", "controlled preopen refresh failure")
+  }
   "run-strategy2-intraday.ps1" = @{
     Log = "strategy2-intraday-*.log"
-    Done = @("Strategy2 intraday patrol end")
-    Detail = @("Strategy2 intraday patrol end")
+    Done = @("Strategy2 intraday patrol end", "skip intraday scan outside market time")
+    Detail = @("Strategy2 intraday patrol end", "skip intraday scan outside market time")
   }
   "run-strategy2-line.ps1" = @{
     Log = "strategy2-line-*.log"
-    Done = @("Strategy2 LINE")
-    Detail = @("sent", "skip", "Strategy2 LINE")
+    Done = @("Strategy2 LINE", "live alert skipped", "patrol skipped")
+    Detail = @("sent", "skip", "skipped", "Strategy2 LINE")
+  }
+  "stop-strategy2-line.ps1" = @{
+    Log = ""
+    Done = @()
+    Detail = @()
   }
   "run-strategy3.ps1" = @{
     Log = "strategy3-*.log"
@@ -35,33 +46,38 @@ $rules = @{
   }
   "run-strategy4.ps1" = @{
     Log = "strategy4-*.log"
-    Done = @("Strategy4 full scan end", "Strategy4 clean cache sync end")
-    Detail = @("Strategy4 full scan end", "Strategy4 clean cache sync end")
+    Done = @("Strategy4 full scan end", "Strategy4 clean cache sync end", "strategy4 cache updated")
+    Detail = @("Strategy4 full scan end", "Strategy4 clean cache sync end", "strategy4 cache updated")
   }
   "run-strategy5.ps1" = @{
     Log = "strategy5-*.log"
     Done = @("Strategy5 scan end")
     Detail = @("Strategy5 scan end")
   }
+  "run-strategy5-watchdog.ps1" = @{
+    Log = "strategy5-watchdog-*.log"
+    Done = @("strategy5 healthy", "strategy5 recovered")
+    Detail = @("strategy5 healthy.*", "strategy5 recovered.*")
+  }
   "run-realtime-radar.ps1" = @{
     Log = "realtime-radar-*.log"
-    Done = @("Realtime radar cache end")
-    Detail = @("Realtime radar cache end")
+    Done = @("Realtime radar cache end", "realtime radar skipped outside")
+    Detail = @("Realtime radar cache end", "realtime radar skipped outside.*", "rows \d+ status ok")
   }
   "run-market-overview.ps1" = @{
     Log = "market-overview-*.log"
-    Done = @("Market overview patrol end")
-    Detail = @("Market overview patrol end")
-  }
-  "stop-strategy2-line.ps1" = @{
-    Log = "strategy2-line-*.log"
-    Done = @("Strategy2 LINE", "stop", "stopped")
-    Detail = @("stop", "stopped", "Strategy2 LINE")
+    Done = @("Market overview patrol end", "market overview skipped outside")
+    Detail = @("Market overview patrol end", "market overview skipped outside.*")
   }
   "run-flow.ps1" = @{
     Log = "flow-*.log"
     Done = @("FLOW_PUBLISH_SUCCESS", "Flow and warrant scan end")
     Detail = @("FLOW_PUBLISH_SUCCESS", "institutionRows=\d+", "warrantMatches=\d+")
+  }
+  "run-flow-watchdog.ps1" = @{
+    Log = "flow-watchdog-*.log"
+    Done = @("Watchdog OK", "Watchdog rerun completed")
+    Detail = @("Watchdog OK.*", "Watchdog rerun completed")
   }
   "run-institution.ps1" = @{
     Log = "institution-*.log"
@@ -75,56 +91,6 @@ $rules = @{
   }
 }
 
-function Convert-StatusText($status) {
-  switch ($status) {
-    "OK" { "正常" }
-    "OK-WAITING" { "等待執行" }
-    "OK-STOPPED" { "時間窗結束" }
-    "LOG-CHECK" { "需看紀錄" }
-    "LOG-ERROR" { "紀錄有錯" }
-    "TASK-FAIL" { "排程失敗" }
-    "OK-NO-PS1" { "非PS任務" }
-    "OK-NO-RULE" { "未定規則" }
-    default { $status }
-  }
-}
-
-function Convert-TaskText($taskName) {
-  $text = $taskName
-  $text = $text -replace "Fuman GitHub 統一同步", "GitHub同步"
-  $text = $text -replace "Fuman Open Buy Cache", "策略1掃描"
-  $text = $text -replace "Fuman Strategy2 Intraday Scan", "策略2盤中掃描"
-  $text = $text -replace "Fuman Strategy2 LINE Start", "策略2 LINE啟動"
-  $text = $text -replace "Fuman Strategy2 LINE Stop", "策略2 LINE停止"
-  $text = $text -replace "Fuman Strategy3 Cache", "策略3掃描"
-  $text = $text -replace "Fuman Strategy4 Cache", "策略4掃描"
-  $text = $text -replace "Fuman Strategy5 Cache", "策略5掃描"
-  $text = $text -replace "Fuman Market Overview Patrol", "市場總覽巡邏"
-  $text = $text -replace "Fuman PC Sleep", "電腦睡眠"
-  $text = $text -replace "Fuman PC Wake", "電腦喚醒"
-  $text = $text -replace "Fuman 即時雷達", "即時雷達"
-  $text = $text -replace "Fuman Flow Cache", "買賣超/權證合併掃描"
-  $text = $text -replace "Fuman 買賣超 Cache", "買賣超掃描"
-  $text = $text -replace "Fuman 權證走向 Cache", "權證走向掃描"
-  return $text
-}
-
-function Convert-ResultText($result) {
-  if ($result -eq 0) { return "成功" }
-  if ($result -eq 267011) { return "尚未跑/停用" }
-  if ($result -eq 267014) { return "已終止/時間窗結束" }
-  return "錯誤碼 $result"
-}
-
-function Test-AllowedStoppedResult($taskName, $scriptName, $result) {
-  if ($result -ne 267014) { return $false }
-  if ($scriptName -eq "run-realtime-radar.ps1") { return $true }
-  if ($scriptName -eq "run-market-overview.ps1") { return $true }
-  if ($taskName -like "*即時雷達*") { return $true }
-  if ($taskName -like "*Market Overview Patrol*") { return $true }
-  return $false
-}
-
 function Get-ScriptNameFromAction($task) {
   $text = (($task.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join " ")
   $match = [regex]::Match($text, "C:\\fuman-terminal\\([^""\s]+\.ps1)")
@@ -133,7 +99,7 @@ function Get-ScriptNameFromAction($task) {
 }
 
 function Read-LogText($path) {
-  if (-not $path -or -not (Test-Path $path)) { return "" }
+  if (-not $path -or -not (Test-Path -LiteralPath $path)) { return "" }
   try {
     $bytes = [System.IO.File]::ReadAllBytes($path)
     $zeroOdd = 0
@@ -150,14 +116,15 @@ function Read-LogText($path) {
 }
 
 function Test-AnyPattern($text, $patterns) {
-  foreach ($pattern in $patterns) {
-    if ($text -match $pattern) { return $true }
+  foreach ($pattern in @($patterns)) {
+    if ($pattern -and $text -match $pattern) { return $true }
   }
   return $false
 }
 
 function Get-Detail($text, $patterns) {
-  foreach ($pattern in $patterns) {
+  foreach ($pattern in @($patterns)) {
+    if (-not $pattern) { continue }
     $match = [regex]::Match($text, $pattern)
     if ($match.Success) { return $match.Value }
   }
@@ -166,10 +133,73 @@ function Get-Detail($text, $patterns) {
 
 function Test-FailureText($text) {
   if (-not $text) { return $false }
-  return $text -match "(?i)(failed with exit code|Error:|exited: 1|UNABLE_TO_VERIFY|fetch failed|This operation was aborted)"
+  $clean = $text -replace "(?im)^.*failure\s+0(/\d+|\b).*$", ""
+  return $clean -match "(?i)(failed with exit code|Error:|exited: 1|UNABLE_TO_VERIFY|fetch failed|This operation was aborted|fatal:|HTTP\s+[45]\d\d)"
 }
 
-if (-not (Test-Path $logDir)) {
+function Test-AllowedStoppedResult($taskName, $scriptName, $result) {
+  if ($result -ne 267014) { return $false }
+  if ($scriptName -eq "run-realtime-radar.ps1") { return $true }
+  if ($scriptName -eq "run-market-overview.ps1") { return $true }
+  if ($taskName -like "*Realtime*") { return $true }
+  if ($taskName -like "*Radar*") { return $true }
+  if ($taskName -like "*Market Overview Patrol*") { return $true }
+  return $false
+}
+
+function Test-LatestFreshnessGatePassed($taskName, $result, $lastRunTime) {
+  if ($result -ne 267014) { return $false }
+  if ($taskName -notlike "*Freshness Gate Full*") { return $false }
+  if (-not (Test-Path -LiteralPath $logDir)) { return $false }
+  $latest = Get-ChildItem -LiteralPath $logDir -Filter "live-freshness-gate-*.log" -File -ErrorAction SilentlyContinue |
+    Where-Object { $lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+  if (-not $latest) { return $false }
+  $text = Read-LogText $latest.FullName
+  return $text -match "SUCCESS live freshness gate passed"
+}
+
+function Test-LatestStrategy1PreopenCovered($taskName, $result, $lastRunTime) {
+  if ($result -eq 0) { return $false }
+  if ($taskName -notlike "*STAR Preopen Watch*") { return $false }
+  if (-not (Test-Path -LiteralPath $logDir)) { return $false }
+  $latest = Get-ChildItem -LiteralPath $logDir -File -ErrorAction SilentlyContinue |
+    Where-Object {
+      ($_.Name -like "strategy1-preopen-prepare-*.log" -or $_.Name -like "strategy1-preopen-final-*.log") -and
+      ($lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime)
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 5
+  foreach ($logFile in @($latest)) {
+    $text = Read-LogText $logFile.FullName
+    if ($text -match "strategy1 preopen runner complete" -and $text -notmatch "strategy1 preopen runner failed") {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Convert-ResultText($result) {
+  switch ($result) {
+    0 { return "0 success" }
+    267011 { return "267011 waiting/not-run" }
+    267014 { return "267014 stopped/window-ended" }
+    3221225786 { return "3221225786 process-start-failed" }
+    default { return "$result failure" }
+  }
+}
+
+function Get-LatestLog($rule, $lastRunTime) {
+  if (-not $rule -or -not $rule.Log) { return $null }
+  if (-not (Test-Path -LiteralPath $logDir)) { return $null }
+  return Get-ChildItem -LiteralPath $logDir -Filter $rule.Log -File -ErrorAction SilentlyContinue |
+    Where-Object { $lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime.AddMinutes(-5) } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+}
+
+if (-not (Test-Path -LiteralPath $logDir)) {
   Write-Host "Missing log directory: $logDir"
   exit 1
 }
@@ -183,93 +213,68 @@ $rows = foreach ($task in ($taskQuery | Sort-Object TaskName)) {
   $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath
   $script = Get-ScriptNameFromAction $task
   $rule = if ($script -and $rules.ContainsKey($script)) { $rules[$script] } else { $null }
-  $latestLog = $null
-  $logOk = $null
-  $detail = ""
-
-  if ($rule) {
-    $latestLog = Get-ChildItem -LiteralPath $logDir -Filter $rule.Log -File -ErrorAction SilentlyContinue |
-      Where-Object { $info.LastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $info.LastRunTime.AddMinutes(-5) } |
-      Sort-Object LastWriteTime -Descending |
-      Select-Object -First 1
-    $text = Read-LogText $latestLog.FullName
-    $logOk = [bool]($latestLog -and (Test-AnyPattern $text $rule.Done))
-    $logFailed = Test-FailureText $text
-    $detail = Get-Detail $text $rule.Detail
-  } else {
-    $logFailed = $false
+  $latestLog = Get-LatestLog $rule $info.LastRunTime
+  $logText = if ($latestLog) { Read-LogText $latestLog.FullName } else { "" }
+  $logOk = if ($rule) { Test-AnyPattern $logText $rule.Done } else { $false }
+  $logFailed = Test-FailureText $logText
+  $detail = if ($rule) { Get-Detail $logText $rule.Detail } else { "" }
+  $result = [int]$info.LastTaskResult
+  $taskOk = $result -eq 0
+  $taskWaiting = $result -eq 267011
+  $taskStoppedOk = (Test-AllowedStoppedResult $task.TaskName $script $result) -and (-not $logFailed)
+  $freshnessGateCovered = Test-LatestFreshnessGatePassed $task.TaskName $result $info.LastRunTime
+  $preopenCovered = Test-LatestStrategy1PreopenCovered $task.TaskName $result $info.LastRunTime
+  if ($preopenCovered -and -not $detail) {
+    $detail = "covered by later strategy1 preopen prepare/final success"
   }
 
-  $taskOk = ($info.LastTaskResult -eq 0)
-  $taskWaiting = ($info.LastTaskResult -eq 267011)
-  $taskStoppedOk = (Test-AllowedStoppedResult $task.TaskName $script $info.LastTaskResult) -and (-not $logFailed)
-  $status = if ($taskWaiting) {
-    "OK-WAITING"
+  $status = if ($task.State -eq "Disabled") {
+    "DISABLED"
+  } elseif ($taskWaiting) {
+    "OK_WAITING"
   } elseif ($taskStoppedOk) {
-    "OK-STOPPED"
-  } elseif ($taskOk -and $script -eq "stop-strategy2-line.ps1") {
-    "OK"
-  } elseif (-not $script) {
-    if ($taskOk) { "OK-NO-PS1" } else { "TASK-FAIL" }
-  } elseif (-not $rule) {
-    if ($taskOk) { "OK-NO-RULE" } else { "TASK-FAIL" }
-  } elseif ($taskOk -and $logOk -and -not $logFailed) {
-    "OK"
-  } elseif ($logFailed) {
-    "LOG-ERROR"
+    "OK_STOPPED"
+  } elseif ($freshnessGateCovered) {
+    "OK_COVERED"
+  } elseif ($preopenCovered) {
+    "OK_COVERED"
   } elseif (-not $taskOk) {
-    "TASK-FAIL"
+    "FAIL"
+  } elseif ($logFailed) {
+    "LOG_ERROR"
+  } elseif ($StrictLogs -and $rule -and $rule.Log -and -not $logOk) {
+    "LOG_CHECK"
   } else {
-    "LOG-CHECK"
+    "OK"
   }
 
   [pscustomobject]@{
     Status = $status
-    StatusText = Convert-StatusText $status
     TaskName = $task.TaskName
-    TaskText = Convert-TaskText $task.TaskName
     Script = $script
+    State = [string]$task.State
     LastRun = $info.LastRunTime
     NextRun = $info.NextRunTime
-    Result = $info.LastTaskResult
-    ResultText = Convert-ResultText $info.LastTaskResult
-    State = $task.State
+    Result = Convert-ResultText $result
     LatestLog = if ($latestLog) { $latestLog.Name } else { "" }
-    LogTime = if ($latestLog) { $latestLog.LastWriteTime } else { $null }
     Detail = $detail
   }
 }
 
-$displayRows = $rows | Select-Object `
-  @{Name="狀態"; Expression={$_.StatusText}},
-  @{Name="排程"; Expression={$_.TaskText}},
-  @{Name="腳本"; Expression={$_.Script}},
-  @{Name="上次執行"; Expression={$_.LastRun}},
-  @{Name="下次執行"; Expression={$_.NextRun}},
-  @{Name="結果"; Expression={$_.ResultText}},
-  @{Name="最新紀錄"; Expression={$_.LatestLog}},
-  @{Name="重點"; Expression={$_.Detail}}
-
 Write-Host ""
-Write-Host "Fuman 排程檢查"
-Write-Host "狀態說明：正常=成功跑完；需看紀錄=排程成功但完成字樣不明；紀錄有錯=log 內有錯誤；排程失敗=Windows 排程回報失敗。"
+Write-Host "Fuman schedule check"
+Write-Host "Mode: active tasks only. Use -IncludeDisabled for retired/disabled inventory; use -StrictLogs to require completion markers."
 Write-Host ""
-$displayRows | Format-Table -AutoSize
+$rows | Format-Table -AutoSize
 
-$bad = @($rows | Where-Object { $_.Status -notlike "OK*" })
+$bad = @($rows | Where-Object { $_.Status -in @("FAIL", "LOG_ERROR") })
 if ($bad.Count) {
   Write-Host ""
-  Write-Host "需要注意"
-  $bad | Select-Object `
-    @{Name="狀態"; Expression={$_.StatusText}},
-    @{Name="排程"; Expression={$_.TaskText}},
-    @{Name="腳本"; Expression={$_.Script}},
-    @{Name="結果"; Expression={$_.ResultText}},
-    @{Name="最新紀錄"; Expression={$_.LatestLog}},
-    @{Name="重點"; Expression={$_.Detail}} |
-    Format-Table -AutoSize
+  Write-Host "Action required"
+  $bad | Format-Table -AutoSize
   exit 1
 }
 
 Write-Host ""
-Write-Host "所有可檢查的 Fuman 排程看起來正常。"
+Write-Host "Schedule check passed: no active Fuman task blockers."
+exit 0
