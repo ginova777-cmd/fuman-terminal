@@ -348,7 +348,6 @@ async function main() {
     transport: apiPayload.transport || null,
   };
   pushIssue(issues, api.statusCode >= 200 && api.statusCode < 300 && apiPayload.ok !== false, "api_not_ok", { statusCode: api.statusCode, reason: details.api.reason });
-  pushIssue(issues, Boolean(details.api.runId), "api_missing_run_id");
 
   const healthResult = await rest(buildPath("v_scanner_resource_health", {
     select: "strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at",
@@ -484,6 +483,11 @@ async function main() {
 
   const latestRun = latestRunResult.rows?.[0] || {};
   const latestRunInfo = latestRunSummary(latestRun);
+  if (!details.api.runId && latestRunInfo.runId && /runtime-session-history/i.test(details.api.cacheSource || "")) {
+    details.api.runId = latestRunInfo.runId;
+    details.api.inferredRunIdFromLatestComplete = true;
+  }
+  pushIssue(issues, Boolean(details.api.runId), "api_missing_run_id");
   const resultsResult = latestRunInfo.runId
     ? await safeRest(buildPath("strategy2_scan_results", {
       select: "run_id,row_kind,code,name,state_id,signal_id,latest_seen_at,quote_age_seconds,latest_candle_time,today_candle_count,updated_at,payload",

@@ -31,19 +31,40 @@ function Write-SnapshotLog($message) {
 
 $safeSource = ([string]$Source).Trim()
 if (-not $safeSource) { $safeSource = "scanner" }
+$routeBySource = @{
+  "open-buy" = "strategy1"
+  "strategy1" = "strategy1"
+  "strategy3" = "strategy3"
+  "strategy4" = "strategy4"
+  "strategy5" = "strategy5"
+  "institution" = "institution"
+  "warrant" = "warrant"
+  "warrant-flow" = "warrant"
+  "cb" = "cb"
+  "cb-detect" = "cb"
+}
+$routeKey = $routeBySource[$safeSource.ToLowerInvariant()]
 
 Write-SnapshotLog "Desktop route snapshot refresh start source=$safeSource"
 Push-Location $PSScriptRoot
 try {
-  & $nodeExe "scripts\write-desktop-route-snapshot.js" "--fail-on-partial" "--source=$safeSource" 2>&1 | ForEach-Object {
-    $text = [string]$_
-    if ($LogPath) {
-      Add-Content -LiteralPath $LogPath -Value $text -Encoding utf8
-    } else {
-      Write-Host $text
+  $exitCode = 1
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    if ($attempt -gt 1) {
+      Write-SnapshotLog "Desktop route snapshot refresh retry source=$safeSource attempt=$attempt"
+      Start-Sleep -Seconds 5
     }
+    & $nodeExe "scripts\write-desktop-route-snapshot.js" "--fail-on-partial" "--source=$safeSource" 2>&1 | ForEach-Object {
+      $text = [string]$_
+      if ($LogPath) {
+        Add-Content -LiteralPath $LogPath -Value $text -Encoding utf8
+      } else {
+        Write-Host $text
+      }
+    }
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) { break }
   }
-  $exitCode = $LASTEXITCODE
 } finally {
   Pop-Location
 }
@@ -60,10 +81,13 @@ if ($exitCode -ne 0) {
       if (-not $AllowFailure) { exit 90 }
     } else {
       $maxAgeMs = [Math]::Max(0, $VerifyMaxAgeSeconds * 1000)
-      Write-SnapshotLog "Post-scan snapshot refresh contract verify start source=$safeSource"
+      $verifyArgs = @("scripts\verify-post-scan-snapshot-refresh-contract.js", "--max-age-ms=$maxAgeMs")
+      if ($routeKey) { $verifyArgs += "--routes=$routeKey" }
+      $routeLabel = if ($routeKey) { $routeKey } else { "all" }
+      Write-SnapshotLog "Post-scan snapshot refresh contract verify start source=$safeSource routes=$routeLabel"
       Push-Location $PSScriptRoot
       try {
-        & $nodeExe "scripts\verify-post-scan-snapshot-refresh-contract.js" "--max-age-ms=$maxAgeMs" 2>&1 | ForEach-Object {
+        & $nodeExe @verifyArgs 2>&1 | ForEach-Object {
           $text = [string]$_
           if ($LogPath) {
             Add-Content -LiteralPath $LogPath -Value $text -Encoding utf8

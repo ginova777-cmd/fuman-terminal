@@ -152,6 +152,7 @@ if (Test-Path -LiteralPath $snapshotScript) {
   & $snapshotScript -Source "open-buy" -LogPath $log
   if ($LASTEXITCODE -ne 0) {
     "Open buy desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
+    Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 $script:OpenBuyVerifiedRunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
     exit $LASTEXITCODE
   }
 } else {

@@ -213,6 +213,14 @@ function Invoke-RunnerTask($strategy, $label, $tier, $runner) {
     Write-ScanLog "$label exception: $($_.Exception.Message)"
   }
   $receipt = Read-JsonFile (Join-Path $receiptDir ("{0}.json" -f $strategy))
+  $receiptIsStale = $false
+  if ($receipt -and $receipt.finishedAt) {
+    try { $receiptIsStale = ([DateTimeOffset]::Parse([string]$receipt.finishedAt) -lt [DateTimeOffset]$startedAt.AddSeconds(-1)) } catch { $receiptIsStale = $true }
+  }
+  if ($receiptIsStale) {
+    Write-ScanLog "$label ignored stale scanner receipt finishedAt=$($receipt.finishedAt)"
+    $receipt = $null
+  }
   if (-not $receipt) {
     $receipt = [ordered]@{
       strategy = $strategy

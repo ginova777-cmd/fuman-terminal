@@ -83,6 +83,16 @@ function flag(name) {
   return process.argv.includes(name) || process.argv.some((item) => item.startsWith(`${name}=`));
 }
 
+function selectedTasks() {
+  const raw = String(arg("--routes", process.env.FUMAN_POST_SCAN_SNAPSHOT_ROUTES || "") || "").trim();
+  if (!raw) return TASKS;
+  const wanted = new Set(raw.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean));
+  if (!wanted.size) return TASKS;
+  const tasks = TASKS.filter((task) => wanted.has(task.key.toLowerCase()));
+  if (!tasks.length) throw new Error(`no post-scan snapshot tasks matched routes=${raw}`);
+  return tasks;
+}
+
 function mkdirp(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
 }
@@ -386,6 +396,7 @@ async function main() {
   const timeoutMs = Math.max(1000, cleanNumber(arg("--timeout-ms", process.env.FUMAN_POST_SCAN_SNAPSHOT_ENDPOINT_TIMEOUT_MS || "30000")));
   const maxAgeMs = Math.max(0, cleanNumber(arg("--max-age-ms", process.env.FUMAN_POST_SCAN_SNAPSHOT_MAX_AGE_MS || "600000")));
   const failOnStale = !flag("--allow-stale");
+  const tasks = selectedTasks();
   const snapshot = await readDesktopRouteSnapshot({
     timeoutMs,
     allowStale: !failOnStale,
@@ -398,7 +409,7 @@ async function main() {
 
   const rows = [];
   if (snapshotPayload) {
-    for (const task of TASKS) {
+    for (const task of tasks) {
       const [snapshotApi, liveApi] = await Promise.all([
         callApi(task, "snapshot", timeoutMs),
         callApi(task, "live", timeoutMs),
@@ -418,6 +429,7 @@ async function main() {
     contract: "post_scan_immediate_display_snapshot_refresh",
     status: issues.length === 0 ? "ready" : "failed",
     checkedAt: new Date().toISOString(),
+    routes: tasks.map((task) => task.key),
     snapshot: {
       exists: Boolean(snapshotPayload),
       updatedAt: snapshotUpdatedAt,
@@ -430,9 +442,9 @@ async function main() {
       previousFilled: Array.isArray(snapshotPayload?.previousFilled) ? snapshotPayload.previousFilled : [],
     },
     gates: {
-      dataExists: rows.length === TASKS.length && rows.every((row) => row.rowCountOk),
+      dataExists: rows.length === tasks.length && rows.every((row) => row.rowCountOk),
       healthViewCorrect: Boolean(snapshotPayload && maxAgeOk),
-      terminalKeysVisible: rows.length === TASKS.length && rows.every((row) => (row.snapshotHit || row.bundleHit) && row.runIdAligned && row.countAligned),
+      terminalKeysVisible: rows.length === tasks.length && rows.every((row) => (row.snapshotHit || row.bundleHit) && row.runIdAligned && row.countAligned),
       immediateDisplayReady: issues.length === 0,
     },
     rows,

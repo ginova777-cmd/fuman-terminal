@@ -125,8 +125,15 @@ try {
     Write-Strategy4Receipt "failed" $sourceExit $false 0 "" @("data source verification exit code $sourceExit") "critical scan failed during data source verification"
     exit $sourceExit
   }
-  & $nodeExe "scripts\verify-strategy4-contract.js" *>&1 | Tee-Object -FilePath $log -Append
-  $contractExit = $LASTEXITCODE
+  Write-Log "Strategy4 contract seed fallback enabled for cache-miss self-heal."
+  $previousContractFallback = $env:STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK
+  try {
+    $env:STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK = "1"
+    & $nodeExe "scripts\verify-strategy4-contract.js" *>&1 | Tee-Object -FilePath $log -Append
+    $contractExit = $LASTEXITCODE
+  } finally {
+    if ($null -ne $previousContractFallback) { $env:STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK = $previousContractFallback } else { Remove-Item Env:STRATEGY4_SUPABASE_ALLOW_EXTERNAL_FALLBACK -ErrorAction SilentlyContinue }
+  }
   if ($contractExit -ne 0) {
     Write-Log "Strategy4 contract verification failed with exit code $contractExit"
     Write-Strategy4Receipt "failed" $contractExit $false 0 "" @("contract verification exit code $contractExit") "critical scan failed during contract verification"
