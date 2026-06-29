@@ -347,7 +347,7 @@ function buildStrategy2PublicReport(report) {
     .sort((a, b) => strategy2RecordSortTime(b).localeCompare(strategy2RecordSortTime(a)) || String(a.code).localeCompare(String(b.code)))
     .map(pickStrategy2PublicRecord);
   return {
-    source: report.source || "strategy2-09-to-1330-patrol",
+    source: report.source || "strategy2-0845-1200-live-patrol",
     profile: "strategy2-public-slim",
     date: report.date || "",
     updatedAt: report.updatedAt || new Date().toISOString(),
