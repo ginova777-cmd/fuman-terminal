@@ -1165,7 +1165,7 @@
     const state = String(merged.state || merged.status || active.name || active.id || "").trim();
     const stateId = String(merged.stateId || merged.state_id || merged.statusId || merged.status_id || active.id || active.key || "").trim();
     const intent = String(merged.intent || merged.liveIntent || merged.entryIntent || merged.entry_intent || "").trim();
-    const time = merged.time || merged.Time || merged.detectedAt || merged.detected_at || merged.seenAt || merged.seen_at || merged.quoteTime || merged.quote_time || merged.createdAt || merged.created_at || "";
+    const time = merged.time || merged.Time || merged.timestamp || merged.entryAt || merged.entry_at || merged.firstAAt || merged.first_a_at || merged.latestAAt || merged.latest_a_at || merged.firstBAt || merged.first_b_at || merged.latestBAt || merged.latest_b_at || merged.latestSeenAt || merged.latest_seen_at || merged.detectedAt || merged.detected_at || merged.seenAt || merged.seen_at || merged.quoteTime || merged.quote_time || merged.createdAt || merged.created_at || "";
     const price = merged.price ?? merged.Price ?? merged.close ?? merged.Close ?? merged.ClosingPrice ?? merged.lastPrice ?? merged.LastPrice ?? merged.entryPrice ?? "";
     const entryPrice = pickFirstValue(merged.entryPrice, merged.entry_price, merged.latestAPrice, merged.latest_a_price, merged.firstAPrice, merged.first_a_price, price);
     const volume = merged.volume ?? merged.Volume ?? merged.tradeVolume ?? merged.TradeVolume ?? merged.volumeLots ?? merged.trade_volume ?? "";
@@ -1238,6 +1238,13 @@
       state: compactText(state, 32),
       stateId: compactText(stateId, 40),
       intent: compactText(intent, 40),
+      timestamp: compactText(merged.timestamp || merged.scanTime || merged.scan_time || "", 32),
+      entryAt: compactText(merged.entryAt || merged.entry_at || "", 32),
+      firstAAt: compactText(merged.firstAAt || merged.first_a_at || "", 32),
+      latestAAt: compactText(merged.latestAAt || merged.latest_a_at || "", 32),
+      firstBAt: compactText(merged.firstBAt || merged.first_b_at || "", 32),
+      latestBAt: compactText(merged.latestBAt || merged.latest_b_at || "", 32),
+      latestSeenAt: compactText(merged.latestSeenAt || merged.latest_seen_at || "", 32),
       time: compactText(time, 32),
       firstSignalTime: compactText(merged.firstSignalTime || merged.first_signal_time || time, 32),
       lastSignalTime: compactText(merged.lastSignalTime || merged.last_signal_time || merged.quoteTime || merged.quote_time || time, 32),
@@ -1312,7 +1319,7 @@
   }
 
   function strategy2TimeValue(row) {
-    const raw = String(row?.time || row?.seenAt || row?.detectedAt || row?.quoteTime || "").trim();
+    const raw = String(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || row?.seenAt || row?.detectedAt || row?.quoteTime || "").trim();
     if (!raw) return 0;
     const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
     if (hms) return cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0);
@@ -1363,7 +1370,7 @@
   }
 
   function strategy2TimeLabel(row) {
-    const raw = String(row?.time || "").trim();
+    const raw = String(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || "").trim();
     const hms = raw.match(/\d{1,2}:\d{2}(?::\d{2})?/);
     return hms ? hms[0] : raw || "--";
   }

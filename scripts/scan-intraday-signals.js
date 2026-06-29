@@ -21,7 +21,6 @@ const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const STRATEGY2_API_ONLY = true;
 const STRATEGY2_SCORECARD_SOURCE_FILE = dataPath("strategy2-scorecard-source.json");
 const STRATEGY2_HISTORY_DIR = dataPath("strategy2-intraday-history");
-const STRATEGY2_HISTORY_WRITE_INTERVAL_MS = Math.max(0, Number(process.env.STRATEGY2_HISTORY_WRITE_INTERVAL_MS || 5 * 60 * 1000));
 const OPEN_BUY_SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
 const OPEN_BUY_FILE = dataPath("open-buy-latest.json");
 const OPEN_BUY_BACKUP_FILE = dataPath("open-buy-backup.json");
@@ -533,14 +532,21 @@ function buildStrategy2DeltaReport(report) {
     records: (slim.records || []).filter((record) => codes.has(String(record.code || ""))).slice(0, 32),
   };
 }
-function shouldWriteStrategy2History(file) {
-  if (STRATEGY2_HISTORY_WRITE_INTERVAL_MS <= 0) return true;
-  try {
-    const stat = fs.statSync(file);
-    return Date.now() - stat.mtimeMs >= STRATEGY2_HISTORY_WRITE_INTERVAL_MS;
-  } catch {
-    return true;
-  }
+function writeStrategy2HistorySnapshot(report, key, options = {}) {
+  const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
+  const records = Array.isArray(report?.records) ? report.records : [];
+  const events = Array.isArray(report?.events) ? report.events : [];
+  if (!records.length && !events.length && !options.allowEmpty) return false;
+  writeJson(strategy2HistoryFile, {
+    ...report,
+    historyContract: "strategy2-session-history-0845-1200-v1",
+    historyWindow: {
+      start: "08:45",
+      end: "12:00",
+      source: "scanner-accumulated-signals",
+    },
+  });
+  return true;
 }
 
 function writeStaticDataTargets(name, payload, options = {}) {
@@ -2137,8 +2143,10 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
   const updatedAt = new Date().toISOString();
   const statusPayload = health?.payload && typeof health.payload === "object" ? health.payload : {};
   const statusText = health?.status?.status || "missing";
+  const retainedRecords = normalizeStrategy2Records((cache.records || []).filter((record) => record.date === key));
+  const retainedEvents = mergeStrategy2Events(retainedRecords, key);
   cache.date = key;
-  cache.records = [];
+  cache.records = retainedRecords;
   cache.updatedAt = updatedAt;
   cache.realtime = {
     source: "supabase-public-slot",
@@ -2163,11 +2171,13 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
     message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
     reason: cache.realtime.reason,
     realtime: cache.realtime,
-    records: [],
-    events: [],
-    entryCount: 0,
-    aCount: 0,
+    records: retainedRecords,
+    events: retainedEvents,
+    entryCount: retainedEvents.filter((event) => event.firstAAt).length,
+    aCount: retainedEvents.filter((event) => event.firstAAt).length,
     bOnlyCount: 0,
+    publishBlocked: true,
+    publishBlockedReason: cache.realtime.reason,
   });
 }
 
@@ -3342,6 +3352,7 @@ async function main() {
     writeJson(SIGNAL_FILE, cache);
     if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+    writeStrategy2HistorySnapshot(strategy2Report, key);
     await upsertStrategy2LatestToSupabase(strategy2Report);
     console.log(`strategy2 quote source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
     return;
@@ -3424,6 +3435,7 @@ async function main() {
     writeJson(SIGNAL_FILE, cache);
     if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+    writeStrategy2HistorySnapshot(strategy2Report, key);
     await upsertStrategy2MinuteCandlesToSupabase(cache, key);
   await upsertStrategy2LatestToSupabase(strategy2Report);
     console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (entry coverage ${entrySourceCoverage.toFixed(4)}, received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
@@ -3786,11 +3798,8 @@ async function main() {
   writeJson(SIGNAL_FILE, cache);
   if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
+  writeStrategy2HistorySnapshot(strategy2Report, key);
   await upsertStrategy2LatestToSupabase(strategy2Report);
-  const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
-  if (shouldWriteStrategy2History(strategy2HistoryFile)) {
-    writeJson(strategy2HistoryFile, strategy2Report);
-  }
   const rotationMessages = rotateStrategy2IntradayCache({ currentDateKey: key });
   rotationMessages.forEach((message) => console.log(`strategy2 cache rotation: ${message}`));
   writeJson(SCORECARD_TRACK_FILE, scorecardTracker);

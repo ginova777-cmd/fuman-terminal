@@ -47,6 +47,91 @@ function readLatestCachedFile(file) {
   return rows[0]?.payload || null;
 }
 
+function runtimeStrategy2HistoryCandidates(marketSession = null) {
+  const keys = [
+    marketSession?.today,
+    marketSession?.marketDataDate,
+    taipeiClock().ymd,
+  ].map(isoDate).filter(Boolean);
+  return [...new Set(keys)].map((date) => path.join(RUNTIME_DIR, "data", "strategy2-intraday-history", `${date}.json`));
+}
+
+function runtimeStrategy2SignalsCandidate(marketSession = null) {
+  const file = path.join(RUNTIME_DIR, "cache", "intraday", "signals.json");
+  if (!fs.existsSync(file)) return null;
+  const payload = readJsonFile(file);
+  if (!payload || typeof payload !== "object") return null;
+  const targetDates = new Set([
+    marketSession?.today,
+    marketSession?.marketDataDate,
+    taipeiClock().ymd,
+  ].map(isoDate).filter(Boolean));
+  const records = (Array.isArray(payload.records) ? payload.records : [])
+    .filter((record) => targetDates.has(record?.date || ""));
+  if (!records.length) return null;
+  const stat = fs.statSync(file);
+  return {
+    file,
+    mtime: stat.mtimeMs,
+    payload: {
+      source: "strategy2-09-to-1200-signals-cache",
+      date: payload.date || [...targetDates][0] || "",
+      updatedAt: payload.updatedAt || new Date(stat.mtimeMs).toISOString(),
+      realtime: payload.realtime || {},
+      records,
+      events: [],
+      entryCount: records.filter((record) => /entry|go/i.test(String(record?.stateId || ""))).length,
+      aCount: records.filter((record) => /entry|go/i.test(String(record?.stateId || ""))).length,
+      bOnlyCount: records.filter((record) => !/entry|go/i.test(String(record?.stateId || ""))).length,
+      historyContract: "strategy2-session-history-0845-1200-v1",
+      historyWindow: {
+        start: "08:45",
+        end: "12:00",
+        source: "scanner-signals-cache",
+      },
+    },
+  };
+}
+
+function readStrategy2RuntimeHistoryPayload(marketSession = null, options = {}) {
+  if (!options?.live && !options?.today) return null;
+  const candidates = runtimeStrategy2HistoryCandidates(marketSession)
+    .filter((file) => fs.existsSync(file))
+    .map((file) => {
+      const payload = readJsonFile(file);
+      const stat = fs.statSync(file);
+      return { file, payload, mtime: stat.mtimeMs };
+    })
+    .filter((row) => row.payload && hasStrategy2PayloadRows(row.payload));
+  const signalsCandidate = runtimeStrategy2SignalsCandidate(marketSession);
+  if (signalsCandidate) candidates.push(signalsCandidate);
+  candidates.sort((a, b) => {
+    const aRecords = Array.isArray(a.payload?.records) ? a.payload.records.length : 0;
+    const bRecords = Array.isArray(b.payload?.records) ? b.payload.records.length : 0;
+    return bRecords - aRecords || b.mtime - a.mtime;
+  });
+  const latest = candidates[0];
+  if (!latest) return null;
+  const payload = latest.payload;
+  return compactStrategy2Payload({
+    ...payload,
+    ok: payload.ok !== false,
+    cacheSource: "runtime-session-history",
+    gate: "strategy2-session-history-0845-1200",
+    reason: payload.reason || "runtime-session-history",
+    updatedAt: payload.updatedAt || new Date(latest.mtime).toISOString(),
+    marketSession,
+    transport: {
+      ...(payload.transport || {}),
+      source: "runtime-session-history",
+      file: latest.file,
+      localOnly: true,
+      via: "api/strategy2-latest",
+      fetchedAt: new Date().toISOString(),
+    },
+  }, options);
+}
+
 function taipeiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -207,6 +292,23 @@ function normalizeCoverageGateReason(reason, sourceCoverage, threshold = 0.5) {
   return `市場來源可用率 ${coverage.toFixed(2)} 已達 ${gate.toFixed(2)}，列入預備進場觀察。`;
 }
 
+function strategy2RowTimeValue(row) {
+  const raw = String(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || row?.quoteTime || "").trim();
+  const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (hms) return cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0);
+  const stamp = Date.parse(raw);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+function sortStrategy2RowsByTime(rows) {
+  return [...(Array.isArray(rows) ? rows : [])].sort((a, b) => {
+    return strategy2RowTimeValue(b) - strategy2RowTimeValue(a)
+      || cleanNumber(b.score) - cleanNumber(a.score)
+      || cleanNumber(b.percent) - cleanNumber(a.percent)
+      || String(a.code).localeCompare(String(b.code), "zh-Hant");
+  });
+}
+
 function compactStrategy2Row(row, index = 0) {
   const active = row?.activeMatch && typeof row.activeMatch === "object" ? row.activeMatch : {};
   const match = Array.isArray(row?.matches) && row.matches[0] && typeof row.matches[0] === "object" ? row.matches[0] : {};
@@ -229,6 +331,15 @@ function compactStrategy2Row(row, index = 0) {
   );
   const percent = row?.percent ?? latest.percent ?? row?.changePercent ?? row?.change_percent ?? row?.change ?? "";
   const score = row?.score ?? row?.maxScore ?? latest.score ?? row?.rankScore ?? active.score ?? match.score ?? "";
+  const timestamp = row?.timestamp || latest.timestamp || row?.scanTime || row?.scan_time || row?.updatedAt || row?.updated_at || "";
+  const entryAt = row?.entryAt || latest.entryAt || row?.entry_at || timestamp;
+  const firstAAt = row?.firstAAt || latest.firstAAt || row?.first_a_at || "";
+  const latestAAt = row?.latestAAt || latest.latestAAt || row?.latest_a_at || "";
+  const firstBAt = row?.firstBAt || latest.firstBAt || row?.first_b_at || "";
+  const latestBAt = row?.latestBAt || latest.latestBAt || row?.latest_b_at || "";
+  const latestSeenAt = row?.latestSeenAt || latest.latestSeenAt || row?.latest_seen_at || "";
+  const quoteTime = row?.quoteTime || latest.quoteTime || row?.quote_time || "";
+  const time = row?.time || entryAt || timestamp || firstAAt || latestAAt || firstBAt || latestBAt || latestSeenAt || quoteTime || "";
   return {
     rank: cleanNumber(row?.rank) || index + 1,
     code,
@@ -245,8 +356,15 @@ function compactStrategy2Row(row, index = 0) {
     close: row?.close ?? row?.price ?? row?.latestSeenPrice ?? row?.observedPrice ?? latest.observedPrice ?? "",
     volume: row?.volume ?? row?.tradeVolume ?? row?.volumeLots ?? latest.volume ?? "",
     value: row?.value ?? row?.tradeValue ?? latest.value ?? "",
-    quoteTime: row?.quoteTime || latest.quoteTime || row?.latestSeenAt || row?.time || row?.updatedAt || "",
-    time: row?.time || row?.quoteTime || row?.latestSeenAt || latest.quoteTime || "",
+    timestamp,
+    entryAt,
+    firstAAt,
+    latestAAt,
+    firstBAt,
+    latestBAt,
+    latestSeenAt,
+    quoteTime,
+    time,
     activeMatch: active?.id || active?.name || active?.reason ? {
       id: active.id || active.name || "",
       name: active.name || active.id || "",
@@ -276,6 +394,7 @@ function rankStrategy2Rows(rows) {
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return payload;
   const limit = options.limit || 60;
+  const battleMode = Boolean(options.today || options.live);
   const payloadRows = rankStrategy2Rows(payload?.rows);
   const events = rankStrategy2Rows(
     Array.isArray(payload?.events) && payload.events.length ? payload.events : payloadRows
@@ -284,16 +403,16 @@ function compactStrategy2Payload(payload, options) {
   const rankedRecords = rankStrategy2Rows(
     Array.isArray(payload?.records) && payload.records.length ? payload.records : payloadRows
   );
-  const records = rankedRecords.filter((row) => !eventCodes.has(row.code)).slice(0, limit);
+  const records = (battleMode ? sortStrategy2RowsByTime(rankedRecords) : rankedRecords.filter((row) => !eventCodes.has(row.code))).slice(0, limit);
   const seen = new Set();
-  const rows = [...events, ...records]
+  const rows = (battleMode ? (records.length ? records : events) : [...events, ...records]
     .filter((row) => {
       const key = row.code ? `${row.code}|${row.state}|${row.reason}` : `${row.rank}|${row.reason}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .slice(0, limit);
+    .slice(0, limit));
   const hasRows = rows.length > 0;
   const noTodayDetections = !hasRows && Boolean(payload?.noTodayDetections);
   const reason = hasRows && payload?.reason === "today-complete-run-empty"
@@ -305,8 +424,8 @@ function compactStrategy2Payload(payload, options) {
     canvas: Boolean(options.canvas),
     shell: Boolean(options.shell),
     compactLimit: limit,
-    battleMode: Boolean(options.today || options.live),
-    mode: options.today || options.live ? "strategy2-live-battle" : "strategy2-live",
+    battleMode,
+    mode: battleMode ? "strategy2-live-battle" : "strategy2-live",
     cacheSource: payload?.cacheSource || "supabase-api",
     snapshotFirst: Boolean(payload?.snapshotFirst || options.snapshot),
     gate: payload?.gate || AUTHORITATIVE_GATE,
@@ -712,12 +831,18 @@ module.exports = async function handler(request, response) {
         return;
       }
     }
+    const marketSession = marketSessionState();
+    const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
+    if (runtimeHistoryPayload) {
+      setStrategy2LiveShellCache(response, options);
+      response.status(200).json(runtimeHistoryPayload);
+      return;
+    }
     const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
     if (!base || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
-    const marketSession = marketSessionState();
     const [completeRun, readiness, tradingDay] = await Promise.all([
       fetchCompleteRunPayload(base, marketSession, options),
       fetchStrategy2Readiness(base),
