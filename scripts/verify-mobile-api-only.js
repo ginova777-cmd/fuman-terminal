@@ -91,6 +91,10 @@ function checkMobileShell() {
   requireText(mobile, "mobile-watch-v2-rescue-render-20260628-01", "mobile watchlist V2 must rescue visible success states that old handlers leave without cards");
   requireText(mobile, "mobile-watch-success-status-render-20260628-01", "mobile watchlist V2 must render a card when a legacy success status is visible without rows");
   requireText(mobile, "mobile-watch-merge-storage-20260629-01", "mobile watchlist V2 must merge primary and mobile storage keys before rendering rows");
+  requireText(mobile, "parseStoredRows(KEY)", "mobile watchlist V2 must read the primary watchlist storage key");
+  requireText(mobile, "parseStoredRows(MOBILE_KEY)", "mobile watchlist V2 must read the mobile watchlist storage key");
+  requireText(mobile, "parseRows(KEY)", "mobile watchlist rescue renderer must read the primary watchlist storage key");
+  requireText(mobile, "parseRows(MOBILE_KEY)", "mobile watchlist rescue renderer must read the mobile watchlist storage key");
   requireText(mobile, "mobile-watch-v2-add-recovery-20260628-01", "mobile watchlist V2 must recover valid adds that get stuck at confirming without rendering cards");
   requireText(mobile, "mobile-watch-v2-stuck-status-recovery-20260628-01", "mobile watchlist V2 must recover manual adds stuck on the confirming status text");
   requireText(mobile, "event.composedPath", "mobile watchlist V2 click bridge must detect button clicks through composedPath");
@@ -113,6 +117,8 @@ function checkMobileShell() {
   rejectText(mobile, "release:main", "mobile shell must not invoke release pipeline as data repair");
   rejectText(mobile, "vercel --prod", "mobile shell must not invoke deploy as data repair");
   rejectText(mobile, "serviceWorker.register", "mobile shell must not register SW or depend on SW cache for latest data");
+  rejectText(mobile, "localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY)", "mobile watchlist must merge both storage keys instead of reading the first non-empty key");
+  rejectText(mobile, "localStorage.getItem(w)||localStorage.getItem(l)", "legacy mobile shell fallback must merge both storage keys instead of reading the first non-empty key");
 }
 
 function checkApiBoot() {

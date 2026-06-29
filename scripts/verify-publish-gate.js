@@ -440,6 +440,7 @@ const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalApp = read("terminal-app.js");
 const desktopFastShell = read("terminal-desktop-fast-shell.js");
+const mobileShell = read("mobile.html");
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
 const mobileApiOnlyVerifier = read("scripts/verify-mobile-api-only.js");
 const mobileAiFragmentVerifier = read("scripts/verify-mobile-ai-fragment.js");
@@ -986,6 +987,21 @@ if (!/\/api\/mobile-boot/.test(mobileUpdateEventPublisher) || !/MOBILE_UPDATE_EV
 if (!/\/api\/mobile-boot/.test(mobileApiOnlyVerifier) || !/MOBILE_UPDATE_EVENT_BOOT_SOURCE/.test(mobileApiOnlyVerifier)) {
   issues.push("verify-mobile-api-only.js must guard mobile update event API-only boot source");
 }
+for (const marker of [
+  "mobile-watch-merge-storage-20260629-01",
+  "parseStoredRows(KEY)",
+  "parseStoredRows(MOBILE_KEY)",
+  "parseRows(KEY)",
+  "parseRows(MOBILE_KEY)",
+  "localStorage.getItem(KEY) || localStorage.getItem(MOBILE_KEY)",
+  "localStorage.getItem(w)||localStorage.getItem(l)",
+]) {
+  if (!mobileApiOnlyVerifier.includes(marker)) issues.push(`verify-mobile-api-only.js missing mobile watch storage merge no-rollback marker ${marker}`);
+}
+if (/localStorage\.getItem\(KEY\)\s*\|\|\s*localStorage\.getItem\(MOBILE_KEY\)/.test(mobileShell) ||
+  /localStorage\.getItem\(w\)\s*\|\|\s*localStorage\.getItem\(l\)/.test(mobileShell)) {
+  issues.push("mobile.html must merge fuman_watchlist and fuman_mobile_watchlist_v1; first-non-empty storage reads are forbidden");
+}
 if (!/function dataOutputPaths/.test(runtimePaths) || !/FUMAN_WRITE_CODE_REPO_DATA/.test(runtimePaths)) {
   issues.push("runtime-paths.js must expose dataOutputPaths with explicit opt-in repo data writes");
 }
@@ -1063,6 +1079,18 @@ for (const marker of [
   "realtime radar flow summary block must stay removed",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing realtime radar no-rollback marker ${marker}`);
+}
+for (const marker of [
+  "verifyMobileDivergedStorageMerge",
+  "verifyMobileConsecutiveManualAdds",
+  "fuman_watchlist",
+  "fuman_mobile_watchlist_v1",
+  "3504",
+  "3028",
+  "3717",
+  "6174",
+]) {
+  if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing mobile watch storage/add no-rollback marker ${marker}`);
 }
 
 const liveVersionVerifier = read("scripts/verify-live-version.js");

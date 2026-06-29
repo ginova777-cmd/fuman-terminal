@@ -1,8 +1,10 @@
 # AGENTS.md
 
-Last updated: 2026-06-28 Asia/Taipei
+Last updated: 2026-06-29 Asia/Taipei
 
 給後續接手本工作區的 Codex：這份只保留目前有效狀態。不要沿用舊 Google Sheet、舊 static JSON、舊同步路徑、舊版本 bump、舊黃框 UI、舊部署流程。
+
+手機端專用契約同步固化在 `MOBILE_AGENTS.md`。修改 `/mobile`、`mobile.html`、`/api/mobile-*`、手機自選股或手機 E2E 時，必須先讀 `MOBILE_AGENTS.md`，再讀本檔自選股與發布規則。
 
 ## 主線
 
