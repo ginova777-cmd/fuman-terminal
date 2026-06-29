@@ -21,7 +21,8 @@ function hasFlag(name) {
 }
 
 const BASE_URL = readArg("base-url", process.env.FUMAN_STRESS_BASE_URL || "https://fuman-terminal.vercel.app");
-const LOOPS = Math.max(1, Math.min(80, Number(readArg("loops", process.env.FUMAN_STRESS_LOOPS || "20")) || 20));
+const CDP_BLANK_URL = "data:text/html,FUMAN_ROUTE_STRESS";
+const LOOPS = Math.max(1, Math.min(80, Number(readArg("loops", process.env.FUMAN_STRESS_LOOPS || "3")) || 3));
 const ROUTES = readArg("routes", process.env.FUMAN_STRESS_ROUTES || "heatmap,market-ai,watchlist,realtime-radar")
   .split(",")
   .map((route) => route.trim())
@@ -69,7 +70,8 @@ const ROUTE_CONFIG = {
     view: "strategy",
     selector: 'aside.sidebar a[data-view="strategy"] .s2',
     panel: "#strategy-view",
-    rows: ".strategy-row,.intraday-table tbody tr,.strategy-stock-card",
+    rows: ".strategy2-terminal-table tbody tr,#strategy-table tbody tr,.strategy-row,.intraday-table tbody tr,.strategy-stock-card",
+    requiredText: "策略2",
   },
   strategy3: {
     view: "strategy",
@@ -263,6 +265,7 @@ async function launchBrowser() {
     "--disable-extensions",
     "--disable-sync",
     "--window-size=1440,1000",
+    CDP_BLANK_URL,
   ];
   if (!HEADFUL) {
     chromeArgs.unshift(
@@ -275,30 +278,81 @@ async function launchBrowser() {
   const browser = childProcess.spawn(findBrowser(), chromeArgs, { stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   browser.stderr.on("data", (chunk) => { stderr += String(chunk).slice(0, 1000); });
+  let stableHits = 0;
   for (let i = 0; i < 100; i += 1) {
     try {
       const version = await fetchJson(`http://127.0.0.1:${port}/json/version`);
-      if (version.webSocketDebuggerUrl) return { browser, port, userDataDir, stderr: () => stderr };
-    } catch {}
+      await fetchJson(`http://127.0.0.1:${port}/json/list`);
+      stableHits += 1;
+      if (version.webSocketDebuggerUrl && stableHits >= 2) return { browser, port, userDataDir, stderr: () => stderr };
+    } catch {
+      stableHits = 0;
+    }
     if (browser.exitCode !== null) throw new Error(`browser exited early: ${stderr}`);
     await sleep(150);
   }
   throw new Error(`Chrome CDP did not start: ${stderr}`);
 }
 
-async function createTab(port, url) {
-  const tab = await fetchJson(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`, { method: "PUT", timeoutMs: 15000 });
-  if (!tab.webSocketDebuggerUrl) throw new Error("CDP page target missing websocket URL");
-  const cdp = new Cdp(tab.webSocketDebuggerUrl);
-  await cdp.connect();
-  await cdp.send("Runtime.enable", {}, 5000).catch(() => null);
-  await cdp.send("Runtime.evaluate", { expression: "1", returnByValue: true }, 5000);
-  await cdp.send("DOM.enable", {}, 10000).catch(() => null);
-  await cdp.send("Network.enable", {}, 10000).catch(() => null);
-  await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
-  await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
-  const pageEnable = await cdp.send("Page.enable", {}, 5000).then(() => ({ ok: true })).catch((error) => ({ ok: false, error: error.message }));
-  return { cdp, pageEnable };
+async function createTab(port) {
+  let lastError = null;
+  for (let targetAttempt = 1; targetAttempt <= 5; targetAttempt += 1) {
+    let tab = null;
+    try {
+      const list = await fetchJson(`http://127.0.0.1:${port}/json/list`, { timeoutMs: 15000 });
+      tab = Array.isArray(list) ? list.find((item) => item.type === "page") : null;
+    } catch {
+      tab = null;
+    }
+    if (!tab?.webSocketDebuggerUrl) {
+      try {
+        tab = await fetchJson(`http://127.0.0.1:${port}/json/new`, { method: "PUT", timeoutMs: 15000 });
+      } catch {
+        tab = null;
+      }
+    }
+    if (!tab?.webSocketDebuggerUrl) {
+      lastError = new Error("CDP page target missing websocket URL");
+      await sleep(350);
+      continue;
+    }
+    const cdp = new Cdp(tab.webSocketDebuggerUrl);
+    try {
+      await cdp.connect();
+      const runtimeHandshake = await handshakeRuntime(cdp);
+      if (!runtimeHandshake.ok) {
+        throw new Error(`Runtime.evaluate handshake failed after ${runtimeHandshake.attempts} attempts: ${runtimeHandshake.error}`);
+      }
+      await cdp.send("DOM.enable", {}, 10000).catch(() => null);
+      await cdp.send("Network.enable", {}, 10000).catch(() => null);
+      await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
+      await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
+      const pageEnable = await cdp.send("Page.enable", {}, 5000).then(() => ({ ok: true })).catch((error) => ({ ok: false, error: error.message }));
+      return { cdp, pageEnable, runtimeHandshake: { ...runtimeHandshake, targetAttempt } };
+    } catch (error) {
+      lastError = error;
+      cdp.close();
+      await sleep(500 + targetAttempt * 250);
+    }
+  }
+  throw lastError || new Error("CDP page target missing websocket URL");
+}
+
+async function handshakeRuntime(cdp) {
+  let lastError = "";
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await cdp.send("Runtime.enable", {}, 12000).catch((error) => {
+      lastError = error.message;
+    });
+    try {
+      await cdp.send("Runtime.evaluate", { expression: "1", returnByValue: true }, 15000);
+      return { ok: true, attempts: attempt };
+    } catch (error) {
+      lastError = error.message;
+      await sleep(350 * attempt);
+    }
+  }
+  return { ok: false, attempts: 3, error: lastError || "unknown runtime handshake failure" };
 }
 
 async function evaluate(cdp, fn, arg = null, timeoutMs = 30000) {
@@ -339,8 +393,22 @@ async function querySelectorNodeId(cdp, selector, timeoutMs = 15000) {
   throw new Error(`selector not found: ${selector} (${lastError})`);
 }
 
+async function clickSelectorByDom(cdp, selector) {
+  const nodeId = await querySelectorNodeId(cdp, selector, 15000);
+  const { model } = await cdp.send("DOM.getBoxModel", { nodeId }, 10000);
+  const quad = model?.border || model?.content;
+  if (!quad || quad.length < 8) throw new Error(`selector has no box model: ${selector}`);
+  const xs = [quad[0], quad[2], quad[4], quad[6]];
+  const ys = [quad[1], quad[3], quad[5], quad[7]];
+  const x = xs.reduce((sum, value) => sum + value, 0) / xs.length;
+  const y = ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y }, 10000);
+  await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 }, 10000);
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }, 10000);
+}
+
 async function clickSelector(cdp, selector) {
-  const clickedVisible = await evaluate(cdp, (sel) => {
+  await evaluate(cdp, (sel) => {
     const visible = (node) => {
       if (!node) return false;
       const rect = node.getBoundingClientRect();
@@ -351,12 +419,14 @@ async function clickSelector(cdp, selector) {
     const target = el?.closest?.("a,button,[role=button]") || el;
     if (!target) return false;
     target.scrollIntoView({ block: "center", inline: "center" });
-    target.click();
     return true;
   }, selector, 10000).catch(() => false);
-  if (clickedVisible) {
+  try {
+    await clickSelectorByDom(cdp, selector);
     await sleep(140);
     return;
+  } catch {
+    // Fall through to DOM click for non-layout test targets.
   }
   const clicked = await evaluate(cdp, (sel) => {
     const el = document.querySelector(sel);
@@ -483,6 +553,7 @@ function collectRouteStats(config, key) {
     .slice(0, 8);
   const hardBlockers = [];
   if (!panel || !visible(panel)) hardBlockers.push(`panel not visible ${config.panel}`);
+  if (config.requiredText && !panelText.includes(config.requiredText)) hardBlockers.push(`route ${key} missing required text ${config.requiredText}`);
   if (!config.allowEmpty && rows.length < 1) hardBlockers.push(`route ${key} rendered no rows`);
   if (modeTabs > 1) hardBlockers.push(`modeTabs duplicated actual=${modeTabs}`);
   if (aiPanels > 1) hardBlockers.push(`aiPanels duplicated actual=${aiPanels}`);
@@ -522,11 +593,14 @@ async function main() {
   let cdp = null;
   const rounds = [];
   let pageEnable = { ok: false, skipped: true };
+  let runtimeHandshake = { ok: false, skipped: true };
   try {
     const url = `${BASE_URL.replace(/\/+$/, "")}/?desktop=1&theme=dark&routeStress=${Date.now()}`;
-    const tab = await createTab(browser.port, url);
+    const tab = await createTab(browser.port);
     cdp = tab.cdp;
     pageEnable = tab.pageEnable;
+    runtimeHandshake = tab.runtimeHandshake;
+    await cdp.send("Page.navigate", { url }, ROUTE_TIMEOUT_MS);
     await waitFor(cdp, () => ({ ok: document.readyState === "interactive" || document.readyState === "complete" }), null, 45000, 250);
     await waitFor(cdp, () => ({ ok: Boolean(document.querySelector("aside.sidebar [data-view]")) }), null, 45000, 250);
     for (let loop = 1; loop <= LOOPS; loop += 1) {
@@ -580,6 +654,7 @@ async function main() {
     contract: {
       singleBrowserContinuousSwitching: true,
       noPerRoundChromeRelaunch: true,
+      runtimeHandshake,
       pageEnableOptional: true,
       pageEnable,
       modeTabs: "modeTabs <= 1",

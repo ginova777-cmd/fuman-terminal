@@ -1354,8 +1354,8 @@
     const paused = /pause|hold|history|b[-_ ]?only|暫停|歷史/.test(pauseText);
     const hasPrepareSetup = /prepare|candidate|ready|watch|預備|準備|候選|早期|再起漲|反彈|轉強|續強|盤中續強|曾發動仍強/.test(combo);
     if (coverageGateHealthy && /wait|待確認/.test(combo)) return "prepare";
-    if (!paused && /entry|enter|go|buy|trigger|fire|進場|買進|攻擊|突破/.test(combo)) return "entry";
     if (!paused && hasPrepareSetup) return "prepare";
+    if (!paused && /entry|enter|go|buy|trigger|fire|進場|買進|攻擊|突破/.test(combo)) return "entry";
     if (hasPrepareSetup && !/暫停進場區顯示|市場來源/.test(combo)) return "prepare";
     return "history";
   }
