@@ -438,8 +438,10 @@ function staleRescanPriority(stock) {
 function selectStaleStocksForRescan(staleStocks = []) {
   if (!REALTIME_STALE_RESCAN_LIMIT) return [];
   return [...staleStocks]
-    .filter((stock) => staleRescanPriority(stock) > 0)
-    .sort((a, b) => staleRescanPriority(b) - staleRescanPriority(a) || String(a.code || "").localeCompare(String(b.code || "")))
+    .filter((stock) => stock?.code)
+    .map((stock, index) => ({ stock, index, score: staleRescanPriority(stock) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index || String(a.stock.code || "").localeCompare(String(b.stock.code || "")))
+    .map((item) => item.stock)
     .slice(0, REALTIME_STALE_RESCAN_LIMIT);
 }
 
