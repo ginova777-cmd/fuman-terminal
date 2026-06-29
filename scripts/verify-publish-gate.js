@@ -2025,6 +2025,7 @@ if (fetchResult.status !== 0) {
     const allowedDirty = new Set([
       ".gitignore",
       "AGENTS.md",
+      "MOBILE_AGENTS.md",
       "post-scan-snapshot-refreshAGENTS.MD",
       "scorecardAGENTS.MD",
       "scripts/verify-publish-gate.js",
@@ -2086,6 +2087,7 @@ if (fetchResult.status !== 0) {
       "scripts/generate-stocks-slim.js",
       "scripts/generate-strategy-weight-report.js",
       "scripts/verify-mobile-health.js",
+      "scripts/verify-terminal-ui-e2e.js",
       "scripts/verify-mobile-api-only.js",
       "scripts/verify-mobile-ai-fragment.js",
       "install-api-only-cleanup-task.ps1",
