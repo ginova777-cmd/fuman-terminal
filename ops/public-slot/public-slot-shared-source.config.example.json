@@ -1,0 +1,16 @@
+{
+  "loopSeconds": 10,
+  "stopAt": "12:05",
+  "minAvgVolume5Lots": 0,
+  "restQuoteBatchSize": 80,
+  "restQuoteEverySeconds": 10,
+  "direct1mBatchSize": 8,
+  "direct1mEverySeconds": 20,
+  "futoptQuoteBatchSize": 120,
+  "futoptQuoteEverySeconds": 10,
+  "futoptQuoteDelayMilliseconds": 300,
+  "futoptTickersEverySeconds": 300,
+  "publicSlotUpsertTimeoutSec": 45,
+  "publicSlotUpsertBatchSize": 300,
+  "writePreopenRows": false
+}

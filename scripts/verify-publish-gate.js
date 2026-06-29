@@ -457,6 +457,8 @@ const scorecardApi = read("api/scorecard.js");
 const scorecardPage = read("88.html");
 const scorecardSnapshotRunner = read("run-scorecard-snapshot.ps1");
 const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
+const publicSlotSupabaseSource = read("ops/public-slot/SupabasePublicSlotSource.ps1");
+const publicSlotRuntimeConfigExample = read("ops/public-slot/public-slot-shared-source.config.example.json");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
 const strategy2ReadinessSql = [
@@ -550,6 +552,36 @@ for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "
 }
 for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "next_offset"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
+}
+for (const marker of [
+  "public-slot-shared-source.json",
+  "Apply-PublicSlotRuntimeConfig",
+  "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
+  "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE",
+  "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_DELAY_MS",
+  "FutoptQuoteDelayMilliseconds",
+  "WritePreopenRows",
+]) {
+  if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
+}
+for (const marker of [
+  "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
+  "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE",
+  "safeBatchSize",
+  "Array]::Copy",
+  "TimeoutSec",
+  "BatchSize",
+]) {
+  if (!publicSlotSupabaseSource.includes(marker)) issues.push(`SupabasePublicSlotSource.ps1 missing runtime upsert tuning marker ${marker}`);
+}
+for (const marker of [
+  "publicSlotUpsertTimeoutSec",
+  "publicSlotUpsertBatchSize",
+  "futoptQuoteDelayMilliseconds",
+  "writePreopenRows",
+  "minAvgVolume5Lots",
+]) {
+  if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
 for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
@@ -1232,6 +1264,8 @@ for (const file of [
   "ops/public-slot/ScorecardSourceContract.sql",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+  "ops/public-slot/SupabasePublicSlotSource.ps1",
+  "ops/public-slot/public-slot-shared-source.config.example.json",
   "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
   "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
   "api/desktop-static-disabled.js",
@@ -1652,6 +1686,8 @@ if (fetchResult.status !== 0) {
       "scripts/scan-intraday-signals.js",
       "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
       "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+      "ops/public-slot/SupabasePublicSlotSource.ps1",
+      "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
       "ops/public-slot/Strategy2ReadinessContractCache.sql",

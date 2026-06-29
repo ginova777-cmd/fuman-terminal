@@ -16,7 +16,11 @@ param(
   [int]$MinCumulativeBidAskLots = 3000,
   [int]$FutoptQuoteBatchSize = 20,
   [int]$FutoptQuoteEverySeconds = 60,
+  [int]$FutoptQuoteDelayMilliseconds = 600,
   [int]$FutoptTickersEverySeconds = 1800,
+  [int]$PublicSlotUpsertTimeoutSec = 20,
+  [int]$PublicSlotUpsertBatchSize = 300,
+  [bool]$WritePreopenRows = $true,
   [string]$BlacklistCsvUrl = "",
   [string]$BlacklistFile = "C:\fuman-runtime\config\fugle-api-blacklist-symbols.txt",
   [string]$StopAt = "14:05",
@@ -29,6 +33,7 @@ $ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceHelper = Join-Path $ScriptDir "SupabasePublicSlotSource.ps1"
 $LogDir = Join-Path $ScriptDir "runtime"
+$RuntimeConfigFile = Join-Path $RuntimeDir "config\public-slot-shared-source.json"
 $StateFile = Join-Path $LogDir "public-slot-minute-state.json"
 $Direct1mStateFile = Join-Path $LogDir "public-slot-direct-1m-state.json"
 $RestQuoteStateFile = Join-Path $LogDir "public-slot-rest-quote-state.json"
@@ -91,6 +96,72 @@ function Write-JsonFile {
   param([string]$Path, [object]$Value)
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
   $Value | ConvertTo-Json -Depth 80 | Set-Content -LiteralPath $Path -Encoding utf8
+}
+
+function Get-ObjectPropertyValue {
+  param([object]$Object, [string[]]$Names)
+  if ($null -eq $Object) { return $null }
+  foreach ($name in $Names) {
+    $property = $Object.PSObject.Properties[$name]
+    if ($null -ne $property -and $null -ne $property.Value -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+      return $property.Value
+    }
+  }
+  return $null
+}
+
+function Set-RuntimeOverride {
+  param(
+    [object]$Config,
+    [string]$VariableName,
+    [string[]]$ConfigNames,
+    [string]$EnvName,
+    [ValidateSet("int", "bool", "string")][string]$Type = "int"
+  )
+  $value = Get-ObjectPropertyValue -Object $Config -Names $ConfigNames
+  $envValue = if (-not [string]::IsNullOrWhiteSpace($EnvName)) { [Environment]::GetEnvironmentVariable($EnvName) } else { $null }
+  if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+    $value = $envValue
+  }
+  if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) { return }
+  switch ($Type) {
+    "bool" {
+      $text = ([string]$value).Trim()
+      $boolValue = $text -match "^(1|true|yes|on)$"
+      if ($text -match "^(0|false|no|off)$") { $boolValue = $false }
+      Set-Variable -Name $VariableName -Value $boolValue -Scope Script
+      break
+    }
+    "string" {
+      Set-Variable -Name $VariableName -Value ([string]$value) -Scope Script
+      break
+    }
+    default {
+      Set-Variable -Name $VariableName -Value ([int]$value) -Scope Script
+      break
+    }
+  }
+}
+
+function Apply-PublicSlotRuntimeConfig {
+  $config = Read-JsonFile -Path $RuntimeConfigFile -Default $null
+  Set-RuntimeOverride -Config $config -VariableName "LoopSeconds" -ConfigNames @("loopSeconds", "LoopSeconds") -EnvName "FUMAN_PUBLIC_SLOT_LOOP_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "StopAt" -ConfigNames @("stopAt", "StopAt") -EnvName "FUMAN_PUBLIC_SLOT_STOP_AT" -Type "string"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteBatchSize" -ConfigNames @("restQuoteBatchSize", "RestQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BATCH_SIZE"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteEverySeconds" -ConfigNames @("restQuoteEverySeconds", "RestQuoteEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_EVERY_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mBatchSize" -ConfigNames @("direct1mBatchSize", "Direct1mBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_BATCH_SIZE"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mEverySeconds" -ConfigNames @("direct1mEverySeconds", "Direct1mEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_EVERY_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "MinAvgVolume5Lots" -ConfigNames @("minAvgVolume5Lots", "MinAvgVolume5Lots") -EnvName "FUMAN_PUBLIC_SLOT_MIN_AVG_VOLUME5_LOTS"
+  Set-RuntimeOverride -Config $config -VariableName "MinCumulativeBidAskLots" -ConfigNames @("minCumulativeBidAskLots", "MinCumulativeBidAskLots") -EnvName "FUMAN_PUBLIC_SLOT_MIN_CUMULATIVE_BID_ASK_LOTS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteBatchSize" -ConfigNames @("futoptQuoteBatchSize", "FutoptQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_BATCH_SIZE"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteEverySeconds" -ConfigNames @("futoptQuoteEverySeconds", "FutoptQuoteEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_EVERY_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteDelayMilliseconds" -ConfigNames @("futoptQuoteDelayMilliseconds", "FutoptQuoteDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptTickersEverySeconds" -ConfigNames @("futoptTickersEverySeconds", "FutoptTickersEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_TICKERS_EVERY_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertTimeoutSec" -ConfigNames @("publicSlotUpsertTimeoutSec", "upsertTimeoutSec", "PublicSlotUpsertTimeoutSec") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC"
+  Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertBatchSize" -ConfigNames @("publicSlotUpsertBatchSize", "upsertBatchSize", "PublicSlotUpsertBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE"
+  Set-RuntimeOverride -Config $config -VariableName "WritePreopenRows" -ConfigNames @("writePreopenRows", "WritePreopenRows") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS" -Type "bool"
+  $env:FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC = [string]$PublicSlotUpsertTimeoutSec
+  $env:FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE = [string]$PublicSlotUpsertBatchSize
 }
 
 function Convert-Market {
@@ -1552,7 +1623,7 @@ function Invoke-FugleFutoptQuoteBatch {
       Write-Log "WARN futopt quote rate limited; stopping current batch and cooling down."
       break
     }
-    Start-Sleep -Milliseconds 600
+    Start-Sleep -Milliseconds ([math]::Max(100, $FutoptQuoteDelayMilliseconds))
   }
   $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $FutureSymbols.Count
   Write-JsonFile -Path $FutoptQuoteStateFile -Value ([ordered]@{
@@ -1756,6 +1827,7 @@ function Convert-IntradayRowsToDailyOhlcvRows {
 if (-not (Test-Path -LiteralPath $SourceHelper)) {
   throw "Missing helper: $SourceHelper"
 }
+Apply-PublicSlotRuntimeConfig
 . $SourceHelper
 
 $serviceRoleKey = $env:SUPABASE_SERVICE_ROLE_KEY
@@ -1773,6 +1845,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize direct1mBatch=$Direct1mBatchSize futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows minAvgVolume5Lots=$MinAvgVolume5Lots"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -1811,7 +1884,7 @@ do {
     $preopenRows = Convert-QuotesToPreopenRows -Quotes $quotes -Payload $payload
     if ($quoteRows.Count -gt 0) {
       Write-PublicSlotQuotesLive -Rows $quoteRows
-      if ($preopenRows.Count -gt 0) {
+      if ($WritePreopenRows -and $preopenRows.Count -gt 0) {
         Write-PublicSlotPreopenSnapshot -Rows $preopenRows
         Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows
       }
@@ -1846,8 +1919,8 @@ do {
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
     if ($direct1mDailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $direct1mDailyRows }
     if ($direct1mOhlcvRows.Count -gt 0) { Write-PublicSlotDailyOhlcv -Rows $direct1mOhlcvRows }
-    if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
-    if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
+    if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
+    if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows }
     if ($combinedFutoptQuoteRows.Count -gt 0) { Write-PublicSlotFutoptQuotesLive -Rows $combinedFutoptQuoteRows }
     if ($shouldWriteFutoptTickers) { Write-PublicSlotFutoptTickers -Rows $combinedFutoptTickerRows }
     if (((Get-Date) - $lastMaintenanceAt).TotalMinutes -ge 30) {
@@ -1871,7 +1944,7 @@ do {
       $quoteRows = $latestQuoteRows
       $preopenRows = @(Convert-QuotesToPreopenRows -Quotes $latestQuoteObjects -Payload $latestQuotePayload)
       Write-PublicSlotQuotesLive -Rows $quoteRows
-      if ($preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
+      if ($WritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
     }
 
     $lastQuoteAt = Get-LatestIsoUtc -Rows $quoteRows -PropertyName "updated_at"

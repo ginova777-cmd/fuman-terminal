@@ -54,12 +54,31 @@ function Invoke-PublicSlotUpsert {
     [Parameter(Mandatory = $true)][string]$OnConflict,
     [Parameter(Mandatory = $true)][object[]]$Rows,
     [int]$RetryCount = 2,
-    [int]$TimeoutSec = 20
+    [int]$TimeoutSec = 20,
+    [int]$BatchSize = 300
   )
 
   if (-not $Rows -or $Rows.Count -eq 0) { return }
   if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl)) {
     throw "Call Initialize-SupabasePublicSlotSource first."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($env:FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC)) {
+    $TimeoutSec = [int]$env:FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE)) {
+    $BatchSize = [int]$env:FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE
+  }
+
+  $safeBatchSize = [math]::Max(1, [math]::Min($BatchSize, 500))
+  if ($Rows.Count -gt $safeBatchSize) {
+    for ($offset = 0; $offset -lt $Rows.Count; $offset += $safeBatchSize) {
+      $count = [math]::Min($safeBatchSize, $Rows.Count - $offset)
+      $chunk = New-Object object[] $count
+      [Array]::Copy($Rows, $offset, $chunk, 0, $count)
+      Invoke-PublicSlotUpsert -Table $Table -OnConflict $OnConflict -Rows $chunk -RetryCount $RetryCount -TimeoutSec $TimeoutSec -BatchSize $safeBatchSize
+    }
+    return
   }
 
   $body = $Rows | ConvertTo-Json -Depth 40 -Compress
