@@ -1588,6 +1588,9 @@ for (const file of [
 ]) {
   if (!sourceSyncVerifier.includes(file)) issues.push(`verify-source-sync.js missing ${file}`);
 }
+if (!sourceSyncScript.includes('".md"') || !sourceSyncVerifier.includes('".md"')) {
+  issues.push("source sync scripts must normalize Markdown as text so AGENTS documents do not drift on CRLF/LF line endings");
+}
 
 const apiOnlyCleanup = read("scripts/cleanup-api-only-retired-artifacts.js");
 for (const [fileName, text] of [
