@@ -521,7 +521,12 @@ function Write-PublicSlotPreopenSnapshotHistory {
   $tradeDate = (Get-Date).ToString("yyyy-MM-dd")
   $hasUpdatedAtColumn = Test-PublicSlotColumnAvailable -Table "fugle_preopen_snapshot_history" -Column "updated_at"
   $normalized = foreach ($row in $Rows) {
-    $observedAt = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } elseif ($row.timestamp) { ConvertTo-IsoUtc $row.timestamp } else { $now }
+    $observedAt = if ($row.observed_at) { ConvertTo-IsoUtc $row.observed_at } else { $now }
+    $payload = ConvertTo-PublicSlotPayloadHashtable $row.payload
+    if (-not $payload.ContainsKey("volume_unit")) { $payload["volume_unit"] = "lots" }
+    if (-not $payload.ContainsKey("time_standard")) { $payload["time_standard"] = "UTC" }
+    $payload["writer_observed_at"] = $observedAt
+    if ($row.updated_at) { $payload["quote_updated_at"] = ConvertTo-IsoUtc $row.updated_at }
     $out = @{
       symbol = [string]$row.symbol
       observed_at = $observedAt
@@ -559,7 +564,7 @@ function Write-PublicSlotPreopenSnapshotHistory {
       ask5_volume = ConvertTo-PublicSlotLots $row.ask5_volume
       bid_levels_json = if ($row.bid_levels_json) { $row.bid_levels_json } else { @() }
       ask_levels_json = if ($row.ask_levels_json) { $row.ask_levels_json } else { @() }
-      payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
+      payload = $payload
     }
     if ($hasUpdatedAtColumn) { $out.updated_at = $observedAt }
     $out

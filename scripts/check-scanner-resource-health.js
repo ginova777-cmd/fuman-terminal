@@ -35,6 +35,8 @@ const STRATEGY_ALIASES = new Map([
 const READY_STATUS = "ready";
 const STALE_STATUS = "stale";
 const BLOCKING_STATUSES = new Set(["not_ready", "failed"]);
+const STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S || 0.9);
+const STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS = Number(process.env.STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS || 120);
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -124,6 +126,89 @@ async function fetchStrategy2ReadinessStatus() {
   }
 }
 
+async function fetchSourceStatusPayload() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const select = "source_name,status,updated_at,stale_seconds,message,payload";
+    const url = `${SUPABASE_URL}/rest/v1/source_status?source_name=eq.fugle_shared_source&select=${encodeURIComponent(select)}&limit=1`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`source_status HTTP ${response.status}: ${text.slice(0, 240)}`);
+    const rows = JSON.parse(text || "[]");
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function boolValue(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function taipeiMinutes(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const hour = Number(parts.find((item) => item.type === "hour")?.value || 0);
+  const minute = Number(parts.find((item) => item.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function strategy2SourceGateIssues(sourceStatus) {
+  if (!sourceStatus) return ["source_status fugle_shared_source missing"];
+  const payload = sourceStatus.payload || {};
+  const activeSymbols = cleanNumber(payload.mother_pool_symbols) || cleanNumber(payload.active_symbols);
+  const freshQuotes120s = cleanNumber(payload.fresh_quotes_120s);
+  const freshQuoteCoverage120s = cleanNumber(payload.fresh_quote_coverage_120s) || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
+  const today1mSymbols = cleanNumber(payload.today_1m_symbols || payload.intraday_1m_symbols_today);
+  const staleSeconds = cleanNumber(payload.intraday_1m_stale_seconds);
+  const hardSeconds = cleanNumber(payload.intraday_1m_fresh_hard_seconds) || STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS;
+  const hasCandidateLimit = Object.prototype.hasOwnProperty.call(payload, "quote_derived_1m_candidate_limit");
+  const fullUniverse = boolValue(payload.quote_derived_1m_full_universe)
+    || (hasCandidateLimit && cleanNumber(payload.quote_derived_1m_candidate_limit) <= 0);
+  const session = String(payload.session || "").toLowerCase();
+  const minutes = taipeiMinutes();
+  const regularNow = session === "regular" || (minutes >= 9 * 60 && minutes <= 13 * 60 + 35);
+  const issues = [];
+
+  if (String(payload.permission_status || "").toLowerCase() && String(payload.permission_status || "").toLowerCase() !== "ready") {
+    issues.push(`permission_status=${payload.permission_status}`);
+  }
+  if (String(payload.quote_status || "").toLowerCase() && String(payload.quote_status || "").toLowerCase() !== "ready") {
+    issues.push(`quote_status=${payload.quote_status}`);
+  }
+  if (activeSymbols >= 1000 && freshQuoteCoverage120s < STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S) {
+    issues.push(`quote fresh 120s coverage ${freshQuoteCoverage120s.toFixed(4)} < ${STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S}`);
+  }
+  if (regularNow) {
+    if (!fullUniverse) issues.push("quote_derived_1m_full_universe=false");
+    if (activeSymbols >= 1000 && today1mSymbols < activeSymbols) {
+      issues.push(`today_1m_symbols ${today1mSymbols}/${activeSymbols} not full universe`);
+    }
+    if (staleSeconds > hardSeconds) {
+      issues.push(`intraday_1m_stale_seconds ${staleSeconds} > ${hardSeconds}`);
+    }
+    if (String(payload.intraday_1m_status || "").toLowerCase() && String(payload.intraday_1m_status || "").toLowerCase() !== "ready") {
+      issues.push(`intraday_1m_status=${payload.intraday_1m_status}`);
+    }
+  }
+  return issues;
+}
+
 function normalizeStrategy(value) {
   const key = String(value || "").trim().toLowerCase();
   return STRATEGY_ALIASES.get(key) || value;
@@ -164,6 +249,8 @@ async function main() {
   let effectiveStatus = status;
   let readiness = null;
   let readinessWarning = "";
+  let sourceStatus = null;
+  let sourceGateIssues = [];
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
       readiness = await fetchStrategy2ReadinessStatus();
@@ -173,6 +260,16 @@ async function main() {
     } catch (error) {
       readinessWarning = `strategy2 readiness status unavailable: ${error?.message || String(error)}`;
       if (status === READY_STATUS) effectiveStatus = "failed";
+    }
+    try {
+      sourceStatus = await fetchSourceStatusPayload();
+      sourceGateIssues = strategy2SourceGateIssues(sourceStatus);
+      if (sourceGateIssues.length > 0 && effectiveStatus === READY_STATUS) {
+        effectiveStatus = "not_ready";
+      }
+    } catch (error) {
+      sourceGateIssues = [`source_status unavailable: ${error?.message || String(error)}`];
+      if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
     }
   }
   const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
@@ -185,7 +282,11 @@ async function main() {
       `execution=${Number(readiness.latest_execution_scanned || 0)}/${Number(readiness.latest_execution_expected || 0)}`,
     ].join("; ")
     : "";
-  const reason = [row.reason || "", readinessReason, readinessWarning].filter(Boolean).join("; ");
+  const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
+  const reason = [row.reason || "", readinessReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const suggestedScannerBehavior = sourceGateIssues.length
+    ? "preserve latest complete run; source_status quote/1m/preopen hard gate is not ready"
+    : row.suggested_scanner_behavior || "";
   const payload = {
     ok,
     blocked,
@@ -198,9 +299,15 @@ async function main() {
     rowCount: Number(row.row_count || 0),
     minRequiredRows: Number(row.min_required_rows || 0),
     reason,
-    suggestedScannerBehavior: row.suggested_scanner_behavior || "",
+    suggestedScannerBehavior,
     updatedAt: row.updated_at || "",
     readiness,
+    sourceStatus,
+    sourceGate: {
+      minFreshQuoteCoverage120s: STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S,
+      intraday1mHardStaleSeconds: STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS,
+      issues: sourceGateIssues,
+    },
   };
   console.log(JSON.stringify(payload, null, 2));
   if (effectiveStatus === READY_STATUS) return;

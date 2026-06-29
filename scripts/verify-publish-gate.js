@@ -569,7 +569,7 @@ for (const marker of ["v_scanner_resource_health", "ready", "stale", "not_ready"
 for (const marker of ["v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 readiness marker ${marker}`);
 }
-for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "readiness"]) {
+for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "strategy2_ready_100", "missing_summary", "sourceStatus", "source_status", "sourceGate", "mother_pool_symbols", "fresh_quote_coverage_120s", "today_1m_symbols", "quote_derived_1m_full_universe", "intraday_1m_stale_seconds", "readiness"]) {
   if (!scannerResourceHealthCheck.includes(marker)) issues.push(`check-scanner-resource-health.js missing Strategy2 market/readiness marker ${marker}`);
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {
@@ -599,8 +599,20 @@ for (const marker of [
   "direct_1m_prewarm_target_symbols",
   "direct_1m_prewarm_complete",
   "QuoteDerived1mCandidateCount",
+  "QuoteDerivedOpeningBackfillMinutes",
+  "Intraday1mFreshHardSeconds",
+  "FugleCollectorBatchSize",
+  "FUGLE_COLLECTOR_CONCURRENCY",
+  "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+  "quoteFullCoverageFloor",
+  "Get-ActiveCommonStockSymbols",
+  "stock_universe",
+  "mother_pool_source",
+  "quote_derived_1m_full_universe",
   "quote_derived_1m_current_minute",
   "quote_derived_1m_rows",
+  "quote_derived_1m_opening_backfill_rows",
+  "fresh_quote_coverage_120s",
   "volume_strategy_usable",
 ]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
@@ -619,6 +631,12 @@ for (const marker of [
   "publicSlotUpsertTimeoutSec",
   "publicSlotUpsertBatchSize",
   "futoptQuoteDelayMilliseconds",
+  "restQuoteDelayMilliseconds",
+  "fugleCollectorLoopMilliseconds",
+  "fugleCollectorBatchSize",
+  "fugleCollectorConcurrency",
+  "fugleCollectorRequestDelayMilliseconds",
+  "fugleCollectorQuoteTtlMilliseconds",
   "writePreopenRows",
   "writePreopenRowsMode",
   "strategy2ReadyPageSize",
@@ -630,6 +648,9 @@ for (const marker of [
   "direct1mPrewarmBars",
   "quoteDerived1mCandidateCount",
   "quoteDerived1mMaxQuoteAgeSeconds",
+  "quoteDerivedOpeningBackfillMinutes",
+  "intraday1mFreshTargetSeconds",
+  "intraday1mFreshHardSeconds",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
@@ -651,8 +672,16 @@ for (const marker of [
   "direct_1m_prewarm_target_symbols",
   "direct_1m_prewarm_complete",
   "QuoteDerived1mCandidateCount",
+  "QuoteDerivedOpeningBackfillMinutes",
+  "Intraday1mFreshHardSeconds",
+  "FugleCollectorBatchSize",
+  "FUGLE_COLLECTOR_CONCURRENCY",
+  "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+  "quote_derived_1m_full_universe",
   "quote_derived_1m_current_minute",
   "quote_derived_1m_rows",
+  "quote_derived_1m_opening_backfill_rows",
+  "fresh_quote_coverage_120s",
   "latest_candle_time_taipei",
 ]) {
   if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);
@@ -1513,6 +1542,14 @@ for (const marker of [
   "ready_ma35_continuous_symbols",
   "ready_macd_continuous_symbols",
   "ready_ge_35_symbols",
+  "fresh_quote_coverage_120s",
+  "mother_pool_source",
+  "mother_pool_symbols",
+  "quote_derived_1m_full_universe",
+  "quote_derived_1m_opening_backfill_rows",
+  "intraday_1m_fresh_hard_seconds",
+  "quote_fresh_coverage_low",
+  "quote_derived_not_full_universe",
   "latest_candle_time_taipei",
 ]) {
   if (!fugleSourceContract.includes(marker)) issues.push(`FugleSourceResourceContract.sql missing source contract marker ${marker}`);
@@ -1833,6 +1870,8 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
       "ops/public-slot/Run-PublicSlotSharedSource.ps1",
       "ops/public-slot/SupabasePublicSlotSource.ps1",
+      "ops/public-slot/Start-PublicSlotSharedSource.cmd",
+      "ops/public-slot/fugle-websocket-collector.js",
       "ops/public-slot/FugleSourceResourceContract.sql",
       "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",

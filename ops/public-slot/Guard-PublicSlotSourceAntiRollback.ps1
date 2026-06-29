@@ -34,17 +34,26 @@ function Write-DefaultRuntimeConfig {
     loopSeconds = 10
     stopAt = "12:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 80
+    restQuoteBatchSize = 240
     restQuoteEverySeconds = 10
+    restQuoteDelayMilliseconds = 40
+    fugleCollectorLoopMilliseconds = 1000
+    fugleCollectorBatchSize = 320
+    fugleCollectorConcurrency = 4
+    fugleCollectorRequestDelayMilliseconds = 20
+    fugleCollectorQuoteTtlMilliseconds = 120000
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "08:00"
-    direct1mPrewarmSymbolCount = 300
-    direct1mPrewarmBatchSize = 40
+    direct1mPrewarmSymbolCount = 2000
+    direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
-    quoteDerived1mCandidateCount = 500
-    quoteDerived1mMaxQuoteAgeSeconds = 180
+    quoteDerived1mCandidateCount = 0
+    quoteDerived1mMaxQuoteAgeSeconds = 120
+    quoteDerivedOpeningBackfillMinutes = 6
+    intraday1mFreshTargetSeconds = 60
+    intraday1mFreshHardSeconds = 120
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
@@ -53,7 +62,7 @@ function Write-DefaultRuntimeConfig {
     publicSlotUpsertBatchSize = 300
     writePreopenRows = $true
     writePreopenRowsMode = "preopen"
-    strategy2ReadyPageSize = 250
+    strategy2ReadyPageSize = 500
   } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ConfigPath -Encoding utf8
 }
 
@@ -75,8 +84,19 @@ function Test-RepoRuntimeConfigSupport {
     "direct_1m_prewarm_target_symbols",
     "direct_1m_prewarm_complete",
     "QuoteDerived1mCandidateCount",
+    "QuoteDerivedOpeningBackfillMinutes",
+    "Intraday1mFreshHardSeconds",
+    "FugleCollectorBatchSize",
+    "FUGLE_COLLECTOR_CONCURRENCY",
+    "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+    "Get-ActiveCommonStockSymbols",
+    "stock_universe",
+    "mother_pool_source",
+    "quote_derived_1m_full_universe",
     "quote_derived_1m_current_minute",
     "quote_derived_1m_rows",
+    "quote_derived_1m_opening_backfill_rows",
+    "fresh_quote_coverage_120s",
     "volume_strategy_usable",
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
@@ -131,6 +151,12 @@ function Test-RuntimeConfig {
     "minAvgVolume5Lots",
     "restQuoteBatchSize",
     "restQuoteEverySeconds",
+    "restQuoteDelayMilliseconds",
+    "fugleCollectorLoopMilliseconds",
+    "fugleCollectorBatchSize",
+    "fugleCollectorConcurrency",
+    "fugleCollectorRequestDelayMilliseconds",
+    "fugleCollectorQuoteTtlMilliseconds",
     "direct1mBatchSize",
     "direct1mEverySeconds",
     "direct1mPrewarmEnabled",
@@ -140,6 +166,9 @@ function Test-RuntimeConfig {
     "direct1mPrewarmBars",
     "quoteDerived1mCandidateCount",
     "quoteDerived1mMaxQuoteAgeSeconds",
+    "quoteDerivedOpeningBackfillMinutes",
+    "intraday1mFreshTargetSeconds",
+    "intraday1mFreshHardSeconds",
     "futoptQuoteBatchSize",
     "futoptQuoteEverySeconds",
     "futoptQuoteDelayMilliseconds",
@@ -154,17 +183,26 @@ function Test-RuntimeConfig {
     loopSeconds = 10
     stopAt = "12:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 80
+    restQuoteBatchSize = 240
     restQuoteEverySeconds = 10
+    restQuoteDelayMilliseconds = 40
+    fugleCollectorLoopMilliseconds = 1000
+    fugleCollectorBatchSize = 320
+    fugleCollectorConcurrency = 4
+    fugleCollectorRequestDelayMilliseconds = 20
+    fugleCollectorQuoteTtlMilliseconds = 120000
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "08:00"
-    direct1mPrewarmSymbolCount = 300
-    direct1mPrewarmBatchSize = 40
+    direct1mPrewarmSymbolCount = 2000
+    direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
-    quoteDerived1mCandidateCount = 500
-    quoteDerived1mMaxQuoteAgeSeconds = 180
+    quoteDerived1mCandidateCount = 0
+    quoteDerived1mMaxQuoteAgeSeconds = 120
+    quoteDerivedOpeningBackfillMinutes = 6
+    intraday1mFreshTargetSeconds = 60
+    intraday1mFreshHardSeconds = 120
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
@@ -172,7 +210,7 @@ function Test-RuntimeConfig {
     publicSlotUpsertTimeoutSec = 45
     publicSlotUpsertBatchSize = 300
     writePreopenRowsMode = "preopen"
-    strategy2ReadyPageSize = 250
+    strategy2ReadyPageSize = 500
   }
   foreach ($name in $expected.Keys) {
     $prop = $config.PSObject.Properties[$name]

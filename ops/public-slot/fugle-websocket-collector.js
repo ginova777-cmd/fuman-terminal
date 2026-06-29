@@ -15,9 +15,11 @@ const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
-const LOOP_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 5000));
-const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 60));
-const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 180000));
+const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
+const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 320));
+const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 4)));
+const REQUEST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || 20));
+const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 120000));
 
 let cursor = 0;
 let lastMessageAt = "";
@@ -63,12 +65,21 @@ function writeStatus(extra = {}) {
     subscribed: extra.subscribed || 0,
     pending: extra.pending || 0,
     quotes: extra.quotes || 0,
+    loopMs: LOOP_MS,
+    batchSize: BATCH_SIZE,
+    concurrency: CONCURRENCY,
+    requestDelayMs: REQUEST_DELAY_MS,
+    quoteTtlMs: QUOTE_TTL_MS,
     lastMessageAt,
     last429At,
     cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : "",
     updatedAt: nowIso(),
     ...extra,
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function mergeQuotes(newQuotes) {
@@ -182,16 +193,25 @@ async function tick() {
   }
 
   const quotes = [];
-  for (const code of batch) {
-    try {
-      const payload = await fetchQuote(code, apiKey);
-      const quote = normalizeQuote(payload, code);
-      if (quote) quotes.push(quote);
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    } catch (error) {
-      if (String(error?.message || "").includes("429")) break;
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < batch.length && Date.now() >= cooldownUntil) {
+      const code = batch[nextIndex];
+      nextIndex += 1;
+      try {
+        const payload = await fetchQuote(code, apiKey);
+        const quote = normalizeQuote(payload, code);
+        if (quote) quotes.push(quote);
+      } catch (error) {
+        if (String(error?.message || "").includes("429")) {
+          nextIndex = batch.length;
+          break;
+        }
+      }
+      if (REQUEST_DELAY_MS > 0) await sleep(REQUEST_DELAY_MS);
     }
   }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batch.length) }, () => worker()));
   cursor = (cursor + Math.max(1, batch.length)) % symbols.length;
   if (quotes.length) lastMessageAt = nowIso();
   const count = mergeQuotes(quotes);
@@ -201,6 +221,7 @@ async function tick() {
     quotes: count,
     fetched: quotes.length,
     attempted: batch.length,
+    concurrency: CONCURRENCY,
     cursor,
   });
 }

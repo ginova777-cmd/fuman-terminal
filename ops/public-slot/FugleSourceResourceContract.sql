@@ -274,6 +274,12 @@ select
   s.payload ->> 'daily_volume_status' as daily_volume_status,
   coalesce((s.payload ->> 'quote_age_seconds')::integer, s.stale_seconds, 999999) as quote_age_seconds,
   coalesce((s.payload ->> 'intraday_1m_stale_seconds')::integer, 999999) as intraday_1m_stale_seconds,
+  coalesce((s.payload ->> 'intraday_1m_fresh_target_seconds')::integer, 60) as intraday_1m_fresh_target_seconds,
+  coalesce((s.payload ->> 'intraday_1m_fresh_hard_seconds')::integer, 120) as intraday_1m_fresh_hard_seconds,
+  coalesce((s.payload ->> 'fresh_quote_coverage_120s')::numeric, 0) as fresh_quote_coverage_120s,
+  s.payload ->> 'mother_pool_source' as mother_pool_source,
+  coalesce((s.payload ->> 'mother_pool_symbols')::integer, 0) as mother_pool_symbols,
+  coalesce((s.payload ->> 'mother_pool_filtered')::integer, 0) as mother_pool_filtered,
   coalesce((s.payload ->> 'active_symbols')::integer, 0) as active_symbols,
   coalesce((s.payload ->> 'quotes')::integer, 0) as quotes,
   coalesce((s.payload ->> 'eligible_quote_rows')::integer, 0) as eligible_quote_rows,
@@ -288,7 +294,10 @@ select
     when s.updated_at < now() - interval '120 seconds' then 'heartbeat_stale'
     when s.payload ->> 'permission_status' <> 'ready' then 'permission_not_ready'
     when coalesce((s.payload ->> 'quote_age_seconds')::integer, s.stale_seconds, 999999) > 120 then 'quote_stale'
-    when coalesce((s.payload ->> 'intraday_1m_stale_seconds')::integer, 0) > 180 then 'intraday_1m_stale'
+    when coalesce((s.payload ->> 'fresh_quote_coverage_120s')::numeric, 0) < 0.9
+      and coalesce((s.payload ->> 'active_symbols')::integer, 0) >= 1000 then 'quote_fresh_coverage_low'
+    when coalesce((s.payload ->> 'quote_derived_1m_full_universe')::boolean, false) <> true then 'quote_derived_not_full_universe'
+    when coalesce((s.payload ->> 'intraday_1m_stale_seconds')::integer, 0) > coalesce((s.payload ->> 'intraday_1m_fresh_hard_seconds')::integer, 120) then 'intraday_1m_stale'
     when nullif(s.payload ->> 'scanner_block_reason', '') is not null then s.payload ->> 'scanner_block_reason'
     when s.status not in ('ok', 'degraded') then 'not_ready'
     else 'ready'
@@ -302,6 +311,11 @@ select
   coalesce((s.payload ->> 'ready_ma35_continuous_symbols')::integer, 0) as ready_ma35_continuous_symbols,
   coalesce((s.payload ->> 'ready_macd_continuous_symbols')::integer, 0) as ready_macd_continuous_symbols,
   coalesce((s.payload ->> 'fresh_quotes_120s')::integer, 0) as fresh_quotes_120s,
+  coalesce((s.payload ->> 'quote_derived_1m_candidate_symbols')::integer, 0) as quote_derived_1m_candidate_symbols,
+  coalesce((s.payload ->> 'quote_derived_1m_full_universe')::boolean, false) as quote_derived_1m_full_universe,
+  coalesce((s.payload ->> 'quote_derived_1m_rows')::integer, 0) as quote_derived_1m_rows,
+  coalesce((s.payload ->> 'quote_derived_1m_opening_backfill_rows')::integer, 0) as quote_derived_1m_opening_backfill_rows,
+  coalesce((s.payload ->> 'quote_derived_1m_opening_backfill_symbols')::integer, 0) as quote_derived_1m_opening_backfill_symbols,
   coalesce((s.payload ->> 'daily_volume_ready_symbols')::integer, 0) as daily_volume_ready_symbols,
   coalesce((s.payload ->> 'top_movers_ready20_count')::integer, 0) as top_movers_ready20_count,
   coalesce((s.payload ->> 'top_movers_ready35_count')::integer, 0) as top_movers_ready35_count,
@@ -415,6 +429,7 @@ notify pgrst, 'reload schema';
 -- fugle_daily_volume_avg(symbol,market,trade_date,volume,avg5_volume,avg_volume5,updated_at,payload)
 -- fugle_intraday_1m(symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,payload[source,synthetic,volume_strategy_usable])
 -- v_fugle_intraday_1m_status(symbol,market,latest_candle_time,latest_candle_time_taipei,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,has_today_data,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_20,ready_ge_35,ready_ge_80,ready_ge_200,updated_at)
+-- v_fugle_source_contract_health includes hard gates for fresh_quote_coverage_120s >= 0.9, quote_derived_1m_full_universe = true, and intraday_1m_stale_seconds <= intraday_1m_fresh_hard_seconds (default 120).
 -- get_fugle_intraday_1m_latest_n(symbols text[], bars_per_symbol integer)
 -- v_daytrade_hot_symbol_readiness(symbol,name,price,open_price,amplitude_from_open,total_volume,trade_value,avg_volume5,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,latest_candle_time_taipei,reason)
 -- v_stock_future_live_contract(trade_date,symbol,stock_name,future_symbol,source_symbol,futopt_last_price,futopt_change_percent,futopt_total_volume,futopt_updated_at,txf_future_symbol,txf_change_percent,relative_to_txf_percent,futopt_fresh_60s,txf_fresh_60s,source_status,reason,updated_at)

@@ -15,11 +15,11 @@ const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
-const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 3000));
-const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 100));
-const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
-const CONCURRENCY = Math.max(1, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 10));
-const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 180000));
+const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
+const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 320));
+const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 20));
+const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 4)));
+const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TTL_MS || 120000));
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
@@ -72,6 +72,7 @@ function writeStatus(extra = {}) {
     batchSize: BATCH_SIZE,
     perSymbolDelayMs: PER_SYMBOL_DELAY_MS,
     concurrency: CONCURRENCY,
+    quoteTtlMs: QUOTE_TTL_MS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     requestRetries: REQUEST_RETRIES,
     lastMessageAt,

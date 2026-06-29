@@ -68,7 +68,8 @@ begin
     and coalesce(u.is_etf, false) = false
     and coalesce(u.is_warrant, false) = false
     and coalesce(u.is_cb, false) = false
-    and coalesce(u.is_blacklisted, false) = false;
+    and coalesce(u.is_blacklisted, false) = false
+    and coalesce(u.is_daytrade_unsuitable, false) = false;
 
   if v_total <= 0 then
     update public.strategy2_intraday_ready_refresh_state
@@ -123,6 +124,7 @@ begin
       and coalesce(u.is_warrant, false) = false
       and coalesce(u.is_cb, false) = false
       and coalesce(u.is_blacklisted, false) = false
+      and coalesce(u.is_daytrade_unsuitable, false) = false
     order by q.symbol
     limit v_page_size
     offset v_offset
@@ -426,6 +428,7 @@ where s.symbol ~ '^[0-9]{4}$'
   and coalesce(s.is_warrant, false) = false
   and coalesce(s.is_cb, false) = false
   and coalesce(s.is_blacklisted, false) = false
+  and coalesce(s.is_daytrade_unsuitable, false) = false
   and c.future_symbol is not null;
 
 grant select on public.v_futopt_stock_mapping_ready to anon;
