@@ -113,12 +113,21 @@ Do not commit runtime receipts or logs with code fixes unless explicitly creatin
 
 Complete scan means every required strategy/chip/CB receipt completed for this scan. `criticalFailures=0` alone is not enough.
 
+The hard order is:
+
+```text
+full scan receipts complete -> desktop_route_snapshot write -> post-scan immediate-display verifier -> UI/health/readiness/schedule
+```
+
+Do not write the final full-scan desktop snapshot when any required receipt is degraded, fallback, partial, warned, stale, missing, or non-zero exit. After writing the snapshot, immediately run `scripts\verify-post-scan-snapshot-refresh-contract.js` so the desktop bundle, snapshot API, and live API agree on runId/count/date before publish or stable reporting.
+
 `run-full-scan.ps1` must keep these strict fields and failure text:
 
 - `strictRequiredStrategies`: `open-buy`, `strategy3`, `institution`, `warrant-flow`, `strategy4`, `strategy5`, `cb-detect`;
 - `allCompleteOk`: must be `true` before publish;
 - `strictFailures`: must be empty before publish;
 - `Full scan strict gate failed`: the blocking error when any required receipt is degraded, fallback, partial, stale, warned, missing, or non-zero exit.
+- `post-scan immediate-display verifier`: the immediate-display verifier must run after the full-scan snapshot write and fail the scan summary if it fails.
 
 `run-publish-gate.ps1` must reject publish unless the latest `scan-summary.json` has `allCompleteOk=true`, empty `strictFailures`, and complete receipts for `institution`, `warrant-flow`, and `cb-detect` as well as the strategy receipts.
 
@@ -211,6 +220,7 @@ When no release SHA is pinned, both hashes must match before reporting stable. W
 - snapshot retry: `Desktop route snapshot refresh retry`;
 - stale receipt guard: `ignored stale scanner receipt`;
 - full scan strict gate: `strictRequiredStrategies`, `allCompleteOk`, `strictFailures`, `Full scan strict gate failed`;
+- full scan immediate-display gate: `post-scan immediate-display verifier`, `scripts\verify-post-scan-snapshot-refresh-contract.js`, `SKIP desktop route snapshot write because strictFailures`;
 - publish receipt strict gate: `institution`, `warrant-flow`, `cb-detect`, `allCompleteOk`, `strictFailures`;
 - release SHA guard: `FUMAN_RELEASE_SHA`, `FUMAN_DEPLOY_SHA`, `/api/release-manifest`;
 - open-buy failed snapshot receipt write;

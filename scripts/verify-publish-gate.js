@@ -1255,6 +1255,9 @@ for (const marker of [
   "allCompleteOk",
   "strictFailures",
   "Full scan strict gate failed",
+  "SKIP desktop route snapshot write because strictFailures",
+  "post-scan immediate-display verifier",
+  "scripts\\verify-post-scan-snapshot-refresh-contract.js",
 ]) {
   if (!fullScan.includes(marker)) issues.push(`run-full-scan.ps1 missing full scan marker ${marker}`);
 }

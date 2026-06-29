@@ -411,6 +411,37 @@ function Invoke-DesktopRouteSnapshotWrite {
   Write-ScanLog "END [snapshot] desktop route snapshot write complete"
 }
 
+function Invoke-PostScanSnapshotRefreshVerify {
+  if ($SkipDesktopSnapshot) {
+    Write-ScanLog "SKIP post-scan immediate-display verifier"
+    return
+  }
+  Write-ScanLog "START [snapshot] post-scan immediate-display verifier"
+  $exitCode = 0
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe "scripts\verify-post-scan-snapshot-refresh-contract.js" "--max-age-ms=600000" *>&1 | ForEach-Object {
+        $text = [string]$_
+        Write-Host $text
+        Add-Content -LiteralPath $log -Value $text -Encoding utf8
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    Write-ScanLog "post-scan immediate-display verifier exception: $($_.Exception.Message)"
+  }
+  if ($exitCode -ne 0) {
+    Write-ScanLog "FAIL post-scan immediate-display verifier failed exit=$exitCode"
+    $criticalFailures.Add("post-scan-immediate-display: verifier failed exit=$exitCode") | Out-Null
+    return
+  }
+  Write-ScanLog "END [snapshot] post-scan immediate-display verifier complete"
+}
+
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
@@ -444,12 +475,19 @@ try {
   Invoke-RunnerTask "strategy4" "strategy4 full scan" "critical" "run-strategy4.ps1"
   Invoke-RunnerTask "strategy5" "strategy5 full scan" "critical" "run-strategy5.ps1"
   Invoke-RunnerTask "cb-detect" "CB detect full scan" "critical" "run-cb-detect.ps1"
-  Invoke-DesktopRouteSnapshotWrite
 
   $receiptItems = @(Convert-ToStableArray $receipts)
-  $criticalFailureItems = @(Convert-ToStableArray $criticalFailures)
   $strictFailures = @(Get-FullScanStrictFailures $receiptItems)
   $strictFailureItems = @(Convert-ToStableArray $strictFailures)
+
+  if ($strictFailureItems.Count -eq 0) {
+    Invoke-DesktopRouteSnapshotWrite
+    Invoke-PostScanSnapshotRefreshVerify
+  } else {
+    Write-ScanLog "SKIP desktop route snapshot write because strictFailures=$($strictFailureItems.Count)"
+  }
+
+  $criticalFailureItems = @(Convert-ToStableArray $criticalFailures)
   $summary = [ordered]@{
     ok = ($criticalFailureItems.Count -eq 0 -and $strictFailureItems.Count -eq 0)
     source = "scan-full"
