@@ -822,8 +822,17 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", "snapshotFirst", "supabase:strategy2_latest_snapshot", "options.snapshot && !options.live"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 snapshot-first marker ${marker}`);
 }
+for (const marker of ["normalizeCoverageGateReason", "市場來源可用率", "已達", "列入預備進場觀察"]) {
+  if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 coverage-gate contradiction guard ${marker}`);
+}
 for (const marker of ["strategy2SnapshotFirstEnabled", "strategy2SnapshotFirst", "snapshot-first-refreshing", "快照先顯示｜即時刷新中"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 snapshot-first marker ${marker}`);
+}
+for (const marker of ["strategy2CoverageGateHealthy", "coverageGateHealthy", "市場來源可用率"]) {
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing Strategy2 coverage-gate UI marker ${marker}`);
+}
+if (/pause\|hold\|history\|b\[-_ \]\?only\|暫停\|歷史\|市場來源可用率/.test(desktopFastShell)) {
+  issues.push("terminal-desktop-fast-shell.js must not pause Strategy2 rows merely because text contains 市場來源可用率");
 }
 for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "script-idle", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight", "primeDesktopFastBundle(false, \"script\")", "paintMarketSnapshotFirstPayload", "primeDesktopFastBundle(false, \"market-snapshot-first\")"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing cold-start snapshot/cache marker ${marker}`);
@@ -1556,7 +1565,10 @@ for (const marker of [
   "sharedSourceCanUpgradeTechnicalEntry",
   "quoteEntrySourceHealthy",
   "technicalEntryHealthy",
+  "coverageBelowEntryGate",
+  "technicalBlocksEntry",
   "quote universe will publish but A-zone technical upgrade is disabled",
+  "1分K/技術確認未就緒",
   "quote 母池保留，但 1分K/技術確認未就緒，暫不升級 A 區",
 ]) {
   if (!strategy2Scanner.includes(marker)) issues.push(`scan-intraday-signals.js missing Strategy2 split gate marker ${marker}`);

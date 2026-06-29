@@ -1179,13 +1179,22 @@ function buildStrategy2ConditionMeta(stock, options = {}) {
 function classifyStrategy2State(stock, signal, options = {}) {
   if (signal.id !== "open_burst_entry" && signal.id !== "rebound") return null;
   const sourceHealthyForEntry = options.entrySourceHealthy !== false;
+  const sourceCoverage = Number(options.sourceCoverage || 0);
+  const coverageBelowEntryGate = sourceCoverage > 0 && sourceCoverage < MIN_ENTRY_SOURCE_COVERAGE;
   const actionableRebound = signal.id === "rebound" && isActionableStrategy2Rebound(signal);
   const score = signal.id === "rebound"
     ? Math.min(100, Math.round(62 + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 8 : 0) + (signal.rsiUp ? 8 : 0)))
     : Math.min(100, Math.round(70 + (signal.macdDifUp ? 8 : 0) + (signal.macdHistUp ? 8 : 0) + (signal.kdUp ? 10 : 0)));
   if (!sourceHealthyForEntry) {
     const label = signal.id === "rebound" ? "反彈" : "開彈";
-    return { stateId: "wait", stateLabel: "待確認", stateReason: `${label}條件已符合，但本輪市場來源可用率 ${Number(options.sourceCoverage || 0).toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，暫不升級。`, score };
+    return {
+      stateId: "wait",
+      stateLabel: "待確認",
+      stateReason: coverageBelowEntryGate
+        ? `${label}條件已符合，但本輪市場來源可用率 ${sourceCoverage.toFixed(2)} 未達 ${MIN_ENTRY_SOURCE_COVERAGE.toFixed(2)}，暫不升級。`
+        : `${label}條件已符合；1分K/技術確認未就緒，暫不升級。`,
+      score,
+    };
   }
   if (signal.id === "rebound") {
     return {
@@ -2895,9 +2904,10 @@ function mergeRealtimeQuoteCache(cache, stocks, key, scanTimestamp) {
 function enforceStrategy2EntryGuards(report) {
   let downgradedRecords = 0;
   let downgradedEvents = 0;
-  const sourceBlocksEntry = report?.realtime?.entrySourceHealthy === false;
   const sourceCoverage = cleanNumber(report?.realtime?.coverage);
   const sourceThreshold = cleanNumber(report?.realtime?.entrySourceCoverageThreshold) || MIN_ENTRY_SOURCE_COVERAGE;
+  const sourceBlocksEntry = report?.realtime?.entrySourceHealthy === false && sourceCoverage > 0 && sourceCoverage < sourceThreshold;
+  const technicalBlocksEntry = report?.realtime?.entrySourceHealthy === false && !sourceBlocksEntry;
   const records = (report.records || []).map((record) => {
     const recordSourceCoverage = cleanNumber(record?.sourceCoverage);
     const createdUnderUnhealthySource = recordSourceCoverage > 0 && recordSourceCoverage < sourceThreshold;
@@ -2955,6 +2965,8 @@ function enforceStrategy2EntryGuards(report) {
         stateLabel: "待確認",
         stateReason: sourceBlocksEntry
           ? `市場來源可用率 ${sourceCoverage.toFixed(2)} 未達 ${sourceThreshold.toFixed(2)}，暫停進場區顯示。`
+          : technicalBlocksEntry
+          ? "1分K/技術確認未就緒，暫停升級進場區。"
           : event.stateReason && /^1分K站上MA35/.test(String(event.stateReason))
           ? "未通過進場區硬條件，降級為待確認。"
           : event.stateReason,

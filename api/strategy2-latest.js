@@ -198,16 +198,34 @@ function compactText(value, limit = 160) {
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
+function normalizeCoverageGateReason(reason, sourceCoverage, threshold = 0.5) {
+  const text = compactText(reason, 220);
+  const match = text.match(/市場來源可用率\s*([0-9.]+)\s*未達\s*([0-9.]+)/);
+  const coverage = cleanNumber(sourceCoverage || match?.[1]);
+  const gate = cleanNumber(threshold || match?.[2] || 0.5) || 0.5;
+  if (!match || !(coverage >= gate)) return text;
+  return `市場來源可用率 ${coverage.toFixed(2)} 已達 ${gate.toFixed(2)}，列入預備進場觀察。`;
+}
+
 function compactStrategy2Row(row, index = 0) {
   const active = row?.activeMatch && typeof row.activeMatch === "object" ? row.activeMatch : {};
   const match = Array.isArray(row?.matches) && row.matches[0] && typeof row.matches[0] === "object" ? row.matches[0] : {};
   const latest = row?.latestRecord && typeof row.latestRecord === "object" ? row.latestRecord : {};
   const code = String(row?.code || latest.code || row?.stockNo || row?.stock_no || row?.symbol || "").match(/\d{4}/)?.[0] || "";
   const name = compactText(row?.name || latest.name || row?.stockName || row?.stock_name || code || "", 48);
-  const state = compactText(row?.stateLabel || row?.state || row?.stateId || row?.status || latest.stateLabel || latest.stateId || active.name || active.id || match.name || match.id || "", 48);
-  const reason = compactText(
+  const rawStateId = row?.stateId || row?.state_id || "";
+  const rawReason = compactText(
     row?.reason || row?.stateReason || row?.strategyReasons?.[0] || latest.reason || latest.stateReason || latest.strategyReasons?.[0] || row?.signal || active.reason || match.reason || row?.note || row?.message || "",
     180
+  );
+  const sourceCoverage = row?.sourceCoverage ?? latest.sourceCoverage ?? row?.source_coverage ?? "";
+  const sourceThreshold = row?.entrySourceCoverageThreshold ?? latest.entrySourceCoverageThreshold ?? 0.5;
+  const reason = normalizeCoverageGateReason(rawReason, sourceCoverage, sourceThreshold);
+  const healthyCoverageWait = reason !== rawReason && /wait|待確認/i.test(`${rawStateId} ${row?.stateLabel || row?.state || row?.status || ""}`);
+  const stateId = healthyCoverageWait ? "prepare" : rawStateId;
+  const state = compactText(
+    healthyCoverageWait ? "預備進場" : row?.stateLabel || row?.state || row?.stateId || row?.status || latest.stateLabel || latest.stateId || active.name || active.id || match.name || match.id || "",
+    48
   );
   const percent = row?.percent ?? latest.percent ?? row?.changePercent ?? row?.change_percent ?? row?.change ?? "";
   const score = row?.score ?? row?.maxScore ?? latest.score ?? row?.rankScore ?? active.score ?? match.score ?? "";
@@ -217,7 +235,7 @@ function compactStrategy2Row(row, index = 0) {
     name,
     title: name || code,
     state,
-    stateId: row?.stateId || row?.state_id || "",
+    stateId,
     status: row?.status || state,
     signal: compactText(row?.signal || state || reason, 72),
     reason,
