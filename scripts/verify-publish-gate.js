@@ -413,6 +413,7 @@ const strategy4StandardGate = read("scripts/verify-strategy4-standard-gate.js");
 const cbDetectScanner = read("scripts/generate-cb-detect.js");
 const runStrategy4 = read("run-strategy4.ps1");
 const runOpenBuy = read("run-open-buy.ps1");
+const runStrategy1Preopen = read("run-strategy1-preopen-common.ps1");
 const runStrategy2Intraday = read("run-strategy2-intraday.ps1");
 const runStrategy3Complete = read("run-strategy3-complete-scan.ps1");
 const runStrategy5 = read("run-strategy5.ps1");
@@ -559,6 +560,9 @@ for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_m
 }
 for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest", "market_closed"]) {
   if (!scannerResourceHealthRunner.includes(marker)) issues.push(`scanner-resource-health.ps1 missing scanner gate marker ${marker}`);
+}
+for (const marker of ["Get-HttpErrorSummary", "Test-ControlledPreopenRefreshFailure", "strategy1_preopen_refresh_statement_timeout", "controlled preopen refresh failure", "preserve latest complete run"]) {
+  if (!runStrategy1Preopen.includes(marker)) issues.push(`run-strategy1-preopen-common.ps1 missing Strategy1 controlled preopen marker ${marker}`);
 }
 if (!/if \(\$Scope -ne "all"\)/.test(cacheSync)) {
   issues.push("run-cache-sync.ps1 must block every non-all scope");

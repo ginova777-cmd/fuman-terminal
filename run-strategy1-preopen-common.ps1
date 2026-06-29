@@ -126,6 +126,43 @@ function Get-SupabaseConfig {
   }
 }
 
+function Get-HttpErrorSummary {
+  param([Parameter(Mandatory = $true)][object]$ErrorRecord)
+
+  $statusCode = ""
+  try {
+    if ($ErrorRecord.Exception.Response) {
+      $statusCode = [string][int]$ErrorRecord.Exception.Response.StatusCode
+    }
+  } catch {}
+
+  $detail = ""
+  try {
+    if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+      $detail = [string]$ErrorRecord.ErrorDetails.Message
+    }
+  } catch {}
+  try {
+    if (-not $detail -and $ErrorRecord.Exception.Response -and $ErrorRecord.Exception.Response.Content) {
+      $detail = [string]$ErrorRecord.Exception.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+    }
+  } catch {}
+
+  $parts = @()
+  if ($statusCode) { $parts += "status=$statusCode" }
+  if ($detail) { $parts += "body=$detail" }
+  if ($ErrorRecord.Exception.Message) { $parts += "message=$($ErrorRecord.Exception.Message)" }
+  return ($parts -join " ")
+}
+
+function Test-ControlledPreopenRefreshFailure {
+  param(
+    [string]$ModeName,
+    [string]$Message
+  )
+  return $ModeName -ne "Final" -and $Message -match "57014|statement timeout|timed out|timeout"
+}
+
 function Invoke-Strategy1SnapshotRefresh {
   param([string]$TradeDate)
 
@@ -139,7 +176,12 @@ function Invoke-Strategy1SnapshotRefresh {
   }
   $uri = "{0}/rest/v1/rpc/refresh_strategy1_futopt_preopen_live_snapshot" -f $config.Url
   Write-PreopenLog "refresh_strategy1_futopt_preopen_live_snapshot start trade_date=$TradeDate"
-  $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $body -TimeoutSec 90
+  try {
+    $response = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $body -TimeoutSec 90 -ErrorAction Stop
+  } catch {
+    $summary = Get-HttpErrorSummary -ErrorRecord $_
+    throw "refresh_strategy1_futopt_preopen_live_snapshot failed $summary"
+  }
   Write-PreopenLog ("refresh_strategy1_futopt_preopen_live_snapshot result {0}" -f (($response | ConvertTo-Json -Depth 8 -Compress)))
   return $response
 }
@@ -184,9 +226,29 @@ try {
   do {
     $iterations += 1
     Invoke-StarPreopenScanOnce -ModeName $Mode
-    $refreshResult = Invoke-Strategy1SnapshotRefresh -TradeDate (Get-TaipeiTradeDate)
+    $controlledRefreshFailure = $false
+    try {
+      $refreshResult = Invoke-Strategy1SnapshotRefresh -TradeDate (Get-TaipeiTradeDate)
+    } catch {
+      $refreshMessage = $_.Exception.Message
+      if (-not (Test-ControlledPreopenRefreshFailure -ModeName $Mode -Message $refreshMessage)) {
+        throw
+      }
+      $controlledRefreshFailure = $true
+      $warnings += "controlled preopen refresh failure: $refreshMessage"
+      $refreshResult = [pscustomobject]@{
+        ok = $false
+        controlled = $true
+        mode = $safeMode
+        reason = "strategy1_preopen_refresh_statement_timeout"
+        preserveLatest = $true
+        error = $refreshMessage
+      }
+      Write-PreopenLog "controlled preopen refresh failure mode=$Mode; preserve latest complete run; error=$refreshMessage"
+    }
 
     if ($Mode -ne "Watch") { break }
+    if ($controlledRefreshFailure) { break }
     if (-not (Test-WatchWindowActive)) { break }
     Start-Sleep -Seconds 30
   } while ($true)
