@@ -83,6 +83,9 @@ function normalizeRow(row) {
   const fiveDayAvgVolume = cleanNumber(payload.fiveDayAvgVolume || payload.five_day_avg_volume);
   const foreignTrustBuyVolumePct = cleanNumber(payload.foreignTrustBuyVolumePct ?? payload.institutionBuyVolumePct ?? payload.foreignTrustVolumePct)
     || (fiveDayAvgVolume > 0 ? ((foreign + trust) / fiveDayAvgVolume) * 100 : 0);
+  const foreignStreak = cleanNumber(payload.foreignStreak ?? payload.foreign_streak);
+  const trustStreak = cleanNumber(payload.trustStreak ?? payload.trust_streak);
+  const jointStreak = cleanNumber(payload.jointStreak ?? payload.joint_streak);
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
@@ -107,8 +110,16 @@ function normalizeRow(row) {
     institutionTotalNet: total,
     institution_total_net: total,
     fiveDayAvgVolume,
+    five_day_avg_volume: fiveDayAvgVolume,
     foreignTrustBuyVolumePct,
+    foreignTrustVolumePct: foreignTrustBuyVolumePct,
     institutionBuyVolumePct: foreignTrustBuyVolumePct,
+    foreignStreak,
+    foreign_streak: foreignStreak,
+    trustStreak,
+    trust_streak: trustStreak,
+    jointStreak,
+    joint_streak: jointStreak,
   };
 }
 

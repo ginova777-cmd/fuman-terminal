@@ -1263,9 +1263,12 @@
       foreignStreak: pickFirstValue(merged.foreignStreak, merged.foreign_streak),
       trustStreak: pickFirstValue(merged.trustStreak, merged.trust_streak),
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
-      foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
-      institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreignTrustVolumePct),
-      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume),
+      foreign_trust_buy_volume_pct: pickFirstValue(merged.foreign_trust_buy_volume_pct, merged.foreignTrustBuyVolumePct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
+      foreignTrustBuyVolumePct: pickFirstValue(merged.foreignTrustBuyVolumePct, merged.foreign_trust_buy_volume_pct, merged.institutionBuyVolumePct, merged.foreignTrustVolumePct),
+      institutionBuyVolumePct: pickFirstValue(merged.institutionBuyVolumePct, merged.foreignTrustBuyVolumePct, merged.foreign_trust_buy_volume_pct, merged.foreignTrustVolumePct),
+      foreignTrustVolumePct: pickFirstValue(merged.foreignTrustVolumePct, merged.foreignTrustBuyVolumePct, merged.foreign_trust_buy_volume_pct, merged.institutionBuyVolumePct),
+      fiveDayAvgVolume: pickFirstValue(merged.fiveDayAvgVolume, merged.five_day_avg_volume, merged.avgVolume5d, merged.avg_volume_5d),
+      five_day_avg_volume: pickFirstValue(merged.five_day_avg_volume, merged.fiveDayAvgVolume, merged.avgVolume5d, merged.avg_volume_5d),
       foreignLots: pickFirstValue(merged.foreignLots, merged.foreign_lots),
       ratio1: pickFirstValue(merged.ratio1, merged.ratio1000Week1),
       ratio2: pickFirstValue(merged.ratio2, merged.ratio1000Week2),
@@ -1650,9 +1653,9 @@
   }
 
   function chipTradeForeignTrustVolumePct(row) {
-    const explicit = cleanNumber(row?.foreignTrustBuyVolumePct || row?.institutionBuyVolumePct || row?.foreignTrustVolumePct);
-    if (explicit > 0) return explicit;
-    const avgVolume = cleanNumber(row?.fiveDayAvgVolume || row?.five_day_avg_volume);
+    const explicitRaw = pickFirstValue(row?.foreignTrustBuyVolumePct, row?.foreign_trust_buy_volume_pct, row?.institutionBuyVolumePct, row?.foreignTrustVolumePct);
+    if (explicitRaw !== undefined && explicitRaw !== null && explicitRaw !== "") return cleanNumber(explicitRaw);
+    const avgVolume = cleanNumber(pickFirstValue(row?.fiveDayAvgVolume, row?.five_day_avg_volume, row?.avgVolume5d, row?.avg_volume_5d));
     if (avgVolume <= 0) return 0;
     return ((cleanNumber(row?.foreign) + cleanNumber(row?.trust)) / avgVolume) * 100;
   }

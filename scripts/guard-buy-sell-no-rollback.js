@@ -64,29 +64,32 @@ if (!/if\s*\(!chipTradeFrozen\)\s*loadChipExclusions\(false\)\.catch/.test(chipF
 }
 
 requireIncludes("terminal-runtime-config.js", [
-  'chipTradeLatest: "/api/chip-trade-latest"',
-  'chipTradeTdccBreakout: "/api/chip-trade-tdcc-breakout-latest"',
-  "chipTradeForeignTrustVolumePct",
+  'institutionCache: "/api/institution-latest"',
+  'institutionSlim: "/api/institution-latest"',
+  'institutionSummary: "/api/institution-latest"',
+  'institutionMobileTop: "/api/institution-latest"',
 ]);
 
 forbidIncludes("terminal-runtime-config.js", [
-  'institutionTdccBreakout: "/api/institution-latest"',
+  "/data/institution-latest.json",
+  "/data/institution-slim.json",
   "/data/institution-tdcc-breakout-top.json",
 ]);
 
 const institutionApi = requireIncludes("api/institution-latest.js", [
-  "INSTITUTION_MIN_COMPLETE_ROWS",
-  "snapshot-min-rows",
-  "chip_trade_latest",
+  "v_institution_latest_complete_run",
+  "validateCompleteRun",
+  "validateReadback",
+  "complete-run-readback",
   "no-store",
 ]);
 
-if (!/(range|Range|Content-Range|from|to|pageSize|PAGE_SIZE)/.test(institutionApi)) {
-  fail("api/institution-latest.js must contain paged/range read logic for >1000 rows");
+if (!/expectedTotal\s*!==\s*scannedCount/.test(institutionApi)) {
+  fail("api/institution-latest.js must reject incomplete latest complete runs");
 }
 
-if (!/(304|441|482|1000|INSTITUTION_MIN_COMPLETE_ROWS)/.test(institutionApi)) {
-  fail("api/institution-latest.js must guard against partial/truncated runs");
+if (!/rows\.length\s*!==\s*resultCount/.test(institutionApi)) {
+  fail("api/institution-latest.js must reject readback count mismatches");
 }
 
 requireIncludes("api/chip-trade-latest.js", [
@@ -98,13 +101,24 @@ requireIncludes("api/chip-trade-tdcc-breakout-latest.js", [
   "no-store",
 ]);
 
+requireIncludes("terminal-desktop-fast-shell.js", [
+  "foreign_trust_buy_volume_pct",
+  "foreignTrustVolumePct",
+  "five_day_avg_volume",
+  "avg_volume_5d",
+  "chipTradeForeignTrustVolumePct(row)",
+  "pickFirstValue(row?.foreignTrustBuyVolumePct",
+]);
+
+if (/row\?\.foreignTrustBuyVolumePct\s*\|\|\s*row\?\.institutionBuyVolumePct/.test(read("terminal-desktop-fast-shell.js"))) {
+  fail("terminal-desktop-fast-shell.js must not use || when reading buy/sell volume pct because valid zero/signed fields can be lost");
+}
+
 const agents = requireIncludes("AGENTS.md", [
-  "買賣超目前正式行為",
-  "chipTradeFrozen = true",
-  "count >= 1200",
-  "304 rows = invalid",
-  "Deploy",
-  "hasChipTradeRows",
+  "Supabase only polling / snapshot",
+  "買賣超 | latest-complete",
+  "完整掃頁面顯示前一個交易日是正常狀態",
+  "不要用 cache bump / version bump 假裝修好資料或速度",
 ]);
 
 if (/Strategy 1|Strategy 2|Strategy 3|Strategy 4|Strategy 5/.test(agents)) {
