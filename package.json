@@ -64,6 +64,7 @@
     "release:daily": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daily-release.ps1",
     "freshness:gate": "npm run release:daily",
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
+    "freshness:local-repair": "npm run freshness:gate:fast",
     "strategy4:publish:fast": "node --use-system-ca scripts/publish-strategy4-fast.js",
     "sync:finmind:quotes": "node --use-system-ca scripts/sync-finmind-quotes-live.js",
     "sync:finmind:daily": "node --use-system-ca scripts/sync-finmind-daily-ohlcv.js",
