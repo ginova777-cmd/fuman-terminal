@@ -4,12 +4,11 @@ const scanWarrantFlow = require("../api/scan-warrant-flow");
 const { writeSummary } = require("./cache-summary");
 const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
-const { ROOT, dataPath, repoPath } = require("./runtime-paths");
+const { dataPath, dataOutputPaths } = require("./runtime-paths");
 const OUT_FILE = dataPath("warrant-flow-latest.json");
 const BACKUP_FILE = dataPath("warrant-flow-backup.json");
 const SUMMARY_FILE = dataPath("warrant-flow-summary.json");
 const STOCK_QUOTES_FILE = dataPath("stocks-quotes-slim.json");
-const SYNC_ROOT = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_SERVICE_ROLE_KEY = process.env.FUMAN_TERMINAL_SUPABASE_SERVICE_ROLE_KEY
@@ -32,11 +31,7 @@ function writeJson(file, payload) {
 }
 
 function writeLatestToRoots(payload) {
-  for (const file of [...new Set([
-    OUT_FILE,
-    repoPath("data", "warrant-flow-latest.json"),
-    path.join(SYNC_ROOT, "data", "warrant-flow-latest.json"),
-  ])]) {
+  for (const file of dataOutputPaths("warrant-flow-latest.json", { repoEnv: "FUMAN_WARRANT_FLOW_WRITE_CODE_REPO" })) {
     writeJson(file, payload);
   }
 }

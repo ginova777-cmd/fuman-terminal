@@ -1,9 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { ROOT, DATA_DIR, dataPath } = require("./runtime-paths");
+const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
-const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
 const stateDir = process.env.FUMAN_STATE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "state");
 
 function writeJson(file, payload) {
@@ -41,16 +40,8 @@ async function latestTradingDate() {
   return normalizeDate(new Date().toISOString());
 }
 
-function allDataTargets(name) {
-  return [...new Set([
-    path.join(DATA_DIR, name),
-    path.join(ROOT, "data", name),
-    path.join(syncRoot, "data", name),
-  ])];
-}
-
 function writeDataFile(name, payload) {
-  for (const file of allDataTargets(name)) writeJson(file, payload);
+  for (const file of dataOutputPaths(name, { repoEnv: "FUMAN_INTRADAY_DATE_WRITE_CODE_REPO" })) writeJson(file, payload);
 }
 
 function payloadDate(payload) {

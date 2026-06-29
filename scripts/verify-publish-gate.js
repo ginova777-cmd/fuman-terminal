@@ -426,6 +426,8 @@ const sourceSync = read("scripts/sync-main-deploy-source.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
 const strategy2SharedSource = read("lib/supabase-public-slot.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
+const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
+const warrantFlowScanner = read("scripts/scan-warrant-flow-cache.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
 const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
 const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
@@ -973,6 +975,18 @@ if (!/\/api\/mobile-boot/.test(mobileApiOnlyVerifier) || !/MOBILE_UPDATE_EVENT_B
 if (!/function dataOutputPaths/.test(runtimePaths) || !/FUMAN_WRITE_CODE_REPO_DATA/.test(runtimePaths)) {
   issues.push("runtime-paths.js must expose dataOutputPaths with explicit opt-in repo data writes");
 }
+for (const [name, source, envName] of [
+  ["scripts/refresh-intraday-latest-dates.js", refreshIntradayLatestDates, "FUMAN_INTRADAY_DATE_WRITE_CODE_REPO"],
+  ["scripts/scan-intraday-signals.js", strategy2Scanner, "FUMAN_STRATEGY2_INTRADAY_WRITE_CODE_REPO"],
+  ["scripts/scan-warrant-flow-cache.js", warrantFlowScanner, "FUMAN_WARRANT_FLOW_WRITE_CODE_REPO"],
+]) {
+  if (!/dataOutputPaths/.test(source) || !source.includes(envName)) {
+    issues.push(`${name} must route generated data through runtime-only dataOutputPaths unless ${envName}=1 is explicitly set`);
+  }
+  if (/\bFUMAN_SYNC_DIR\b/.test(source) || /C:\\\\fuman-terminal/.test(source)) {
+    issues.push(`${name} must not default generated data writes into C:\\fuman-terminal`);
+  }
+}
 for (const [name, source] of [
   ["generate-data-quality-report.js", dataQualityReportGenerator],
   ["generate-consistency-report.js", consistencyReportGenerator],
@@ -1341,6 +1355,9 @@ if (!/run-strategy3-complete-scan\.ps1/.test(runStrategy3) || /run-cache-sync\.p
 }
 for (const marker of ["Write-Strategy3Receipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1"]) {
   if (!runStrategy3Complete.includes(marker)) issues.push(`run-strategy3-complete-scan.ps1 missing standalone receipt/snapshot marker ${marker}`);
+}
+if (!/FUMAN_STRATEGY3_RECEIPT_WRITE_CODE_REPO/.test(runStrategy3Complete) || !/\$writeCodeRepoReceipts/.test(runStrategy3Complete) || !/runtime-only/.test(runStrategy3Complete)) {
+  issues.push("run-strategy3-complete-scan.ps1 must write Strategy3 receipts to runtime only unless FUMAN_STRATEGY3_RECEIPT_WRITE_CODE_REPO=1 is explicitly set");
 }
 const strategy3Watchdog = read("run-strategy3-watchdog.ps1");
 for (const marker of ["/api/strategy3-latest", "Cache-Control", "no-store", "runId", "complete"]) {

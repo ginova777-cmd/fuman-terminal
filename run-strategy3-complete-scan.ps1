@@ -18,8 +18,12 @@ $logDir = Join-Path $env:FUMAN_RUNTIME_DIR "logs"
 New-Item -ItemType Directory -Force -Path $logDir, $env:FUMAN_DATA_DIR, $env:FUMAN_CACHE_DIR, $env:FUMAN_STATE_DIR | Out-Null
 $log = Join-Path $logDir ("strategy3-complete-scan-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
-$syncReceiptDir = Join-Path $PSScriptRoot "data\scan-receipts"
-New-Item -ItemType Directory -Force -Path $receiptDir, $syncReceiptDir | Out-Null
+$writeCodeRepoReceipts = ($env:FUMAN_STRATEGY3_RECEIPT_WRITE_CODE_REPO -eq "1") -or ($env:FUMAN_SCAN_RECEIPTS_WRITE_CODE_REPO -eq "1") -or ($env:FUMAN_WRITE_CODE_REPO_DATA -eq "1")
+$syncReceiptDir = if ($writeCodeRepoReceipts) { Join-Path $PSScriptRoot "data\scan-receipts" } else { $null }
+$receiptMode = if ($syncReceiptDir) { "runtime+code-repo" } else { "runtime-only" }
+$initDirs = @($receiptDir)
+if ($syncReceiptDir) { $initDirs += $syncReceiptDir }
+New-Item -ItemType Directory -Force -Path $initDirs | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
 function Write-Strategy3CompleteLog($Message) {
@@ -50,10 +54,13 @@ function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     log = $log
   }
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy3.json") -Encoding utf8
-  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $syncReceiptDir "strategy3.json") -Encoding utf8
+  if ($syncReceiptDir) {
+    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $syncReceiptDir "strategy3.json") -Encoding utf8
+  }
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
+Write-Strategy3CompleteLog "Strategy3 receipt mode=$receiptMode"
 Invoke-FumanWeekdayGuard -Label "Strategy3 complete scan" -LogPath $log
 
 function Get-TaipeiTodayYmd {

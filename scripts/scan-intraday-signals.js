@@ -12,7 +12,7 @@ const {
   getStrategy2SourceHealth,
 } = require("../lib/supabase-public-slot");
 
-const { ROOT, dataPath, cachePath, repoPath } = require("./runtime-paths");
+const { ROOT, dataPath, cachePath, dataOutputPaths } = require("./runtime-paths");
 const CACHE_DIR = cachePath("intraday");
 const SIGNAL_FILE = path.join(CACHE_DIR, "signals.json");
 const SCORECARD_TRACK_FILE = path.join(CACHE_DIR, "scorecard-trades.json");
@@ -544,11 +544,9 @@ function shouldWriteStrategy2History(file) {
 }
 
 function writeStaticDataTargets(name, payload, options = {}) {
-  const targets = [];
-  if (!options.skipRuntime) targets.push(dataPath(name));
-  targets.push(repoPath("data", name));
-  const syncRoot = process.env.FUMAN_SYNC_DIR || "C:\\fuman-terminal";
-  if (fs.existsSync(syncRoot)) targets.push(path.join(syncRoot, "data", name));
+  const targets = options.skipRuntime
+    ? dataOutputPaths(name, { repoEnv: "FUMAN_STRATEGY2_INTRADAY_WRITE_CODE_REPO" }).filter((file) => path.resolve(file) !== path.resolve(dataPath(name)))
+    : dataOutputPaths(name, { repoEnv: "FUMAN_STRATEGY2_INTRADAY_WRITE_CODE_REPO" });
   [...new Set(targets.map((file) => path.resolve(file)))].forEach((file) => {
     writeJson(file, payload);
   });
