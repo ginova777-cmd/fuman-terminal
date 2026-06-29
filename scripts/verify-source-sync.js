@@ -154,6 +154,7 @@ const TEXT_EXTENSIONS = new Set([
   ".html",
   ".js",
   ".json",
+  ".md",
   ".ps1",
   ".sql",
 ]);
