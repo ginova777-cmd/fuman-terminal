@@ -160,7 +160,8 @@ function Test-ControlledPreopenRefreshFailure {
     [string]$ModeName,
     [string]$Message
   )
-  return $ModeName -ne "Final" -and $Message -match "57014|statement timeout|timed out|timeout"
+  if ($Message -match "57014|statement timeout") { return $true }
+  return $ModeName -ne "Final" -and $Message -match "timed out|timeout"
 }
 
 function Invoke-Strategy1SnapshotRefresh {
