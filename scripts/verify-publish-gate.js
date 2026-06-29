@@ -785,8 +785,14 @@ if (/Math\.max\(Number\(options\.timeoutMs/.test(desktopRouteSnapshotCache)) {
 if (!/DEFAULT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotCache) || !/FUMAN_DESKTOP_ROUTE_SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotCache) || /timeoutMs:\s*options\.timeoutMs\s*\|\|\s*20000/.test(desktopRouteSnapshotCache)) {
   issues.push("lib/desktop-route-snapshot-cache.js must use configurable desktop snapshot write timeout instead of a hard 20s Supabase upsert timeout");
 }
+if (!/postScanSnapshotContract/.test(desktopRouteSnapshotCache)) {
+  issues.push("lib/desktop-route-snapshot-cache.js must treat postScanSnapshotContract as a volatile endpoint query parameter");
+}
 if (!/SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || !/FUMAN_DESKTOP_ROUTE_SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || /timeoutMs:\s*options\.timeoutMs\s*\|\|\s*20000/.test(desktopRouteSnapshotBuilder)) {
   issues.push("lib/desktop-route-snapshot-builder.js must pass configurable desktop snapshot write timeout to all snapshot upserts");
+}
+if (!/STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS/.test(strategy3LatestApi) || /timeoutMs:\s*650/.test(strategy3LatestApi)) {
+  issues.push("api/strategy3-latest.js must use a configurable desktop route snapshot read timeout instead of the old 650ms hard timeout");
 }
 for (const [file, source] of [
   ["api/strategy3-latest.js", strategy3LatestApi],

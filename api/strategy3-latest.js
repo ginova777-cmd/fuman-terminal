@@ -15,6 +15,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
 const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
+const DESKTOP_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || process.env.FUMAN_STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2500);
 
 function apiOnlyError(reason = "") {
   return {
@@ -256,7 +257,7 @@ module.exports = async function handler(request, response) {
   }
 
   const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 650,
+    timeoutMs: DESKTOP_SNAPSHOT_READ_TIMEOUT_MS,
     via: "api/strategy3-latest",
   });
   if (cached) {
