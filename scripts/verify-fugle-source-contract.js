@@ -157,6 +157,10 @@ function staticChecks() {
     "quote_derived_1m_current_minute",
     "quote_derived_1m_rows",
     "quote_derived_1m_opening_backfill_rows",
+    "MinutePayload",
+    "Get-ObjectPayloadValue",
+    "if ($readyMa20 -lt $readyMa35)",
+    "-MinutePayload $minutePayload",
     "fresh_quote_coverage_120s",
     "volume_strategy_usable",
     "scanner_can_run_ma20",
@@ -358,6 +362,16 @@ async function liveChecks() {
     ], "source_status:fugle_shared_source");
     if (payload.source_contract_version !== CONTRACT_VERSION) {
       issues.push(`source_status source_contract_version mismatch: ${payload.source_contract_version || "(missing)"}`);
+    }
+    const readyMa20 = Number(payload.ready_ma20_continuous_symbols || payload.ready_ge_20_symbols || 0);
+    const readyMa35 = Number(payload.ready_ma35_continuous_symbols || payload.ready_ge_35_symbols || 0);
+    const readyMacd = Number(payload.ready_macd_continuous_symbols || 0);
+    const readyGe80 = Number(payload.ready_ge_80_symbols || 0);
+    if (readyMa35 > readyMa20) {
+      issues.push(`source_status ready_ma20_continuous_symbols ${readyMa20} below ready_ma35_continuous_symbols ${readyMa35}`);
+    }
+    if (readyGe80 > readyMacd) {
+      issues.push(`source_status ready_macd_continuous_symbols ${readyMacd} below ready_ge_80_symbols ${readyGe80}`);
     }
   }
 

@@ -522,6 +522,10 @@ function Get-Intraday1mCoverageStats {
         if ($row.ready_ge_80 -eq $true) { $ready80++ }
         if ($row.ready_ge_200 -eq $true) { $ready200++ }
       }
+      if ($ready80 -lt $ready200) { $ready80 = $ready200 }
+      if ($readyMa35 -lt $ready80) { $readyMa35 = $ready80 }
+      if ($readyMa20 -lt $readyMa35) { $readyMa20 = $readyMa35 }
+      if ($readyMacd -lt $ready80) { $readyMacd = $ready80 }
       $stats.intraday_1m_symbols_today = $viewRows.Count
       $stats.intraday_1m_latest_candle_time = $latest
       $stats.intraday_1m_rows_today = $rowsToday
@@ -604,6 +608,12 @@ function Copy-IntradayStatsFromSourcePayload {
   if ($Stats.ready_ge_80 -le 0) { $Stats.ready_ge_80 = [int](Get-Number $Payload.ready_ge_80_symbols) }
   $Stats.ready_ge_200 = [int](Get-Number $Payload.ready_ge_200)
   if ($Stats.ready_ge_200 -le 0) { $Stats.ready_ge_200 = [int](Get-Number $Payload.ready_ge_200_symbols) }
+  if ($Stats.ready_ge_80 -lt $Stats.ready_ge_200) { $Stats.ready_ge_80 = $Stats.ready_ge_200 }
+  if ($Stats.ready_ge_35 -lt $Stats.ready_ge_80) { $Stats.ready_ge_35 = $Stats.ready_ge_80 }
+  if ($Stats.ready_ma35_continuous -lt $Stats.ready_ge_35) { $Stats.ready_ma35_continuous = $Stats.ready_ge_35 }
+  if ($Stats.ready_ma20_continuous -lt $Stats.ready_ma35_continuous) { $Stats.ready_ma20_continuous = $Stats.ready_ma35_continuous }
+  if ($Stats.ready_ge_20 -lt $Stats.ready_ma20_continuous) { $Stats.ready_ge_20 = $Stats.ready_ma20_continuous }
+  if ($Stats.ready_macd_continuous -lt $Stats.ready_ge_80) { $Stats.ready_macd_continuous = $Stats.ready_ge_80 }
   $Stats.intraday_1m_stale_seconds = $previousStale
   $Stats.intraday_1m_stats_source = "preserved_source_status"
   return $Stats
@@ -982,7 +992,8 @@ function Write-QuoteHeartbeatStatus {
     [object]$RestQuotePayload,
     [int]$FallbackAgeSeconds,
     [string]$QuotesFile,
-    [object]$WebSocketStatus
+    [object]$WebSocketStatus,
+    [object]$MinutePayload = $null
   )
 
   try {
@@ -1019,6 +1030,17 @@ function Write-QuoteHeartbeatStatus {
       }
       return $Default
     }
+    function Get-ObjectPayloadValue {
+      param([object]$Payload, [string]$Key, [object]$Default = $null)
+      if ($null -ne $Payload) {
+        if ($Payload -is [System.Collections.IDictionary] -and $Payload.Contains($Key)) {
+          return $Payload[$Key]
+        }
+        $prop = $Payload.PSObject.Properties[$Key]
+        if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+      }
+      return $Default
+    }
 
     $eligibleQuoteFloor = if ($effectiveEligibleSymbols -ge 1000) { [int][math]::Ceiling([double]$effectiveEligibleSymbols * 0.9) } else { [math]::Min(400, [math]::Max(1, [int]([double]$effectiveEligibleSymbols * 0.8))) }
     $quotesOk = ($effectiveEligibleQuoteRows -ge $eligibleQuoteFloor -and $quoteAgeSeconds -le $StaleSeconds)
@@ -1049,6 +1071,13 @@ function Write-QuoteHeartbeatStatus {
     $intraday1mStatus = Get-SourcePartStatus -Ok $intraday1mOk -Required:($Session -eq "regular")
     $dailyVolumeStatus = Get-SourcePartStatus -Ok $dailyVolumeOk
     $latestCandleTimeTaipei = Convert-IsoUtcToTaipei -IsoTime $intradayStats.intraday_1m_latest_candle_time
+    $quoteDerivedCandidateSymbols = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "candidateSymbols" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_candidate_symbols" -Default 0))
+    $quoteDerivedRows = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "quoteDerivedRows" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_rows" -Default 0))
+    $quoteDerivedCurrentRows = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "quoteDerivedCurrentRows" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_current_rows" -Default 0))
+    $quoteDerivedCurrentMinute = Get-ObjectPayloadValue -Payload $MinutePayload -Key "currentMinute" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_current_minute" -Default ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:00Z")))
+    $quoteDerivedOpeningBackfillRows = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "openingBackfillRows" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_rows" -Default 0))
+    $quoteDerivedOpeningBackfillSymbols = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "openingBackfillSymbols" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_symbols" -Default 0))
+    $quoteDerivedMaxAgeSeconds = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "quoteDerivedMaxQuoteAgeSeconds" -Default $QuoteDerived1mMaxQuoteAgeSeconds)
 
     $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
 
@@ -1160,16 +1189,16 @@ function Write-QuoteHeartbeatStatus {
       rest_quote_batch_size = $RestQuoteBatchSize
       rest_quote_every_seconds = $RestQuoteEverySeconds
       rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
-      quote_derived_1m_candidate_symbols = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_candidate_symbols" -Default 0)
+      quote_derived_1m_candidate_symbols = $quoteDerivedCandidateSymbols
       quote_derived_1m_candidate_limit = $QuoteDerived1mCandidateCount
       quote_derived_1m_full_universe = [bool](Get-PreviousPayloadValue -Key "quote_derived_1m_full_universe" -Default ($QuoteDerived1mCandidateCount -le 0))
-      quote_derived_1m_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_rows" -Default 0)
-      quote_derived_1m_current_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_current_rows" -Default 0)
-      quote_derived_1m_current_minute = Get-PreviousPayloadValue -Key "quote_derived_1m_current_minute" -Default ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:00Z"))
-      quote_derived_1m_max_quote_age_seconds = $QuoteDerived1mMaxQuoteAgeSeconds
+      quote_derived_1m_rows = $quoteDerivedRows
+      quote_derived_1m_current_rows = $quoteDerivedCurrentRows
+      quote_derived_1m_current_minute = $quoteDerivedCurrentMinute
+      quote_derived_1m_max_quote_age_seconds = $quoteDerivedMaxAgeSeconds
       quote_derived_1m_opening_backfill_minutes = $QuoteDerivedOpeningBackfillMinutes
-      quote_derived_1m_opening_backfill_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_rows" -Default 0)
-      quote_derived_1m_opening_backfill_symbols = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_symbols" -Default 0)
+      quote_derived_1m_opening_backfill_rows = $quoteDerivedOpeningBackfillRows
+      quote_derived_1m_opening_backfill_symbols = $quoteDerivedOpeningBackfillSymbols
       direct_1m_prewarm_enabled = [bool]$Direct1mPrewarmEnabled
       direct_1m_prewarm_start = $Direct1mPrewarmStart
       direct_1m_prewarm_bars_per_symbol = $Direct1mPrewarmBars
@@ -2608,6 +2637,9 @@ do {
     $minutePayload = Update-MinuteRows -QuoteRows $quoteRows -CandidateSymbols $priorityWarmupSymbols
     if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
+    if ($quoteRows.Count -gt 0 -and ($session -eq "regular" -or $minutePayload.minuteRows.Count -gt 0)) {
+      Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus -MinutePayload $minutePayload
+    }
     $direct1mSymbols = @($priorityWarmupSymbols)
     $direct1mPrewarmPayload = Invoke-Direct1mStartupPrewarm -Symbols $direct1mSymbols -ApiKey $fugleApiKey
     $direct1mPayload = Invoke-Direct1mWarmupBatch -Symbols $direct1mSymbols -ApiKey $fugleApiKey
