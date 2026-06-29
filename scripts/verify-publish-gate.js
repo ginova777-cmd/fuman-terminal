@@ -156,6 +156,31 @@ function queryScheduledTask(taskName) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+const fumanScheduleRegistry = readJsonFile("scripts/fuman-schedule-registry.json");
+if (fumanScheduleRegistry) {
+  const tasks = Array.isArray(fumanScheduleRegistry.tasks) ? fumanScheduleRegistry.tasks : [];
+  const strategy2LineStop1200 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Stop 1200");
+  if (!strategy2LineStop1200) {
+    issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE stop as Fuman Strategy2 LINE Stop 1200");
+  } else {
+    if (strategy2LineStop1200.time !== "12:00") {
+      issues.push(`scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1200 time must be 12:00; current=${strategy2LineStop1200.time || "(missing)"}`);
+    }
+    if (!String(strategy2LineStop1200.description || "").includes("12:00")) {
+      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1200 description must say 12:00");
+    }
+  }
+  if (tasks.some((task) => /Strategy2 LINE Stop 1330/.test(String(task?.taskName || task?.displayName || "")))) {
+    issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1330; Strategy2 runs 08:45-12:00");
+  }
+}
+const fumanScheduleFullText = read("check-fuman-schedule-full.ps1");
+if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1200") || !fumanScheduleFullText.includes("巡邏到 12:00")) {
+  issues.push("check-fuman-schedule-full.ps1 must describe Strategy2 as 08:45-12:00 and name LINE stop as 1200");
+}
+if (/Fuman Strategy2 LINE Stop 1330|策略2 當沖雷達[\s\S]{0,120}13:30/.test(fumanScheduleFullText)) {
+  issues.push("check-fuman-schedule-full.ps1 must not describe Strategy2 as stopping at 13:30");
+}
 if (packageJson.engines?.node !== EXPECTED_NODE_VERSION) {
   issues.push(`package.json engines.node must be ${EXPECTED_NODE_VERSION}; current=${packageJson.engines?.node || "(missing)"}`);
 }

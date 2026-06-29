@@ -108,10 +108,10 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy2 LINE Stop 1330",
-      "displayName": "Fuman Strategy2 LINE Stop 1330",
-      "description": "策略2通知巡邏，13:30 停止",
-      "time": "13:30",
+      "taskName": "\\Fuman Strategy2 LINE Stop 1200",
+      "displayName": "Fuman Strategy2 LINE Stop 1200",
+      "description": "策略2通知巡邏，12:00 停止",
+      "time": "12:00",
       "aliases": [
         "line stop"
       ]
