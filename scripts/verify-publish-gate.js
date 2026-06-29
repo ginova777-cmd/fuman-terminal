@@ -689,7 +689,7 @@ for (const marker of [
 if (/Set-Content\s+-LiteralPath\s+\$path|Repair-CmdEntrypoints|Repair-RunnerText|Repair-HelperText|Repair-RepoRuntimeConfigSupport|RunnerSnapshotPath|repo runner repaired|Copy-Item[\s\S]{0,160}-Destination\s+\$RunnerPath/.test(publicSlotAntiRollbackGuard)) {
   issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not rewrite tracked public-slot source files");
 }
-for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "09:00-12:00"]) {
+for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "08:45 futopt", "08:55 preopen", "08:45-12:00"]) {
   if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
 }
 for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
@@ -1323,7 +1323,6 @@ for (const marker of [
   "STRATEGY2_ENTRY_END_MINUTES",
   "STRATEGY2_SCAN_END_MINUTES",
   "525",
-  "545",
   "720",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing strategy2 governance marker ${marker}`);
@@ -1741,7 +1740,7 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
     "不升級 A 區",
     "afterhours_stopped_ok",
     "STRATEGY2_SCAN_START_MINUTES = 525",
-    "STRATEGY2_ENTRY_START_MINUTES = 545",
+    "STRATEGY2_ENTRY_START_MINUTES = 525",
     "STRATEGY2_ENTRY_END_MINUTES = 720",
     "STRATEGY2_SCAN_END_MINUTES = 720",
     "npm run verify:publish-gate",
@@ -1845,14 +1844,17 @@ if (fetchResult.status !== 0) {
       "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
       "legacy-entrypoint-guard.ps1",
+      "run-full-scan.ps1",
       "run-live-freshness-gate.ps1",
+      "run-strategy2-intraday.ps1",
       "scanner-resource-health.ps1",
       "run-chip-source-sync.ps1",
       "run-api-only-retired-cleanup.ps1",
       "run-cache-sync.ps1",
       "run-open-buy-sync-retry.ps1",
       "scripts/intraday-radar-rules.js",
-  "scripts/scan-intraday-signals.js",
+      "scripts/patrol-intraday-signals.js",
+      "scripts/scan-intraday-signals.js",
       "scripts/scan-institution-cache.js",
       "scripts/sync-official-chip-data.js",
       "scripts/verify-chip-source-health.js",

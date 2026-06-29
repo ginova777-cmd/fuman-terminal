@@ -2,7 +2,7 @@
 -- Purpose:
 --   - Keep hot API/terminal reads fast.
 --   - Preserve latest complete run unless 08:45 futopt, 08:55 preopen hot,
---     09:00-12:00 intraday 1m, and latest execution are all 100%.
+--     08:45-12:00 intraday 1m, and latest execution are all 100%.
 
 create table if not exists public.strategy2_readiness_status_cache (
   id text primary key default 'latest',
@@ -285,7 +285,7 @@ begin
     v_reasons := array_append(v_reasons, format('08:55 preopen_hot %s/%s ready', v_preopen_hot_ready, v_preopen_hot_expected));
   end if;
   if v_intraday_expected <= 0 or v_intraday_ready <> v_intraday_expected then
-    v_reasons := array_append(v_reasons, format('09:00-12:00 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
+    v_reasons := array_append(v_reasons, format('08:45-12:00 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
   end if;
   if v_latest.run_id is null
      or v_latest.complete is not true

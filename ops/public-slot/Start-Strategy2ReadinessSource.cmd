@@ -8,7 +8,7 @@ if not exist "%PWSH%" set "PWSH=powershell.exe"
 rem Strategy2 readiness source:
 rem - 08:45 futopt: keep futopt_quotes_live fresh for stock futures.
 rem - 08:55 preopen: write preopen snapshot history densely enough for 3 samples / 1 minute.
-rem - 09:00-12:00: keep full quote universe and 1m aggregation warm for ready_ge_35.
+rem - 08:45-12:00: keep full quote universe and 1m aggregation warm for ready_ge_35.
 node "%SCRIPT_DIR%..\..\scripts\check-strategy2-trading-day.js" --closed-exit-code=10
 if %ERRORLEVEL% EQU 10 exit /b 0
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%

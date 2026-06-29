@@ -52,7 +52,7 @@ const REALTIME_RESCUE_COVERAGE = Number(process.env.STRATEGY2_REALTIME_RESCUE_CO
 const REALTIME_RESCUE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_LIMIT || 60));
 const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REALTIME_RESCUE_COOLDOWN_MS || 30 * 1000));
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
-const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || 8 * 60);
+const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || (8 * 60 + 45));
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || (8 * 60 + 45));
 const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (12 * 60));
 const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (12 * 60));
@@ -532,21 +532,116 @@ function buildStrategy2DeltaReport(report) {
     records: (slim.records || []).filter((record) => codes.has(String(record.code || ""))).slice(0, 32),
   };
 }
-function writeStrategy2HistorySnapshot(report, key, options = {}) {
+function strategy2LiveRecordMinute(record) {
+  const raw = String(record?.timestamp || record?.entryAt || record?.quoteTime || record?.time || "").trim();
+  const match = raw.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isStrategy2LiveLedgerRecord(record, key) {
+  if (!record || typeof record !== "object") return false;
+  const recordDate = compactDateKey(record.date || record.scanDate || record.timestamp || record.entryAt, key);
+  if (recordDate && recordDate !== key) return false;
+  const minute = strategy2LiveRecordMinute(record);
+  if (minute === null) return true;
+  return minute >= STRATEGY2_SCAN_START_MINUTES && minute <= STRATEGY2_SCAN_END_MINUTES;
+}
+
+function strategy2LiveLedgerRecordKey(record) {
+  return [
+    compactDateKey(record?.date || record?.timestamp || record?.entryAt, ""),
+    String(record?.timestamp || record?.entryAt || record?.quoteTime || record?.time || ""),
+    String(record?.code || record?.symbol || ""),
+    String(record?.signalId || record?.signal_id || record?.primaryStrategy || ""),
+    String(record?.stateId || record?.state_id || ""),
+    String(record?.strategy || ""),
+  ].join("|");
+}
+
+function mergeStrategy2LiveLedgerRows(existingRows, incomingRows, key) {
+  const merged = new Map();
+  const add = (row, source) => {
+    if (!isStrategy2LiveLedgerRecord(row, key)) return;
+    const normalized = {
+      ...row,
+      date: key,
+      liveWindow: "08:45-12:00",
+      liveLedgerSource: source,
+    };
+    const rowKey = strategy2LiveLedgerRecordKey(normalized);
+    if (!rowKey.replace(/\|/g, "")) return;
+    const current = merged.get(rowKey);
+    merged.set(rowKey, current ? { ...current, ...normalized } : normalized);
+  };
+  (Array.isArray(existingRows) ? existingRows : []).forEach((row) => add(row, "history-ledger"));
+  (Array.isArray(incomingRows) ? incomingRows : []).forEach((row) => add(row, "live-scan"));
+  return [...merged.values()].sort((a, b) => {
+    return String(a.timestamp || a.entryAt || "").localeCompare(String(b.timestamp || b.entryAt || ""))
+      || cleanNumber(b.score) - cleanNumber(a.score)
+      || String(a.code || "").localeCompare(String(b.code || ""), "zh-Hant");
+  });
+}
+
+function buildStrategy2LiveLedgerReport(report, key) {
   const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
   const records = Array.isArray(report?.records) ? report.records : [];
   const events = Array.isArray(report?.events) ? report.events : [];
-  if (!records.length && !events.length && !options.allowEmpty) return false;
-  writeJson(strategy2HistoryFile, {
+  const existing = readJson(strategy2HistoryFile, {});
+  const existingRecords = Array.isArray(existing?.records) ? existing.records : [];
+  const mergedRecords = mergeStrategy2LiveLedgerRows(existingRecords, records, key);
+  const mergedEvents = mergedRecords.length ? mergeStrategy2Events(mergedRecords, key) : events;
+  if (!mergedRecords.length && !mergedEvents.length) return null;
+  const times = [...new Set(mergedRecords.map((record) => timeLabel(record.timestamp || record.entryAt || record.quoteTime || record.time)).filter(Boolean))].sort();
+  return {
+    ...existing,
     ...report,
-    historyContract: "strategy2-session-history-0845-1200-v1",
+    source: report.source || "strategy2-0845-1200-live-patrol",
+    cacheSource: report.cacheSource || "strategy2-live-ledger",
+    records: mergedRecords,
+    events: mergedEvents,
+    entryCount: mergedEvents.filter((event) => event.firstAAt || event.stateId === "entry" || event.stateId === "go").length,
+    aCount: mergedEvents.filter((event) => event.firstAAt || event.stateId === "entry" || event.stateId === "go").length,
+    bOnlyCount: mergedRecords.filter((record) => !isEntryState(record)).length,
+    totalCount: mergedRecords.length,
+    scanned: mergedRecords.length,
+    total: mergedRecords.length,
+    historyContract: "strategy2-live-ledger-0845-1200-v2",
     historyWindow: {
       start: "08:45",
       end: "12:00",
-      source: "scanner-accumulated-signals",
+      timezone: "Asia/Taipei",
+      source: "scanner-append-only-live-ledger",
+      uniqueRecordTimes: times.length,
+      firstRecordAt: times[0] || "",
+      lastRecordAt: times[times.length - 1] || "",
     },
-  });
-  return true;
+    scanWindow: {
+      ...(report.scanWindow || {}),
+      start: "08:45:00",
+      end: "12:00:00",
+      timezone: "Asia/Taipei",
+      mode: "live-detection-ledger",
+      uniqueRecordTimes: times.length,
+      firstRecordAt: times[0] || "",
+      lastRecordAt: times[times.length - 1] || "",
+    },
+  };
+}
+
+function writeStrategy2HistorySnapshot(report, key, options = {}) {
+  const ledgerReport = buildStrategy2LiveLedgerReport(report, key);
+  if (!ledgerReport && !options.allowEmpty) return null;
+  const strategy2HistoryFile = path.join(STRATEGY2_HISTORY_DIR, `${key}.json`);
+  const payload = ledgerReport || {
+    ...report,
+    records: [],
+    events: [],
+    historyContract: "strategy2-live-ledger-0845-1200-v2",
+    historyWindow: { start: "08:45", end: "12:00", timezone: "Asia/Taipei", source: "scanner-append-only-live-ledger" },
+  };
+  writeJson(strategy2HistoryFile, payload);
+  return payload;
 }
 
 function writeStaticDataTargets(name, payload, options = {}) {
@@ -3352,8 +3447,8 @@ async function main() {
     writeJson(SIGNAL_FILE, cache);
     if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
-    writeStrategy2HistorySnapshot(strategy2Report, key);
-    await upsertStrategy2LatestToSupabase(strategy2Report);
+    const strategy2LiveLedgerReport = writeStrategy2HistorySnapshot(strategy2Report, key) || strategy2Report;
+    await upsertStrategy2LatestToSupabase(strategy2LiveLedgerReport);
     console.log(`strategy2 quote source unhealthy: ${sharedSourceHealth.reason || sharedSourceHealth.message || "unknown"}`);
     return;
   }
@@ -3421,7 +3516,7 @@ async function main() {
     cache.realtime = { ...realtimeSummaryBase, skippedPartialCoverage: true };
     const strategy2Events = mergeStrategy2Events(cache.records || [], key);
     const strategy2Report = enforceStrategy2EntryGuards({
-      source: "strategy2-09-to-1330-patrol",
+      source: "strategy2-0845-1200-live-patrol",
       date: key,
       updatedAt: cache.updatedAt,
       realtime: cache.realtime,
@@ -3435,9 +3530,9 @@ async function main() {
     writeJson(SIGNAL_FILE, cache);
     if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
     publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
-    writeStrategy2HistorySnapshot(strategy2Report, key);
+    const strategy2LiveLedgerReport = writeStrategy2HistorySnapshot(strategy2Report, key) || strategy2Report;
     await upsertStrategy2MinuteCandlesToSupabase(cache, key);
-  await upsertStrategy2LatestToSupabase(strategy2Report);
+  await upsertStrategy2LatestToSupabase(strategy2LiveLedgerReport);
     console.log(`intraday signals ${key}: skipped partial realtime coverage ${realtimeStocks.length}/${realtimeSourceStocks.length} (entry coverage ${entrySourceCoverage.toFixed(4)}, received ${realtimeStats.received}, failed ${realtimeStats.failed}, missed ${realtimeStats.missedCount || 0})`);
     return;
   }
@@ -3784,7 +3879,7 @@ async function main() {
     tradableByQuote: liveStocks.length,
   };
   const strategy2Report = enforceStrategy2EntryGuards({
-    source: "strategy2-09-to-1330-patrol",
+    source: "strategy2-0845-1200-live-patrol",
     date: key,
     updatedAt: cache.updatedAt,
     realtime: realtimeSummary,
@@ -3798,8 +3893,8 @@ async function main() {
   writeJson(SIGNAL_FILE, cache);
   if (!STRATEGY2_API_ONLY) writeJson(STRATEGY2_REPORT_FILE, strategy2Report);
   publishStaticDataJson("strategy2-intraday-latest.json", strategy2Report);
-  writeStrategy2HistorySnapshot(strategy2Report, key);
-  await upsertStrategy2LatestToSupabase(strategy2Report);
+  const strategy2LiveLedgerReport = writeStrategy2HistorySnapshot(strategy2Report, key) || strategy2Report;
+  await upsertStrategy2LatestToSupabase(strategy2LiveLedgerReport);
   const rotationMessages = rotateStrategy2IntradayCache({ currentDateKey: key });
   rotationMessages.forEach((message) => console.log(`strategy2 cache rotation: ${message}`));
   writeJson(SCORECARD_TRACK_FILE, scorecardTracker);

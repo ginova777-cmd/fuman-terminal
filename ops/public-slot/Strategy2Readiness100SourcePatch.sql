@@ -844,7 +844,7 @@ begin
     v_reasons := array_append(v_reasons, format('08:55 preopen_hot %s/%s ready', v_preopen_hot_ready, v_preopen_hot_expected));
   end if;
   if v_intraday_expected <= 0 or v_intraday_ready <> v_intraday_expected then
-    v_reasons := array_append(v_reasons, format('09:00-12:00 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
+    v_reasons := array_append(v_reasons, format('08:45-12:00 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
   end if;
   if v_latest.run_id is null
      or v_latest.complete is not true
