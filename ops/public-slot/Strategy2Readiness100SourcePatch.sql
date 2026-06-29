@@ -310,8 +310,8 @@ select
   c.is_trial,
   c.quote_updated_at,
   c.avg_20d_volume,
-  c.avg_5d_days,
-  c.avg_20d_days,
+  c.avg_5d_days::bigint as avg_5d_days,
+  c.avg_20d_days::bigint as avg_20d_days,
   c.intraday_1m_status_updated_at
 from public.strategy2_intraday_ready_cache c
 where c.symbol ~ '^[0-9]{4}$';
