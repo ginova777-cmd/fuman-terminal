@@ -3007,8 +3007,15 @@ do {
       $strategy2ReadyMaxPages = Get-Strategy2ReadyRefreshMaxPages
       $strategy2ReadyLast = $null
       $strategy2ReadyEffectivePageSize = Get-Strategy2ReadyEffectivePageSize
+      $strategy2ReadyRpcOk = $false
       for ($readyPage = 0; $readyPage -lt $strategy2ReadyMaxPages; $readyPage++) {
         $strategy2ReadyLast = Invoke-PublicSlotRpc -FunctionName "refresh_strategy2_intraday_ready_cache" -Body (Get-Strategy2ReadyRefreshBody -ReadyPage $readyPage)
+        if ($null -eq $strategy2ReadyLast) {
+          $strategy2ReadyNextOffset = -1
+          Write-Log "WARN strategy2 ready cache RPC returned null page=$readyPage; stopping refresh and preserving incomplete state"
+          break
+        }
+        $strategy2ReadyRpcOk = $true
         $strategy2ReadyPages += 1
         $processedThisPage = [int](Get-Number $strategy2ReadyLast.processed)
         $strategy2ReadyProcessed += $processedThisPage
@@ -3028,7 +3035,11 @@ do {
         }
         if ($strategy2ReadyNextOffset -eq 0) { break }
       }
-      if ($strategy2ReadyTotalExpected -gt 0 -and $strategy2ReadyNextOffset -ne 0) {
+      if (-not $strategy2ReadyRpcOk) {
+        Write-Log "WARN strategy2 ready cache partial refresh; strategy2 ready cache incomplete full-cycle rpc_failed pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"
+      } elseif ($strategy2ReadyTotalExpected -le 0) {
+        Write-Log "WARN strategy2 ready cache partial refresh; strategy2 ready cache incomplete full-cycle missing_total_expected pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"
+      } elseif ($strategy2ReadyNextOffset -ne 0) {
         Write-Log "WARN strategy2 ready cache partial refresh; strategy2 ready cache incomplete full-cycle pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"
       } else {
         Write-Log "strategy2 ready cache full-cycle refreshed pages=$strategy2ReadyPages/$strategy2ReadyMaxPages processed=$strategy2ReadyProcessed total_expected=$strategy2ReadyTotalExpected next_offset=$strategy2ReadyNextOffset page_size=$strategy2ReadyEffectivePageSize last=$strategy2ReadyLast"

@@ -579,7 +579,7 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
   if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
 }
-for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "strategy2 ready cache partial refresh", "strategy2 ready cache incomplete full-cycle", "next_offset", "total_expected", "Get-Strategy2ReadyRefreshMaxPages"]) {
+for (const marker of ["refresh_strategy2_readiness_cache", "strategy2 readiness cache refreshed", "refresh_strategy2_preopen_hot_gate_cache", "strategy2 preopen hot gate cache refreshed", "strategy2 ready cache full-cycle refreshed", "strategy2 ready cache partial refresh", "strategy2 ready cache incomplete full-cycle", "rpc_failed", "missing_total_expected", "next_offset", "total_expected", "Get-Strategy2ReadyRefreshMaxPages", "strategy2ReadyRpcOk"]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing Strategy2 readiness refresh marker ${marker}`);
 }
 if (/\$readyPage\s*=\s*0;\s*\$readyPage\s*-lt\s*12;/.test(publicSlotSharedSourceRunner)) {
