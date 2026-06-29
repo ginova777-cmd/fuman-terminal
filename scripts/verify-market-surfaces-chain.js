@@ -123,6 +123,24 @@ function latestUiPass(rows, routeKey, kind = "") {
 async function main() {
   const checks = [];
   const details = {};
+  const marketAiApiSource = readText("api/market-ai-live.js");
+
+  details.aiStaticContract = {
+    noChangeAsPercent: !/PCT_KEYS\s*=\s*\[[^\]]*["']Change["']/m.test(marketAiApiSource)
+      && !/firstNumber(?:WithKey)?\(\s*row\s*,\s*\[[^\]]*["']Change["']/m.test(marketAiApiSource),
+    hasDataFreshness: /dataFreshness/.test(marketAiApiSource),
+    hasPriorityStaleBlock: /priorityStaleBlocked/.test(marketAiApiSource),
+    hasOpenDetectGate: /requiresTodayDetection/.test(marketAiApiSource)
+      && /allowLatestFallback:\s*!mustDetectToday/.test(marketAiApiSource)
+      && /canServeCachedPayload\(request,\s*detectWindowActive,\s*mustDetectToday\)/.test(marketAiApiSource),
+  };
+  addCheck(
+    checks,
+    Object.values(details.aiStaticContract).every(Boolean),
+    "ai-static-freshness-contract",
+    "AI 判讀 must not treat Change as percent and must keep same-day freshness gate",
+    details.aiStaticContract
+  );
 
   const market = await fetchJson("/api/market", 35000);
   const marketRows = normalizeRows(market.json);
@@ -179,6 +197,9 @@ async function main() {
     realtimeRadarCount: cleanNumber(ai.json?.summary?.realtimeRadarCount),
     aiDetectWindow: ai.json?.aiDetectWindow || {},
     marketSession: ai.json?.marketSession || {},
+    dataFreshness: ai.json?.dataFreshness || {},
+    priorityObservation: ai.json?.priorityObservation || {},
+    percentSources: [...new Set(aiRows.map((row) => row?.percentSource).filter(Boolean))],
   };
   addCheck(checks, ai.ok && ai.json?.ok !== false, "ai-api-ok", "AI 判讀 /api/market-ai-live must return ok 2xx", details.ai);
   addCheck(checks, details.ai.breadthSample > 0 || details.ai.strategy2Count > 0 || details.ai.realtimeRadarCount > 0 || details.ai.rows > 0, "ai-api-content", "AI 判讀 must expose breadth, strategy2, realtime radar, or AI rows", details.ai);
@@ -186,6 +207,15 @@ async function main() {
   addCheck(checks, details.ai.filterCount >= 5 && ["all", "momentum", "institution", "intraday", "risk"].every((key) => details.ai.groupKeys.includes(key)), "ai-filter-groups", "AI 判讀 must expose all five capsule groups", details.ai);
   addCheck(checks, details.ai.todayPoints >= 4 && details.ai.riskNotes >= 2 && details.ai.reasoning >= 4, "ai-judgement-fields", "AI 判讀 must expose 今日重點/風險提醒/判讀理由 fields", details.ai);
   addCheck(checks, Object.values(details.ai.fieldCompleteness || {}).every(Boolean), "ai-field-completeness", "AI 判讀 fieldCompleteness must be true for required dashboard fields", details.ai);
+  addCheck(checks, Boolean(details.ai.dataFreshness?.today), "ai-data-freshness-contract", "AI 判讀 must expose dataFreshness.today and source dates", details.ai);
+  addCheck(checks, !details.ai.percentSources.includes("Change"), "ai-percent-source-no-change", "AI 判讀 rows must never use Change as percent source", details.ai);
+  addCheck(
+    checks,
+    !details.ai.dataFreshness?.priorityStaleBlocked || details.ai.priorityObservation?.stock === null,
+    "ai-stale-priority-block",
+    "AI 判讀 must block priorityObservation stock when only stale source data is available",
+    details.ai
+  );
   addCheck(checks, !obviousStaticFallback(ai.json), "ai-no-static-fallback", "AI 判讀 must not use static/local fallback as authority", details.ai);
 
   const realtime = await fetchJson("/api/realtime-radar-latest?full=1&limit=1200", 35000);

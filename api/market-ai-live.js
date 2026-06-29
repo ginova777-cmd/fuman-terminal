@@ -133,6 +133,59 @@ function marketPayloadTradeDates(payload) {
   ];
 }
 
+function rowTradeDate(row) {
+  return compactDate(firstText(row, [
+    "quoteDate",
+    "tradeDate",
+    "resolvedTradeDate",
+    "sourceTradeDate",
+    "date",
+    "Date",
+    "radarDate",
+    "marketDataDate",
+    "timestamp",
+    "updatedAt",
+    "quoteUpdatedAt",
+    "radarUpdatedAt",
+  ], ""));
+}
+
+function payloadTradeDate(payload) {
+  const rowDates = rowsFromPayload(payload).map(rowTradeDate).filter(Boolean);
+  return [
+    payload?.resolvedTradeDate,
+    payload?.tradeDate,
+    payload?.sourceTradeDate,
+    payload?.date,
+    payload?.marketDataDate,
+    payload?.dashboard?.tradeDate,
+    payload?.snapshot?.tradeDate,
+    payload?.marketSession?.marketDataDate,
+    payload?.market?.resolvedTradeDate,
+    payload?.market?.sourceTradeDate,
+    payload?.market?.marketDates?.twse,
+    payload?.market?.marketDates?.tpex,
+    payload?.heatmap?.resolvedTradeDate,
+    payload?.heatmap?.tradeDate,
+    payload?.realtimeRadar?.date,
+    payload?.realtimeRadar?.tradeDate,
+    payload?.realtimeRadar?.marketSession?.marketDataDate,
+    ...rowDates,
+  ].map(compactDate).filter(Boolean).sort().at(-1) || "";
+}
+
+function isTodayDate(value, clock) {
+  const date = compactDate(value);
+  return Boolean(date && date === clock.ymd);
+}
+
+function filterRowsForToday(rows, clock, parentIsToday) {
+  return normalizeArray(rows).filter((row) => {
+    const date = rowTradeDate(row);
+    return date ? date === clock.ymd : parentIsToday;
+  });
+}
+
 function newestMarketDataDate(breadth, marketSummary, stocksSlim, cached) {
   return [
     marketSummary?.marketDates?.twse,
@@ -152,15 +205,24 @@ function isWeekend(clock) {
 function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
   const marketDataDate = newestMarketDataDate(breadth, marketSummary, stocksSlim, cached);
   const hasTodayMarketData = Boolean(marketDataDate && marketDataDate === clock.ymd);
-  const closed = isWeekend(clock) || !hasTodayMarketData;
+  const closed = isWeekend(clock);
   return {
     taipeiDate: clock.date,
     today: clock.ymd,
     marketDataDate,
     hasTodayMarketData,
     closed,
-    reason: isWeekend(clock) ? "weekend" : hasTodayMarketData ? "today-market-data" : "no-today-market-data",
+    stale: !hasTodayMarketData,
+    reason: isWeekend(clock) ? "weekend" : hasTodayMarketData ? "today-market-data" : "awaiting-today-market-data",
   };
+}
+
+function requiresTodayDetection(clock, session) {
+  return Boolean(isMarketAiDetectWindow(clock) && !session?.closed && !session?.hasTodayMarketData);
+}
+
+function canServeCachedPayload(request, detectWindowActive, mustDetectToday) {
+  return Boolean(!mustDetectToday && (!shouldRefresh(request) || !detectWindowActive));
 }
 
 function cachedResponsePayload(cached, breadth, clock, reason = "cache") {
@@ -290,6 +352,15 @@ function firstNumber(row, keys, fallback = 0) {
   return fallback;
 }
 
+function firstNumberWithKey(row, keys, fallback = 0) {
+  for (const key of keys) {
+    const value = key.split(".").reduce((current, part) => current?.[part], row);
+    const number = cleanNumber(value);
+    if (number) return { value: number, key };
+  }
+  return { value: fallback, key: "" };
+}
+
 function rowsFromPayload(payload) {
   for (const key of ["rows", "items", "signals", "records", "events", "matches", "data", "top", "hotStocks"]) {
     if (Array.isArray(payload?.[key])) return payload[key];
@@ -312,8 +383,10 @@ function heatmapStocks(payload) {
     })));
 }
 
+const PCT_KEYS = ["percent", "pct", "changePercent", "change_percent"];
+
 function scoreRow(row, source = "") {
-  const pct = firstNumber(row, ["percent", "pct", "changePercent", "change_percent", "Change"]);
+  const pct = firstNumberWithKey(row, PCT_KEYS).value;
   const value = firstNumber(row, ["value", "tradeValue", "TradeValue", "amount", "amountYi"]);
   const baseScore = firstNumber(row, ["score", "aiScore", "rankScore", "finalScore"]);
   const side = firstText(row, ["side", "direction", "state"], "");
@@ -326,7 +399,8 @@ function normalizeStockRow(row, source, extraTags = []) {
   const code = firstText(row, ["code", "Code", "symbol", "stockId", "stock_id", "ticker"], "").trim();
   if (!/^\d{4}$/.test(code)) return null;
   const name = firstText(row, ["name", "Name", "stockName", "stock_name", "company"], code);
-  const pct = firstNumber(row, ["percent", "pct", "changePercent", "change_percent", "Change"]);
+  const pctInfo = firstNumberWithKey(row, PCT_KEYS);
+  const pct = pctInfo.value;
   const close = firstNumber(row, ["price", "close", "ClosingPrice", "lastPrice", "latestClose"]);
   const value = firstNumber(row, ["value", "tradeValue", "TradeValue", "amount", "amountYi"]);
   const volume = firstNumber(row, ["volume", "tradeVolume", "TradeVolume", "totalVolume"]);
@@ -346,6 +420,8 @@ function normalizeStockRow(row, source, extraTags = []) {
     price: close,
     pct,
     percent: pct,
+    percentSource: pctInfo.key,
+    quoteDate: rowTradeDate(row),
     value,
     tradeValue: value,
     volume,
@@ -382,15 +458,24 @@ function groupPayload(label, source, rows, note = "") {
 }
 
 function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, session) {
-  const sectors = normalizeArray(heatmapPayload?.sectors);
-  const sectorStocks = heatmapStocks(heatmapPayload);
-  const radarRows = rowsFromPayload(radarPayload);
-  const baseRows = rowsFromPayload(payload);
-  const up = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.up), 0);
-  const down = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.down), 0);
-  const sample = cleanNumber(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || payload?.breadth?.sample) || sectorStocks.length || up + down;
-  const upRatio = sample ? up / sample * 100 : 0;
-  const downRatio = sample ? down / sample * 100 : 0;
+  const heatmapTradeDate = payloadTradeDate(heatmapPayload);
+  const radarTradeDate = payloadTradeDate(radarPayload);
+  const baseTradeDate = payloadTradeDate(payload);
+  const heatmapIsToday = isTodayDate(heatmapTradeDate, clock);
+  const radarIsToday = isTodayDate(radarTradeDate, clock);
+  const baseIsToday = isTodayDate(baseTradeDate, clock);
+  const staleSources = [
+    heatmapTradeDate && !heatmapIsToday ? `熱力圖 ${heatmapTradeDate}` : "",
+    radarTradeDate && !radarIsToday ? `即時雷達 ${radarTradeDate}` : "",
+    baseTradeDate && !baseIsToday ? `AI cache ${baseTradeDate}` : "",
+  ].filter(Boolean);
+
+  const sectors = heatmapIsToday ? normalizeArray(heatmapPayload?.sectors) : [];
+  const sectorStocks = heatmapIsToday ? heatmapStocks(heatmapPayload) : [];
+  const radarRows = filterRowsForToday(rowsFromPayload(radarPayload), clock, radarIsToday);
+  const baseRows = filterRowsForToday(rowsFromPayload(payload), clock, baseIsToday);
+  const heatmapUp = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.up), 0);
+  const heatmapDown = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.down), 0);
   const strongSectors = sectors.filter((sector) => cleanNumber(sector?.pct ?? sector?.avgPct) > 0)
     .sort((a, b) => cleanNumber(b?.pct ?? b?.avgPct) - cleanNumber(a?.pct ?? a?.avgPct))
     .slice(0, 5);
@@ -407,6 +492,16 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     .filter(Boolean);
 
   const allRows = mergeStockRows(normalizedBase, normalizedRadar, normalizedHeatmap).slice(0, 60);
+  const rowUp = allRows.filter((row) => cleanNumber(row.pct) > 0).length;
+  const rowDown = allRows.filter((row) => cleanNumber(row.pct) < 0).length;
+  const sample = heatmapIsToday
+    ? cleanNumber(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || payload?.breadth?.sample) || sectorStocks.length || heatmapUp + heatmapDown
+    : allRows.length;
+  const up = heatmapIsToday ? heatmapUp : rowUp;
+  const down = heatmapIsToday ? heatmapDown : rowDown;
+  const upRatio = sample ? up / sample * 100 : 0;
+  const downRatio = sample ? down / sample * 100 : 0;
+
   const momentumRows = allRows
     .filter((row) => cleanNumber(row.pct) > 0 || /動能|強勢|多/i.test(`${row.tags.join(" ")} ${row.reason}`))
     .sort((a, b) => cleanNumber(b.pct) - cleanNumber(a.pct) || cleanNumber(b.score) - cleanNumber(a.score))
@@ -432,7 +527,21 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const confidence = !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
   const bias = hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
   const action = hasDirectionalBreadth ? (up >= down ? "降低追價" : "等待方向") : "等待方向";
-  const tradeDate = heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || session?.marketDataDate || clock.ymd;
+  const tradeDate = heatmapIsToday ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || clock.ymd) : session?.marketDataDate || clock.ymd;
+  const priorityStaleBlocked = Boolean(staleSources.length && !topStock);
+  const priorityObservation = topStock ? {
+    title: `${topStock.code} ${topStock.name}`,
+    text: `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。`,
+    stock: topStock,
+    staleBlocked: false,
+  } : {
+    title: "--",
+    text: staleSources.length
+      ? `等待今日 ${clock.ymd} 即時資料；已排除 ${staleSources.join("、")}，舊 snapshot 不產生優先觀察。`
+      : "等待即時雷達與熱力圖資料。",
+    stock: null,
+    staleBlocked: priorityStaleBlocked,
+  };
 
   const groups = {
     all: groupPayload("全部", "AI merge: heatmap + realtime radar + market-ai", allGroupRows, "綜合分數排序"),
@@ -454,7 +563,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       ? `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，目前判定為${bias}。`
       : `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，漲跌方向等待 heatmap snapshot 補齊，不用舊 fallback 假判斷。`,
     `族群聚焦：${strongNames.length ? strongNames.join("、") : "等待強勢族群成形"}。`,
-    `優先觀察：${topStock ? `${topStock.code} ${topStock.name}，${topStock.reason}` : "等待即時雷達與熱力圖合流訊號"}。`,
+    `優先觀察：${topStock ? `${topStock.code} ${topStock.name}，${topStock.reason}` : priorityObservation.text}。`,
     `風險提醒：${weakNames.length ? weakNames.join("、") : "暫無明顯弱勢族群"}，高分標的仍需量價確認。`,
   ];
   const riskNotes = [
@@ -462,7 +571,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     { title: "弱勢排除", text: weakNames.length ? `${weakNames.join("、")} 偏弱，先從觀察名單排除風險高標的。` : "弱勢族群沒有明顯擴散，仍需留意尾盤翻弱。" },
   ];
   const reasoning = [
-    { key: "breadth", title: `上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%`, text: `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。` },
+    { key: "breadth", title: `上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%`, text: heatmapIsToday ? `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。` : "今日熱力圖尚未完成，暫不使用舊 snapshot 判斷市場方向。" },
     { key: "radar", title: `${normalizedRadar.length.toLocaleString("zh-TW")} 檔即時雷達`, text: "只採 API-only 最新資料，不讀舊 DOM snapshot。" },
     { key: "sector", title: `強族群前 ${Math.min(3, strongNames.length)} 名`, text: strongNames.join("、") || "等待族群擴散。" },
     { key: "risk", title: groups.risk.count ? "風險標的先排除" : "風險暫無集中", text: groups.risk.rows.slice(0, 4).map((row) => `${row.code} ${row.name}`).join("、") || weakNames.join("、") || "等待風險訊號。" },
@@ -476,11 +585,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     filters,
     todayPoints,
     riskNotes,
-    priorityObservation: topStock ? {
-      title: `${topStock.code} ${topStock.name}`,
-      text: `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。`,
-      stock: topStock,
-    } : { title: "--", text: "等待即時雷達與熱力圖資料。", stock: null },
+    priorityObservation,
     sectorFocus: {
       title: strongNames.length ? strongNames.join("、") : "等待族群擴散",
       sectors: strongSectors.map((sector) => ({
@@ -510,12 +615,23 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
         aiRows: normalizedBase.length,
       },
     },
+    dataFreshness: {
+      today: clock.ymd,
+      heatmapTradeDate,
+      heatmapIsToday,
+      radarTradeDate,
+      radarIsToday,
+      baseTradeDate,
+      baseIsToday,
+      staleSources,
+      priorityStaleBlocked,
+    },
     fieldCompleteness: {
       todayPoints: todayPoints.length >= 4,
       riskNotes: riskNotes.length >= 2,
-      priorityObservation: Boolean(topStock),
-      sectorFocus: Boolean(strongSectors.length || weakSectors.length || sectors.length || allGroupRows.length),
-      hotStocks: allGroupRows.length > 0,
+      priorityObservation: Boolean(priorityObservation),
+      sectorFocus: Boolean(strongSectors.length || weakSectors.length || sectors.length || allGroupRows.length || staleSources.length),
+      hotStocks: allGroupRows.length > 0 || staleSources.length > 0,
       reasoning: reasoning.length >= 4,
       filters: filters.length === 5,
     },
@@ -572,6 +688,7 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
     sectorFocus: insights.sectorFocus,
     reasoning: insights.reasoning,
     dashboard: insights.dashboard,
+    dataFreshness: insights.dataFreshness,
     fieldCompleteness: insights.fieldCompleteness,
     summary: {
       ...(payload?.summary || {}),
@@ -605,32 +722,34 @@ module.exports = async function handler(request, response) {
   const marketSummary = readCachedMarketSummary();
   const stocksSlim = readCachedStocksSlim();
   const session = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
+  const mustDetectToday = requiresTodayDetection(clock, session);
+  const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday };
 
   if (cached && session.closed && !shouldRefresh(request)) {
     const payload = normalizeNonTradingCachePayload(
       cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
-      session
+      sessionForPayload
     );
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, session));
+    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
     return;
   }
 
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
-    allowLatestFallback: true,
+    allowLatestFallback: !mustDetectToday,
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
   if (snapshot?.payload) {
     const payload = {
       ...snapshotResponsePayload(snapshot, breadth, clock),
-      marketSession: session,
+      marketSession: sessionForPayload,
     };
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, session));
+    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
     return;
   }
 
-  if (cached && (!shouldRefresh(request) || !detectWindowActive)) {
+  if (cached && canServeCachedPayload(request, detectWindowActive, mustDetectToday)) {
     const payload = {
       ...cachedResponsePayload(
         cached,
@@ -638,9 +757,9 @@ module.exports = async function handler(request, response) {
         clock,
         detectWindowActive ? "normal-cache" : "after-1330-cache"
       ),
-      marketSession: session,
+      marketSession: sessionForPayload,
     };
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, session));
+    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
     return;
   }
 
@@ -677,19 +796,29 @@ module.exports = async function handler(request, response) {
       start: "09:00:00",
       end: "13:30:00",
       active: detectWindowActive,
-      reason: detectWindowActive ? "live-detect-window" : "cache-missing-fallback",
+      reason: mustDetectToday ? "live-detect-required" : detectWindowActive ? "live-detect-window" : "cache-missing-fallback",
       taipeiDate: clock.date,
       taipeiTime: clock.time,
     },
-    marketSession: session,
+    marketSession: sessionForPayload,
   };
-  const enrichedPayload = await enrichMarketAiPayload(payload, request, clock, session, { heatmapPayload, radarPayload: realtimeRadar });
+  const enrichedPayload = await enrichMarketAiPayload(payload, request, clock, sessionForPayload, { heatmapPayload, radarPayload: realtimeRadar });
 
   for (const file of cacheCandidates()) {
     try { writeJsonAtomic(file, enrichedPayload); } catch {}
   }
 
   response.status(200).json(enrichedPayload);
+};
+
+module.exports.__test = {
+  buildMarketAiInsights,
+  normalizeStockRow,
+  scoreRow,
+  taipeiClock,
+  marketSessionState,
+  requiresTodayDetection,
+  canServeCachedPayload,
 };
 
 
