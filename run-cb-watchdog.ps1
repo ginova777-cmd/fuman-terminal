@@ -72,7 +72,9 @@ if ($result.ok) {
 }
 
 Write-WatchdogLog "Watchdog stale: $($result.reason); starting rerun"
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${PSScriptRoot}\run-cb-detect.ps1" >> $log 2>&1
+$pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
+if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
+& $pwshExe -NoProfile -ExecutionPolicy Bypass -File "${PSScriptRoot}\run-cb-detect.ps1" >> $log 2>&1
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {
   Write-WatchdogLog "Watchdog rerun failed exit=$exit"

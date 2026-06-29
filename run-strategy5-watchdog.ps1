@@ -127,7 +127,9 @@ if ($running.Count -gt 0) {
 }
 
 Write-WatchdogLog "starting strategy5 runner: $runner"
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $runner *>&1 | ForEach-Object {
+$pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
+if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
+& $pwshExe -NoProfile -ExecutionPolicy Bypass -File $runner *>&1 | ForEach-Object {
   Add-Content -LiteralPath $log -Value ([string]$_) -Encoding utf8
 }
 

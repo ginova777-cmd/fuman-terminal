@@ -103,7 +103,9 @@ if ($result.ok) {
 Write-WatchdogLog "Watchdog stale: $($result.reason); starting rerun"
 Write-FumanFlowHealth -Scope $Scope -Status watchdog_rerun -Message "Watchdog rerun started" -Detail @{ expectedTime = $ExpectedTime; reason = $result.reason; log = $log }
 $script = if ($Scope -eq "institution") { "${PSScriptRoot}\run-institution.ps1" } else { "${PSScriptRoot}\run-warrant-flow.ps1" }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script >> $log 2>&1
+$pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
+if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
+& $pwshExe -NoProfile -ExecutionPolicy Bypass -File $script >> $log 2>&1
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {
   Write-WatchdogLog "Watchdog rerun failed exit=$exit"
