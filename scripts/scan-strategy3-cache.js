@@ -37,15 +37,17 @@ const MIN_ISSUED_SHARES_COUNT = Number(process.env.STRATEGY3_MIN_ISSUED_SHARES_C
 const MIN_VOLUME_AVERAGE_COUNT = Number(process.env.STRATEGY3_MIN_VOLUME_AVERAGE_COUNT || 1000);
 const STRATEGY3_REQUIRE_TV_ENTRY = process.env.STRATEGY3_REQUIRE_TV_ENTRY !== "0";
 const STRATEGY3_TV_CANDIDATE_LIMIT = Number(process.env.STRATEGY3_TV_CANDIDATE_LIMIT || 0);
-const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 160);
+const STRATEGY3_TV_CANDLE_LIMIT = Number(process.env.STRATEGY3_TV_CANDLE_LIMIT || 260);
 const STRATEGY3_TV_CONCURRENCY = Number(process.env.STRATEGY3_TV_CONCURRENCY || 8);
 const STRATEGY3_1M_READBACK_LIMIT = Number(process.env.STRATEGY3_1M_READBACK_LIMIT || 360);
 const STRATEGY3_1M_READBACK_CONCURRENCY = Number(process.env.STRATEGY3_1M_READBACK_CONCURRENCY || 8);
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
 const STRATEGY3_REQUIRE_VOLUME_AVERAGE = process.env.STRATEGY3_REQUIRE_VOLUME_AVERAGE === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
-const STRATEGY3_REQUIRE_AFTER_1300 = process.env.STRATEGY3_REQUIRE_AFTER_1300 !== "0";
-const STRATEGY3_MIN_AFTER_1300_CANDIDATES = Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20);
+const STRATEGY3_REQUIRE_INTRADAY_1M = process.env.STRATEGY3_REQUIRE_INTRADAY_1M !== "0";
+const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
+const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000);
+const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
 const STRATEGY3_MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
 const STRATEGY3_MAX_CHANGE_PERCENT = Number(process.env.STRATEGY3_MAX_CHANGE_PERCENT || 5);
@@ -64,13 +66,13 @@ const SUPABASE_RUNS_TABLE = process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strate
 const STRATEGY3_API_ONLY = true;
 const SUPABASE_RESULTS_ATTEMPTS = Math.max(1, Number(process.env.STRATEGY3_SUPABASE_RESULTS_ATTEMPTS || 3));
 const STRATEGY3_NO_TV_PASS_REASON = "資源已就緒；硬門檻後 TradingView 隔日沖條件本輪 0 檔通過";
-const STRATEGY3_MIN_FIELD_GATE_CANDIDATES = Number(process.env.STRATEGY3_MIN_FIELD_GATE_CANDIDATES || 12);
+const STRATEGY3_MIN_FIELD_GATE_CANDIDATES = Number(process.env.STRATEGY3_MIN_FIELD_GATE_CANDIDATES || 1);
 const STRATEGY3_DRIFT_MIN_QUOTE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_QUOTE_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_FUGLE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_FUGLE_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS || 1000);
 const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISABLED === "1";
-const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 12);
+const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 20);
 const STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW = process.env.STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW !== "0";
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -91,6 +93,9 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   const warnings = [];
   const after1300Count = cleanNumber(exclusionStats.resourceAfter1300Count)
     || stocks.filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
+  const intradayReadyCount = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
+  const latestCandleTime = latestTime(stocks.map((stock) => stock.latestCandleTime));
+  const latestCandleMinute = candleMinutes({ candleTime: latestCandleTime });
   if (STRATEGY3_REQUIRE_TURNOVER && issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
   } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
@@ -101,8 +106,11 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   } else if (volumeAverageMap.size < MIN_VOLUME_AVERAGE_COUNT) {
     warnings.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}; volume ratio is advisory for TV-only strategy3`);
   }
-  if (STRATEGY3_REQUIRE_AFTER_1300 && after1300Count < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
-    issues.push(`after1300ReadyCount ${after1300Count} below ${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
+  if (STRATEGY3_REQUIRE_INTRADAY_1M && intradayReadyCount < STRATEGY3_MIN_INTRADAY_1M_CANDIDATES) {
+    issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${STRATEGY3_MIN_INTRADAY_1M_CANDIDATES}`);
+  }
+  if (STRATEGY3_REQUIRE_INTRADAY_1M && latestCandleMinute != null && latestCandleMinute < STRATEGY3_SESSION_LATEST_MINUTE) {
+    issues.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}`);
   }
   const warningCount = sourceWarnings.length + warnings.length;
   if (warningCount > SOURCE_WARNING_LIMIT) {
@@ -113,16 +121,24 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     issuedSharesCount: issuedSharesMap.size,
     volumeAverageCount: volumeAverageMap.size,
     stockUniverseCount: stocks.length,
+    intraday1mReadyCount: intradayReadyCount,
+    minIntraday1mCandidates: STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
+    minIntraday1mCandles: STRATEGY3_MIN_INTRADAY_1M_CANDLES,
+    latestCandleTime,
+    latestCandleMinute,
+    sessionWindow: "09:00-12:59",
+    entryWindow: "12:50-12:59",
     after1300ReadyCount: after1300Count,
     exclusionStats,
     warningCount,
     warningLimit: SOURCE_WARNING_LIMIT,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
-    minAfter1300Candidates: STRATEGY3_MIN_AFTER_1300_CANDIDATES,
+    minAfter1300Candidates: 0,
     requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
     requireVolumeAverage: STRATEGY3_REQUIRE_VOLUME_AVERAGE,
-    requireAfter1300: STRATEGY3_REQUIRE_AFTER_1300,
+    requireAfter1300: false,
+    requireIntraday1m: STRATEGY3_REQUIRE_INTRADAY_1M,
     issues,
     warnings,
   };
@@ -218,6 +234,21 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function latestTime(values) {
+  return (values || [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
+}
+
+function strategy3HasSession1m(stock) {
+  if (!stock) return false;
+  const count = cleanNumber(stock.intradayCandleCount || stock.todayCandleCount || stock.candleCount);
+  if (count >= STRATEGY3_MIN_INTRADAY_1M_CANDLES) return true;
+  const minute = candleMinutes({ candleTime: stock.latestCandleTime });
+  return count > 0 && minute != null && minute >= STRATEGY3_SESSION_LATEST_MINUTE;
+}
+
 function buildSupabaseHeaders(preferCount = false) {
   const headers = {
     apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -291,22 +322,45 @@ function validateStrategy3PrePublish(output) {
   const matches = Array.isArray(output.matches) ? output.matches : [];
   const fieldGateCount = matches.length;
   const tvPassCount = cleanNumber(output.tvPassCount);
+  const completeScan = output.scanCoverage && typeof output.scanCoverage === "object" ? output.scanCoverage : {};
   if (output.sourceHealth?.status === "failed") issues.push(`sourceHealth failed: ${(output.sourceHealth.issues || []).join("; ")}`);
   if (output.sourceDriftHealth?.status !== "ready") issues.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`);
+  if (completeScan.candidateLimitApplied) issues.push(`candidate limit applied: ${completeScan.candidateLimit}`);
+  if (cleanNumber(completeScan.scannedCount) !== cleanNumber(output.total)) issues.push(`scannedCount ${completeScan.scannedCount} != total ${output.total}`);
+  if (cleanNumber(completeScan.fieldGateCandidates) !== fieldGateCount) issues.push(`fieldGateCandidates ${completeScan.fieldGateCandidates} != matches ${fieldGateCount}`);
   if (fieldGateCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) issues.push(`fieldGateReadyCount ${fieldGateCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
   if (!Object.prototype.hasOwnProperty.call(output, "tvPassCount")) issues.push("missing tvPassCount");
   if (!matches.every((stock) => stock && stock.tvOvernightEntry && typeof stock.tvOvernightEntry.ok === "boolean")) issues.push("missing per-row tvOvernightEntry breakdown");
-  return { ok: issues.length === 0, fieldGateReadyCount: fieldGateCount, expectedFieldGateReadyCount: STRATEGY3_MIN_FIELD_GATE_CANDIDATES, tvPassCount, issues };
+  return {
+    ok: issues.length === 0,
+    completeScan: issues.filter((issue) => /candidate limit applied|scannedCount|fieldGateCandidates/.test(issue)).length === 0,
+    fieldGateReadyCount: fieldGateCount,
+    minFieldGateCandidates: STRATEGY3_MIN_FIELD_GATE_CANDIDATES,
+    scannedCount: cleanNumber(completeScan.scannedCount),
+    sourceUniverseCount: cleanNumber(completeScan.sourceUniverseCount),
+    candidateLimitApplied: Boolean(completeScan.candidateLimitApplied),
+    tvPassCount,
+    issues,
+  };
 }
 
 async function verifyStrategy3PublishedRun(expectedRunId, expectedCount) {
   const table = encodeURIComponent(SUPABASE_RESULTS_TABLE);
   const runId = encodeURIComponent(expectedRunId);
-  const result = await fetchSupabaseRest(`${table}?select=code,name,payload&run_id=eq.${runId}&strategy=eq.strategy3&limit=80`, { count: true, timeoutMs: 25000 });
+  const readLimit = Math.max(1, Math.min(5000, cleanNumber(expectedCount) + 5));
+  const result = await fetchSupabaseRest(`${table}?select=code,name,payload&run_id=eq.${runId}&strategy=eq.strategy3&limit=${readLimit}`, { count: true, timeoutMs: 25000 });
   const rows = Array.isArray(result.rows) ? result.rows : [];
   const tvPassCount = rows.filter((row) => row?.payload?.tvOk === true || row?.payload?.tvFlame === true || row?.payload?.tvOvernightEntry?.ok === true).length;
   const missingBreakdown = rows.filter((row) => !row?.payload?.tvBreakdown && !row?.payload?.tvOvernightEntry).length;
-  return { ok: rows.length === expectedCount && missingBreakdown === 0, runId: expectedRunId, count: rows.length, expectedCount, tvPassCount, missingBreakdown };
+  return {
+    ok: cleanNumber(result.exactCount) === cleanNumber(expectedCount) && rows.length === cleanNumber(expectedCount) && missingBreakdown === 0,
+    runId: expectedRunId,
+    count: rows.length,
+    exactCount: cleanNumber(result.exactCount),
+    expectedCount,
+    tvPassCount,
+    missingBreakdown,
+  };
 }
 
 
@@ -366,6 +420,7 @@ function buildSupabaseRunRow(output, runId, status = "complete") {
       sourceWarnings: (output.sourceWarnings || []).slice(0, 20),
       sourceHealth: output.sourceHealth || null,
       sourceDriftHealth: output.sourceDriftHealth || null,
+      scanCoverage: output.scanCoverage || null,
       selfTest: output.selfTest || null,
       publishedSelfTest: output.publishedSelfTest || null,
     },
@@ -417,6 +472,8 @@ function buildSupabaseScanRows(output, runId) {
           candleSource: String(stock.tvOvernightEntry?.candleSource || ""),
           degenerateRatio: cleanNumber(stock.tvOvernightEntry?.candleQuality?.degenerateRatio),
           degenerateRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.degenerateRows),
+          sessionRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.sessionRows),
+          entryWindowRows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.entryWindowRows),
           after1300Rows: cleanNumber(stock.tvOvernightEntry?.candleQuality?.after1300Rows),
           formulaVersion: String(stock.tvOvernightEntry?.formulaVersion || ""),
           controlSource: String(stock.tvOvernightEntry?.controlSource || ""),
@@ -584,6 +641,16 @@ function after1300CandleRows(candles, quoteDate = "") {
   });
 }
 
+function session1mCandleRows(candles, quoteDate = "") {
+  const expectedDate = String(quoteDate || "").replace(/\D/g, "");
+  return (candles || []).filter((candle) => {
+    const minutes = candleMinutes(candle);
+    if (minutes == null || minutes < 9 * 60 || minutes > 12 * 60 + 59) return false;
+    const dateKey = candleTaipeiDateKey(candle);
+    return !expectedDate || !dateKey || dateKey === expectedDate;
+  });
+}
+
 async function mapLimit(items, limit, mapper) {
   const out = new Array(items.length);
   let next = 0;
@@ -615,24 +682,25 @@ function strategy3ReadbackCandidates(stocks) {
 }
 
 async function repairAfter1300StatusFromRpc(stocks, warnings) {
-  const currentReady = (stocks || []).filter((stock) => stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0).length;
-  if (currentReady >= STRATEGY3_MIN_AFTER_1300_CANDIDATES) return { repaired: 0, checked: 0 };
+  const currentReady = (stocks || []).filter((stock) => strategy3HasSession1m(stock)).length;
+  if (currentReady >= STRATEGY3_MIN_INTRADAY_1M_CANDIDATES) return { repaired: 0, checked: 0 };
   const candidates = strategy3ReadbackCandidates(stocks);
   let repaired = 0;
   let checked = 0;
   await mapLimit(candidates, STRATEGY3_1M_READBACK_CONCURRENCY, async (stock) => {
-    if (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0) return;
+    if (strategy3HasSession1m(stock)) return;
     checked += 1;
     try {
       const result = await fetchStrategy3Intraday1mLatestN(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
       const candles = result.candles || result.rows || [];
+      const sessionRows = session1mCandleRows(candles, stock.quoteDate);
+      if (!sessionRows.length) return;
       const afterRows = after1300CandleRows(candles, stock.quoteDate);
-      if (!afterRows.length) return;
       stock.after1300CandleCount = afterRows.length;
-      stock.hasAfter1300Candle = true;
+      stock.hasAfter1300Candle = afterRows.length > 0;
       stock.has1300Candle = afterRows.some((row) => candleMinutes(row) === 13 * 60);
-      stock.intradayCandleCount = candles.length;
-      stock.latestCandleTime = afterRows.at(-1)?.candleTime || afterRows.at(-1)?.time || stock.latestCandleTime || "";
+      stock.intradayCandleCount = sessionRows.length;
+      stock.latestCandleTime = sessionRows.at(-1)?.candleTime || sessionRows.at(-1)?.time || stock.latestCandleTime || "";
       stock.intradayStatusSource = "rpc-readback";
       repaired += 1;
     } catch (error) {
@@ -860,8 +928,8 @@ async function fetchSupabaseStrategy3Universe() {
     if (stock.avgVolume > 0) volumeAverageMap.set(stock.code, stock.avgVolume);
   });
   if (!access.ok) warnings.push(`strategy3 supabase read access partial: ${access.failed.map((item) => item.table).join(",")}`);
-  if (STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE && sideVolumeResult.sideRows < STRATEGY3_MIN_AFTER_1300_CANDIDATES) {
-    warnings.push(`strategy3 outside/inside side-volume coverage low: ${sideVolumeResult.sideRows}<${STRATEGY3_MIN_AFTER_1300_CANDIDATES}`);
+  if (STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE && sideVolumeResult.sideRows < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) {
+    warnings.push(`strategy3 outside/inside side-volume coverage low: ${sideVolumeResult.sideRows}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
   }
   return {
     stocks,
@@ -995,6 +1063,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     const volumeRatio = cleanNumber(stock.volumeRatio || stock.projectedRatio || stock.volume_ratio || stock.volume_ratio_5)
       || (avgVolume ? stock.tradeVolume / avgVolume : 0);
     const fieldGate = strategy3FieldGate(stock, volumeRatio, volumeLots);
+    const session1mReady = strategy3HasSession1m(stock);
     const heatPenalty = pct > 8.8 ? 24 : pct > 6.5 ? 12 : pct < 0 ? 30 : 0;
     const outsideDominanceScore = Math.min(Math.max(fieldGate.outsideInsideDiff, 0) / 500, 18)
       + Math.min(Math.max(fieldGate.outsideInsideRatio - 1, 0) * 16, 16);
@@ -1008,12 +1077,12 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     ), 0, 100);
     const turnoverPass = STRATEGY3_REQUIRE_TURNOVER ? turnoverRate > 5 : true;
     const fixedPass = stock.close > 0
-      && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0)
+      && session1mReady
       && fieldGate.ok
       && turnoverPass;
     const fixedReason = fixedPass
-      ? `進入 TradingView 隔日沖判斷：有 13:00 後1分K，且通過漲幅/量比/外內盤/成交張數門檻。${fieldGate.reason}`
-      : `未進入 TradingView 隔日沖判斷：價格、13:00後1分K或硬門檻未通過。close=${stock.close}、after1300=${stock.after1300CandleCount || 0}、volumeRatio=${volumeRatio.toFixed(2)}。${fieldGate.reason}`;
+      ? `進入 TradingView 隔日沖判斷：有 09:00-12:59 1分K，且通過漲幅/量比/外內盤/成交張數門檻。${fieldGate.reason}`
+      : `未進入 TradingView 隔日沖判斷：價格、09:00-12:59 1分K或硬門檻未通過。close=${stock.close}、session1m=${stock.intradayCandleCount || 0}、volumeRatio=${volumeRatio.toFixed(2)}。${fieldGate.reason}`;
     return {
       ...stock,
       valueRank,
@@ -1030,6 +1099,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       outsideInsideRatio: Number(fieldGate.outsideInsideRatio.toFixed(2)),
       outsideDominanceScore: Number(outsideDominanceScore.toFixed(2)),
       strategy3FieldGate: fieldGate,
+      strategy3Session1mReady: session1mReady,
       strategy3FixedPass: fixedPass,
       overnightScore,
       overnightState: fixedPass ? "待TV判斷" : "觀察",
@@ -1037,19 +1107,18 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       matches: [{ id: "overnight_chip", reason: fixedReason }],
     };
   })
-    .filter((stock) => stock.close > 0 && (stock.hasAfter1300Candle || cleanNumber(stock.after1300CandleCount) > 0))
+    .filter((stock) => stock.close > 0 && strategy3HasSession1m(stock))
     .filter((stock) => stock.strategy3FixedPass)
-    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value)
-    .slice(0, STRATEGY3_TV_CANDIDATE_LIMIT > 0 ? STRATEGY3_TV_CANDIDATE_LIMIT : undefined);
+    .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value);
 
-  if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored.slice(0, 80);
+  if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored;
 
   const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
       const result = await fetchStrategy3TvCandles(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
       const rawTvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
       const quality = result.quality || {};
-      const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、after1300=${quality.after1300Rows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
+      const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、session=${quality.sessionRows ?? 0}、entryWindow=${quality.entryWindowRows ?? 0}、after1300=${quality.after1300Rows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
       const tvEntry = {
         ...rawTvEntry,
         reason: `${rawTvEntry.reason} ${sourceNote}。`,
@@ -1095,7 +1164,6 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
         || cleanNumber(b.outsideInsideDiff) - cleanNumber(a.outsideInsideDiff)
         || b.value - a.value;
     })
-    .slice(0, 80)
     .map((stock) => {
       const tvOk = Boolean(stock.tvOvernightEntry?.ok);
       return {
@@ -1340,6 +1408,17 @@ async function main() {
   const tvPassCount = matches.filter((stock) => stock.tvOvernightEntry?.ok).length;
   const displayMode = matches.length ? "field_gate_with_tv_flame" : "no_tv_pass";
   const noMatchReason = matches.length ? "" : STRATEGY3_NO_TV_PASS_REASON;
+  const scanCoverage = {
+    completeScan: true,
+    sourceUniverseCount: stocks.length,
+    scannedCount: stocks.length,
+    sessionReadyCandidates: stocks.filter((stock) => strategy3HasSession1m(stock)).length,
+    fieldGateCandidates: matches.length,
+    resultCount: matches.length,
+    candidateLimit: STRATEGY3_TV_CANDIDATE_LIMIT,
+    candidateLimitApplied: STRATEGY3_TV_CANDIDATE_LIMIT > 0,
+    tvEntryRequired: STRATEGY3_REQUIRE_TV_ENTRY,
+  };
   const output = {
     ok: true,
     source,
@@ -1354,6 +1433,7 @@ async function main() {
     qualityStatus: sourceHealth.status,
     sourceHealth,
     sourceDriftHealth,
+    scanCoverage,
     displayMode,
     noMatchReason,
     matches,

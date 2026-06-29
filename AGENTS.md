@@ -1099,14 +1099,15 @@ do not show flame
 
 ## Strategy3 戰鬥契約
 
-策略3是隔日沖 API-only / Supabase complete-run 策略。2026-06-26 校正後，以下規則是正式口徑。
+策略3是隔日沖 API-only / Supabase complete-run 策略。2026-06-29 校正後，以下規則是正式口徑。
 
 ### 顯示與 Publish 規則
 
-- 候選清單固定顯示 field gate 後的 12 檔。
-- TradingView / TV 條件只負責加火焰，不可把候選清單砍成 0 檔。
-- complete run 不可因 tvPassCount=0 而寫 0 筆；tvPassCount 可以是 0，但 count 必須維持 12。
-- 若 fieldGateReadyCount < 12，scanner 必須 failed/block，不可覆蓋 latest complete run。
+- 13:00 complete scan 必須完整掃 `09:00-12:59` 的今日 1 分 K；不可等待 `13:00` 後 K，也不可用 `after1300ReadyCount >= 20` 擋整批。
+- 候選清單不固定 12 檔；全台母池完整掃完後，只要符合 field gate 與 TV 判讀資料契約就必須出現。
+- TradingView / TV 條件負責判斷是否通過與是否加火焰；不可因固定名額、TV candidate limit 或 UI limit 截斷正式結果。
+- complete run 不可因 tvPassCount=0 而寫 0 筆；tvPassCount 可以是 0，但 count 必須等於實際符合條件並寫入 Supabase 的筆數。
+- 若來源未達 `09:00-12:59` session readiness、source drift failed、或 readback count 不一致，scanner 必須 failed/block，不可覆蓋 latest complete run。
 - API 最新來源是 `/api/strategy3-latest` 與 Supabase `strategy3_scan_runs` / `strategy3_scan_results`，不使用 static JSON 作為權威。
 
 ### Field Gate 硬門檻
@@ -1121,7 +1122,8 @@ do not show flame
 
 - 控盤線與 OBV 以 close-price proxy 為正式口徑，避免 Supabase 1m high/low 大量退化造成誤判。
 - TV pass 條件：`controlOk=true` 且 `obvOk=true`，`nearHigh` 不作硬門檻，除非 `STRATEGY3_REQUIRE_NEAR_100_HIGH=1`。
-- 每檔 result payload 必須保留 `tvBreakdown`：`controlOk / obvOk / nearHigh / nearHighOk / candleRows / candleSource / degenerateRatio / after1300Rows / formulaVersion / controlSource`。
+- TV entry 視窗固定為 `12:50-12:59` 尾盤代理；正式掃描時窗固定為 `09:00-12:59`。
+- 每檔 result payload 必須保留 `tvBreakdown`：`controlOk / obvOk / nearHigh / nearHighOk / candleRows / candleSource / degenerateRatio / sessionRows / entryWindowRows / after1300Rows / formulaVersion / controlSource`。
 
 ### Source Drift Gate
 
@@ -1138,8 +1140,8 @@ do not show flame
 
 scanner 必須有兩段 self-test：
 
-- pre-publish `selfTest`：`fieldGateReadyCount=12`、`tvPassCount` 欄位存在、每檔有 `tvOvernightEntry` breakdown、`sourceDriftHealth=ready`。
-- published `publishedSelfTest`：寫入 Supabase 後讀回 `count=12`、`missingBreakdown=0`、`tvPassCount` 可讀。
+- pre-publish `selfTest`：`completeScan=true`、`scanCoverage.candidateLimitApplied=false`、`scanCoverage.scannedCount == output.total`、`fieldGateReadyCount == output.count`、`tvPassCount` 欄位存在、每檔有 `tvOvernightEntry` breakdown、`sourceDriftHealth=ready`。
+- published `publishedSelfTest`：寫入 Supabase 後讀回 `exactCount == output.count`、`count == output.count`、`missingBreakdown=0`、`tvPassCount` 可讀。
 
 驗證指令：
 
@@ -1148,13 +1150,13 @@ Set-Location -LiteralPath C:\fuman-terminal
 node scripts\verify-strategy3-battle-state.js
 ```
 
-成功條件：`ok=true`、API `count=12`、`fieldGateReadyCount=12`、`tvBreakdownRows=12`、`publishedSelfTest.ok=true`、`sourceDriftHealth.status=ready`。
+成功條件：`ok=true`、API `count == latest run result_count`、Supabase result exact count 等於 run result_count、`scanCoverage.completeScan=true`、`candidateLimitApplied=false`、`tvBreakdownRows == result rows`、`publishedSelfTest.ok=true`、`sourceDriftHealth.status=ready`。
 
 ### 排程
 
 正式 Strategy3 建議三段：
 
-- 13:00 complete scan；掃描腳本會先 refresh ready snapshot，再跑 resource health gate / self-test，通過才 publish。
+- 13:00 complete scan；掃描腳本使用 `09:00-12:59` 今日 1 分 K 完整掃全台母池，再跑 resource health gate / self-test，通過才 publish。
 - 13:05 battle verify / watchdog；必須在 13:30 收盤前完成，避免事後才發現壞 run。
 
 安裝腳本：

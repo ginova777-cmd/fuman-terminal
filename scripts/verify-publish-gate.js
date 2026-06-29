@@ -1481,8 +1481,17 @@ for (const marker of [
   "chipTradeExclusion",
   "STRATEGY3_APPLY_BLACKLIST",
   "TradingView 隔日沖判斷",
+  "STRATEGY3_MIN_INTRADAY_1M_CANDIDATES",
+  "sessionWindow: \"09:00-12:59\"",
+  "entryWindow: \"12:50-12:59\"",
+  "candidateLimitApplied",
+  "scanCoverage",
+  "completeScan",
 ]) {
   if (!strategy3Scanner.includes(marker)) issues.push(`scan-strategy3-cache.js missing strategy3 TV-only marker ${marker}`);
+}
+if (/fieldGateReadyCount=12|count=12|slice\(0,\s*80\)|STRATEGY3_MIN_AFTER_1300_CANDIDATES/.test(strategy3Scanner)) {
+  issues.push("scan-strategy3-cache.js must not restore fixed-12, slice-80, or after1300-min-candidate Strategy3 gates");
 }
 for (const marker of [
   "scanner receipt",

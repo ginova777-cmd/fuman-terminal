@@ -82,7 +82,8 @@ function rankCandidates(quotes) {
 }
 
 async function main() {
-  const minAfter1300 = Math.max(1, Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20));
+  const minIntraday1mCandidates = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
+  const minIntraday1mCandles = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
   const tvLimit = Math.max(1, Number(process.env.STRATEGY3_DIAG_TV_LIMIT || 120));
   const quoteReady = await fetchStrategy3QuoteReady({ minQuotes: 500, timeout: 8000 }).catch((error) => ({
     ok: false,
@@ -106,6 +107,7 @@ async function main() {
       cumulativeBidAskVolume: cleanNumber(sideRow.cumulativeBidAskVolume),
       after1300CandleCount: cleanNumber(row.after_1300_candle_count ?? row.candles_after_1300),
       hasAfter1300Candle: row.has_after_1300_candle === true || cleanNumber(row.after_1300_candle_count) > 0,
+      intradayCandleCount: cleanNumber(row.today_candle_count ?? row.candle_count ?? row.rows_today),
       latestCandleTime: row.latest_candle_time || quote.latestCandleTime || "",
     };
     const exclusion = chipTradeExclusion(item, blacklistCodes);
@@ -116,8 +118,9 @@ async function main() {
     };
   });
   const chipReady = merged.filter((quote) => !quote.chipExcluded);
+  const sessionReady = chipReady.filter((quote) => cleanNumber(quote.intradayCandleCount) >= minIntraday1mCandles || quote.latestCandleTime);
   const after1300 = chipReady.filter((quote) => quote.hasAfter1300Candle || cleanNumber(quote.after1300CandleCount) > 0);
-  const fieldReady = after1300.filter((quote) => passesFieldGate(quote).ok);
+  const fieldReady = sessionReady.filter((quote) => passesFieldGate(quote).ok);
   const ranked = rankCandidates(fieldReady).slice(0, tvLimit);
   let tvOk = 0;
   const examples = [];
@@ -140,6 +143,7 @@ async function main() {
         outsideInsideDiff: Math.round(cleanNumber(quote.outsideVolume) - cleanNumber(quote.insideVolume)),
         outsideInsideRatio: Number((cleanNumber(quote.insideVolume) > 0 ? cleanNumber(quote.outsideVolume) / cleanNumber(quote.insideVolume) : 0).toFixed(2)),
         latestQuoteDate: String(quote.updatedAt || quote.quoteTimeRaw || "").slice(0, 10),
+        intradayCandleCount: quote.intradayCandleCount,
         after1300CandleCount: quote.after1300CandleCount,
         latestCandleTime: quote.latestCandleTime,
         tvOk: tv.ok,
@@ -159,7 +163,7 @@ async function main() {
   }
   const latestQuoteDate = latestDate(merged.map((quote) => quote.updatedAt || quote.quoteTimeRaw));
   const latestCandleDate = latestDate(merged.map((quote) => quote.latestCandleTime));
-  const ready = latest.ok && after1300.length >= minAfter1300;
+  const ready = latest.ok && sessionReady.length >= minIntraday1mCandidates;
   process.stdout.write(`${JSON.stringify({
     ok: true,
     ready,
@@ -175,6 +179,9 @@ async function main() {
     chipExcludedCount: merged.length - chipReady.length,
     latestQuoteDate,
     latestCandleDate,
+    sessionReadyCount: sessionReady.length,
+    minIntraday1mCandidates,
+    minIntraday1mCandles,
     after1300ReadyCount: after1300.length,
     fieldGateReadyCount: fieldReady.length,
     fieldGate: {
@@ -185,13 +192,13 @@ async function main() {
       requireOutsideGtInside: REQUIRE_OUTSIDE_GT_INSIDE,
       sideVolumeRows: side.byCode.size,
     },
-    minAfter1300,
+    minAfter1300: 0,
     tvChecked: ranked.length,
     tvOk,
     status: ready ? "ready" : "not_ready",
     reason: ready
       ? `source ready; tvOk=${tvOk}/${ranked.length}`
-      : `latest quotes ok=${latest.ok}; after1300=${after1300.length}/${minAfter1300}`,
+      : `latest quotes ok=${latest.ok}; session1m=${sessionReady.length}/${minIntraday1mCandidates}`,
     examples,
   }, null, 2)}\n`);
 }

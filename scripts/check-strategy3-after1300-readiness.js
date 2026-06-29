@@ -4,7 +4,9 @@ const fs = require("fs");
 const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const MIN_AFTER_1300 = Math.max(1, Number(process.env.STRATEGY3_MIN_AFTER_1300_CANDIDATES || 20));
+const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
+const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
+const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 
 function readSecret(file) {
   try { return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", file), "utf8").trim(); } catch { return ""; }
@@ -38,6 +40,23 @@ function taipeiTradeDate() {
   }).formatToParts(new Date());
   const get = (type) => parts.find((part) => part.type === type)?.value || "";
   return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function candleMinutes(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Taipei",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(parsed));
+    const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+    return get("hour") * 60 + get("minute");
+  }
+  const match = text.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
 function headers(extra = {}) {
@@ -75,26 +94,41 @@ async function getRows(route) {
 
 async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
-  const statusRefresh = await rpc("refresh_strategy3_intraday_1m_status_latest", { p_trade_date: tradeDate });
+  let statusRefresh = null;
+  let statusRefreshWarning = "";
+  try {
+    statusRefresh = await rpc("refresh_strategy3_intraday_1m_status_latest", { p_trade_date: tradeDate });
+  } catch (error) {
+    statusRefreshWarning = error?.message || String(error);
+  }
   const rows = await getRows([
     "/rest/v1/v_strategy3_intraday_1m_status",
     "?select=symbol,latest_candle_time,today_candle_count,after_1300_candle_count,has_after_1300_candle,updated_at",
-    "&after_1300_candle_count=gt.0",
     "&order=latest_candle_time.desc",
     "&limit=5000",
   ].join(""));
   const latestCandleTime = rows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
-  const ready = rows.length >= MIN_AFTER_1300;
+  const sessionRows = rows.filter((row) => {
+    const count = Number(row.today_candle_count || 0);
+    const minute = candleMinutes(row.latest_candle_time || row.updated_at);
+    return count >= MIN_INTRADAY_1M_CANDLES || (count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE);
+  });
+  const ready = sessionRows.length >= MIN_INTRADAY_1M_CANDIDATES;
   console.log(JSON.stringify({
     ok: true,
     ready,
     source: "v_strategy3_intraday_1m_status",
     tradeDate,
-    after1300ReadyCount: rows.length,
-    minAfter1300: MIN_AFTER_1300,
+    sessionReadyCount: sessionRows.length,
+    minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
+    minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
+    sessionLatestMinute: SESSION_LATEST_MINUTE,
+    after1300ReadyCount: rows.filter((row) => Number(row.after_1300_candle_count || 0) > 0).length,
+    minAfter1300: 0,
     latestCandleTime,
     status: ready ? "ready" : "not_ready",
-    reason: ready ? "after1300 intraday status ready" : `after1300ReadyCount ${rows.length} below ${MIN_AFTER_1300}`,
+    reason: ready ? "09:00-12:59 intraday status ready" : `sessionReadyCount ${sessionRows.length} below ${MIN_INTRADAY_1M_CANDIDATES}`,
+    statusRefreshWarning,
     statusRefresh,
   }));
 }

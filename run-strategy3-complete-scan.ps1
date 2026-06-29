@@ -122,7 +122,7 @@ captureHandler(handler).then((result) => {
 
 function Test-Strategy3ControlledSourceNotReady($Message) {
   $text = [string]$Message
-  return $text -match "after1300ReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout"
+  return $text -match "sessionReadyCount .* below" -or $text -match "intraday1mReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout"
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
@@ -137,20 +137,20 @@ if ($refreshExitCode -ne 0) {
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
 $after1300Gate = $null
-if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "after1300|latest_candle_date|ready_snapshot|snapshot_rows") {
+if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "after1300|intraday1m|latest_candle_date|ready_snapshot|snapshot_rows") {
   $after1300Text = (& $nodeExe "scripts\check-strategy3-after1300-readiness.js" 2>&1) -join "`n"
-  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 after1300 live-source gate output: $after1300Text"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 session1m live-source gate output: $after1300Text"
   try {
     $after1300Gate = $after1300Text | ConvertFrom-Json -ErrorAction Stop
   } catch {
     $after1300Gate = $null
   }
   if ($after1300Gate -and $after1300Gate.ready -eq $true) {
-    Write-Strategy3CompleteLog "Strategy3 ready_snapshot health is stale, but live after1300 source is ready; continuing scan. after1300=$($after1300Gate.after1300ReadyCount)/$($after1300Gate.minAfter1300) latest=$($after1300Gate.latestCandleTime)"
+    Write-Strategy3CompleteLog "Strategy3 ready_snapshot health is stale, but live 09:00-12:59 source is ready; continuing scan. session1m=$($after1300Gate.sessionReadyCount)/$($after1300Gate.minIntraday1mCandidates) latest=$($after1300Gate.latestCandleTime)"
     $resourceGate = [pscustomobject]@{
       PreserveLatest = $false
       Status = "ready"
-      Reason = "live after1300 source ready; ready_snapshot refresh blocked by DB grant/function"
+      Reason = "live 09:00-12:59 source ready; ready_snapshot refresh blocked by DB grant/function"
     }
   }
 }
