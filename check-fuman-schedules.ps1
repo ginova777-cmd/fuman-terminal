@@ -1,3 +1,7 @@
+param(
+  [switch]$IncludeDisabled
+)
+
 $ErrorActionPreference = "Continue"
 
 $logDir = "C:\fuman-runtime\logs"
@@ -74,6 +78,8 @@ $rules = @{
 function Convert-StatusText($status) {
   switch ($status) {
     "OK" { "正常" }
+    "OK-WAITING" { "等待執行" }
+    "OK-STOPPED" { "時間窗結束" }
     "LOG-CHECK" { "需看紀錄" }
     "LOG-ERROR" { "紀錄有錯" }
     "TASK-FAIL" { "排程失敗" }
@@ -106,7 +112,17 @@ function Convert-TaskText($taskName) {
 function Convert-ResultText($result) {
   if ($result -eq 0) { return "成功" }
   if ($result -eq 267011) { return "尚未跑/停用" }
+  if ($result -eq 267014) { return "已終止/時間窗結束" }
   return "錯誤碼 $result"
+}
+
+function Test-AllowedStoppedResult($taskName, $scriptName, $result) {
+  if ($result -ne 267014) { return $false }
+  if ($scriptName -eq "run-realtime-radar.ps1") { return $true }
+  if ($scriptName -eq "run-market-overview.ps1") { return $true }
+  if ($taskName -like "*即時雷達*") { return $true }
+  if ($taskName -like "*Market Overview Patrol*") { return $true }
+  return $false
 }
 
 function Get-ScriptNameFromAction($task) {
@@ -158,7 +174,12 @@ if (-not (Test-Path $logDir)) {
   exit 1
 }
 
-$rows = foreach ($task in (Get-ScheduledTask | Where-Object { $_.TaskName -like $taskNameFilter } | Sort-Object TaskName)) {
+$taskQuery = Get-ScheduledTask | Where-Object { $_.TaskName -like $taskNameFilter }
+if (-not $IncludeDisabled) {
+  $taskQuery = $taskQuery | Where-Object { $_.State -ne "Disabled" }
+}
+
+$rows = foreach ($task in ($taskQuery | Sort-Object TaskName)) {
   $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath
   $script = Get-ScriptNameFromAction $task
   $rule = if ($script -and $rules.ContainsKey($script)) { $rules[$script] } else { $null }
@@ -180,7 +201,13 @@ $rows = foreach ($task in (Get-ScheduledTask | Where-Object { $_.TaskName -like 
   }
 
   $taskOk = ($info.LastTaskResult -eq 0)
-  $status = if (-not $script) {
+  $taskWaiting = ($info.LastTaskResult -eq 267011)
+  $taskStoppedOk = (Test-AllowedStoppedResult $task.TaskName $script $info.LastTaskResult) -and (-not $logFailed)
+  $status = if ($taskWaiting) {
+    "OK-WAITING"
+  } elseif ($taskStoppedOk) {
+    "OK-STOPPED"
+  } elseif (-not $script) {
     if ($taskOk) { "OK-NO-PS1" } else { "TASK-FAIL" }
   } elseif (-not $rule) {
     if ($taskOk) { "OK-NO-RULE" } else { "TASK-FAIL" }

@@ -161,6 +161,7 @@ function Test-ControlledPreopenRefreshFailure {
     [string]$Message
   )
   if ($Message -match "57014|statement timeout") { return $true }
+  if ($ModeName -ne "Final" -and $Message -match "refresh_strategy1_futopt_preopen_live_snapshot failed .*status=500|Response status code does not indicate success: 500|Internal Server Error") { return $true }
   return $ModeName -ne "Final" -and $Message -match "timed out|timeout"
 }
 
@@ -224,6 +225,13 @@ $iterations = 0
 $warnings = @()
 
 try {
+  if ($Mode -eq "Watch" -and -not (Test-WatchWindowActive)) {
+    $message = "outside STAR preopen watch window; skip"
+    Write-PreopenLog $message
+    Write-PreopenReceipt "complete" 0 "skipped" $message $null 0 @($message)
+    exit 0
+  }
+
   do {
     $iterations += 1
     Invoke-StarPreopenScanOnce -ModeName $Mode
