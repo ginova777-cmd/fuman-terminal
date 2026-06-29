@@ -513,6 +513,12 @@ try {
   exit 0
 } catch {
   Write-ScanLog "FAILED $($_.Exception.Message)"
+  if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+    Write-ScanLog "FAILED position $($_.InvocationInfo.PositionMessage)"
+  }
+  if ($_.ScriptStackTrace) {
+    Write-ScanLog "FAILED stack $($_.ScriptStackTrace)"
+  }
   exit 1
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
