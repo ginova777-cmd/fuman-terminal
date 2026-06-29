@@ -41,7 +41,7 @@ https://fuman-terminal.vercel.app/mobile
 成功條件：
 
 - 代號必須經 `/api/mobile-watch-meta?code=XXXX` 驗證為有效上市 / 上櫃台股。
-- `2334` 這類 invalid code 不可進 storage，不可顯示卡片，不可佔名額。
+- `0000` 這類 invalid code 不可進 storage，不可顯示卡片，不可佔名額；不要用可能變成有效股票的四碼當 invalid 測試。
 - 成功後必須同步寫入 `fuman_watchlist` 與 `fuman_mobile_watchlist_v1`。
 - 成功後必須直接 render `.watch-row`，不可只顯示「已加入自選」或只更新 storage。
 - 切到自選 tab 時，策略加入的標的必須看得到卡片。

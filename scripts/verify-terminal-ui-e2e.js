@@ -1039,7 +1039,7 @@ async function afterDesktopRouteActivate(cdp, route) {
         return { ok: shellReady && containerReady && storageOk && cardOk && !/尚未同步/.test(status), bridgeReady, shellReady, containerReady, storageOk, cardOk, status, rows: rows.map((item) => item?.code).join(",") };
       }, code, 15000, 300);
     };
-    await submitWatchlistCode("2334");
+    await submitWatchlistCode("0000");
     await waitFor(cdp, () => {
       let rows = [];
       try { rows = JSON.parse(localStorage.getItem("fuman_watchlist") || "[]"); } catch {}
@@ -1048,8 +1048,8 @@ async function afterDesktopRouteActivate(cdp, route) {
       const status = String(document.querySelector("#watchlist-entry-status")?.textContent || "");
       const countText = String(document.querySelector("#watchlist-count")?.textContent || "").trim();
       return {
-        ok: !codes.includes("2334")
-          && !cards.includes("2334")
+        ok: !codes.includes("0000")
+          && !cards.includes("0000")
           && /不是有效上市\/上櫃台股代號/.test(status)
           && /^1(?:\/10)?$/.test(countText),
         rows: codes.join(","),
@@ -1553,14 +1553,14 @@ function collectMobileStats(route) {
     if (new Set(watchCodes).size !== watchCodes.length) contractBlockers.push(`mobile watch codes must be unique actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("2344")) contractBlockers.push(`mobile watch seeded code 2344 missing actual=${watchCodes.join(",")}`);
     if (!watchCodes.includes("3028")) contractBlockers.push(`mobile watch manual add code 3028 missing actual=${watchCodes.join(",")}`);
-    if (watchCodes.includes("2334")) contractBlockers.push(`mobile watch invalid code 2334 rendered actual=${watchCodes.join(",")}`);
+    if (watchCodes.includes("0000")) contractBlockers.push(`mobile watch invalid code 0000 rendered actual=${watchCodes.join(",")}`);
     if (watchCodes.includes("8112") || watchCodes.includes("2408")) contractBlockers.push(`mobile watch rendered rows past 10-code cap actual=${watchCodes.join(",")}`);
     storageCodes.forEach((codes, index) => {
       const key = index === 0 ? "fuman_watchlist" : "fuman_mobile_watchlist_v1";
       if (codes.length !== 10) contractBlockers.push(`mobile watch storage ${key} must be capped at 10 actual=${codes.length}`);
       if (!codes.includes("2344")) contractBlockers.push(`mobile watch storage ${key} missing 2344 actual=${codes.join(",")}`);
       if (!codes.includes("3028")) contractBlockers.push(`mobile watch storage ${key} missing manual add 3028 actual=${codes.join(",")}`);
-      if (codes.includes("2334")) contractBlockers.push(`mobile watch storage ${key} kept invalid 2334 actual=${codes.join(",")}`);
+      if (codes.includes("0000")) contractBlockers.push(`mobile watch storage ${key} kept invalid 0000 actual=${codes.join(",")}`);
       if (codes.includes("8112") || codes.includes("2408")) contractBlockers.push(`mobile watch storage ${key} kept rows past cap actual=${codes.join(",")}`);
     });
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
@@ -1995,7 +1995,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
               mobile: codesFor("fuman_mobile_watchlist_v1"),
             };
           });
-          await submitMobileWatchCode(cdp, "2334");
+          await submitMobileWatchCode(cdp, "0000");
           const invalidAdd = await evaluate(cdp, async (before) => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -2017,16 +2017,16 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
                 return {
                   ok: primaryUnchanged
                     && mobileUnchanged
-                    && !storage.fuman_watchlist.includes("2334")
-                    && !storage.fuman_mobile_watchlist_v1.includes("2334")
-                    && !cards.some((text) => /\b2334\b/.test(text)),
+                    && !storage.fuman_watchlist.includes("0000")
+                    && !storage.fuman_mobile_watchlist_v1.includes("0000")
+                    && !cards.some((text) => /\b0000\b/.test(text)),
                   status,
                   rows: storage.fuman_watchlist.length,
                   before,
                   storage,
-                  has2334: storage.fuman_watchlist.includes("2334")
-                    || storage.fuman_mobile_watchlist_v1.includes("2334")
-                    || cards.some((text) => /\b2334\b/.test(text)),
+                  has0000: storage.fuman_watchlist.includes("0000")
+                    || storage.fuman_mobile_watchlist_v1.includes("0000")
+                    || cards.some((text) => /\b0000\b/.test(text)),
                 };
               }
             }

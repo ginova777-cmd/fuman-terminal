@@ -1069,6 +1069,22 @@ if (!/postScanSnapshotContract/.test(desktopRouteSnapshotCache)) {
 if (!/SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || !/FUMAN_DESKTOP_ROUTE_SNAPSHOT_WRITE_TIMEOUT_MS/.test(desktopRouteSnapshotBuilder) || /timeoutMs:\s*options\.timeoutMs\s*\|\|\s*20000/.test(desktopRouteSnapshotBuilder)) {
   issues.push("lib/desktop-route-snapshot-builder.js must pass configurable desktop snapshot write timeout to all snapshot upserts");
 }
+if (!/function\s+liveCompactQuery/.test(desktopRouteSnapshotBuilder) || !/WATCHLIST_WARRANT_COVERAGE_QUERY\s*=\s*\{[^}]*live:\s*"1"/.test(desktopRouteSnapshotBuilder)) {
+  issues.push("lib/desktop-route-snapshot-builder.js must use live query helpers for post-scan snapshot capture instead of stale CDN/cache reads");
+}
+for (const marker of [
+  '["/api/open-buy-latest", openBuyLatest, liveCompactQuery(60)',
+  '["/api/strategy3-latest", strategy3Latest, liveCompactQuery(60)',
+  '["/api/strategy4-latest", strategy4Latest, liveCompactQuery(70)',
+  '["/api/strategy5-latest", strategy5Latest, liveCompactQuery(70)',
+  '["/api/institution-latest", institutionLatest, liveCompactQuery(60)',
+  '["/api/cb-detect-latest", cbDetectLatest, liveCompactQuery(60)',
+  '["/api/warrant-flow-latest", warrantFlowLatest, liveCompactQuery(60)',
+]) {
+  if (!desktopRouteSnapshotBuilder.includes(marker)) {
+    issues.push(`lib/desktop-route-snapshot-builder.js missing live post-scan snapshot route marker ${marker}`);
+  }
+}
 if (!/STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS/.test(strategy3LatestApi) || /timeoutMs:\s*650/.test(strategy3LatestApi)) {
   issues.push("api/strategy3-latest.js must use a configurable desktop route snapshot read timeout instead of the old 650ms hard timeout");
 }
@@ -1404,12 +1420,17 @@ for (const marker of [
   "verifyMobileConsecutiveManualAdds",
   "fuman_watchlist",
   "fuman_mobile_watchlist_v1",
+  "submitWatchlistCode(\"0000\")",
+  "submitMobileWatchCode(cdp, \"0000\")",
   "3504",
   "3028",
   "3717",
   "6174",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing mobile watch storage/add no-rollback marker ${marker}`);
+}
+if (/submitWatchlistCode\("2334"\)|submitMobileWatchCode\(cdp,\s*"2334"\)/.test(terminalUiE2eVerifier)) {
+  issues.push("verify-terminal-ui-e2e.js must not use 2334 as invalid-code fixture; use unambiguous 0000");
 }
 
 const liveVersionVerifier = read("scripts/verify-live-version.js");
