@@ -69,10 +69,42 @@ source_status.payload.last_quote_at
 source_status.payload.latest_candle_time
 source_status.payload.latest_candle_time_taipei
 source_status.payload.intraday_1m_stale_seconds
+source_status.payload.today_candle_count
+source_status.payload.warmup_candle_count
+source_status.payload.continuous_candle_count
+source_status.payload.ready_ma20_continuous_symbols
+source_status.payload.ready_ma35_continuous_symbols
+source_status.payload.ready_macd_continuous_symbols
+source_status.payload.direct_1m_prewarm_enabled
+source_status.payload.direct_1m_prewarm_bars_per_symbol
+source_status.payload.direct_1m_prewarm_target_symbols
+source_status.payload.direct_1m_prewarm_completed_symbols
+source_status.payload.direct_1m_prewarm_rows
+source_status.payload.direct_1m_prewarm_complete
 source_status.payload.ready_ge_35_symbols
 source_status.payload.ready_ge_80_symbols
 source_status.payload.ready_ge_200_symbols
+source_status.payload.scanner_can_run_quote_only
+source_status.payload.scanner_can_run_opening
+source_status.payload.scanner_can_run_ma20
+source_status.payload.scanner_can_run_ma35
+source_status.payload.scanner_can_run_full_intraday
+source_status.payload.scanner_block_reason
 ```
+
+`today_candle_count` 只能用來判斷今日訊號與今日成交量，不可用來判斷 MA20/MA35 readiness。09:01 的 MA20/MA35 必須像券商畫面一樣使用跨日連續 1 分 K 暖機：前一交易日最後 N-1 根 + 今日最新 1 根。正式欄位是：
+
+```text
+warmup_candle_count
+continuous_candle_count
+ready_ma20_continuous
+ready_ma35_continuous
+ready_macd_continuous
+```
+
+因此 `fugle_intraday_1m` 必須保留最近 80~200 根、至少 2~5 個交易日的 1 分 K。策略端技術指標 MA20 / MA35 / MACD / RSI / KD 使用跨日 continuous K；今日進場時間、今日成交量、今日訊號只看今天資料。
+
+08:00 shared source 啟動後必須先為當沖候選池做 direct 1m prewarm：優先抓 Fugle historical 1m，至少每檔最近 200 根，不能等 09:00 後才從今天第一根開始累積。prewarm 進度必須寫入 `source_status.payload.direct_1m_prewarm_*`，且 `Guard-PublicSlotSourceAntiRollback.ps1` 與 publish gate 必須防止這些欄位被拿掉。
 
 每輪也必須寫 `fugle_source_coverage`，用來回查 08:00、09:00、09:05、09:35 的覆蓋率。若 Supabase schema 還沒套 `FugleSourceResourceContract.sql`，writer 可以安全跳過 coverage 寫入，但 `npm run verify:fugle-source-contract -- --live` 必須失敗，不能進正式發布。
 

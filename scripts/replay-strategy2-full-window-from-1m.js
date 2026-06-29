@@ -93,6 +93,8 @@ function ema(values, length) {
 function techAt(candles, index) {
   const rows = candles.slice(0, index + 1);
   const closes = rows.map((row) => cleanNumber(row.close));
+  const ma20 = rows.length >= 20 ? avg(closes.slice(-20)) : 0;
+  const ma20Prev = rows.length >= 21 ? avg(closes.slice(-21, -1)) : 0;
   const ma35 = rows.length >= 35 ? avg(closes.slice(-35)) : 0;
   const ma35Prev = rows.length >= 36 ? avg(closes.slice(-36, -1)) : 0;
   const ema12 = ema(closes, 12);
@@ -109,6 +111,10 @@ function techAt(candles, index) {
   const rsv = high > low ? ((closes[last] - low) / (high - low)) * 100 : 50;
   const prevClose = cleanNumber(closes[prev]);
   return {
+    ma20,
+    ma20Prev,
+    ma20TrendUp: ma20 > 0 && ma20Prev > 0 && ma20 >= ma20Prev,
+    ma20Source: ma20 > 0 ? "supabase-fugle-1m" : "",
     ma35,
     ma35Prev,
     ma35TrendUp: ma35 > 0 && ma35Prev > 0 && ma35 >= ma35Prev,
@@ -168,11 +174,12 @@ function isStrategy2MotherPoolSnapshot(stock, volumeTop100Codes = new Set()) {
     && (channelAvg5 || channelStrongVolume || channelVolumeRank);
 }
 
-function buildSnapshot(base, candle, index, candles, cumulativeVolume, previousSnapshot, date) {
+function buildSnapshot(base, candle, index, candles, cumulativeVolume, previousSnapshot, date, dayCandles = candles) {
   const time = taipeiTime(candle.candleTime || candle.time);
-  const previousClose = cleanNumber(base.prevClose || base.previousClose) || cleanNumber(candles[0]?.open) || cleanNumber(candle.open);
+  const firstDayCandle = dayCandles[0] || candle;
+  const previousClose = cleanNumber(base.prevClose || base.previousClose) || cleanNumber(firstDayCandle?.open) || cleanNumber(candle.open);
   const close = cleanNumber(candle.close);
-  const dayOpen = cleanNumber(base.open) || cleanNumber(candles[0]?.open) || cleanNumber(candle.open) || close;
+  const dayOpen = cleanNumber(base.open) || cleanNumber(firstDayCandle?.open) || cleanNumber(candle.open) || close;
   const prevClosePercent = previousClose ? ((close - previousClose) / previousClose) * 100 : cleanNumber(base.percent);
   const amplitudePercent = dayOpen ? ((close - dayOpen) / dayOpen) * 100 : prevClosePercent;
   const tradeVolume = cumulativeVolume;
@@ -583,19 +590,23 @@ async function main() {
       }
       const startSec = secondsOfDay(START_TIME);
       const endSec = secondsOfDay(END_TIME);
-      const candles = (result.candles || result.rows || [])
-        .filter((row) => taipeiDate(row.candleTime || row.time) === date)
+      const allCandles = (result.candles || result.rows || [])
         .map((row) => ({ ...row, timeText: taipeiTime(row.candleTime || row.time) }))
+        .filter((row) => cleanNumber(row.close) > 0)
+        .sort((a, b) => Date.parse(a.candleTime || a.time || "") - Date.parse(b.candleTime || b.time || ""));
+      const candles = allCandles
+        .filter((row) => taipeiDate(row.candleTime || row.time) === date)
         .filter((row) => secondsOfDay(row.timeText) >= startSec && secondsOfDay(row.timeText) <= endSec)
         .sort((a, b) => secondsOfDay(a.timeText) - secondsOfDay(b.timeText));
       if (!candles.length) continue;
       candleCodes += 1;
       let cumulativeVolume = 0;
       let previousSnapshot = null;
-      for (let index = 0; index < candles.length; index += 1) {
-        const candle = candles[index];
+      for (const candle of candles) {
+        const index = allCandles.findIndex((row) => (row.candleTime || row.time) === (candle.candleTime || candle.time));
+        if (index < 0) continue;
         cumulativeVolume += cleanNumber(candle.volume);
-        const stock = buildSnapshot(base, candle, index, candles, cumulativeVolume, previousSnapshot, date);
+        const stock = buildSnapshot(base, candle, index, allCandles, cumulativeVolume, previousSnapshot, date, candles);
         previousSnapshot = stock;
         if (secondsOfDay(stock.quoteTime) < secondsOfDay("08:45:00")) continue;
         motherPoolSnapshots.push(stock);

@@ -38,6 +38,11 @@ function Write-DefaultRuntimeConfig {
     restQuoteEverySeconds = 10
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
+    direct1mPrewarmEnabled = $true
+    direct1mPrewarmStart = "08:00"
+    direct1mPrewarmSymbolCount = 300
+    direct1mPrewarmBatchSize = 40
+    direct1mPrewarmBars = 200
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
@@ -60,11 +65,22 @@ function Test-RepoRuntimeConfigSupport {
     "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
     "Test-ShouldWritePreopenRows",
     "Get-Strategy2ReadyRefreshBody",
+    "Test-Intraday1mMa20Required",
     "Test-Intraday1mMa35Required",
+    "Invoke-Direct1mStartupPrewarm",
+    "PreferHistorical",
+    "Direct1mPrewarmBars",
+    "direct_1m_prewarm_target_symbols",
+    "direct_1m_prewarm_complete",
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
     "sourceCoreOk",
     "intraday_1m_ma35_required",
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
+    "ready_macd_continuous_symbols",
     "fugle-source-contract-20260629-01",
     "public-slot-shared-source-20260629-01",
     "source_contract_version",
@@ -85,6 +101,10 @@ function Test-RepoRuntimeConfigSupport {
     "safeBatchSize",
     "Write-PublicSlotSourceCoverageSnapshot",
     "fugle_source_coverage",
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
     "ready_ge_35_symbols",
     "latest_candle_time_taipei"
   )) {
@@ -107,6 +127,11 @@ function Test-RuntimeConfig {
     "restQuoteEverySeconds",
     "direct1mBatchSize",
     "direct1mEverySeconds",
+    "direct1mPrewarmEnabled",
+    "direct1mPrewarmStart",
+    "direct1mPrewarmSymbolCount",
+    "direct1mPrewarmBatchSize",
+    "direct1mPrewarmBars",
     "futoptQuoteBatchSize",
     "futoptQuoteEverySeconds",
     "futoptQuoteDelayMilliseconds",
@@ -125,6 +150,11 @@ function Test-RuntimeConfig {
     restQuoteEverySeconds = 10
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
+    direct1mPrewarmEnabled = $true
+    direct1mPrewarmStart = "08:00"
+    direct1mPrewarmSymbolCount = 300
+    direct1mPrewarmBatchSize = 40
+    direct1mPrewarmBars = 200
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100

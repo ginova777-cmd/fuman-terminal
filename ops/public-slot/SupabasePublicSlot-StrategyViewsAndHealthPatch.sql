@@ -49,16 +49,33 @@ with base as (
     ((now() at time zone 'Asia/Taipei')::date) as taipei_today
   from public.fugle_intraday_1m
 ),
+ranked as (
+  select
+    *,
+    row_number() over (
+      partition by symbol
+      order by candle_time desc
+    ) as rn
+  from base
+),
+windowed as (
+  select *
+  from ranked
+  where rn <= 200
+),
 grouped as (
   select
     symbol,
     market,
     max(candle_time) as latest_candle_time,
-    count(*) as candle_count,
-    count(*) filter (where trade_date = taipei_today) as rows_today,
+    count(*)::integer as candle_count,
+    count(*) filter (where trade_date = taipei_today)::integer as rows_today,
+    count(*) filter (where trade_date < taipei_today)::integer as warmup_candle_count,
+    count(*)::integer as continuous_candle_count,
     bool_or(trade_date = taipei_today) as has_today_data,
-    max(updated_at) as updated_at
-  from base
+    max(updated_at) as updated_at,
+    (max(candle_time) at time zone 'Asia/Taipei')::text as latest_candle_time_taipei
+  from windowed
   group by symbol, market
 )
 select
@@ -67,11 +84,18 @@ select
   latest_candle_time,
   candle_count,
   rows_today,
-  (rows_today >= 35) as ready_ge_35,
-  (rows_today >= 80) as ready_ge_80,
-  (rows_today >= 200) as ready_ge_200,
+  (has_today_data and continuous_candle_count >= 35) as ready_ge_35,
+  (has_today_data and continuous_candle_count >= 80) as ready_ge_80,
+  (has_today_data and continuous_candle_count >= 200) as ready_ge_200,
   has_today_data,
-  updated_at
+  updated_at,
+  latest_candle_time_taipei,
+  rows_today as today_candle_count,
+  warmup_candle_count,
+  continuous_candle_count,
+  (has_today_data and continuous_candle_count >= 20) as ready_ma20_continuous,
+  (has_today_data and continuous_candle_count >= 35) as ready_ma35_continuous,
+  (has_today_data and continuous_candle_count >= 80) as ready_macd_continuous
 from grouped;
 
 create or replace view public.v_fugle_intraday_1m_latest_200 as

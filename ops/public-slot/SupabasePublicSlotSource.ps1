@@ -126,6 +126,21 @@ function Get-PublicSlotNullableLots {
   return ConvertTo-PublicSlotLots $Value
 }
 
+function ConvertTo-PublicSlotPayloadHashtable {
+  param([object]$Payload)
+
+  $out = @{}
+  if ($null -eq $Payload) { return $out }
+  if ($Payload -is [System.Collections.IDictionary]) {
+    foreach ($key in $Payload.Keys) { $out[[string]$key] = $Payload[$key] }
+    return $out
+  }
+  foreach ($prop in $Payload.PSObject.Properties) {
+    $out[[string]$prop.Name] = $prop.Value
+  }
+  return $out
+}
+
 function Write-PublicSlotSourceStatus {
   param(
     [Parameter(Mandatory = $true)][string]$SourceName,
@@ -190,6 +205,33 @@ function Write-PublicSlotSourceCoverageSnapshot {
     intraday_1m_stale_seconds = [int]($Payload.intraday_1m_stale_seconds)
     message = $Message
     payload = $Payload
+  }
+
+  $optionalCoverageColumns = @{
+    permission_status = $Payload.permission_status
+    fresh_quotes_120s = [int]($Payload.fresh_quotes_120s)
+    today_1m_symbols = [int]($Payload.today_1m_symbols)
+    today_1m_rows = [int]($Payload.today_1m_rows)
+    warmup_candle_count = [int]($Payload.warmup_candle_count)
+    continuous_candle_count = [int]($Payload.continuous_candle_count)
+    ready_ge_20_symbols = [int]($Payload.ready_ge_20_symbols)
+    ready_ma20_continuous_symbols = [int]($Payload.ready_ma20_continuous_symbols)
+    ready_ma35_continuous_symbols = [int]($Payload.ready_ma35_continuous_symbols)
+    ready_macd_continuous_symbols = [int]($Payload.ready_macd_continuous_symbols)
+    top_movers_ready20_count = [int]($Payload.top_movers_ready20_count)
+    top_movers_ready35_count = [int]($Payload.top_movers_ready35_count)
+    daily_volume_ready_symbols = [int]($Payload.daily_volume_ready_symbols)
+    scanner_can_run_quote_only = [bool]($Payload.scanner_can_run_quote_only)
+    scanner_can_run_opening = [bool]($Payload.scanner_can_run_opening)
+    scanner_can_run_ma20 = [bool]($Payload.scanner_can_run_ma20)
+    scanner_can_run_ma35 = [bool]($Payload.scanner_can_run_ma35)
+    scanner_can_run_full_intraday = [bool]($Payload.scanner_can_run_full_intraday)
+    scanner_block_reason = $Payload.scanner_block_reason
+  }
+  foreach ($column in $optionalCoverageColumns.Keys) {
+    if (Test-PublicSlotColumnAvailable -Table "fugle_source_coverage" -Column $column) {
+      $row[$column] = $optionalCoverageColumns[$column]
+    }
   }
 
   Invoke-PublicSlotUpsert -Table "fugle_source_coverage" -OnConflict "source_name,checked_at" -Rows @($row)
@@ -270,6 +312,14 @@ function Write-PublicSlotIntraday1m {
   $now = ConvertTo-IsoUtc
   $normalized = foreach ($row in $Rows) {
     $candleTime = if ($row.candle_time) { ConvertTo-IsoUtc $row.candle_time } elseif ($row.time) { ConvertTo-IsoUtc $row.time } else { ConvertTo-IsoUtc $row.timestamp }
+    $payload = ConvertTo-PublicSlotPayloadHashtable $row.payload
+    if (-not $payload.ContainsKey("volume_unit")) { $payload["volume_unit"] = "lots" }
+    if (-not $payload.ContainsKey("time_standard")) { $payload["time_standard"] = "UTC" }
+    if (-not $payload.ContainsKey("source")) { $payload["source"] = "fugle_direct" }
+    if (-not $payload.ContainsKey("synthetic")) { $payload["synthetic"] = $false }
+    if (-not $payload.ContainsKey("volume_strategy_usable")) {
+      $payload["volume_strategy_usable"] = ((ConvertTo-PublicSlotLots $row.volume) -gt 0)
+    }
     @{
       symbol = [string]$row.symbol
       market = $row.market
@@ -281,7 +331,7 @@ function Write-PublicSlotIntraday1m {
       close = $row.close
       volume = ConvertTo-PublicSlotLots $row.volume
       updated_at = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } else { $now }
-      payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
+      payload = $payload
     }
   }
 

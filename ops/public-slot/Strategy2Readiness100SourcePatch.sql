@@ -7,7 +7,12 @@
 
 alter table public.strategy2_intraday_ready_cache
   add column if not exists ready_ge_80 boolean,
-  add column if not exists ready_ge_200 boolean;
+  add column if not exists ready_ge_200 boolean,
+  add column if not exists warmup_candle_count integer not null default 0,
+  add column if not exists continuous_candle_count integer not null default 0,
+  add column if not exists ready_ma20_continuous boolean not null default false,
+  add column if not exists ready_ma35_continuous boolean not null default false,
+  add column if not exists ready_macd_continuous boolean not null default false;
 
 create table if not exists public.strategy2_intraday_ready_refresh_state (
   id text primary key,
@@ -125,14 +130,19 @@ begin
   candle_status as (
     select
       p.symbol,
-      count(m.*)::integer as today_candle_count,
-      max(m.candle_time) as latest_candle_time,
-      max(m.updated_at) as updated_at
+      coalesce(s.today_candle_count, 0)::integer as today_candle_count,
+      coalesce(s.warmup_candle_count, 0)::integer as warmup_candle_count,
+      coalesce(s.continuous_candle_count, s.candle_count, 0)::integer as continuous_candle_count,
+      s.latest_candle_time,
+      s.updated_at,
+      coalesce(s.ready_ma20_continuous, s.ready_ge_20, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 20) as ready_ma20_continuous,
+      coalesce(s.ready_ma35_continuous, s.ready_ge_35, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 35) as ready_ma35_continuous,
+      coalesce(s.ready_macd_continuous, s.ready_ge_80, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 80) as ready_macd_continuous,
+      coalesce(s.ready_ge_80, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 80) as ready_ge_80,
+      coalesce(s.ready_ge_200, coalesce(s.continuous_candle_count, s.candle_count, 0) >= 200) as ready_ge_200
     from universe p
-    left join public.fugle_intraday_1m m
-      on m.symbol = p.symbol
-     and m.trade_date = v_trade_date
-    group by p.symbol
+    left join public.v_fugle_intraday_1m_status s
+      on s.symbol = p.symbol
   )
   insert into public.strategy2_intraday_ready_cache (
     symbol,
@@ -152,6 +162,11 @@ begin
     ready_ge_35,
     ready_ge_80,
     ready_ge_200,
+    warmup_candle_count,
+    continuous_candle_count,
+    ready_ma20_continuous,
+    ready_ma35_continuous,
+    ready_macd_continuous,
     is_active,
     is_etf,
     is_warrant,
@@ -183,9 +198,14 @@ begin
     coalesce(d.avg_5d_volume, 0),
     coalesce(s.today_candle_count, 0),
     s.latest_candle_time,
-    coalesce(s.today_candle_count, 0) >= 35,
-    coalesce(s.today_candle_count, 0) >= 80,
-    coalesce(s.today_candle_count, 0) >= 200,
+    coalesce(s.ready_ma35_continuous, false),
+    coalesce(s.ready_ge_80, false),
+    coalesce(s.ready_ge_200, false),
+    coalesce(s.warmup_candle_count, 0),
+    coalesce(s.continuous_candle_count, 0),
+    coalesce(s.ready_ma20_continuous, false),
+    coalesce(s.ready_ma35_continuous, false),
+    coalesce(s.ready_macd_continuous, false),
     p.is_active,
     p.is_etf,
     p.is_warrant,
@@ -223,6 +243,11 @@ begin
     ready_ge_35 = excluded.ready_ge_35,
     ready_ge_80 = excluded.ready_ge_80,
     ready_ge_200 = excluded.ready_ge_200,
+    warmup_candle_count = excluded.warmup_candle_count,
+    continuous_candle_count = excluded.continuous_candle_count,
+    ready_ma20_continuous = excluded.ready_ma20_continuous,
+    ready_ma35_continuous = excluded.ready_ma35_continuous,
+    ready_macd_continuous = excluded.ready_macd_continuous,
     is_active = excluded.is_active,
     is_etf = excluded.is_etf,
     is_warrant = excluded.is_warrant,
@@ -312,7 +337,12 @@ select
   c.avg_20d_volume,
   c.avg_5d_days::bigint as avg_5d_days,
   c.avg_20d_days::bigint as avg_20d_days,
-  c.intraday_1m_status_updated_at
+  c.intraday_1m_status_updated_at,
+  c.warmup_candle_count,
+  c.continuous_candle_count,
+  c.ready_ma20_continuous,
+  c.ready_ma35_continuous,
+  c.ready_macd_continuous
 from public.strategy2_intraday_ready_cache c
 where c.symbol ~ '^[0-9]{4}$';
 
@@ -708,13 +738,16 @@ begin
     symbol,
     name,
     null,
-    'intraday_1m_not_ready_ge_35',
+    'intraday_1m_not_ready_ma35_continuous',
     jsonb_build_object(
       'source', 'v_strategy2_intraday_ready',
       'cache_policy', 'paged_strategy2_intraday_ready_cache',
       'today_candle_count', today_candle_count,
+      'warmup_candle_count', warmup_candle_count,
+      'continuous_candle_count', continuous_candle_count,
       'latest_candle_time', latest_candle_time,
       'ready_ge_35', ready_ge_35,
+      'ready_ma35_continuous', ready_ma35_continuous,
       'quote_age_seconds', quote_age_seconds,
       'quote_updated_at', quote_updated_at,
       'price', price,
@@ -723,8 +756,8 @@ begin
     )
   from public.v_strategy2_intraday_ready
   where not (
-    coalesce(ready_ge_35, false) = true
-    or coalesce(today_candle_count, 0) >= 35
+    coalesce(ready_ma35_continuous, ready_ge_35, false) = true
+    or coalesce(continuous_candle_count, 0) >= 35
   );
 
   select
@@ -756,8 +789,8 @@ begin
   select
     count(*),
     count(*) filter (
-      where coalesce(ready_ge_35, false) = true
-         or coalesce(today_candle_count, 0) >= 35
+      where coalesce(ready_ma35_continuous, ready_ge_35, false) = true
+         or coalesce(continuous_candle_count, 0) >= 35
     )
   into v_intraday_expected, v_intraday_ready
   from public.v_strategy2_intraday_ready;

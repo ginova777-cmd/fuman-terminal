@@ -593,6 +593,11 @@ for (const marker of [
   "Test-ShouldWritePreopenRows",
   "Strategy2ReadyPageSize",
   "Get-Strategy2ReadyRefreshBody",
+  "Invoke-Direct1mStartupPrewarm",
+  "PreferHistorical",
+  "Direct1mPrewarmBars",
+  "direct_1m_prewarm_target_symbols",
+  "direct_1m_prewarm_complete",
 ]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
 }
@@ -614,6 +619,11 @@ for (const marker of [
   "writePreopenRowsMode",
   "strategy2ReadyPageSize",
   "minAvgVolume5Lots",
+  "direct1mPrewarmEnabled",
+  "direct1mPrewarmStart",
+  "direct1mPrewarmSymbolCount",
+  "direct1mPrewarmBatchSize",
+  "direct1mPrewarmBars",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
@@ -626,6 +636,14 @@ for (const marker of [
   "fugle-source-contract-20260629-01",
   "Write-PublicSlotSourceCoverageSnapshot",
   "source_contract_version",
+  "warmup_candle_count",
+  "continuous_candle_count",
+  "ready_ma20_continuous_symbols",
+  "ready_ma35_continuous_symbols",
+  "Invoke-Direct1mStartupPrewarm",
+  "Direct1mPrewarmBars",
+  "direct_1m_prewarm_target_symbols",
+  "direct_1m_prewarm_complete",
   "latest_candle_time_taipei",
 ]) {
   if (!publicSlotAntiRollbackGuard.includes(marker)) issues.push(`Guard-PublicSlotSourceAntiRollback.ps1 missing safe runtime guard marker ${marker}`);
@@ -639,8 +657,19 @@ for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10",
 for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
   if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
 }
-for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ge_35", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
+for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ma35_continuous", "continuous_candle_count", "ready_ma35_continuous", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
+}
+for (const file of [
+  "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
+  "ops/public-slot/Strategy2ReadinessContractCache.sql",
+  "ops/public-slot/SupabasePublicSlot-StrategyViewsAndHealthPatch.sql",
+  "lib/supabase-public-slot.js",
+  "scripts/verify-strategy2-battle-state.js",
+]) {
+  const text = read(file);
+  if (/today_candle_count\W*>=\W*(20|35)|rows_today\W*>=\W*(20|35)/.test(text)) issues.push(`${file} must not use today-only candle count as MA readiness`);
+  if (/intraday_1m_not_ready_ge_35/.test(text)) issues.push(`${file} must not use old intraday_1m_not_ready_ge_35 reason`);
 }
 for (const marker of ["Invoke-ScannerResourceHealthGate", "PublishAllowed", "FallbackWarningOnly", "PreserveLatest", "market_closed"]) {
   if (!scannerResourceHealthRunner.includes(marker)) issues.push(`scanner-resource-health.ps1 missing scanner gate marker ${marker}`);
@@ -1466,6 +1495,14 @@ for (const marker of [
   "fugle_intraday_1m",
   "v_fugle_intraday_1m_status",
   "get_fugle_intraday_1m_latest_n",
+  "warmup_candle_count",
+  "continuous_candle_count",
+  "ready_ma20_continuous",
+  "ready_ma35_continuous",
+  "ready_macd_continuous",
+  "ready_ma20_continuous_symbols",
+  "ready_ma35_continuous_symbols",
+  "ready_macd_continuous_symbols",
   "ready_ge_35_symbols",
   "latest_candle_time_taipei",
 ]) {

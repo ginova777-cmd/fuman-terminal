@@ -111,7 +111,7 @@ function summarizeReadyRows(rows) {
   const latestCandleTime = maxTimestamp(list, ["latest_candle_time"]);
   return {
     rows: list.length,
-    readyRows: list.filter((row) => row.ready_ge_35 === true || cleanNumber(row.today_candle_count) >= 35).length,
+    readyRows: list.filter((row) => row.ready_ma35_continuous === true || row.ready_ge_35 === true || cleanNumber(row.continuous_candle_count ?? row.candle_count) >= 35).length,
     symbolRows: new Set(list.map((row) => String(row.symbol || row.code || "").trim()).filter(Boolean)).size,
     latestQuoteTime,
     latestQuoteDate: normalizeDate(latestQuoteTime),

@@ -2774,19 +2774,27 @@ function buildSma35Info(rows, targetMinute, source, extra = {}) {
     .filter((row) => row.minute && cleanNumber(row.close) > 0)
     .sort((a, b) => a.minute.localeCompare(b.minute));
   const index = sorted.findLastIndex((row) => row.minute <= targetMinute);
-  if (index < 34) return null;
-  const window = sorted.slice(index - 34, index + 1).map((row) => cleanNumber(row.close));
-  const previousWindow = sorted.slice(index - 35, index).map((row) => cleanNumber(row.close));
+  if (index < 19) return null;
+  const ma20Window = sorted.slice(index - 19, index + 1).map((row) => cleanNumber(row.close));
+  const ma20PreviousWindow = sorted.slice(index - 20, index).map((row) => cleanNumber(row.close));
+  const window = index >= 34 ? sorted.slice(index - 34, index + 1).map((row) => cleanNumber(row.close)) : [];
+  const previousWindow = index >= 35 ? sorted.slice(index - 35, index).map((row) => cleanNumber(row.close)) : [];
   const indicatorRows = sorted.slice(0, index + 1);
+  const ma20 = avg(ma20Window);
+  const ma20Prev = ma20PreviousWindow.length >= 20 ? avg(ma20PreviousWindow) : 0;
   const ma35 = avg(window);
   const ma35Prev = previousWindow.length >= 35 ? avg(previousWindow) : 0;
-  if (ma35 <= 0) return null;
+  if (ma20 <= 0 && ma35 <= 0) return null;
   const closes = indicatorRows.map((row) => row.close);
   const macd = macdInfo(closes);
   const kd = kdInfo(indicatorRows);
   const rsi = rsiInfo(closes);
   const npsy = npsyInfo(closes);
   return {
+    ma20,
+    ma20Prev,
+    ma20TrendUp: ma20Prev > 0 && ma20 > ma20Prev,
+    ma20Source: source,
     ma35,
     ma35Prev,
     ma35TrendUp: ma35Prev > 0 && ma35 > ma35Prev,
@@ -3034,8 +3042,8 @@ async function fetchSupabaseFugleIntradaySma35(code, scanTimestamp, cache, optio
       close: cleanNumber(row.close),
       volume: cleanNumber(row.volume),
     }))
-    .filter((row) => row.minute.startsWith(targetDate) && row.close > 0);
-  storeStrategy2MinuteCandles(cache, code, rows, targetDate, "supabase-fugle");
+    .filter((row) => row.minute <= targetMinute && row.close > 0);
+  storeStrategy2MinuteCandles(cache, code, rows.filter((row) => row.minute.startsWith(targetDate)), targetDate, "supabase-fugle");
   return buildSma35Info(rows, targetMinute, "supabase-fugle-1m", {
     ma35Symbol: String(code),
     sourceAgeSeconds: Number.isFinite(Number(result.sourceAgeSeconds)) ? Number(result.sourceAgeSeconds) : undefined,
@@ -3245,8 +3253,9 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
       const code = candidates[cursor++];
       const status = statusByCode.get(String(code));
       const candleCount = cleanNumber(status?.today_candle_count ?? status?.candle_count ?? status?.rows_today);
+      const continuousCandleCount = cleanNumber(status?.continuous_candle_count ?? status?.candle_count);
       const latestCandleAge = cleanNumber(status?.latest_candle_age_seconds);
-      const readyGe35 = status?.ready_ge_35 === true || candleCount >= 35;
+      const readyGe35 = status?.ready_ma35_continuous === true || status?.ready_ge_35 === true || continuousCandleCount >= 35;
       const staleLatestCandle = latestCandleAge > STRATEGY2_1M_STATUS_MAX_AGE_SECONDS;
       if (status && (!readyGe35 || status.has_today_data === false || staleLatestCandle)) {
         map.set(String(code), {
@@ -3254,7 +3263,7 @@ async function fetchMa35Map(stocks, scanTimestamp, cache) {
             source: "v_fugle_intraday_1m_status",
             ok: false,
             skipped: true,
-            error: `1m_not_ready ready_ge_35=${status.ready_ge_35} candle_count=${candleCount} has_today_data=${status.has_today_data} latest_age=${status.latest_candle_age_seconds ?? ""}`,
+            error: `1m_not_ready ready_ma35_continuous=${status.ready_ma35_continuous ?? status.ready_ge_35} today_candle_count=${candleCount} continuous_candle_count=${continuousCandleCount} has_today_data=${status.has_today_data} latest_age=${status.latest_candle_age_seconds ?? ""}`,
           }],
         });
         continue;

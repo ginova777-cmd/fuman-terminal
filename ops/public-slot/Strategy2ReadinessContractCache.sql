@@ -184,12 +184,15 @@ begin
     symbol,
     name,
     null,
-    'intraday_1m_not_ready_ge_35',
+    'intraday_1m_not_ready_ma35_continuous',
     jsonb_build_object(
       'source', 'v_strategy2_intraday_ready',
       'today_candle_count', today_candle_count,
+      'warmup_candle_count', warmup_candle_count,
+      'continuous_candle_count', continuous_candle_count,
       'latest_candle_time', latest_candle_time,
       'ready_ge_35', ready_ge_35,
+      'ready_ma35_continuous', ready_ma35_continuous,
       'quote_age_seconds', quote_age_seconds,
       'quote_updated_at', quote_updated_at,
       'price', price,
@@ -198,8 +201,8 @@ begin
     )
   from public.v_strategy2_intraday_ready
   where not (
-    coalesce(ready_ge_35, false) = true
-    or coalesce(today_candle_count, 0) >= 35
+    coalesce(ready_ma35_continuous, ready_ge_35, false) = true
+    or coalesce(continuous_candle_count, 0) >= 35
   );
 
   select
@@ -230,8 +233,8 @@ begin
   select
     count(*),
     count(*) filter (
-      where coalesce(ready_ge_35, false) = true
-         or coalesce(today_candle_count, 0) >= 35
+      where coalesce(ready_ma35_continuous, ready_ge_35, false) = true
+         or coalesce(continuous_candle_count, 0) >= 35
     )
   into v_intraday_expected, v_intraday_ready
   from public.v_strategy2_intraday_ready;

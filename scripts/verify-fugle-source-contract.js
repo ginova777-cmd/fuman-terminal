@@ -8,6 +8,7 @@ const STATIC_ONLY = process.argv.includes("--static-only");
 const LIVE = process.argv.includes("--live") || (!STATIC_ONLY && process.env.SUPABASE_SOURCE_CONTRACT_LIVE !== "0");
 
 const issues = [];
+const EMPTY_PAYLOAD_OK = new Set(["scanner_block_reason"]);
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -37,6 +38,10 @@ function requireRegex(file, regex, label) {
   if (!regex.test(read(file))) issues.push(`${file} missing ${label}`);
 }
 
+function forbidRegex(file, regex, label) {
+  if (regex.test(read(file))) issues.push(`${file} must not contain ${label}`);
+}
+
 function staticChecks() {
   requireIncludes("ops/public-slot/FugleSourceResourceContract.sql", [
     CONTRACT_VERSION,
@@ -46,10 +51,31 @@ function staticChecks() {
     "source_contract_version",
     "writer_version",
     "quote_status",
+    "permission_status",
     "preopen_status",
     "intraday_1m_status",
     "daily_volume_status",
+    "fresh_quotes_120s",
+    "today_1m_symbols",
+    "today_1m_rows",
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ge_20_symbols",
     "ready_ge_35_symbols",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
+    "ready_macd_continuous_symbols",
+    "ready_ma20_continuous",
+    "ready_ma35_continuous",
+    "ready_macd_continuous",
+    "top_movers_ready20_count",
+    "top_movers_ready35_count",
+    "scanner_can_run_quote_only",
+    "scanner_can_run_opening",
+    "scanner_can_run_ma20",
+    "scanner_can_run_ma35",
+    "scanner_can_run_full_intraday",
+    "scanner_block_reason",
     "latest_candle_time_taipei",
     "v_fugle_quotes_commonstock_active",
     "fugle_quotes_live",
@@ -59,6 +85,9 @@ function staticChecks() {
     "fugle_intraday_1m",
     "v_fugle_intraday_1m_status",
     "get_fugle_intraday_1m_latest_n",
+    "v_daytrade_hot_symbol_readiness",
+    "volume_strategy_usable",
+    "synthetic",
     "v_stock_future_live_contract",
     "v_strategy12_stock_future_contract_health",
     "fugle_preopen_snapshot",
@@ -70,8 +99,20 @@ function staticChecks() {
     "Write-PublicSlotSourceCoverageSnapshot",
     "fugle_source_coverage",
     "quote_status",
+    "permission_status",
     "intraday_1m_status",
+    "ready_ge_20_symbols",
     "ready_ge_35_symbols",
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
+    "ready_macd_continuous_symbols",
+    "fresh_quotes_120s",
+    "scanner_can_run_ma20",
+    "scanner_block_reason",
+    "volume_strategy_usable",
+    "synthetic",
     "latest_candle_time_taipei",
   ]);
 
@@ -82,14 +123,61 @@ function staticChecks() {
     "writer_version",
     "writer_pid",
     "quote_status",
+    "permission_status",
     "preopen_status",
     "intraday_1m_status",
     "daily_volume_status",
+    "Test-Intraday1mMa20Required",
+    "Get-PublicSlotPermissionProbe",
+    "Invoke-Direct1mStartupPrewarm",
+    "PreferHistorical",
+    "Direct1mPrewarmBars",
+    "direct_1m_prewarm_target_symbols",
+    "direct_1m_prewarm_complete",
+    "scanner_can_run_ma20",
+    "scanner_block_reason",
+    "ready_ge_20_symbols",
     "ready_ge_35_symbols",
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
+    "ready_macd_continuous_symbols",
     "ready_ge_80_symbols",
     "ready_ge_200_symbols",
     "latest_candle_time_taipei",
     "Write-PublicSlotSourceCoverageSnapshot",
+  ]);
+
+  requireIncludes("ops/public-slot/Strategy2Readiness100SourcePatch.sql", [
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous",
+    "ready_ma35_continuous",
+    "ready_macd_continuous",
+    "public.v_fugle_intraday_1m_status",
+  ]);
+
+  requireIncludes("lib/supabase-public-slot.js", [
+    "warmup_candle_count",
+    "continuous_candle_count",
+    "ready_ma20_continuous",
+    "ready_ma35_continuous",
+    "ready_macd_continuous",
+  ]);
+
+  requireIncludes("scripts/scan-intraday-signals.js", [
+    "ma20Window",
+    "ma20Source",
+    "row.minute <= targetMinute",
+    "continuous_candle_count",
+    "ready_ma35_continuous",
+  ]);
+
+  requireIncludes("scripts/replay-strategy2-full-window-from-1m.js", [
+    "dayCandles",
+    "allCandles",
+    "ma20Source",
   ]);
 
   requireIncludes("scripts/verify-publish-gate.js", [
@@ -99,6 +187,17 @@ function staticChecks() {
   ]);
 
   requireRegex("package.json", /"verify:fugle-source-contract"\s*:/, "verify:fugle-source-contract script");
+
+  for (const file of [
+    "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
+    "ops/public-slot/Strategy2ReadinessContractCache.sql",
+    "ops/public-slot/SupabasePublicSlot-StrategyViewsAndHealthPatch.sql",
+    "lib/supabase-public-slot.js",
+    "scripts/verify-strategy2-battle-state.js",
+  ]) {
+    forbidRegex(file, /today_candle_count\W*>=\W*(20|35)|rows_today\W*>=\W*(20|35)/, "today-only candle count as MA readiness");
+    forbidRegex(file, /intraday_1m_not_ready_ge_35/, "old intraday_1m_not_ready_ge_35 reason");
+  }
 }
 
 async function restGet(baseUrl, key, pathAndQuery) {
@@ -132,7 +231,7 @@ async function rpc(baseUrl, key, name, body) {
 
 function requirePayload(payload, keys, sourceName) {
   for (const key of keys) {
-    if (payload?.[key] === undefined || payload?.[key] === null || String(payload[key]).trim() === "") {
+    if (payload?.[key] === undefined || payload?.[key] === null || (!EMPTY_PAYLOAD_OK.has(key) && String(payload[key]).trim() === "")) {
       issues.push(`${sourceName} payload missing ${key}`);
     }
   }
@@ -171,6 +270,7 @@ async function liveChecks() {
       "build_id",
       "writer_pid",
       "quote_status",
+      "permission_status",
       "preopen_status",
       "intraday_1m_status",
       "daily_volume_status",
@@ -179,9 +279,33 @@ async function liveChecks() {
       "latest_candle_time",
       "latest_candle_time_taipei",
       "intraday_1m_stale_seconds",
+      "ready_ge_20_symbols",
       "ready_ge_35_symbols",
       "ready_ge_80_symbols",
       "ready_ge_200_symbols",
+      "fresh_quotes_120s",
+      "today_1m_symbols",
+      "today_1m_rows",
+      "warmup_candle_count",
+      "continuous_candle_count",
+      "ready_ma20_continuous_symbols",
+      "ready_ma35_continuous_symbols",
+      "ready_macd_continuous_symbols",
+      "direct_1m_prewarm_enabled",
+      "direct_1m_prewarm_bars_per_symbol",
+      "direct_1m_prewarm_target_symbols",
+      "direct_1m_prewarm_completed_symbols",
+      "direct_1m_prewarm_rows",
+      "direct_1m_prewarm_complete",
+      "daily_volume_ready_symbols",
+      "top_movers_ready20_count",
+      "top_movers_ready35_count",
+      "scanner_can_run_quote_only",
+      "scanner_can_run_opening",
+      "scanner_can_run_ma20",
+      "scanner_can_run_ma35",
+      "scanner_can_run_full_intraday",
+      "scanner_block_reason",
       "quotes",
       "active_symbols",
       "eligible_quote_rows",
@@ -199,19 +323,28 @@ async function liveChecks() {
   }
 
   const probes = [
-    ["fugle_source_coverage", "source_name,checked_at,status,quote_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,intraday_1m_symbols_today,ready_ge_35_symbols,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1"],
+    ["fugle_source_coverage", "source_name,checked_at,status,quote_status,permission_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,fresh_quotes_120s,today_1m_symbols,today_1m_rows,warmup_candle_count,continuous_candle_count,intraday_1m_symbols_today,ready_ge_20_symbols,ready_ge_35_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_macd_continuous_symbols,top_movers_ready20_count,top_movers_ready35_count,scanner_can_run_ma20,scanner_block_reason,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1"],
     ["v_fugle_quotes_commonstock_active", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,stock_type,session&limit=1"],
     ["fugle_quotes_live", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,payload&limit=1"],
     ["stock_tickers", "symbol,name,market,stock_type,industry,type,is_etf,is_suspended,updated_at,payload&limit=1"],
     ["fugle_daily_volume", "symbol,market,trade_date,volume,updated_at,payload&limit=1"],
-    ["fugle_intraday_1m", "symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,payload&limit=1"],
-    ["v_fugle_intraday_1m_status", "symbol,market,latest_candle_time,today_candle_count,candle_count,has_today_data,ready_ge_35,ready_ge_80,ready_ge_200,updated_at&limit=1"],
+    ["fugle_intraday_1m", "symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,payload&order=updated_at.desc&limit=1"],
+    ["v_fugle_intraday_1m_status", "symbol,market,latest_candle_time,latest_candle_time_taipei,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,has_today_data,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_20,ready_ge_35,ready_ge_80,ready_ge_200,updated_at&limit=1"],
+    ["v_daytrade_hot_symbol_readiness", "symbol,name,price,open_price,amplitude_from_open,total_volume,trade_value,avg_volume5,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,latest_candle_time_taipei,reason&limit=1"],
     ["market_calendar", "trade_date,market,is_open,session,note,updated_at,payload&limit=1"],
   ];
 
   for (const [table, query] of probes) {
     try {
-      await restGet(baseUrl, key, `${table}?select=${query}`);
+      const rows = await restGet(baseUrl, key, `${table}?select=${query}`);
+      if (table === "fugle_intraday_1m" && Array.isArray(rows) && rows[0]) {
+        const payload = rows[0].payload || {};
+        for (const marker of ["source", "synthetic", "volume_strategy_usable"]) {
+          if (payload[marker] === undefined || payload[marker] === null) {
+            issues.push(`fugle_intraday_1m latest payload missing ${marker}`);
+          }
+        }
+      }
     } catch (error) {
       issues.push(`${table} probe failed: ${error.message}`);
     }
