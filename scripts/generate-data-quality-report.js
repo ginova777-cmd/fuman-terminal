@@ -9,6 +9,12 @@ const FILES = [
   "institution-latest.json",
   "warrant-flow-latest.json",
 ];
+
+const RETIRED_API_ONLY_FILES = new Set([
+  "market-summary.json",
+  "institution-latest.json",
+  "warrant-flow-latest.json",
+]);
 const TRUSTED_STRATEGY2_MA35_SOURCES = new Set(["fugle-1m", "yahoo-1m", "local-1m", "twelve-1m"]);
 const STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_MIN_REALTIME_COVERAGE || 0.25);
 const STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_HEALTH_WARN_REALTIME_COVERAGE || 0.5);
@@ -161,6 +167,18 @@ function strategy2Issues(rows, payload) {
 }
 
 function inspect(file) {
+  if (RETIRED_API_ONLY_FILES.has(file)) {
+    return {
+      file,
+      ok: true,
+      retired: true,
+      status: "api_only_retired_static_data",
+      bytes: 0,
+      count: 0,
+      updatedAt: "",
+      issues: [],
+    };
+  }
   const candidates = [dataPath(file), path.join(ROOT, "data", file)];
   const target = candidates.find((item) => fs.existsSync(item));
   if (!target) return { file, ok: false, issues: [{ level: "high", message: "missing" }] };

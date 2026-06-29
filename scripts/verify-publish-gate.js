@@ -1009,6 +1009,22 @@ for (const [name, source] of [
     issues.push(`${name} must not default to writing generated data into repo/deploy sync roots`);
   }
 }
+if (!/RETIRED_API_ONLY_FILES/.test(dataQualityReportGenerator) || !/api_only_retired_static_data/.test(dataQualityReportGenerator)) {
+  issues.push("generate-data-quality-report.js must treat retired static latest files as API-only diagnostics");
+}
+for (const marker of ["market-summary.json", "institution-latest.json", "warrant-flow-latest.json"]) {
+  if (!dataQualityReportGenerator.includes(marker)) {
+    issues.push(`generate-data-quality-report.js missing retired static data marker ${marker}`);
+  }
+}
+if (!/RETIRED_API_ONLY_FILES/.test(performanceReportGenerator) || !/api_only_retired_static_data/.test(performanceReportGenerator)) {
+  issues.push("generate-performance-report.js must treat retired static cache assets as API-only diagnostics");
+}
+for (const marker of ["market-summary.json", "institution-slim.json", "warrant-flow-slim.json", "warrant-priority-top.json"]) {
+  if (!performanceReportGenerator.includes(marker)) {
+    issues.push(`generate-performance-report.js missing retired static asset marker ${marker}`);
+  }
+}
 
 const mobileLayoutVerifier = read("scripts/verify-mobile-layout.js");
 for (const marker of [

@@ -2,12 +2,31 @@ const fs = require("fs");
 const path = require("path");
 const { ROOT, dataPath, dataOutputPaths } = require("./runtime-paths");
 
+const RETIRED_API_ONLY_FILES = new Set([
+  "market-summary.json",
+  "institution-slim.json",
+  "institution-joint-top.json",
+  "warrant-flow-slim.json",
+  "warrant-priority-top.json",
+]);
+
 function readJson(file) {
   if (!fs.existsSync(file)) return null;
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 function stat(file) {
+  if (RETIRED_API_ONLY_FILES.has(file)) {
+    return {
+      file,
+      ok: true,
+      retired: true,
+      status: "api_only_retired_static_data",
+      bytes: 0,
+      count: 0,
+      updatedAt: "",
+    };
+  }
   const candidates = [dataPath(file), path.join(ROOT, "data", file)];
   const target = candidates.find((item) => fs.existsSync(item));
   if (!target) return { file, ok: false, bytes: 0, updatedAt: "" };
