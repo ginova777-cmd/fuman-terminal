@@ -71,6 +71,17 @@ function Test-UpdatedAfterSlot($updatedAt, $slot) {
 }
 
 function Test-InstitutionFresh {
+  $url = "https://fuman-terminal.vercel.app/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  try {
+    $payload = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45 -Headers @{ "Cache-Control" = "no-cache" }).Content | ConvertFrom-Json
+    $count = if ($payload.count) { [int]$payload.count } else { 0 }
+    if ($payload.ok -ne $true -or -not $payload.runId) { return @{ ok = $false; reason = "institution API not ready ok=$($payload.ok) runId=$($payload.runId)" } }
+    if ($count -lt 100) { return @{ ok = $false; reason = "institution API count too low: $count" } }
+    if (-not (Test-UpdatedAfterSlot $payload.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "institution API not updated after $ExpectedTime; updatedAt=$($payload.updatedAt)" } }
+    return @{ ok = $true; reason = "api ok count=$count runId=$($payload.runId)" }
+  } catch {
+    Write-WatchdogLog "Institution API freshness check failed: $($_.Exception.Message); falling back to runtime cache"
+  }
   $path = Join-Path $env:FUMAN_DATA_DIR "institution-latest.json"
   if (-not (Test-Path -LiteralPath $path)) { return @{ ok = $false; reason = "missing institution cache" } }
   $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
@@ -81,6 +92,17 @@ function Test-InstitutionFresh {
 }
 
 function Test-WarrantFresh {
+  $url = "https://fuman-terminal.vercel.app/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  try {
+    $payload = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45 -Headers @{ "Cache-Control" = "no-cache" }).Content | ConvertFrom-Json
+    $count = if ($payload.count) { [int]$payload.count } else { 0 }
+    if ($payload.ok -ne $true -or -not $payload.runId) { return @{ ok = $false; reason = "warrant API not ready ok=$($payload.ok) runId=$($payload.runId)" } }
+    if ($count -lt 20) { return @{ ok = $false; reason = "warrant API count too low: $count" } }
+    if (-not (Test-UpdatedAfterSlot $payload.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "warrant API not updated after $ExpectedTime; updatedAt=$($payload.updatedAt)" } }
+    return @{ ok = $true; reason = "api ok count=$count runId=$($payload.runId)" }
+  } catch {
+    Write-WatchdogLog "Warrant API freshness check failed: $($_.Exception.Message); falling back to runtime cache"
+  }
   $path = Join-Path $env:FUMAN_DATA_DIR "warrant-flow-latest.json"
   if (-not (Test-Path -LiteralPath $path)) { return @{ ok = $false; reason = "missing warrant cache" } }
   $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
