@@ -439,7 +439,7 @@ try {
   Invoke-ScanTask "cb-detect" "cb detect raw refresh" "optional" "scripts\generate-cb-detect.js" (Join-Path $runtimeRoot "data\cb-detect-latest.json") @{}
   Invoke-DesktopRouteSnapshotWrite
 
-  $strictFailures = Get-FullScanStrictFailures @($receipts.ToArray())
+  $strictFailures = @(Get-FullScanStrictFailures @($receipts.ToArray()))
   $summary = [ordered]@{
     ok = ($criticalFailures.Count -eq 0 -and $strictFailures.Count -eq 0)
     source = "scan-full"
@@ -448,7 +448,7 @@ try {
     criticalFailures = @($criticalFailures.ToArray())
     strictRequiredStrategies = @($strictRequiredStrategies)
     allCompleteOk = ($strictFailures.Count -eq 0)
-    strictFailures = @($strictFailures.ToArray())
+    strictFailures = @($strictFailures)
     receipts = @($receipts.ToArray())
     log = $log
   }
