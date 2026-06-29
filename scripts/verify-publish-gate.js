@@ -964,6 +964,26 @@ for (const marker of [
 if (!/REALTIME_RADAR_NOTIFY\s*=\s*"0"/.test(runRealtimeRadar)) {
   issues.push("run-realtime-radar.ps1 must disable realtime radar Telegram source alerts with REALTIME_RADAR_NOTIFY=0");
 }
+for (const marker of [
+  "REALTIME_RADAR_PATROL_INTERVAL_MS = \"3000\"",
+  "REALTIME_RADAR_BATCH_SIZE",
+  "REALTIME_RADAR_BATCH_CONCURRENCY",
+  "REALTIME_RADAR_BATCH_TIMEOUT_MS",
+  "REALTIME_RADAR_BATCH_RETRIES",
+  "REALTIME_RADAR_STALE_RESCAN_LIMIT",
+]) {
+  if (!runRealtimeRadar.includes(marker)) issues.push(`run-realtime-radar.ps1 missing fast/stable radar tuning marker ${marker}`);
+}
+for (const marker of [
+  "REALTIME_BATCH_SIZE",
+  "REALTIME_BATCH_RETRIES",
+  "fetchRealtimeBatch",
+  "selectStaleStocksForRescan",
+  "normalizeRescanBatches",
+  "staleRescanLimit",
+]) {
+  if (!realtimeRadarScanner.includes(marker)) issues.push(`scan-realtime-radar-cache.js missing fast/stable radar tuning marker ${marker}`);
+}
 const buildRadarRowsMatch = realtimeRadarScanner.match(/function buildRadarRows[\s\S]*?function radarRowSessionSeconds/);
 if (!buildRadarRowsMatch) {
   issues.push("scan-realtime-radar-cache.js must keep buildRadarRows before radarRowSessionSeconds for realtime radar no-rollback guard");

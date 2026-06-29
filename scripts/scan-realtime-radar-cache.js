@@ -36,6 +36,10 @@ const MAX_QUOTE_AGE_SECONDS = Number(process.env.REALTIME_RADAR_MAX_QUOTE_AGE_SE
 const REALTIME_RESCAN_BATCH_SIZE = Number(process.env.REALTIME_RADAR_RESCAN_BATCH_SIZE || 80);
 const REALTIME_BATCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_BATCH_TIMEOUT_MS || 10000);
 const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.REALTIME_RADAR_BATCH_CONCURRENCY || 6));
+const REALTIME_BATCH_SIZE = Math.max(20, Number(process.env.REALTIME_RADAR_BATCH_SIZE || 100));
+const REALTIME_BATCH_RETRIES = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRIES || 1));
+const REALTIME_BATCH_RETRY_DELAY_MS = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRY_DELAY_MS || 500));
+const REALTIME_STALE_RESCAN_LIMIT = Math.max(0, Number(process.env.REALTIME_RADAR_STALE_RESCAN_LIMIT || 180));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
@@ -283,6 +287,18 @@ async function fetchJson(url, timeout = 30000) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(attempt = 0) {
+  return REALTIME_BATCH_RETRY_DELAY_MS * Math.max(1, attempt + 1);
+}
+
+async function fetchRealtimeBatch(codes = [], timeout = REALTIME_BATCH_TIMEOUT_MS) {
+  return fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, timeout);
+}
+
 async function fetchStocks() {
   try {
     const market = await fetchJson(`${BASE_URL}/api/market?t=${Date.now()}`, 30000);
@@ -345,7 +361,7 @@ async function runWithConcurrency(items, limit, worker) {
 }
 async function fetchRealtime(stocks) {
   const quotes = new Map();
-  const batchSize = 100;
+  const batchSize = REALTIME_BATCH_SIZE;
   const failedBatches = [];
   const apiErrors = [];
   const fallbackRecovered = { fugle: 0, yahoo: 0 };
@@ -361,8 +377,19 @@ async function fetchRealtime(stocks) {
     });
   }
   await runWithConcurrency(batches, REALTIME_BATCH_CONCURRENCY, async ({ batchStocks, codes, batchIndex }) => {
+    let lastError = null;
     try {
-      const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, REALTIME_BATCH_TIMEOUT_MS);
+      let payload = null;
+      for (let attempt = 0; attempt <= REALTIME_BATCH_RETRIES; attempt += 1) {
+        try {
+          payload = await fetchRealtimeBatch(codes, REALTIME_BATCH_TIMEOUT_MS + attempt * 3000);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt >= REALTIME_BATCH_RETRIES) throw error;
+          await sleep(retryDelayMs(attempt));
+        }
+      }
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
       (payload.errors || []).forEach((error) => apiErrors.push({ ...error, parentBatch: batchIndex }));
       fallbackRecovered.fugle += Number(payload.fallbackRecovered?.fugle || 0);
@@ -375,7 +402,7 @@ async function fetchRealtime(stocks) {
         count: codes.length,
         codes,
         stocks: batchStocks,
-        error: error.message,
+        error: error.message || lastError?.message || "realtime batch failed",
       });
       console.log(`realtime batch deferred #${batchIndex} ${codes[0]}-${codes.at(-1)}: ${error.message}`);
     }
@@ -398,6 +425,38 @@ async function fetchRealtime(stocks) {
     quoteSourceCounts[source] = (quoteSourceCounts[source] || 0) + 1;
   }
   return { stocks: liveStocks, failedBatches, apiErrors, fallbackRecovered, quoteSourceCounts, totalBatches: batches.length, quoteCount: quotes.size };
+}
+
+function staleRescanPriority(stock) {
+  const value = cleanNumber(stock.value);
+  const volume = cleanNumber(stock.tradeVolume);
+  const percent = Math.abs(cleanNumber(stock.percent));
+  const change = Math.abs(cleanNumber(stock.change));
+  return value / 1000000 + volume / 100 + percent * 8 + change * 3;
+}
+
+function selectStaleStocksForRescan(staleStocks = []) {
+  if (!REALTIME_STALE_RESCAN_LIMIT) return [];
+  return [...staleStocks]
+    .filter((stock) => staleRescanPriority(stock) > 0)
+    .sort((a, b) => staleRescanPriority(b) - staleRescanPriority(a) || String(a.code || "").localeCompare(String(b.code || "")))
+    .slice(0, REALTIME_STALE_RESCAN_LIMIT);
+}
+
+function normalizeRescanBatches(batches = []) {
+  return batches.flatMap((batch) => {
+    const stocks = Array.isArray(batch.stocks) ? batch.stocks : [];
+    const chunks = chunkStocks(stocks, REALTIME_RESCAN_BATCH_SIZE);
+    return chunks.map((chunk, index) => ({
+      ...batch,
+      ...chunk,
+      reason: batch.reason || "retry",
+      batchIndex: batch.batchIndex ? `${batch.batchIndex}.${index + 1}` : "",
+      startCode: chunk.codes[0] || "",
+      endCode: chunk.codes.at(-1) || "",
+      count: chunk.codes.length,
+    }));
+  });
 }
 
 function applyRealtimeQuotes(stocks, quotes) {
@@ -423,16 +482,26 @@ async function rescanRealtimeBatches(failedBatches = []) {
   const quotes = new Map();
   const stillFailedBatches = [];
   let recoveredBatches = 0;
-  for (const batch of failedBatches) {
+  for (const batch of normalizeRescanBatches(failedBatches)) {
     const codes = batch.codes || [];
     if (!codes.length) continue;
+    let lastError = null;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const payload = await fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, 20000);
+      let payload = null;
+      for (let attempt = 0; attempt <= REALTIME_BATCH_RETRIES; attempt += 1) {
+        try {
+          await sleep(retryDelayMs(attempt));
+          payload = await fetchRealtimeBatch(codes, Math.max(20000, REALTIME_BATCH_TIMEOUT_MS) + attempt * 3000);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt >= REALTIME_BATCH_RETRIES) throw error;
+        }
+      }
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
       recoveredBatches += 1;
     } catch (error) {
-      stillFailedBatches.push(normalizeDeferredBatch({ ...batch, error: error.message }, batch.reason || "retry_failed"));
+      stillFailedBatches.push(normalizeDeferredBatch({ ...batch, error: error.message || lastError?.message }, batch.reason || "retry_failed"));
       console.log(`realtime deferred batch failed ${codes[0]}-${codes.at(-1)}: ${error.message}`);
     }
   }
@@ -720,6 +789,11 @@ async function main() {
     sessionStart: "09:00",
     sessionEnd: "13:30",
     sessionLimit: REALTIME_RADAR_SESSION_LIMIT,
+    batchSize: REALTIME_BATCH_SIZE,
+    batchConcurrency: REALTIME_BATCH_CONCURRENCY,
+    batchTimeoutMs: REALTIME_BATCH_TIMEOUT_MS,
+    batchRetries: REALTIME_BATCH_RETRIES,
+    staleRescanLimit: REALTIME_STALE_RESCAN_LIMIT,
     currentScanCount: currentRows.length,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
@@ -754,7 +828,8 @@ async function main() {
   await maybeSendRealtimeRadarAlert(payload);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
-  const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocks).map((batch) => ({ ...batch, reason: "stale_quote" }))];
+  const staleStocksForRescan = selectStaleStocksForRescan(staleStocks);
+  const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocksForRescan).map((batch) => ({ ...batch, reason: "stale_quote" }))];
   let deferredRetry = null;
   if (deferredBatches.length) {
     const retry = await rescanRealtimeBatches(deferredBatches);
@@ -776,7 +851,7 @@ async function main() {
           longCount: mergedRows.filter((row) => row.side === "long").length,
           shortCount: mergedRows.filter((row) => row.side === "short").length,
           recoveredBatchCount: retry.recoveredBatches,
-          staleRescanCount: staleStocks.length,
+          staleRescanCount: staleStocksForRescan.length,
           staleQuoteCount: remainingStaleStocks.length,
           staleQuoteDetails: patchedStaleQuoteDetails,
           failedBatchDetails: patchedFailedBatchDetails,
