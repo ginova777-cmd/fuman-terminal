@@ -1935,6 +1935,9 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await verifyMobileLegacySuccessRescue(cdp);
           await verifyMobileDivergedStorageMerge(cdp);
           await verifyMobileConsecutiveManualAdds(cdp);
+          await cdp.send("Page.navigate", { url: BLANK_PAGE_URL }, 10000).catch(() => null);
+          await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
+          await reloadMobilePage(cdp, theme);
           await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
           await reloadMobilePage(cdp, theme);
           await activateMobileRoute(cdp, effectiveRoute);
