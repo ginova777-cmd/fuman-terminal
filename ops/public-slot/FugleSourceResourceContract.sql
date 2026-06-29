@@ -90,6 +90,9 @@ alter table public.fugle_source_coverage
 create index if not exists idx_fugle_source_coverage_trade_date_checked
   on public.fugle_source_coverage (trade_date desc, checked_at desc);
 
+create unique index if not exists idx_fugle_source_coverage_source_checked_at_unique
+  on public.fugle_source_coverage (source_name, checked_at);
+
 do $$
 begin
   if exists (

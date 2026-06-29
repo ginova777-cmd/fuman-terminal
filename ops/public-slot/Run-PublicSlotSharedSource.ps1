@@ -1001,17 +1001,32 @@ function Write-QuoteHeartbeatStatus {
     $effectiveQuoteCoverage = [math]::Round($effectiveEligibleQuoteRows / [math]::Max(1, $effectiveEligibleSymbols), 4)
     $script:ApiUniverseStats.eligible_quote_rows = $effectiveEligibleQuoteRows
     $script:ApiUniverseStats.eligible_quote_coverage = $effectiveQuoteCoverage
+    $previousSourcePayload = $null
+    try {
+      $previousRows = @(Invoke-PublicSlotRestGet -PathAndQuery "source_status?source_name=eq.$SourceName&select=payload&limit=1")
+      if ($previousRows.Count -gt 0) {
+        $previousSourcePayload = @($previousRows)[0].payload
+      }
+    } catch {}
+    function Get-PreviousPayloadValue {
+      param([string]$Key, [object]$Default = $null)
+      if ($null -ne $previousSourcePayload) {
+        if ($previousSourcePayload -is [System.Collections.IDictionary] -and $previousSourcePayload.Contains($Key)) {
+          return $previousSourcePayload[$Key]
+        }
+        $prop = $previousSourcePayload.PSObject.Properties[$Key]
+        if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+      }
+      return $Default
+    }
 
     $eligibleQuoteFloor = if ($effectiveEligibleSymbols -ge 1000) { [int][math]::Ceiling([double]$effectiveEligibleSymbols * 0.9) } else { [math]::Min(400, [math]::Max(1, [int]([double]$effectiveEligibleSymbols * 0.8))) }
     $quotesOk = ($effectiveEligibleQuoteRows -ge $eligibleQuoteFloor -and $quoteAgeSeconds -le $StaleSeconds)
     $intradayStats = Get-Intraday1mCoverageStats -FallbackRows @()
     if ($intradayStats.intraday_1m_rows_today -le 0 -or $intradayStats.intraday_1m_stale_seconds -ge 999999) {
-      try {
-        $previousRows = @(Invoke-PublicSlotRestGet -PathAndQuery "source_status?source_name=eq.$SourceName&select=payload&limit=1")
-        if ($previousRows.Count -gt 0) {
-          $intradayStats = Copy-IntradayStatsFromSourcePayload -Stats $intradayStats -Payload (@($previousRows)[0].payload)
-        }
-      } catch {}
+      if ($null -ne $previousSourcePayload) {
+        $intradayStats = Copy-IntradayStatsFromSourcePayload -Stats $intradayStats -Payload $previousSourcePayload
+      }
     }
     $intraday1mFreshOk = ($intradayStats.intraday_1m_rows_today -gt 0 -and $intradayStats.intraday_1m_stale_seconds -le $Intraday1mFreshHardSeconds)
     $intraday1mMa20Required = ($Session -eq "regular" -and (Test-Intraday1mMa20Required))
@@ -1076,6 +1091,7 @@ function Write-QuoteHeartbeatStatus {
       avg_volume5_eligible = $script:ApiUniverseStats.avg_volume5_eligible
       avg_volume5_filtered = $script:ApiUniverseStats.avg_volume5_filtered
       daily_volume_rows = $script:ApiUniverseStats.avg_volume5_eligible
+      daily_volume_avg_rows = $script:ApiUniverseStats.avg_volume5_eligible
       degraded_but_usable_for_intraday = [bool]$degradedButUsableForIntraday
       source_parts = @{
         quotes_ok = [bool]$quotesOk
@@ -1092,6 +1108,9 @@ function Write-QuoteHeartbeatStatus {
       permission_failed_resources = @($permissionProbe.failed_resources)
       preopen_rows = @($PreopenRows).Count
       preopen_count = @($PreopenRows).Count
+      preopen = @($PreopenRows).Count
+      futopt = [int](Get-PreviousPayloadValue -Key "futopt" -Default 0)
+      futopt_quotes = [int](Get-PreviousPayloadValue -Key "futopt_quotes" -Default 0)
       intraday_1m_symbols_today = $intradayStats.intraday_1m_symbols_today
       intraday_1m_rows_today = $intradayStats.intraday_1m_rows_today
       today_1m_rows = $intradayStats.intraday_1m_rows_today
@@ -1141,6 +1160,23 @@ function Write-QuoteHeartbeatStatus {
       rest_quote_batch_size = $RestQuoteBatchSize
       rest_quote_every_seconds = $RestQuoteEverySeconds
       rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
+      quote_derived_1m_candidate_symbols = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_candidate_symbols" -Default 0)
+      quote_derived_1m_candidate_limit = $QuoteDerived1mCandidateCount
+      quote_derived_1m_full_universe = [bool](Get-PreviousPayloadValue -Key "quote_derived_1m_full_universe" -Default ($QuoteDerived1mCandidateCount -le 0))
+      quote_derived_1m_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_rows" -Default 0)
+      quote_derived_1m_current_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_current_rows" -Default 0)
+      quote_derived_1m_current_minute = Get-PreviousPayloadValue -Key "quote_derived_1m_current_minute" -Default ((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:00Z"))
+      quote_derived_1m_max_quote_age_seconds = $QuoteDerived1mMaxQuoteAgeSeconds
+      quote_derived_1m_opening_backfill_minutes = $QuoteDerivedOpeningBackfillMinutes
+      quote_derived_1m_opening_backfill_rows = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_rows" -Default 0)
+      quote_derived_1m_opening_backfill_symbols = [int](Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_symbols" -Default 0)
+      direct_1m_prewarm_enabled = [bool]$Direct1mPrewarmEnabled
+      direct_1m_prewarm_start = $Direct1mPrewarmStart
+      direct_1m_prewarm_bars_per_symbol = $Direct1mPrewarmBars
+      direct_1m_prewarm_target_symbols = [int](Get-PreviousPayloadValue -Key "direct_1m_prewarm_target_symbols" -Default $Direct1mPrewarmSymbolCount)
+      direct_1m_prewarm_completed_symbols = [int](Get-PreviousPayloadValue -Key "direct_1m_prewarm_completed_symbols" -Default 0)
+      direct_1m_prewarm_rows = [int](Get-PreviousPayloadValue -Key "direct_1m_prewarm_rows" -Default 0)
+      direct_1m_prewarm_complete = [bool](Get-PreviousPayloadValue -Key "direct_1m_prewarm_complete" -Default $false)
       session = $Session
       collector = $CollectorState
       websocket_status = $WebSocketStatus
