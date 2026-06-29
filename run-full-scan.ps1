@@ -476,9 +476,8 @@ try {
   Invoke-RunnerTask "strategy5" "strategy5 full scan" "critical" "run-strategy5.ps1"
   Invoke-RunnerTask "cb-detect" "CB detect full scan" "critical" "run-cb-detect.ps1"
 
-  $receiptItems = @(Convert-ToStableArray $receipts)
-  $strictFailures = @(Get-FullScanStrictFailures $receiptItems)
-  $strictFailureItems = @(Convert-ToStableArray $strictFailures)
+  $receiptItems = @($receipts.ToArray())
+  $strictFailureItems = @(Get-FullScanStrictFailures $receiptItems)
 
   if ($strictFailureItems.Count -eq 0) {
     Invoke-DesktopRouteSnapshotWrite
@@ -487,7 +486,7 @@ try {
     Write-ScanLog "SKIP desktop route snapshot write because strictFailures=$($strictFailureItems.Count)"
   }
 
-  $criticalFailureItems = @(Convert-ToStableArray $criticalFailures)
+  $criticalFailureItems = @($criticalFailures.ToArray())
   $summary = [ordered]@{
     ok = ($criticalFailureItems.Count -eq 0 -and $strictFailureItems.Count -eq 0)
     source = "scan-full"
