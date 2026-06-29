@@ -170,7 +170,7 @@ function Get-FullScanStrictFailures($items) {
       $failures.Add("${strategy}: warnings=$(@($warnings).Count)") | Out-Null
     }
   }
-  return $failures
+  return @($failures.ToArray())
 }
 
 function Write-Receipt($receipt) {
