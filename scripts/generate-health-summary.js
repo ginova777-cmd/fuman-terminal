@@ -98,6 +98,11 @@ const REPLACED_OR_LEGACY_TASKS = new Set([
 
 const NON_TERMINAL_DATA_TASKS = new Set([]);
 
+const MAINTENANCE_STOPPED_TASKS = new Set([
+  "\\Fuman Freshness Gate Fast 0845-1645",
+  "\\Fuman Freshness Gate Full 0610 2010",
+]);
+
 function isIgnorableTaskResult(task) {
   const name = String(task.TaskName || "");
   const code = String(task["Last Result"] || "");
@@ -110,6 +115,9 @@ function isIgnorableTaskResult(task) {
     const ageMs = Date.now() - Date.parse(latest.updatedAt || "");
     const freshEnough = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 20 * 60 * 1000;
     return latest.ok && latest.date === taipeiDateText() && freshEnough;
+  }
+  if (MAINTENANCE_STOPPED_TASKS.has(name) && code === "267014" && task.Status === "Ready") {
+    return true;
   }
   return (
     name === "\\Fuman PC Wake 0430" && code === "-2147020576" && task.Status === "Ready"
