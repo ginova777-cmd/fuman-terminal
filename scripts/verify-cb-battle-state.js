@@ -238,6 +238,15 @@ async function main() {
       source: strictApi.body?.source || "",
       cacheSource: strictApi.body?.cacheSource || "",
       dataContractSource: strictApi.body?.dataContractSource || "",
+      status: strictApi.body?.status || "",
+      sourceCoverage: strictApi.body?.sourceCoverage || null,
+      staleSeconds: strictApi.body?.staleSeconds,
+      latestRunId: strictApi.body?.latestRunId || "",
+      fallbackUsed: strictApi.body?.fallbackUsed,
+      writeBudget: strictApi.body?.writeBudget || null,
+      retentionOk: strictApi.body?.retentionOk,
+      issues: Array.isArray(strictApi.body?.issues) ? strictApi.body.issues : null,
+      warnings: Array.isArray(strictApi.body?.warnings) ? strictApi.body.warnings : null,
       transport: strictApi.body?.transport || null,
       error: strictApi.body?.error || strictApi.body?.detail || "",
     },
@@ -252,6 +261,15 @@ async function main() {
       source: compactApi.body?.source || "",
       cacheSource: compactApi.body?.cacheSource || "",
       dataContractSource: compactApi.body?.dataContractSource || "",
+      status: compactApi.body?.status || "",
+      sourceCoverage: compactApi.body?.sourceCoverage || null,
+      staleSeconds: compactApi.body?.staleSeconds,
+      latestRunId: compactApi.body?.latestRunId || "",
+      fallbackUsed: compactApi.body?.fallbackUsed,
+      writeBudget: compactApi.body?.writeBudget || null,
+      retentionOk: compactApi.body?.retentionOk,
+      issues: Array.isArray(compactApi.body?.issues) ? compactApi.body.issues : null,
+      warnings: Array.isArray(compactApi.body?.warnings) ? compactApi.body.warnings : null,
       transport: compactApi.body?.transport || null,
       error: compactApi.body?.error || compactApi.body?.detail || "",
     },
@@ -265,6 +283,17 @@ async function main() {
   pushIssue(issues, details.api.strict.cacheSource === "supabase-api", "cb_strict_api_not_using_complete_run", details.api.strict);
   pushIssue(issues, details.api.strict.count >= MIN_RESULT_ROWS, "cb_api_count_below_min", { count: details.api.strict.count, min: MIN_RESULT_ROWS });
   pushIssue(issues, details.api.strict.returnedCount >= MIN_RESULT_ROWS, "cb_api_returned_count_empty", details.api.strict);
+  for (const [label, api] of Object.entries(details.api)) {
+    pushIssue(issues, api.status === "ready", `cb_${label}_api_status_not_ready`, { status: api.status });
+    pushIssue(issues, api.sourceCoverage && typeof api.sourceCoverage === "object", `cb_${label}_api_source_coverage_missing`, api);
+    pushIssue(issues, Number.isFinite(Number(api.staleSeconds)), `cb_${label}_api_stale_seconds_missing`, api);
+    pushIssue(issues, Boolean(api.latestRunId), `cb_${label}_api_latest_run_id_missing`, api);
+    pushIssue(issues, api.fallbackUsed === false, `cb_${label}_api_fallback_used`, api);
+    pushIssue(issues, api.writeBudget?.allowLatestWrite === true && api.writeBudget?.preservePreviousCompleteRun === false, `cb_${label}_api_write_budget_blocks_publish`, api.writeBudget || {});
+    pushIssue(issues, api.retentionOk === true, `cb_${label}_api_retention_not_ok`, api);
+    pushIssue(issues, Array.isArray(api.issues), `cb_${label}_api_issues_not_machine_readable`, api);
+    pushIssue(issues, Array.isArray(api.warnings), `cb_${label}_api_warnings_not_machine_readable`, api);
+  }
 
   const [scannerHealth, completeRunHealth, latestRun] = await Promise.all([
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),

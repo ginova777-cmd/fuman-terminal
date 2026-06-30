@@ -64,6 +64,23 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function secondsSince(value) {
+  const time = Date.parse(String(value || ""));
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.floor((Date.now() - time) / 1000));
+}
+
+function ratio(numerator, denominator) {
+  const top = cleanNumber(numerator);
+  const bottom = cleanNumber(denominator);
+  if (bottom <= 0) return top > 0 ? 1 : 0;
+  return Number(Math.max(0, Math.min(1, top / bottom)).toFixed(4));
+}
+
+function uniqueList(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
 function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
@@ -144,7 +161,7 @@ function buildCbSourceHealth(health, scannerHealth) {
   const issues = [];
   const warnings = [];
   if (completeRunStatus !== "ok") issues.push(`complete_run_${completeRunStatus}`);
-  if (scannerStatus !== "ok") warnings.push(`scanner_${scannerStatus}`);
+  if (scannerStatus !== "ok") issues.push(`scanner_${scannerStatus}`);
   return {
     completeRun: health || null,
     scanner: scannerHealth || null,
@@ -158,6 +175,57 @@ function buildCbSourceHealth(health, scannerHealth) {
     warnings,
     warningCount: warnings.length,
     warningLimit: 3,
+  };
+}
+
+function buildCbSourceCoverage(payload = {}) {
+  const run = payload?.run || {};
+  const sourceCounts = run?.payload?.sourceCounts || payload?.sourceCounts || {};
+  const expectedTotal = cleanNumber(run.expected_total ?? run.expectedTotal ?? payload.expectedTotal ?? payload.count);
+  const scannedCount = cleanNumber(run.scanned_count ?? run.scannedCount ?? payload.scannedCount ?? payload.count);
+  const resultCount = cleanNumber(run.result_count ?? run.resultCount ?? payload.resultCount ?? payload.count);
+  const scannerRows = cleanNumber(payload?.sourceHealth?.scanner?.row_count ?? resultCount);
+  return {
+    contract: "cb-source-coverage-v1",
+    status: payload?.sourceHealth?.status === "ok" && resultCount > 0 ? "ready" : "degraded",
+    completeRunCoverage: ratio(resultCount, expectedTotal || resultCount),
+    scanCoverage: ratio(scannedCount, expectedTotal || scannedCount),
+    expectedTotal,
+    scannedCount,
+    resultCount,
+    scannerRows,
+    sourceCounts,
+    latestCompleteRunHealth: payload?.sourceHealth?.completeRun?.source_status || payload?.sourceHealth?.completeRun?.status || "",
+    scannerResourceStatus: payload?.sourceHealth?.scanner?.status || "",
+  };
+}
+
+function buildCbGateContract(payload = {}, baseIssues = [], baseWarnings = [], options = {}) {
+  const updatedAt = payload?.updatedAt || payload?.generatedAt || "";
+  const staleSeconds = secondsSince(updatedAt);
+  const sourceCoverage = buildCbSourceCoverage(payload);
+  const fallbackUsed = payload?.cacheSource !== "supabase-api";
+  const retentionOk = payload?.complete === true && fallbackUsed === false && cleanNumber(payload?.count) > 0;
+  const status = options.status || (payload?.ok === false ? "blocked" : baseIssues.length ? "degraded" : "ready");
+  const publishAllowed = status === "ready" && retentionOk && sourceCoverage.status === "ready";
+  const reason = options.reason || payload?.detail || payload?.reason || (baseIssues.length ? baseIssues.join(";") : "ready");
+  return {
+    status,
+    sourceCoverage,
+    staleSeconds,
+    latestRunId: payload?.runId || "",
+    fallbackUsed,
+    writeBudget: {
+      allowLatestWrite: publishAllowed,
+      allowCompleteRunWrite: publishAllowed,
+      preservePreviousCompleteRun: !publishAllowed,
+      reason: publishAllowed ? "CB complete-run source ready" : reason,
+    },
+    retentionOk,
+    publishAllowed,
+    mustPreserveLatest: !publishAllowed,
+    issues: uniqueList(baseIssues),
+    warnings: uniqueList(baseWarnings),
   };
 }
 
@@ -176,33 +244,48 @@ function attachCbSelfCheck(payload, options = {}) {
   if (!updatedAtOk) issues.push("updated_at_invalid");
   if (!qualityStatus) issues.push("quality_status_missing");
   if (sourceHealthStatus && sourceHealthStatus !== "ok") issues.push(`source_health_${sourceHealthStatus}`);
+  const warnings = payload?.sourceHealth?.warnings || [];
   const status = options.status || (payload?.ok === false ? "blocked" : issues.length ? "degraded" : "ready");
+  const gateContract = buildCbGateContract(payload, issues, warnings, {
+    status,
+    reason: options.reason || payload?.detail || payload?.reason || "",
+  });
   return {
     ...payload,
+    ...gateContract,
     selfCheck: {
       strategy: "cb-detect",
-      contract: "api-self-check-v1",
+      contract: "api-self-check-v2",
       checkedAt: new Date().toISOString(),
-      status,
-      reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : "ready"),
+      status: gateContract.status,
+      reason: gateContract.writeBudget.reason,
       officialSource: "Supabase complete-run: cb_detect_scan_runs + cb_detect_scan_results",
       sourceOk,
       cacheSource,
       runId: payload?.runId || "",
+      latestRunId: gateContract.latestRunId,
       updatedAt,
       qualityStatus,
       freshness: {
         runId: payload?.runId || "",
         updatedAt,
         generatedAt: payload?.generatedAt || "",
+        staleSeconds: gateContract.staleSeconds,
       },
+      sourceCoverage: gateContract.sourceCoverage,
+      fallbackUsed: gateContract.fallbackUsed,
+      writeBudget: gateContract.writeBudget,
+      retentionOk: gateContract.retentionOk,
+      publishAllowed: gateContract.publishAllowed,
+      mustPreserveLatest: gateContract.mustPreserveLatest,
       dataContract: {
         source: payload?.dataContractSource || "",
         ok: String(payload?.dataContractSource || "").includes("cb_detect_scan_runs/results"),
       },
       sourceHealth: payload?.sourceHealth || null,
       transport: payload?.transport || null,
-      issues,
+      issues: gateContract.issues,
+      warnings: gateContract.warnings,
     },
   };
 }
@@ -210,7 +293,7 @@ async function readLatestCompleteRun(options) {
   const runRows = await fetchSupabaseRows(
     CB_DETECT_RUNS_TABLE,
     [
-      "select=run_id,scan_date,finished_at,status,complete,result_count,quality_status,source,schema_version,data_contract_source,generated_at,updated_at,payload",
+      "select=run_id,scan_date,finished_at,status,complete,expected_total,scanned_count,result_count,quality_status,source,schema_version,data_contract_source,generated_at,updated_at,payload",
       "strategy=eq.cb_detect",
       "status=eq.complete",
       "complete=eq.true",
@@ -256,6 +339,10 @@ async function readLatestCompleteRun(options) {
     updatedAt: run.updated_at || run.finished_at || run.generated_at || "",
     generatedAt: run.generated_at || "",
     dataContractSource: run.data_contract_source || "cb_detect_scan_runs/results",
+    expectedTotal: cleanNumber(run.expected_total) || count,
+    scannedCount: cleanNumber(run.scanned_count) || count,
+    resultCount: count,
+    run,
     sourceHealth: buildCbSourceHealth(health, scannerHealth),
     transport: {
       source: "supabase",

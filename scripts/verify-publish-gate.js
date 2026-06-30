@@ -2234,7 +2234,19 @@ if (/run-cache-sync|freshness:gate|release:daily|sync-afterhours-supabase-status
 for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "publishCbDetectCompleteRunToSupabase", "verifyCbDetectSupabaseReadback"]) {
   if (!cbDetectScanner.includes(marker)) issues.push(`generate-cb-detect.js missing CB complete-run marker ${marker}`);
 }
-for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "readLatestCompleteRun", "cacheSource: \"supabase-api\"", "gate: \"run_id\""]) {
+for (const marker of [
+  "cb_detect_scan_runs",
+  "cb_detect_scan_results",
+  "readLatestCompleteRun",
+  "cacheSource: \"supabase-api\"",
+  "gate: \"run_id\"",
+  "sourceCoverage",
+  "staleSeconds",
+  "latestRunId",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+]) {
   if (!cbDetectLatestApi.includes(marker)) issues.push(`api/cb-detect-latest.js missing CB complete-run API marker ${marker}`);
 }
 for (const marker of [

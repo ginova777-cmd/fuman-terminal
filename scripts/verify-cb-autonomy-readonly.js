@@ -145,6 +145,15 @@ function apiOk(blockers, label, result, runId) {
   add(blockers, payload.transport?.gate === "run_id", `${label}_api_not_run_id_gate`, payload.transport || {});
   add(blockers, payload.transport?.runTable === "cb_detect_scan_runs", `${label}_api_run_table_mismatch`, payload.transport || {});
   add(blockers, payload.transport?.resultTable === "cb_detect_scan_results", `${label}_api_result_table_mismatch`, payload.transport || {});
+  add(blockers, payload.status === "ready", `${label}_api_status_not_ready`, { status: payload.status || "" });
+  add(blockers, payload.sourceCoverage && typeof payload.sourceCoverage === "object", `${label}_api_source_coverage_missing`, payload);
+  add(blockers, Number.isFinite(Number(payload.staleSeconds)), `${label}_api_stale_seconds_missing`, payload);
+  add(blockers, Boolean(payload.latestRunId), `${label}_api_latest_run_id_missing`, payload);
+  add(blockers, payload.fallbackUsed === false, `${label}_api_fallback_used`, { fallbackUsed: payload.fallbackUsed });
+  add(blockers, payload.writeBudget?.allowLatestWrite === true && payload.writeBudget?.preservePreviousCompleteRun === false, `${label}_api_write_budget_blocks_publish`, payload.writeBudget || {});
+  add(blockers, payload.retentionOk === true, `${label}_api_retention_not_ok`, { retentionOk: payload.retentionOk });
+  add(blockers, Array.isArray(payload.issues), `${label}_api_issues_not_machine_readable`, payload);
+  add(blockers, Array.isArray(payload.warnings), `${label}_api_warnings_not_machine_readable`, payload);
   add(blockers, !runId || !payload.runId || payload.runId === runId, `${label}_api_run_id_differs`, {
     apiRunId: payload.runId,
     runId,
@@ -158,6 +167,15 @@ function apiOk(blockers, label, result, runId) {
     updatedAt: payload.updatedAt || "",
     cacheSource: payload.cacheSource || "",
     qualityStatus: payload.qualityStatus || "",
+    status: payload.status || "",
+    sourceCoverage: payload.sourceCoverage || null,
+    staleSeconds: payload.staleSeconds,
+    latestRunId: payload.latestRunId || "",
+    fallbackUsed: payload.fallbackUsed,
+    writeBudget: payload.writeBudget || null,
+    retentionOk: payload.retentionOk,
+    issues: Array.isArray(payload.issues) ? payload.issues : null,
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : null,
     transport: payload.transport || {},
     sourceHealth: payload.sourceHealth || null,
   };
