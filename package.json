@@ -136,6 +136,9 @@
     "monitor:terminal-cold-start": "node --use-system-ca scripts/monitor-terminal-cold-start-stability.js",
     "verify:terminal-route-stress": "node --use-system-ca scripts/verify-terminal-route-switch-stress.js",
     "verify:cb-autonomy": "node --use-system-ca scripts/verify-cb-autonomy-readonly.js",
+    "verify:cb-battle": "node --use-system-ca scripts/verify-cb-battle-state.js",
+    "verify:cb-alert-path": "node --use-system-ca scripts/verify-cb-alert-path.js",
+    "verify:cb-alert-path:send": "node --use-system-ca scripts/verify-cb-alert-path.js --send",
     "verify:strategy1-autonomy": "node --use-system-ca scripts/verify-strategy1-autonomy-readonly.js"
   },
   "engines": {

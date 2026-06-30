@@ -429,6 +429,18 @@ if (!String(packageJson.scripts?.["verify:strategy4-standard-gate"] || "").inclu
 if (!String(packageJson.scripts?.["verify:daily-battle-readiness"] || "").includes("scripts/verify-daily-battle-readiness.js")) {
   issues.push("package.json missing scripts.verify:daily-battle-readiness for all-strategy battle readiness table");
 }
+if (!String(packageJson.scripts?.["verify:cb-autonomy"] || "").includes("scripts/verify-cb-autonomy-readonly.js")) {
+  issues.push("package.json missing scripts.verify:cb-autonomy for CB unattended self-proof");
+}
+if (!String(packageJson.scripts?.["verify:cb-battle"] || "").includes("scripts/verify-cb-battle-state.js")) {
+  issues.push("package.json missing scripts.verify:cb-battle for CB complete-run/source-health battle gate");
+}
+if (!String(packageJson.scripts?.["verify:cb-alert-path"] || "").includes("scripts/verify-cb-alert-path.js")) {
+  issues.push("package.json missing scripts.verify:cb-alert-path for CB alert receipt gate");
+}
+if (!String(packageJson.scripts?.["verify:cb-alert-path:send"] || "").includes("scripts/verify-cb-alert-path.js --send")) {
+  issues.push("package.json missing scripts.verify:cb-alert-path:send for actual CB Gmail receipt proof");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -574,6 +586,8 @@ const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const watchlistMatchIndexGenerator = read("scripts/generate-watchlist-match-index.js");
 const strategy3BattleStateVerifier = read("scripts/verify-strategy3-battle-state.js");
 const strategy3AlertPathVerifier = read("scripts/verify-strategy3-alert-path.js");
+const cbAutonomyVerifier = read("scripts/verify-cb-autonomy-readonly.js");
+const cbAlertPathVerifier = read("scripts/verify-cb-alert-path.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
@@ -2188,6 +2202,26 @@ for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "publishC
 }
 for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "readLatestCompleteRun", "cacheSource: \"supabase-api\"", "gate: \"run_id\""]) {
   if (!cbDetectLatestApi.includes(marker)) issues.push(`api/cb-detect-latest.js missing CB complete-run API marker ${marker}`);
+}
+for (const marker of [
+  "verify-cb-battle-state.js",
+  "cb_battle_state_verify_failed",
+  "scanner_resource_health_unreadable",
+  "cb_alert_actual_smtp_receipt_missing_or_failed",
+  "cb-watchdog-alert.json",
+  "cb-battle-verify-alert.json",
+]) {
+  if (!cbAutonomyVerifier.includes(marker)) issues.push(`verify-cb-autonomy-readonly.js missing CB unattended blocker marker ${marker}`);
+}
+for (const marker of [
+  "cb-alert-path-smoke",
+  "run-cb-watchdog.ps1",
+  "run-cb-battle-verify.ps1",
+  "sendActual",
+  "smtp:dry-run",
+  "channel must be smtp",
+]) {
+  if (!cbAlertPathVerifier.includes(marker)) issues.push(`verify-cb-alert-path.js missing CB alert path marker ${marker}`);
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
   issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");
