@@ -112,7 +112,6 @@ $env:STRATEGY4_BATCH_SIZE = "80"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
 $env:STRATEGY4_USE_MIS = "1"
 $env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
-$env:STRATEGY4_ALLOW_PARTIAL_PUBLISH = "1"
 $env:STRATEGY4_SYNC_PARTIAL = "1"
 $env:STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS = "3"
 $env:STRATEGY4_SCAN_STAMP = $strategy4Stamp
@@ -180,7 +179,6 @@ try {
   Remove-Item Env:STRATEGY4_BATCHES_PER_RUN -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_FAIL_ON_INCOMPLETE -ErrorAction SilentlyContinue
-  Remove-Item Env:STRATEGY4_ALLOW_PARTIAL_PUBLISH -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_SYNC_PARTIAL -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_SCAN_STAMP -ErrorAction SilentlyContinue
