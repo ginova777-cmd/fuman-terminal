@@ -93,8 +93,9 @@ function installMarketAiLiveContractPanel() {
   }
 
   function staleLegacyPanel(panel = aiPanel()) {
-    if (!panel || panel.dataset.marketApiAi === "live-contract" || panel.dataset.marketApiAi === "loading-contract") return false;
+    if (!panel) return false;
     const text = panel.innerText || "";
+    if (panel.dataset.marketApiAi === "loading-contract" && /載入今日正式 AI 判讀\/熱力圖資料中/.test(text)) return false;
     const today = todayLabel();
     const matches = [...text.matchAll(/(?:資料|API|最新資料)\s*(\d{2}\/\d{2})/g)].map((match) => match[1]);
     return matches.some((value) => value && value !== today);
@@ -211,6 +212,12 @@ function installMarketHeatmapLiveContractPanel() {
     const text = String(value || "").replace(/\D/g, "");
     return text.length >= 8 ? `${text.slice(4, 6)}/${text.slice(6, 8)}` : todayLabel();
   };
+  const nowTime = () => new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
   const duringSession = () => {
     const now = new Date();
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -225,6 +232,20 @@ function installMarketHeatmapLiveContractPanel() {
     const mins = 60 * Number(parts.hour || 0) + Number(parts.minute || 0);
     return mins >= 540 && mins <= 810;
   };
+
+  function setMarketChrome(text) {
+    const view = document.querySelector("#market-view");
+    if (!view) return;
+    view.querySelectorAll(".refresh-line").forEach((node) => {
+      node.textContent = text;
+    });
+    const time = view.querySelector(".market-time");
+    if (time) time.textContent = `${todayLabel()} ${nowTime()}`;
+    const message = view.querySelector("#terminal-message");
+    if (message && /等待|快取|snapshot|06\/|2026-06-2/.test(message.textContent || "")) {
+      message.textContent = text;
+    }
+  }
 
   let loading = false;
   let lastSig = "";
@@ -242,8 +263,9 @@ function installMarketHeatmapLiveContractPanel() {
   }
 
   function staleLegacyHeatmap(panel = heatmapPanel()) {
-    if (!panel || panel.dataset.heatmapApi === "loading-contract") return false;
+    if (!panel) return false;
     const text = panel.innerText || "";
+    if (panel.dataset.heatmapApi === "loading-contract" && /載入今日正式 AI 判讀\/熱力圖資料中/.test(text)) return false;
     const today = todayLabel();
     const shortDates = [...text.matchAll(/\b(\d{2}\/\d{2})\b/g)].map((match) => match[1]);
     const compactDates = [...text.matchAll(/\b(20\d{6})\b/g)].map((match) => dateLabel(match[1]));
@@ -257,6 +279,7 @@ function installMarketHeatmapLiveContractPanel() {
     suppressObserver = true;
     panel.dataset.heatmapApi = "loading-contract";
     panel.innerHTML = `<div class="empty-state">載入今日正式 AI 判讀/熱力圖資料中...<br><small>${esc(reason)}｜不顯示舊 heatmap cache。</small></div>`;
+    setMarketChrome(`載入今日正式 AI 判讀/熱力圖資料中 · ${todayLabel()} ${nowTime()} · ${reason}`);
     suppressObserver = false;
   }
 
@@ -308,6 +331,7 @@ function installMarketHeatmapLiveContractPanel() {
     panel.innerHTML = status.ok && sectors.length
       ? `<div class="heatmap-health-bar" data-heatmap-live-contract="1"><strong>熱力圖 ${esc(dateLabel(tradeDate))}</strong><span>${esc(status.text)}</span></div><div class="heatmap-grid heatmap-live-grid">${sectors.slice(0, 18).map(sectorCard).join("")}</div>`
       : `<div class="empty-state">熱力圖正式水源未達可用標準：${esc(status.text)}。不使用舊 heatmap cache 當正常資料。</div>`;
+    setMarketChrome(`熱力圖 ${dateLabel(tradeDate)} · ${status.text}`);
     suppressObserver = false;
   }
 
@@ -327,6 +351,7 @@ function installMarketHeatmapLiveContractPanel() {
       suppressObserver = true;
       panel.dataset.heatmapApi = "live-contract";
       panel.innerHTML = `<div class="empty-state">熱力圖正式水源讀取失敗：${esc(error?.message || error)}。不使用舊 heatmap cache 當正常資料。</div>`;
+      setMarketChrome(`熱力圖正式水源讀取失敗 · ${todayLabel()} ${nowTime()} · 不顯示舊 cache`);
       suppressObserver = false;
     } finally {
       loading = false;
@@ -344,6 +369,11 @@ function installMarketHeatmapLiveContractPanel() {
   const observer = new MutationObserver(() => queueMicrotask(guardStaleFirstPaint));
   observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
 
+  queueMicrotask(() => {
+    if (active() && heatmapPanel()?.dataset.heatmapApi !== "live-contract") {
+      setLoadingHeatmap("啟動市場總覽");
+    }
+  });
   setInterval(() => run(false), 5000);
   document.addEventListener("pointerdown", (event) => {
     const button = event.target.closest?.('[data-market-mode="overview"],[data-view="market"]');
@@ -360,6 +390,7 @@ function installMarketHeatmapLiveContractPanel() {
   }, true);
   document.addEventListener("visibilitychange", () => { document.hidden || run(true); }, { passive: true });
   window.addEventListener("focus", () => run(true), { passive: true });
+  setTimeout(() => run(true), 40);
   setTimeout(() => run(true), 400);
 }
 

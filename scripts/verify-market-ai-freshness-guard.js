@@ -23,6 +23,7 @@ const aiGuardSource = readText("terminal-ai-risk-guard.js");
 const indexHtml = readText("index.html");
 const apiSource = readText("api/market-ai-live.js");
 const scheduleRegistry = readJson("scripts/fuman-schedule-registry.json");
+const terminalVersion = readJson("version.json").version;
 const activeTasks = new Set(scheduleRegistry.policy.activeTasks || []);
 const retiredTasks = new Set(scheduleRegistry.policy.retiredTasks || []);
 
@@ -35,12 +36,19 @@ assert(aiGuardSource.includes('panel.dataset.marketApiAi = "live-contract"'), "A
 assert(aiGuardSource.includes('panel.dataset.heatmapApi = "live-contract"'), "heatmap live-contract marker missing");
 assert(aiGuardSource.includes("staleLegacyPanel"), "AI stale first-paint detector missing");
 assert(aiGuardSource.includes("staleLegacyHeatmap"), "heatmap stale first-paint detector missing");
+assert(aiGuardSource.includes("setMarketChrome"), "heatmap first-paint guard must update market timestamp chrome");
+assert(aiGuardSource.includes("啟動市場總覽"), "heatmap first-paint guard must start before old snapshot can settle");
 assert(aiGuardSource.includes("不使用舊 heatmap cache 當正常資料"), "heatmap stale/no-data display must reject old cache");
 assert(aiGuardSource.includes("不顯示舊 panel cache"), "AI loading display must reject old panel cache");
-assert(indexHtml.includes("terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-01"), "index must load the AI/heatmap freshness guard through the terminal version contract");
+const guardScript = `terminal-ai-risk-guard.js?v=${terminalVersion}`;
+assert(indexHtml.includes(guardScript), "index must load the AI/heatmap freshness guard through the terminal version contract");
 assert(
-  indexHtml.indexOf("terminal-ai-risk-guard.js") > indexHtml.indexOf("terminal-core.js"),
-  "freshness guard must load after terminal core so it can intercept rendered panels"
+  indexHtml.indexOf(guardScript) < indexHtml.indexOf("terminal-desktop-fast-shell.js"),
+  "freshness guard must load before desktop fast shell so stale market snapshots cannot first-paint as normal"
+);
+assert(
+  indexHtml.indexOf(guardScript) < indexHtml.indexOf("terminal-core.js"),
+  "freshness guard must load before terminal core so it can intercept app-rendered stale panels"
 );
 assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
