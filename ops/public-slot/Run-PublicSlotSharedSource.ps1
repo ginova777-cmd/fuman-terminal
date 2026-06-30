@@ -39,6 +39,7 @@ param(
   [bool]$WritePreopenRows = $true,
   [ValidateSet("always", "preopen", "never")]
   [string]$WritePreopenRowsMode = "preopen",
+  [bool]$Strategy2ReadyRefreshEnabled = $false,
   [int]$Strategy2ReadyPageSize = 100,
   [int]$Strategy2ReadyMaxPages = 120,
   [int]$Strategy2ReadyRefreshEverySeconds = 60,
@@ -206,6 +207,7 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertBatchSize" -ConfigNames @("publicSlotUpsertBatchSize", "upsertBatchSize", "PublicSlotUpsertBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "WritePreopenRows" -ConfigNames @("writePreopenRows", "WritePreopenRows") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "WritePreopenRowsMode" -ConfigNames @("writePreopenRowsMode", "WritePreopenRowsMode") -EnvName "FUMAN_PUBLIC_SLOT_WRITE_PREOPEN_ROWS_MODE" -Type "string"
+  Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyRefreshEnabled" -ConfigNames @("strategy2ReadyRefreshEnabled", "Strategy2ReadyRefreshEnabled") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_REFRESH_ENABLED" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyPageSize" -ConfigNames @("strategy2ReadyPageSize", "Strategy2ReadyPageSize") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_PAGE_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyMaxPages" -ConfigNames @("strategy2ReadyMaxPages", "Strategy2ReadyMaxPages") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_MAX_PAGES"
   Set-RuntimeOverride -Config $config -VariableName "Strategy2ReadyRefreshEverySeconds" -ConfigNames @("strategy2ReadyRefreshEverySeconds", "Strategy2ReadyRefreshEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_STRATEGY2_READY_REFRESH_EVERY_SECONDS"
@@ -2675,7 +2677,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -3077,7 +3079,7 @@ do {
       payload = @{ source = "public-slot-shared-source" }
     })
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-strategy2-ready-cache" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
-    if (Test-Strategy2ReadinessRefreshDue -LastRefreshAt $lastStrategy2ReadinessRefreshAt) {
+    if ($Strategy2ReadyRefreshEnabled -and (Test-Strategy2ReadinessRefreshDue -LastRefreshAt $lastStrategy2ReadinessRefreshAt)) {
       $lastStrategy2ReadinessRefreshAt = Get-Date
       try {
       $strategy2ReadyPages = 0
@@ -3142,8 +3144,10 @@ do {
         Write-Log "WARN strategy2 readiness cache refresh skipped: $($_.Exception.Message)"
       }
       Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-strategy2-readiness-cache" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
-    } else {
+    } elseif ($Strategy2ReadyRefreshEnabled) {
       Write-Log "strategy2 readiness cache refresh skipped by interval strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s"
+    } else {
+      Write-Log "strategy2 readiness cache refresh disabled in shared source; dedicated Strategy2 Readiness Source task owns cache refresh"
     }
     Write-Log "$status $message"
   } catch {
