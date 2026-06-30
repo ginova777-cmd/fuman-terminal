@@ -11,6 +11,8 @@ New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
 $log = Join-Path $logDir ("strategy5-watchdog-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $statusFile = Join-Path $stateDir "strategy5-watchdog-status.json"
 $runner = "${PSScriptRoot}\run-strategy5.ps1"
+$alertScript = "${PSScriptRoot}\scripts\send-workflow-alert.js"
+$alertReceiptFile = Join-Path $runtimeDir "data\scan-receipts\strategy5-watchdog-alert.json"
 $apiBaseUrl = if ($env:FUMAN_VERCEL_BASE_URL) { $env:FUMAN_VERCEL_BASE_URL.TrimEnd("/") } else { "https://fuman-terminal.vercel.app" }
 $apiUrl = "$apiBaseUrl/api/strategy5-latest"
 
@@ -30,6 +32,36 @@ function Write-WatchdogStatus {
     updatedAt = (Get-Date).ToString("o")
     log = $log
   } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statusFile -Encoding utf8
+}
+
+function Invoke-Strategy5WatchdogFailureAlert {
+  param([string]$Reason, [int]$ExitCode = 1)
+  if ($env:STRATEGY5_WATCHDOG_DISABLE_ALERT -eq "1") { return }
+  if (-not (Test-Path -LiteralPath $alertScript)) {
+    Write-WatchdogLog "strategy5 alert script missing: $alertScript"
+    return
+  }
+  $previousSubject = $env:FUMAN_ALERT_SUBJECT
+  $previousText = $env:FUMAN_ALERT_TEXT
+  $previousKind = $env:FUMAN_ALERT_KIND
+  $previousSource = $env:FUMAN_ALERT_SOURCE
+  $previousReceipt = $env:FUMAN_ALERT_RECEIPT_FILE
+  try {
+    $env:FUMAN_ALERT_SUBJECT = "Fuman Strategy5 watchdog failed"
+    $env:FUMAN_ALERT_TEXT = "Strategy5 watchdog failed`nreason=$Reason`nexitCode=$ExitCode`napi=$apiUrl`nlog=$log`nExpected behavior: preserve latest complete run and expose chip/source health reason."
+    $env:FUMAN_ALERT_KIND = "strategy5-watchdog"
+    $env:FUMAN_ALERT_SOURCE = "FumanStrategy5Watchdog2130"
+    $env:FUMAN_ALERT_RECEIPT_FILE = $alertReceiptFile
+    & node "--use-system-ca" $alertScript | ForEach-Object { Write-WatchdogLog $_ }
+  } catch {
+    Write-WatchdogLog "strategy5 Gmail alert failed: $($_.Exception.Message)"
+  } finally {
+    if ($null -eq $previousSubject) { Remove-Item Env:FUMAN_ALERT_SUBJECT -ErrorAction SilentlyContinue } else { $env:FUMAN_ALERT_SUBJECT = $previousSubject }
+    if ($null -eq $previousText) { Remove-Item Env:FUMAN_ALERT_TEXT -ErrorAction SilentlyContinue } else { $env:FUMAN_ALERT_TEXT = $previousText }
+    if ($null -eq $previousKind) { Remove-Item Env:FUMAN_ALERT_KIND -ErrorAction SilentlyContinue } else { $env:FUMAN_ALERT_KIND = $previousKind }
+    if ($null -eq $previousSource) { Remove-Item Env:FUMAN_ALERT_SOURCE -ErrorAction SilentlyContinue } else { $env:FUMAN_ALERT_SOURCE = $previousSource }
+    if ($null -eq $previousReceipt) { Remove-Item Env:FUMAN_ALERT_RECEIPT_FILE -ErrorAction SilentlyContinue } else { $env:FUMAN_ALERT_RECEIPT_FILE = $previousReceipt }
+  }
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
@@ -137,6 +169,7 @@ if ($null -eq $exitCode) { $exitCode = 0 }
 
 if ($exitCode -ne 0) {
   Write-WatchdogLog "strategy5 runner failed with exit code $exitCode"
+  Invoke-Strategy5WatchdogFailureAlert -Reason "runner failed" -ExitCode $exitCode
   Write-WatchdogStatus "failed" "runner failed" $exitCode
   exit $exitCode
 }
@@ -144,6 +177,7 @@ if ($exitCode -ne 0) {
 $postHealth = Test-Strategy5Healthy (Get-Strategy5Payload)
 if (-not $postHealth.Healthy) {
   Write-WatchdogLog "strategy5 still unhealthy after rerun: $($postHealth.Reason)"
+  Invoke-Strategy5WatchdogFailureAlert -Reason "still unhealthy after rerun: $($postHealth.Reason)" -ExitCode 1
   Write-WatchdogStatus "failed" "still unhealthy after rerun: $($postHealth.Reason)" 1
   exit 1
 }
