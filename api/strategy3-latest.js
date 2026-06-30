@@ -22,6 +22,8 @@ function apiOnlyError(reason = "") {
   return {
     ok: false,
     status: "critical",
+    sourceStatus: "critical",
+    dataContractSource: FORMAL_SOURCE_CHAIN,
     error: "strategy3_api_only_unavailable",
     detail: reason,
     sourceCoverage: {
@@ -42,6 +44,8 @@ function apiOnlyError(reason = "") {
     staleSeconds: null,
     latestRunId: "",
     fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     writeBudget: {
       ok: false,
       status: "blocked",
@@ -119,9 +123,13 @@ function normalizePayload(row) {
   const rawName = String(payload.rawName || payload.name || row.name || row.code || "").trim();
   const tvOk = Boolean(payload.tvOk || payload.tvFlame || payload.tvOvernightEntry?.ok);
   const displayName = String(payload.displayName || (tvOk && rawName ? `${rawName} 🔥` : rawName)).trim();
+  const runId = String(payload.runId || payload.run_id || row.runId || row.run_id || "").trim();
+  const updatedAt = String(payload.updatedAt || payload.updated_at || row.updatedAt || row.updated_at || row.generated_at || "").trim();
+  const source = String(payload.source || row.source || payload.quoteSource || row.quote_source || "strategy3_scan_results").trim();
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
+    runId,
     rawName,
     displayName,
     tvOk,
@@ -137,6 +145,8 @@ function normalizePayload(row) {
     score: cleanNumber(payload.score || payload.overnightScore || row.score),
     overnightScore: cleanNumber(payload.overnightScore || payload.score || row.score),
     matches: signals,
+    source,
+    updatedAt,
     reason: String(payload.tvOvernightEntry?.reason || payload.reason || row.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };
 }
@@ -169,11 +179,55 @@ function firstNumber(...values) {
   return null;
 }
 
+function metricFromMessage(message, key) {
+  const escaped = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = String(message || "").match(new RegExp(`(?:^|[;\\s])${escaped}=([^;\\s]+)`, "i"));
+  return match ? match[1] : "";
+}
+
+function ratio(numerator, denominator) {
+  const a = cleanNumber(numerator);
+  const b = cleanNumber(denominator);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= 0) return null;
+  return Number((a / b).toFixed(4));
+}
+
+function rowPayload(row) {
+  return row?.payload && typeof row.payload === "object" ? row.payload : row || {};
+}
+
+function tvDiagnosticFallback(row) {
+  const payload = rowPayload(row);
+  const entry = payload.tvOvernightEntry && typeof payload.tvOvernightEntry === "object" ? payload.tvOvernightEntry : {};
+  const breakdown = payload.tvBreakdown && typeof payload.tvBreakdown === "object" ? payload.tvBreakdown : {};
+  const fallbackFrom = String(
+    payload.candleFallbackFrom
+    || payload.tvCandleFallbackFrom
+    || entry.candleFallbackFrom
+    || breakdown.candleFallbackFrom
+    || ""
+  ).trim();
+  if (!fallbackFrom) return null;
+  return {
+    symbol: String(payload.code || payload.symbol || row?.code || row?.symbol || "").trim(),
+    name: String(payload.rawName || payload.name || payload.displayName || row?.name || "").replace(/🔥/g, "").trim(),
+    scope: "tv_candle_diagnostic",
+    fallbackFrom,
+    fallbackSource: String(entry.candleSource || breakdown.candleSource || payload.tvCandleSource || payload.candleSource || "").trim(),
+    fallbackReason: String(payload.candleFallbackReason || payload.tvCandleFallbackReason || entry.candleFallbackReason || breakdown.candleFallbackReason || "").trim(),
+    fallbackError: String(payload.candleFallbackError || payload.tvCandleFallbackError || entry.candleFallbackError || breakdown.candleFallbackError || "").trim(),
+    allowed: true,
+    formalSource: false,
+    purpose: "TV candle diagnostic quality rescue; publish gate remains formal Supabase source-chain",
+  };
+}
+
+function tvDiagnosticFallbackDetails(rows) {
+  return asArray(rows).map(tvDiagnosticFallback).filter(Boolean);
+}
+
 function hasTvDiagnosticFallback(rows) {
-  return asArray(rows).some((row) => {
-    const payload = row?.payload && typeof row.payload === "object" ? row.payload : row;
-    return Boolean(payload?.candleFallbackFrom || payload?.tvCandleFallbackFrom);
-  });
+  return tvDiagnosticFallbackDetails(rows).length > 0;
 }
 
 function hasSourceFallback(sourceWarnings) {
@@ -202,6 +256,7 @@ function buildUnattendedContract(payload, context = {}) {
   const rows = normalizeSnapshotRows(payload);
   const liveProbe = context.liveProbe || null;
   const sourceStatusPayload = liveProbe?.sourceStatus?.payload && typeof liveProbe.sourceStatus.payload === "object" ? liveProbe.sourceStatus.payload : {};
+  const sourceStatusMessage = String(liveProbe?.sourceStatus?.message || "");
   const quoteCheck = findSourceCheck(sourceDriftHealth, "fugle_quotes_latest");
   const intradayCheck = findSourceCheck(sourceDriftHealth, "v_strategy3_intraday_1m_status");
   const dailyVolumeCheck = findSourceCheck(sourceDriftHealth, "stock_daily_volume");
@@ -214,9 +269,29 @@ function buildUnattendedContract(payload, context = {}) {
     sourceStatusPayload.stale_seconds,
     latestCandleTime ? secondsSince(latestCandleTime) : null
   );
-  const tvDiagnosticFallbackUsed = hasTvDiagnosticFallback(rows);
+  const tvFallbackDetails = tvDiagnosticFallbackDetails(rows);
+  const tvDiagnosticFallbackUsed = tvFallbackDetails.length > 0;
   const sourceFallbackUsed = hasSourceFallback(sourceWarnings);
   const fallbackUsed = sourceFallbackUsed || tvDiagnosticFallbackUsed;
+  const sourceUniverseCount = cleanNumber(sourceHealth.stockUniverseCount || scanCoverage.sourceUniverseCount || payload.total);
+  const preopenRows = firstNumber(
+    sourceStatusPayload.preopen_rows,
+    sourceStatusPayload.preopenSymbols,
+    sourceStatusPayload.preopen_symbols,
+    metricFromMessage(sourceStatusMessage, "preopen")
+  );
+  const preopenExpected = firstNumber(
+    sourceStatusPayload.preopen_expected_symbols,
+    sourceStatusPayload.preopenExpected,
+    sourceStatusPayload.eligible_quote_rows,
+    metricFromMessage(sourceStatusMessage, "eligible_quote_rows"),
+    sourceUniverseCount
+  );
+  const preopenCoverage = firstNumber(
+    sourceStatusPayload.preopen_coverage,
+    sourceStatusPayload.preopen_hot_coverage,
+    ratio(preopenRows, preopenExpected)
+  );
   const issues = [
     ...asArray(sourceHealth.issues),
     ...(sourceDriftHealth.status && sourceDriftHealth.status !== "ready" ? [`sourceDriftHealth=${sourceDriftHealth.status}: ${sourceDriftHealth.reason || ""}`.trim()] : []),
@@ -243,6 +318,8 @@ function buildUnattendedContract(payload, context = {}) {
       : "ready";
   return {
     status,
+    sourceStatus: status,
+    dataContractSource: FORMAL_SOURCE_CHAIN,
     sourceCoverage: {
       source: FORMAL_SOURCE_CHAIN,
       fresh_quote_coverage_120s: cleanNumber(sourceStatusPayload.fresh_quote_coverage_120s),
@@ -255,7 +332,9 @@ function buildUnattendedContract(payload, context = {}) {
       latestCandleTime,
       intraday_1m_stale_seconds: staleSeconds,
       intraday1mStaleSeconds: staleSeconds,
-      preopenCoverage: sourceStatusPayload.preopen_coverage ?? sourceStatusPayload.preopen_hot_coverage ?? null,
+      preopenCoverage,
+      preopenRows,
+      preopenExpected,
       dailyVolumeFreshness: dailyVolumeCheck.latestDate || "",
       quoteRows: cleanNumber(quoteCheck.rowCount),
       quoteMinRequired: cleanNumber(quoteCheck.minRequired),
@@ -264,7 +343,7 @@ function buildUnattendedContract(payload, context = {}) {
       dailyVolumeRows: cleanNumber(dailyVolumeCheck.rowCount),
       dailyVolumeMinRequired: cleanNumber(dailyVolumeCheck.minRequired),
       sessionReadyCount: cleanNumber(sourceHealth.intraday1mReadyCount || scanCoverage.sessionReadyCandidates),
-      sourceUniverseCount: cleanNumber(sourceHealth.stockUniverseCount || scanCoverage.sourceUniverseCount || payload.total),
+      sourceUniverseCount,
       fieldGateCandidates: cleanNumber(scanCoverage.fieldGateCandidates || payload.count),
     },
     staleSeconds,
@@ -274,6 +353,32 @@ function buildUnattendedContract(payload, context = {}) {
       sourceFallbackUsed ? "source" : "",
       tvDiagnosticFallbackUsed ? "tv_candle_diagnostic" : "",
     ].filter(Boolean),
+    fallbackDetails: [
+      ...tvFallbackDetails.slice(0, 20),
+      ...(sourceFallbackUsed ? [{
+        scope: "source",
+        fallbackFrom: FORMAL_SOURCE_CHAIN,
+        fallbackSource: "sourceWarnings",
+        fallbackReason: sourceWarnings.filter((warning) => /fallback/i.test(String(warning || ""))).join("; "),
+        allowed: false,
+        formalSource: true,
+        purpose: "source fallback would block publish",
+      }] : []),
+    ],
+    fallbackContract: {
+      tv_candle_diagnostic: {
+        allowed: true,
+        formalSource: false,
+        publishGateSource: FORMAL_SOURCE_CHAIN,
+        purpose: "TV candle diagnostic quality rescue only",
+      },
+      source: {
+        allowed: false,
+        formalSource: true,
+        publishGateSource: FORMAL_SOURCE_CHAIN,
+        purpose: "formal source fallback is not allowed for publish",
+      },
+    },
     writeBudget: {
       ok: status === "ready",
       status: status === "ready" ? "protected" : "blocked",
@@ -396,9 +501,23 @@ function buildSnapshotPayload(snapshot, options = {}) {
   const sourcePayload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
   if (!sourcePayload) return null;
   const rows = normalizeSnapshotRows(sourcePayload);
+  const snapshotRunId = String(sourcePayload.runId || snapshot.snapshotId || "").trim();
+  const snapshotUpdatedAt = String(sourcePayload.updatedAt || snapshot.updatedAt || new Date().toISOString());
   const matches = rows
     .slice(0, options.limit || rows.length)
-    .map((row, index) => normalizePayload({ ...row, rank: row.rank || index + 1, payload: row }));
+    .map((row, index) => normalizePayload({
+      ...row,
+      rank: row.rank || index + 1,
+      runId: row.runId || row.run_id || snapshotRunId,
+      updatedAt: row.updatedAt || row.updated_at || snapshotUpdatedAt,
+      source: row.source || sourcePayload.source || "strategy3_scan_results",
+      payload: {
+        ...row,
+        runId: row.runId || row.run_id || snapshotRunId,
+        updatedAt: row.updatedAt || row.updated_at || snapshotUpdatedAt,
+        source: row.source || sourcePayload.source || "strategy3_scan_results",
+      },
+    }));
   const count = Math.max(cleanNumber(sourcePayload.count), rows.length);
   const total = Math.max(cleanNumber(sourcePayload.total), count);
   return attachStrategy3UnattendedContract({
@@ -406,8 +525,8 @@ function buildSnapshotPayload(snapshot, options = {}) {
     ok: sourcePayload.ok !== false,
     source: sourcePayload.source || "strategy3_scan_results",
     cacheSource: "supabase-snapshot",
-    runId: String(sourcePayload.runId || snapshot.snapshotId || ""),
-    updatedAt: String(sourcePayload.updatedAt || snapshot.updatedAt || new Date().toISOString()),
+    runId: snapshotRunId,
+    updatedAt: snapshotUpdatedAt,
     generatedAt: String(sourcePayload.generatedAt || sourcePayload.updatedAt || snapshot.updatedAt || new Date().toISOString()),
     usedDate: String(sourcePayload.usedDate || snapshot.tradeDate || "").replace(/\D/g, ""),
     complete: sourcePayload.complete !== false,
@@ -424,12 +543,12 @@ function buildSnapshotPayload(snapshot, options = {}) {
       source: "supabase-snapshot",
       snapshotKey: SNAPSHOT_KEY,
       snapshotId: snapshot.snapshotId || "",
-      runId: String(sourcePayload.runId || snapshot.snapshotId || ""),
+      runId: snapshotRunId,
       gate: "latest-snapshot",
       via: "api/strategy3-latest",
       fetchedAt: new Date().toISOString(),
     },
-  }, { liveProbe: options.liveProbe, latestRunId: String(sourcePayload.runId || snapshot.snapshotId || "") });
+  }, { liveProbe: options.liveProbe, latestRunId: snapshotRunId });
 }
 
 async function readLatestSnapshot(options) {

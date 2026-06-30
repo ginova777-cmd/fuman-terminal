@@ -15,6 +15,10 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 const MIN_RESULT_ROWS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_MIN_RESULT_ROWS || 1));
 const REST_ATTEMPTS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_REST_ATTEMPTS || 3));
 
@@ -166,6 +170,8 @@ async function main() {
     statusCode: api.statusCode,
     ok: api.body?.ok,
     status: api.body?.status,
+    sourceStatus: api.body?.sourceStatus,
+    dataContractSource: api.body?.dataContractSource,
     runId: api.body?.runId,
     latestRunId: api.body?.latestRunId,
     count: api.body?.count,
@@ -174,6 +180,8 @@ async function main() {
     staleSeconds: api.body?.staleSeconds,
     fallbackUsed: api.body?.fallbackUsed,
     fallbackScope: api.body?.fallbackScope,
+    fallbackDetails: api.body?.fallbackDetails,
+    fallbackContract: api.body?.fallbackContract,
     writeBudget: api.body?.writeBudget,
     retentionOk: api.body?.retentionOk,
     sourceCoverage: api.body?.sourceCoverage,
@@ -184,7 +192,7 @@ async function main() {
   if (cleanNumber(api.body?.count) < MIN_RESULT_ROWS) issues.push(`api_count_${api.body?.count}_below_${MIN_RESULT_ROWS}`);
   if (!Object.prototype.hasOwnProperty.call(api.body || {}, "tvPassCount")) issues.push("api_missing_tvPassCount");
   if (!api.body?.runId) issues.push("api_missing_runId");
-  for (const field of ["status", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "writeBudget", "retentionOk", "issues", "warnings"]) {
+  for (const field of ["status", "sourceStatus", "dataContractSource", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "fallbackScope", "fallbackDetails", "writeBudget", "retentionOk", "issues", "warnings"]) {
     if (!Object.prototype.hasOwnProperty.call(api.body || {}, field)) issues.push(`api_missing_${field}`);
   }
   if (api.body?.latestRunId && api.body?.runId && String(api.body.latestRunId) !== String(api.body.runId)) {
@@ -196,9 +204,11 @@ async function main() {
   if (!api.body?.sourceCoverage || typeof api.body.sourceCoverage !== "object") {
     issues.push("api_sourceCoverage_not_object");
   } else {
-    for (const field of ["fresh_quote_coverage_120s", "today_1m_symbols", "ready_ge_35", "latest_candle_time", "intraday_1m_stale_seconds", "dailyVolumeFreshness"]) {
+    for (const field of ["fresh_quote_coverage_120s", "today_1m_symbols", "ready_ge_35", "latest_candle_time", "intraday_1m_stale_seconds", "preopenCoverage", "preopenRows", "preopenExpected", "dailyVolumeFreshness"]) {
       if (!Object.prototype.hasOwnProperty.call(api.body.sourceCoverage, field)) issues.push(`api_sourceCoverage_missing_${field}`);
     }
+    if (api.body.sourceCoverage.preopenCoverage === null || api.body.sourceCoverage.preopenCoverage === undefined) issues.push("api_sourceCoverage_preopenCoverage_null");
+    if (cleanNumber(api.body.sourceCoverage.preopenRows) < 1000) issues.push(`api_sourceCoverage_preopenRows_${api.body.sourceCoverage.preopenRows}_below_1000`);
   }
   if (!api.body?.writeBudget || typeof api.body.writeBudget !== "object") issues.push("api_writeBudget_not_object");
   if (api.body?.retentionOk !== true) issues.push("api_retentionOk_not_true");
@@ -207,6 +217,27 @@ async function main() {
   if (api.body?.fallbackUsed === true && Array.isArray(api.body?.fallbackScope) && api.body.fallbackScope.includes("source")) {
     issues.push("api_source_fallback_used");
   }
+  if (api.body?.fallbackUsed === true && !Array.isArray(api.body?.fallbackDetails)) issues.push("api_fallbackDetails_not_array");
+  if (api.body?.fallbackUsed === true && !api.body?.fallbackScope?.length) issues.push("api_fallbackUsed_without_scope");
+  const apiRows = asArray(api.body?.matches).length ? asArray(api.body.matches)
+    : asArray(api.body?.rows).length ? asArray(api.body.rows)
+      : asArray(api.body?.items).length ? asArray(api.body.items)
+        : asArray(api.body?.data);
+  const rowMissingRunId = apiRows.filter((row) => String(row?.runId || row?.run_id || "") !== String(api.body?.runId || ""));
+  const rowMissingJudgment = apiRows.filter((row) => {
+    const hasReason = String(row?.reason || "").trim();
+    const hasScore = row?.score !== null && row?.score !== undefined && row?.score !== "";
+    const hasTvEntry = row?.tvOvernightEntry && typeof row.tvOvernightEntry === "object";
+    return !hasReason && !hasScore && !hasTvEntry;
+  });
+  details.apiRows = {
+    rowsChecked: apiRows.length,
+    rowMissingRunId: rowMissingRunId.length,
+    rowMissingJudgment: rowMissingJudgment.length,
+    sampleMissingRunId: rowMissingRunId.slice(0, 5).map((row) => ({ code: row?.code || row?.symbol || "", name: row?.name || "" })),
+  };
+  if (apiRows.length > 0 && rowMissingRunId.length > 0) issues.push(`api_rows_missing_runId_${rowMissingRunId.length}_${apiRows.length}`);
+  if (apiRows.length > 0 && rowMissingJudgment.length > 0) issues.push(`api_rows_missing_judgment_${rowMissingJudgment.length}_${apiRows.length}`);
 
   const health = await restSafe("v_scanner_resource_health?select=strategy,status,latest_date,row_count,reason&strategy=eq.Strategy3&limit=1", { attempts: REST_ATTEMPTS, timeoutMs: 20000 });
   const healthRow = health.rows?.[0] || {};
@@ -315,6 +346,11 @@ async function main() {
   if (liveTvOk > apiTvPassCount) {
     issues.push(`live_source_chain_tv_drift_api_${apiTvPassCount}_live_${liveTvOk}`);
   }
+  if (livePayload.fallbackUsed === true) {
+    if (api.body?.fallbackUsed !== true) issues.push("api_hidden_live_source_chain_fallback");
+    if (!asArray(api.body?.fallbackScope).includes("tv_candle_diagnostic")) issues.push("api_missing_tv_candle_diagnostic_fallback_scope");
+    if (!asArray(api.body?.fallbackDetails).length) issues.push("api_missing_tv_candle_diagnostic_fallback_details");
+  }
 
   const sourceCounts = await Promise.all([
     sourceCount("strategy3_ready_snapshot", "strategy3_ready_snapshot?select=symbol&limit=1"),
@@ -326,6 +362,30 @@ async function main() {
   for (const [name, item] of sourceCounts) {
     if (item.readError) continue;
     if (cleanNumber(item.count) < cleanNumber(item.minRequired || 1000)) issues.push(`${name}_count_${item.count}_below_${item.minRequired || 1000}`);
+  }
+
+  const retention = await restSafe(
+    "v_fuman_cost_governance_audit_status?select=table_name,ran_at,keep_policy,keep_from_date,deleted_rows,before_rows,after_rows,before_total_bytes,after_total_bytes,has_before_after_audit&table_name=in.(fugle_intraday_1m,fugle_preopen_snapshot_history)&limit=10",
+    { attempts: REST_ATTEMPTS, timeoutMs: 20000 }
+  );
+  const retentionRows = asArray(retention.rows);
+  details.retention = retention.ok ? {
+    rows: retentionRows,
+    requiredTables: ["fugle_intraday_1m", "fugle_preopen_snapshot_history"],
+  } : {
+    status: "read_failed",
+    error: retention.error,
+    details: retention.details,
+  };
+  if (!retention.ok) {
+    issues.push(`retention_audit_read_failed_${retention.error || "unknown"}`);
+  } else {
+    for (const tableName of ["fugle_intraday_1m", "fugle_preopen_snapshot_history"]) {
+      const row = retentionRows.find((item) => item?.table_name === tableName);
+      if (!row) issues.push(`retention_audit_missing_${tableName}`);
+      else if (row.has_before_after_audit !== true) issues.push(`retention_audit_missing_before_after_${tableName}`);
+      else if (!row.ran_at) issues.push(`retention_audit_missing_ran_at_${tableName}`);
+    }
   }
 
   const output = { ok: issues.length === 0, checkedAt: new Date().toISOString(), issues, details };
