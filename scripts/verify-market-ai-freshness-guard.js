@@ -20,6 +20,7 @@ const readText = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const readJson = (file) => JSON.parse(readText(file));
 
 const aiGuardSource = readText("terminal-ai-risk-guard.js");
+const terminalAppSource = readText("terminal-app.js");
 const indexHtml = readText("index.html");
 const apiSource = readText("api/market-ai-live.js");
 const heatmapApiSource = readText("api/heatmap.js");
@@ -42,6 +43,7 @@ assert(aiGuardSource.includes("setMarketChrome"), "heatmap first-paint guard mus
 assert(aiGuardSource.includes("啟動市場總覽"), "heatmap first-paint guard must start before old snapshot can settle");
 assert(aiGuardSource.includes("不使用舊 heatmap cache 當正常資料"), "heatmap stale/no-data display must reject old cache");
 assert(aiGuardSource.includes("不顯示舊 panel cache"), "AI loading display must reject old panel cache");
+assert(terminalAppSource.includes("const liveWindow=!!isHeatmapPollingWindow?.();const hasSnapshot=liveWindow?!1:await loadHeatmapLatestSnapshot(force)"), "terminal app must not render heatmap snapshot before live data during polling window");
 const guardScript = `terminal-ai-risk-guard.js?v=${terminalVersion}`;
 assert(indexHtml.includes(guardScript), "index must load the AI/heatmap freshness guard through the terminal version contract");
 assert(
