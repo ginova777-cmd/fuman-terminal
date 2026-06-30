@@ -521,6 +521,7 @@ const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeApi = read("api/realtime.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
+const realtimeRadarCss = read("terminal-realtime-radar.css");
 const openBuyLatestApi = read("api/open-buy-latest.js");
 const latestStrategyApi = read("api/latest-strategy.js");
 const strategy2LatestApi = read("api/strategy2-latest.js");
@@ -1306,8 +1307,9 @@ for (const marker of [
   "data-realtime-radar-dom-shell",
   "radar-dom-shell",
   "realtimeRadarDomSide",
-  "realtimeRadarDomSide = \"all\"",
-  "data-radar-dom-side=\"all\"",
+  "realtimeRadarDomSide = \"long\"",
+  "data-radar-dom-side=\"long\"",
+  "data-radar-dom-side=\"short\"",
   "流水帳逐筆記錄",
   "limit: 1200",
   "full: true",
@@ -1316,6 +1318,12 @@ for (const marker of [
   "panel.querySelectorAll(\":scope > .desktop-route-shell.desktop-canvas-app\").forEach((node) => node.remove())",
 ]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing realtime radar DOM/full-session marker ${marker}`);
+}
+if (desktopFastShell.includes('data-radar-dom-side="all"') || /全部\s+\$\{escapeHtml\(String\(sessionRows\.length\)\)\}/.test(desktopFastShell)) {
+  issues.push("terminal-desktop-fast-shell.js must not render realtime radar all-session tab; only long/short tabs are allowed");
+}
+if (!/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(realtimeRadarCss) || /all-active/.test(realtimeRadarCss)) {
+  issues.push("terminal-realtime-radar.css must render realtime radar board tabs as long/short only");
 }
 if (/<section\s+class=["']radar-flow-grid/.test(desktopFastShell) || /<section\s+class=["']radar-flow-grid/.test(terminalApp)) {
   issues.push("realtime radar DOM shell must not render the removed flow summary block");
@@ -1554,7 +1562,7 @@ for (const marker of [
   "realtime radar must not render legacy desktop canvas shell",
   "realtime radar must not expose canvasRows",
   "realtime radar must show 09:00-13:30 session window",
-  "realtime radar must default to all-session ledger",
+  "realtime radar must render long/short ledger tabs only",
   "realtime radar flow summary block must stay removed",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing realtime radar no-rollback marker ${marker}`);

@@ -126,7 +126,7 @@
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
   let marketHeatmapSectorRows = [];
-  let realtimeRadarDomSide = "all";
+  let realtimeRadarDomSide = "long";
   let realtimeRadarDomSideUserSelected = false;
   let realtimeRadarDomHealth = null;
   const canvasState = {
@@ -2634,7 +2634,7 @@
       const radarSide = event.target.closest?.("[data-radar-dom-side]");
       if (radarSide) {
         event.preventDefault();
-        realtimeRadarDomSide = ["all", "long", "short"].includes(radarSide.dataset.radarDomSide) ? radarSide.dataset.radarDomSide : "all";
+        realtimeRadarDomSide = ["long", "short"].includes(radarSide.dataset.radarDomSide) ? radarSide.dataset.radarDomSide : "long";
         realtimeRadarDomSideUserSelected = true;
         renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, canvasState.source || "dom", canvasState.rows);
         return;
@@ -5621,7 +5621,7 @@
     const link = document.createElement("link");
     link.id = "fuman-realtime-radar-dom-style";
     link.rel = "stylesheet";
-    link.href = "/terminal-realtime-radar.css?v=radar-ledger-20260630-01";
+    link.href = "/terminal-realtime-radar.css?v=radar-ledger-20260630-02";
     document.head.appendChild(link);
   }
 
@@ -5632,12 +5632,12 @@
     const incomingRows = rows.length ? rows : rowsForRoute(REALTIME_RADAR_ROUTE);
     const sessionRows = radarDomSessionRows(incomingRows.length ? incomingRows : canvasState.rows);
     const flow = radarDomFlowSummary(sessionRows);
-    if (!["all", "long", "short"].includes(realtimeRadarDomSide)) realtimeRadarDomSide = "all";
-    if (!realtimeRadarDomSideUserSelected) realtimeRadarDomSide = "all";
+    if (!["long", "short"].includes(realtimeRadarDomSide)) realtimeRadarDomSide = "long";
+    if (!realtimeRadarDomSideUserSelected) realtimeRadarDomSide = "long";
     if (realtimeRadarDomSide === "long" && !flow.longRows.length && flow.shortRows.length) realtimeRadarDomSide = "short";
     if (realtimeRadarDomSide === "short" && !flow.shortRows.length && flow.longRows.length) realtimeRadarDomSide = "long";
-    const activeRows = realtimeRadarDomSide === "short" ? flow.shortRows : realtimeRadarDomSide === "long" ? flow.longRows : sessionRows;
-    const activeLabel = realtimeRadarDomSide === "short" ? "空方" : realtimeRadarDomSide === "long" ? "多方" : "全部";
+    const activeRows = realtimeRadarDomSide === "short" ? flow.shortRows : flow.longRows;
+    const activeLabel = realtimeRadarDomSide === "short" ? "空方" : "多方";
     const meta = strategyMeta(link || REALTIME_RADAR_ROUTE);
     const sourceLabel = String(source || canvasState.source || "api");
     panel.dataset.fumanRouteSnapshotRestoring = "1";
@@ -5669,7 +5669,6 @@
           <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:30 盤中訊號。</p>
         </section>
         <nav class="radar-board-tabs" aria-label="即時雷達流水帳篩選">
-          <button type="button" data-radar-dom-side="all" class="${realtimeRadarDomSide === "all" ? "all-active active" : "all-active"}">全部 ${escapeHtml(String(sessionRows.length))}</button>
           <button type="button" data-radar-dom-side="long" class="${realtimeRadarDomSide === "long" ? "active" : ""}">多方 ${escapeHtml(String(flow.longRows.length))}</button>
           <button type="button" data-radar-dom-side="short" class="${realtimeRadarDomSide === "short" ? "short-active active" : "short-active"}">空方 ${escapeHtml(String(flow.shortRows.length))}</button>
         </nav>

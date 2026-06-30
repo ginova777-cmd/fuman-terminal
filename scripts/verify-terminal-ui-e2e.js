@@ -1377,9 +1377,11 @@ function collectDesktopStats(route) {
     if (routeCanvas || canvasSize) contractBlockers.push("realtime radar must not render canvas element");
     if (canvasRows !== 0) contractBlockers.push(`realtime radar must not expose canvasRows actual=${canvasRows}`);
     const allLedgerTab = activePanel.querySelector('[data-radar-dom-side="all"]');
+    const longLedgerTab = activePanel.querySelector('[data-radar-dom-side="long"]');
+    const shortLedgerTab = activePanel.querySelector('[data-radar-dom-side="short"]');
     if (!/09:00-13:30/.test(panelText)) contractBlockers.push("realtime radar must show 09:00-13:30 session window");
-    if (!/流水帳逐筆記錄/.test(panelText) || !allLedgerTab || !allLedgerTab.classList.contains("active")) {
-      contractBlockers.push("realtime radar must default to all-session ledger");
+    if (!/流水帳逐筆記錄/.test(panelText) || allLedgerTab || !longLedgerTab || !shortLedgerTab || (!longLedgerTab.classList.contains("active") && !shortLedgerTab.classList.contains("active"))) {
+      contractBlockers.push("realtime radar must render long/short ledger tabs only");
     }
     if (activePanel.querySelector(".radar-flow-grid")) contractBlockers.push("realtime radar flow summary block must stay removed");
     if (!domRows.some((row) => row.selector === ".radar-signal-card")) contractBlockers.push("realtime radar DOM signal cards missing");

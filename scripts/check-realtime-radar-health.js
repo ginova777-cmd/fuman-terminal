@@ -186,18 +186,20 @@ async function readFrontendGuard() {
   const noSnapshotOnRealtimeError = fastShell.includes("if (isRealtimeRadarRoute(route))") && fastShell.includes("return [];");
   const healthBanner = fastShell.includes("radarDomHealthBanner") && css.includes(".radar-health-banner");
   const stateGuard = fastShell.includes("realtimeRadarDomSideUserSelected") && fastShell.includes("realtimeRadarDomHealth");
-  const allSessionLedger = fastShell.includes('realtimeRadarDomSide = "all"')
-    && fastShell.includes('data-radar-dom-side="all"')
+  const longShortLedger = fastShell.includes('realtimeRadarDomSide = "long"')
+    && fastShell.includes('data-radar-dom-side="long"')
+    && fastShell.includes('data-radar-dom-side="short"')
+    && !fastShell.includes('data-radar-dom-side="all"')
     && fastShell.includes("09:00-13:30 流水帳逐筆記錄");
   return {
-    ok: pageLoadsFastShell && pageHasRealtimeRoute && fullSessionApi && noSnapshotOnRealtimeError && healthBanner && stateGuard && allSessionLedger,
+    ok: pageLoadsFastShell && pageHasRealtimeRoute && fullSessionApi && noSnapshotOnRealtimeError && healthBanner && stateGuard && longShortLedger,
     pageLoadsFastShell,
     pageHasRealtimeRoute,
     fullSessionApi,
     noSnapshotOnRealtimeError,
     healthBanner,
     stateGuard,
-    allSessionLedger,
+    longShortLedger,
   };
 }
 
