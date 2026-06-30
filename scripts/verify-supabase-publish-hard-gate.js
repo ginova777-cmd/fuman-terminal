@@ -28,9 +28,13 @@ const MIN_PREOPEN_ROWS = Number(process.env.FUMAN_PUBLISH_MIN_PREOPEN_ROWS || 1)
 const MIN_DAILY_VOLUME_COVERAGE = Number(process.env.FUMAN_PUBLISH_MIN_DAILY_VOLUME_COVERAGE || 0.5);
 const SAMPLE_LIMIT = Number(process.env.FUMAN_PUBLISH_COVERAGE_SAMPLE_LIMIT || 500);
 
-function cleanNumber(value) {
-  const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
-  return Number.isFinite(number) ? number : 0;
+function cleanNumber(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).replace(/[,+%]/g, "").trim();
+  if (!text) return fallback;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function ensureDirs() {
@@ -154,7 +158,10 @@ async function buildPayload() {
   const sourceStatusUpdatedAt = health.status?.updated_at || sourceStatusResult.latest?.updated_at || "";
   const sourceStatusStaleSeconds = staleSeconds(sourceStatusUpdatedAt, now);
   const fallbackUsed = health.fallbackUsed === true || health.payload?.fallbackUsed === true || health.payload?.fallback_used === true || quoteResult.fallbackUsed === true;
-  const latestRunId = health.payload?.latest_run_id || health.payload?.latestRunId || "";
+  const latestRunId = health.payload?.latest_run_id || health.payload?.latestRunId || health.latestRunId || "";
+  const latestRunIdSource = health.payload?.latest_run_id || health.payload?.latestRunId
+    ? "source_status.payload"
+    : health.latestRunIdSource || "";
   const writeBudget = health.payload?.writeBudget || health.payload?.write_budget || { status: "read-only", allowed: false, reason: "publish hard gate is read-only" };
   const retentionOk = health.payload?.retentionOk !== false && health.payload?.retention_ok !== false;
   const sourceCoverage = {
@@ -186,7 +193,7 @@ async function buildPayload() {
   if (retentionOk !== true) issues.push(issue("critical", "retention-not-ok", "retentionOk is not true"));
   if (!health.anonRead?.ok) issues.push(issue("critical", "anon-read-failed", "Supabase anon read target check failed", { failed: health.anonRead?.failed || [] }));
   if (!latestCandleTime && marketSession) warnings.push(issue("warning", "latest-candle-time-missing", "latest_candle_time is missing"));
-  if (!latestRunId) warnings.push(issue("warning", "latest-run-id-missing", "latestRunId missing from source_status payload"));
+  if (!latestRunId) warnings.push(issue("warning", "latest-run-id-missing", "latestRunId missing from source_status payload and readiness status"));
 
   const status = issues.length ? "critical" : "ready";
   return {
@@ -197,6 +204,7 @@ async function buildPayload() {
     sourceCoverage,
     staleSeconds: Math.max(sourceStatusStaleSeconds, marketSession ? quoteAgeSeconds : 0, latestCandleTime ? intraday1mStaleSeconds : 0),
     latestRunId,
+    latestRunIdSource,
     fallbackUsed,
     writeBudget,
     retentionOk,
@@ -242,6 +250,7 @@ main().catch((error) => {
     sourceCoverage: {},
     staleSeconds: 999999,
     latestRunId: "",
+    latestRunIdSource: "",
     fallbackUsed: false,
     writeBudget: { status: "blocked", allowed: false, reason: "verifier failed before publish" },
     retentionOk: false,

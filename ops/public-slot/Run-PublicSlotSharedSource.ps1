@@ -445,6 +445,61 @@ function Convert-PublicSlotRestRows {
   return @($items)
 }
 
+function Get-PayloadFieldValue {
+  param([object]$Payload, [string]$Key, [object]$Default = $null)
+  if ($null -eq $Payload) { return $Default }
+  if ($Payload -is [System.Collections.IDictionary] -and $Payload.Contains($Key)) {
+    return $Payload[$Key]
+  }
+  $prop = $Payload.PSObject.Properties[$Key]
+  if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+  return $Default
+}
+
+function Get-Strategy2LatestRunEvidence {
+  param([object]$FallbackPayload = $null)
+
+  $fallbackRunId = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "latest_run_id" -Default (Get-PayloadFieldValue -Payload $FallbackPayload -Key "latestRunId" -Default ""))
+  $fallbackScanDate = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "strategy2_latest_scan_date" -Default "")
+  $fallbackFinishedAt = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "strategy2_latest_finished_at" -Default "")
+  $fallbackStatus = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "strategy2_readiness_status" -Default "")
+  $fallbackReason = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "strategy2_readiness_reason" -Default "")
+  $fallbackCheckedAt = [string](Get-PayloadFieldValue -Payload $FallbackPayload -Key "strategy2_readiness_checked_at" -Default "")
+
+  try {
+    $rows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRestGet -PathAndQuery "v_strategy2_readiness_status?select=latest_run_id,latest_scan_date,latest_finished_at,status,reason,checked_at&limit=1")
+    if ($rows.Count -gt 0) {
+      $row = @($rows)[0]
+      $runId = [string]$row.latest_run_id
+      return @{
+        latest_run_id = $runId
+        latestRunId = $runId
+        strategy2_latest_run_id = $runId
+        strategy2_latest_run_id_source = if ([string]::IsNullOrWhiteSpace($runId)) { "v_strategy2_readiness_status_empty" } else { "v_strategy2_readiness_status" }
+        strategy2_latest_scan_date = [string]$row.latest_scan_date
+        strategy2_latest_finished_at = [string]$row.latest_finished_at
+        strategy2_readiness_status = [string]$row.status
+        strategy2_readiness_reason = [string]$row.reason
+        strategy2_readiness_checked_at = [string]$row.checked_at
+      }
+    }
+  } catch {
+    Write-Log "WARN strategy2 latest run evidence read failed: $($_.Exception.Message)"
+  }
+
+  return @{
+    latest_run_id = $fallbackRunId
+    latestRunId = $fallbackRunId
+    strategy2_latest_run_id = $fallbackRunId
+    strategy2_latest_run_id_source = if ([string]::IsNullOrWhiteSpace($fallbackRunId)) { "missing" } else { "previous_source_status_payload" }
+    strategy2_latest_scan_date = $fallbackScanDate
+    strategy2_latest_finished_at = $fallbackFinishedAt
+    strategy2_readiness_status = $fallbackStatus
+    strategy2_readiness_reason = $fallbackReason
+    strategy2_readiness_checked_at = $fallbackCheckedAt
+  }
+}
+
 function Get-PublicSlotPermissionProbe {
   param([int]$CacheSeconds = 60)
 
@@ -1215,6 +1270,7 @@ function Write-QuoteHeartbeatStatus {
     $quoteDerivedOpeningBackfillRows = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "openingBackfillRows" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_rows" -Default 0))
     $quoteDerivedOpeningBackfillSymbols = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "openingBackfillSymbols" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_symbols" -Default 0))
     $quoteDerivedMaxAgeSeconds = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "quoteDerivedMaxQuoteAgeSeconds" -Default $QuoteDerived1mMaxQuoteAgeSeconds)
+    $strategy2RunEvidence = Get-Strategy2LatestRunEvidence -FallbackPayload $previousSourcePayload
 
     $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
 
@@ -1223,6 +1279,15 @@ function Write-QuoteHeartbeatStatus {
       writer_version = $WriterVersion
       build_id = if ($env:FUMAN_BUILD_ID) { $env:FUMAN_BUILD_ID } elseif ($env:VERCEL_GIT_COMMIT_SHA) { $env:VERCEL_GIT_COMMIT_SHA } else { "local" }
       writer_pid = $PID
+      latest_run_id = $strategy2RunEvidence.latest_run_id
+      latestRunId = $strategy2RunEvidence.latestRunId
+      strategy2_latest_run_id = $strategy2RunEvidence.strategy2_latest_run_id
+      strategy2_latest_run_id_source = $strategy2RunEvidence.strategy2_latest_run_id_source
+      strategy2_latest_scan_date = $strategy2RunEvidence.strategy2_latest_scan_date
+      strategy2_latest_finished_at = $strategy2RunEvidence.strategy2_latest_finished_at
+      strategy2_readiness_status = $strategy2RunEvidence.strategy2_readiness_status
+      strategy2_readiness_reason = $strategy2RunEvidence.strategy2_readiness_reason
+      strategy2_readiness_checked_at = $strategy2RunEvidence.strategy2_readiness_checked_at
       quote_status = $quoteStatus
       permission_status = $permissionStatus
       preopen_status = $preopenStatus
@@ -3061,12 +3126,22 @@ do {
     $dailyVolumeStatus = Get-SourcePartStatus -Ok $dailyVolumeOk
     $latestCandleTimeTaipei = Convert-IsoUtcToTaipei -IsoTime $intradayStats.intraday_1m_latest_candle_time
     $dailyVolumeRowsWritten = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count)
+    $strategy2RunEvidence = Get-Strategy2LatestRunEvidence
     $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
     $sourceStatusPayload = @{
       source_contract_version = $SourceContractVersion
       writer_version = $WriterVersion
       build_id = if ($env:FUMAN_BUILD_ID) { $env:FUMAN_BUILD_ID } elseif ($env:VERCEL_GIT_COMMIT_SHA) { $env:VERCEL_GIT_COMMIT_SHA } else { "local" }
       writer_pid = $PID
+      latest_run_id = $strategy2RunEvidence.latest_run_id
+      latestRunId = $strategy2RunEvidence.latestRunId
+      strategy2_latest_run_id = $strategy2RunEvidence.strategy2_latest_run_id
+      strategy2_latest_run_id_source = $strategy2RunEvidence.strategy2_latest_run_id_source
+      strategy2_latest_scan_date = $strategy2RunEvidence.strategy2_latest_scan_date
+      strategy2_latest_finished_at = $strategy2RunEvidence.strategy2_latest_finished_at
+      strategy2_readiness_status = $strategy2RunEvidence.strategy2_readiness_status
+      strategy2_readiness_reason = $strategy2RunEvidence.strategy2_readiness_reason
+      strategy2_readiness_checked_at = $strategy2RunEvidence.strategy2_readiness_checked_at
       quote_status = $quoteStatus
       permission_status = $permissionStatus
       preopen_status = $preopenStatus
