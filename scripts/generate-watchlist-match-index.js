@@ -5,7 +5,6 @@ const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_ROOT || process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const DEPLOY_ROOT = process.env.FUMAN_DEPLOY_DIR || "C:\\fuman-terminal";
-const OUTPUT = "data/strategy-match-index.json";
 
 const SOURCES = [
   { key: "openBuy", label: "策略1-明日開盤入", api: "open-buy-latest", fields: ["matches"] },
@@ -139,11 +138,6 @@ async function callApi(source) {
   return response.body && typeof response.body === "object" ? response.body : {};
 }
 
-function writeJson(file, payload) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(payload)}\n`, "utf8");
-}
-
 function taipeiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -261,14 +255,10 @@ async function main() {
     byCode,
   };
 
-  for (const root of [...new Set([ROOT, RUNTIME_ROOT, DEPLOY_ROOT])]) {
-    writeJson(path.join(root, OUTPUT), payload);
-  }
-
   const clock = taipeiClock();
   const locked = isAfterTaipei1330(clock);
   const snapshot = await upsertSnapshot("watchlist_match_index", payload, {
-    source: "data/strategy-match-index.json",
+    source: "api-driven-watchlist-match-index",
     snapshotId: runId,
     tradeDate: clock.date,
     locked,

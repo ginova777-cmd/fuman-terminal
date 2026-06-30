@@ -56,6 +56,11 @@ function isDesktopApiOnlyStaticOutput(output) {
   return /^data[\\/]+(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect).*\.json$/i.test(String(output || ""));
 }
 
+function isRetiredStaticOutput(output) {
+  const normalized = String(output || "").replace(/\\/g, "/");
+  return /^(data\/(?:strategy-match-index|data-status-index|realtime-radar-latest)\.json|data\/scan-receipts\/realtime-radar\.json)$/i.test(normalized);
+}
+
 function writeToBoth(output, payload) {
   if (STRATEGY4_API_ONLY && isStrategy4StaticOutput(output)) {
     console.log(`strategy4 API-only: skipped static slim output ${output}`);
@@ -67,6 +72,10 @@ function writeToBoth(output, payload) {
   }
   if (DESKTOP_API_ONLY_STATIC_OUTPUT && isDesktopApiOnlyStaticOutput(output)) {
     console.log(`desktop API-only: skipped static slim output ${output}`);
+    return;
+  }
+  if (DESKTOP_API_ONLY_STATIC_OUTPUT && isRetiredStaticOutput(output)) {
+    console.log(`desktop API-only: skipped retired static output ${output}`);
     return;
   }
   for (const root of writeRoots()) {
@@ -952,7 +961,7 @@ function marketAiLiveCache() {
   const marketPayload = readOptional("data/market-summary.json", {});
   const breadth = readOptional("data/market-ai-breadth-latest.json", {});
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
-  const realtimeRadar = readOptional("data/realtime-radar-latest.json", {});
+  const realtimeRadar = apiOnlyStaticDisabledPayload("realtime-radar-api-only-static-disabled");
   const strategy2Count = payloadCount(strategy2);
   const realtimeRadarCount = payloadCount(realtimeRadar);
   return {
@@ -995,7 +1004,7 @@ function marketAiPanelLatest() {
   const breadth = readOptional("data/market-ai-breadth-latest.json", marketAiBreadthLatest());
   const strategy5 = readOptional("data/strategy5-latest.json", {});
   const strategy2 = readOptional("data/strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-top.json", {}));
-  const radar = readOptional("data/realtime-radar-latest.json", {});
+  const radar = apiOnlyStaticDisabledPayload("realtime-radar-api-only-static-disabled");
   const quotes = readOptional("data/stocks-quotes-mobile-top.json", {});
   const sectors = normalizeArray(market?.sectors).map((sector) => {
     const up = cleanNumber(sector?.up);
@@ -1072,7 +1081,7 @@ function marketAiPanelLatest() {
 
 function mobileStockAnalysisLatest(panel = null) {
   const sourcePanel = panel || readOptional("data/market-ai-panel-latest.json", marketAiPanelLatest());
-  const strategyIndex = readOptional("data/strategy-match-index.json", {});
+  const strategyIndex = apiOnlyStaticDisabledPayload("strategy-match-index-api-only-static-disabled");
   const stockIndex = readOptional("data/stocks-index.json", {});
   const stockNameByCode = new Map(normalizeArray(stockIndex?.stocks).map((stock) => [String(stock?.code || "").trim(), String(stock?.name || "")]));
   const breadth = sourcePanel?.breadth || {};
@@ -1770,7 +1779,6 @@ function terminalHomeStatus() {
     "mobile-home-summary.json": terminalHomeStatusEntry("mobile-home-summary.json", mobileHomeSummary(), "mobile-home-summary"),
     "stocks-quotes-mobile-top.json": terminalHomeStatusEntry("stocks-quotes-mobile-top.json", readOptional("data/stocks-quotes-mobile-top.json", {}), "stocks-quotes-mobile-top"),
     "strategy2-intraday-live-top.json": terminalHomeStatusEntry("strategy2-intraday-live-top.json", readOptional("data/strategy2-intraday-live-top.json", {}), "strategy2-live-top"),
-    "realtime-radar-latest.json": terminalHomeStatusEntry("realtime-radar-latest.json", readOptional("data/realtime-radar-latest.json", {}), "realtime-radar"),
     "strategy4-score-top.json": terminalHomeStatusEntry("strategy4-score-top.json", readOptional("data/strategy4-score-top.json", {}), "strategy4-score-top"),
     "warrant-flow-mobile-top.json": terminalHomeStatusEntry("warrant-flow-mobile-top.json", readOptional("data/warrant-flow-mobile-top.json", {}), "warrant-flow-mobile-top"),
   };
@@ -1851,7 +1859,6 @@ function terminalHomeMobileSlim() {
         "mobile-home-summary.json",
         "stocks-quotes-mobile-top.json",
         "strategy2-intraday-live-top.json",
-        "realtime-radar-latest.json",
         "strategy4-score-top.json",
         "warrant-flow-mobile-top.json",
       ].includes(key))),
@@ -1949,7 +1956,6 @@ function buildStrategyMatchIndex() {
     { key: "strategy3", label: "策略3-隔日沖", file: "data/strategy3-latest.json", fields: ["matches"] },
     { key: "strategy4", label: "策略4-波段", file: "data/strategy4-slim.json", fields: ["matches"] },
     { key: "strategy5", label: "策略5-綜合策略", file: "data/strategy5-latest.json", fields: ["matches"] },
-    { key: "realtime", label: "即時雷達", file: "data/realtime-radar-latest.json", fields: ["rows"] },
     { key: "institution", label: "買賣超", file: "data/institution-latest.json", fields: ["data", "rows", "matches"], objectFields: ["data"] },
     { key: "cb", label: "CB名單", file: "data/cb-detect-latest.json", fields: ["rows", "matches"] },
     { key: "warrant", label: "權證", file: "data/warrant-flow-latest.json", fields: ["matches", "rows"], codeField: "underlyingCode" },
@@ -1998,14 +2004,9 @@ function buildStrategyMatchIndex() {
 }
 
 async function writeStrategyMatchIndexSnapshot() {
-  const strategyMatchIndex = buildStrategyMatchIndex();
-  writeToBoth("data/strategy-match-index.json", strategyMatchIndex);
-  await safeUpsertSnapshot("watchlist_match_index", strategyMatchIndex, {
-    source: "data/strategy-match-index.json",
-    snapshotId: `watchlist-match-index-${String(strategyMatchIndex.updatedAt || Date.now()).replace(/\D/g, "").slice(0, 14)}`,
-  });
-  console.log(`[slim] wrote data/strategy-match-index.json codes=${strategyMatchIndex.count || 0}`);
-  return strategyMatchIndex;
+  const retired = apiOnlyStaticDisabledPayload("strategy-match-index-static-retired");
+  console.log("[slim] skipped retired data/strategy-match-index.json static builder; use scripts/generate-watchlist-match-index.js for watchlist_match_index snapshot");
+  return retired;
 }
 
 const jobs = [

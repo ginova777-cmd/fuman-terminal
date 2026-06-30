@@ -563,6 +563,12 @@ function Test-DesktopApiOnlyStaticDataFile($file) {
   # DESKTOP_API_ONLY_STATIC_FILTER: these desktop terminal datasets must be served by Supabase latest APIs only.
   $normalized = ([string]$file) -replace "/", "\"
   if ($normalized -match "\\mobile-" -or $normalized -match "-mobile-" -or $normalized -match "tdcc-breakout") { return $false }
+  if ($normalized -in @(
+    "data\data-status-index.json",
+    "data\strategy-match-index.json",
+    "data\realtime-radar-latest.json",
+    "data\scan-receipts\realtime-radar.json"
+  )) { return $true }
   return $normalized -match "^data\\(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect).+\.json$"
 }
 
@@ -968,7 +974,6 @@ try {
     "data\market-summary.json",
     "data\mobile-home-summary.json",
     "data\terminal-home-bundle.json",
-    "data\data-status-index.json",
     "data\stocks-slim.json",
     "data\stocks-index.json",
     "data\stocks-quotes-slim.json",
@@ -977,8 +982,7 @@ try {
     "data\signal-quality-report.json",
     "data\data-quality-report.json",
     "data\data-consistency-report.json",
-    "data\strategy-weight-report.json",
-    "data\strategy-match-index.json"
+    "data\strategy-weight-report.json"
   )
 
   foreach ($file in @(($copiedFiles + $refreshedDerivedFiles) | Select-Object -Unique)) {

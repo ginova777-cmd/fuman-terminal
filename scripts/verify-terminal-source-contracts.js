@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("./twse-trading-day");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-source-contracts");
@@ -10,22 +11,8 @@ const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--route
   .map((item) => item.trim())
   .filter(Boolean));
 
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || readSecret("terminal-supabase-url.txt")
-  || readSecret("supabase-url.txt")
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
-  || process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecret("supabase-service-role-key.txt")
-  || readSecret("supabase-anon-key.txt")
-  || readSecret("terminal-supabase-service-role-key.txt")
-  || readSecret("terminal-supabase-key.txt");
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const COMMON_RESULT_FIELDS = [
   "run_id",
@@ -175,7 +162,11 @@ const CONTRACTS = [
     key: "realtime-radar",
     label: "realtime radar",
     checks: [
-      sourceTable("fugle_quotes_live", ["symbol", "name", "updated_at", "price", "total_volume", "trade_value"], { order: "updated_at.desc", requireToday: true }),
+      realtimeRadarCache(),
+      sourceTable("fugle_realtime_quote_latest", [
+        "symbol", "name", "market", "price", "open_price", "high_price", "low_price", "previous_close",
+        "change_percent", "volume_lots", "trade_value_twd", "last_trade_time", "quote_updated_at",
+      ], { order: "quote_updated_at.desc.nullslast", requireToday: true, minRows: 1, purpose: "formal quote-view fallback for stale/missing radar cache" }),
     ],
   },
 ];
@@ -237,11 +228,24 @@ function sourceTable(table, fields, options = {}) {
     select: fields.join(","),
     query: [options.order ? `order=${options.order}` : "", "limit=5"].filter(Boolean).join("&"),
     level: options.level || "error",
+    minRows: Number(options.minRows || 0),
     requireToday: options.requireToday === true,
     maxAgeDays: Number(options.maxAgeDays || 0),
     purpose: options.purpose || "",
     healthStatusField: options.healthStatusField || "",
     acceptedHealthStatuses: options.acceptedHealthStatuses || ["ready", "ok", "healthy", "complete"],
+  };
+}
+
+function realtimeRadarCache() {
+  return {
+    kind: "realtime-radar-cache",
+    table: "fuman_realtime_radar_cache",
+    select: "id,payload,updated_at",
+    query: "id=eq.latest&limit=1",
+    minRows: 1,
+    minPayloadRows: 1200,
+    requireToday: true,
   };
 }
 
@@ -341,6 +345,7 @@ function compactDate(value) {
 function rowDate(row = {}) {
   return compactDate(
     row.updated_at
+    || row.quote_updated_at
     || row.quote_time
     || row.last_trade_time
     || row.scan_date
@@ -349,6 +354,52 @@ function rowDate(row = {}) {
     || row.latest_trade_date
     || row.checked_trade_date
   );
+}
+
+function cleanNumber(value) {
+  const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function normalizedCodes(value) {
+  return Array.isArray(value)
+    ? value.map((code) => String(code || "").replace(/\D/g, "").slice(0, 4)).filter(Boolean).sort()
+    : [];
+}
+
+function sameCodeSet(left, right) {
+  const a = normalizedCodes(left);
+  const b = normalizedCodes(right);
+  return a.length === b.length && a.every((code, index) => code === b[index]);
+}
+
+function realtimeRadarPayloadDate(payload = {}) {
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  return [
+    payload.resolvedTradeDate,
+    payload.tradeDate,
+    payload.usedDate,
+    payload.dataDate,
+    payload.date,
+    payload.marketDataDate,
+    ...rows.slice(0, 20).flatMap((row) => [row?.radarDate, row?.tradeDate, row?.quoteDate, row?.date, row?.timestamp, row?.radarUpdatedAt]),
+  ].map(compactDate).filter(Boolean).sort().at(-1) || "";
+}
+
+function realtimeRadarPayloadUpdatedAtMs(payload = {}, row = {}) {
+  return cleanNumber(payload.updatedAtMs)
+    || Date.parse(payload.updatedAt || payload.timestamp || row.updated_at || "")
+    || 0;
+}
+
+function realtimeRadarMaxAgeMs(payload = {}) {
+  const staleAfterMs = cleanNumber(payload.staleAfterMs);
+  return Math.max(90000, staleAfterMs > 0 ? staleAfterMs * 3 : 90000);
+}
+
+function isRealtimeRadarLiveWindow(date = new Date()) {
+  const minutes = taipeiMinutes(date);
+  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
 }
 
 function dateAgeDays(dateKey) {
@@ -424,12 +475,35 @@ async function checkOne(strategy, check) {
       issues.push(`${check.table} ${check.healthStatusField}=${status}${reason ? ` (${reason})` : ""}`);
     }
   }
+  if (result.ok && check.kind === "realtime-radar-cache") {
+    const row = result.rows[0] || {};
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : null;
+    const payloadRows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const expected = await expectedQuoteDateKey();
+    const payloadDate = realtimeRadarPayloadDate(payload || {});
+    const updatedAtMs = realtimeRadarPayloadUpdatedAtMs(payload || {}, row);
+    const expectedExcludedCodes = ["1475", "2254", "7732", "8488"];
+    if (!payload) issues.push(`${check.table} latest payload missing`);
+    if (payload && payloadRows.length < check.minPayloadRows) issues.push(`${check.table} payload rows ${payloadRows.length}<${check.minPayloadRows}`);
+    if (payload && payloadDate < expected) issues.push(`${check.table} payload date ${payloadDate || "--"} < expected quote date ${expected}`);
+    if (payload && !updatedAtMs) issues.push(`${check.table} payload updatedAt missing`);
+    if (payload && isRealtimeRadarLiveWindow() && payloadDate === taipeiDateKey() && updatedAtMs && Date.now() - updatedAtMs > realtimeRadarMaxAgeMs(payload)) {
+      issues.push(`${check.table} payload age ${Math.round((Date.now() - updatedAtMs) / 1000)}s exceeds live max`);
+    }
+    if (payload && cleanNumber(payload.staleQuoteCount) > 0) issues.push(`${check.table} staleQuoteCount=${cleanNumber(payload.staleQuoteCount)}`);
+    if (payload && cleanNumber(payload.failedBatchCount) > 0) issues.push(`${check.table} failedBatchCount=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`);
+    if (payload && !sameCodeSet(payload.sourceExcludedCodes, expectedExcludedCodes)) {
+      issues.push(`${check.table} sourceExcludedCodes=${normalizedCodes(payload.sourceExcludedCodes).join(",") || "--"} expected=${expectedExcludedCodes.join(",")}`);
+    }
+  }
   return {
     ...check,
     ok: issues.length === 0,
     level: check.level || "error",
     rowCount: result.rows.length,
-    newestDate: result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "",
+    newestDate: check.kind === "realtime-radar-cache"
+      ? realtimeRadarPayloadDate(result.rows[0]?.payload || {}) || rowDate(result.rows[0] || {})
+      : result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "",
     issues,
   };
 }

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -10,22 +11,8 @@ const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--route
   .map((item) => item.trim())
   .filter(Boolean));
 
-const SUPABASE_URL = String(
-  process.env.SUPABASE_URL
-  || process.env.FUMAN_SUPABASE_URL
-  || readSecret("terminal-supabase-url.txt")
-  || readSecret("supabase-url.txt")
-  || "https://cpmpfhbzutkiecccekfr.supabase.co"
-).replace(/\/+$/, "");
-
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
-  || process.env.SUPABASE_ANON_KEY
-  || process.env.FUMAN_SUPABASE_ANON_KEY
-  || readSecret("supabase-service-role-key.txt")
-  || readSecret("supabase-anon-key.txt")
-  || readSecret("terminal-supabase-service-role-key.txt")
-  || readSecret("terminal-supabase-key.txt");
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const STRATEGIES = [
   {

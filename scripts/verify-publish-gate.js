@@ -258,6 +258,16 @@ if (vercelJson) {
   if (!rewrites.some((route) => route?.source === "/88" && route?.destination === "/88.html")) {
     issues.push("vercel.json must keep /88 rewritten to /88.html for the public scorecard");
   }
+  for (const [source, destination] of [
+    ["/data/realtime-radar-latest.json", "/api/desktop-static-disabled"],
+    ["/data/strategy-match-index.json", "/api/desktop-static-disabled"],
+    ["/data/data-status-index.json", "/api/desktop-static-disabled"],
+    ["/data/scan-receipts/realtime-radar.json", "/api/desktop-static-disabled"],
+  ]) {
+    if (!rewrites.some((route) => route?.source === source && route?.destination === destination)) {
+      issues.push(`vercel.json must route retired realtime radar static source ${source} to ${destination}`);
+    }
+  }
 }
 if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.deploy || ""))) {
   issues.push("package.json scripts.deploy must require version/deploy approval");
@@ -555,6 +565,7 @@ const runChipSourceSync = read("run-chip-source-sync.ps1");
 const productionHealthMonitor = read("scripts/monitor-production-health.js");
 const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
+const watchlistMatchIndexGenerator = read("scripts/generate-watchlist-match-index.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
@@ -578,6 +589,7 @@ const strategy2BattleStateVerifier = read("scripts/verify-strategy2-battle-state
 const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
+const terminalSourceContracts = read("scripts/verify-terminal-source-contracts.js");
 const terminalApp = read("terminal-app.js");
 const desktopFastShell = read("terminal-desktop-fast-shell.js");
 const mobileShell = read("mobile.html");
@@ -1116,6 +1128,19 @@ if (/"strategy4", "data\/strategy4-latest\.json"|strategy4PresetFiles\]/.test(sl
 }
 if (!/FUMAN_SLIM_CACHE_WRITE_CODE_REPO/.test(slimCacheGenerator) || !/function\s+writeRoots/.test(slimCacheGenerator)) {
   issues.push("generate-slim-cache.js must write generated static artifacts to runtime only unless FUMAN_SLIM_CACHE_WRITE_CODE_REPO=1 is explicitly set");
+}
+for (const marker of [
+  "isRetiredStaticOutput",
+  "strategy-match-index-static-retired",
+  "realtime-radar-api-only-static-disabled",
+]) {
+  if (!slimCacheGenerator.includes(marker)) issues.push(`generate-slim-cache.js missing retired realtime/static marker ${marker}`);
+}
+if (/readOptional\("data\/realtime-radar-latest\.json"|readOptional\("data\/strategy-match-index\.json"|writeToBoth\("data\/strategy-match-index\.json"|source:\s*"data\/strategy-match-index\.json"/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must not read/write retired realtime radar or strategy-match static JSON");
+}
+if (!/api-driven-watchlist-match-index/.test(watchlistMatchIndexGenerator) || /writeJson\(|data\/strategy-match-index\.json/.test(watchlistMatchIndexGenerator)) {
+  issues.push("generate-watchlist-match-index.js must be API-driven snapshot-only and must not write data/strategy-match-index.json");
 }
 if (/data\/strategy4-|strategy4-score/.test(sourceSync)) {
   issues.push("sync-main-deploy-source.js must not publish strategy4 static JSON artifacts");
@@ -1911,6 +1936,7 @@ const deletedDozenPattern = new RegExp([
 if (deletedDozenPattern.test(dailyBattleReadiness)) {
   issues.push("verify-daily-battle-readiness.js must not restore fixed Strategy3 readiness counts");
 }
+const terminalResourceChain = read("scripts/verify-terminal-resource-chain.js");
 for (const marker of [
   "scanner receipt",
   "sourceHealth",
@@ -1918,8 +1944,13 @@ for (const marker of [
   "cb_detect_scan_results",
   "latest complete scan",
 ]) {
-  const terminalResourceChain = read("scripts/verify-terminal-resource-chain.js");
   if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
+}
+for (const marker of [
+  "terminalSupabaseUrl",
+  "terminalSupabaseKey",
+]) {
+  if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js must use terminal Supabase resolver marker ${marker}`);
 }
 const marketSurfacesChain = read("scripts/verify-market-surfaces-chain.js");
 for (const marker of [
@@ -1947,8 +1978,26 @@ for (const marker of [
   "strategy2_ready_100",
   "missing_summary",
 ]) {
-  const sourceContracts = read("scripts/verify-terminal-source-contracts.js");
-  if (!sourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
+  if (!terminalSourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
+}
+for (const marker of [
+  "realtimeRadarCache",
+  "realtime-radar-cache",
+  "fuman_realtime_radar_cache",
+  "fugle_realtime_quote_latest",
+  "formal quote-view fallback",
+  "staleQuoteCount",
+  "failedBatchCount",
+  "sourceExcludedCodes",
+]) {
+  if (!terminalSourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing realtime radar formal source-contract marker ${marker}`);
+}
+const realtimeRadarSourceIndex = terminalSourceContracts.indexOf('key: "realtime-radar"');
+const realtimeRadarSourceBlock = realtimeRadarSourceIndex >= 0 ? terminalSourceContracts.slice(realtimeRadarSourceIndex, realtimeRadarSourceIndex + 1600) : "";
+if (!realtimeRadarSourceBlock) {
+  issues.push("verify-terminal-source-contracts.js missing realtime-radar contract block");
+} else if (/fugle_quotes_live/.test(realtimeRadarSourceBlock)) {
+  issues.push("verify-terminal-source-contracts.js realtime-radar contract must not read retired fugle_quotes_live; use fuman_realtime_radar_cache plus fugle_realtime_quote_latest fallback");
 }
 const fugleSourceContract = read("ops/public-slot/FugleSourceResourceContract.sql");
 for (const marker of [
