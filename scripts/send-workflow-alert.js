@@ -77,6 +77,12 @@ function sanitizeSmtpResponse(value) {
   return String(value || "").replace(/[A-Za-z0-9+/=]{16,}/g, "[redacted]");
 }
 
+function normalizeSmtpPassword(pass, host) {
+  const value = String(pass || "");
+  if (!/gmail\.com$/i.test(String(host || ""))) return value;
+  return value.replace(/\s+/g, "");
+}
+
 async function sendMail({ host, port, user, pass, to, subject, text }) {
   const socket = tls.connect({ host, port, servername: host });
   await new Promise((resolve, reject) => {
@@ -87,7 +93,7 @@ async function sendMail({ host, port, user, pass, to, subject, text }) {
   await smtpCommand(socket, "EHLO fuman-terminal");
   await smtpCommand(socket, "AUTH LOGIN", /^334/);
   await smtpCommand(socket, Buffer.from(user).toString("base64"), /^334/);
-  await smtpCommand(socket, Buffer.from(pass).toString("base64"));
+  await smtpCommand(socket, Buffer.from(normalizeSmtpPassword(pass, host)).toString("base64"));
   await smtpCommand(socket, `MAIL FROM:<${user}>`);
   await smtpCommand(socket, `RCPT TO:<${to}>`);
   await smtpCommand(socket, "DATA", /^354/);
