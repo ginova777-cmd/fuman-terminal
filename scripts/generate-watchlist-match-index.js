@@ -243,6 +243,7 @@ async function main() {
   const runId = `watchlist-match-index-${updatedAt.replace(/\D/g, "").slice(0, 14)}`;
   const payload = {
     ok: true,
+    contract: "api-driven-watchlist-match-index",
     source: "watchlist-match-index",
     runId,
     updatedAt,
