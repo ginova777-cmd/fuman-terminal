@@ -732,6 +732,37 @@ function Convert-VolumeToLots {
   return $number
 }
 
+function Get-QuoteDerivedPrice {
+  param([object]$Quote)
+
+  $candidates = @(
+    @{ source = "price"; value = Get-Number $Quote.price },
+    @{ source = "open_price"; value = Get-Number $Quote.open_price },
+    @{ source = "high_price"; value = Get-Number $Quote.high_price },
+    @{ source = "low_price"; value = Get-Number $Quote.low_price },
+    @{ source = "previous_close"; value = Get-Number $Quote.previous_close },
+    @{ source = "reference_price"; value = Get-Number $Quote.reference_price },
+    @{ source = "trial_price"; value = Get-Number $Quote.trial_price }
+  )
+  foreach ($candidate in $candidates) {
+    if ([double]$candidate.value -gt 0) {
+      return [pscustomobject]@{ price = [double]$candidate.value; source = [string]$candidate.source; synthetic = ([string]$candidate.source -ne "price") }
+    }
+  }
+
+  $bid = Get-Number $Quote.best_bid_price
+  if ($bid -le 0) { $bid = Get-Number $Quote.bid1_price }
+  $ask = Get-Number $Quote.best_ask_price
+  if ($ask -le 0) { $ask = Get-Number $Quote.ask1_price }
+  if ($bid -gt 0 -and $ask -gt 0) {
+    return [pscustomobject]@{ price = [math]::Round(($bid + $ask) / 2, 4); source = "bid_ask_mid"; synthetic = $true }
+  }
+  if ($bid -gt 0) { return [pscustomobject]@{ price = [double]$bid; source = "best_bid_price"; synthetic = $true } }
+  if ($ask -gt 0) { return [pscustomobject]@{ price = [double]$ask; source = "best_ask_price"; synthetic = $true } }
+
+  return [pscustomobject]@{ price = 0.0; source = "none"; synthetic = $true }
+}
+
 function Invoke-PublicSlotRpc {
   param([string]$FunctionName, [hashtable]$Body = @{})
   try {
@@ -1530,7 +1561,11 @@ function Invoke-Direct1mStartupPrewarm {
   }
 
   $script:Direct1mRateLimited = $false
-  $batchSize = [math]::Max(1, [math]::Min($Direct1mPrewarmBatchSize, $remaining.Count))
+  $effectivePrewarmBatchSize = $Direct1mPrewarmBatchSize
+  if ((Get-PublicSlotSession) -eq "regular") {
+    $effectivePrewarmBatchSize = [math]::Min($effectivePrewarmBatchSize, 8)
+  }
+  $batchSize = [math]::Max(1, [math]::Min($effectivePrewarmBatchSize, $remaining.Count))
   $batch = @($remaining | Select-Object -First $batchSize)
   $rows = New-Object System.Collections.Generic.List[object]
   $fetched = 0
@@ -1549,7 +1584,7 @@ function Invoke-Direct1mStartupPrewarm {
       Write-Log "WARN direct_1m_prewarm rate limited; preserving progress and cooling down."
       break
     }
-    Start-Sleep -Milliseconds ([math]::Max(0, $RestQuoteDelayMilliseconds))
+    Start-Sleep -Milliseconds ([math]::Max(0, [math]::Min($RestQuoteDelayMilliseconds, 40)))
   }
 
   $completedArray = @($targetSymbols | Where-Object { $completedSet.Contains([string]$_) })
@@ -1599,8 +1634,12 @@ function Invoke-Direct1mWarmupBatch {
   }
   $cursor = [int]($state.cursor)
   if ($cursor -lt 0 -or $cursor -ge $Symbols.Count) { $cursor = 0 }
+  $effectiveDirect1mBatchSize = $Direct1mBatchSize
+  if ((Get-PublicSlotSession) -eq "regular") {
+    $effectiveDirect1mBatchSize = [math]::Min($effectiveDirect1mBatchSize, 2)
+  }
   $batch = New-Object System.Collections.Generic.List[string]
-  for ($i = 0; $i -lt [math]::Min($Direct1mBatchSize, $Symbols.Count); $i++) {
+  for ($i = 0; $i -lt [math]::Min($effectiveDirect1mBatchSize, $Symbols.Count); $i++) {
     $batch.Add([string]$Symbols[($cursor + $i) % $Symbols.Count])
   }
   $rows = New-Object System.Collections.Generic.List[object]
@@ -1617,7 +1656,7 @@ function Invoke-Direct1mWarmupBatch {
       Write-Log "WARN direct_1m rate limited; stopping current batch and cooling down."
       break
     }
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds ([math]::Max(0, [math]::Min($RestQuoteDelayMilliseconds, 40)))
   }
   $nextCursor = ($cursor + [math]::Max(1, $fetched)) % $Symbols.Count
   Write-JsonFile -Path $Direct1mStateFile -Value ([ordered]@{
@@ -1963,6 +2002,12 @@ function Convert-QuotesToRows {
     if ([string]::IsNullOrWhiteSpace($quoteSession)) { $quoteSession = Get-PublicSlotSession }
     $isTrial = $false
     try { $isTrial = [bool]$quote.isTrial } catch {}
+    $referencePrice = Get-Number $quote.referencePrice
+    if ($referencePrice -le 0) { $referencePrice = Get-Number $quote.prevClose }
+    $trialPrice = Get-Number $quote.trialPrice
+    if ($trialPrice -le 0) { $trialPrice = Get-Number $quote.close }
+    $bidPrice = Get-Number $quote.bidPrice
+    $askPrice = Get-Number $quote.askPrice
     $rows.Add([ordered]@{
       symbol = $symbol
       name = $quoteName
@@ -1973,6 +2018,12 @@ function Convert-QuotesToRows {
       high_price = Get-Number $quote.high
       low_price = Get-Number $quote.low
       previous_close = Get-Number $quote.prevClose
+      reference_price = $referencePrice
+      trial_price = $trialPrice
+      best_bid_price = $bidPrice
+      best_ask_price = $askPrice
+      bid1_price = $bidPrice
+      ask1_price = $askPrice
       change_percent = Get-Number $quote.percent
       total_volume = [int64](Convert-VolumeToLots $quote.tradeVolume)
       trade_value = [int64](Get-Number $quote.tradeValue)
@@ -2522,7 +2573,8 @@ function Update-MinuteRows {
     if (-not $quoteFreshForDerived1m -and -not $fullUniverseMode) { continue }
     if ($taipeiTimeOfDay -lt [TimeSpan]::Parse("09:00") -or $taipeiTimeOfDay -gt [TimeSpan]::Parse("13:35")) { continue }
     $minute = $currentMinute
-    $price = Get-Number $quote.price
+    $pricePayload = Get-QuoteDerivedPrice -Quote $quote
+    $price = [double]$pricePayload.price
     $totalVolume = [int64](Convert-VolumeToLots $quote.total_volume)
     if ($price -le 0 -or $symbol -notmatch '^\d{4}$') { continue }
 
@@ -2555,8 +2607,9 @@ function Update-MinuteRows {
     $taipeiMinute = $currentTaipeiMinute
 
     $minuteVolume = [int64]([math]::Max(0, [int64]$bucket.last_volume - [int64]$bucket.start_volume))
-    $synthetic = ($minuteVolume -le 0 -or -not $quoteFreshForDerived1m)
+    $synthetic = ($minuteVolume -le 0 -or -not $quoteFreshForDerived1m -or [bool]$pricePayload.synthetic)
     $minuteSource = if ($quoteFreshForDerived1m) { "quote_derived_1m" } else { "synthetic_flat" }
+    if ([bool]$pricePayload.synthetic) { $minuteSource = "synthetic_flat" }
     $rows.Add([ordered]@{
       symbol = $symbol
       market = [string]$quote.market
@@ -2582,6 +2635,7 @@ function Update-MinuteRows {
         quote_updated_at = $quoteTime.ToUniversalTime().ToString("o")
         quote_age_seconds = $quoteAgeSeconds
         quote_fresh_for_1m = $quoteFreshForDerived1m
+        price_source = [string]$pricePayload.source
         stale_quote_synthetic_flat = (-not $quoteFreshForDerived1m)
         candidate_pool = $candidatePoolLabel
         quote_derived_1m_full_universe = [bool]$fullUniverseMode
@@ -2620,6 +2674,7 @@ function Update-MinuteRows {
             quote_updated_at = $quoteTime.ToUniversalTime().ToString("o")
             quote_age_seconds = $quoteAgeSeconds
             quote_fresh_for_1m = $quoteFreshForDerived1m
+            price_source = [string]$pricePayload.source
             stale_quote_synthetic_flat = (-not $quoteFreshForDerived1m)
             candidate_pool = $candidatePoolLabel
             quote_derived_1m_full_universe = [bool]$fullUniverseMode
