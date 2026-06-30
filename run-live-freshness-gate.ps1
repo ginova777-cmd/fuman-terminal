@@ -434,6 +434,7 @@ try {
 
   $gateMode = if ($SkipRawRefresh) { "publish" } elseif ($Fast) { "fast" } else { "full" }
   Invoke-DesktopRouteSnapshotRefresh "live-freshness-gate-$gateMode"
+  Invoke-NpmAt $publishRoot "verify:watchlist-autonomy"
   Invoke-NpmAt $publishRoot "verify:live-version"
   Write-GateLog "Legacy terminal freshness diagnostic disabled; not writing data/live-freshness-ok.json"
 
@@ -463,6 +464,7 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
 
 
 
