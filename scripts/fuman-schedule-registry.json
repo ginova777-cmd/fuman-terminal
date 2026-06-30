@@ -338,8 +338,8 @@
     {
       "taskName": "\\Fuman Strategy2 Supabase Coverage 0800",
       "displayName": "Fuman Strategy2 Supabase Coverage 0800",
-      "description": "Strategy2 Supabase coverage watch.",
-      "time": "08:00",
+      "description": "Strategy2 Supabase coverage watch: 08:30 warmup, 08:45 readiness, 08:55 preopen, 09:05 first 1m, 09:10 quote+1m hard gate, 09:30 ready_ge_35 hard gate.",
+      "time": "08:00-09:30",
       "expectedState": "Ready"
     },
     {

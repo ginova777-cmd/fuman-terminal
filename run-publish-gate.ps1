@@ -10,6 +10,11 @@ $receiptDir = Join-Path $runtimeRoot "data\scan-receipts"
 
 Push-Location $syncRoot
 try {
+  & npm.cmd run publish:source-gate
+  $sourceGateExit = $LASTEXITCODE
+  if ($sourceGateExit -ne 0) {
+    exit $sourceGateExit
+  }
   & npm.cmd run verify:publish-gate
   $contractExit = $LASTEXITCODE
 } finally {

@@ -609,6 +609,7 @@ const warrantFlowScanner = read("scripts/scan-warrant-flow-cache.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
 const chipSourceHealthVerifier = read("scripts/verify-chip-source-health.js");
 const scannerResourceHealthCheck = read("scripts/check-scanner-resource-health.js");
+const publishSourceGate = read("scripts/check-publish-source-gate.js");
 const strategy2ReadinessGate = read("scripts/check-strategy2-readiness-gate.js");
 const strategy2TradingDayGate = read("scripts/check-strategy2-trading-day.js");
 const postScanSnapshotVerifier = read("scripts/verify-post-scan-snapshot-refresh-contract.js");
@@ -763,6 +764,34 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "publishAllowed", "preserve latest complete run", "refresh_strategy2_readiness_cache"]) {
   if (!strategy2ReadinessGate.includes(marker)) issues.push(`check-strategy2-readiness-gate.js missing Strategy2 readiness gate marker ${marker}`);
+}
+for (const marker of [
+  "publish-source-gate-v1",
+  "check-strategy2-supabase-coverage.js",
+  "check-scanner-resource-health.js",
+  "send-workflow-alert.js",
+  "publishAllowed",
+  "mustPreserveLatest",
+  "allowLatestWrite",
+  "preservePreviousCompleteRun",
+  "freshQuoteCoverage120s",
+  "today1mSymbols",
+  "readyGe35",
+  "latestCandleTime",
+  "intraday1mStaleSeconds",
+  "preopenCoverage",
+  "dailyVolumeFreshness",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+]) {
+  if (!publishSourceGate.includes(marker)) issues.push(`check-publish-source-gate.js missing publish source gate marker ${marker}`);
+}
+if (!String(packageJson.scripts?.["publish:source-gate"] || "").includes("scripts/check-publish-source-gate.js")) {
+  issues.push("package.json publish:source-gate must run scripts/check-publish-source-gate.js");
+}
+if (!read("run-publish-gate.ps1").includes("npm.cmd run publish:source-gate")) {
+  issues.push("run-publish-gate.ps1 must run publish:source-gate before verify:publish-gate");
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "closed-exit-code", "skip Strategy2 readiness source collectors"]) {
   if (!strategy2TradingDayGate.includes(marker)) issues.push(`check-strategy2-trading-day.js missing Strategy2 market-closed marker ${marker}`);
