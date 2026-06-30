@@ -166,6 +166,7 @@ const FILES = [
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
+  "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
   "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",

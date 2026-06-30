@@ -590,6 +590,7 @@ const strategy2ReadinessSql = [
   read("ops/public-slot/Strategy2ReadinessContractCache.sql"),
   read("ops/public-slot/Strategy2Readiness100SourcePatch.sql"),
 ].join("\n");
+const intraday1mCoverageStatsRpcSql = read("ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -836,6 +837,12 @@ for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2R
 }
 for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ma35_continuous", "continuous_candle_count", "ready_ma35_continuous", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
+}
+for (const marker of ["get_fugle_intraday_1m_coverage_stats", "idx_fugle_intraday_1m_symbol_candle_time_desc", "p_symbols text[]", "intraday_1m_stale_seconds"]) {
+  if (!intraday1mCoverageStatsRpcSql.includes(marker)) issues.push(`FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql missing coverage RPC marker ${marker}`);
+}
+if (!publicSlotSharedSourceRunner.includes("get_fugle_intraday_1m_coverage_stats")) {
+  issues.push("Run-PublicSlotSharedSource.ps1 must prefer get_fugle_intraday_1m_coverage_stats before REST batch fallback");
 }
 if (!strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, false)") || !strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, true)")) {
   issues.push("Strategy2Readiness100SourcePatch.sql must use 500-row refresh wrappers for intraday ready cache");
@@ -1824,6 +1831,7 @@ if (deletedSnapshotGatePattern.test(strategy3ReadySnapshotRefresh)) {
 }
 for (const file of [
   "ops/public-slot/FugleSourceResourceContract.sql",
+  "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "ops/public-slot/Strategy3CumulativeBidAskPatch.sql",
   "ops/public-slot/Strategy3CumulativeBidAskViewOnlyPatch.sql",
@@ -2251,6 +2259,7 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/Start-PublicSlotSharedSource.cmd",
       "ops/public-slot/fugle-websocket-collector.js",
       "ops/public-slot/FugleSourceResourceContract.sql",
+      "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
       "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
