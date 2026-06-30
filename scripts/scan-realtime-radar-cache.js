@@ -773,13 +773,37 @@ async function main() {
   const previousPayload = readJson(OUT_FILE, null);
   const currentRows = buildRadarRows(freshStocks, detectedAt, timestamp);
   const rows = mergeRadarSessionRows(previousPayload, currentRows, timestamp, key);
+  const runId = `realtime-radar-${key}-${detectedAt}`;
+  const staleQuoteSeverity = staleQuoteCount >= 80 ? "critical" : staleQuoteCount > 0 ? "warning" : "";
+  const degradedReasons = [
+    realtime.failedBatches.length ? "some realtime batches failed" : "",
+    staleQuoteSeverity ? `stale quotes detected (${staleQuoteCount})` : "",
+  ].filter(Boolean);
+  const freshnessDecision = staleQuoteSeverity === "critical"
+    ? "degraded_stale_quotes_high"
+    : degradedReasons.length ? "degraded" : "fresh";
   let payload = {
+    ok: true,
+    runId,
     source: "mini-pc-realtime-radar",
-    status: realtime.failedBatches.length ? "degraded" : "ok",
+    status: freshnessDecision === "fresh" ? "ok" : freshnessDecision,
     date: key,
+    usedDate: key,
+    sourceDate: key,
     timestamp,
     updatedAt: new Date(detectedAt).toISOString(),
     updatedAtMs: detectedAt,
+    freshness: {
+      decision: freshnessDecision,
+      reason: degradedReasons.length ? `${degradedReasons.join("; ")}; stale/no-quote rows excluded` : "fresh realtime scan",
+      severity: staleQuoteSeverity || (realtime.failedBatches.length ? "warning" : "ok"),
+      checkedAt: new Date(detectedAt).toISOString(),
+      maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+      staleQuoteCount,
+      failedBatchCount: realtime.failedBatches.length,
+      totalBatchCount: realtime.totalBatches,
+      quoteCount: realtime.quoteCount,
+    },
     staleAfterMs: STALE_AFTER_MS,
     maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
     staleQuoteCount,
@@ -811,6 +835,16 @@ async function main() {
       payload = {
         ...previous,
         status: "degraded_keepalive",
+        freshness: {
+          decision: "degraded_keepalive",
+          reason: "current scan failed; keeping today's earlier rows and exposing failed batches",
+          checkedAt: new Date(detectedAt).toISOString(),
+          maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+          staleQuoteCount,
+          failedBatchCount: realtime.failedBatches.length,
+          totalBatchCount: realtime.totalBatches,
+          quoteCount: realtime.quoteCount,
+        },
         timestamp,
         updatedAt: new Date(detectedAt).toISOString(),
         updatedAtMs: detectedAt,
@@ -849,11 +883,29 @@ async function main() {
       if (mergedRows.length > payload.rows.length || radarRowsSignature(mergedRows) !== radarRowsSignature(payload.rows)) {
         const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
+        const remainingStaleSeverity = remainingStaleStocks.length >= 80 ? "critical" : remainingStaleStocks.length > 0 ? "warning" : "";
+        const retryFailedCount = retry.failedBatches?.length || 0;
+        const deferredDecision = remainingStaleSeverity === "critical"
+          ? "degraded_stale_quotes_high_after_deferred_rescan"
+          : remainingStaleSeverity || retryFailedCount ? "degraded_after_deferred_rescan" : "fresh_after_deferred_rescan";
         const patchedStaleQuoteDetails = buildStaleQuoteDetails(remainingStaleStocks, timestamp);
         const patchedFailedBatchDetails = buildFailedBatchDetails(retry.failedBatches || []);
         const patchedPayload = {
           ...payload,
-          status: "ok_after_deferred_rescan",
+          status: deferredDecision === "fresh_after_deferred_rescan" ? "ok_after_deferred_rescan" : deferredDecision,
+          freshness: {
+            decision: deferredDecision,
+            reason: remainingStaleStocks.length
+              ? `deferred stale/failed batches were rescanned and merged; ${remainingStaleStocks.length} stale quotes remain`
+              : "deferred stale/failed batches were rescanned and merged",
+            severity: remainingStaleSeverity || (retryFailedCount ? "warning" : "ok"),
+            checkedAt: new Date().toISOString(),
+            maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
+            staleQuoteCount: remainingStaleStocks.length,
+            failedBatchCount: retryFailedCount,
+            totalBatchCount: deferredBatches.length,
+            quoteCount: retry.quotes.size,
+          },
           rows: mergedRows,
           longCount: mergedRows.filter((row) => row.side === "long").length,
           shortCount: mergedRows.filter((row) => row.side === "short").length,

@@ -65,7 +65,7 @@ if (!/terminal-hotfix\.js\?[^"']+["']\s+data-fuman-terminal-hotfix=["']1["']/.te
 if (!/terminal-desktop-fast-shell\.js\?[^"']+["']\s+data-fuman-desktop-fast-shell=["']1["']/.test(indexHtml)) {
   issues.push("index.html must load terminal-desktop-fast-shell.js with an explicit cache key");
 }
-if (!/terminal-core\.js\?v=public-terminal-fast-20260623-09&runtime=desktop-fast-shell-core-\d{8}-\d{2}/.test(indexHtml)) {
+if (!/terminal-core\.js\?v=public-terminal-fast-\d{8}-\d{2}&runtime=desktop-fast-shell-core-\d{8}-\d{2}/.test(indexHtml)) {
   issues.push("index.html terminal-core runtime key must be desktop-fast-shell-core-* when fast shell owns runtime");
 }
 

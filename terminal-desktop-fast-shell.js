@@ -126,7 +126,9 @@
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
   let marketHeatmapSectorRows = [];
-  let realtimeRadarDomSide = "long";
+  let realtimeRadarDomSide = "all";
+  let realtimeRadarDomSideUserSelected = false;
+  let realtimeRadarDomHealth = null;
   const canvasState = {
     route: "",
     source: "",
@@ -263,6 +265,7 @@
     window.__fumanDesktopActiveRoute = route;
     document.documentElement.dataset.fumanDesktopActiveRoute = key;
     document.documentElement.dataset.fumanDesktopActiveRouteSeq = String(seq);
+    if (key === REALTIME_RADAR_ROUTE) realtimeRadarDomSideUserSelected = false;
     try {
       window.dispatchEvent(new CustomEvent("fuman:desktop-route", { detail: route }));
     } catch (error) {}
@@ -1313,6 +1316,14 @@
       .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
     const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : 120;
+    if (isRealtimeRadarRoute(route)) {
+      return best
+        .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)
+          || cleanNumber(b.rank) - cleanNumber(a.rank)
+          || cleanNumber(b.score) - cleanNumber(a.score)
+          || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+        .slice(0, Math.max(minLimit, Math.min(maxLimit, limit)));
+    }
     return best
       .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
       .slice(0, Math.max(minLimit, Math.min(maxLimit, limit)));
@@ -1377,6 +1388,10 @@
 
   function isRoutePayloadNotDrawable(payload, route = "") {
     if (!payload || typeof payload !== "object") return false;
+    if (isRealtimeRadarRoute(route)) {
+      const hasDrawableRows = ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload[key]) && payload[key].some((item) => item && typeof item === "object"));
+      return !hasDrawableRows && payload.ok === false;
+    }
     if (route !== "strategy|策略1") return false;
     const hasDrawableRows = ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload[key]) && payload[key].some((item) => item && typeof item === "object"));
     if (hasDrawableRows) return false;
@@ -1394,7 +1409,10 @@
     const detail = String(payload.detail || payload.lastError || payload.error || reason);
     let title = "等待完整掃描";
     let message = "策略1 等待下一次完整掃描與期權資料 ready，資料 ready 後會自動顯示。";
-    if (/futopt/i.test(detail)) {
+    if (isRealtimeRadarRoute(route)) {
+      title = /stale/i.test(`${reason} ${detail}`) ? "即時雷達資料過期" : "即時雷達暫停顯示";
+      message = "正式水源尚未提供可用的今日盤中資料，已停止沿用舊快照。";
+    } else if (/futopt/i.test(detail)) {
       title = "等待期權資料";
       message = "期權資料尚未 ready，策略1 決策 gate 暫停出名單。";
     } else if (/decision/i.test(reason) || payload.decisionReady === false || payload.meta?.decision_ready === false) {
@@ -1410,6 +1428,36 @@
       qualityStatus: String(payload.qualityStatus || payload.cacheSource || ""),
       at: Date.now(),
     };
+  }
+
+  function realtimeRadarHealthFromPayload(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    const session = payload.marketSession || {};
+    const freshness = payload.freshness || {};
+    const statusText = String(payload.status || freshness.decision || payload.reason || payload.error || "");
+    const stale = payload.ok === false || session.hasTodayMarketData === false || /stale|unavailable|empty|no_|not_|failed/i.test(statusText);
+    const degraded = /degraded|fallback/i.test(statusText) || cleanNumber(payload.staleQuoteCount) > 0 || cleanNumber(payload.failedBatchCount) > 0;
+    if (!stale && !degraded) return null;
+    const detail = [
+      payload.reason || payload.error || freshness.reason || statusText,
+      session.marketDataIsoDate ? `資料日 ${session.marketDataIsoDate}` : "",
+      session.taipeiDate ? `今日 ${session.taipeiDate}` : "",
+      cleanNumber(payload.staleQuoteCount) ? `stale ${cleanNumber(payload.staleQuoteCount)} 檔` : "",
+      cleanNumber(payload.failedBatchCount) ? `failed batch ${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount)}` : "",
+    ].filter(Boolean).join(" · ");
+    return {
+      stale,
+      degraded,
+      title: stale ? "資料異常" : "降級運行",
+      detail: detail || "正式資料源尚未通過 freshness gate",
+      source: payload.cacheSource || payload.source || "",
+      checkedAt: payload.updatedAt || freshness.checkedAt || "",
+    };
+  }
+
+  function rememberRealtimeRadarHealth(payload) {
+    realtimeRadarDomHealth = realtimeRadarHealthFromPayload(payload);
+    return realtimeRadarDomHealth;
   }
 
   function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
@@ -1493,6 +1541,7 @@
       return;
     }
     if (pathname === "/api/realtime-radar-latest") {
+      rememberRealtimeRadarHealth(payload);
       marketRadarBundlePayload = payload;
       if (isMarketViewActive() && marketDesktopMode === "ai") {
         scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {}, { delay: 160 });
@@ -1713,8 +1762,30 @@
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
     const url = compactCanvasUrlForRoute(route, force);
     const task = fetch(url, { cache: force ? "no-store" : "default" })
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+      .then(async (response) => {
+        let payload = null;
+        try { payload = await response.json(); } catch (error) {}
+        if (!response.ok) {
+          const errorPayload = {
+            ...(payload && typeof payload === "object" ? payload : {}),
+            ok: false,
+            error: payload?.error || `HTTP ${response.status}`,
+            reason: payload?.reason || `HTTP ${response.status}`,
+            httpStatus: response.status,
+          };
+          if (isRealtimeRadarRoute(route)) {
+            rememberRealtimeRadarHealth(errorPayload);
+            const emptyState = routeEmptyStateFromPayload(errorPayload, route);
+            if (emptyState) canvasEmptyStates.set(route, emptyState);
+            if (canvasState.route === route) canvasState.source = emptyState?.reason || errorPayload.reason || "api-error";
+            return errorPayload;
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return payload || {};
+      })
       .then((payload) => {
+        if (isRealtimeRadarRoute(route)) rememberRealtimeRadarHealth(payload);
         const rows = normalizeCanvasRowsFromPayload(payload, route);
         if (rows.length) {
           const source = payload?.snapshotFirst ? "snapshot-first-refreshing" : "api";
@@ -1730,7 +1801,16 @@
         }
         return rows;
       })
-      .catch(() => rowsForRoute(route))
+      .catch((error) => {
+        if (isRealtimeRadarRoute(route)) {
+          const errorPayload = { ok: false, error: error?.message || "network_error", reason: error?.message || "network_error" };
+          rememberRealtimeRadarHealth(errorPayload);
+          const emptyState = routeEmptyStateFromPayload(errorPayload, route);
+          if (emptyState) canvasEmptyStates.set(route, emptyState);
+          return [];
+        }
+        return rowsForRoute(route);
+      })
       .finally(() => canvasInflight.delete(inflightKey));
     canvasInflight.set(inflightKey, task);
     return task;
@@ -2553,7 +2633,8 @@
       const radarSide = event.target.closest?.("[data-radar-dom-side]");
       if (radarSide) {
         event.preventDefault();
-        realtimeRadarDomSide = radarSide.dataset.radarDomSide === "short" ? "short" : "long";
+        realtimeRadarDomSide = ["all", "long", "short"].includes(radarSide.dataset.radarDomSide) ? radarSide.dataset.radarDomSide : "all";
+        realtimeRadarDomSideUserSelected = true;
         renderRealtimeRadarDomShell(linkForRouteKey(REALTIME_RADAR_ROUTE) || REALTIME_RADAR_ROUTE, canvasState.source || "dom", canvasState.rows);
         return;
       }
@@ -3759,8 +3840,31 @@
   }
 
   function marketApiUrl(path, limit = 60, withBust = false) {
-    const sep = path.includes("?") ? "&" : "?";
-    return `${path}${sep}canvas=1&compact=1&shell=1&limit=${limit}${withBust ? `&t=${Date.now()}` : ""}`;
+    const radarPath = normalizeRealtimeRadarApiPath(path, limit);
+    const sep = radarPath.includes("?") ? "&" : "?";
+    const limitParam = isRealtimeRadarApiPath(radarPath) ? "" : `&limit=${limit}`;
+    return `${radarPath}${sep}canvas=1&compact=1&shell=1${limitParam}${withBust ? `&t=${Date.now()}` : ""}`;
+  }
+
+  function isRealtimeRadarApiPath(path) {
+    try {
+      return new URL(path, window.location.origin).pathname === "/api/realtime-radar-latest";
+    } catch (error) {
+      return String(path || "").split("?")[0] === "/api/realtime-radar-latest";
+    }
+  }
+
+  function normalizeRealtimeRadarApiPath(path, limit = 60) {
+    if (!isRealtimeRadarApiPath(path)) return path;
+    try {
+      const url = new URL(path, window.location.origin);
+      url.searchParams.set("full", "1");
+      url.searchParams.set("limit", String(Math.max(1200, cleanNumber(limit))));
+      return `${url.pathname}${url.search}`;
+    } catch (error) {
+      const sep = String(path || "").includes("?") ? "&" : "?";
+      return `${path}${sep}full=1&limit=${Math.max(1200, cleanNumber(limit))}`;
+    }
   }
 
   function formatYi(value) {
@@ -3963,11 +4067,15 @@
   }
 
   function marketJsonCacheKey(path, limit = 60) {
+    if (isRealtimeRadarApiPath(path)) {
+      return `${normalizeRealtimeRadarApiPath(path, 1200)}|1200`;
+    }
     return `${path}|${limit}`;
   }
 
   function rememberRealtimeRadarPayload(payload, source = "market-prime") {
     if (!payload || typeof payload !== "object") return 0;
+    rememberRealtimeRadarHealth(payload);
     marketRadarBundlePayload = payload;
     const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
     if (rows.length) rememberCanvasRows(REALTIME_RADAR_ROUTE, rows, source, Date.now());
@@ -4684,7 +4792,7 @@
     const isLiveWindow = detectWindow.active === true;
     const sessionTitle = isLiveWindow ? "巡邏中" : "收盤快照";
     const sessionText = isLiveWindow
-      ? "09:00-13:00 AI 盤中巡邏，資料更新才重建判讀。"
+      ? "09:00-13:30 AI 盤中巡邏，資料更新才重建判讀。"
       : "收盤後固定顯示最後 13:30 snapshot，不再追著即時波動重算。";
     const heatmapUp = sectors.reduce((sum, item) => sum + num(item.up), 0);
     const heatmapDown = sectors.reduce((sum, item) => sum + num(item.down), 0);
@@ -5407,6 +5515,18 @@
     ].filter(Boolean).slice(0, 5);
   }
 
+  function radarDomHealthBanner() {
+    const health = realtimeRadarDomHealth;
+    if (!health) return "";
+    return `
+      <section class="radar-health-banner ${health.stale ? "stale" : "degraded"}">
+        <strong>${escapeHtml(health.title)}</strong>
+        <span>${escapeHtml(health.detail)}</span>
+        ${health.source ? `<small>${escapeHtml(health.source)}</small>` : ""}
+      </section>
+    `;
+  }
+
   function radarDomFlowSummary(rows = []) {
     const longRows = rows.filter((row) => radarCanvasSide(row) === "long");
     const shortRows = rows.filter((row) => radarCanvasSide(row) === "short");
@@ -5480,7 +5600,7 @@
     const link = document.createElement("link");
     link.id = "fuman-realtime-radar-dom-style";
     link.rel = "stylesheet";
-    link.href = "/terminal-realtime-radar.css?v=radar-dom-20260628-01";
+    link.href = "/terminal-realtime-radar.css?v=radar-ledger-20260630-01";
     document.head.appendChild(link);
   }
 
@@ -5491,10 +5611,12 @@
     const incomingRows = rows.length ? rows : rowsForRoute(REALTIME_RADAR_ROUTE);
     const sessionRows = radarDomSessionRows(incomingRows.length ? incomingRows : canvasState.rows);
     const flow = radarDomFlowSummary(sessionRows);
-    if (realtimeRadarDomSide !== "long" && realtimeRadarDomSide !== "short") realtimeRadarDomSide = "long";
+    if (!["all", "long", "short"].includes(realtimeRadarDomSide)) realtimeRadarDomSide = "all";
+    if (!realtimeRadarDomSideUserSelected) realtimeRadarDomSide = "all";
     if (realtimeRadarDomSide === "long" && !flow.longRows.length && flow.shortRows.length) realtimeRadarDomSide = "short";
     if (realtimeRadarDomSide === "short" && !flow.shortRows.length && flow.longRows.length) realtimeRadarDomSide = "long";
-    const activeRows = realtimeRadarDomSide === "short" ? flow.shortRows : flow.longRows;
+    const activeRows = realtimeRadarDomSide === "short" ? flow.shortRows : realtimeRadarDomSide === "long" ? flow.longRows : sessionRows;
+    const activeLabel = realtimeRadarDomSide === "short" ? "空方" : realtimeRadarDomSide === "long" ? "多方" : "全部";
     const meta = strategyMeta(link || REALTIME_RADAR_ROUTE);
     const sourceLabel = String(source || canvasState.source || "api");
     panel.dataset.fumanRouteSnapshotRestoring = "1";
@@ -5510,9 +5632,10 @@
             <small>${escapeHtml(meta.icon)} 即時多空資金雷達</small>
             <h1>${escapeHtml(meta.title)}</h1>
           </div>
-          <small>資料日期 ${escapeHtml(radarDomDateLabel(sessionRows))} · 09:00-13:00 時間完整記錄 · 總筆數 ${escapeHtml(String(sessionRows.length))} 筆 · ${escapeHtml(sourceLabel)}</small>
+          <small>資料日期 ${escapeHtml(radarDomDateLabel(sessionRows))} · 09:00-13:30 流水帳逐筆記錄 · 總筆數 ${escapeHtml(String(sessionRows.length))} 筆 · ${escapeHtml(sourceLabel)}</small>
           <button class="radar-action" type="button" data-radar-dom-refresh>刷新</button>
         </header>
+        ${radarDomHealthBanner()}
         <section class="radar-ai-box overview">
           <div class="radar-ai-head">
             <span>◎ AI 即時判斷</span>
@@ -5522,18 +5645,19 @@
             ${radarDomAiPanel("↗ 偏多 AI 分析", flow.longRows, "long")}
             ${radarDomAiPanel("↘ 偏空 AI 分析", flow.shortRows, "short")}
           </div>
-          <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:00 盤中訊號。</p>
+          <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:30 盤中訊號。</p>
         </section>
-        <nav class="radar-board-tabs" aria-label="即時雷達多空切換">
+        <nav class="radar-board-tabs" aria-label="即時雷達流水帳篩選">
+          <button type="button" data-radar-dom-side="all" class="${realtimeRadarDomSide === "all" ? "all-active active" : "all-active"}">全部 ${escapeHtml(String(sessionRows.length))}</button>
           <button type="button" data-radar-dom-side="long" class="${realtimeRadarDomSide === "long" ? "active" : ""}">多方 ${escapeHtml(String(flow.longRows.length))}</button>
           <button type="button" data-radar-dom-side="short" class="${realtimeRadarDomSide === "short" ? "short-active active" : "short-active"}">空方 ${escapeHtml(String(flow.shortRows.length))}</button>
         </nav>
         <div class="radar-session-strip">
-          <span>09:00-13:00 時間完整記錄 · ${escapeHtml(realtimeRadarDomSide === "short" ? "空方" : "多方")} ${escapeHtml(String(activeRows.length))} 筆</span>
+          <span>09:00-13:30 流水帳逐筆記錄 · ${escapeHtml(activeLabel)} ${escapeHtml(String(activeRows.length))} 筆</span>
           <span>最新在上</span>
         </div>
         <section class="radar-board-list" data-radar-dom-list>
-          ${activeRows.length ? activeRows.map(radarDomSignalCard).join("") : `<div class="radar-empty">目前沒有${realtimeRadarDomSide === "short" ? "空方" : "多方"}訊號</div>`}
+          ${activeRows.length ? activeRows.map(radarDomSignalCard).join("") : `<div class="radar-empty">目前沒有${escapeHtml(activeLabel)}訊號</div>`}
         </section>
       </section>
     `;

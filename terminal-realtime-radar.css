@@ -57,6 +57,51 @@ body.fuman-light-theme .radar-action {
   border-color: #fed7aa !important;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
 }
+.radar-health-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #ffe8bd;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.radar-health-banner.stale {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(127, 29, 29, 0.28);
+  color: #ffd7d7;
+}
+.radar-health-banner strong {
+  color: #fff4d5;
+  font-weight: 950;
+}
+.radar-health-banner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar-health-banner small {
+  color: #f8d891;
+  font-weight: 850;
+}
+body.fuman-light-theme .radar-health-banner {
+  background: #fffbeb !important;
+  border-color: #f59e0b !important;
+  color: #92400e !important;
+}
+body.fuman-light-theme .radar-health-banner.stale {
+  background: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+body.fuman-light-theme .radar-health-banner strong,
+body.fuman-light-theme .radar-health-banner small {
+  color: inherit !important;
+}
 .radar-ai-box,
 .radar-team-box,
 .radar-flow-card,
@@ -359,7 +404,7 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 }
 .radar-board-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   margin-top: 0;
   border-bottom: 1px solid rgba(255, 193, 7, 0.22);
@@ -381,6 +426,10 @@ body.fuman-light-theme .radar-ai-panel.short .radar-ai-chip {
 .radar-board-tabs button.active {
   border-color: #ff4d5c;
   color: #ff6674;
+}
+.radar-board-tabs button.all-active.active {
+  border-color: #60a5fa;
+  color: #93c5fd;
 }
 .radar-board-tabs button.short-active {
   border-color: rgba(120, 144, 188, 0.45);

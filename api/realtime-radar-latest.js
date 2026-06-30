@@ -89,6 +89,41 @@ function buildMarketSession(tradingDay, payload) {
   };
 }
 
+function taipeiMinuteOfDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return cleanNumber(byType.hour) * 60 + cleanNumber(byType.minute);
+}
+
+function isMarketDetectionWindow(date = new Date()) {
+  const minutes = taipeiMinuteOfDay(date);
+  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+}
+
+function payloadUpdatedAtMs(payload) {
+  const explicit = cleanNumber(payload?.updatedAtMs);
+  if (explicit > 0) return explicit;
+  const parsed = Date.parse(payload?.updatedAt || payload?.timestamp || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function payloadFreshnessMaxAgeMs(payload) {
+  const staleAfterMs = cleanNumber(payload?.staleAfterMs);
+  return Math.max(90000, staleAfterMs > 0 ? staleAfterMs * 3 : 90000);
+}
+
+function isTradingDayPayloadFresh(marketSession, payload) {
+  if (!marketSession?.hasTodayMarketData) return false;
+  if (!isMarketDetectionWindow()) return true;
+  const updatedAtMs = payloadUpdatedAtMs(payload);
+  return Boolean(updatedAtMs && Date.now() - updatedAtMs <= payloadFreshnessMaxAgeMs(payload));
+}
+
 function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
   if (!Array.isArray(payload?.rows)) return payload;
   const allRows = payload.rows.map((row) => {
@@ -116,7 +151,7 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
     count: rows.length,
     totalCount: allRows.length,
     hasMore: allRows.length > rows.length,
-    displayWindow: "09:00-13:00",
+    displayWindow: "09:00-13:30",
   };
 }
 
@@ -144,7 +179,11 @@ function radarScore(row) {
 
 function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
   const now = Date.now();
-  const date = taipeiDateKey();
+  const latestQuoteAt = rows
+    .map((row) => Date.parse(row.quote_updated_at || row.last_trade_time || ""))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => b - a)[0] || now;
+  const date = taipeiDateKey(new Date(latestQuoteAt));
   const normalized = rows
     .map((row) => {
       const code = String(row.symbol || "").trim();
@@ -187,12 +226,22 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
     .slice(0, clampLimit(limit));
   return {
     ok: normalized.length > 0,
+    runId: `quote-view-fallback-${date}-${latestQuoteAt}`,
     source: `supabase:${QUOTE_TABLE}`,
     cacheSource: "supabase-quote-view",
     date,
-    updatedAt: new Date(now).toISOString(),
-    updatedAtMs: now,
+    usedDate: date,
+    sourceDate: date,
+    updatedAt: new Date(latestQuoteAt).toISOString(),
+    updatedAtMs: latestQuoteAt,
+    staleAfterMs: 90000,
     count: normalized.length,
+    freshness: {
+      decision: normalized.length ? "quote-view-fallback" : "no_quote_rows",
+      reason: normalized.length ? "radar cache unavailable/stale; using formal realtime quote view" : "formal realtime quote view returned no rows",
+      checkedAt: new Date(now).toISOString(),
+      quoteCount: normalized.length,
+    },
     rows: normalized,
     transport: {
       source: "supabase",
@@ -202,6 +251,11 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
       fetchedAt: new Date(now).toISOString(),
     },
   };
+}
+
+async function fetchQuoteViewFallback(limit = DEFAULT_RADAR_LIMIT) {
+  const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=${clampLimit(limit)}`);
+  return quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : [], limit);
 }
 
 async function fetchSupabaseJson(pathAndQuery) {
@@ -267,6 +321,45 @@ function unavailablePayload(reason = "") {
   };
 }
 
+function staleTradingDayPayload(payload, marketSession, reason = "trading_day_radar_cache_stale") {
+  return {
+    ok: false,
+    error: "realtime_radar_stale",
+    reason,
+    cacheSource: payload?.cacheSource || "supabase-radar-cache",
+    source: payload?.source || "api-only",
+    date: payload?.date || "",
+    usedDate: payload?.usedDate || payload?.date || "",
+    sourceDate: payload?.sourceDate || payload?.date || "",
+    updatedAt: payload?.updatedAt || "",
+    updatedAtMs: payload?.updatedAtMs || 0,
+    count: 0,
+    totalCount: Array.isArray(payload?.rows) ? payload.rows.length : 0,
+    rows: [],
+    staleCache: {
+      marketDataDate: marketSession?.marketDataDate || "",
+      today: marketSession?.today || "",
+      updatedAt: payload?.updatedAt || "",
+      status: payload?.status || "",
+      rowCount: Array.isArray(payload?.rows) ? payload.rows.length : 0,
+    },
+    freshness: {
+      decision: "stale",
+      reason,
+      checkedAt: new Date().toISOString(),
+      marketDataDate: marketSession?.marketDataDate || "",
+      today: marketSession?.today || "",
+    },
+    transport: {
+      source: "supabase",
+      table: TABLE,
+      via: "api/realtime-radar-latest",
+      gate: "trading-day-stale-cache-blocked",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -318,8 +411,7 @@ module.exports = async function handler(request, response) {
 
     if (!row?.payload) {
       try {
-        const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=${clampLimit(requestedLimit)}`);
-        const quotePayload = quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : [], requestedLimit);
+        const quotePayload = await fetchQuoteViewFallback(requestedLimit);
         if (quotePayload.rows.length) {
           const session = buildMarketSession(tradingDay, quotePayload);
           response.status(200).json(withMarketSession(quotePayload, session, "", requestedLimit));
@@ -347,6 +439,21 @@ module.exports = async function handler(request, response) {
       },
     };
     const session = buildMarketSession(tradingDay, payload);
+    if (!isTradingDayPayloadFresh(session, payload)) {
+      try {
+        const quotePayload = await fetchQuoteViewFallback(requestedLimit);
+        const quoteSession = buildMarketSession(tradingDay, quotePayload);
+        if (quotePayload.rows.length && isTradingDayPayloadFresh(quoteSession, quotePayload)) {
+          response.status(200).json(withMarketSession(quotePayload, quoteSession, "stale-radar-cache-quote-view-fallback", requestedLimit));
+          return;
+        }
+      } catch (error) {
+        primaryError = [primaryError, error?.message || String(error)].filter(Boolean).join(" | ");
+      }
+      const stalePayload = staleTradingDayPayload(payload, session, primaryError || "trading_day_radar_cache_stale");
+      response.status(503).json(withMarketSession(stalePayload, session, stalePayload.reason, requestedLimit));
+      return;
+    }
     response.status(200).json(withMarketSession(payload, session, "", requestedLimit));
   } catch (error) {
     const payload = unavailablePayload(error?.message || String(error));

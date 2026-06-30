@@ -1268,7 +1268,7 @@ for (const marker of [
   "FULL_SESSION_RADAR_LIMIT = 1200",
   "MAX_RADAR_LIMIT = 1500",
   "function requestRadarLimit",
-  "displayWindow: \"09:00-13:00\"",
+  "displayWindow: \"09:00-13:30\"",
   "totalCount",
   "hasMore",
 ]) {
@@ -1279,6 +1279,9 @@ for (const marker of [
   "data-realtime-radar-dom-shell",
   "radar-dom-shell",
   "realtimeRadarDomSide",
+  "realtimeRadarDomSide = \"all\"",
+  "data-radar-dom-side=\"all\"",
+  "流水帳逐筆記錄",
   "limit: 1200",
   "full: true",
   "/api/realtime-radar-latest?full=1",
@@ -1507,7 +1510,8 @@ for (const marker of [
   "realtime radar DOM shell missing",
   "realtime radar must not render legacy desktop canvas shell",
   "realtime radar must not expose canvasRows",
-  "realtime radar must show 09:00-13:00 session window",
+  "realtime radar must show 09:00-13:30 session window",
+  "realtime radar must default to all-session ledger",
   "realtime radar flow summary block must stay removed",
 ]) {
   if (!terminalUiE2eVerifier.includes(marker)) issues.push(`verify-terminal-ui-e2e.js missing realtime radar no-rollback marker ${marker}`);

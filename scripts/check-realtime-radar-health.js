@@ -11,9 +11,8 @@ const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state")
 const SECRET_DIR = path.join(RUNTIME_DIR, "secrets");
 const OUT_FILE = path.join(DATA_DIR, "realtime-radar-health-report.json");
 const STATUS_FILE = path.join(STATE_DIR, "realtime-radar-health-status.json");
+const PRODUCTION_URL = (process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const ALERT_COOLDOWN_MS = Number(process.env.REALTIME_RADAR_HEALTH_ALERT_COOLDOWN_MS || 15 * 60 * 1000);
-const FRONTEND_VERSION = process.env.FUMAN_EXPECTED_FRONTEND_VERSION || "realtime-radar-core-20260601-04";
-const FRONTEND_SW_CACHE = process.env.FUMAN_EXPECTED_SW_CACHE || "fuman-terminal-sw-20260601-07";
 const MIN_INTRADAY_ROWS = Number(process.env.REALTIME_RADAR_HEALTH_MIN_ROWS || 1200);
 const MAX_HEALTH_FAILED_BATCHES = Number(process.env.REALTIME_RADAR_HEALTH_MAX_FAILED_BATCHES || 0);
 
@@ -159,34 +158,33 @@ async function readSupabaseLatest() {
   return { ok: Boolean(row?.payload), updatedAt: row?.updated_at || "", payload: row?.payload || null };
 }
 
-async function readStaticLatest() {
-  const payload = await fetchJson(`https://fuman-terminal.vercel.app/data/realtime-radar-latest.json?t=${Date.now()}`, {}, 8000);
-  return { ok: Boolean(payload?.rows?.length), payload };
+async function readProductionApiLatest() {
+  const payload = await fetchJson(`${PRODUCTION_URL}/api/realtime-radar-latest?full=1&limit=1200&compact=1&shell=1&t=${Date.now()}`, {}, 10000);
+  return { ok: payload?.ok !== false && Boolean(payload?.rows?.length), payload };
 }
 
 async function readFrontendGuard() {
-  const home = await fetch(`https://fuman-terminal.vercel.app/?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
-  const core = await fetch(`https://fuman-terminal.vercel.app/terminal-core.js?v=${FRONTEND_VERSION}&t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
-  const app = await fetch(`https://fuman-terminal.vercel.app/terminal-app.js?v=${FRONTEND_VERSION}&t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
-  const sw = await fetch(`https://fuman-terminal.vercel.app/fuman-sw.js?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
-  const pageVersion = home.includes(`terminal-core.js?v=${FRONTEND_VERSION}`);
-  const coreVersion = core.includes(`const version = "${FRONTEND_VERSION}"`);
-  const oldCoreVersion = core.includes("realtime-radar-date-20260601-02");
-  const afterCloseGuard = app.includes("shouldRefreshRealtimeRadarRemoteCache");
-  const afterCloseSupabase = app.includes("shouldRunLivePolling() || !isKnownNonTradingMarketDate()");
-  const swVersion = sw.includes(FRONTEND_VERSION);
-  const swCache = sw.includes(FRONTEND_SW_CACHE);
+  const home = await fetch(`${PRODUCTION_URL}/?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const fastShell = await fetch(`${PRODUCTION_URL}/terminal-desktop-fast-shell.js?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const css = await fetch(`${PRODUCTION_URL}/terminal-realtime-radar.css?t=${Date.now()}`, { cache: "no-store" }).then((r) => r.text());
+  const pageLoadsFastShell = /terminal-desktop-fast-shell\.js\?/.test(home);
+  const pageHasRealtimeRoute = /data-view=["']realtime-radar["']/.test(home) && /id=["']realtime-radar-view["']/.test(home);
+  const fullSessionApi = fastShell.includes("/api/realtime-radar-latest?full=1") && fastShell.includes("marketJsonCacheKey(\"/api/realtime-radar-latest?full=1\", 1200)");
+  const noSnapshotOnRealtimeError = fastShell.includes("if (isRealtimeRadarRoute(route))") && fastShell.includes("return [];");
+  const healthBanner = fastShell.includes("radarDomHealthBanner") && css.includes(".radar-health-banner");
+  const stateGuard = fastShell.includes("realtimeRadarDomSideUserSelected") && fastShell.includes("realtimeRadarDomHealth");
+  const allSessionLedger = fastShell.includes('realtimeRadarDomSide = "all"')
+    && fastShell.includes('data-radar-dom-side="all"')
+    && fastShell.includes("09:00-13:30 流水帳逐筆記錄");
   return {
-    ok: pageVersion && coreVersion && !oldCoreVersion && afterCloseGuard && afterCloseSupabase && swVersion && swCache,
-    pageVersion,
-    coreVersion,
-    oldCoreVersion,
-    afterCloseGuard,
-    afterCloseSupabase,
-    swVersion,
-    swCache,
-    expectedVersion: FRONTEND_VERSION,
-    expectedSwCache: FRONTEND_SW_CACHE,
+    ok: pageLoadsFastShell && pageHasRealtimeRoute && fullSessionApi && noSnapshotOnRealtimeError && healthBanner && stateGuard && allSessionLedger,
+    pageLoadsFastShell,
+    pageHasRealtimeRoute,
+    fullSessionApi,
+    noSnapshotOnRealtimeError,
+    healthBanner,
+    stateGuard,
+    allSessionLedger,
   };
 }
 
@@ -238,6 +236,12 @@ async function main() {
   const failedBatchCount = cleanNumber(latest.failedBatchCount);
   const totalBatchCount = cleanNumber(latest.totalBatchCount);
   const staleQuoteCount = cleanNumber(latest.staleQuoteCount);
+  const quoteSourceText = latest.quoteSourceCounts && typeof latest.quoteSourceCounts === "object"
+    ? Object.entries(latest.quoteSourceCounts).map(([key, value]) => `${key}:${value}`).join(",")
+    : "";
+  const fallbackText = latest.fallbackRecovered && typeof latest.fallbackRecovered === "object"
+    ? Object.entries(latest.fallbackRecovered).map(([key, value]) => `${key}:${value}`).join(",")
+    : "";
 
   if (!tradingDay.isTradingDay) {
     const report = { ok: true, status: "ok", date, phase, tradingDay, skipped: "non_trading_day", updatedAt: new Date().toISOString(), issues: [] };
@@ -261,8 +265,8 @@ async function main() {
       : totalBatchCount && failedBatchCount / totalBatchCount >= 0.35 ? "critical" : "warning";
     pushIssue(issues, severity, "api-realtime-failed-batches", `${failedBatchCount}/${totalBatchCount || "--"} realtime batches failed`);
   }
-  if (staleQuoteCount >= 80) pushIssue(issues, "critical", "stale-quotes-high", `staleQuoteCount=${staleQuoteCount}`);
-  else if (staleQuoteCount >= 20) pushIssue(issues, "warning", "stale-quotes-elevated", `staleQuoteCount=${staleQuoteCount}`);
+  if (staleQuoteCount >= 80) pushIssue(issues, "critical", "stale-quotes-high", `staleQuoteCount=${staleQuoteCount} sources=${quoteSourceText || "--"} fallbackRecovered=${fallbackText || "--"}`);
+  else if (staleQuoteCount >= 20) pushIssue(issues, "warning", "stale-quotes-elevated", `staleQuoteCount=${staleQuoteCount} sources=${quoteSourceText || "--"} fallbackRecovered=${fallbackText || "--"}`);
 
   const failedQueue = readJson(path.join(STATE_DIR, "realtime-radar-failed-batches.json"), {});
   if (cleanNumber(failedQueue.count) > 0) pushIssue(issues, "warning", "failed-queue-pending", `failed queue has ${failedQueue.count} batch(es)`);
@@ -285,17 +289,17 @@ async function main() {
     pushIssue(issues, "warning", "supabase-readback-error", supabase.error);
   }
 
-  let staticLatest = { ok: false, error: "" };
+  let productionApi = { ok: false, error: "" };
   try {
-    staticLatest = await readStaticLatest();
-    const staticMs = payloadUpdatedAtMs(staticLatest.payload || {});
-    if (!staticLatest.ok) pushIssue(issues, "warning", "static-fallback-missing", "static realtime-radar latest missing rows");
-    else if (updatedMs && staticMs && Math.abs(updatedMs - staticMs) > 10 * 60 * 1000) {
-      pushIssue(issues, "warning", "static-fallback-lag", `static fallback differs from runtime by ${Math.round(Math.abs(updatedMs - staticMs) / 1000)}s`);
+    productionApi = await readProductionApiLatest();
+    const apiMs = payloadUpdatedAtMs(productionApi.payload || {});
+    if (!productionApi.ok && phase !== "preopen") pushIssue(issues, "critical", "production-api-unavailable", `production API unavailable: ${productionApi.payload?.reason || productionApi.payload?.error || "no rows"}`);
+    else if (updatedMs && apiMs && Math.abs(updatedMs - apiMs) > 5 * 60 * 1000) {
+      pushIssue(issues, "critical", "production-api-runtime-lag", `production API differs from runtime by ${Math.round(Math.abs(updatedMs - apiMs) / 1000)}s`);
     }
   } catch (error) {
-    staticLatest = { ok: false, error: String(error?.message || error) };
-    pushIssue(issues, "warning", "static-fallback-error", staticLatest.error);
+    productionApi = { ok: false, error: String(error?.message || error) };
+    pushIssue(issues, "critical", "production-api-error", productionApi.error);
   }
 
   let frontend = { ok: false, error: "" };
@@ -334,6 +338,8 @@ async function main() {
       failedBatchCount,
       totalBatchCount,
       staleQuoteCount,
+      quoteSourceCounts: latest.quoteSourceCounts || {},
+      fallbackRecovered: latest.fallbackRecovered || {},
       staleQuoteDetails: Array.isArray(latest.staleQuoteDetails) ? latest.staleQuoteDetails.slice(0, 20) : [],
       failedBatchDetails: Array.isArray(latest.failedBatchDetails) ? latest.failedBatchDetails.slice(0, 20) : [],
     },
@@ -345,14 +351,17 @@ async function main() {
       readbackRows: Array.isArray(supabase.payload?.rows) ? supabase.payload.rows.length : 0,
       error: supabase.error || "",
     },
-    staticFallback: {
-      ok: staticLatest.ok,
-      timestamp: staticLatest.payload?.timestamp || "",
-      rows: Array.isArray(staticLatest.payload?.rows) ? staticLatest.payload.rows.length : 0,
-      error: staticLatest.error || "",
+    productionApi: {
+      ok: productionApi.ok,
+      status: productionApi.payload?.status || "",
+      reason: productionApi.payload?.reason || productionApi.payload?.error || "",
+      timestamp: productionApi.payload?.timestamp || productionApi.payload?.updatedAt || "",
+      rows: Array.isArray(productionApi.payload?.rows) ? productionApi.payload.rows.length : 0,
+      marketSession: productionApi.payload?.marketSession || null,
+      error: productionApi.error || "",
     },
     frontend,
-    googleSheet: google,
+    googleSheet: { retired: true, reason: "scorecard website / Supabase is the source of truth" },
     tasks: { realtimeRadar: radarTask, pcWake0430: wakeTask },
     warnings,
     issues,

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260630-01";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260630-01-realtime-ledger";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -31,7 +31,7 @@ const STATIC_ASSETS = [
   "/terminal-chip-flow.js?v=public-terminal-fast-20260630-01",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260630-01",
   "/terminal-watchlist-module.js?v=public-terminal-fast-20260630-01",
-  "/terminal-realtime-radar.css?v=radar-dom-20260628-01",
+  "/terminal-realtime-radar.css?v=radar-ledger-20260630-01",
   "/terminal-intraday-radar.css?v=public-terminal-fast-20260630-01",
   "/terminal-utility.css?v=public-terminal-fast-20260630-01",
   "/refresh.html?v=public-terminal-fast-20260630-01",

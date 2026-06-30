@@ -52,6 +52,10 @@
       "destination": "/api/mobile-page"
     },
     {
+      "source": "/data/realtime-radar-latest.json",
+      "destination": "/api/realtime-radar-latest?full=1&limit=1200"
+    },
+    {
       "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
       "destination": "/api/desktop-static-disabled"
     }
@@ -627,19 +631,6 @@
     },
     {
       "source": "/data/strategy2-intraday-latest.json",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
-    },
-    {
-      "source": "/data/realtime-radar-latest.json",
       "headers": [
         {
           "key": "Cache-Control",
