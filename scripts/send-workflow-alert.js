@@ -17,7 +17,19 @@ function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
-function secretValue(envName, fileNames = []) {
+function secretValue(envName, fileNames = [], options = {}) {
+  const preferFiles = options.preferFiles === true;
+  if (preferFiles) {
+    for (const name of fileNames) {
+      for (const dir of [
+        path.join(RUNTIME_DIR, "secrets"),
+        path.join(ROOT, "secrets"),
+      ]) {
+        const value = readSecretText(path.join(dir, name));
+        if (value) return value;
+      }
+    }
+  }
   const envValue = process.env[envName];
   if (envValue) return envValue;
   for (const name of fileNames) {
@@ -118,6 +130,7 @@ function alertDefaultsForKind(kind, workflow, mode, runUrl) {
 
 async function sendMail({ host, port, user, pass, to, subject, text }) {
   const socket = tls.connect({ host, port, servername: host });
+  socket.setMaxListeners(Math.max(socket.getMaxListeners(), 30));
   await new Promise((resolve, reject) => {
     socket.once("secureConnect", resolve);
     socket.once("error", reject);
@@ -161,7 +174,7 @@ async function main() {
 
   const to = secretValue("REPORT_EMAIL_TO", ["report-email-to.txt", "smtp-to.txt", "gmail-to.txt"]);
   const user = secretValue("SMTP_USER", ["smtp-user.txt", "gmail-user.txt"]);
-  const pass = secretValue("SMTP_PASS", ["smtp-pass.txt", "gmail-app-password.txt"]);
+  const pass = secretValue("SMTP_PASS", ["smtp-pass.txt", "gmail-app-password.txt"], { preferFiles: true });
   const payload = {
     ok: false,
     kind,
