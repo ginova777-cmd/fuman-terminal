@@ -36,8 +36,21 @@ function withTimeout(promise, timeout, fallback) {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
-function isFreshHeatmapCache() {
-  return heatmapCache && Date.now() - heatmapCache.cachedAt < HEATMAP_CACHE_MS;
+function isUsableHeatmapMemoryPayload(payload, clock = taipeiClock()) {
+  if (!hasHeatmapSnapshotPayload(payload)) return false;
+  if (payload?.ok === false) return false;
+  const today = String(clock?.date || "").replace(/\D/g, "") || taipeiDateKey();
+  const health = payload?.health || {};
+  const stockCount = cleanNumber(health.stockCount || payload?.stockCount || heatmapPayloadRows(payload).length);
+  if (stockCount < 500) return false;
+  if (health.today && String(health.today) !== today) return false;
+  return health.isHealthy !== false;
+}
+
+function isFreshHeatmapCache(clock = taipeiClock()) {
+  return heatmapCache
+    && Date.now() - heatmapCache.cachedAt < HEATMAP_CACHE_MS
+    && isUsableHeatmapMemoryPayload(heatmapCache.payload, clock);
 }
 
 function heatmapCacheCandidates(file = HEATMAP_LATEST_FILE) {
@@ -2829,7 +2842,7 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    if (isFreshHeatmapCache()) {
+    if (isFreshHeatmapCache(clock)) {
       response.status(200).json({
         ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "snapshot-first-memory-cache"),
         cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS, reason: "snapshot-first-memory-cache" },
@@ -2868,7 +2881,7 @@ module.exports = async function handler(request, response) {
     }
   }
 
-  if (isFreshHeatmapCache()) {
+  if (isFreshHeatmapCache(clock)) {
     response.status(200).json({
       ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "memory-cache"),
       cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS },
@@ -3007,7 +3020,9 @@ module.exports = async function handler(request, response) {
         profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
       },
     };
-    heatmapCache = { cachedAt: Date.now(), payload };
+    heatmapCache = isUsableHeatmapMemoryPayload(payload, clock)
+      ? { cachedAt: Date.now(), payload }
+      : null;
 
     response.status(200).json({
       ...attachHeatmapDetectWindow(payload, clock, "live-detect-window"),

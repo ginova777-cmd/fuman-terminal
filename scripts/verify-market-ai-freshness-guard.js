@@ -22,6 +22,7 @@ const readJson = (file) => JSON.parse(readText(file));
 const aiGuardSource = readText("terminal-ai-risk-guard.js");
 const indexHtml = readText("index.html");
 const apiSource = readText("api/market-ai-live.js");
+const heatmapApiSource = readText("api/heatmap.js");
 const scheduleRegistry = readJson("scripts/fuman-schedule-registry.json");
 const terminalVersion = readJson("version.json").version;
 const activeTasks = new Set(scheduleRegistry.policy.activeTasks || []);
@@ -52,6 +53,10 @@ assert(
 );
 assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
+assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
+assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");
+assert(heatmapApiSource.includes("health.isHealthy !== false"), "heatmap memory cache must enforce health before serving");
+assert(heatmapApiSource.includes("heatmapCache = isUsableHeatmapMemoryPayload(payload, clock)"), "heatmap API must not store unusable live payloads in memory cache");
 assert(activeTasks.has("Fuman Freshness Gate Fast 0845-1645"), "schedule registry missing fast live freshness gate");
 assert(activeTasks.has("Fuman Freshness Gate Full 2010"), "schedule registry missing full freshness gate");
 assert(activeTasks.has("Fuman Terminal Local Freshness Verify 0830-2230"), "schedule registry missing local terminal freshness verify");
