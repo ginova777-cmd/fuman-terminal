@@ -167,6 +167,8 @@ function payloadTradeDate(payload) {
     payload?.market?.marketDates?.tpex,
     payload?.heatmap?.resolvedTradeDate,
     payload?.heatmap?.tradeDate,
+    payload?.health?.today,
+    payload?.heatmapDetectWindow?.taipeiDate,
     payload?.realtimeRadar?.date,
     payload?.realtimeRadar?.tradeDate,
     payload?.realtimeRadar?.marketSession?.marketDataDate,
@@ -457,6 +459,23 @@ function groupPayload(label, source, rows, note = "") {
   };
 }
 
+function heatmapSourceIssue(payload, heatmapIsToday) {
+  if (!payload || !Object.keys(payload).length) return "熱力圖水源無回應";
+  const health = payload.health || {};
+  const sectors = normalizeArray(payload.sectors);
+  const stockCount = cleanNumber(payload.stockCount || health.stockCount);
+  const realtimeStockCount = cleanNumber(payload.realtimeStockCount || health.realtimeStockCount);
+  const badDate = cleanNumber(health.badDate);
+  const notRealtime = cleanNumber(health.notRealtime);
+  const noPrice = cleanNumber(health.noPrice);
+  if (!heatmapIsToday) return "";
+  if (health.isHealthy === false) {
+    return `熱力圖即時報價水源不健康：realtime ${realtimeStockCount.toLocaleString("zh-TW")} / stock ${stockCount.toLocaleString("zh-TW")}，badDate ${badDate}，notRealtime ${notRealtime}，noPrice ${noPrice}，quoteTime ${health.quoteTime || "--"}`;
+  }
+  if (!sectors.length) return `熱力圖今天無族群資料：stock ${stockCount.toLocaleString("zh-TW")}，realtime ${realtimeStockCount.toLocaleString("zh-TW")}`;
+  return "";
+}
+
 function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, session) {
   const heatmapTradeDate = payloadTradeDate(heatmapPayload);
   const radarTradeDate = payloadTradeDate(radarPayload);
@@ -464,14 +483,21 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const heatmapIsToday = isTodayDate(heatmapTradeDate, clock);
   const radarIsToday = isTodayDate(radarTradeDate, clock);
   const baseIsToday = isTodayDate(baseTradeDate, clock);
+  const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday);
+  const heatmapUsable = heatmapIsToday && !heatmapIssue;
+  const sourceIssues = [
+    heatmapIssue,
+    radarTradeDate && !radarIsToday ? `即時雷達非今日資料：${radarTradeDate}` : "",
+    baseTradeDate && !baseIsToday ? `AI cache 非今日資料：${baseTradeDate}` : "",
+  ].filter(Boolean);
   const staleSources = [
     heatmapTradeDate && !heatmapIsToday ? `熱力圖 ${heatmapTradeDate}` : "",
     radarTradeDate && !radarIsToday ? `即時雷達 ${radarTradeDate}` : "",
     baseTradeDate && !baseIsToday ? `AI cache ${baseTradeDate}` : "",
   ].filter(Boolean);
 
-  const sectors = heatmapIsToday ? normalizeArray(heatmapPayload?.sectors) : [];
-  const sectorStocks = heatmapIsToday ? heatmapStocks(heatmapPayload) : [];
+  const sectors = heatmapUsable ? normalizeArray(heatmapPayload?.sectors) : [];
+  const sectorStocks = heatmapUsable ? heatmapStocks(heatmapPayload) : [];
   const radarRows = filterRowsForToday(rowsFromPayload(radarPayload), clock, radarIsToday);
   const baseRows = filterRowsForToday(rowsFromPayload(payload), clock, baseIsToday);
   const heatmapUp = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.up), 0);
@@ -494,11 +520,11 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const allRows = mergeStockRows(normalizedBase, normalizedRadar, normalizedHeatmap).slice(0, 60);
   const rowUp = allRows.filter((row) => cleanNumber(row.pct) > 0).length;
   const rowDown = allRows.filter((row) => cleanNumber(row.pct) < 0).length;
-  const sample = heatmapIsToday
+  const sample = heatmapUsable
     ? cleanNumber(heatmapPayload?.stockCount || heatmapPayload?.sample || heatmapPayload?.count || payload?.breadth?.sample) || sectorStocks.length || heatmapUp + heatmapDown
     : allRows.length;
-  const up = heatmapIsToday ? heatmapUp : rowUp;
-  const down = heatmapIsToday ? heatmapDown : rowDown;
+  const up = heatmapUsable ? heatmapUp : rowUp;
+  const down = heatmapUsable ? heatmapDown : rowDown;
   const upRatio = sample ? up / sample * 100 : 0;
   const downRatio = sample ? down / sample * 100 : 0;
 
@@ -527,7 +553,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const confidence = !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
   const bias = hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
   const action = hasDirectionalBreadth ? (up >= down ? "降低追價" : "等待方向") : "等待方向";
-  const tradeDate = heatmapIsToday ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || clock.ymd) : session?.marketDataDate || clock.ymd;
+  const tradeDate = heatmapUsable ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.health?.today || clock.ymd) : radarIsToday ? radarTradeDate : session?.marketDataDate || clock.ymd;
   const priorityStaleBlocked = Boolean(staleSources.length && !topStock);
   const priorityObservation = topStock ? {
     title: `${topStock.code} ${topStock.name}`,
@@ -562,16 +588,18 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     hasDirectionalBreadth
       ? `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，目前判定為${bias}。`
       : `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，漲跌方向等待 heatmap snapshot 補齊，不用舊 fallback 假判斷。`,
+    sourceIssues.length ? `水源狀態：${sourceIssues[0]}。` : `水源狀態：今日正式水源可用。`,
     `族群聚焦：${strongNames.length ? strongNames.join("、") : "等待強勢族群成形"}。`,
     `優先觀察：${topStock ? `${topStock.code} ${topStock.name}，${topStock.reason}` : priorityObservation.text}。`,
     `風險提醒：${weakNames.length ? weakNames.join("、") : "暫無明顯弱勢族群"}，高分標的仍需量價確認。`,
   ];
   const riskNotes = [
+    { title: sourceIssues.length ? "水源異常" : "水源正常", text: sourceIssues[0] || "正式 API 水源目前未回報 stale 或 no data。" },
     { title: "族群集中", text: strongNames.length ? `強勢集中於 ${strongNames.join("、")}，追價要等第二波確認。` : "強勢族群尚未集中，避免用單檔急拉當大盤方向。" },
     { title: "弱勢排除", text: weakNames.length ? `${weakNames.join("、")} 偏弱，先從觀察名單排除風險高標的。` : "弱勢族群沒有明顯擴散，仍需留意尾盤翻弱。" },
   ];
   const reasoning = [
-    { key: "breadth", title: `上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%`, text: heatmapIsToday ? `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。` : "今日熱力圖尚未完成，暫不使用舊 snapshot 判斷市場方向。" },
+    { key: "breadth", title: `上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%`, text: heatmapUsable ? `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。` : (heatmapIssue || "今日熱力圖尚未完成，暫不使用舊 snapshot 判斷市場方向。") },
     { key: "radar", title: `${normalizedRadar.length.toLocaleString("zh-TW")} 檔即時雷達`, text: "只採 API-only 最新資料，不讀舊 DOM snapshot。" },
     { key: "sector", title: `強族群前 ${Math.min(3, strongNames.length)} 名`, text: strongNames.join("、") || "等待族群擴散。" },
     { key: "risk", title: groups.risk.count ? "風險標的先排除" : "風險暫無集中", text: groups.risk.rows.slice(0, 4).map((row) => `${row.code} ${row.name}`).join("、") || weakNames.join("、") || "等待風險訊號。" },
@@ -619,11 +647,13 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       today: clock.ymd,
       heatmapTradeDate,
       heatmapIsToday,
+      heatmapUsable,
       radarTradeDate,
       radarIsToday,
       baseTradeDate,
       baseIsToday,
       staleSources,
+      sourceIssues,
       priorityStaleBlocked,
     },
     fieldCompleteness: {

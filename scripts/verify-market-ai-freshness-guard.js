@@ -131,4 +131,43 @@ assert.strictEqual(freshRadarInsights.dataFreshness.radarIsToday, true);
 assert.notStrictEqual(freshRadarInsights.priorityObservation.stock?.score, 100);
 assert.strictEqual(freshRadarInsights.priorityObservation.stock?.percentSource, "change_percent");
 
+const unhealthyTodayHeatmapInsights = buildMarketAiInsights(
+  { dashboard: { tradeDate: "20260629" }, rows: [] },
+  {
+    updatedAt: "2026-06-29T02:50:03.913Z",
+    stockCount: 1960,
+    realtimeStockCount: 0,
+    health: {
+      today: "20260629",
+      stockCount: 0,
+      realtimeStockCount: 0,
+      badDate: 0,
+      notRealtime: 0,
+      noPrice: 0,
+      quoteTime: "",
+      isHealthy: false,
+    },
+    sectors: [],
+  },
+  {
+    tradeDate: "20260629",
+    rows: [{
+      code: "2330",
+      name: "台積電",
+      close: 1000,
+      change_percent: 1.2,
+      value: 10000000000,
+      quoteDate: "20260629",
+      side: "long",
+      reason: "即時雷達",
+    }],
+  },
+  clock,
+  { ...session, marketDataDate: "20260629", hasTodayMarketData: true, stale: false }
+);
+assert.strictEqual(unhealthyTodayHeatmapInsights.dataFreshness.heatmapIsToday, true);
+assert.strictEqual(unhealthyTodayHeatmapInsights.dataFreshness.heatmapUsable, false);
+assert(unhealthyTodayHeatmapInsights.dataFreshness.sourceIssues[0].includes("熱力圖即時報價水源不健康"));
+assert(unhealthyTodayHeatmapInsights.todayPoints.some((point) => point.includes("水源狀態")));
+
 console.log("[market-ai-freshness-guard] ok");
