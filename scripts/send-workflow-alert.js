@@ -83,6 +83,39 @@ function normalizeSmtpPassword(pass, host) {
   return value.replace(/\s+/g, "");
 }
 
+function alertDefaultsForKind(kind, workflow, mode, runUrl) {
+  if (/^institution\b|^institution-/i.test(String(kind || ""))) {
+    return {
+      source: "Institution / 買賣超",
+      subject: "買賣超無人值守｜執行失敗通知",
+      text: [
+        "買賣超無人值守｜執行失敗通知",
+        "",
+        `Workflow：${workflow}`,
+        `策略：Institution / 買賣超`,
+        `告警種類：${kind}`,
+        `模式：${mode}`,
+        runUrl ? `檢查網址：${runUrl}` : "",
+        "",
+        "代表買賣超資料鏈、watchdog、或 publish gate 沒有正常完成，請立即檢查失敗原因。",
+      ].filter(Boolean).join("\n"),
+    };
+  }
+  return {
+    source: workflow,
+    subject: "策略2當沖雷達成績單｜執行失敗通知",
+    text: [
+      "策略2當沖雷達成績單｜執行失敗通知",
+      "",
+      `Workflow：${workflow}`,
+      `模式：${mode}`,
+      runUrl ? `檢查網址：${runUrl}` : "",
+      "",
+      "代表今天的盤後成績單沒有正常完成，請到 GitHub Actions 查看失敗原因。",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
 async function sendMail({ host, port, user, pass, to, subject, text }) {
   const socket = tls.connect({ host, port, servername: host });
   await new Promise((resolve, reject) => {
@@ -121,17 +154,10 @@ async function main() {
   const runUrl = process.env.GITHUB_RUN_URL || "";
   const mode = process.env.SCORECARD_MODE || "unknown";
   const kind = readArg("--kind") || process.env.FUMAN_ALERT_KIND || "scorecard";
-  const source = process.env.FUMAN_ALERT_SOURCE || workflow;
-  const subject = readArg("--subject") || process.env.FUMAN_ALERT_SUBJECT || "策略2當沖雷達成績單｜執行失敗通知";
-  const text = process.env.FUMAN_ALERT_TEXT || [
-    "策略2當沖雷達成績單｜執行失敗通知",
-    "",
-    `Workflow：${workflow}`,
-    `模式：${mode}`,
-    runUrl ? `檢查網址：${runUrl}` : "",
-    "",
-    "代表今天的盤後成績單沒有正常完成，請到 GitHub Actions 查看失敗原因。",
-  ].filter(Boolean).join("\n");
+  const alertDefaults = alertDefaultsForKind(kind, workflow, mode, runUrl);
+  const source = process.env.FUMAN_ALERT_SOURCE || alertDefaults.source;
+  const subject = readArg("--subject") || process.env.FUMAN_ALERT_SUBJECT || alertDefaults.subject;
+  const text = process.env.FUMAN_ALERT_TEXT || alertDefaults.text;
 
   const to = secretValue("REPORT_EMAIL_TO", ["report-email-to.txt", "smtp-to.txt", "gmail-to.txt"]);
   const user = secretValue("SMTP_USER", ["smtp-user.txt", "gmail-user.txt"]);
