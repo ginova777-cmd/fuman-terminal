@@ -441,6 +441,9 @@ if (!String(packageJson.scripts?.["verify:cb-alert-path"] || "").includes("scrip
 if (!String(packageJson.scripts?.["verify:cb-alert-path:send"] || "").includes("scripts/verify-cb-alert-path.js --send")) {
   issues.push("package.json missing scripts.verify:cb-alert-path:send for actual CB Gmail receipt proof");
 }
+if (!String(packageJson.scripts?.["verify:cost-governance-audit"] || "").includes("scripts/verify-cost-governance-audit.js")) {
+  issues.push("package.json missing scripts.verify:cost-governance-audit for Supabase cleanup before/after audit proof");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -588,6 +591,8 @@ const strategy3BattleStateVerifier = read("scripts/verify-strategy3-battle-state
 const strategy3AlertPathVerifier = read("scripts/verify-strategy3-alert-path.js");
 const cbAutonomyVerifier = read("scripts/verify-cb-autonomy-readonly.js");
 const cbAlertPathVerifier = read("scripts/verify-cb-alert-path.js");
+const costGovernanceAuditVerifier = read("scripts/verify-cost-governance-audit.js");
+const costGovernanceAuditPatch = read("ops/public-slot/SupabaseCostGovernanceAuditPatch_20260630.sql");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
@@ -2222,6 +2227,33 @@ for (const marker of [
   "channel must be smtp",
 ]) {
   if (!cbAlertPathVerifier.includes(marker)) issues.push(`verify-cb-alert-path.js missing CB alert path marker ${marker}`);
+}
+for (const marker of [
+  "v_fuman_cost_governance_audit_status",
+  "cost-governance-before-after-v1",
+  "has_before_after_audit",
+  "before_total_bytes",
+  "after_total_bytes",
+]) {
+  if (!costGovernanceAuditVerifier.includes(marker)) {
+    issues.push(`verify-cost-governance-audit.js missing cleanup audit marker ${marker}`);
+  }
+}
+for (const marker of [
+  "alter table public.fuman_retention_cleanup_log",
+  "before_rows",
+  "after_rows",
+  "before_total_bytes",
+  "after_total_bytes",
+  "audit_payload",
+  "create or replace function public.fuman_retention_cleanup_once",
+  "create or replace function public.fuman_cleanup_intraday_1m_3d_once",
+  "create or replace view public.v_fuman_cost_governance_audit_status",
+  "cost-governance-before-after-v1",
+]) {
+  if (!costGovernanceAuditPatch.includes(marker)) {
+    issues.push(`SupabaseCostGovernanceAuditPatch_20260630.sql missing cleanup audit marker ${marker}`);
+  }
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
   issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");
