@@ -2699,6 +2699,98 @@ h1 {
   gap: 8px;
 }
 
+#market-view.market-overview-mode.market-index-pending > .metric-grid {
+  display: none !important;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] {
+  display: block !important;
+  grid-template-columns: none !important;
+  width: 100%;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-health-bar {
+  margin: 0 0 12px;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card {
+  min-height: 132px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+  padding: 13px 13px 12px;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card.tw-up {
+  border-color: rgba(255, 94, 103, 0.52);
+  background:
+    linear-gradient(135deg, rgba(255, 94, 103, 0.18), rgba(18, 24, 39, 0.9) 68%),
+    rgba(15, 18, 31, 0.94);
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card.tw-down {
+  border-color: rgba(46, 230, 166, 0.45);
+  background:
+    linear-gradient(135deg, rgba(46, 230, 166, 0.16), rgba(18, 24, 39, 0.9) 68%),
+    rgba(15, 18, 31, 0.94);
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card small {
+  display: block;
+  margin: 0;
+  color: #dbe7f8;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card strong,
+#market-view .sector-card.tw-up strong,
+#market-view .sector-card.tw-up .sector-pct,
+#market-view #heatmap[data-heatmap-api="live-contract"] .tw-up {
+  color: var(--red) !important;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card.tw-down strong,
+#market-view .sector-card.tw-down strong,
+#market-view .sector-card.tw-down .sector-pct,
+#market-view #heatmap[data-heatmap-api="live-contract"] .tw-down {
+  color: var(--green) !important;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .heatmap-live-card p {
+  margin: 0;
+  color: #c9d5ea;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .sector-stocks {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+#market-view #heatmap[data-heatmap-api="live-contract"] .sector-stocks span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #market-view .sector-card {
   min-height: 116px;
   display: grid;

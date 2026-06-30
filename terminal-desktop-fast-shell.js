@@ -4477,6 +4477,7 @@
     panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app").forEach((node) => node.remove());
     panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
     panel.classList.add("fuman-market-overview-shell");
+    panel.classList.add("market-index-pending");
     delete panel.dataset.fumanCanvasPersistent;
     delete panel.dataset.fumanRouteSnapshotRestoring;
     restoreMarketDesktopMode();
@@ -4587,6 +4588,8 @@
     const txfRow = marketCanvasRowByCode(marketPayload, ["TXF"]);
     const futuresNear = marketPayload?.futuresNear || marketPayload?.futures || null;
     const futuresNext = marketPayload?.futuresNext || null;
+    const hasMarketIndexData = Boolean(twse || otc || twseRow || otcRow || txfRow || futuresNear || futuresNext);
+    market.classList.toggle("market-index-pending", !hasMarketIndexData);
     const cards = [...market.querySelectorAll(".metric-grid .metric-card")];
     updateMarketMetricCard(
       cards[0],
@@ -4766,7 +4769,7 @@
           ? leader
           : leader ? `${leader.name || leader.code || "--"} ${Number(leader.pct || 0) >= 0 ? "+" : ""}${Number(leader.pct || 0).toFixed(2)}%` : "--";
         return `
-          <article class="sector-card ${pct >= 0 ? "hot up" : "cold down"}" data-market-heatmap-sector="${index}" role="button" tabindex="0" title="查看 ${escapeHtml(sector.name || sector.industry || "分類")} 股票">
+          <article class="sector-card ${pct >= 0 ? "hot tw-up" : "cold tw-down"}" data-market-heatmap-sector="${index}" role="button" tabindex="0" title="查看 ${escapeHtml(sector.name || sector.industry || "分類")} 股票">
             <div>
               <h3>${escapeHtml(sector.name || sector.industry || "--")}</h3>
               <strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong>
@@ -7460,17 +7463,20 @@
         #market-view.market-overview-mode > .metric-grid .metric-card:nth-child(n + 4) {
           display: none !important;
         }
+        #market-view.market-overview-mode.market-index-pending > .metric-grid {
+          display: none !important;
+        }
         #market-view.market-overview-mode > .terminal-band,
         #market-view.market-overview-mode > .watch-section {
           display: none !important;
         }
         #market-view .metric-card.market-card-up em,
         #market-view .ticker-strip .ticker-up b {
-          color: #2dd4bf !important;
+          color: #fb7185 !important;
         }
         #market-view .metric-card.market-card-down em,
         #market-view .ticker-strip .ticker-down b {
-          color: #fb7185 !important;
+          color: #2dd4bf !important;
         }
         #market-view .ticker-strip {
           overflow: hidden !important;

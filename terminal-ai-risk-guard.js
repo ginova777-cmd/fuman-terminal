@@ -308,15 +308,15 @@ function installMarketHeatmapLiveContractPanel() {
 
   function stockRow(stock) {
     const pct = num(stock.pct ?? stock.percent ?? stock.changePercent);
-    const klass = pct >= 0 ? "up" : "down";
+    const klass = pct >= 0 ? "tw-up" : "tw-down";
     return `<span class="${klass}">${esc(stock.code || stock.Code || "--")} ${esc(stock.name || stock.Name || "")} ${pct.toFixed(2)}%</span>`;
   }
 
   function sectorCard(sector) {
     const pct = num(sector.pct ?? sector.percent ?? sector.changePercent);
-    const klass = pct >= 0 ? "up" : "down";
+    const klass = pct >= 0 ? "tw-up" : "tw-down";
     const stocks = arr(sector.stocks || sector.rows).slice(0, 4).map(stockRow).join("");
-    return `<article class="sector-card heatmap-live-card ${klass}"><div><small>${esc(sector.name || sector.label || "--")}</small><strong>${pct.toFixed(2)}%</strong></div><p>上漲 ${num(sector.up).toLocaleString("zh-TW")} / 下跌 ${num(sector.down).toLocaleString("zh-TW")}</p><div class="sector-stocks">${stocks || "<span>等待成分股</span>"}</div></article>`;
+    return `<article class="sector-card heatmap-live-card ${klass}"><div><small>${esc(sector.name || sector.label || "--")}</small><strong>${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong></div><p>上漲 ${num(sector.up).toLocaleString("zh-TW")} / 下跌 ${num(sector.down).toLocaleString("zh-TW")}</p><div class="sector-stocks">${stocks || "<span>等待成分股</span>"}</div></article>`;
   }
 
   function paintHeatmap(payload) {
