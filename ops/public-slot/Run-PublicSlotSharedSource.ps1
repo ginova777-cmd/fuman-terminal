@@ -533,9 +533,51 @@ function Get-Intraday1mCoverageStats {
   $viewRows = @()
   $candidateSymbols = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
 
+  if ($candidateSymbols.Count -gt 0) {
+    try {
+      $coverageRows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRpc -FunctionName "get_fugle_intraday_1m_coverage_stats" -Body @{ p_symbols = @($candidateSymbols) })
+      if ($coverageRows.Count -gt 0) {
+        $coverage = $coverageRows[0]
+        $stats.intraday_1m_symbols_today = [int](Get-Number $coverage.intraday_1m_symbols_today)
+        $stats.intraday_1m_latest_candle_time = $coverage.latest_candle_time
+        if ([string]::IsNullOrWhiteSpace([string]$stats.intraday_1m_latest_candle_time)) {
+          $stats.intraday_1m_latest_candle_time = $coverage.intraday_1m_latest_candle_time
+        }
+        $stats.intraday_1m_rows_today = [int](Get-Number $coverage.intraday_1m_rows_today)
+        $stats.intraday_1m_stale_seconds = [int](Get-Number $coverage.intraday_1m_stale_seconds)
+        $stats.today_candle_count = [int](Get-Number $coverage.today_candle_count)
+        if ($stats.today_candle_count -le 0) { $stats.today_candle_count = $stats.intraday_1m_rows_today }
+        $stats.warmup_candle_count = [int](Get-Number $coverage.warmup_candle_count)
+        $stats.continuous_candle_count = [int](Get-Number $coverage.continuous_candle_count)
+        $stats.ready_ma20_continuous = [int](Get-Number $coverage.ready_ma20_continuous)
+        $stats.ready_ma35_continuous = [int](Get-Number $coverage.ready_ma35_continuous)
+        $stats.ready_macd_continuous = [int](Get-Number $coverage.ready_macd_continuous)
+        $stats.ready_ge_20 = [int](Get-Number $coverage.ready_ge_20)
+        $stats.ready_ge_35 = [int](Get-Number $coverage.ready_ge_35)
+        $stats.ready_ge_80 = [int](Get-Number $coverage.ready_ge_80)
+        $stats.ready_ge_200 = [int](Get-Number $coverage.ready_ge_200)
+        if ($stats.ready_ge_20 -le 0) { $stats.ready_ge_20 = $stats.ready_ma20_continuous }
+        if ($stats.ready_ge_35 -le 0) { $stats.ready_ge_35 = $stats.ready_ma35_continuous }
+        if ($stats.ready_ma35_continuous -lt $stats.ready_ge_35) { $stats.ready_ma35_continuous = $stats.ready_ge_35 }
+        if ($stats.ready_ma20_continuous -lt $stats.ready_ma35_continuous) { $stats.ready_ma20_continuous = $stats.ready_ma35_continuous }
+        if ($stats.ready_ge_20 -lt $stats.ready_ma20_continuous) { $stats.ready_ge_20 = $stats.ready_ma20_continuous }
+        if ($stats.ready_macd_continuous -lt $stats.ready_ge_80) { $stats.ready_macd_continuous = $stats.ready_ge_80 }
+        if ($stats.intraday_1m_stale_seconds -le 0) {
+          $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $stats.intraday_1m_latest_candle_time
+        }
+        $stats.intraday_1m_stats_source = "get_fugle_intraday_1m_coverage_stats"
+        if ($stats.intraday_1m_rows_today -gt 0 -and $stats.intraday_1m_stale_seconds -lt 999999) {
+          return $stats
+        }
+      }
+    } catch {
+      Write-Log "WARN intraday 1m coverage RPC failed symbols=$($candidateSymbols.Count): $($_.Exception.Message)"
+    }
+  }
+
   try {
     if ($candidateSymbols.Count -gt 0) {
-      $batchSize = 200
+      $batchSize = 25
       $collected = New-Object System.Collections.Generic.List[object]
       for ($offset = 0; $offset -lt $candidateSymbols.Count; $offset += $batchSize) {
         $take = [math]::Min($batchSize, $candidateSymbols.Count - $offset)
