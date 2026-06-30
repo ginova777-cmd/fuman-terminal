@@ -84,6 +84,9 @@ async function main() {
   const bundle = bundleResult.body || {};
 
   issueWhen(manifestResult.status < 200 || manifestResult.status >= 300, `release manifest HTTP ${manifestResult.status}: ${manifest.error || ""}`);
+  issueWhen(manifest.ok === false, `release manifest not ok: ${manifest.error || "missing release identity"}`);
+  issueWhen(!manifest.gitSha, "release manifest gitSha missing");
+  issueWhen(!manifest.deployId && !manifest.deploymentId, "release manifest deployId missing");
   issueWhen(versionResult.status < 200 || versionResult.status >= 300, `version.json HTTP ${versionResult.status}: ${version.error || ""}`);
   issueWhen(healthResult.status < 200 || healthResult.status >= 300 || health.ok === false, `production-health unhealthy HTTP ${healthResult.status}: ${(health.issues || [health.error]).filter(Boolean).join("; ")}`);
   issueWhen(bundleResult.status < 200 || bundleResult.status >= 300 || bundle.ok === false, `terminal-fast-bundle unhealthy HTTP ${bundleResult.status}: ${bundle.error || ""}`);
@@ -127,6 +130,7 @@ async function main() {
     releaseManifest: {
       status: manifestResult.status,
       gitSha: manifest.gitSha || "",
+      deployId: manifest.deployId || manifest.deploymentId || "",
       version: manifest.version || "",
     },
     productionHealth: {

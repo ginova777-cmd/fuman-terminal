@@ -122,6 +122,8 @@ const STRATEGIES = [
     policy: "same-day live",
     endpoint: "/api/realtime-radar-latest",
     receiptKey: "realtime-radar",
+    requireApiRunId: true,
+    requireWriteBudgetDisclosure: true,
   },
   {
     key: "market",
@@ -418,6 +420,8 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
     source: payload?.source || "",
     cacheSource: payload?.cacheSource || "",
     transportSource: payload?.transport?.source || "",
+    writeBudgetStatus: payload?.writeBudget?.status || "",
+    writeBudgetLimit: cleanNumber(payload?.writeBudget?.limit),
     snapshotHit: Boolean(payload?.snapshotHit),
     snapshotFallback: Boolean(payload?.snapshotFallback || payload?.transport?.fallbackFromPreviousSnapshot),
     error: payload?.error || payload?.detail || payload?.reason || "",
@@ -581,6 +585,10 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   }
   if (live?.status >= 500 || live?.ok === false) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
   if (compact?.status >= 500 || compact?.ok === false) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
+  if (config.requireApiRunId && !live?.runId) issues.push("live API missing runId");
+  if (config.requireApiRunId && !compact?.runId) issues.push("terminal API missing runId");
+  if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus) issues.push("live API missing writeBudget disclosure");
+  if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus) issues.push("terminal API missing writeBudget disclosure");
   if (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot"))) {
     issues.push(`desktop snapshot endpoint missing/error`);
   }

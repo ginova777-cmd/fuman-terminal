@@ -12,6 +12,7 @@ const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
 const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
 const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
 const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-supabase-status.json");
+const WRITE_BUDGET_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-write-budget.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
 
 function readSecretText(file) {
@@ -51,6 +52,7 @@ const MARKET_END_MINUTES = 13 * 60 + 30;
 const MARKET_START_SECONDS = MARKET_START_MINUTES * 60;
 const MARKET_END_SECONDS = MARKET_END_MINUTES * 60;
 const REALTIME_RADAR_SESSION_LIMIT = Math.max(120, Number(process.env.REALTIME_RADAR_SESSION_LIMIT || 1200));
+const REALTIME_RADAR_WRITE_BUDGET_PER_SCAN = Math.max(1, Number(process.env.REALTIME_RADAR_WRITE_BUDGET_PER_SCAN || 3));
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -58,6 +60,49 @@ function writeJson(file, value) {
 }
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function compactDateKey(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function buildRealtimeRadarRunId(tradeDate, parts = taipeiParts(), detectedAt = Date.now()) {
+  const date = compactDateKey(tradeDate || `${parts.year}${parts.month}${parts.day}`) || "unknown";
+  const time = `${parts.hour || "00"}${parts.minute || "00"}${parts.second || "00"}`;
+  return `realtime-radar-${date}-${time}-${detectedAt}`;
+}
+
+function createWriteBudget(runId) {
+  return {
+    runId,
+    source: "realtime-radar-write-budget",
+    limit: REALTIME_RADAR_WRITE_BUDGET_PER_SCAN,
+    writesAttempted: 0,
+    writesCompleted: 0,
+    blocked: false,
+    reason: "",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function writeBudgetSnapshot(writeBudget, status = "open") {
+  return {
+    source: writeBudget.source,
+    status,
+    runId: writeBudget.runId,
+    limit: writeBudget.limit,
+    writesAttempted: writeBudget.writesAttempted,
+    writesCompleted: writeBudget.writesCompleted,
+    blocked: writeBudget.blocked,
+    reason: writeBudget.reason,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function persistWriteBudget(writeBudget, status = "open") {
+  const snapshot = writeBudgetSnapshot(writeBudget, status);
+  writeJson(WRITE_BUDGET_STATUS_FILE, snapshot);
+  return snapshot;
 }
 
 async function sendOpsText(text) {
@@ -165,11 +210,29 @@ function updateSupabaseUploadStatus(ok, error = "") {
   return payload;
 }
 
-async function safeUploadRealtimeRadarPayload(payload) {
+async function safeUploadRealtimeRadarPayload(payload, writeBudget = null) {
+  if (writeBudget) {
+    writeBudget.writesAttempted += 1;
+    if (writeBudget.writesAttempted > writeBudget.limit) {
+      writeBudget.blocked = true;
+      writeBudget.reason = `write budget exceeded ${writeBudget.writesAttempted}/${writeBudget.limit}`;
+      payload.writeBudget = persistWriteBudget(writeBudget, "blocked");
+      return updateSupabaseUploadStatus(false, writeBudget.reason);
+    }
+    payload.writeBudget = writeBudgetSnapshot(writeBudget, "committing");
+  }
   try {
     const uploaded = await uploadRealtimeRadarPayload(payload);
+    if (writeBudget && uploaded !== false) {
+      writeBudget.writesCompleted += 1;
+      payload.writeBudget = persistWriteBudget(writeBudget, "ok");
+    }
     return updateSupabaseUploadStatus(uploaded !== false, uploaded === false ? "Supabase credentials missing; upload skipped." : "");
   } catch (error) {
+    if (writeBudget) {
+      writeBudget.reason = error.message || String(error);
+      payload.writeBudget = persistWriteBudget(writeBudget, "failed");
+    }
     console.log(`realtime radar supabase upload failed: ${error.message}`);
     return updateSupabaseUploadStatus(false, error.message);
   }
@@ -782,6 +845,9 @@ async function main() {
   const key = dateKey(parts);
   const detectedAt = Date.now();
   const timestamp = timestampKey(parts);
+  const runId = buildRealtimeRadarRunId(key, parts, detectedAt);
+  const writeBudget = createWriteBudget(runId);
+  persistWriteBudget(writeBudget, "open");
   const tradingDay = await isTwseTradingDay(new Date(detectedAt), { stateDir: STATE_DIR });
   if (!tradingDay.isTradingDay) {
     writeFailedBatchQueue([]);
@@ -811,6 +877,7 @@ async function main() {
   const currentRows = buildRadarRows(freshStocks, detectedAt, timestamp);
   const rows = mergeRadarSessionRows(previousPayload, currentRows, timestamp, key);
   let payload = {
+    runId,
     source: "mini-pc-realtime-radar",
     status: realtime.failedBatches.length ? "degraded" : "ok",
     date: key,
@@ -845,12 +912,14 @@ async function main() {
     currentScanCount: currentRows.length,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
+    writeBudget: writeBudgetSnapshot(writeBudget, "open"),
   };
   if (!rows.length && realtime.failedBatches.length) {
     const previous = readJson(OUT_FILE, null);
     if (previous?.status !== "outside_market_time" && previous?.date === key && Array.isArray(previous.rows) && previous.rows.length) {
       payload = {
         ...previous,
+        runId,
         status: "degraded_keepalive",
         timestamp,
         updatedAt: new Date(detectedAt).toISOString(),
@@ -867,12 +936,13 @@ async function main() {
         failedBatchDetails,
         externalSourceIssues,
         lastFailedScanAt: timestamp,
+        writeBudget: writeBudgetSnapshot(writeBudget, "open"),
       };
       console.log(`realtime radar ${timestamp}: kept previous rows ${previous.rows.length} after ${realtime.failedBatches.length}/${realtime.totalBatches} failed batches`);
     }
   }
   writeJson(OUT_FILE, payload);
-  const supabaseUpload = await safeUploadRealtimeRadarPayload(payload);
+  const supabaseUpload = await safeUploadRealtimeRadarPayload(payload, writeBudget);
   payload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, payload);
   await maybeSendRealtimeRadarAlert(payload);
@@ -901,6 +971,7 @@ async function main() {
         const patchedFailedBatchDetails = buildFailedBatchDetails(retry.failedBatches || []);
         const patchedPayload = {
           ...payload,
+          runId,
           status: "ok_after_deferred_rescan",
           rows: mergedRows,
           longCount: mergedRows.filter((row) => row.side === "long").length,
@@ -913,9 +984,10 @@ async function main() {
           lastTradeStaleDetails: patchedLastTradeStaleDetails,
           failedBatchDetails: patchedFailedBatchDetails,
           externalSourceIssues: buildExternalSourceIssues({ failedBatchDetails: patchedFailedBatchDetails, staleQuoteDetails: patchedStaleQuoteDetails }),
+          writeBudget: writeBudgetSnapshot(writeBudget, "open"),
         };
         writeJson(OUT_FILE, patchedPayload);
-        await safeUploadRealtimeRadarPayload(patchedPayload);
+        await safeUploadRealtimeRadarPayload(patchedPayload, writeBudget);
         await maybeSendRealtimeRadarAlert(patchedPayload);
         console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} ${staleQuoteLogText(patchedPayload.staleQuoteDetails, patchedPayload.staleQuoteCount)} lastTradeStale ${patchedPayload.lastTradeStaleCount || 0} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }

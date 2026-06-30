@@ -12,14 +12,28 @@ function localGitSha() {
   return "";
 }
 
+function deploymentId(req) {
+  return process.env.VERCEL_DEPLOYMENT_ID
+    || process.env.VERCEL_DEPLOY_ID
+    || process.env.FUMAN_DEPLOY_ID
+    || process.env.FUMAN_VERCEL_DEPLOYMENT_ID
+    || process.env.VERCEL_URL
+    || req.headers?.["x-vercel-id"]
+    || "";
+}
+
 module.exports = function handler(req, res) {
   const gitSha = localGitSha();
+  const deployId = deploymentId(req);
   res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.status(200).json({
-    ok: Boolean(gitSha),
+    ok: Boolean(gitSha && deployId),
     version: versionPayload.version,
     gitSha,
+    deployId,
+    deploymentId: deployId,
+    deploymentUrl: process.env.VERCEL_URL || "",
     branch: process.env.VERCEL_GIT_COMMIT_REF || process.env.FUMAN_RELEASE_BRANCH || "",
     repo: process.env.VERCEL_GIT_REPO_SLUG || "fuman-terminal",
     source: process.env.VERCEL_GIT_COMMIT_SHA ? "vercel-git-env" : (process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA ? "fuman-release-env" : "local-git"),

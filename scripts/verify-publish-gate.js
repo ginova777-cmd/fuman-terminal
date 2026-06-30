@@ -272,6 +272,9 @@ if (vercelJson) {
 if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.deploy || ""))) {
   issues.push("package.json scripts.deploy must require version/deploy approval");
 }
+if (!/deploy-production-with-release-env\.js/.test(String(packageJson.scripts?.deploy || ""))) {
+  issues.push("package.json scripts.deploy must use deploy-production-with-release-env.js so release manifest gets gitSha/deployId");
+}
 if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.["release:main"] || ""))) {
   issues.push("package.json scripts.release:main must require version/deploy approval");
 }
@@ -528,6 +531,7 @@ const refreshDesktopSnapshot = read("refresh-desktop-route-snapshot.ps1");
 const agentsGuide = read("AGENTS.md");
 const postScanSnapshotAgents = read("post-scan-snapshot-refreshAGENTS.MD");
 const prepareDeploy = read("scripts/prepare-deploy.js");
+const deployProductionWithReleaseEnv = read("scripts/deploy-production-with-release-env.js");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeApi = read("api/realtime.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
@@ -564,6 +568,7 @@ const runRealtimeRadar = read("run-realtime-radar.ps1");
 const runChipSourceSync = read("run-chip-source-sync.ps1");
 const productionHealthMonitor = read("scripts/monitor-production-health.js");
 const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
+const workflowAlertSender = read("scripts/send-workflow-alert.js");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const watchlistMatchIndexGenerator = read("scripts/generate-watchlist-match-index.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
@@ -679,6 +684,9 @@ for (const marker of ["scorecard.duckdb", "export-scorecard-snapshot.py"]) {
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
 }
+for (const marker of ["FUMAN_RELEASE_SHA", "FUMAN_DEPLOY_SHA", "FUMAN_DEPLOY_ID", "--env", "vercel", "rev-parse"]) {
+  if (!deployProductionWithReleaseEnv.includes(marker)) issues.push(`deploy-production-with-release-env.js missing release env marker ${marker}`);
+}
 if (!/verify:sync-hard-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:sync-hard-gate before production deploy");
 }
@@ -696,6 +704,9 @@ for (const marker of ["verify-production-mirror-guard.js", "production mirror on
 }
 for (const marker of ["FUMAN_RELEASE_SHA is required", "mode: \"read-only\"", "/api/release-manifest", "/api/production-health", "/api/terminal-fast-bundle"]) {
   if (!finalReadonlyVerifier.includes(marker)) issues.push(`verify-final-readonly.js missing pinned read-only final verify marker ${marker}`);
+}
+for (const marker of ["release manifest deployId missing", "deployId: manifest.deployId || manifest.deploymentId || \"\""]) {
+  if (!finalReadonlyVerifier.includes(marker)) issues.push(`verify-final-readonly.js missing release deployId gate marker ${marker}`);
 }
 if (/writeFileSync|appendFileSync|freshness:gate|write-desktop-route-snapshot|publish-mobile-update-event|run-daily-release|run-full-scan/.test(finalReadonlyVerifier)) {
   issues.push("verify-final-readonly.js must stay read-only and must not write files, publish mobile events, run scans, or refresh snapshots");
@@ -1322,6 +1333,8 @@ for (const marker of [
   "FULL_SESSION_RADAR_LIMIT = 1200",
   "MAX_RADAR_LIMIT = 1500",
   "function requestRadarLimit",
+  "function radarPayloadRunId",
+  "payloadRunId",
   "displayWindow: \"09:00-13:30\"",
   "totalCount",
   "hasMore",
@@ -1356,6 +1369,12 @@ if (/<section\s+class=["']radar-flow-grid/.test(desktopFastShell) || /<section\s
 }
 for (const marker of [
   "REALTIME_RADAR_SESSION_LIMIT",
+  "REALTIME_RADAR_WRITE_BUDGET_PER_SCAN",
+  "realtime-radar-write-budget.json",
+  "function buildRealtimeRadarRunId",
+  "function createWriteBudget",
+  "writeBudget",
+  "runId",
   "function mergeRadarSessionRows",
   "sessionStart: \"09:00\"",
   "sessionEnd: \"13:30\"",
@@ -1378,6 +1397,7 @@ for (const marker of [
   "REALTIME_RADAR_BATCH_TIMEOUT_MS",
   "REALTIME_RADAR_BATCH_RETRIES",
   "REALTIME_RADAR_STALE_RESCAN_LIMIT",
+  "REALTIME_RADAR_WRITE_BUDGET_PER_SCAN",
   "REALTIME_FUGLE_PRIMARY_BUDGET_MS",
   "REALTIME_FINMIND_FALLBACK_BUDGET_MS",
 ]) {
@@ -1629,9 +1649,24 @@ for (const marker of [
   "VERCEL_GIT_COMMIT_SHA",
   "FUMAN_RELEASE_SHA",
   "FUMAN_DEPLOY_SHA",
+  "VERCEL_DEPLOYMENT_ID",
+  "FUMAN_DEPLOY_ID",
+  "VERCEL_URL",
+  "deployId",
+  "deploymentId",
   "versionPayload.version",
 ]) {
   if (!releaseManifestApi.includes(marker)) issues.push(`api/release-manifest.js missing release manifest marker ${marker}`);
+}
+for (const marker of [
+  "scripts/deploy-production-with-release-env.js",
+  "scripts/monitor-production-health.js",
+  "scripts/send-workflow-alert.js",
+  "run-production-health-monitor.ps1",
+  "run-realtime-radar.ps1",
+]) {
+  if (!sourceSync.includes(marker)) issues.push(`sync-main-deploy-source.js missing release/monitor sync marker ${marker}`);
+  if (!sourceSyncVerifier.includes(marker)) issues.push(`verify-source-sync.js missing release/monitor compare marker ${marker}`);
 }
 for (const marker of [
   "verifyMarketEventReminderGuard",
@@ -1957,6 +1992,9 @@ for (const marker of [
   "cb_detect_scan_runs",
   "cb_detect_scan_results",
   "latest complete scan",
+  "requireApiRunId",
+  "requireWriteBudgetDisclosure",
+  "writeBudgetStatus",
 ]) {
   if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
 }
@@ -2102,6 +2140,15 @@ for (const marker of ["cb_detect_scan_runs", "cb_detect_scan_results", "readLate
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
   issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");
+}
+for (const marker of ["/api/release-manifest", "release-manifest deployId missing", "release-manifest gitSha missing", "FUMAN_RELEASE_SHA"]) {
+  if (!productionHealthMonitor.includes(marker)) issues.push(`monitor-production-health.js missing release identity monitor marker ${marker}`);
+}
+for (const marker of ["Invoke-FailureAlert", "send-workflow-alert.js", "production-health-monitor-alert.json", "FUMAN_ALERT_RECEIPT_FILE", "FumanTerminalProductionHealthMonitor"]) {
+  if (!productionHealthMonitorRunner.includes(marker)) issues.push(`run-production-health-monitor.ps1 missing SMTP alert receipt marker ${marker}`);
+}
+for (const marker of ["REPORT_EMAIL_TO", "SMTP_USER", "SMTP_PASS", "gmail-app-password.txt", "FUMAN_ALERT_KIND", "FUMAN_ALERT_RECEIPT_FILE", "writeReceipt"]) {
+  if (!workflowAlertSender.includes(marker)) issues.push(`send-workflow-alert.js missing generic SMTP alert marker ${marker}`);
 }
 
 for (const legacyScript of [

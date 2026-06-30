@@ -86,6 +86,20 @@ function radarPayloadTradeDate(payload) {
   ].map(compactDateKey).filter(Boolean).sort().at(-1) || "";
 }
 
+function radarPayloadRunId(payload, row = {}) {
+  const explicit = String(
+    payload?.runId
+    || payload?.transport?.runId
+    || payload?.transport?.payloadRunId
+    || ""
+  ).trim();
+  if (explicit) return explicit;
+  const date = radarPayloadTradeDate(payload) || compactDateKey(row.updated_at) || taipeiDateKey();
+  const updatedAt = payloadUpdatedAtMs(payload) || Date.parse(row.updated_at || "") || 0;
+  const rowCount = Array.isArray(payload?.rows) ? payload.rows.length : cleanNumber(payload?.count);
+  return `realtime-radar-${date || "unknown"}-${updatedAt || "unknown"}-${rowCount || 0}`;
+}
+
 function buildMarketSession(tradingDay, payload) {
   const today = taipeiDateKey();
   const marketDataDate = radarPayloadTradeDate(payload);
@@ -169,12 +183,28 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
 
 function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_RADAR_LIMIT) {
   const normalizedPayload = normalizeRadarRows(payload, limit);
+  const runId = radarPayloadRunId(normalizedPayload);
+  const writeBudget = normalizedPayload?.writeBudget || {
+    source: "realtime-radar-write-budget",
+    status: "pending_next_writer_run",
+    runId,
+    limit: 0,
+    writesAttempted: 0,
+    writesCompleted: 0,
+    blocked: false,
+    reason: "payload missing writer writeBudget; waiting for next scanner run",
+    checkedAt: new Date().toISOString(),
+  };
   return {
     ...normalizedPayload,
+    runId,
+    writeBudget,
     reason: reason || normalizedPayload?.reason,
     marketSession,
     transport: {
       ...(normalizedPayload?.transport || {}),
+      runId,
+      payloadRunId: runId,
       via: "api/realtime-radar-latest",
       gate: marketSession?.closed ? "non-trading-day-cache" : "trading-day-live",
       fetchedAt: new Date().toISOString(),
@@ -340,8 +370,10 @@ function unavailablePayload(reason = "") {
 }
 
 function staleTradingDayPayload(payload, marketSession, reason = "trading_day_radar_cache_stale") {
+  const runId = radarPayloadRunId(payload);
   return {
     ok: false,
+    runId,
     error: "realtime_radar_stale",
     reason,
     cacheSource: payload?.cacheSource || "supabase-radar-cache",
@@ -371,6 +403,8 @@ function staleTradingDayPayload(payload, marketSession, reason = "trading_day_ra
     transport: {
       source: "supabase",
       table: TABLE,
+      runId,
+      payloadRunId: runId,
       via: "api/realtime-radar-latest",
       gate: "trading-day-stale-cache-blocked",
       fetchedAt: new Date().toISOString(),
