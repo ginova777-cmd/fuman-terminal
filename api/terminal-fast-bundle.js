@@ -6,6 +6,7 @@ const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const latestSignals = require("./latest-signals");
+const latestStrategy = require("./latest-strategy");
 const realtimeRadarLatest = require("./realtime-radar-latest");
 const heatmap = require("./heatmap");
 const marketAiLive = require("./market-ai-live");
@@ -365,6 +366,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 2300],
     ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 2500],
     ["/api/strategy5-latest", strategy5Latest, compactQuery(70), 2300],
+    ["/api/latest-strategy?key=strategy2", latestStrategy, { key: "strategy2", compact: "1", shell: "1", limit: "80", live: "1" }, 3000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/realtime-radar-latest", realtimeRadarLatest, { compact: "1", shell: "1", limit: "50" }, 2100],
     ["/api/heatmap?snapshot=1", heatmap, { snapshot: "1", canvas: "1", compact: "1", shell: "1", limit: "60" }, 2100],

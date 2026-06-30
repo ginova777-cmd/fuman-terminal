@@ -62,6 +62,7 @@
     "verify:heatmap-ai-alert-path": "node --use-system-ca scripts/verify-heatmap-ai-alert-path.js",
     "verify:market-surfaces-chain": "node --use-system-ca scripts/verify-market-surfaces-chain.js",
     "verify:market-ai-freshness": "node scripts/verify-market-ai-freshness-guard.js",
+    "verify:watchlist-autonomy": "node --use-system-ca scripts/verify-watchlist-autonomy.js",
     "verify:post-scan-snapshot-refresh": "node --use-system-ca scripts/verify-post-scan-snapshot-refresh-contract.js",
     "verify:data-freshness": "npm run verify:terminal-source-contracts && npm run verify:terminal-resource-chain && npm run verify:market-surfaces-chain && npm run verify:scorecard-chain && npm run verify:warrant-freshness",
     "verify:warrant-freshness": "node --use-system-ca scripts/verify-warrant-freshness.js",

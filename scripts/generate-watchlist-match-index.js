@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_ROOT || process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -255,18 +254,7 @@ async function main() {
     byCode,
   };
 
-  const clock = taipeiClock();
-  const locked = isAfterTaipei1330(clock);
-  const snapshot = await upsertSnapshot("watchlist_match_index", payload, {
-    source: "api-driven-watchlist-match-index",
-    snapshotId: runId,
-    tradeDate: clock.date,
-    locked,
-    reason: locked ? "after-1330-cache" : "snapshot-cache",
-  });
-  if (!snapshot.ok) throw new Error(`watchlist snapshot upsert failed: ${snapshot.error || "unknown_error"}`);
-
-  console.log(`[watchlist-index] ok codes=${payload.count} snapshot=watchlist_match_index`);
+  console.log(`[watchlist-index] retired writer; built codes=${payload.count}. Official watchlist_match_index is written only by desktop-route-snapshot-builder.`);
   if (payload.byCode["3006"]) {
     console.log(`[watchlist-index] 3006 ${payload.byCode["3006"].map((item) => item.label).join(" / ")}`);
   }

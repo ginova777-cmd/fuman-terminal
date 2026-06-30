@@ -2005,7 +2005,7 @@ function buildStrategyMatchIndex() {
 
 async function writeStrategyMatchIndexSnapshot() {
   const retired = apiOnlyStaticDisabledPayload("strategy-match-index-static-retired");
-  console.log("[slim] skipped retired data/strategy-match-index.json static builder; use scripts/generate-watchlist-match-index.js for watchlist_match_index snapshot");
+  console.log("[slim] skipped retired data/strategy-match-index.json static builder; official watchlist_match_index is written only by desktop-route-snapshot-builder");
   return retired;
 }
 
