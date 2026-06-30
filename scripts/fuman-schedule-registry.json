@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-30T10:55:00+08:00",
+  "updatedAt": "2026-06-30T11:10:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -46,7 +46,8 @@
       "Fuman 權證走向 Watchdog 2050",
       "FumanTerminalProductionHealthMonitor"
     ],
-    "expectedDisabledTasks": [
+    "expectedDisabledTasks": [],
+    "retiredTasks": [
       "Fuman Auto Main Release 1615",
       "Fuman Daily Health Summary 1545",
       "Fuman Deploy Worktree Clean Monitor 5m",
@@ -56,11 +57,9 @@
       "Fuman Strategy3 Battle Verify 1335",
       "Fuman Strategy3 Complete Scan 1318",
       "Fuman Strategy3 Refresh Snapshot 1308",
+      "Fuman Strategy2 LINE Stop 1330",
       "Fuman Terminal API Health",
       "Fuman 即時雷達健檢 0910"
-    ],
-    "retiredTasks": [
-      "Fuman Strategy2 LINE Stop 1330"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"
@@ -105,6 +104,7 @@
       ],
       "Fuman 即時雷達": [
         0,
+        267009,
         267014
       ]
     },
