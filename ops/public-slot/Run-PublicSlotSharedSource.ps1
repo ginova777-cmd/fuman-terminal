@@ -2171,6 +2171,26 @@ function Get-NearMonthStockFutureSymbols {
   return $selected.ToArray()
 }
 
+function Get-NearMonthTxfFutureSymbols {
+  param([object[]]$TickerRows)
+  $today = (Get-Date).Date
+  $candidates = @($TickerRows | Where-Object {
+    $futureSymbol = [string]$_["future_symbol"]
+    [string]$_["product"] -eq "TXF" -and
+      $futureSymbol -match "^TXF" -and
+      $futureSymbol -ne "TXF-S" -and
+      $futureSymbol -notlike "*-F"
+  } | Sort-Object {
+    try {
+      $d = [datetime]::Parse([string]$_["end_date"])
+      if ($d.Date -lt $today) { [datetime]::MaxValue } else { $d }
+    } catch { [datetime]::MaxValue }
+  }, { [string]$_["future_symbol"] })
+
+  if ($candidates.Count -gt 0) { return @([string]$candidates[0]["future_symbol"]) }
+  return @()
+}
+
 function Invoke-FugleFutoptQuote {
   param([string]$FutureSymbol, [string]$ApiKey)
   if ([string]::IsNullOrWhiteSpace($FutureSymbol) -or [string]::IsNullOrWhiteSpace($ApiKey)) { return $null }
@@ -2186,6 +2206,40 @@ function Invoke-FugleFutoptQuote {
     if ($_.Exception.Message -match '429|Too Many') { $script:FutoptRateLimited = $true }
     return $null
   }
+}
+
+function Invoke-FugleTxfQuoteRows {
+  param([string[]]$FutureSymbols, [object[]]$TickerRows, [string]$ApiKey)
+  $rows = New-Object System.Collections.Generic.List[object]
+  if ($FutureSymbols.Count -eq 0 -or [string]::IsNullOrWhiteSpace($ApiKey)) {
+    return @{ rows = @(); attempted = 0; fetched = 0; rate_limited = $false }
+  }
+
+  $tickerBySymbol = @{}
+  foreach ($ticker in @($TickerRows)) {
+    $fs = [string]$ticker["future_symbol"]
+    if ($fs -and -not $tickerBySymbol.ContainsKey($fs)) { $tickerBySymbol[$fs] = $ticker }
+  }
+
+  $script:FutoptRateLimited = $false
+  $attempted = 0
+  $fetched = 0
+  foreach ($futureSymbol in @($FutureSymbols | Select-Object -Unique)) {
+    $attempted += 1
+    $quote = Invoke-FugleFutoptQuote -FutureSymbol $futureSymbol -ApiKey $ApiKey
+    $row = Convert-FugleFutoptQuoteToRow -Quote $quote -TickerBySymbol $tickerBySymbol
+    if ($null -ne $row) {
+      $fetched += 1
+      $rows.Add($row)
+    }
+    if ($script:FutoptRateLimited) {
+      Write-Log "WARN fugle TXF quote rate limited; preserving previous TXF row."
+      break
+    }
+    Start-Sleep -Milliseconds ([math]::Max(100, $FutoptQuoteDelayMilliseconds))
+  }
+
+  return @{ rows = $rows.ToArray(); attempted = $attempted; fetched = $fetched; rate_limited = [bool]$script:FutoptRateLimited }
 }
 
 function Convert-FugleFutoptQuoteToRow {
@@ -2740,6 +2794,18 @@ do {
     }
     $direct1mSymbols = @($priorityWarmupSymbols)
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-direct-1m" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
+    try {
+      $earlyFutoptTickerPayload = Invoke-FugleFutoptTickers -ApiKey $fugleApiKey
+      $earlyFutoptTickerRows = @(Convert-FugleFutoptTickersToRows -Payload $earlyFutoptTickerPayload)
+      $earlyTxfFutureSymbols = @(Get-NearMonthTxfFutureSymbols -TickerRows $earlyFutoptTickerRows)
+      $earlyTxfQuotePayload = Invoke-FugleTxfQuoteRows -FutureSymbols $earlyTxfFutureSymbols -TickerRows $earlyFutoptTickerRows -ApiKey $fugleApiKey
+      if ($earlyTxfQuotePayload.rows.Count -gt 0) {
+        Write-PublicSlotFutoptQuotesLive -Rows $earlyTxfQuotePayload.rows
+      }
+      Write-Log "fugle TXF early quote symbols=$($earlyTxfFutureSymbols.Count) fetched=$($earlyTxfQuotePayload.fetched) rows=$($earlyTxfQuotePayload.rows.Count) before_direct_1m=True"
+    } catch {
+      Write-Log "WARN fugle TXF early quote failed: $($_.Exception.Message)"
+    }
     $direct1mPrewarmPayload = Invoke-Direct1mStartupPrewarm -Symbols $direct1mSymbols -ApiKey $fugleApiKey
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-direct-1m-prewarm" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $direct1mPayload = Invoke-Direct1mWarmupBatch -Symbols $direct1mSymbols -ApiKey $fugleApiKey
@@ -2748,10 +2814,12 @@ do {
     $txfPayload = Convert-TaifexToFutoptRows -Payload (Invoke-TaifexFuturesQuote -Cid "TXF") -Product "TXF"
     $fugleFutoptTickerPayload = Invoke-FugleFutoptTickers -ApiKey $fugleApiKey
     $fugleFutoptTickerRows = @(Convert-FugleFutoptTickersToRows -Payload $fugleFutoptTickerPayload)
+    $nearTxfFutureSymbols = @(Get-NearMonthTxfFutureSymbols -TickerRows $fugleFutoptTickerRows)
+    $fugleTxfQuotePayload = Invoke-FugleTxfQuoteRows -FutureSymbols $nearTxfFutureSymbols -TickerRows $fugleFutoptTickerRows -ApiKey $fugleApiKey
     $nearStockFutureSymbols = @(Get-NearMonthStockFutureSymbols -TickerRows $fugleFutoptTickerRows)
     $fugleFutoptQuotePayload = Invoke-FugleFutoptQuoteBatch -FutureSymbols $nearStockFutureSymbols -TickerRows $fugleFutoptTickerRows -ApiKey $fugleApiKey
     $combinedFutoptTickerRows = @($txfPayload.tickers) + @($fugleFutoptTickerRows)
-    $combinedFutoptQuoteRows = @($txfPayload.quotes) + @($fugleFutoptQuotePayload.rows)
+    $combinedFutoptQuoteRows = @($txfPayload.quotes) + @($fugleTxfQuotePayload.rows) + @($fugleFutoptQuotePayload.rows)
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-futopt" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $stockFutureTickerCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" }).Count
     $stockFutureMappedCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" -and -not [string]::IsNullOrWhiteSpace([string]$_.underlying_symbol) }).Count
@@ -2846,7 +2914,7 @@ do {
     $dailyVolumeStatus = Get-SourcePartStatus -Ok $dailyVolumeOk
     $latestCandleTimeTaipei = Convert-IsoUtcToTaipei -IsoTime $intradayStats.intraday_1m_latest_candle_time
     $dailyVolumeRowsWritten = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count)
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
     $sourceStatusPayload = @{
       source_contract_version = $SourceContractVersion
       writer_version = $WriterVersion
@@ -2974,10 +3042,15 @@ do {
       futopt_stock_tickers = $stockFutureTickerCount
       futopt_stock_mapped = $stockFutureMappedCount
       futopt_stock_quote_universe = $nearStockFutureSymbols.Count
+      futopt_txf_symbols = $nearTxfFutureSymbols.Count
+      futopt_txf_quote_attempted_this_loop = $fugleTxfQuotePayload.attempted
+      futopt_txf_quote_fetched_this_loop = $fugleTxfQuotePayload.fetched
+      futopt_txf_quotes_this_loop = $fugleTxfQuotePayload.rows.Count
+      futopt_txf_quote_rate_limited = [bool]$fugleTxfQuotePayload.rate_limited
       futopt_stock_quotes_this_loop = $fugleFutoptQuotePayload.rows.Count
       futopt_stock_this_loop = $fugleFutoptQuotePayload.rows.Count
-      txf_ok = ($txfPayload.quotes.Count -gt 0)
-      futopt_txf_ok = ($txfPayload.quotes.Count -gt 0)
+      txf_ok = (($txfPayload.quotes.Count + $fugleTxfQuotePayload.rows.Count) -gt 0)
+      futopt_txf_ok = (($txfPayload.quotes.Count + $fugleTxfQuotePayload.rows.Count) -gt 0)
       mapped_underlying_count = $stockFutureMappedCount
       futopt_stock_quote_attempted_this_loop = $fugleFutoptQuotePayload.attempted
       futopt_stock_quote_fetched_this_loop = $fugleFutoptQuotePayload.fetched
