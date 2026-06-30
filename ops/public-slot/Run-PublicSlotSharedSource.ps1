@@ -409,7 +409,11 @@ function Get-ScannerBlockReason {
 }
 
 function Invoke-PublicSlotRestGet {
-  param([string]$PathAndQuery)
+  param(
+    [string]$PathAndQuery,
+    [switch]$LogError,
+    [switch]$ThrowOnError
+  )
   try {
     $headers = @{
       apikey = $serviceRoleKey
@@ -418,8 +422,27 @@ function Invoke-PublicSlotRestGet {
     $uri = "$($ProjectUrl.TrimEnd('/'))/rest/v1/$PathAndQuery"
     return Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 20 -ErrorAction Stop
   } catch {
+    if ($LogError) {
+      Write-Log "WARN REST GET failed path=$PathAndQuery error=$($_.Exception.Message)"
+    }
+    if ($ThrowOnError) { throw }
     return @()
   }
+}
+
+function Convert-PublicSlotRestRows {
+  param([object]$Rows)
+  if ($null -eq $Rows) { return @() }
+
+  $items = @($Rows)
+  if ($items.Count -eq 1 -and $null -ne $items[0]) {
+    $valueProperty = $items[0].PSObject.Properties["value"]
+    if ($null -ne $valueProperty -and $valueProperty.Value -is [System.Array]) {
+      return @($valueProperty.Value)
+    }
+  }
+
+  return @($items)
 }
 
 function Get-PublicSlotPermissionProbe {
@@ -483,7 +506,10 @@ function Invoke-PublicSlotRestGetAll {
 }
 
 function Get-Intraday1mCoverageStats {
-  param([object[]]$FallbackRows = @())
+  param(
+    [object[]]$FallbackRows = @(),
+    [string[]]$Symbols = @()
+  )
 
   $stats = @{
     intraday_1m_symbols_today = 0
@@ -503,10 +529,24 @@ function Get-Intraday1mCoverageStats {
     ready_macd_continuous = 0
   }
 
+  $statusSelect = "symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_20,ready_ge_35,ready_ge_80,ready_ge_200,has_today_data"
+  $viewRows = @()
+  $candidateSymbols = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
+
   try {
-    $viewRows = @(Invoke-PublicSlotRestGet -PathAndQuery "v_fugle_intraday_1m_status?select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_20,ready_ge_35,ready_ge_80,ready_ge_200,has_today_data&has_today_data=eq.true&limit=5000")
-    if ($viewRows.Count -le 0) {
-      $viewRows = @(Invoke-PublicSlotRestGet -PathAndQuery "v_fugle_intraday_1m_status?select=symbol,latest_candle_time,today_candle_count,candle_count,ready_ge_35,ready_ge_80,ready_ge_200,has_today_data&has_today_data=eq.true&limit=5000")
+    if ($candidateSymbols.Count -gt 0) {
+      $batchSize = 200
+      $collected = New-Object System.Collections.Generic.List[object]
+      for ($offset = 0; $offset -lt $candidateSymbols.Count; $offset += $batchSize) {
+        $take = [math]::Min($batchSize, $candidateSymbols.Count - $offset)
+        $batch = @($candidateSymbols[$offset..($offset + $take - 1)])
+        $symbolList = ($batch -join ",")
+        $rows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRestGet -PathAndQuery "v_fugle_intraday_1m_status?select=$statusSelect&symbol=in.($symbolList)&limit=$batchSize" -LogError)
+        foreach ($row in $rows) { $collected.Add($row) }
+      }
+      $viewRows = @($collected.ToArray())
+    } else {
+      $viewRows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRestGet -PathAndQuery "v_fugle_intraday_1m_status?select=$statusSelect&has_today_data=eq.true&limit=5000" -LogError)
     }
     if ($viewRows.Count -gt 0) {
       $latest = Get-LatestIsoUtc -Rows $viewRows -PropertyName "latest_candle_time"
@@ -518,6 +558,7 @@ function Get-Intraday1mCoverageStats {
       $readyMacd = 0
       $ready80 = 0
       $ready200 = 0
+      $symbolsWithToday = 0
       foreach ($row in $viewRows) {
         $rowCandleCount = 0
         if ($null -ne $row.today_candle_count) {
@@ -531,6 +572,9 @@ function Get-Intraday1mCoverageStats {
         $rowContinuousCount = [int](Get-Number $row.continuous_candle_count)
         if ($rowContinuousCount -le 0) { $rowContinuousCount = $rowWarmupCount + $rowCandleCount }
         if ($rowContinuousCount -le 0) { $rowContinuousCount = [int](Get-Number $row.candle_count) }
+        $hasToday = ($row.has_today_data -eq $true -or $rowCandleCount -gt 0)
+        if (-not $hasToday) { continue }
+        $symbolsWithToday += 1
         $rowsToday += $rowCandleCount
         $warmupRows += $rowWarmupCount
         $continuousRows += $rowContinuousCount
@@ -544,7 +588,7 @@ function Get-Intraday1mCoverageStats {
       if ($readyMa35 -lt $ready80) { $readyMa35 = $ready80 }
       if ($readyMa20 -lt $readyMa35) { $readyMa20 = $readyMa35 }
       if ($readyMacd -lt $ready80) { $readyMacd = $ready80 }
-      $stats.intraday_1m_symbols_today = $viewRows.Count
+      $stats.intraday_1m_symbols_today = $symbolsWithToday
       $stats.intraday_1m_latest_candle_time = $latest
       $stats.intraday_1m_rows_today = $rowsToday
       $stats.today_candle_count = $rowsToday
@@ -558,10 +602,12 @@ function Get-Intraday1mCoverageStats {
       $stats.ready_ge_80 = $ready80
       $stats.ready_ge_200 = $ready200
       $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $latest
-      $stats.intraday_1m_stats_source = "v_fugle_intraday_1m_status"
+      $stats.intraday_1m_stats_source = if ($candidateSymbols.Count -gt 0) { "v_fugle_intraday_1m_status_symbol_batches" } else { "v_fugle_intraday_1m_status" }
       return $stats
     }
-  } catch {}
+  } catch {
+    Write-Log "WARN intraday 1m coverage status query failed symbols=$($candidateSymbols.Count): $($_.Exception.Message)"
+  }
 
   $today = (Get-Date).ToString("yyyy-MM-dd")
   $fallbackRows = @($FallbackRows)
@@ -1062,7 +1108,7 @@ function Write-QuoteHeartbeatStatus {
 
     $eligibleQuoteFloor = if ($effectiveEligibleSymbols -ge 1000) { [int][math]::Ceiling([double]$effectiveEligibleSymbols * 0.9) } else { [math]::Min(400, [math]::Max(1, [int]([double]$effectiveEligibleSymbols * 0.8))) }
     $quotesOk = ($effectiveEligibleQuoteRows -ge $eligibleQuoteFloor -and $quoteAgeSeconds -le $StaleSeconds)
-    $intradayStats = Get-Intraday1mCoverageStats -FallbackRows @()
+    $intradayStats = Get-Intraday1mCoverageStats -FallbackRows @() -Symbols $EligibleSymbols
     if ($intradayStats.intraday_1m_rows_today -le 0 -or $intradayStats.intraday_1m_stale_seconds -ge 999999) {
       if ($null -ne $previousSourcePayload) {
         $intradayStats = Copy-IntradayStatsFromSourcePayload -Stats $intradayStats -Payload $previousSourcePayload
@@ -2869,7 +2915,7 @@ do {
     $combined1mRows = @($minutePayload.minuteRows) + @($direct1mRows)
     $last1mAt = Get-LatestIsoUtc -Rows $combined1mRows -PropertyName "candle_time"
     $quoteAgeSeconds = Get-IsoAgeSeconds -IsoTime $lastQuoteAt -FallbackSeconds $age
-    $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows
+    $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows -Symbols $priorityWarmupSymbols
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count

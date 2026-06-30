@@ -198,8 +198,11 @@ if (fumanScheduleRegistry) {
   if (!activeTasks.includes("Fuman Freshness Gate Full 2010")) {
     issues.push("scripts/fuman-schedule-registry.json policy.activeTasks must include Fuman Freshness Gate Full 2010");
   }
-  if (!expectedDisabledTasks.includes("Fuman Deploy Worktree Clean Monitor 5m")) {
-    issues.push("scripts/fuman-schedule-registry.json policy.expectedDisabledTasks must declare disabled deploy worktree clean monitor");
+  if (expectedDisabledTasks.length > 0) {
+    issues.push("scripts/fuman-schedule-registry.json policy.expectedDisabledTasks must stay empty; old disabled tasks must be retired/removed");
+  }
+  if (!retiredTasks.includes("Fuman Deploy Worktree Clean Monitor 5m")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire deploy worktree clean monitor");
   }
   if (!retiredTasks.includes("Fuman Strategy2 LINE Stop 1330")) {
     issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire Fuman Strategy2 LINE Stop 1330");
