@@ -15,6 +15,7 @@ const PRODUCTION_URL = (process.env.FUMAN_PRODUCTION_URL || "https://fuman-termi
 const ALERT_COOLDOWN_MS = Number(process.env.REALTIME_RADAR_HEALTH_ALERT_COOLDOWN_MS || 15 * 60 * 1000);
 const MIN_INTRADAY_ROWS = Number(process.env.REALTIME_RADAR_HEALTH_MIN_ROWS || 1200);
 const MAX_HEALTH_FAILED_BATCHES = Number(process.env.REALTIME_RADAR_HEALTH_MAX_FAILED_BATCHES || 0);
+const EXPECTED_SOURCE_EXCLUDED_CODES = ["1475", "2254", "7732", "8488"];
 
 function readJson(file, fallback = null) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -80,6 +81,18 @@ function maxSeverity(issues) {
   if (issues.some((item) => item.severity === "critical")) return "critical";
   if (issues.some((item) => item.severity === "warning")) return "warning";
   return "ok";
+}
+
+function normalizedCodes(value) {
+  return Array.isArray(value)
+    ? value.map((code) => String(code || "").replace(/\D/g, "").slice(0, 4)).filter(Boolean).sort()
+    : [];
+}
+
+function sameCodeSet(left, right) {
+  const a = normalizedCodes(left);
+  const b = normalizedCodes(right);
+  return a.length === b.length && a.every((code, index) => code === b[index]);
 }
 
 function parseSchtasksOutput(output) {
@@ -199,7 +212,7 @@ async function notify(report) {
     "",
     `狀態：${report.status}`,
     `資料：${report.radar.date || "--"} ${report.radar.timestamp || "--"} rows=${report.radar.rows}`,
-    `failed=${report.radar.failedBatchCount}/${report.radar.totalBatchCount} stale=${report.radar.staleQuoteCount}`,
+    `failed=${report.radar.failedBatchCount}/${report.radar.totalBatchCount} sourceStale=${report.radar.staleQuoteCount} lastTradeStale=${report.radar.lastTradeStaleCount || 0}`,
     "",
     ...report.issues.slice(0, 8).map((item) => `[${item.severity}] ${item.code}｜${item.message}`),
   ];
@@ -236,6 +249,7 @@ async function main() {
   const failedBatchCount = cleanNumber(latest.failedBatchCount);
   const totalBatchCount = cleanNumber(latest.totalBatchCount);
   const staleQuoteCount = cleanNumber(latest.staleQuoteCount);
+  const lastTradeStaleCount = cleanNumber(latest.lastTradeStaleCount);
   const quoteSourceText = latest.quoteSourceCounts && typeof latest.quoteSourceCounts === "object"
     ? Object.entries(latest.quoteSourceCounts).map(([key, value]) => `${key}:${value}`).join(",")
     : "";
@@ -267,6 +281,9 @@ async function main() {
   }
   if (staleQuoteCount >= 80) pushIssue(issues, "critical", "stale-quotes-high", `staleQuoteCount=${staleQuoteCount} sources=${quoteSourceText || "--"} fallbackRecovered=${fallbackText || "--"}`);
   else if (staleQuoteCount >= 20) pushIssue(issues, "warning", "stale-quotes-elevated", `staleQuoteCount=${staleQuoteCount} sources=${quoteSourceText || "--"} fallbackRecovered=${fallbackText || "--"}`);
+  if (!sameCodeSet(latest.sourceExcludedCodes, EXPECTED_SOURCE_EXCLUDED_CODES)) {
+    pushIssue(issues, "critical", "source-excluded-codes-mismatch", `sourceExcludedCodes=${normalizedCodes(latest.sourceExcludedCodes).join(",") || "--"} expected=${EXPECTED_SOURCE_EXCLUDED_CODES.join(",")}`);
+  }
 
   const failedQueue = readJson(path.join(STATE_DIR, "realtime-radar-failed-batches.json"), {});
   if (cleanNumber(failedQueue.count) > 0) pushIssue(issues, "warning", "failed-queue-pending", `failed queue has ${failedQueue.count} batch(es)`);
@@ -293,9 +310,23 @@ async function main() {
   try {
     productionApi = await readProductionApiLatest();
     const apiMs = payloadUpdatedAtMs(productionApi.payload || {});
+    const apiRows = Array.isArray(productionApi.payload?.rows) ? productionApi.payload.rows.length : 0;
+    const apiReason = String(productionApi.payload?.reason || productionApi.payload?.error || "");
     if (!productionApi.ok && phase !== "preopen") pushIssue(issues, "critical", "production-api-unavailable", `production API unavailable: ${productionApi.payload?.reason || productionApi.payload?.error || "no rows"}`);
     else if (updatedMs && apiMs && Math.abs(updatedMs - apiMs) > 5 * 60 * 1000) {
       pushIssue(issues, "critical", "production-api-runtime-lag", `production API differs from runtime by ${Math.round(Math.abs(updatedMs - apiMs) / 1000)}s`);
+    }
+    if (phase === "intraday" && apiRows < MIN_INTRADAY_ROWS) {
+      pushIssue(issues, "critical", "production-api-row-count-low", `production API rows ${apiRows} below ${MIN_INTRADAY_ROWS}`);
+    }
+    if (phase === "intraday" && apiReason === "stale-radar-cache-quote-view-fallback") {
+      pushIssue(issues, "critical", "production-api-using-quote-view-fallback", "production API is still serving quote-view fallback instead of Supabase radar cache");
+    }
+    if (productionApi.payload?.displayWindow && productionApi.payload.displayWindow !== "09:00-13:30") {
+      pushIssue(issues, "critical", "production-api-display-window", `production API displayWindow=${productionApi.payload.displayWindow}`);
+    }
+    if (Array.isArray(latest.sourceExcludedCodes) && !sameCodeSet(productionApi.payload?.sourceExcludedCodes, latest.sourceExcludedCodes)) {
+      pushIssue(issues, "critical", "production-api-source-exclusions-mismatch", `production API sourceExcludedCodes=${normalizedCodes(productionApi.payload?.sourceExcludedCodes).join(",") || "--"} runtime=${normalizedCodes(latest.sourceExcludedCodes).join(",")}`);
     }
   } catch (error) {
     productionApi = { ok: false, error: String(error?.message || error) };
@@ -338,9 +369,12 @@ async function main() {
       failedBatchCount,
       totalBatchCount,
       staleQuoteCount,
+      lastTradeStaleCount,
       quoteSourceCounts: latest.quoteSourceCounts || {},
       fallbackRecovered: latest.fallbackRecovered || {},
+      sourceExcludedCodes: Array.isArray(latest.sourceExcludedCodes) ? latest.sourceExcludedCodes : [],
       staleQuoteDetails: Array.isArray(latest.staleQuoteDetails) ? latest.staleQuoteDetails.slice(0, 20) : [],
+      lastTradeStaleDetails: Array.isArray(latest.lastTradeStaleDetails) ? latest.lastTradeStaleDetails.slice(0, 20) : [],
       failedBatchDetails: Array.isArray(latest.failedBatchDetails) ? latest.failedBatchDetails.slice(0, 20) : [],
     },
     supabase: {
@@ -357,6 +391,8 @@ async function main() {
       reason: productionApi.payload?.reason || productionApi.payload?.error || "",
       timestamp: productionApi.payload?.timestamp || productionApi.payload?.updatedAt || "",
       rows: Array.isArray(productionApi.payload?.rows) ? productionApi.payload.rows.length : 0,
+      displayWindow: productionApi.payload?.displayWindow || "",
+      sourceExcludedCodes: normalizedCodes(productionApi.payload?.sourceExcludedCodes),
       marketSession: productionApi.payload?.marketSession || null,
       error: productionApi.error || "",
     },

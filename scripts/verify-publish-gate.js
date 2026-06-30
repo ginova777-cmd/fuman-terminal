@@ -166,6 +166,21 @@ if (fumanScheduleRegistry) {
   if (fumanScheduleRegistry.policyVersion !== 3) {
     issues.push(`scripts/fuman-schedule-registry.json policyVersion must be 3; current=${fumanScheduleRegistry.policyVersion || "(missing)"}`);
   }
+  const strategy2LineStart0900 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Start 0900");
+  if (!strategy2LineStart0900) {
+    issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE start as Fuman Strategy2 LINE Start 0900");
+  } else {
+    if (strategy2LineStart0900.time !== "09:00") {
+      issues.push(`scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 time must be 09:00; current=${strategy2LineStart0900.time || "(missing)"}`);
+    }
+    const triggers = Array.isArray(strategy2LineStart0900.expectedTriggers) ? strategy2LineStart0900.expectedTriggers : [];
+    if (triggers.length !== 1 || triggers[0] !== "09:00") {
+      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 expectedTriggers must be exactly 09:00");
+    }
+    if (!String(strategy2LineStart0900.description || "").includes("09:00-12:00")) {
+      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 description must say 09:00-12:00");
+    }
+  }
   const strategy2LineStop1200 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Stop 1200");
   if (!strategy2LineStop1200) {
     issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE stop as Fuman Strategy2 LINE Stop 1200");
@@ -178,7 +193,7 @@ if (fumanScheduleRegistry) {
     }
   }
   if (tasks.some((task) => /Strategy2 LINE Stop 1330/.test(String(task?.taskName || task?.displayName || "")))) {
-    issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1330; Strategy2 runs 08:45-12:00");
+    issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1330; Strategy2 runs 09:00-12:00");
   }
   const freshnessFull2010 = tasks.find((task) => task?.taskName === "\\Fuman Freshness Gate Full 2010");
   if (!freshnessFull2010) {
@@ -213,8 +228,8 @@ if (fumanScheduleRegistry) {
   }
 }
 const fumanScheduleFullText = read("check-fuman-schedule-full.ps1");
-if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1200") || !fumanScheduleFullText.includes("巡邏到 12:00")) {
-  issues.push("check-fuman-schedule-full.ps1 must describe Strategy2 as 08:45-12:00 and name LINE stop as 1200");
+if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1200") || !fumanScheduleFullText.includes("09:00 後每 3 秒巡邏到 12:00")) {
+  issues.push("check-fuman-schedule-full.ps1 must describe Strategy2 as 09:00-12:00 and name LINE stop as 1200");
 }
 if (/Fuman Strategy2 LINE Stop 1330|策略2 當沖雷達[\s\S]{0,120}13:30/.test(fumanScheduleFullText)) {
   issues.push("check-fuman-schedule-full.ps1 must not describe Strategy2 as stopping at 13:30");
@@ -504,6 +519,7 @@ const agentsGuide = read("AGENTS.md");
 const postScanSnapshotAgents = read("post-scan-snapshot-refreshAGENTS.MD");
 const prepareDeploy = read("scripts/prepare-deploy.js");
 const runtimeConfig = read("terminal-runtime-config.js");
+const realtimeApi = read("api/realtime.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
 const openBuyLatestApi = read("api/open-buy-latest.js");
 const latestStrategyApi = read("api/latest-strategy.js");
@@ -1264,6 +1280,17 @@ for (const marker of [
   if (!realtimeRadarApi.includes(marker)) issues.push(`api/realtime-radar-latest.js missing fallback order marker ${marker}`);
 }
 for (const marker of [
+  "REALTIME_QUOTE_SOURCE_ORDER",
+  "fugle,finmind,twse-mis,yahoo-chart",
+  "fetchFugleQuotesForCodes",
+  "fetchFinMindQuotesForCodes",
+  "fetchTwseMisQuotesForCodes",
+  "sourceAttempts",
+  "primarySource",
+]) {
+  if (!realtimeApi.includes(marker)) issues.push(`api/realtime.js missing realtime quote source order marker ${marker}`);
+}
+for (const marker of [
   "DEFAULT_RADAR_LIMIT = 120",
   "FULL_SESSION_RADAR_LIMIT = 1200",
   "MAX_RADAR_LIMIT = 1500",
@@ -1308,11 +1335,17 @@ if (!/REALTIME_RADAR_NOTIFY\s*=\s*"0"/.test(runRealtimeRadar)) {
 }
 for (const marker of [
   "REALTIME_RADAR_PATROL_INTERVAL_MS = \"3000\"",
+  "REALTIME_RADAR_SKIP_SYNC_AFTER_OUTPUT = \"1\"",
+  "REALTIME_RADAR_USE_LOCAL_API = \"1\"",
+  "REALTIME_QUOTE_SOURCE_ORDER = \"fugle,finmind,twse-mis,yahoo-chart\"",
+  "REALTIME_RADAR_EXCLUDED_CODES",
   "REALTIME_RADAR_BATCH_SIZE",
   "REALTIME_RADAR_BATCH_CONCURRENCY",
   "REALTIME_RADAR_BATCH_TIMEOUT_MS",
   "REALTIME_RADAR_BATCH_RETRIES",
   "REALTIME_RADAR_STALE_RESCAN_LIMIT",
+  "REALTIME_FUGLE_PRIMARY_BUDGET_MS",
+  "REALTIME_FINMIND_FALLBACK_BUDGET_MS",
 ]) {
   if (!runRealtimeRadar.includes(marker)) issues.push(`run-realtime-radar.ps1 missing fast/stable radar tuning marker ${marker}`);
 }
@@ -1320,6 +1353,16 @@ for (const marker of [
   "REALTIME_BATCH_SIZE",
   "REALTIME_BATCH_RETRIES",
   "fetchRealtimeBatch",
+  "REALTIME_RADAR_USE_LOCAL_API",
+  "fetchLocalRealtimeBatch",
+  "require(\"../api/realtime\")",
+  "function hasFreshQuote(stock)",
+  "function hasFreshLastTrade(stock, scanTimestamp)",
+  "lastTradeStaleCount",
+  "lastTradeStaleDetails",
+  "REALTIME_RADAR_EXCLUDED_CODES",
+  "sourceExcludedCodes",
+  "isRealtimeRadarSourceCandidate",
   "selectStaleStocksForRescan",
   "normalizeRescanBatches",
   "staleRescanLimit",

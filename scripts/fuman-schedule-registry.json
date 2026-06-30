@@ -311,11 +311,11 @@
     {
       "taskName": "\\Fuman Strategy2 LINE Start 0900",
       "displayName": "Fuman Strategy2 LINE Start 0900",
-      "description": "Strategy2 LINE patrol start; trigger must be 08:45 for the 08:45-12:00 window.",
-      "time": "08:45",
+      "description": "Strategy2 LINE patrol start; trigger must be 09:00 for the 09:00-12:00 official live window.",
+      "time": "09:00",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "08:45"
+        "09:00"
       ]
     },
     {

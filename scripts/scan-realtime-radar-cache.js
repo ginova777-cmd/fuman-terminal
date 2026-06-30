@@ -41,6 +41,11 @@ const REALTIME_BATCH_RETRIES = Math.max(0, Number(process.env.REALTIME_RADAR_BAT
 const REALTIME_BATCH_RETRY_DELAY_MS = Math.max(0, Number(process.env.REALTIME_RADAR_BATCH_RETRY_DELAY_MS || 700));
 const REALTIME_STALE_RESCAN_LIMIT = Math.max(0, Number(process.env.REALTIME_RADAR_STALE_RESCAN_LIMIT || 180));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
+const USE_LOCAL_REALTIME_API = process.env.REALTIME_RADAR_USE_LOCAL_API !== "0";
+const REALTIME_RADAR_EXCLUDED_CODES = new Set(String(process.env.REALTIME_RADAR_EXCLUDED_CODES || "1475,2254,7732,8488")
+  .split(",")
+  .map((code) => code.replace(/\D/g, "").slice(0, 4))
+  .filter(Boolean));
 const MARKET_START_MINUTES = 9 * 60;
 const MARKET_END_MINUTES = 13 * 60 + 30;
 const MARKET_START_SECONDS = MARKET_START_MINUTES * 60;
@@ -229,7 +234,11 @@ function quoteAgeSeconds(scanTimestamp, quoteTime) {
   return Math.abs(scanSeconds - quoteSeconds);
 }
 
-function hasFreshQuote(stock, scanTimestamp) {
+function hasFreshQuote(stock) {
+  return stock?.isRealtime === true && cleanNumber(stock.close) > 0;
+}
+
+function hasFreshLastTrade(stock, scanTimestamp) {
   const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
   return age != null && age <= MAX_QUOTE_AGE_SECONDS;
 }
@@ -248,31 +257,9 @@ function isMarketTime(parts = taipeiParts()) {
   return minutes >= MARKET_START_MINUTES && minutes <= MARKET_END_MINUTES;
 }
 
-function secondsOfDay(value) {
-  const match = String(value || "").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (!match) return null;
-  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
-}
-
-function quoteAgeSeconds(scanTimestamp, quoteTime) {
-  const scanSeconds = secondsOfDay(scanTimestamp);
-  const quoteSeconds = secondsOfDay(quoteTime);
-  if (scanSeconds == null || quoteSeconds == null) return null;
-  return Math.abs(scanSeconds - quoteSeconds);
-}
-
-function hasFreshQuote(stock, scanTimestamp) {
-  const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
-  return age != null && age <= MAX_QUOTE_AGE_SECONDS;
-}
-
-function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
-  const chunks = [];
-  for (let index = 0; index < stocks.length; index += size) {
-    const batchStocks = stocks.slice(index, index + size);
-    chunks.push({ stocks: batchStocks, codes: batchStocks.map((stock) => stock.code).filter(Boolean) });
-  }
-  return chunks.filter((batch) => batch.codes.length);
+function isRealtimeRadarSourceCandidate(stock) {
+  const code = String(stock?.code || "");
+  return isIntradayTradable(stock) && !REALTIME_RADAR_EXCLUDED_CODES.has(code);
 }
 
 async function fetchJson(url, timeout = 30000) {
@@ -292,6 +279,46 @@ async function fetchJson(url, timeout = 30000) {
   }
 }
 
+function localRealtimeApiHandler() {
+  if (!localRealtimeApiHandler.instance) {
+    localRealtimeApiHandler.instance = require("../api/realtime");
+  }
+  return localRealtimeApiHandler.instance;
+}
+
+async function fetchLocalRealtimeBatch(codes = []) {
+  const handler = localRealtimeApiHandler();
+  return await new Promise((resolve, reject) => {
+    const request = {
+      method: "GET",
+      query: { codes: codes.join(",") },
+      url: `/api/realtime?codes=${encodeURIComponent(codes.join(","))}`,
+    };
+    const response = {
+      statusCode: 200,
+      headers: {},
+      setHeader(key, value) {
+        this.headers[key] = value;
+      },
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        if (this.statusCode >= 400 || payload?.ok === false) {
+          reject(new Error(payload?.error || `local realtime API HTTP ${this.statusCode}`));
+          return;
+        }
+        resolve(payload);
+      },
+      end() {
+        resolve({});
+      },
+    };
+    Promise.resolve(handler(request, response)).catch(reject);
+  });
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -301,6 +328,7 @@ function retryDelayMs(attempt = 0) {
 }
 
 async function fetchRealtimeBatch(codes = [], timeout = REALTIME_BATCH_TIMEOUT_MS) {
+  if (USE_LOCAL_REALTIME_API) return fetchLocalRealtimeBatch(codes);
   return fetchJson(`${BASE_URL}/api/realtime?codes=${encodeURIComponent(codes.join(","))}&t=${Date.now()}`, timeout);
 }
 
@@ -332,7 +360,7 @@ async function fetchStocks() {
         percent: cleanNumber(stock.pct ?? stock.percent),
         value: cleanNumber(stock.value),
         tradeVolume: cleanNumber(stock.volume ?? stock.tradeVolume),
-      })).filter((stock) => stock.code && stock.name);
+      })).filter((stock) => stock.code && stock.name && isRealtimeRadarSourceCandidate(stock));
     }
   } catch {}
 
@@ -350,7 +378,7 @@ async function fetchStocks() {
       value: cleanNumber(stock.TradeValue || stock["成交金額"]),
       tradeVolume: cleanNumber(stock.TradeVolume || stock["成交股數"]),
     };
-  }).filter((stock) => stock.code && stock.name && stock.close);
+  }).filter((stock) => stock.code && stock.name && stock.close && isRealtimeRadarSourceCandidate(stock));
 }
 
 async function runWithConcurrency(items, limit, worker) {
@@ -369,7 +397,8 @@ async function fetchRealtime(stocks) {
   const batchSize = REALTIME_BATCH_SIZE;
   const failedBatches = [];
   const apiErrors = [];
-  const fallbackRecovered = { fugle: 0, yahoo: 0 };
+  const fallbackRecovered = { fugle: 0, finmind: 0, twseMis: 0, yahoo: 0 };
+  const sourceAttempts = [];
   const batches = [];
   for (let i = 0; i < stocks.length; i += batchSize) {
     const batchStocks = stocks.slice(i, i + batchSize);
@@ -398,7 +427,12 @@ async function fetchRealtime(stocks) {
       (payload.quotes || []).forEach((quote) => quotes.set(quote.code, quote));
       (payload.errors || []).forEach((error) => apiErrors.push({ ...error, parentBatch: batchIndex }));
       fallbackRecovered.fugle += Number(payload.fallbackRecovered?.fugle || 0);
+      fallbackRecovered.finmind += Number(payload.fallbackRecovered?.finmind || 0);
+      fallbackRecovered.twseMis += Number(payload.fallbackRecovered?.twseMis || 0);
       fallbackRecovered.yahoo += Number(payload.fallbackRecovered?.yahoo || 0);
+      if (Array.isArray(payload.sourceAttempts)) {
+        sourceAttempts.push(...payload.sourceAttempts.map((item) => ({ ...item, parentBatch: batchIndex })));
+      }
     } catch (error) {
       failedBatches.push({
         batchIndex,
@@ -429,7 +463,7 @@ async function fetchRealtime(stocks) {
     const source = stock.quoteSource || "unknown";
     quoteSourceCounts[source] = (quoteSourceCounts[source] || 0) + 1;
   }
-  return { stocks: liveStocks, failedBatches, apiErrors, fallbackRecovered, quoteSourceCounts, totalBatches: batches.length, quoteCount: quotes.size };
+  return { stocks: liveStocks, failedBatches, apiErrors, fallbackRecovered, quoteSourceCounts, sourceAttempts, totalBatches: batches.length, quoteCount: quotes.size };
 }
 
 function staleRescanPriority(stock) {
@@ -764,56 +798,38 @@ async function main() {
   const queuedBatches = hydrateQueuedBatches(readFailedBatchQueue(), rawStocks);
   const realtime = await fetchRealtime(rawStocks);
   const liveStocks = realtime.stocks;
-  const freshStocks = liveStocks.filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
-  const staleStocks = liveStocks.filter((stock) => stock.isRealtime === true && !hasFreshQuote(stock, timestamp));
+  const freshStocks = liveStocks.filter((stock) => hasFreshQuote(stock));
+  const staleStocks = liveStocks.filter((stock) => !hasFreshQuote(stock));
+  const lastTradeStaleStocks = freshStocks.filter((stock) => !hasFreshLastTrade(stock, timestamp));
   const staleQuoteCount = staleStocks.length;
+  const lastTradeStaleCount = lastTradeStaleStocks.length;
   const staleQuoteDetails = buildStaleQuoteDetails(staleStocks, timestamp);
+  const lastTradeStaleDetails = buildStaleQuoteDetails(lastTradeStaleStocks, timestamp);
   const failedBatchDetails = buildFailedBatchDetails(realtime.failedBatches);
   const externalSourceIssues = buildExternalSourceIssues({ failedBatchDetails, staleQuoteDetails });
   const previousPayload = readJson(OUT_FILE, null);
   const currentRows = buildRadarRows(freshStocks, detectedAt, timestamp);
   const rows = mergeRadarSessionRows(previousPayload, currentRows, timestamp, key);
-  const runId = `realtime-radar-${key}-${detectedAt}`;
-  const staleQuoteSeverity = staleQuoteCount >= 80 ? "critical" : staleQuoteCount > 0 ? "warning" : "";
-  const degradedReasons = [
-    realtime.failedBatches.length ? "some realtime batches failed" : "",
-    staleQuoteSeverity ? `stale quotes detected (${staleQuoteCount})` : "",
-  ].filter(Boolean);
-  const freshnessDecision = staleQuoteSeverity === "critical"
-    ? "degraded_stale_quotes_high"
-    : degradedReasons.length ? "degraded" : "fresh";
   let payload = {
-    ok: true,
-    runId,
     source: "mini-pc-realtime-radar",
-    status: freshnessDecision === "fresh" ? "ok" : freshnessDecision,
+    status: realtime.failedBatches.length ? "degraded" : "ok",
     date: key,
-    usedDate: key,
-    sourceDate: key,
     timestamp,
     updatedAt: new Date(detectedAt).toISOString(),
     updatedAtMs: detectedAt,
-    freshness: {
-      decision: freshnessDecision,
-      reason: degradedReasons.length ? `${degradedReasons.join("; ")}; stale/no-quote rows excluded` : "fresh realtime scan",
-      severity: staleQuoteSeverity || (realtime.failedBatches.length ? "warning" : "ok"),
-      checkedAt: new Date(detectedAt).toISOString(),
-      maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
-      staleQuoteCount,
-      failedBatchCount: realtime.failedBatches.length,
-      totalBatchCount: realtime.totalBatches,
-      quoteCount: realtime.quoteCount,
-    },
     staleAfterMs: STALE_AFTER_MS,
     maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
     staleQuoteCount,
+    lastTradeStaleCount,
     failedBatchCount: realtime.failedBatches.length,
     totalBatchCount: realtime.totalBatches,
     quoteCount: realtime.quoteCount,
     quoteSourceCounts: realtime.quoteSourceCounts,
+    sourceAttempts: realtime.sourceAttempts,
     fallbackRecovered: realtime.fallbackRecovered,
     apiErrorDetails: realtime.apiErrors,
     staleQuoteDetails,
+    lastTradeStaleDetails,
     failedBatchDetails,
     externalSourceIssues,
     rows,
@@ -825,6 +841,7 @@ async function main() {
     batchTimeoutMs: REALTIME_BATCH_TIMEOUT_MS,
     batchRetries: REALTIME_BATCH_RETRIES,
     staleRescanLimit: REALTIME_STALE_RESCAN_LIMIT,
+    sourceExcludedCodes: [...REALTIME_RADAR_EXCLUDED_CODES],
     currentScanCount: currentRows.length,
     longCount: rows.filter((row) => row.side === "long").length,
     shortCount: rows.filter((row) => row.side === "short").length,
@@ -835,26 +852,18 @@ async function main() {
       payload = {
         ...previous,
         status: "degraded_keepalive",
-        freshness: {
-          decision: "degraded_keepalive",
-          reason: "current scan failed; keeping today's earlier rows and exposing failed batches",
-          checkedAt: new Date(detectedAt).toISOString(),
-          maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
-          staleQuoteCount,
-          failedBatchCount: realtime.failedBatches.length,
-          totalBatchCount: realtime.totalBatches,
-          quoteCount: realtime.quoteCount,
-        },
         timestamp,
         updatedAt: new Date(detectedAt).toISOString(),
         updatedAtMs: detectedAt,
         staleAfterMs: STALE_AFTER_MS,
         maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
         staleQuoteCount,
+        lastTradeStaleCount,
         failedBatchCount: realtime.failedBatches.length,
         totalBatchCount: realtime.totalBatches,
         quoteCount: realtime.quoteCount,
         staleQuoteDetails,
+        lastTradeStaleDetails,
         failedBatchDetails,
         externalSourceIssues,
         lastFailedScanAt: timestamp,
@@ -867,7 +876,7 @@ async function main() {
   payload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, payload);
   await maybeSendRealtimeRadarAlert(payload);
-  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
+  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} lastTradeStale ${payload.lastTradeStaleCount || 0} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
 
   const staleStocksForRescan = selectStaleStocksForRescan(staleStocks);
   const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocksForRescan).map((batch) => ({ ...batch, reason: "stale_quote" }))];
@@ -877,49 +886,38 @@ async function main() {
     deferredRetry = retry;
     if (retry.quotes.size) {
       const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes)
-        .filter((stock) => stock.isRealtime === true && hasFreshQuote(stock, timestamp));
+        .filter((stock) => hasFreshQuote(stock));
       const retryRows = buildRadarRows(retryStocks, detectedAt, timestamp);
       const mergedRows = mergeRadarSessionRows(payload, retryRows, timestamp, key);
       if (mergedRows.length > payload.rows.length || radarRowsSignature(mergedRows) !== radarRowsSignature(payload.rows)) {
         const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
-        const remainingStaleSeverity = remainingStaleStocks.length >= 80 ? "critical" : remainingStaleStocks.length > 0 ? "warning" : "";
-        const retryFailedCount = retry.failedBatches?.length || 0;
-        const deferredDecision = remainingStaleSeverity === "critical"
-          ? "degraded_stale_quotes_high_after_deferred_rescan"
-          : remainingStaleSeverity || retryFailedCount ? "degraded_after_deferred_rescan" : "fresh_after_deferred_rescan";
+        const retryLiveStocksByCode = new Map(liveStocks.map((stock) => [String(stock.code || ""), stock]));
+        for (const retryStock of retryStocks) retryLiveStocksByCode.set(String(retryStock.code || ""), retryStock);
+        const patchedFreshStocks = [...retryLiveStocksByCode.values()].filter((stock) => hasFreshQuote(stock));
+        const patchedLastTradeStaleStocks = patchedFreshStocks.filter((stock) => !hasFreshLastTrade(stock, timestamp));
         const patchedStaleQuoteDetails = buildStaleQuoteDetails(remainingStaleStocks, timestamp);
+        const patchedLastTradeStaleDetails = buildStaleQuoteDetails(patchedLastTradeStaleStocks, timestamp);
         const patchedFailedBatchDetails = buildFailedBatchDetails(retry.failedBatches || []);
         const patchedPayload = {
           ...payload,
-          status: deferredDecision === "fresh_after_deferred_rescan" ? "ok_after_deferred_rescan" : deferredDecision,
-          freshness: {
-            decision: deferredDecision,
-            reason: remainingStaleStocks.length
-              ? `deferred stale/failed batches were rescanned and merged; ${remainingStaleStocks.length} stale quotes remain`
-              : "deferred stale/failed batches were rescanned and merged",
-            severity: remainingStaleSeverity || (retryFailedCount ? "warning" : "ok"),
-            checkedAt: new Date().toISOString(),
-            maxQuoteAgeSeconds: MAX_QUOTE_AGE_SECONDS,
-            staleQuoteCount: remainingStaleStocks.length,
-            failedBatchCount: retryFailedCount,
-            totalBatchCount: deferredBatches.length,
-            quoteCount: retry.quotes.size,
-          },
+          status: "ok_after_deferred_rescan",
           rows: mergedRows,
           longCount: mergedRows.filter((row) => row.side === "long").length,
           shortCount: mergedRows.filter((row) => row.side === "short").length,
           recoveredBatchCount: retry.recoveredBatches,
           staleRescanCount: staleStocksForRescan.length,
           staleQuoteCount: remainingStaleStocks.length,
+          lastTradeStaleCount: patchedLastTradeStaleStocks.length,
           staleQuoteDetails: patchedStaleQuoteDetails,
+          lastTradeStaleDetails: patchedLastTradeStaleDetails,
           failedBatchDetails: patchedFailedBatchDetails,
           externalSourceIssues: buildExternalSourceIssues({ failedBatchDetails: patchedFailedBatchDetails, staleQuoteDetails: patchedStaleQuoteDetails }),
         };
         writeJson(OUT_FILE, patchedPayload);
         await safeUploadRealtimeRadarPayload(patchedPayload);
         await maybeSendRealtimeRadarAlert(patchedPayload);
-        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} ${staleQuoteLogText(patchedPayload.staleQuoteDetails, patchedPayload.staleQuoteCount)} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
+        console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} ${staleQuoteLogText(patchedPayload.staleQuoteDetails, patchedPayload.staleQuoteCount)} lastTradeStale ${patchedPayload.lastTradeStaleCount || 0} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }
   }
