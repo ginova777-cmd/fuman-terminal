@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const scanOpenBuy = require("../api/scan-open-buy");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
@@ -56,6 +57,35 @@ function writeSupabaseStatus(ok, details = {}) {
     checkedAt: new Date().toISOString(),
     ...details,
   });
+}
+
+function runSupabasePublishHardGate(stage = "strategy1-complete-publish") {
+  const result = spawnSync(process.execPath, ["--use-system-ca", "scripts/verify-supabase-publish-hard-gate.js"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      FUMAN_ALERT_SOURCE: "scan-open-buy-cache.js",
+      FUMAN_PUBLISH_STAGE: stage,
+    },
+    timeout: 180000,
+    windowsHide: true,
+  });
+  const stdout = String(result.stdout || "").trim();
+  const stderr = String(result.stderr || "").trim();
+  if (result.error || result.status !== 0) {
+    writeSupabaseStatus(false, {
+      skipped: true,
+      reason: "supabase publish hard gate blocked",
+      gate: "supabase-publish-hard-gate",
+      exitCode: result.status ?? 1,
+      stdout: stdout.slice(0, 4000),
+      stderr: stderr.slice(0, 4000),
+    });
+    throw new Error(`Supabase publish hard gate blocked Strategy1 publish: ${stderr || stdout || result.error?.message || "unknown gate failure"}`);
+  }
+  console.log(`open-buy supabase publish hard gate ok: ${stdout.split(/\r?\n/).slice(-1)[0] || "ready"}`);
+  return true;
 }
 
 async function verifyOpenBuySupabaseReadback(baseUrl, expected) {
@@ -629,6 +659,7 @@ async function main() {
       await publishRunningStatus(output, "blocked non-complete publish to latest");
       throw new Error(`Refusing to publish non-complete open-buy output: status=${output.scanStatus} complete=${output.complete}`);
     }
+    runSupabasePublishHardGate("strategy1-complete-publish");
     if (!OPEN_BUY_API_ONLY) {
       fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
       fs.writeFileSync(OUT_FILE, `${JSON.stringify(output, null, 2)}\n`);

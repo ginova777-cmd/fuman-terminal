@@ -2231,8 +2231,25 @@ for (const marker of [
   "SUPABASE_OPEN_BUY_RESULTS_TABLE",
   "incomplete scan is not eligible for run_id complete gate",
   "open-buy supabase run_id gate ok",
+  "runSupabasePublishHardGate",
+  "verify-supabase-publish-hard-gate.js",
+  "Supabase publish hard gate blocked Strategy1 publish",
 ]) {
   if (!openBuyScanner.includes(marker)) issues.push(`scan-open-buy-cache.js missing strategy1 run_id complete gate marker ${marker}`);
+}
+const strategy1AutonomyVerifier = read("scripts/verify-strategy1-autonomy-readonly.js");
+for (const marker of [
+  "runSupabasePublishHardGate",
+  "runPublishSourceGateAlertSmoke",
+  "sourceCoverage",
+  "staleSeconds",
+  "latestRunId",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+  "publishAllowed",
+]) {
+  if (!strategy1AutonomyVerifier.includes(marker)) issues.push(`verify-strategy1-autonomy-readonly.js missing Strategy1 autonomy source gate marker ${marker}`);
 }
 for (const marker of ["Write-OpenBuyReceipt", "scan-receipts", "refresh-desktop-route-snapshot.ps1"]) {
   if (!runOpenBuy.includes(marker)) issues.push(`run-open-buy.ps1 missing standalone receipt/snapshot marker ${marker}`);
