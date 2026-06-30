@@ -37,6 +37,7 @@ assert(aiGuardSource.includes('panel.dataset.marketApiAi = "live-contract"'), "A
 assert(aiGuardSource.includes('panel.dataset.heatmapApi = "live-contract"'), "heatmap live-contract marker missing");
 assert(aiGuardSource.includes("staleLegacyPanel"), "AI stale first-paint detector missing");
 assert(aiGuardSource.includes("staleLegacyHeatmap"), "heatmap stale first-paint detector missing");
+assert(aiGuardSource.includes("hyphenDates"), "heatmap stale detector must catch YYYY-MM-DD first-paint dates");
 assert(aiGuardSource.includes("setMarketChrome"), "heatmap first-paint guard must update market timestamp chrome");
 assert(aiGuardSource.includes("啟動市場總覽"), "heatmap first-paint guard must start before old snapshot can settle");
 assert(aiGuardSource.includes("不使用舊 heatmap cache 當正常資料"), "heatmap stale/no-data display must reject old cache");

@@ -269,7 +269,8 @@ function installMarketHeatmapLiveContractPanel() {
     const today = todayLabel();
     const shortDates = [...text.matchAll(/\b(\d{2}\/\d{2})\b/g)].map((match) => match[1]);
     const compactDates = [...text.matchAll(/\b(20\d{6})\b/g)].map((match) => dateLabel(match[1]));
-    if ([...shortDates, ...compactDates].some((value) => value && value !== today)) return true;
+    const hyphenDates = [...text.matchAll(/\b20\d{2}-(\d{2})-(\d{2})\b/g)].map((match) => `${match[1]}/${match[2]}`);
+    if ([...shortDates, ...compactDates, ...hyphenDates].some((value) => value && value !== today)) return true;
     return Boolean(duringSession() && panel.dataset.heatmapApi !== "live-contract" && /快取|snapshot|收盤|舊/.test(text));
   }
 
@@ -374,6 +375,7 @@ function installMarketHeatmapLiveContractPanel() {
       setLoadingHeatmap("啟動市場總覽");
     }
   });
+  setInterval(guardStaleFirstPaint, 800);
   setInterval(() => run(false), 5000);
   document.addEventListener("pointerdown", (event) => {
     const button = event.target.closest?.('[data-market-mode="overview"],[data-view="market"]');
