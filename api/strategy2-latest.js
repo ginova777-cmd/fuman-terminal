@@ -404,13 +404,19 @@ function attachStrategy2SelfCheck(payload, options = {}) {
   const updatedAt = payload?.updatedAt || payload?.generatedAt || "";
   const updatedAtOk = Number.isFinite(Date.parse(String(updatedAt || "")));
   const qualityStatus = String(payload?.qualityStatus || "");
+  const publishBlocked = payload?.publishBlocked === true || payload?.transport?.publishBlocked === true;
+  const publishBlockedReason = payload?.publishBlockedReason || payload?.transport?.publishBlockedReason || "";
+  const failClosed = publishBlocked || /^(degraded|not_ready|stale|blocked)$/i.test(qualityStatus);
+  const failClosedReason = publishBlockedReason || payload?.resourceReadiness?.reason || payload?.reason || "";
   const issues = [];
+  const warnings = [];
   if (!sourceOk) issues.push("official_source_not_confirmed");
   if (!payload?.runId && !payload?.transport?.runId) issues.push("run_id_missing");
   if (!marketDate) issues.push("market_date_missing");
   if (!updatedAtOk) issues.push("updated_at_invalid");
   if (!qualityStatus) issues.push("quality_status_missing");
-  const status = options.status || (payload?.ok === false ? "blocked" : sourceOk && !issues.length ? "ready" : cacheSource.includes("runtime") || cacheSource.includes("snapshot") ? "degraded" : issues.length ? "degraded" : "ready");
+  if (failClosed) warnings.push("strategy2_fail_closed_not_fresh_live");
+  const status = options.status || (payload?.ok === false ? "blocked" : failClosed ? "degraded" : sourceOk && !issues.length ? "ready" : cacheSource.includes("runtime") || cacheSource.includes("snapshot") ? "degraded" : issues.length ? "degraded" : "ready");
   return {
     ...payload,
     selfCheck: {
@@ -418,7 +424,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       contract: "api-self-check-v1",
       checkedAt: new Date().toISOString(),
       status,
-      reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : "ready"),
+      reason: options.reason || payload?.detail || failClosedReason || payload?.reason || (issues.length ? issues.join(";") : "ready"),
       officialSource: "Supabase complete-run: v_strategy2_latest_complete_run + strategy2_scan_results",
       sourceOk,
       cacheSource,
@@ -426,6 +432,13 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       marketDate,
       updatedAt,
       qualityStatus,
+      dataReadiness: {
+        status: failClosed ? "fail_closed" : "fresh_live_ready",
+        failClosed,
+        publishBlocked,
+        publishBlockedReason,
+        reason: failClosedReason,
+      },
       freshness: {
         runId: payload?.runId || payload?.transport?.runId || "",
         marketDate,
@@ -434,10 +447,10 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       },
       transport: payload?.transport || null,
       issues,
+      warnings,
     },
   };
 }
-
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return attachStrategy2SelfCheck(payload);
   const limit = options.limit || 60;
@@ -625,7 +638,7 @@ function attachStrategy2Readiness(payload, readiness, tradingDay) {
   const publishBlockedReason = publishBlocked
     ? effectiveReadiness.reason || effectiveReadiness.status || "strategy2 readiness not ready"
     : "";
-  return {
+  const nextPayload = {
     ...payload,
     resourceReadiness: effectiveReadiness,
     publishBlocked,
@@ -639,8 +652,8 @@ function attachStrategy2Readiness(payload, readiness, tradingDay) {
       publishBlockedReason,
     },
   };
+  return attachStrategy2SelfCheck(nextPayload);
 }
-
 function hasStrategy2PayloadRows(payload) {
   return Array.isArray(payload?.events) && payload.events.length > 0
     || Array.isArray(payload?.records) && payload.records.length > 0
@@ -906,5 +919,6 @@ module.exports = async function handler(request, response) {
     response.status(503).json(apiOnlyError("strategy2_api_only_failed", error?.message || String(error)));
   }
 };
+
 
 

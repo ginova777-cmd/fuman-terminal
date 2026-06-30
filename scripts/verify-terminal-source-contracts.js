@@ -6,9 +6,31 @@ const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supa
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-source-contracts");
 const STRICT_WARNINGS = process.argv.includes("--strict") || process.env.TERMINAL_SOURCE_CONTRACT_STRICT_WARNINGS === "1";
+const ROUTE_ALIASES = new Map([
+  ["open-buy", "strategy1"],
+  ["open-buy-latest", "strategy1"],
+  ["strategy2-latest", "strategy2"],
+  ["strategy3-latest", "strategy3"],
+  ["strategy4-latest", "strategy4"],
+  ["strategy5-latest", "strategy5"],
+  ["institution-latest", "institution"],
+  ["chip", "institution"],
+  ["cb-detect", "cb"],
+  ["cb-detect-latest", "cb"],
+  ["warrant-flow", "warrant"],
+  ["warrant-flow-latest", "warrant"],
+  ["realtime-radar-latest", "realtime-radar"],
+  ["market-overview", "market"],
+]);
+
+function normalizeRouteFilter(value) {
+  const key = String(value || "").trim().replace(/^\/+api\//, "").replace(/^\/+/, "").replace(/\?.*$/, "");
+  return ROUTE_ALIASES.get(key) || key;
+}
+
 const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--routes="))?.slice("--routes=".length) || "")
   .split(",")
-  .map((item) => item.trim())
+  .map(normalizeRouteFilter)
   .filter(Boolean));
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
