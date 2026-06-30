@@ -15,6 +15,7 @@ const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
 const AI_WINDOW_START_SECONDS = 9 * 60 * 60;
 const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
+const AI_TODAY_REQUIRED_START_SECONDS = AI_WINDOW_START_SECONDS;
 const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
 const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
 
@@ -104,6 +105,10 @@ function taipeiClock(now = new Date()) {
 
 function isMarketAiDetectWindow(clock = taipeiClock()) {
   return clock.seconds >= AI_WINDOW_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
+}
+
+function isMarketAiTodayRequiredWindow(clock = taipeiClock()) {
+  return clock.seconds >= AI_TODAY_REQUIRED_START_SECONDS;
 }
 
 function compactDate(value) {
@@ -221,7 +226,7 @@ function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
 }
 
 function requiresTodayDetection(clock, session) {
-  return Boolean(isMarketAiDetectWindow(clock) && !session?.closed && !session?.hasTodayMarketData);
+  return Boolean(isMarketAiTodayRequiredWindow(clock) && !session?.closed && !session?.hasTodayMarketData);
 }
 
 function canServeCachedPayload(request, detectWindowActive, mustDetectToday) {

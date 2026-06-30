@@ -61,10 +61,17 @@ assert(
 );
 assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
+assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after 09:00 until same-day data exists");
 assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
 assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");
 assert(heatmapApiSource.includes("health.isHealthy !== false"), "heatmap memory cache must enforce health before serving");
 assert(heatmapApiSource.includes("heatmapCache = isUsableHeatmapMemoryPayload(payload, clock)"), "heatmap API must not store unusable live payloads in memory cache");
+assert(heatmapApiSource.includes('HEATMAP_QUOTE_TABLE = process.env.HEATMAP_QUOTE_TABLE || "fugle_quotes_live"'), "heatmap API must use fugle_quotes_live as the formal live source");
+assert(heatmapApiSource.includes("fetchSupabaseHeatmapQuotes") && heatmapApiSource.includes("strictQuoteContract"), "heatmap API must expose the strict quote contract");
+assert(heatmapApiSource.includes("supabaseHeatmapQuoteRejectReason") && heatmapApiSource.includes('"not_today"') && heatmapApiSource.includes('"stale"'), "heatmap API must reject stale/non-today Fugle rows");
+assert(heatmapApiSource.includes("forceLiveContract") && heatmapApiSource.includes("desktop-live-contract") && heatmapApiSource.includes("market-ai-live"), "heatmap API must let formal live consumers bypass after-close snapshot fallback");
+assert(heatmapApiSource.includes("fallbackUsed") && heatmapApiSource.includes("fallbackReason") && heatmapApiSource.includes("twse-tpex-mis"), "heatmap API must label MIS as degraded fallback only");
+assert(heatmapApiSource.includes("isFinalCloseHeatmapPayload(snapshot.payload, clock)") && heatmapApiSource.includes("isFinalCloseHeatmapPayload(localSnapshot.payload, clock)"), "heatmap snapshot/cache must only serve same-day final close payloads");
 assert(activeTasks.has("Fuman Freshness Gate Fast 0845-1645"), "schedule registry missing fast live freshness gate");
 assert(activeTasks.has("Fuman Freshness Gate Full 2010"), "schedule registry missing full freshness gate");
 assert(activeTasks.has("Fuman Terminal Local Freshness Verify 0830-2230"), "schedule registry missing local terminal freshness verify");

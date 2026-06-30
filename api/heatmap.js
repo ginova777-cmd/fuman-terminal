@@ -19,11 +19,17 @@ async function fetchText(url, options = {}, timeout = 15000) {
 }
 
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 let heatmapCache = null;
 const HEATMAP_CACHE_MS = 15000;
 const ROOT = require("path").resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
+const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_ROOT });
+const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_ROOT });
+const HEATMAP_QUOTE_TABLE = process.env.HEATMAP_QUOTE_TABLE || "fugle_quotes_live";
+const HEATMAP_QUOTE_MIN_ROWS = Math.max(500, Number(process.env.HEATMAP_QUOTE_MIN_ROWS || 500) || 500);
+const HEATMAP_QUOTE_MAX_AGE_SECONDS = Math.max(30, Number(process.env.HEATMAP_QUOTE_MAX_AGE_SECONDS || 180) || 180);
 const HEATMAP_LATEST_FILE = "heatmap-latest.json";
 const HEATMAP_WINDOW_START_SECONDS = 9 * 60 * 60;
 const HEATMAP_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
@@ -42,8 +48,10 @@ function isUsableHeatmapMemoryPayload(payload, clock = taipeiClock()) {
   const today = String(clock?.date || "").replace(/\D/g, "") || taipeiDateKey();
   const health = payload?.health || {};
   const stockCount = cleanNumber(health.stockCount || payload?.stockCount || heatmapPayloadRows(payload).length);
+  const meta = heatmapPayloadMeta(payload);
   if (stockCount < 500) return false;
   if (health.today && String(health.today) !== today) return false;
+  if (meta.rows >= 500 && meta.maxDate && meta.maxDate !== today) return false;
   return health.isHealthy !== false;
 }
 
@@ -97,6 +105,49 @@ function taipeiClock(now = new Date()) {
     time: `${parts.hour}:${parts.minute}:${parts.second}`,
     seconds: hour * 60 * 60 + minute * 60 + second,
   };
+}
+
+function compactDateKeyFromValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length >= 8) return digits.slice(0, 8);
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(parsed)).replace(/\D/g, "");
+}
+
+function taipeiTimeKeyFromValue(value) {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) return normalizeHeatmapTime(value);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(parsed)).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.hour || "00"}${parts.minute || "00"}${parts.second || "00"}`;
+}
+
+function secondsSinceValue(value) {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+}
+
+function boolValue(value) {
+  if (value === true || value === 1) return true;
+  const text = String(value || "").trim().toLowerCase();
+  return text === "true" || text === "1" || text === "yes";
 }
 
 function isHeatmapDetectWindow(clock = taipeiClock()) {
@@ -182,7 +233,7 @@ function snapshotHeatmapPayload(snapshot, clock) {
   }, clock, snapshot.reason || (snapshot.locked ? "after-1330-cache" : "supabase-snapshot"));
 }
 
-function buildHeatmapHealth(sectors, quoteMap) {
+function buildHeatmapHealth(sectors, quoteMap, sourceInfo = {}) {
   const today = taipeiDateKey();
   const stocks = sectors.flatMap((sector) => sector.stocks || []);
   const badDate = stocks.filter((stock) => String(stock.quoteDate || "") !== today).length;
@@ -190,6 +241,8 @@ function buildHeatmapHealth(sectors, quoteMap) {
   const noPrice = stocks.filter((stock) => !cleanNumber(stock.close)).length;
   const zeroVolume = stocks.filter((stock) => !cleanNumber(stock.volume)).length;
   const quoteTimes = stocks.map((stock) => String(stock.quoteTime || "")).filter(Boolean).sort();
+  const hasStrictSource = Boolean(sourceInfo && Object.keys(sourceInfo).length);
+  const sourceHealthy = !hasStrictSource || (sourceInfo.ok === true && sourceInfo.fallbackUsed !== true);
   return {
     today,
     stockCount: stocks.length,
@@ -199,7 +252,19 @@ function buildHeatmapHealth(sectors, quoteMap) {
     noPrice,
     zeroVolume,
     quoteTime: quoteTimes[quoteTimes.length - 1] || "",
-    isHealthy: stocks.length >= 500 && badDate === 0 && notRealtime === 0 && noPrice === 0,
+    formalSource: sourceInfo.source || "",
+    formalSourceOk: hasStrictSource ? sourceInfo.ok === true : true,
+    formalSourceRows: cleanNumber(sourceInfo.rows),
+    formalSourceRawRows: cleanNumber(sourceInfo.rawRows),
+    formalSourceLatestUpdatedAt: sourceInfo.latestUpdatedAt || "",
+    formalSourceLatestAgeSeconds: sourceInfo.latestAgeSeconds ?? null,
+    formalSourceMaxAgeSeconds: sourceInfo.maxAgeSeconds || HEATMAP_QUOTE_MAX_AGE_SECONDS,
+    formalSourceFallbackUsed: sourceInfo.fallbackUsed === true,
+    formalSourceFallbackReason: sourceInfo.fallbackReason || "",
+    formalSourceRejectedRows: cleanNumber(sourceInfo.rejectedCount),
+    formalSourceRejectedReasons: sourceInfo.rejectedReasons || {},
+    formalSourceIssue: sourceInfo.issue || "",
+    isHealthy: stocks.length >= 500 && badDate === 0 && notRealtime === 0 && noPrice === 0 && sourceHealthy,
     cacheTtlMs: HEATMAP_CACHE_MS,
   };
 }
@@ -2734,6 +2799,164 @@ async function fetchCompanyProfiles() {
   return profileMap;
 }
 
+async function fetchSupabaseRows(pathAndQuery, timeout = 5000) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_not_configured");
+  const text = await fetchText(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  }, timeout);
+  return text.trim() ? JSON.parse(text) : [];
+}
+
+async function fetchSupabasePagedRows(table, select, order, maxRows = 3000, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await fetchSupabaseRows(`${table}?select=${select}&order=${order}&limit=${pageSize}&offset=${offset}`);
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+function supabaseHeatmapObservedAt(row) {
+  return row?.updated_at || row?.last_trade_time || row?.payload?.updated_at || row?.payload?.quote_updated_at || "";
+}
+
+function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = taipeiClock()) {
+  const symbol = String(row?.symbol || row?.code || "").trim();
+  if (!isCommonStockCode(symbol) || symbol.startsWith("00") || symbol.toUpperCase() === "TEST") return "not_commonstock";
+  const market = String(row?.market || "").trim().toUpperCase();
+  if (market && !["TSE", "OTC", "TWSE", "TPEX"].includes(market)) return "unsupported_market";
+  const stockType = String(row?.stock_type || row?.payload?.stock_type || "").trim().toUpperCase();
+  if (stockType && stockType !== "COMMONSTOCK") return "not_commonstock";
+  if (boolValue(row?.is_trial)) return "trial_quote";
+  if (boolValue(row?.is_halted)) return "halted";
+  if (!cleanNumber(row?.price)) return "no_price";
+  const observedAt = supabaseHeatmapObservedAt(row);
+  const quoteDate = compactDateKeyFromValue(observedAt);
+  if (!quoteDate) return "missing_date";
+  if (quoteDate !== today) return "not_today";
+  const ageSeconds = secondsSinceValue(observedAt);
+  if (isHeatmapDetectWindow(clock) && ageSeconds != null && ageSeconds > HEATMAP_QUOTE_MAX_AGE_SECONDS) return "stale";
+  return "";
+}
+
+function normalizeSupabaseHeatmapQuote(row, today = taipeiDateKey(), clock = taipeiClock()) {
+  const rejectReason = supabaseHeatmapQuoteRejectReason(row, today, clock);
+  if (rejectReason) return null;
+  const observedAt = supabaseHeatmapObservedAt(row);
+  const close = cleanNumber(row.price);
+  const changePercent = Number(row.change_percent);
+  const rawPreviousClose = cleanNumber(row.previous_close);
+  const pct = Number.isFinite(changePercent)
+    ? changePercent
+    : rawPreviousClose
+      ? ((close - rawPreviousClose) / rawPreviousClose) * 100
+      : 0;
+  const previousClose = rawPreviousClose || (pct !== -100 ? close / (1 + pct / 100) : close) || close;
+  const volumeLots = cleanNumber(row.total_volume);
+  const tradeValue = cleanNumber(row.trade_value) || (volumeLots ? volumeLots * 1000 * close : 0);
+  return {
+    close,
+    prev: previousClose,
+    change: close - previousClose,
+    pct,
+    volume: volumeLots,
+    value: tradeValue,
+    quoteDate: compactDateKeyFromValue(observedAt) || today,
+    quoteTime: taipeiTimeKeyFromValue(observedAt),
+    updatedAt: Date.parse(observedAt) || Date.now(),
+    priceSource: `supabase:${HEATMAP_QUOTE_TABLE}`,
+  };
+}
+
+async function fetchSupabaseHeatmapQuotes(clock = taipeiClock()) {
+  const quoteMap = new Map();
+  const source = `supabase:${HEATMAP_QUOTE_TABLE}`;
+  const select = [
+    "symbol",
+    "name",
+    "market",
+    "updated_at",
+    "last_trade_time",
+    "price",
+    "previous_close",
+    "change_percent",
+    "total_volume",
+    "trade_value",
+    "stock_type",
+    "session",
+    "is_halted",
+    "is_trial",
+    "payload",
+  ].join(",");
+
+  try {
+    const rows = await fetchSupabasePagedRows(HEATMAP_QUOTE_TABLE, select, "updated_at.desc", 3000, 1000);
+    const today = String(clock?.date || "").replace(/\D/g, "") || taipeiDateKey();
+    const rejectedReasons = {};
+    let latestMs = 0;
+
+    for (const row of rows) {
+      const observedAt = supabaseHeatmapObservedAt(row);
+      const observedMs = Date.parse(String(observedAt || ""));
+      if (Number.isFinite(observedMs)) latestMs = Math.max(latestMs, observedMs);
+      const reason = supabaseHeatmapQuoteRejectReason(row, today, clock);
+      if (reason) {
+        rejectedReasons[reason] = (rejectedReasons[reason] || 0) + 1;
+        continue;
+      }
+      const symbol = String(row?.symbol || "").trim();
+      const quote = normalizeSupabaseHeatmapQuote(row, today, clock);
+      if (symbol && quote) quoteMap.set(symbol, quote);
+    }
+
+    const latestUpdatedAt = latestMs ? new Date(latestMs).toISOString() : "";
+    const latestAgeSeconds = latestMs ? Math.max(0, Math.floor((Date.now() - latestMs) / 1000)) : null;
+    const issue = quoteMap.size >= HEATMAP_QUOTE_MIN_ROWS ? "" : `fresh_rows_${quoteMap.size}_below_${HEATMAP_QUOTE_MIN_ROWS}`;
+    return {
+      quoteMap,
+      sourceInfo: {
+        source,
+        table: HEATMAP_QUOTE_TABLE,
+        ok: quoteMap.size >= HEATMAP_QUOTE_MIN_ROWS,
+        issue,
+        rows: quoteMap.size,
+        rawRows: Array.isArray(rows) ? rows.length : 0,
+        rejectedCount: Array.isArray(rows) ? rows.length - quoteMap.size : 0,
+        rejectedReasons,
+        latestUpdatedAt,
+        latestAgeSeconds,
+        maxAgeSeconds: HEATMAP_QUOTE_MAX_AGE_SECONDS,
+        fallbackUsed: false,
+        fallbackReason: "",
+      },
+    };
+  } catch (error) {
+    return {
+      quoteMap,
+      sourceInfo: {
+        source,
+        table: HEATMAP_QUOTE_TABLE,
+        ok: false,
+        issue: error.message || String(error),
+        rows: 0,
+        rawRows: 0,
+        rejectedCount: 0,
+        rejectedReasons: {},
+        latestUpdatedAt: "",
+        latestAgeSeconds: null,
+        maxAgeSeconds: HEATMAP_QUOTE_MAX_AGE_SECONDS,
+        fallbackUsed: false,
+        fallbackReason: "",
+      },
+    };
+  }
+}
+
 async function fetchBatchQuotes(stocks) {
   const query = stocks.map((stock) => `${stock.market}_${stock.code}.tw`).join("|");
   const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(query)}&json=1&delay=0`;
@@ -2745,7 +2968,7 @@ async function fetchBatchQuotes(stocks) {
   }
 }
 
-async function fetchRealtimeQuotes(stocks) {
+async function fetchMisRealtimeQuotes(stocks) {
   const quoteMap = new Map();
   const chunks = chunkArray(stocks, 120);
   const quotePromise = Promise.all(chunks.map(fetchBatchQuotes));
@@ -2775,6 +2998,24 @@ async function fetchRealtimeQuotes(stocks) {
   });
 
   return quoteMap;
+}
+
+async function fetchRealtimeQuotes(stocks, clock = taipeiClock()) {
+  const primary = await fetchSupabaseHeatmapQuotes(clock);
+  if (primary.sourceInfo.ok) return primary;
+
+  const fallbackMap = await fetchMisRealtimeQuotes(stocks);
+  return {
+    quoteMap: fallbackMap,
+    sourceInfo: {
+      ...primary.sourceInfo,
+      ok: false,
+      fallbackUsed: true,
+      fallbackReason: primary.sourceInfo.issue || "formal_source_not_healthy",
+      fallbackSource: "twse-tpex-mis",
+      fallbackRows: fallbackMap.size,
+    },
+  };
 }
 
 function mergeQuote(stock, quote) {
@@ -2809,15 +3050,17 @@ module.exports = async function handler(request, response) {
   if (request.method !== "GET") { response.status(405).json({ ok: false, error: "Method not allowed" }); return; }
 
   const clock = taipeiClock();
+  const sourceName = String(request.query?.source || "").trim();
+  const forceLiveContract = ["market-ai-live", "desktop-live-contract", "release-guard", "release-guard-live", "local-contract"].includes(sourceName);
   const snapshotFirst = String(request.query?.snapshot || request.query?.cache || request.query?.fast || "") === "1";
-  if (snapshotFirst) {
+  if (snapshotFirst && !forceLiveContract) {
     setHeatmapSnapshotCacheHeaders(response);
     const snapshot = await readSnapshot("heatmap_latest", {
       tradeDate: clock.date,
       allowLatestFallback: true,
       timeoutMs: 900,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
       response.status(200).json(snapshotHeatmapPayload({
         ...snapshot,
         reason: "snapshot-first",
@@ -2826,7 +3069,7 @@ module.exports = async function handler(request, response) {
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
       response.status(200).json(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
@@ -2852,19 +3095,19 @@ module.exports = async function handler(request, response) {
   }
 
   const detectWindowActive = isHeatmapDetectWindow(clock);
-  if (!detectWindowActive) {
+  if (!detectWindowActive && !forceLiveContract) {
     const snapshot = await readSnapshot("heatmap_latest", {
       tradeDate: clock.date,
       allowLatestFallback: true,
       timeoutMs: 1400,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
       response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
       response.status(200).json(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
@@ -2904,7 +3147,7 @@ module.exports = async function handler(request, response) {
     const byCode = new Map();
     stocks.forEach((stock) => byCode.set(stock.code, stock));
     const uniqueStocks = [...byCode.values()];
-    const quoteMap = await fetchRealtimeQuotes(uniqueStocks);
+    const { quoteMap, sourceInfo } = await fetchRealtimeQuotes(uniqueStocks, clock);
     const groups = Object.fromEntries(
       BB_HEATMAP_GROUP_ORDER.map((name) => [name, { name, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 }])
     );
@@ -3002,10 +3245,14 @@ module.exports = async function handler(request, response) {
       }))
     );
 
-    const health = buildHeatmapHealth(sectors, quoteMap);
+    const health = buildHeatmapHealth(sectors, quoteMap, sourceInfo);
     const payload = {
       ok: sectors.length > 0 && health.isHealthy,
-      source: "TWSE/TPEx full stock list + MOPS industry profiles + MIS quotes",
+      source: sourceInfo.fallbackUsed
+        ? "Supabase fugle_quotes_live strict live quotes + degraded TWSE/TPEx MIS fallback"
+        : "Supabase fugle_quotes_live strict live quotes",
+      formalSource: sourceInfo.source || `supabase:${HEATMAP_QUOTE_TABLE}`,
+      strictQuoteContract: sourceInfo,
       updatedAt: new Date().toISOString(),
       stockCount: uniqueStocks.length,
       realtimeStockCount: quoteMap.size,
@@ -3018,6 +3265,7 @@ module.exports = async function handler(request, response) {
         twse: twseResult.status === "rejected" ? twseResult.reason.message : null,
         tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
         profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
+        quotes: sourceInfo.ok ? null : (sourceInfo.issue || sourceInfo.fallbackReason || "formal_quote_source_unhealthy"),
       },
     };
     heatmapCache = isUsableHeatmapMemoryPayload(payload, clock)
