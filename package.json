@@ -98,6 +98,7 @@
     "verify:runtime-ownership": "node scripts/verify-runtime-ownership.js",
     "verify:fast-shell-self-contained": "node scripts/verify-fast-shell-self-contained.js",
     "verify:fast-shell-regression-drill": "node scripts/verify-fast-shell-regression-drill.js",
+    "verify:upload-gate": "node scripts/verify-upload-gate.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
     "verify:deploy-worktree-clean": "node scripts/verify-deploy-worktree-clean.js",
     "monitor:deploy-worktree-clean": "node scripts/monitor-deploy-worktree-clean.js",
