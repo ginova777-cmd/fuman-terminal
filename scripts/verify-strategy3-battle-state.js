@@ -181,6 +181,9 @@ async function main() {
     fallbackUsed: api.body?.fallbackUsed,
     fallbackScope: api.body?.fallbackScope,
     fallbackDetails: api.body?.fallbackDetails,
+    diagnosticFallbackUsed: api.body?.diagnosticFallbackUsed,
+    diagnosticFallbackScope: api.body?.diagnosticFallbackScope,
+    diagnosticFallbackDetails: api.body?.diagnosticFallbackDetails,
     fallbackContract: api.body?.fallbackContract,
     writeBudget: api.body?.writeBudget,
     retentionOk: api.body?.retentionOk,
@@ -192,7 +195,7 @@ async function main() {
   if (cleanNumber(api.body?.count) < MIN_RESULT_ROWS) issues.push(`api_count_${api.body?.count}_below_${MIN_RESULT_ROWS}`);
   if (!Object.prototype.hasOwnProperty.call(api.body || {}, "tvPassCount")) issues.push("api_missing_tvPassCount");
   if (!api.body?.runId) issues.push("api_missing_runId");
-  for (const field of ["status", "sourceStatus", "dataContractSource", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "fallbackScope", "fallbackDetails", "writeBudget", "retentionOk", "issues", "warnings"]) {
+  for (const field of ["status", "sourceStatus", "dataContractSource", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "fallbackScope", "fallbackDetails", "diagnosticFallbackUsed", "diagnosticFallbackScope", "diagnosticFallbackDetails", "writeBudget", "retentionOk", "issues", "warnings"]) {
     if (!Object.prototype.hasOwnProperty.call(api.body || {}, field)) issues.push(`api_missing_${field}`);
   }
   if (api.body?.latestRunId && api.body?.runId && String(api.body.latestRunId) !== String(api.body.runId)) {
@@ -219,6 +222,10 @@ async function main() {
   }
   if (api.body?.fallbackUsed === true && !Array.isArray(api.body?.fallbackDetails)) issues.push("api_fallbackDetails_not_array");
   if (api.body?.fallbackUsed === true && !api.body?.fallbackScope?.length) issues.push("api_fallbackUsed_without_scope");
+  if (api.body?.diagnosticFallbackUsed === true && !Array.isArray(api.body?.diagnosticFallbackDetails)) issues.push("api_diagnosticFallbackDetails_not_array");
+  if (api.body?.diagnosticFallbackUsed === true && !asArray(api.body?.diagnosticFallbackScope).includes("tv_candle_diagnostic")) {
+    issues.push("api_diagnosticFallbackUsed_without_tv_candle_diagnostic_scope");
+  }
   const apiRows = asArray(api.body?.matches).length ? asArray(api.body.matches)
     : asArray(api.body?.rows).length ? asArray(api.body.rows)
       : asArray(api.body?.items).length ? asArray(api.body.items)
@@ -347,9 +354,17 @@ async function main() {
     issues.push(`live_source_chain_tv_drift_api_${apiTvPassCount}_live_${liveTvOk}`);
   }
   if (livePayload.fallbackUsed === true) {
-    if (api.body?.fallbackUsed !== true) issues.push("api_hidden_live_source_chain_fallback");
-    if (!asArray(api.body?.fallbackScope).includes("tv_candle_diagnostic")) issues.push("api_missing_tv_candle_diagnostic_fallback_scope");
-    if (!asArray(api.body?.fallbackDetails).length) issues.push("api_missing_tv_candle_diagnostic_fallback_details");
+    const liveScopes = asArray(livePayload.fallbackScope);
+    const liveSourceFallback = liveScopes.includes("source");
+    const liveDiagnosticFallback = liveScopes.includes("tv_candle_diagnostic");
+    if (liveSourceFallback && api.body?.fallbackUsed !== true) issues.push("api_hidden_live_source_chain_fallback");
+    if (liveDiagnosticFallback) {
+      if (api.body?.diagnosticFallbackUsed !== true) issues.push("api_hidden_live_tv_candle_diagnostic_fallback");
+      if (!asArray(api.body?.diagnosticFallbackScope).includes("tv_candle_diagnostic")) issues.push("api_missing_tv_candle_diagnostic_fallback_scope");
+      if (!asArray(api.body?.diagnosticFallbackDetails).length) issues.push("api_missing_tv_candle_diagnostic_fallback_details");
+    } else if (!liveSourceFallback && api.body?.fallbackUsed !== true) {
+      issues.push("api_hidden_live_source_chain_fallback");
+    }
   }
 
   const sourceCounts = await Promise.all([
