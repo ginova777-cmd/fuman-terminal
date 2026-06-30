@@ -89,6 +89,7 @@ async function sendEmailText(subject, text, config = emailConfigFromEnv()) {
   if (!hasEmailConfig(config)) throw new Error("Missing REPORT_EMAIL_TO/ALERT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
 
   const socket = tls.connect({ host: config.host, port: config.port, servername: config.host });
+  socket.setMaxListeners(Math.max(socket.getMaxListeners(), 30));
   await new Promise((resolve, reject) => {
     socket.once("secureConnect", resolve);
     socket.once("error", reject);
