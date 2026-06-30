@@ -37,11 +37,12 @@ function forbidIncludes(file, needles) {
 }
 
 const chipFlow = requireIncludes("terminal-chip-flow.js", [
-  "CHIP_TRADE_VALID_CACHE_KEY",
-  "fuman-terminal-chip-trade-valid-cache-v1",
+  "CHIP_TRADE_API_ONLY_NO_LOCAL_FALLBACK",
+  "chip-trade-api-only-no-local-fallback-v1",
   "function hasChipTradeRows()",
   "chipTradeFrozen",
-  "restoreChipTradeLocalCache() && hasChipTradeRows()",
+  "function restoreChipTradeLocalCache()",
+  "return false;",
   "loadChipTradeData(force = false)",
   "renderChipTradeTable();",
 ]);
@@ -51,6 +52,9 @@ forbidIncludes("terminal-chip-flow.js", [
   "/data/institution-slim.json",
   "/data/institution-mobile-top.json",
   "/data/institution-tdcc-breakout-top.json",
+  "localStorage.setItem",
+  "localStorage.getItem",
+  "fuman-terminal-chip-trade-valid-cache-v1",
   "近5日均量 < 3000",
   "內外盤累計 < 3000",
 ]);

@@ -41,7 +41,7 @@
       let chipExclusionsLoading = null;
       let chipTradeFrozen = false;
       const TDCC_CACHE_MS = 10 * 60 * 1000;
-      const CHIP_TRADE_VALID_CACHE_KEY = "fuman-terminal-chip-trade-valid-cache-v1";
+      const CHIP_TRADE_API_ONLY_NO_LOCAL_FALLBACK = "chip-trade-api-only-no-local-fallback-v1";
 
       const cleanNumber = scope.cleanNumber;
       const formatNumber = scope.formatNumber;
@@ -107,32 +107,11 @@
         const updatedAt = Date.parse(next.updatedAt || "");
         scope.institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
         scope.chipTradeLoadedAt = Date.now();
-        try {
-          localStorage.setItem(CHIP_TRADE_VALID_CACHE_KEY, JSON.stringify({
-            runId: next.runId || next.transport?.runId || "",
-            usedDate: next.usedDate || "",
-            updatedAt: next.updatedAt || new Date(scope.institutionUpdatedAt).toISOString(),
-            savedAt: Date.now(),
-            data: next.data,
-          }));
-        } catch {}
         return true;
       }
 
       function restoreChipTradeLocalCache() {
-        if (hasChipTradeRows()) return true;
-        try {
-          const payload = JSON.parse(localStorage.getItem(CHIP_TRADE_VALID_CACHE_KEY) || "null");
-          if (!payload?.data || !Object.keys(payload.data).length) return false;
-          scope.institutionData = payload.data;
-          scope.institutionDate = payload.usedDate || scope.institutionDate || "";
-          const updatedAt = Date.parse(payload.updatedAt || "");
-          scope.institutionUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : cleanNumber(payload.savedAt) || Date.now();
-          scope.chipTradeLoadedAt = Date.now();
-          return true;
-        } catch {
-          return false;
-        }
+        return false;
       }
 
       function formatChipSignedLots(value) {
@@ -421,7 +400,6 @@
 
       function renderChipTradeTable() {
         if (!scope.isViewActive("chip-trade")) return;
-        restoreChipTradeLocalCache();
         const body = document.querySelector("#chip-trade-body");
         const sortEl = document.querySelector("#chip-sort");
         if (!body) return;
@@ -515,14 +493,8 @@
 
       async function loadChipTradeData(force = false) {
         if (!scope.isViewActive("chip-trade") || !scope.canRunViewWork("chip-trade")) return;
-        const restored = restoreChipTradeLocalCache();
         const hasInstitutionRows = hasChipTradeRows();
         if (chipTradeFrozen && hasInstitutionRows) {
-          renderChipTradeTable();
-          return;
-        }
-        if (restored && hasInstitutionRows) {
-          chipTradeFrozen = true;
           renderChipTradeTable();
           return;
         }
@@ -539,7 +511,7 @@
         }
         scope.chipTradeLoading = true;
         const body = document.querySelector("#chip-trade-body");
-        if (restored || hasInstitutionRows) {
+        if (hasInstitutionRows) {
           renderChipTradeTable();
         } else if (body) {
           scope.loadInstitutionSummary().then(() => {
@@ -585,14 +557,10 @@
         } catch (error) {
           reportChipFlowError("load", error);
           if (hasChipTradeRows()) renderChipTradeTable();
-          else if (body) body.innerHTML = `<tr><td colspan="14">買賣超資料檔讀取失敗：${chipErrorText(error)}。已回報 frontend-error，請重新整理或稍後再試。</td></tr>`;
+          else if (body) body.innerHTML = `<tr><td colspan="14">買賣超正式 API 讀取失敗：${chipErrorText(error)}。未使用舊本機 cache；請稍後重試。</td></tr>`;
         } finally {
           scope.chipTradeLoading = false;
         }
-      }
-
-      if (restoreChipTradeLocalCache() && hasChipTradeRows()) {
-        chipTradeFrozen = true;
       }
 
       return { renderChipTradeTable, loadChipTradeData };
