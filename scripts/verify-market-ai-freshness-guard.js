@@ -20,6 +20,7 @@ const readText = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const readJson = (file) => JSON.parse(readText(file));
 
 const aiGuardSource = readText("terminal-ai-risk-guard.js");
+const desktopShellSource = readText("terminal-desktop-fast-shell.js");
 const terminalAppSource = readText("terminal-app.js");
 const indexHtml = readText("index.html");
 const apiSource = readText("api/market-ai-live.js");
@@ -44,6 +45,10 @@ assert(aiGuardSource.includes("啟動市場總覽"), "heatmap first-paint guard 
 assert(aiGuardSource.includes("不使用舊 heatmap cache 當正常資料"), "heatmap stale/no-data display must reject old cache");
 assert(aiGuardSource.includes("不顯示舊 panel cache"), "AI loading display must reject old panel cache");
 assert(terminalAppSource.includes("const liveWindow=!!isHeatmapPollingWindow?.();const hasSnapshot=liveWindow?!1:await loadHeatmapLatestSnapshot(force)"), "terminal app must not render heatmap snapshot before live data during polling window");
+assert(desktopShellSource.includes("marketHeatmapContractPath"), "desktop shell must route market heatmap through live/snapshot contract helper");
+assert(desktopShellSource.includes("desktop-fast-shell-live"), "desktop shell must use official live heatmap path during active market window");
+assert(!desktopShellSource.includes('fetchMarketJson("/api/heatmap?snapshot=1"'), "desktop shell must not directly fetch heatmap snapshot for market first paint");
+assert(desktopShellSource.includes('if (isMarketHeatmapLiveWindow()) return;'), "desktop shell must ignore bundled heatmap snapshots during active market window");
 const guardScript = `terminal-ai-risk-guard.js?v=${terminalVersion}`;
 assert(indexHtml.includes(guardScript), "index must load the AI/heatmap freshness guard through the terminal version contract");
 assert(

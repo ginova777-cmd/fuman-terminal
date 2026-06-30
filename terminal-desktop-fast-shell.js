@@ -1524,6 +1524,7 @@
     if (!payload || typeof payload !== "object") return;
     const pathname = bundleEndpointPath(endpoint);
     if (pathname === "/api/heatmap" && Array.isArray(payload.sectors) && payload.sectors.length) {
+      if (isMarketHeatmapLiveWindow()) return;
       marketSnapshotFirstPayload = { ...payload, snapshotFirst: true };
       if (isMarketViewActive()) {
         paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload);
@@ -4073,6 +4074,26 @@
     return `${path}|${limit}`;
   }
 
+  function isMarketHeatmapLiveWindow() {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date()).reduce((acc, part) => {
+      if (part.type !== "literal") acc[part.type] = part.value;
+      return acc;
+    }, {});
+    const mins = 60 * Number(parts.hour || 0) + Number(parts.minute || 0);
+    return mins >= 540 && mins <= 810;
+  }
+
+  function marketHeatmapContractPath() {
+    return isMarketHeatmapLiveWindow()
+      ? "/api/heatmap?limit=999&stocks=999&source=desktop-fast-shell-live"
+      : "/api/heatmap?snapshot=1";
+  }
+
   function rememberRealtimeRadarPayload(payload, source = "market-prime") {
     if (!payload || typeof payload !== "object") return 0;
     rememberRealtimeRadarHealth(payload);
@@ -4084,9 +4105,9 @@
 
   function primeMarketColdPayloads(force = false, reason = "boot") {
     const tasks = [
-      fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800).then((payload) => {
+      fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800).then((payload) => {
         if (payload?.sectors?.length) {
-          marketSnapshotFirstPayload = { ...payload, snapshotFirst: true, firstPaint: true };
+          marketSnapshotFirstPayload = { ...payload, snapshotFirst: !isMarketHeatmapLiveWindow(), firstPaint: true };
           paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload);
         }
       }),
@@ -4275,12 +4296,12 @@
       settled += 1;
       if (settled >= 4) marketDesktopAiLoading = false;
     };
-    fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800)
+    fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
       .then((payload) => {
         if (payload?.sectors?.length) {
           marketSnapshotFirstPayload = {
             ...payload,
-            snapshotFirst: true,
+            snapshotFirst: !isMarketHeatmapLiveWindow(),
             firstPaint: true,
           };
           state.heatmap = marketSnapshotFirstPayload;
@@ -4686,12 +4707,12 @@
         done();
         return;
       }
-      fetchMarketJson("/api/heatmap?snapshot=1", 36, force, 1800)
+      fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
         .then((payload) => {
           if (payload?.sectors?.length) {
             state.heatmap = {
               ...payload,
-              snapshotFirst: true,
+              snapshotFirst: !isMarketHeatmapLiveWindow(),
               firstPaint: true,
             };
             marketSnapshotFirstPayload = state.heatmap;
@@ -4703,9 +4724,9 @@
     window.setTimeout(fetchHeatmap, (!force && !paintedFromMemory) ? 140 : 0);
     if (!force) {
       window.setTimeout(() => {
-        fetchMarketJson("/api/heatmap?snapshot=1", 60, false, 2600).then((payload) => {
+        fetchMarketJson(marketHeatmapContractPath(), 60, false, isMarketHeatmapLiveWindow() ? 6500 : 2600).then((payload) => {
           if (payload?.sectors?.length && isMarketViewActive()) {
-            marketSnapshotFirstPayload = { ...payload, snapshotFirst: true, firstPaint: false };
+            marketSnapshotFirstPayload = { ...payload, snapshotFirst: !isMarketHeatmapLiveWindow(), firstPaint: false };
             paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload, state.market || {});
           }
         });
@@ -5154,12 +5175,12 @@
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson("/api/heatmap?snapshot=1", 60, force, 1800)
+    fetchMarketJson(marketHeatmapContractPath(), 60, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = {
             ...payload,
-            snapshotFirst: true,
+            snapshotFirst: !isMarketHeatmapLiveWindow(),
           };
           marketSnapshotFirstPayload = state.heatmap;
           renderIfChanged(true);
