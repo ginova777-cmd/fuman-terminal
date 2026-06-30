@@ -159,6 +159,13 @@ const packageJson = JSON.parse(read("package.json"));
 const fumanScheduleRegistry = readJsonFile("scripts/fuman-schedule-registry.json");
 if (fumanScheduleRegistry) {
   const tasks = Array.isArray(fumanScheduleRegistry.tasks) ? fumanScheduleRegistry.tasks : [];
+  const policy = fumanScheduleRegistry.policy || {};
+  const activeTasks = Array.isArray(policy.activeTasks) ? policy.activeTasks : [];
+  const expectedDisabledTasks = Array.isArray(policy.expectedDisabledTasks) ? policy.expectedDisabledTasks : [];
+  const retiredTasks = Array.isArray(policy.retiredTasks) ? policy.retiredTasks : [];
+  if (fumanScheduleRegistry.policyVersion !== 3) {
+    issues.push(`scripts/fuman-schedule-registry.json policyVersion must be 3; current=${fumanScheduleRegistry.policyVersion || "(missing)"}`);
+  }
   const strategy2LineStop1200 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Stop 1200");
   if (!strategy2LineStop1200) {
     issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE stop as Fuman Strategy2 LINE Stop 1200");
@@ -172,6 +179,34 @@ if (fumanScheduleRegistry) {
   }
   if (tasks.some((task) => /Strategy2 LINE Stop 1330/.test(String(task?.taskName || task?.displayName || "")))) {
     issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1330; Strategy2 runs 08:45-12:00");
+  }
+  const freshnessFull2010 = tasks.find((task) => task?.taskName === "\\Fuman Freshness Gate Full 2010");
+  if (!freshnessFull2010) {
+    issues.push("scripts/fuman-schedule-registry.json must name full freshness gate as Fuman Freshness Gate Full 2010");
+  } else {
+    if (freshnessFull2010.time !== "20:10") {
+      issues.push(`scripts/fuman-schedule-registry.json Fuman Freshness Gate Full 2010 time must be 20:10; current=${freshnessFull2010.time || "(missing)"}`);
+    }
+    const triggers = Array.isArray(freshnessFull2010.expectedTriggers) ? freshnessFull2010.expectedTriggers : [];
+    if (triggers.length !== 1 || triggers[0] !== "20:10") {
+      issues.push("scripts/fuman-schedule-registry.json Fuman Freshness Gate Full 2010 expectedTriggers must be exactly 20:10");
+    }
+  }
+  if (tasks.some((task) => /Freshness Gate Full \d{4} 2010/.test(String(task?.taskName || task?.displayName || "")))) {
+    issues.push("scripts/fuman-schedule-registry.json must not keep a time-coded legacy full freshness gate task");
+  }
+  if (!activeTasks.includes("Fuman Freshness Gate Full 2010")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.activeTasks must include Fuman Freshness Gate Full 2010");
+  }
+  if (!expectedDisabledTasks.includes("Fuman Deploy Worktree Clean Monitor 5m")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.expectedDisabledTasks must declare disabled deploy worktree clean monitor");
+  }
+  if (!retiredTasks.includes("Fuman Strategy2 LINE Stop 1330")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire Fuman Strategy2 LINE Stop 1330");
+  }
+  const forbiddenFullTriggers = policy.forbiddenTriggers && policy.forbiddenTriggers["Fuman Freshness Gate Full 2010"];
+  if (!Array.isArray(forbiddenFullTriggers) || !forbiddenFullTriggers.includes("06:10")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.forbiddenTriggers must forbid 06:10 on Fuman Freshness Gate Full 2010");
   }
 }
 const fumanScheduleFullText = read("check-fuman-schedule-full.ps1");
@@ -366,6 +401,27 @@ if (!String(packageJson.scripts?.["verify:daily-battle-readiness"] || "").includ
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
+if (!String(packageJson.scripts?.["guard:mirror"] || "").includes("scripts/verify-production-mirror-guard.js")) {
+  issues.push("package.json missing scripts.guard:mirror for production mirror dirty guard");
+}
+if (!String(packageJson.scripts?.["verify:sync-hard-gate"] || "").includes("scripts/verify-sync-hard-gate.js")) {
+  issues.push("package.json missing scripts.verify:sync-hard-gate for release clone deploy preflight");
+}
+if (!String(packageJson.scripts?.["verify:final-readonly"] || "").includes("scripts/verify-final-readonly.js")) {
+  issues.push("package.json missing scripts.verify:final-readonly for pinned read-only final verification");
+}
+if (!String(packageJson.scripts?.["verify:retired-artifacts"] || "").includes("scripts/verify-retired-artifacts-clean.js")) {
+  issues.push("package.json missing scripts.verify:retired-artifacts for old cache/artifact rollback prevention");
+}
+if (!String(packageJson.scripts?.["schedule:check"] || "").includes("check-fuman-schedules.ps1")) {
+  issues.push("package.json missing scripts.schedule:check for canonical scheduler policy verification");
+}
+if (!String(packageJson.scripts?.["schedule:retire"] || "").includes("scripts/remove-fuman-retired-schedule-tasks.ps1")) {
+  issues.push("package.json missing scripts.schedule:retire for retired scheduler task cleanup");
+}
+if (!String(packageJson.scripts?.["schedule:migrate:freshness2010"] || "").includes("scripts/migrate-fuman-freshness-gate-2010-task.ps1")) {
+  issues.push("package.json missing scripts.schedule:migrate:freshness2010 for full gate 2010 migration");
+}
 if (!String(packageJson.scripts?.["monitor:deploy-worktree-clean"] || "").includes("scripts/monitor-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.monitor:deploy-worktree-clean");
 }
@@ -482,6 +538,10 @@ const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
+const productionMirrorGuard = read("scripts/verify-production-mirror-guard.js");
+const syncHardGate = read("scripts/verify-sync-hard-gate.js");
+const finalReadonlyVerifier = read("scripts/verify-final-readonly.js");
+const retiredArtifactsVerifier = read("scripts/verify-retired-artifacts-clean.js");
 const releaseManifestApi = read("api/release-manifest.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
 const strategy2SharedSource = read("lib/supabase-public-slot.js");
@@ -522,6 +582,7 @@ const publicSlotAntiRollbackGuard = read("ops/public-slot/Guard-PublicSlotSource
 const publicSlotSharedSourceStarter = read("ops/public-slot/Start-PublicSlotSharedSource.cmd");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
+const publicSlotSharedSourceWatchdogInstaller = read("ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1");
 const strategy2ReadinessSql = [
   read("ops/public-slot/Strategy2ReadinessContractCache.sql"),
   read("ops/public-slot/Strategy2Readiness100SourcePatch.sql"),
@@ -584,8 +645,34 @@ for (const marker of ["scorecard.duckdb", "export-scorecard-snapshot.py"]) {
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
 }
+if (!/verify:sync-hard-gate/.test(prepareDeploy)) {
+  issues.push("scripts/prepare-deploy.js must run verify:sync-hard-gate before production deploy");
+}
+if (!/verify:retired-artifacts/.test(prepareDeploy)) {
+  issues.push("scripts/prepare-deploy.js must run verify:retired-artifacts before production deploy");
+}
 if (!/verify:publish-gate/.test(publishGate)) {
   issues.push("run-publish-gate.ps1 must run verify:publish-gate before freshness publish");
+}
+for (const marker of ["production mirror is dirty", "status\", \"--porcelain=v1\"", "FUMAN_RELEASE_SHA", "FUMAN_DEPLOY_SHA"]) {
+  if (!productionMirrorGuard.includes(marker)) issues.push(`verify-production-mirror-guard.js missing mirror guard marker ${marker}`);
+}
+for (const marker of ["verify-production-mirror-guard.js", "production mirror only", "release/deploy gates from the release clone"]) {
+  if (!syncHardGate.includes(marker)) issues.push(`verify-sync-hard-gate.js missing release clone/mirror marker ${marker}`);
+}
+for (const marker of ["FUMAN_RELEASE_SHA is required", "mode: \"read-only\"", "/api/release-manifest", "/api/production-health", "/api/terminal-fast-bundle"]) {
+  if (!finalReadonlyVerifier.includes(marker)) issues.push(`verify-final-readonly.js missing pinned read-only final verify marker ${marker}`);
+}
+if (/writeFileSync|appendFileSync|freshness:gate|write-desktop-route-snapshot|publish-mobile-update-event|run-daily-release|run-full-scan/.test(finalReadonlyVerifier)) {
+  issues.push("verify-final-readonly.js must stay read-only and must not write files, publish mobile events, run scans, or refresh snapshots");
+}
+for (const marker of ["EXACT_RETIRED", "retired artifacts must not be tracked in source", "retired artifacts must not exist in source", "git ls-files"]) {
+  if (!retiredArtifactsVerifier.includes(marker)) issues.push(`verify-retired-artifacts-clean.js missing retired artifact guard marker ${marker}`);
+}
+for (const marker of ["Fuman Public Slot Shared Source Watchdog", "Register-ScheduledTask", "-RepetitionInterval", "-RepetitionDuration", "RepeatDurationDays = 3650"]) {
+  if (!publicSlotSharedSourceWatchdogInstaller.includes(marker)) {
+    issues.push(`Install-PublicSlotSharedSourceWatchdog.ps1 missing durable watchdog schedule marker ${marker}`);
+  }
 }
 for (const marker of ["twse:T86", "tpex:3itrade_hedge_result", "twse:MI_MARGN", "tpex:margin_balance", "keepOfficialOnlyForFinMindGaps"]) {
   if (!officialChipSync.includes(marker)) issues.push(`sync-official-chip-data.js missing official chip fallback marker ${marker}`);
@@ -1524,6 +1611,7 @@ const sourceSyncScript = read("scripts/sync-main-deploy-source.js");
 for (const file of [
   "88.html",
   "AGENTS.md",
+  "check-fuman-schedules.ps1",
   "post-scan-snapshot-refreshAGENTS.MD",
   "terminal-live-check.js",
   "terminal-watchlist-module.js",
@@ -1544,6 +1632,12 @@ for (const file of [
   "scripts/verify-deploy-worktree-clean.js",
   "scripts/monitor-deploy-worktree-clean.js",
   "scripts/install-deploy-worktree-clean-monitor-task.ps1",
+  "scripts/verify-sync-hard-gate.js",
+  "scripts/verify-production-mirror-guard.js",
+  "scripts/verify-final-readonly.js",
+  "scripts/verify-retired-artifacts-clean.js",
+  "scripts/migrate-fuman-freshness-gate-2010-task.ps1",
+  "scripts/remove-fuman-retired-schedule-tasks.ps1",
   "scripts/verify-mobile-health.js",
   "scripts/verify-mobile-api-only.js",
   "scripts/verify-mobile-ai-fragment.js",
@@ -1593,6 +1687,7 @@ for (const file of [
   "ops/public-slot/public-slot-shared-source.config.example.json",
   "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
   "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
+  "ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1",
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
   "scripts/scan-warrant-flow-cache.js",
@@ -1608,6 +1703,15 @@ for (const file of [
   "api/release-manifest.js",
   "lib/desktop-route-snapshot-builder.js",
   "lib/desktop-route-snapshot-cache.js",
+  "scripts/verify-sync-hard-gate.js",
+  "scripts/verify-production-mirror-guard.js",
+  "scripts/verify-final-readonly.js",
+  "scripts/verify-retired-artifacts-clean.js",
+  "scripts/migrate-fuman-freshness-gate-2010-task.ps1",
+  "scripts/remove-fuman-retired-schedule-tasks.ps1",
+  "check-fuman-schedules.ps1",
+  "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
+  "ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1",
   "run-publish-gate.ps1",
 ]) {
   if (!sourceSyncVerifier.includes(file)) issues.push(`verify-source-sync.js missing ${file}`);

@@ -24,7 +24,9 @@ function runCheck(label, command) {
   }).status || 0;
 }
 
+run("verify:sync-hard-gate", ["npm", "run", "verify:sync-hard-gate"]);
 run("guard:source", ["npm", "run", "guard:source"]);
+run("verify:retired-artifacts", ["npm", "run", "verify:retired-artifacts"]);
 run("verify:publish-gate", ["npm", "run", "verify:publish-gate"]);
 run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
 run("verify:bump", ["npm", "run", "verify:bump"]);

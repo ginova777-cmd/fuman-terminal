@@ -100,7 +100,7 @@ const NON_TERMINAL_DATA_TASKS = new Set([]);
 
 const MAINTENANCE_STOPPED_TASKS = new Set([
   "\\Fuman Freshness Gate Fast 0845-1645",
-  "\\Fuman Freshness Gate Full 0610 2010",
+  "\\Fuman Freshness Gate Full 2010",
 ]);
 
 function isIgnorableTaskResult(task) {

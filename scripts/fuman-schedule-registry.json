@@ -1,298 +1,505 @@
 {
-  "updatedAt": "2026-06-09T23:50:00Z",
+  "updatedAt": "2026-06-30T10:20:00+08:00",
+  "policyVersion": 3,
+  "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
+  "policy": {
+    "activeTasks": [
+      "Fuman API-Only Retired Artifact Cleanup 1535",
+      "Fuman CB Battle Verify 2150",
+      "Fuman CB Complete Scan 2125",
+      "Fuman CB Watchdog 2145",
+      "Fuman Chip Source Sync 2005",
+      "Fuman Daily Battle Verify 2155",
+      "Fuman Freshness Gate Fast 0845-1645",
+      "Fuman Freshness Gate Full 2010",
+      "Fuman Institution Battle Verify 2110",
+      "Fuman Open Buy Cache 2130",
+      "Fuman Open Buy Preopen 0855",
+      "Fuman Open Buy Preopen Prepare 0845",
+      "Fuman PC Wake 0430",
+      "Fuman Public Slot Anti Rollback Guard 1m",
+      "Fuman Public Slot Shared Source 0800",
+      "Fuman Public Slot Shared Source Watchdog",
+      "Fuman Publish Gate Verify 0820",
+      "Fuman Scorecard Daily Automation 1400",
+      "Fuman STAR Preopen Watch 0845",
+      "Fuman Strategy1 Candidate Verify 2135",
+      "Fuman Strategy1 Flame Gate Verify 0852",
+      "Fuman Strategy1 Futopt Preopen Verify 0850",
+      "Fuman Strategy2 Intraday Scan",
+      "Fuman Strategy2 LINE Start 0900",
+      "Fuman Strategy2 LINE Stop 1200",
+      "Fuman Strategy2 Readiness Source 0800",
+      "Fuman Strategy2 Supabase Coverage 0800",
+      "Fuman Strategy3 Battle Verify 1305",
+      "Fuman Strategy3 Complete Scan 1300",
+      "Fuman Strategy4 Cache 1600",
+      "Fuman Strategy5 Cache 2100",
+      "Fuman Strategy5 Watchdog 2130",
+      "Fuman Supabase Vercel History Cleanup 1545",
+      "Fuman Terminal Local Freshness Verify 0830-2230",
+      "Fuman Warrant Battle Verify 2055",
+      "Fuman 即時雷達",
+      "Fuman 買賣超 Cache 2100",
+      "Fuman 買賣超 Watchdog 2120",
+      "Fuman 權證走向 Cache 2030",
+      "Fuman 權證走向 Watchdog 2050",
+      "FumanTerminalProductionHealthMonitor"
+    ],
+    "expectedDisabledTasks": [
+      "Fuman Auto Main Release 1615",
+      "Fuman Daily Health Summary 1545",
+      "Fuman Deploy Worktree Clean Monitor 5m",
+      "Fuman Market Overview Patrol 0900",
+      "Fuman Market Overview Watchdog 0901",
+      "Fuman Strategy3 Battle Verify 1323",
+      "Fuman Strategy3 Battle Verify 1335",
+      "Fuman Strategy3 Complete Scan 1318",
+      "Fuman Strategy3 Refresh Snapshot 1308",
+      "Fuman Terminal API Health",
+      "Fuman 即時雷達健檢 0910"
+    ],
+    "retiredTasks": [
+      "Fuman Strategy2 LINE Stop 1330"
+    ],
+    "retiredTaskNamePatterns": [
+      "^Fuman Freshness Gate Full [0-9]{4} 2010$"
+    ],
+    "forbiddenTriggers": {
+      "Fuman Freshness Gate Full 2010": [
+        "06:10"
+      ]
+    },
+    "allowedResults": {
+      "Fuman Freshness Gate Full 2010": [
+        0,
+        267011
+      ],
+      "Fuman Public Slot Shared Source 0800": [
+        0,
+        267009
+      ],
+      "Fuman Strategy2 Readiness Source 0800": [
+        0,
+        267014
+      ],
+      "Fuman Strategy2 LINE Stop 1200": [
+        0,
+        267011
+      ],
+      "Fuman Strategy2 Supabase Coverage 0800": [
+        0,
+        267009
+      ],
+      "Fuman 即時雷達": [
+        0,
+        267014
+      ]
+    },
+    "coveredBy": {
+      "Fuman STAR Preopen Watch 0845": {
+        "status": "OK_COVERED",
+        "severity": "warning",
+        "logPatterns": [
+          "strategy1-preopen-prepare-*.log",
+          "strategy1-preopen-final-*.log"
+        ],
+        "successPattern": "strategy1 preopen runner complete",
+        "failurePattern": "strategy1 preopen runner failed",
+        "detail": "covered by later strategy1 preopen prepare/final success"
+      }
+    },
+    "alertSeverity": {
+      "OK": "none",
+      "DISABLED_EXPECTED": "none",
+      "OK_RUNNING": "info",
+      "OK_WAITING": "info",
+      "OK_STOPPED": "info",
+      "OK_COVERED": "warning",
+      "LOG_CHECK": "warning",
+      "MISSING": "critical",
+      "UNKNOWN_REGISTRY": "critical",
+      "STATE_MISMATCH": "critical",
+      "TRIGGER_MISMATCH": "critical",
+      "FORBIDDEN_TRIGGER": "critical",
+      "RETIRED_PRESENT": "critical",
+      "FAIL": "critical",
+      "LOG_ERROR": "critical"
+    }
+  },
   "tasks": [
+    {
+      "taskName": "\\Fuman API-Only Retired Artifact Cleanup 1535",
+      "displayName": "Fuman API-Only Retired Artifact Cleanup 1535",
+      "description": "Retired API artifact cleanup.",
+      "time": "15:35",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman CB Battle Verify 2150",
+      "displayName": "Fuman CB Battle Verify 2150",
+      "description": "CB battle verification.",
+      "time": "21:50",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman CB Complete Scan 2125",
+      "displayName": "Fuman CB Complete Scan 2125",
+      "description": "CB complete scan.",
+      "time": "21:25",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman CB Watchdog 2145",
+      "displayName": "Fuman CB Watchdog 2145",
+      "description": "CB watchdog.",
+      "time": "21:45",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Chip Source Sync 2005",
+      "displayName": "Fuman Chip Source Sync 2005",
+      "description": "Official chip source sync.",
+      "time": "20:05",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Daily Battle Verify 2155",
+      "displayName": "Fuman Daily Battle Verify 2155",
+      "description": "Daily battle verification.",
+      "time": "21:55",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Freshness Gate Fast 0845-1645",
+      "displayName": "Fuman Freshness Gate Fast 0845-1645",
+      "description": "Fast live freshness gate from 08:45 through 16:45.",
+      "time": "08:45-16:45",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Freshness Gate Full 2010",
+      "displayName": "Fuman Freshness Gate Full 2010",
+      "description": "Official full freshness/release gate at 20:10 only.",
+      "time": "20:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "20:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Institution Battle Verify 2110",
+      "displayName": "Fuman Institution Battle Verify 2110",
+      "description": "Institution battle verification.",
+      "time": "21:10",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Open Buy Cache 2130",
+      "displayName": "Fuman Open Buy Cache 2130",
+      "description": "Strategy1 open-buy cache.",
+      "time": "21:30",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Open Buy Preopen 0855",
+      "displayName": "Fuman Open Buy Preopen 0855",
+      "description": "Strategy1 preopen final runner.",
+      "time": "08:55",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Open Buy Preopen Prepare 0845",
+      "displayName": "Fuman Open Buy Preopen Prepare 0845",
+      "description": "Strategy1 preopen prepare runner.",
+      "time": "08:45",
+      "expectedState": "Ready"
+    },
     {
       "taskName": "\\Fuman PC Wake 0430",
       "displayName": "Fuman PC Wake 0430",
-      "description": "Mini PC 凌晨 04:30 喚醒",
+      "description": "Mini PC wake timer.",
       "time": "04:30",
-      "aliases": [
-        "PC Wake 0530",
-        "喚醒",
-        "wake"
-      ]
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman PC Sleep 2400",
-      "displayName": "Fuman PC Sleep 2400",
-      "description": "Mini PC 晚上 24:00 / 00:00 睡眠",
-      "time": "00:00",
-      "aliases": [
-        "PC Sleep 2200",
-        "睡眠",
-        "sleep"
-      ]
+      "taskName": "\\Fuman Public Slot Anti Rollback Guard 1m",
+      "displayName": "Fuman Public Slot Anti Rollback Guard 1m",
+      "description": "Public slot anti-rollback guard.",
+      "time": "every 1 minute",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman GitHub 統一同步 0612",
-      "displayName": "Fuman GitHub 統一同步 0612",
-      "description": "早上 06:12 把 runtime 資料同步到 GitHub",
-      "time": "06:12",
-      "aliases": [
-        "github 0612"
-      ]
-    },
-    {
-      "taskName": "\\Fuman GitHub 統一同步 0715",
-      "displayName": "Fuman GitHub 統一同步 0715",
-      "description": "早上 07:15 同步 GitHub",
-      "time": "07:15",
-      "aliases": [
-        "github 0715"
-      ]
-    },
-    {
-      "taskName": "\\Fuman GitHub 統一同步 1445",
-      "displayName": "Fuman GitHub 統一同步 1445",
-      "description": "下午 14:45 同步 GitHub",
-      "time": "14:45",
-      "aliases": [
-        "github 1445"
-      ]
-    },
-    {
-      "taskName": "\\Fuman GitHub 統一同步 2112",
-      "displayName": "Fuman GitHub 統一同步 2112",
-      "description": "晚上 21:12 同步 GitHub，補上晚間資料發布",
-      "time": "21:12",
-      "aliases": [
-        "github 2112"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Open Buy Cache 1600",
-      "displayName": "Fuman Open Buy Cache 1600",
-      "description": "策略1「明日開盤入」下午 16:00 完整快取",
-      "time": "16:00",
-      "aliases": [
-        "策略1",
-        "open buy 1600"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Open Buy Sync Retry",
-      "displayName": "Fuman Open Buy Sync Retry",
-      "description": "策略1 GitHub 同步補救，下午 16:20 執行",
-      "time": "16:20",
-      "aliases": [
-        "open buy retry"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Strategy2 Readiness Source 0800",
-      "displayName": "Fuman Strategy2 Readiness Source 0800",
-      "description": "策略2戰備資料源：08:00 確認交易日並啟動，保證 08:45 個股期貨、08:55 試撮 history、09:00 當沖 1m 母池 coverage",
+      "taskName": "\\Fuman Public Slot Shared Source 0800",
+      "displayName": "Fuman Public Slot Shared Source 0800",
+      "description": "Public slot shared source.",
       "time": "08:00",
-      "aliases": [
-        "策略2戰備",
-        "strategy2 readiness"
-      ]
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Public Slot Shared Source Watchdog",
+      "displayName": "Fuman Public Slot Shared Source Watchdog",
+      "description": "Public slot shared source watchdog.",
+      "time": "08:00",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Publish Gate Verify 0820",
+      "displayName": "Fuman Publish Gate Verify 0820",
+      "description": "Publish gate verification.",
+      "time": "08:20",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Scorecard Daily Automation 1400",
+      "displayName": "Fuman Scorecard Daily Automation 1400",
+      "description": "Scorecard daily automation.",
+      "time": "14:00",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman STAR Preopen Watch 0845",
+      "displayName": "Fuman STAR Preopen Watch 0845",
+      "description": "Strategy1 STAR preopen watch. Non-zero result is covered by later preopen prepare/final success.",
+      "time": "08:45",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Candidate Verify 2135",
+      "displayName": "Fuman Strategy1 Candidate Verify 2135",
+      "description": "Strategy1 candidate verify.",
+      "time": "21:35",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Flame Gate Verify 0852",
+      "displayName": "Fuman Strategy1 Flame Gate Verify 0852",
+      "description": "Strategy1 flame gate verify.",
+      "time": "08:52",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Futopt Preopen Verify 0850",
+      "displayName": "Fuman Strategy1 Futopt Preopen Verify 0850",
+      "description": "Strategy1 futures/options preopen verify.",
+      "time": "08:50",
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy2 Intraday Scan",
       "displayName": "Fuman Strategy2 Intraday Scan",
-      "description": "策略2當沖雷達，08:00 啟動；08:45 進入個股期貨/試撮 gate，09:00 後巡邏到 12:00",
+      "description": "Strategy2 intraday scanner; operational window is 08:45-12:00.",
       "time": "08:00",
-      "aliases": [
-        "策略2",
-        "當沖"
-      ]
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy2 LINE Start 0900",
       "displayName": "Fuman Strategy2 LINE Start 0900",
-      "description": "策略2 LINE / Telegram 通知巡邏，09:00 啟動",
-      "time": "09:00",
-      "aliases": [
-        "line start"
+      "description": "Strategy2 LINE patrol start; trigger must be 08:45 for the 08:45-12:00 window.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
       ]
     },
     {
       "taskName": "\\Fuman Strategy2 LINE Stop 1200",
       "displayName": "Fuman Strategy2 LINE Stop 1200",
-      "description": "策略2通知巡邏，12:00 停止",
+      "description": "Strategy2 LINE patrol stop at 12:00.",
       "time": "12:00",
-      "aliases": [
-        "line stop"
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "12:00"
       ]
     },
     {
-      "taskName": "\\Fuman 即時雷達",
-      "displayName": "Fuman 即時雷達",
-      "description": "即時雷達，08:58 啟動",
-      "time": "08:58",
-      "aliases": [
-        "即時雷達",
-        "realtime"
-      ]
+      "taskName": "\\Fuman Strategy2 Readiness Source 0800",
+      "displayName": "Fuman Strategy2 Readiness Source 0800",
+      "description": "Strategy2 readiness source.",
+      "time": "08:00",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Market Overview Patrol 0900",
-      "displayName": "Fuman Market Overview Patrol 0900",
-      "description": "市場總覽 / 熱力圖 / AI判讀，09:00 啟動巡邏",
-      "time": "09:00",
-      "aliases": [
-        "市場總覽",
-        "market"
-      ]
+      "taskName": "\\Fuman Strategy2 Supabase Coverage 0800",
+      "displayName": "Fuman Strategy2 Supabase Coverage 0800",
+      "description": "Strategy2 Supabase coverage watch.",
+      "time": "08:00",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Market Overview Watchdog 0901",
-      "displayName": "Fuman Market Overview Watchdog 0901",
-      "description": "市場總覽 Watchdog，09:01 檢查狀態",
-      "time": "09:01",
-      "aliases": [
-        "market watchdog"
-      ]
+      "taskName": "\\Fuman Strategy3 Battle Verify 1305",
+      "displayName": "Fuman Strategy3 Battle Verify 1305",
+      "description": "Strategy3 battle verification.",
+      "time": "13:05",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Strategy3 Cache 1230",
-      "displayName": "Fuman Strategy3 Cache 1230",
-      "description": "策略3隔日沖，12:30 先跑主掃描",
-      "time": "12:30",
-      "aliases": [
-        "策略3 1230",
-        "strategy3 early"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Strategy3 Cache 1300",
-      "displayName": "Fuman Strategy3 Cache 1300",
-      "description": "策略3隔日沖，13:00 第二次保險快取",
+      "taskName": "\\Fuman Strategy3 Complete Scan 1300",
+      "displayName": "Fuman Strategy3 Complete Scan 1300",
+      "description": "Strategy3 complete scan.",
       "time": "13:00",
-      "aliases": [
-        "策略3",
-        "策略3 1300",
-        "strategy3 fallback"
-      ]
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Strategy3 Watchdog 1320",
-      "displayName": "Fuman Strategy3 Watchdog 1320",
-      "description": "策略3 Watchdog，13:20 最後檢查並補跑",
-      "time": "13:20",
-      "aliases": [
-        "strategy3 watchdog",
-        "策略3 watchdog"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Auto Main Release 1615",
-      "displayName": "Fuman Auto Main Release 1615",
-      "description": "策略4波段，下午 16:15 完整掃描後同步、部署、驗證並推送 GitHub",
-      "time": "16:15",
-      "aliases": [
-        "策略4"
-      ]
+      "taskName": "\\Fuman Strategy4 Cache 1600",
+      "displayName": "Fuman Strategy4 Cache 1600",
+      "description": "Strategy4 cache after 16:00.",
+      "time": "16:00",
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy5 Cache 2100",
       "displayName": "Fuman Strategy5 Cache 2100",
-      "description": "策略5綜合策略，晚上 21:00 快取",
+      "description": "Strategy5 cache.",
       "time": "21:00",
-      "aliases": [
-        "策略5 2100"
-      ]
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy5 Watchdog 2130",
       "displayName": "Fuman Strategy5 Watchdog 2130",
-      "description": "策略5 Watchdog，21:30 檢查 21:00 complete run；失敗會補跑",
+      "description": "Strategy5 watchdog.",
       "time": "21:30",
-      "aliases": [
-        "strategy5 watchdog",
-        "策略5 watchdog"
-      ]
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Daily Health Summary 1545",
-      "displayName": "Fuman Daily Health Summary 1545",
-      "description": "每日健康摘要，15:45 產生",
+      "taskName": "\\Fuman Supabase Vercel History Cleanup 1545",
+      "displayName": "Fuman Supabase Vercel History Cleanup 1545",
+      "description": "Supabase/Vercel history cleanup.",
       "time": "15:45",
-      "aliases": [
-        "health"
-      ]
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman 權證走向 Cache 0530",
-      "displayName": "Fuman 權證走向 Cache 0530",
-      "description": "權證資金走向，早上 05:30 快取並發布終端",
-      "time": "05:30",
-      "aliases": [
-        "權證 0530",
-        "權證 0500"
-      ]
+      "taskName": "\\Fuman Terminal Local Freshness Verify 0830-2230",
+      "displayName": "Fuman Terminal Local Freshness Verify 0830-2230",
+      "description": "Local freshness verify/repair from 08:30 through 22:30.",
+      "time": "08:30-22:30",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman 權證走向 Watchdog 0550",
-      "displayName": "Fuman 權證走向 Watchdog 0550",
-      "description": "早上 05:50 檢查權證 05:30 是否成功；失敗會重跑",
-      "time": "05:50",
-      "aliases": [
-        "權證 0550",
-        "權證 0520"
-      ]
+      "taskName": "\\Fuman Warrant Battle Verify 2055",
+      "displayName": "Fuman Warrant Battle Verify 2055",
+      "description": "Warrant battle verification.",
+      "time": "20:55",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman 權證走向 Cache 2030",
-      "displayName": "Fuman 權證走向 Cache 2030",
-      "description": "權證資金走向，晚上 20:30 快取並發布終端",
-      "time": "20:30",
-      "aliases": [
-        "權證 2030",
-        "權證 2200"
-      ]
-    },
-    {
-      "taskName": "\\Fuman 權證走向 Watchdog 2050",
-      "displayName": "Fuman 權證走向 Watchdog 2050",
-      "description": "晚上 20:50 檢查權證 20:30 是否成功；失敗會重跑",
-      "time": "20:50",
-      "aliases": [
-        "權證 2050",
-        "權證 2220"
-      ]
+      "taskName": "\\Fuman 即時雷達",
+      "displayName": "Fuman 即時雷達",
+      "description": "Realtime radar. 267014 is allowed when the market window has ended.",
+      "time": "08:58",
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman 買賣超 Cache 2100",
       "displayName": "Fuman 買賣超 Cache 2100",
-      "description": "買賣超資料，晚上 21:00 快取並發布終端",
+      "description": "Institution flow cache.",
       "time": "21:00",
-      "aliases": [
-        "買賣超 2100"
-      ]
+      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman 買賣超 Watchdog 2120",
       "displayName": "Fuman 買賣超 Watchdog 2120",
-      "description": "晚上 21:20 檢查買賣超 21:00 是否成功；失敗會重跑",
-      "time": "21:20",
-      "aliases": [
-        "買賣超 2120"
-      ]
+      "description": "Institution flow watchdog.",
+      "time": "21:15",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman CB Complete Scan 2125",
-      "displayName": "Fuman CB Complete Scan 2125",
-      "description": "CB可轉債完整掃描，晚上 21:25 讀取 CBAS 三層來源、60分K門檻與評分，並發布終端。",
-      "time": "21:25",
-      "aliases": [
-        "CB",
-        "可轉債",
-        "CB 2125",
-        "CB完整掃"
-      ]
+      "taskName": "\\Fuman 權證走向 Cache 2030",
+      "displayName": "Fuman 權證走向 Cache 2030",
+      "description": "Warrant flow cache.",
+      "time": "20:30",
+      "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman CB Watchdog 2145",
-      "displayName": "Fuman CB Watchdog 2145",
-      "description": "晚上 21:45 檢查 CB 21:25 是否成功；失敗會重跑並發布終端。",
-      "time": "21:45",
-      "aliases": [
-        "CB watchdog",
-        "CB 2145",
-        "可轉債 watchdog"
-      ]
+      "taskName": "\\Fuman 權證走向 Watchdog 2050",
+      "displayName": "Fuman 權證走向 Watchdog 2050",
+      "description": "Warrant flow watchdog.",
+      "time": "20:50",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\FumanTerminalProductionHealthMonitor",
+      "displayName": "FumanTerminalProductionHealthMonitor",
+      "description": "Production health monitor.",
+      "time": "every 5 minutes",
+      "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Auto Main Release 1615",
+      "displayName": "Fuman Auto Main Release 1615",
+      "description": "Disabled: auto main release is not part of the canonical deploy loop.",
+      "time": "16:15",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Daily Health Summary 1545",
+      "displayName": "Fuman Daily Health Summary 1545",
+      "description": "Disabled: replaced by production monitor and health receipts.",
+      "time": "15:45",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Deploy Worktree Clean Monitor 5m",
+      "displayName": "Fuman Deploy Worktree Clean Monitor 5m",
+      "description": "Disabled: replaced by production mirror guard in deploy gates.",
+      "time": "every 5 minutes",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Market Overview Patrol 0900",
+      "displayName": "Fuman Market Overview Patrol 0900",
+      "description": "Disabled: market overview is covered by API surfaces.",
+      "time": "09:00",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Market Overview Watchdog 0901",
+      "displayName": "Fuman Market Overview Watchdog 0901",
+      "description": "Disabled: market overview patrol is disabled.",
+      "time": "09:01",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Battle Verify 1323",
+      "displayName": "Fuman Strategy3 Battle Verify 1323",
+      "description": "Disabled: duplicate Strategy3 battle verify.",
+      "time": "13:23",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Battle Verify 1335",
+      "displayName": "Fuman Strategy3 Battle Verify 1335",
+      "description": "Disabled: duplicate Strategy3 battle verify.",
+      "time": "13:35",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Complete Scan 1318",
+      "displayName": "Fuman Strategy3 Complete Scan 1318",
+      "description": "Disabled: duplicate Strategy3 complete scan.",
+      "time": "13:18",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Refresh Snapshot 1308",
+      "displayName": "Fuman Strategy3 Refresh Snapshot 1308",
+      "description": "Disabled: snapshot refresh is covered by later gates.",
+      "time": "13:08",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Terminal API Health",
+      "displayName": "Fuman Terminal API Health",
+      "description": "Disabled: production monitor supersedes this task.",
+      "time": "17:28",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman 即時雷達健檢 0910",
+      "displayName": "Fuman 即時雷達健檢 0910",
+      "description": "Disabled: realtime radar health is covered by the main radar and monitor chain.",
+      "time": "09:10",
+      "expectedState": "Disabled"
     }
   ]
 }

@@ -109,15 +109,28 @@ function assertVercelProject() {
 
 function assertProductionMirrorPolicy() {
   const actualRoot = ROOT.toLowerCase();
-  if (actualRoot !== PRODUCTION_MIRROR_ROOT) return;
-  const branch = git(["branch", "--show-current"]);
-  if (branch.stdout !== "main") fail("C:\\fuman-terminal is production mirror only and must stay on main");
+  if (actualRoot === PRODUCTION_MIRROR_ROOT) {
+    fail("C:\\fuman-terminal is production mirror only; run release/deploy gates from the release clone, not the mirror");
+  }
+}
+
+function assertProductionMirrorClean() {
+  const mirrorGuard = spawnSync(process.execPath, ["scripts/verify-production-mirror-guard.js"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: process.env,
+    windowsHide: true,
+  });
+  if (mirrorGuard.status === 0) return;
+  const output = `${mirrorGuard.stdout || ""}${mirrorGuard.stderr || ""}`.trim();
+  fail(output || "production mirror guard failed");
 }
 
 assertCleanWorktree();
 assertBranchAndSync();
 assertVercelProject();
 assertProductionMirrorPolicy();
+assertProductionMirrorClean();
 
 if (issues.length) {
   console.error("[sync-hard-gate] failed");

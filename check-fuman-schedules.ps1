@@ -1,12 +1,16 @@
 param(
   [switch]$IncludeDisabled,
-  [switch]$StrictLogs
+  [switch]$StrictLogs,
+  [string]$RegistryPath = ""
 )
 
 $ErrorActionPreference = "Continue"
 
+$root = $PSScriptRoot
 $logDir = if ($env:FUMAN_LOG_DIR) { $env:FUMAN_LOG_DIR } else { "C:\fuman-runtime\logs" }
-$taskNameFilter = "Fuman*"
+if (-not $RegistryPath) {
+  $RegistryPath = Join-Path $root "scripts\fuman-schedule-registry.json"
+}
 
 $rules = @{
   "run-cache-sync.ps1" = @{
@@ -91,11 +95,108 @@ $rules = @{
   }
 }
 
+function Normalize-TaskName($Name) {
+  $text = ([string]$Name).Trim()
+  while ($text.StartsWith("\")) { $text = $text.Substring(1) }
+  return $text
+}
+
+function Read-Registry {
+  if (-not (Test-Path -LiteralPath $RegistryPath)) {
+    throw "schedule registry not found: $RegistryPath"
+  }
+  return Get-Content -LiteralPath $RegistryPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+}
+
+function Add-PolicyTask($Map, $Name, $ExpectedState, $Entry = $null) {
+  $key = Normalize-TaskName $Name
+  if (-not $key) { return }
+  if (-not $Map.ContainsKey($key)) {
+    $Map[$key] = @{
+      ExpectedState = $ExpectedState
+      ExpectedTriggers = @()
+      Description = ""
+      Time = ""
+    }
+  }
+  if ($ExpectedState) { $Map[$key].ExpectedState = $ExpectedState }
+  if ($Entry) {
+    if ($Entry.description) { $Map[$key].Description = [string]$Entry.description }
+    if ($Entry.time) { $Map[$key].Time = [string]$Entry.time }
+    if ($Entry.expectedTriggers) { $Map[$key].ExpectedTriggers = @($Entry.expectedTriggers | ForEach-Object { [string]$_ }) }
+  }
+}
+
+function Build-Policy($Registry) {
+  $map = @{}
+  foreach ($entry in @($Registry.tasks)) {
+    $state = if ($entry.expectedState) { [string]$entry.expectedState } else { "" }
+    Add-PolicyTask $map $entry.taskName $state $entry
+  }
+  foreach ($name in @($Registry.policy.activeTasks)) { Add-PolicyTask $map $name "Ready" }
+  foreach ($name in @($Registry.policy.expectedDisabledTasks)) { Add-PolicyTask $map $name "Disabled" }
+
+  $retired = @{}
+  foreach ($name in @($Registry.policy.retiredTasks)) {
+    $key = Normalize-TaskName $name
+    if ($key) { $retired[$key] = $true }
+  }
+
+  $allowedResults = @{}
+  if ($Registry.policy.allowedResults) {
+    foreach ($prop in $Registry.policy.allowedResults.PSObject.Properties) {
+      $allowedResults[(Normalize-TaskName $prop.Name)] = @($prop.Value | ForEach-Object { [int64]$_ })
+    }
+  }
+
+  $coveredBy = @{}
+  if ($Registry.policy.coveredBy) {
+    foreach ($prop in $Registry.policy.coveredBy.PSObject.Properties) {
+      $coveredBy[(Normalize-TaskName $prop.Name)] = $prop.Value
+    }
+  }
+
+  $forbiddenTriggers = @{}
+  if ($Registry.policy.forbiddenTriggers) {
+    foreach ($prop in $Registry.policy.forbiddenTriggers.PSObject.Properties) {
+      $forbiddenTriggers[(Normalize-TaskName $prop.Name)] = @($prop.Value | ForEach-Object { [string]$_ })
+    }
+  }
+
+  $retiredPatterns = @($Registry.policy.retiredTaskNamePatterns | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  $severity = @{}
+  if ($Registry.policy.alertSeverity) {
+    foreach ($prop in $Registry.policy.alertSeverity.PSObject.Properties) {
+      $severity[$prop.Name] = [string]$prop.Value
+    }
+  }
+
+  return @{
+    Tasks = $map
+    Retired = $retired
+    RetiredPatterns = $retiredPatterns
+    AllowedResults = $allowedResults
+    CoveredBy = $coveredBy
+    ForbiddenTriggers = $forbiddenTriggers
+    Severity = $severity
+  }
+}
+
 function Get-ScriptNameFromAction($task) {
   $text = (($task.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join " ")
-  $match = [regex]::Match($text, "C:\\fuman-terminal\\([^""\s]+\.ps1)")
+  $match = [regex]::Match($text, "(?i)(?:C:\\fuman-terminal\\)?([^""'\s\\]+\.ps1)")
   if ($match.Success) { return $match.Groups[1].Value }
   return ""
+}
+
+function Get-ActionText($task) {
+  return (($task.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)".Trim() }) -join " | ")
+}
+
+function Get-TriggerTimes($task) {
+  return @($task.Triggers | ForEach-Object {
+    try { ([datetime]$_.StartBoundary).ToString("HH:mm") } catch { "" }
+  } | Where-Object { $_ } | Sort-Object -Unique)
 }
 
 function Read-LogText($path) {
@@ -137,52 +238,10 @@ function Test-FailureText($text) {
   return $clean -match "(?i)(failed with exit code|Error:|exited: 1|UNABLE_TO_VERIFY|fetch failed|This operation was aborted|fatal:|HTTP\s+[45]\d\d)"
 }
 
-function Test-AllowedStoppedResult($taskName, $scriptName, $result) {
-  if ($result -ne 267014) { return $false }
-  if ($scriptName -eq "run-realtime-radar.ps1") { return $true }
-  if ($scriptName -eq "run-market-overview.ps1") { return $true }
-  if ($taskName -like "*Realtime*") { return $true }
-  if ($taskName -like "*Radar*") { return $true }
-  if ($taskName -like "*Market Overview Patrol*") { return $true }
-  return $false
-}
-
-function Test-LatestFreshnessGatePassed($taskName, $result, $lastRunTime) {
-  if ($result -ne 267014) { return $false }
-  if ($taskName -notlike "*Freshness Gate Full*") { return $false }
-  if (-not (Test-Path -LiteralPath $logDir)) { return $false }
-  $latest = Get-ChildItem -LiteralPath $logDir -Filter "live-freshness-gate-*.log" -File -ErrorAction SilentlyContinue |
-    Where-Object { $lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime } |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-  if (-not $latest) { return $false }
-  $text = Read-LogText $latest.FullName
-  return $text -match "SUCCESS live freshness gate passed"
-}
-
-function Test-LatestStrategy1PreopenCovered($taskName, $result, $lastRunTime) {
-  if ($result -eq 0) { return $false }
-  if ($taskName -notlike "*STAR Preopen Watch*") { return $false }
-  if (-not (Test-Path -LiteralPath $logDir)) { return $false }
-  $latest = Get-ChildItem -LiteralPath $logDir -File -ErrorAction SilentlyContinue |
-    Where-Object {
-      ($_.Name -like "strategy1-preopen-prepare-*.log" -or $_.Name -like "strategy1-preopen-final-*.log") -and
-      ($lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime)
-    } |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 5
-  foreach ($logFile in @($latest)) {
-    $text = Read-LogText $logFile.FullName
-    if ($text -match "strategy1 preopen runner complete" -and $text -notmatch "strategy1 preopen runner failed") {
-      return $true
-    }
-  }
-  return $false
-}
-
 function Convert-ResultText($result) {
   switch ($result) {
     0 { return "0 success" }
+    267009 { return "267009 running" }
     267011 { return "267011 waiting/not-run" }
     267014 { return "267014 stopped/window-ended" }
     3221225786 { return "3221225786 process-start-failed" }
@@ -199,82 +258,199 @@ function Get-LatestLog($rule, $lastRunTime) {
     Select-Object -First 1
 }
 
+function Test-CoveredByRule($rule, $lastRunTime) {
+  if (-not $rule -or -not (Test-Path -LiteralPath $logDir)) { return $false }
+  $patterns = @($rule.logPatterns | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  if ($patterns.Count -eq 0) { return $false }
+  $logs = @(Get-ChildItem -LiteralPath $logDir -File -ErrorAction SilentlyContinue |
+    Where-Object {
+      $name = $_.Name
+      $matchesPattern = @($patterns | Where-Object { $name -like $_ }).Count -gt 0
+      $afterRun = $lastRunTime -eq [datetime]"1999-11-30" -or $_.LastWriteTime -ge $lastRunTime.AddMinutes(-5)
+      $matchesPattern -and $afterRun
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 5)
+  foreach ($logFile in $logs) {
+    $text = Read-LogText $logFile.FullName
+    $success = $rule.successPattern -and $text -match [string]$rule.successPattern
+    $failure = $rule.failurePattern -and $text -match [string]$rule.failurePattern
+    if ($success -and -not $failure) { return $true }
+  }
+  return $false
+}
+
+function Get-Severity($Policy, $Status) {
+  if ($Policy.Severity.ContainsKey($Status)) { return $Policy.Severity[$Status] }
+  if ($Status -like "OK*") { return "none" }
+  return "critical"
+}
+
+function Test-RetiredPattern($Policy, $TaskName) {
+  foreach ($pattern in @($Policy.RetiredPatterns)) {
+    if ($TaskName -match $pattern) { return $true }
+  }
+  return $false
+}
+
+function Test-ExpectedTriggers($Expected, $Actual) {
+  $expectedSet = @($Expected | Sort-Object -Unique)
+  if ($expectedSet.Count -eq 0) { return $true }
+  $actualSet = @($Actual | Sort-Object -Unique)
+  if ($expectedSet.Count -ne $actualSet.Count) { return $false }
+  for ($i = 0; $i -lt $expectedSet.Count; $i++) {
+    if ($expectedSet[$i] -ne $actualSet[$i]) { return $false }
+  }
+  return $true
+}
+
+try {
+  $registry = Read-Registry
+  $policy = Build-Policy $registry
+} catch {
+  Write-Host "Fuman schedule check failed to load registry: $($_.Exception.Message)"
+  exit 1
+}
+
 if (-not (Test-Path -LiteralPath $logDir)) {
   Write-Host "Missing log directory: $logDir"
   exit 1
 }
 
-$taskQuery = Get-ScheduledTask | Where-Object { $_.TaskName -like $taskNameFilter }
-if (-not $IncludeDisabled) {
-  $taskQuery = $taskQuery | Where-Object { $_.State -ne "Disabled" }
+$scheduledTasks = @(Get-ScheduledTask | Where-Object { $_.TaskName -like "Fuman*" })
+$present = @{}
+foreach ($task in $scheduledTasks) {
+  $present[(Normalize-TaskName $task.TaskName)] = $task
 }
 
-$rows = foreach ($task in ($taskQuery | Sort-Object TaskName)) {
+$rows = @()
+
+foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
+  $name = Normalize-TaskName $task.TaskName
   $info = Get-ScheduledTaskInfo -TaskName $task.TaskName -TaskPath $task.TaskPath
   $script = Get-ScriptNameFromAction $task
+  $actionText = Get-ActionText $task
+  $triggers = Get-TriggerTimes $task
   $rule = if ($script -and $rules.ContainsKey($script)) { $rules[$script] } else { $null }
   $latestLog = Get-LatestLog $rule $info.LastRunTime
   $logText = if ($latestLog) { Read-LogText $latestLog.FullName } else { "" }
   $logOk = if ($rule) { Test-AnyPattern $logText $rule.Done } else { $false }
   $logFailed = Test-FailureText $logText
   $detail = if ($rule) { Get-Detail $logText $rule.Detail } else { "" }
-  $result = [int]$info.LastTaskResult
-  $taskOk = $result -eq 0
-  $taskWaiting = $result -eq 267011
-  $taskStoppedOk = (Test-AllowedStoppedResult $task.TaskName $script $result) -and (-not $logFailed)
-  $freshnessGateCovered = Test-LatestFreshnessGatePassed $task.TaskName $result $info.LastRunTime
-  $preopenCovered = Test-LatestStrategy1PreopenCovered $task.TaskName $result $info.LastRunTime
-  if ($preopenCovered -and -not $detail) {
-    $detail = "covered by later strategy1 preopen prepare/final success"
-  }
+  $result = [int64]$info.LastTaskResult
+  $state = [string]$task.State
+  $entry = if ($policy.Tasks.ContainsKey($name)) { $policy.Tasks[$name] } else { $null }
+  $expectedState = if ($entry) { [string]$entry.ExpectedState } else { "" }
+  $allowed = if ($policy.AllowedResults.ContainsKey($name)) { @($policy.AllowedResults[$name]) } else { @(0) }
+  $coveredRule = if ($policy.CoveredBy.ContainsKey($name)) { $policy.CoveredBy[$name] } else { $null }
+  $covered = Test-CoveredByRule $coveredRule $info.LastRunTime
+  $forbidden = if ($policy.ForbiddenTriggers.ContainsKey($name)) { @($policy.ForbiddenTriggers[$name]) } else { @() }
+  $forbiddenHit = @($triggers | Where-Object { $forbidden -contains $_ })
 
-  $status = if ($task.State -eq "Disabled") {
-    "DISABLED"
-  } elseif ($taskWaiting) {
-    "OK_WAITING"
-  } elseif ($taskStoppedOk) {
-    "OK_STOPPED"
-  } elseif ($freshnessGateCovered) {
-    "OK_COVERED"
-  } elseif ($preopenCovered) {
-    "OK_COVERED"
-  } elseif (-not $taskOk) {
-    "FAIL"
+  if ($covered -and -not $detail -and $coveredRule.detail) { $detail = [string]$coveredRule.detail }
+  if (-not $detail -and $entry -and $entry.Description) { $detail = [string]$entry.Description }
+
+  $status = "OK"
+  if ($policy.Retired.ContainsKey($name) -or (Test-RetiredPattern $policy $name)) {
+    $status = "RETIRED_PRESENT"
+  } elseif (-not $entry) {
+    $status = "UNKNOWN_REGISTRY"
+  } elseif ($state -eq "Disabled" -and $expectedState -eq "Disabled") {
+    $status = "DISABLED_EXPECTED"
+  } elseif ($expectedState -eq "Disabled" -and $state -ne "Disabled") {
+    $status = "STATE_MISMATCH"
+  } elseif ($expectedState -ne "Disabled" -and $state -eq "Disabled") {
+    $status = "STATE_MISMATCH"
+  } elseif ($forbiddenHit.Count -gt 0) {
+    $status = "FORBIDDEN_TRIGGER"
+    $detail = "forbidden trigger present: $($forbiddenHit -join ', ')"
+  } elseif (-not (Test-ExpectedTriggers $entry.ExpectedTriggers $triggers)) {
+    $status = "TRIGGER_MISMATCH"
+    $detail = "expected triggers $($entry.ExpectedTriggers -join ', '); actual $($triggers -join ', ')"
+  } elseif ($result -eq 267009 -and ($allowed -contains 267009)) {
+    $status = "OK_RUNNING"
+  } elseif ($result -eq 267011 -and ($allowed -contains 267011)) {
+    $status = "OK_WAITING"
+  } elseif ($result -eq 267014 -and ($allowed -contains 267014) -and -not $logFailed) {
+    $status = "OK_STOPPED"
+  } elseif ($allowed -notcontains $result) {
+    if ($covered) {
+      $status = "OK_COVERED"
+    } else {
+      $status = "FAIL"
+    }
   } elseif ($logFailed) {
-    "LOG_ERROR"
+    $status = "LOG_ERROR"
   } elseif ($StrictLogs -and $rule -and $rule.Log -and -not $logOk) {
-    "LOG_CHECK"
-  } else {
-    "OK"
+    $status = "LOG_CHECK"
   }
 
-  [pscustomobject]@{
+  $severity = Get-Severity $policy $status
+  $rows += [pscustomobject]@{
     Status = $status
+    Severity = $severity
     TaskName = $task.TaskName
     Script = $script
-    State = [string]$task.State
+    State = $state
     LastRun = $info.LastRunTime
     NextRun = $info.NextRunTime
     Result = Convert-ResultText $result
+    Triggers = ($triggers -join ",")
     LatestLog = if ($latestLog) { $latestLog.Name } else { "" }
     Detail = $detail
+    Action = $actionText
   }
+}
+
+foreach ($name in ($policy.Tasks.Keys | Sort-Object)) {
+  $entry = $policy.Tasks[$name]
+  if ($entry.ExpectedState -eq "Disabled") { continue }
+  if (-not $present.ContainsKey($name)) {
+    $rows += [pscustomobject]@{
+      Status = "MISSING"
+      Severity = Get-Severity $policy "MISSING"
+      TaskName = $name
+      Script = ""
+      State = "Missing"
+      LastRun = ""
+      NextRun = ""
+      Result = ""
+      Triggers = ""
+      LatestLog = ""
+      Detail = "expected active task is missing"
+      Action = ""
+    }
+  }
+}
+
+$displayRows = @($rows)
+if (-not $IncludeDisabled) {
+  $displayRows = @($displayRows | Where-Object { $_.State -ne "Disabled" -or $_.Severity -eq "critical" })
 }
 
 Write-Host ""
 Write-Host "Fuman schedule check"
-Write-Host "Mode: active tasks only. Use -IncludeDisabled for retired/disabled inventory; use -StrictLogs to require completion markers."
+Write-Host "Registry: $RegistryPath"
+Write-Host "Policy version: $($registry.policyVersion)"
+Write-Host "Mode: canonical registry. Use -IncludeDisabled for expected disabled inventory; use -StrictLogs to require completion markers."
 Write-Host ""
-$rows | Format-Table -AutoSize
+$displayRows | Sort-Object Severity, TaskName | Format-Table -AutoSize Status, Severity, TaskName, State, Result, Triggers, LatestLog, Detail
 
-$bad = @($rows | Where-Object { $_.Status -in @("FAIL", "LOG_ERROR") })
-if ($bad.Count) {
+$critical = @($rows | Where-Object { $_.Severity -eq "critical" })
+$warnings = @($rows | Where-Object { $_.Severity -eq "warning" })
+
+if ($critical.Count) {
   Write-Host ""
   Write-Host "Action required"
-  $bad | Format-Table -AutoSize
+  $critical | Sort-Object TaskName | Format-Table -AutoSize Status, Severity, TaskName, State, Result, Triggers, Detail
   exit 1
 }
 
 Write-Host ""
-Write-Host "Schedule check passed: no active Fuman task blockers."
+if ($warnings.Count) {
+  Write-Host "Schedule check passed with warnings: $($warnings.Count)"
+  $warnings | Sort-Object TaskName | Format-Table -AutoSize Status, Severity, TaskName, Result, Detail
+} else {
+  Write-Host "Schedule check passed: no canonical Fuman task blockers."
+}
 exit 0
