@@ -179,6 +179,25 @@ async function verifySupabaseApi(issues) {
   assertOk(Number(firstVolume?.thirtyMinuteVolume || 0) > 0, "warrant-flow api first volume thirtyMinuteVolume missing", issues);
   assertOk(Number(firstVolume?.floatingUnits || 0) > 0, "warrant-flow api first volume floatingUnits missing", issues);
   assertOk(Number(firstVolume?.volumeMultiple || 0) > 0, "warrant-flow api first volume volumeMultiple missing", issues);
+  const coverageRows = rows(coveragePayload);
+  const badQuoteDateRows = coverageRows
+    .map((row, index) => ({ row, index, quoteDate: compactDateKey(row?.quoteDate) }))
+    .filter(({ quoteDate }) => quoteDate && quoteDate !== usedDate && quoteDate !== sourceDate)
+    .slice(0, 5);
+  assertOk(
+    badQuoteDateRows.length === 0,
+    `warrant-flow row quoteDate differs from source/used date: ${badQuoteDateRows.map(({ index, row, quoteDate }) => `${index}:${row?.code || row?.underlyingCode || "missing"}:${quoteDate}`).join(",")}`,
+    issues
+  );
+  const missingSourceTradeDateRows = coverageRows
+    .map((row, index) => ({ row, index, sourceTradeDate: compactDateKey(row?.sourceTradeDate) }))
+    .filter(({ sourceTradeDate }) => sourceTradeDate && sourceTradeDate !== usedDate && sourceTradeDate !== sourceDate)
+    .slice(0, 5);
+  assertOk(
+    missingSourceTradeDateRows.length === 0,
+    `warrant-flow row sourceTradeDate differs from source/used date: ${missingSourceTradeDateRows.map(({ index, row, sourceTradeDate }) => `${index}:${row?.code || row?.underlyingCode || "missing"}:${sourceTradeDate}`).join(",")}`,
+    issues
+  );
 
   const watchlistSummary = await verifyWatchlistWarrantCoverage(coveragePayload, issues);
 
@@ -192,6 +211,7 @@ async function verifySupabaseApi(issues) {
     volumeMatchesTotal: apiPayload.volumeMatchesTotal,
     singleSignalsTotal: apiPayload.singleSignalsTotal,
     schemaVersion: apiPayload.schemaVersion || "",
+    quoteDateCheckedRows: coverageRows.length,
     coverageVolumeRows: volumeRows(coveragePayload).length,
     coverageSingleRows: singleRows(coveragePayload).length,
     watchlistSummary,

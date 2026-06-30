@@ -291,6 +291,23 @@ function ageInDaysFromTradeDate(value) {
   if (!date) return Infinity;
   return Math.floor((taipeiDateOnly() - date) / 86400000);
 }
+
+function annotateWarrantRowDates(row, sourceDate) {
+  if (!row || typeof row !== "object") return row;
+  const gateDate = normalizeDateKey(sourceDate || row.tradeDate || row.sourceDate || row.usedDate || "");
+  const underlyingQuoteDate = normalizeDateKey(row.underlyingQuoteDate || row.underlyingTradeDate || row.quoteDate || "");
+  const next = {
+    ...row,
+    quoteDate: gateDate || normalizeDateKey(row.quoteDate || ""),
+    sourceTradeDate: gateDate || "",
+    underlyingQuoteDate,
+  };
+  if (Array.isArray(row.topWarrants)) {
+    next.topWarrants = row.topWarrants.map((item) => annotateWarrantRowDates(item, gateDate));
+  }
+  return next;
+}
+
 function normalizeMatch(item, quoteMap = new Map()) {
   const code = String(item.underlyingCode || item.code || "").trim();
   const name = String(item.underlyingName || item.name || "").trim();
@@ -308,7 +325,8 @@ function normalizeMatch(item, quoteMap = new Map()) {
     name,
     close,
     percent,
-    quoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
+    quoteDate: item.tradeDate || item.sourceDate || "",
+    underlyingQuoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
     displayClose: close,
     displayPercent: percent,
     underlyingCode: code,
@@ -345,7 +363,8 @@ function normalizeSingleSignal(item, quoteMap = new Map()) {
     name: String(item.underlyingName || item.name || "").trim(),
     close,
     percent,
-    quoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
+    quoteDate: item.tradeDate || item.sourceDate || "",
+    underlyingQuoteDate: quote.quoteDate || quote.tradeDate || quote.TradeDate || item.quoteDate || "",
     displayClose: close,
     displayPercent: percent,
     underlyingCode: code,
@@ -395,6 +414,9 @@ async function main() {
     singleSignals,
   };
   output.tradeDate = [...new Set(matches.map((item) => String(item.tradeDate || "")).filter(Boolean))].sort().at(-1) || output.tradeDate || "";
+  output.matches = matches.map((item) => annotateWarrantRowDates(item, output.tradeDate));
+  output.volumeMatches = volumeMatches.map((item) => annotateWarrantRowDates(item, output.tradeDate));
+  output.singleSignals = singleSignals.map((item) => annotateWarrantRowDates(item, output.tradeDate));
   output.runId = warrantFlowRunIdFromOutput(output);
   output.complete = true;
   output.schemaVersion = output.schemaVersion || "warrant-flow-run-id-complete-v1";

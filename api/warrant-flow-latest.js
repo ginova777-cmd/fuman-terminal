@@ -272,8 +272,10 @@ function completeRunGateIssues(run, rows) {
   return issues;
 }
 
-function normalizeRow(row) {
+function normalizeRow(row, context = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const marketDate = compactDateKey(context.sourceDate || context.usedDate || row.scan_date || "");
+  const underlyingQuoteDate = compactDateKey(payload.underlyingQuoteDate || payload.underlyingTradeDate || payload.quoteDate || "");
   return {
     ...payload,
     code: String(payload.code || row.underlying_code || row.code || "").trim(),
@@ -286,23 +288,26 @@ function normalizeRow(row) {
     finalScore: cleanNumber(payload.finalScore || payload.score || row.score),
     score: cleanNumber(payload.score || payload.finalScore || row.score),
     reason: String(payload.reason || row.reason || "").trim(),
+    quoteDate: marketDate || compactDateKey(payload.quoteDate || row.scan_date || ""),
+    sourceTradeDate: marketDate || "",
+    underlyingQuoteDate,
   };
 }
 
 function buildPayload(rows, run, options = {}) {
+  const scanDate = compactDateKey(run?.scan_date || rows[0]?.scan_date || "");
+  const usedDate = compactDateKey(run?.payload?.usedDate || run?.payload?.tradeDate || scanDate);
+  const sourceDate = compactDateKey(run?.payload?.sourceDate || run?.payload?.tradeDate || scanDate || usedDate);
   const byType = (type) => rows
     .filter((row) => String(row.result_type || "match") === type)
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
-    .map(normalizeRow);
+    .map((row) => normalizeRow(row, { sourceDate, usedDate }));
   const matches = byType("match");
   const volumeMatches = byType("volume");
   const singleSignals = byType("single");
   const outputMatches = options.canvas ? matches.slice(0, options.limit || 80) : matches;
   const outputVolumeMatches = options.canvas ? volumeMatches.slice(0, options.limit || 80) : volumeMatches;
   const outputSingleSignals = options.canvas ? singleSignals.slice(0, options.limit || 80) : singleSignals;
-  const scanDate = compactDateKey(run?.scan_date || rows[0]?.scan_date || "");
-  const usedDate = compactDateKey(run?.payload?.usedDate || run?.payload?.tradeDate || scanDate);
-  const sourceDate = compactDateKey(run?.payload?.sourceDate || run?.payload?.tradeDate || scanDate || usedDate);
   const runId = String(run?.run_id || rows[0]?.run_id || "");
   return {
     ok: true,
