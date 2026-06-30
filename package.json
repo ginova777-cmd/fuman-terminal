@@ -147,6 +147,7 @@
     "verify:strategy5-alert-path": "node --use-system-ca scripts/verify-strategy5-alert-path.js",
     "verify:strategy1-autonomy": "node --use-system-ca scripts/verify-strategy1-autonomy-readonly.js",
     "verify:strategy4-autonomy": "node --use-system-ca scripts/verify-strategy4-autonomy-readonly.js",
+    "verify:strategy4-publish-gate": "node --use-system-ca scripts/verify-supabase-publish-hard-gate.js --strategy=strategy4",
     "verify:cost-governance-audit": "node --use-system-ca scripts/verify-cost-governance-audit.js",
     "verify:supabase-publish-hard-gate": "node --use-system-ca scripts/verify-supabase-publish-hard-gate.js"
   },

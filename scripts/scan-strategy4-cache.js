@@ -42,6 +42,8 @@ const BLACKLIST_FILE = process.env.STRATEGY4_BLACKLIST_FILE || path.join(CONFIG_
 const HISTORY_PREWARM_SCRIPT = path.join(ROOT, "scripts", "prewarm-strategy4-history-cache.js");
 const HISTORY_PREWARM_STATUS_FILE = path.join(STATE_DIR, "strategy4-history-prewarm-status.json");
 const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "strategy4-supabase-status.json");
+const STRATEGY4_PUBLISH_GATE_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, "strategy4-supabase-publish-hard-gate.json");
+const STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS = Number(process.env.STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS || 1800);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
 const SKIP_RETRY_ON_SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_SKIP_RETRY !== "0";
@@ -148,6 +150,40 @@ function writeSupabaseStatus(ok, details = {}) {
     checkedAt: new Date().toISOString(),
     ...details,
   });
+}
+
+function readStrategy4PublishGate() {
+  const payload = readJson(STRATEGY4_PUBLISH_GATE_FILE, null);
+  if (!payload || typeof payload !== "object") return null;
+  const checkedAtMs = Date.parse(String(payload.checkedAt || ""));
+  const ageSeconds = Number.isFinite(checkedAtMs) ? Math.max(0, Math.round((Date.now() - checkedAtMs) / 1000)) : 999999;
+  return { ...payload, ageSeconds, file: STRATEGY4_PUBLISH_GATE_FILE };
+}
+
+function assertStrategy4PublishGate() {
+  const gate = readStrategy4PublishGate();
+  const issues = [];
+  if (!gate) {
+    issues.push(`missing Strategy4 publish hard gate file ${STRATEGY4_PUBLISH_GATE_FILE}`);
+  } else {
+    if (String(gate.strategy || "").toLowerCase() !== "strategy4") issues.push(`publish gate strategy=${gate.strategy || "(blank)"} not strategy4`);
+    if (gate.ok !== true) issues.push(`publish gate ok=${gate.ok}`);
+    if (gate.publishAllowed !== true) issues.push(`publish gate publishAllowed=${gate.publishAllowed}`);
+    if (gate.fallbackUsed === true) issues.push("publish gate fallbackUsed=true");
+    if (gate.retentionOk !== true) issues.push(`publish gate retentionOk=${gate.retentionOk}`);
+    if (gate.writePolicy?.allowLatestWrite !== true || gate.writePolicy?.allowCompleteRunWrite !== true) {
+      issues.push("publish gate writePolicy does not allow latest/complete-run writes");
+    }
+    if (gate.writePolicy?.preservePreviousCompleteRun === true) issues.push("publish gate requests preserving previous complete run");
+    if (gate.ageSeconds > STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS) {
+      issues.push(`publish gate stale ${gate.ageSeconds}s > ${STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS}s`);
+    }
+    if (Array.isArray(gate.issues) && gate.issues.length) issues.push(`publish gate issues: ${gate.issues.slice(0, 5).map((item) => item.id || item.message || String(item)).join("; ")}`);
+  }
+  if (issues.length) {
+    throw new Error(`Strategy4 publish hard gate failed: ${issues.join("; ")}`);
+  }
+  return gate;
 }
 
 function hasOwnObjectField(object, field) {
@@ -975,6 +1011,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
           acceptedReason: "stock_daily_volume full scan completed with no no-data or scanner errors",
         }
       : (supabaseCoverage || null),
+    supabasePublishGate: readStrategy4PublishGate(),
     pendingCount,
     noDataCount,
     errorCount,
@@ -1144,6 +1181,7 @@ function buildSupabaseRunRow(output, runId) {
       misSourceRatio: cleanNumber(output.misSourceRatio),
       dataSourceCounts: output.dataSourceCounts || {},
       supabaseCoverage: output.supabaseCoverage || null,
+      supabasePublishGate: output.supabasePublishGate || null,
       selfTest: output.selfTest || null,
       prePublishSelfTest: output.prePublishSelfTest || null,
       publishedSelfTest: output.publishedSelfTest || null,
@@ -1667,6 +1705,9 @@ async function main() {
     supabaseCoverage,
     insufficientHistory,
   });
+
+  output.supabasePublishGate = assertStrategy4PublishGate();
+  console.log(`strategy4 publish hard gate ok: status=${output.supabasePublishGate.status} publishAllowed=${output.supabasePublishGate.publishAllowed} staleSeconds=${output.supabasePublishGate.staleSeconds}`);
 
   const prePublishSelfTest = assertStrategy4PrePublishSelfTest(output);
   console.log(`strategy4 pre-publish self-test ok: count ${prePublishSelfTest.count}, executionRate ${prePublishSelfTest.executionRate}, coverageRatio ${prePublishSelfTest.coverageRatio}, breakdown ${prePublishSelfTest.walletBreakdownRows}/${prePublishSelfTest.mutakiBreakdownRows}`);

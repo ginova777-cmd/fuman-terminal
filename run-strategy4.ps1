@@ -82,6 +82,21 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
+
+& $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+$publishGateExit = $LASTEXITCODE
+if ($publishGateExit -ne 0) {
+  $reason = "Strategy4 Supabase publish hard gate blocked new publish; preserving latest complete run. exit=$publishGateExit"
+  Write-Log $reason
+  try {
+    $latestPayload = Assert-Strategy4LatestApi
+    Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
+  } catch {
+    Write-Log "Strategy4 latest API verification after publish gate block failed: $($_.Exception.Message)"
+  }
+  Write-Strategy4Receipt "failed" $publishGateExit $false 0 "" @($reason) $reason
+  exit $publishGateExit
+}
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
 if ($resourceGate.PreserveLatest) {

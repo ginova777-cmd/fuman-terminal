@@ -16,8 +16,15 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const STATE_DIR = path.join(RUNTIME_DIR, "state");
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
-const OUT_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, "supabase-publish-hard-gate.json");
-const ALERT_RECEIPT = process.env.FUMAN_SUPABASE_PUBLISH_GATE_ALERT_RECEIPT || path.join(RECEIPT_DIR, "supabase-publish-hard-gate-alert.json");
+const REQUESTED_STRATEGY = String(
+  process.env.FUMAN_PUBLISH_GATE_STRATEGY
+  || process.argv.find((arg) => arg.startsWith("--strategy="))?.split("=").slice(1).join("=")
+  || "strategy2"
+).trim().toLowerCase();
+const STRATEGY_KEY = REQUESTED_STRATEGY.replace(/[^a-z0-9_-]/g, "") || "strategy2";
+const STRATEGY_LABEL = STRATEGY_KEY === "strategy4" ? "Strategy4" : STRATEGY_KEY === "strategy3" ? "Strategy3" : "Strategy2";
+const OUT_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, STRATEGY_KEY === "strategy2" ? "supabase-publish-hard-gate.json" : `${STRATEGY_KEY}-supabase-publish-hard-gate.json`);
+const ALERT_RECEIPT = process.env.FUMAN_SUPABASE_PUBLISH_GATE_ALERT_RECEIPT || path.join(RECEIPT_DIR, STRATEGY_KEY === "strategy2" ? "supabase-publish-hard-gate-alert.json" : `${STRATEGY_KEY}-supabase-publish-hard-gate-alert.json`);
 
 const MIN_QUOTE_COVERAGE = Number(process.env.FUMAN_PUBLISH_MIN_QUOTE_COVERAGE || process.env.STRATEGY2_COVERAGE_MIN_QUOTES || 0.9);
 const MAX_QUOTE_AGE_SECONDS = Number(process.env.FUMAN_PUBLISH_MAX_QUOTE_AGE_SECONDS || 120);
@@ -64,7 +71,7 @@ function issue(severity, id, message, details = {}) {
 
 function alertFailure(payload, dryRun = false) {
   const summary = [
-    "Supabase publish hard gate blocked strategy publish.",
+    `Supabase publish hard gate blocked ${STRATEGY_LABEL} publish.`,
     `status=${payload.status}`,
     `latestRunId=${payload.latestRunId || ""}`,
     `fallbackUsed=${payload.fallbackUsed}`,
@@ -82,19 +89,19 @@ function alertFailure(payload, dryRun = false) {
   const result = spawnSync(process.execPath, [
     "--use-system-ca",
     path.join(ROOT, "scripts", "send-workflow-alert.js"),
-    "--kind=supabase-publish-hard-gate",
+    `--kind=${STRATEGY_KEY}-supabase-publish-hard-gate`,
     `--receipt=${ALERT_RECEIPT}`,
-    "--subject=Fuman Terminal Supabase publish gate blocked",
+    `--subject=Fuman Terminal ${STRATEGY_LABEL} Supabase publish gate blocked`,
     ...(dryRun ? ["--dry-run"] : []),
   ], {
     cwd: ROOT,
     encoding: "utf8",
     env: {
       ...process.env,
-      FUMAN_ALERT_KIND: "supabase-publish-hard-gate",
+      FUMAN_ALERT_KIND: `${STRATEGY_KEY}-supabase-publish-hard-gate`,
       FUMAN_ALERT_SOURCE: "verify-supabase-publish-hard-gate.js",
       FUMAN_ALERT_RECEIPT_FILE: ALERT_RECEIPT,
-      FUMAN_ALERT_SUBJECT: "Fuman Terminal Supabase publish gate blocked",
+      FUMAN_ALERT_SUBJECT: `Fuman Terminal ${STRATEGY_LABEL} Supabase publish gate blocked`,
       FUMAN_ALERT_TEXT: summary,
       ...(dryRun ? { FUMAN_ALERT_DRY_RUN: "1" } : {}),
     },
@@ -201,6 +208,8 @@ async function buildPayload() {
     status,
     checkedAt: now.toISOString(),
     source: "supabase-publish-hard-gate",
+    strategy: STRATEGY_KEY,
+    strategyLabel: STRATEGY_LABEL,
     sourceCoverage,
     staleSeconds: Math.max(sourceStatusStaleSeconds, marketSession ? quoteAgeSeconds : 0, latestCandleTime ? intraday1mStaleSeconds : 0),
     latestRunId,
@@ -209,6 +218,14 @@ async function buildPayload() {
     writeBudget,
     retentionOk,
     publishAllowed: issues.length === 0 && !fallbackUsed,
+    writePolicy: {
+      allowLatestWrite: issues.length === 0 && !fallbackUsed,
+      allowCompleteRunWrite: issues.length === 0 && !fallbackUsed,
+      preservePreviousCompleteRun: issues.length > 0 || fallbackUsed,
+      reason: issues.length === 0 && !fallbackUsed
+        ? `${STRATEGY_LABEL} Supabase source coverage ready`
+        : `${STRATEGY_LABEL} Supabase source coverage blocked publish`,
+    },
     scannerBehavior: issues.length === 0
       ? "publish_allowed"
       : "publish_blocked; preserve previous complete run; do not write latest; API/front-end must surface degraded reason",
@@ -248,6 +265,8 @@ main().catch((error) => {
     checkedAt: new Date().toISOString(),
     source: "supabase-publish-hard-gate",
     sourceCoverage: {},
+    strategy: STRATEGY_KEY,
+    strategyLabel: STRATEGY_LABEL,
     staleSeconds: 999999,
     latestRunId: "",
     latestRunIdSource: "",
@@ -255,6 +274,12 @@ main().catch((error) => {
     writeBudget: { status: "blocked", allowed: false, reason: "verifier failed before publish" },
     retentionOk: false,
     publishAllowed: false,
+    writePolicy: {
+      allowLatestWrite: false,
+      allowCompleteRunWrite: false,
+      preservePreviousCompleteRun: true,
+      reason: "publish hard gate failed before source coverage could be verified",
+    },
     scannerBehavior: "publish_blocked; preserve previous complete run; do not write latest",
     issues: [issue("critical", "supabase-publish-hard-gate-error", error?.message || String(error))],
     warnings: [],

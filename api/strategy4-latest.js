@@ -171,6 +171,58 @@ function buildStrategy4SourceHealth(rows, run, matches) {
   };
 }
 
+function buildStrategy4GateContract(rows, run, matches) {
+  const runPayload = run?.payload && typeof run.payload === "object" ? run.payload : {};
+  const gate = runPayload.supabasePublishGate && typeof runPayload.supabasePublishGate === "object" ? runPayload.supabasePublishGate : null;
+  const supabaseCoverage = runPayload.supabaseCoverage && typeof runPayload.supabaseCoverage === "object" ? runPayload.supabaseCoverage : {};
+  const qualityStatus = String(run?.quality_status || rows[0]?.quality_status || "");
+  const fallbackUsed = false;
+  const retentionOk = run?.complete === true
+    && String(run?.status || "") === "complete"
+    && qualityStatus === "complete"
+    && cleanNumber(run?.result_count) > 0
+    && fallbackUsed === false;
+  const gateIssues = Array.isArray(gate?.issues) ? gate.issues : [];
+  const gateWarnings = Array.isArray(gate?.warnings) ? gate.warnings : [];
+  const dailyVolumeFreshness = supabaseCoverage?.coverageRatio ?? (supabaseCoverage?.qualityStatus === "complete" ? 1 : null);
+  const sourceCoverage = gate?.sourceCoverage || {
+    fresh_quote_coverage_120s: null,
+    today_1m_symbols: null,
+    ready_ge_35: null,
+    latest_candle_time: "",
+    intraday_1m_stale_seconds: null,
+    preopen_coverage: null,
+    daily_volume_freshness: dailyVolumeFreshness,
+    supabaseCoverage,
+  };
+  const publishAllowed = retentionOk && gateIssues.length === 0 && gate?.publishAllowed !== false;
+  const status = gate?.status || (publishAllowed ? "ready" : qualityStatus === "complete" ? "ready" : "degraded");
+  const writeBudget = gate?.writePolicy || {
+    allowLatestWrite: publishAllowed,
+    allowCompleteRunWrite: publishAllowed,
+    preservePreviousCompleteRun: !publishAllowed,
+    reason: publishAllowed ? "Strategy4 latest complete run is publishable" : "Strategy4 must preserve previous complete run",
+  };
+  const warnings = [
+    ...gateWarnings,
+    ...(gate ? [] : [{ severity: "warning", id: "strategy4-publish-gate-snapshot-missing", message: "latest complete run predates Strategy4 publish gate snapshot; next scanner run will persist gate evidence" }]),
+  ];
+  return {
+    status,
+    sourceCoverage,
+    staleSeconds: cleanNumber(gate?.staleSeconds ?? sourceCoverage?.intraday_1m_stale_seconds),
+    latestRunId: String(run?.run_id || ""),
+    fallbackUsed,
+    writeBudget,
+    retentionOk,
+    issues: gateIssues,
+    warnings,
+    publishAllowed,
+    mustPreserveLatest: !publishAllowed,
+    gate,
+  };
+}
+
 function buildPayload(rows, total, run = null, options = {}) {
   const first = rows[0] || {};
   const matches = rows
@@ -183,8 +235,10 @@ function buildPayload(rows, total, run = null, options = {}) {
     return acc;
   }, { A: 0, B: 0, C: 0 });
   const scanDate = String(first.scan_date || "").replace(/-/g, "");
+  const gateContract = buildStrategy4GateContract(rows, run, matches);
   return {
     ok: true,
+    status: gateContract.status,
     source: "supabase:strategy4_scan_results",
     cacheSource: "supabase-api",
     schemaVersion: String(first.schema_version || EXPECTED_SCHEMA),
@@ -195,6 +249,16 @@ function buildPayload(rows, total, run = null, options = {}) {
     updatedAt: String(first.scan_time || first.updated_at || new Date().toISOString()),
     scanStamp: scanDate,
     complete: Boolean(first.complete),
+    latestRunId: gateContract.latestRunId,
+    fallbackUsed: gateContract.fallbackUsed,
+    writeBudget: gateContract.writeBudget,
+    retentionOk: gateContract.retentionOk,
+    sourceCoverage: gateContract.sourceCoverage,
+    staleSeconds: gateContract.staleSeconds,
+    issues: gateContract.issues,
+    warnings: gateContract.warnings,
+    publishAllowed: gateContract.publishAllowed,
+    mustPreserveLatest: gateContract.mustPreserveLatest,
     canvas: Boolean(options.canvas),
     qualityStatus: String(first.quality_status || ""),
     count: matches.length,

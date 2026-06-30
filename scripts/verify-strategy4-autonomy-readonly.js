@@ -197,8 +197,41 @@ function apiSummary(result) {
     dataContractSource: body.dataContractSource || "",
     error: body.error || body.detail || body.reason || "",
     fetchDetail: body.fetchDetail || null,
+    statusText: body.status || "",
+    sourceCoverage: body.sourceCoverage || null,
+    staleSeconds: n(body.staleSeconds),
+    latestRunId: body.latestRunId || "",
+    fallbackUsed: body.fallbackUsed,
+    writeBudget: body.writeBudget || null,
+    retentionOk: body.retentionOk,
+    issues: Array.isArray(body.issues) ? body.issues : null,
+    warnings: Array.isArray(body.warnings) ? body.warnings : null,
+    publishAllowed: body.publishAllowed,
+    mustPreserveLatest: body.mustPreserveLatest,
     transport: body.transport || {},
   };
+}
+
+function localFiles(dir, prefix) {
+}
+
+function assertApiGateContract(label, item) {
+  add(["ready", "degraded", "critical", "stale"].includes(String(item.statusText || "")), `${label}_api_status_missing_or_bad`, item);
+  add(item.sourceCoverage && typeof item.sourceCoverage === "object", `${label}_api_sourceCoverage_missing`, item);
+  if (item.sourceCoverage && typeof item.sourceCoverage === "object") {
+    for (const field of ["fresh_quote_coverage_120s", "today_1m_symbols", "ready_ge_35", "latest_candle_time", "intraday_1m_stale_seconds", "preopen_coverage", "daily_volume_freshness"]) {
+      add(Object.prototype.hasOwnProperty.call(item.sourceCoverage, field), `${label}_api_sourceCoverage_missing_${field}`, item.sourceCoverage);
+    }
+  }
+  add(Object.prototype.hasOwnProperty.call(item, "fallbackUsed"), `${label}_api_fallbackUsed_missing`, item);
+  add(item.writeBudget && typeof item.writeBudget === "object", `${label}_api_writeBudget_missing`, item);
+  add(Object.prototype.hasOwnProperty.call(item, "retentionOk"), `${label}_api_retentionOk_missing`, item);
+  add(Array.isArray(item.issues), `${label}_api_issues_not_array`, item);
+  add(Array.isArray(item.warnings), `${label}_api_warnings_not_array`, item);
+  add(!item.latestRunId || item.latestRunId === item.runId, `${label}_api_latestRunId_mismatch`, { latestRunId: item.latestRunId, runId: item.runId });
+  add(item.fallbackUsed !== true, `${label}_api_fallback_used`, item);
+  add(item.retentionOk === true, `${label}_api_retention_not_ok`, item);
+  add(item.writeBudget?.allowLatestWrite === true && item.writeBudget?.allowCompleteRunWrite === true && item.writeBudget?.preservePreviousCompleteRun === false, `${label}_api_write_budget_blocks_publish`, item.writeBudget || {});
 }
 
 function localFiles(dir, prefix) {
@@ -303,6 +336,7 @@ async function main() {
     add(item.qualityStatus === "complete", `${label}_api_quality_not_complete`, item);
     add(item.cacheSource === "supabase-api", `${label}_api_not_direct_supabase`, item);
     add(item.transport?.gate === "run_id", `${label}_api_not_run_id_gate`, item.transport);
+    assertApiGateContract(label, item);
   }
   if (api.productionSnapshot.ok) {
     add(api.productionSnapshot.runId === runId, "snapshot_run_id_mismatch", { snapshotRunId: api.productionSnapshot.runId, runId });
@@ -325,7 +359,10 @@ async function main() {
     apiHasStaticFallback: /staticFallback|static-fallback|\/data\/strategy4-|strategy4_static|strategy4_scan_results_latest_empty/.test(apiSource),
     scannerSkipsStaticOutput: scan.includes("strategy4 API-only: skipped static data/strategy4*.json output"),
     runnerCallsSnapshotRefresh: runner.includes("refresh-desktop-route-snapshot.ps1") && runner.includes('-Source "strategy4"'),
+    runnerCallsPublishHardGate: runner.includes("verify-supabase-publish-hard-gate.js") && runner.includes("--strategy=strategy4"),
     runnerAllowsPartialPublishEnv: runner.includes("STRATEGY4_ALLOW_PARTIAL_PUBLISH"),
+    scannerAssertsPublishHardGate: scan.includes("assertStrategy4PublishGate()") && scan.includes("STRATEGY4_PUBLISH_GATE_FILE"),
+    scannerPersistsPublishGate: scan.includes("supabasePublishGate: output.supabasePublishGate") && scan.includes("supabasePublishGate: readStrategy4PublishGate()"),
     serviceWorkerBlocksStaticStrategy4: sw.includes("isStrategy4StaticDataRequest") && sw.includes("strategy4_static_disabled"),
     frontendDesktopEndpoint: runtime.includes('strategy4Cache: "/api/strategy4-latest"') || live.includes('strategy4Cache: "/api/strategy4-latest"'),
     frontendMobileEndpoint: read("api/mobile-fragment.js").includes('endpoint: "/api/strategy4-latest"') && read("api/mobile-boot.js").includes('strategy4: "/api/strategy4-latest"'),
@@ -338,7 +375,10 @@ async function main() {
   add(!risks.apiHasStaticFallback, "api_static_fallback_still_present");
   add(risks.scannerSkipsStaticOutput, "scanner_may_write_static_strategy4_json");
   add(risks.runnerCallsSnapshotRefresh, "runner_does_not_refresh_desktop_snapshot");
+  add(risks.runnerCallsPublishHardGate, "runner_does_not_call_strategy4_publish_hard_gate");
   add(!risks.runnerAllowsPartialPublishEnv, "runner_sets_STRATEGY4_ALLOW_PARTIAL_PUBLISH");
+  add(risks.scannerAssertsPublishHardGate, "scanner_can_upsert_without_strategy4_publish_hard_gate");
+  add(risks.scannerPersistsPublishGate, "scanner_does_not_persist_strategy4_publish_gate_evidence");
   add(risks.serviceWorkerBlocksStaticStrategy4, "service_worker_does_not_block_strategy4_static_json");
   add(risks.frontendDesktopEndpoint, "frontend_desktop_not_formal_api");
   add(risks.frontendMobileEndpoint, "frontend_mobile_not_formal_api");
