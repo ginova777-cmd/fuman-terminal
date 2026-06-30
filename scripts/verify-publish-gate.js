@@ -1248,6 +1248,9 @@ for (const marker of [
 if (!/STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS/.test(strategy3LatestApi) || /timeoutMs:\s*650/.test(strategy3LatestApi)) {
   issues.push("api/strategy3-latest.js must use a configurable desktop route snapshot read timeout instead of the old 650ms hard timeout");
 }
+for (const marker of ["tvPassCount", "normalizeStrategy3ApiContract", "strategy3TvOk"]) {
+  if (!strategy3LatestApi.includes(marker)) issues.push(`api/strategy3-latest.js missing Strategy3 API contract marker ${marker}`);
+}
 for (const [file, source] of [
   ["api/strategy3-latest.js", strategy3LatestApi],
   ["api/strategy4-latest.js", strategy4LatestApi],

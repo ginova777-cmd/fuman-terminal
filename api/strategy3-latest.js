@@ -111,6 +111,24 @@ function normalizeSnapshotRows(payload) {
       : [];
 }
 
+function strategy3TvOk(row) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : row;
+  return Boolean(payload?.tvOk || payload?.tvFlame || payload?.tvOvernightEntry?.ok);
+}
+
+function normalizeStrategy3ApiContract(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const rows = normalizeSnapshotRows(payload);
+  const tvPassCount = Object.prototype.hasOwnProperty.call(payload, "tvPassCount")
+    ? cleanNumber(payload.tvPassCount)
+    : cleanNumber(payload.selfTest?.tvPassCount || payload.publishedSelfTest?.tvPassCount)
+      || rows.filter(strategy3TvOk).length;
+  return {
+    ...payload,
+    tvPassCount,
+  };
+}
+
 function normalizeSourceHealth(value) {
   const sourceHealth = value && typeof value === "object" ? { ...value } : null;
   if (!sourceHealth) return null;
@@ -149,6 +167,7 @@ function buildPayload(rows, run, options = {}) {
     complete: true,
     canvas: Boolean(options.canvas),
     qualityStatus,
+    tvPassCount: cleanNumber(run?.payload?.tvPassCount) || matches.filter(strategy3TvOk).length,
     count: Math.max(matches.length, resultCount),
     returnedCount: matches.length,
     total: Math.max(matches.length, cleanNumber(run?.expected_total || run?.scanned_count)),
@@ -189,6 +208,7 @@ function buildSnapshotPayload(snapshot, options = {}) {
     complete: sourcePayload.complete !== false,
     canvas: Boolean(options.canvas),
     qualityStatus: sourcePayload.qualityStatus || sourcePayload.sourceHealth?.status || "",
+    tvPassCount: cleanNumber(sourcePayload.tvPassCount) || cleanNumber(sourcePayload.selfTest?.tvPassCount || sourcePayload.publishedSelfTest?.tvPassCount) || rows.filter(strategy3TvOk).length,
     count,
     returnedCount: matches.length,
     total,
@@ -262,7 +282,7 @@ module.exports = async function handler(request, response) {
   });
   if (cached) {
     setDesktopSnapshotCache(response);
-    response.status(200).json(cached);
+    response.status(200).json(normalizeStrategy3ApiContract(cached));
     return;
   }
 
@@ -275,7 +295,7 @@ module.exports = async function handler(request, response) {
     const snapshot = await readLatestSnapshot(options);
     if (snapshot) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(snapshot);
+      response.status(200).json(normalizeStrategy3ApiContract(snapshot));
       return;
     }
     const latest = await fetchLatestCompleteRows(options.limit);
