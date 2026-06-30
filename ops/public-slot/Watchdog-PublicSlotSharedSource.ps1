@@ -125,11 +125,36 @@ function Get-SourceStatusAgeSeconds {
 
 function Test-SharedSourceProcessRunning {
   try {
-    $matches = Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe' OR Name = 'powershell.exe'" |
-      Where-Object { $_.CommandLine -match "Run-PublicSlotSharedSource\.ps1" }
-    return (@($matches).Count -gt 0)
+    return (@(Get-SharedSourceProcesses).Count -gt 0)
   } catch {
     return $false
+  }
+}
+
+function Get-SharedSourceProcesses {
+  try {
+    return @(Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe' OR Name = 'powershell.exe'" |
+      Where-Object { $_.CommandLine -match "Run-PublicSlotSharedSource\.ps1" })
+  } catch {
+    return @()
+  }
+}
+
+function Stop-SharedSourceProcesses {
+  param([switch]$KeepNewest)
+  $processes = @(Get-SharedSourceProcesses)
+  if ($KeepNewest -and $processes.Count -le 1) { return }
+  $targets = $processes
+  if ($KeepNewest) {
+    $targets = @($processes | Sort-Object CreationDate -Descending | Select-Object -Skip 1)
+  }
+  foreach ($proc in $targets) {
+    try {
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+      Write-WatchdogLog "已停止 shared source pid=$($proc.ProcessId)"
+    } catch {
+      Write-WatchdogLog "停止 shared source pid=$($proc.ProcessId) 失敗：$($_.Exception.Message)"
+    }
   }
 }
 
@@ -247,6 +272,8 @@ function Start-SharedSourceTask {
         if (-not [string]::IsNullOrWhiteSpace($_)) { Write-WatchdogLog $_.Trim() }
       }
       Start-Sleep -Seconds 2
+      Stop-SharedSourceProcesses
+      Start-Sleep -Seconds 2
     }
     schtasks /Run /TN $TaskName | Out-String | ForEach-Object {
       if (-not [string]::IsNullOrWhiteSpace($_)) { Write-WatchdogLog $_.Trim() }
@@ -268,12 +295,19 @@ if ([string]::IsNullOrWhiteSpace($anonKey)) {
 }
 
 $isRunning = Test-SharedSourceProcessRunning
+$sharedSourceProcesses = @(Get-SharedSourceProcesses)
 $collectorProcesses = @(Get-CollectorProcesses)
 $collectorCache = Get-CollectorCacheHealth
 $health = Get-SourceStatusAgeSeconds -AnonKey $anonKey
 $quoteHealth = Get-QuoteLiveHealth -AnonKey $anonKey
 
-Write-WatchdogLog "檢查結果：process_running=$isRunning；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
+Write-WatchdogLog "檢查結果：process_running=$isRunning；shared_source_count=$($sharedSourceProcesses.Count)；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
+
+if ($sharedSourceProcesses.Count -gt 1) {
+  Write-WatchdogLog "偵測到多個 shared source writer，保留最新一個並停止其餘程序，避免 source_status 互相覆蓋。"
+  Stop-SharedSourceProcesses -KeepNewest
+  exit 0
+}
 
 if ($collectorProcesses.Count -ne 1) {
   Restart-FugleQuoteCollector -Reason "collector_count=$($collectorProcesses.Count)，應為 1"
@@ -291,6 +325,11 @@ if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
 
 if (-not $isRunning) {
   Start-SharedSourceTask -Reason "shared source 程序沒有在跑"
+  exit 0
+}
+
+if (($collectorCache.Ok -or $quoteHealth.Ok) -and ((-not $health.Ok) -or $health.Status -ne "ok" -or $health.AgeSeconds -gt $MaxSourceAgeSeconds)) {
+  Write-WatchdogLog "shared source 程序仍在跑，且 live collector/quote 有活資料；不因 source_status 落後而重啟，避免多 writer。$($health.Reason)"
   exit 0
 }
 
