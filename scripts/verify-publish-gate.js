@@ -456,6 +456,9 @@ if (!String(packageJson.scripts?.["verify:cost-governance-audit"] || "").include
 if (!String(packageJson.scripts?.["verify:supabase-publish-hard-gate"] || "").includes("scripts/verify-supabase-publish-hard-gate.js")) {
   issues.push("package.json missing scripts.verify:supabase-publish-hard-gate for source coverage publish blocker");
 }
+if (!String(packageJson.scripts?.["verify:api-unattended-scorecard"] || "").includes("scripts/verify-api-unattended-scorecard.js")) {
+  issues.push("package.json missing scripts.verify:api-unattended-scorecard for all-strategy API unattended scorecard");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -623,6 +626,9 @@ const strategy2SharedSource = read("lib/supabase-public-slot.js");
 const strategy2SourcePublishGate = read("lib/strategy2-source-publish-gate.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const supabasePublishHardGate = read("scripts/verify-supabase-publish-hard-gate.js");
+const apiUnattendedScorecard = read("scripts/verify-api-unattended-scorecard.js");
+const apiUnattendedRunner = read("run-api-unattended-scorecard.ps1");
+const apiUnattendedInstaller = read("scripts/install-api-unattended-scorecard-task.ps1");
 const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
 const warrantFlowScanner = read("scripts/scan-warrant-flow-cache.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
@@ -2390,6 +2396,72 @@ for (const marker of [
 ]) {
   if (!supabasePublishHardGate.includes(marker)) {
     issues.push(`verify-supabase-publish-hard-gate.js missing source hard gate marker ${marker}`);
+  }
+}
+for (const marker of [
+  "API Unattended Scorecard",
+  "strategy1",
+  "strategy2",
+  "strategy3",
+  "strategy4",
+  "strategy5",
+  "institution",
+  "cb",
+  "warrant",
+  "realtime-radar",
+  "/api/open-buy-latest",
+  "/api/latest-strategy?key=strategy2",
+  "/api/strategy2-latest",
+  "/api/strategy3-latest",
+  "/api/strategy4-latest",
+  "/api/strategy5-latest",
+  "/api/institution-latest",
+  "/api/cb-detect-latest",
+  "/api/warrant-flow-latest",
+  "/api/realtime-radar-latest?full=1",
+  "sourceCoverageFields",
+  "fresh_quote_coverage_120s",
+  "today_1m_symbols",
+  "ready_ge_35",
+  "intraday_1m_stale_seconds",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+  "rowsChecked",
+  "blankCounts",
+  "sampleMissingRows",
+  "verifierResults",
+  "needsHumanWatch",
+]) {
+  if (!apiUnattendedScorecard.includes(marker)) {
+    issues.push(`verify-api-unattended-scorecard.js missing all-strategy unattended marker ${marker}`);
+  }
+}
+for (const marker of [
+  "verify:api-unattended-scorecard",
+  "FUMAN_API_UNATTENDED_COMPUTER",
+  "FUMAN_API_UNATTENDED_SCORECARD_FILE",
+  "FUMAN_API_UNATTENDED_REPORT_FILE",
+  "ComputerLabel",
+  "ProductionUrl",
+  "SkipVerifiers",
+]) {
+  if (!apiUnattendedRunner.includes(marker)) {
+    issues.push(`run-api-unattended-scorecard.ps1 missing external-computer runner marker ${marker}`);
+  }
+}
+for (const marker of [
+  "Fuman API Unattended Scorecard",
+  "run-api-unattended-scorecard.ps1",
+  "08:35",
+  "09:10",
+  "09:35",
+  "12:05",
+  "20:35",
+  "Register-ScheduledTask",
+]) {
+  if (!apiUnattendedInstaller.includes(marker)) {
+    issues.push(`install-api-unattended-scorecard-task.ps1 missing schedule installer marker ${marker}`);
   }
 }
 for (const marker of [
