@@ -3,6 +3,7 @@ const path = require("path");
 
 const { hasLineConfig, sendLineText } = require("./line-push");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
+const { hasEmailConfig, sendEmailText } = require("./ops-email");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_TERMINAL_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -13,6 +14,8 @@ const ALERT_STATE_FILE = path.join(STATE_DIR, "terminal-api-health-alert-state.j
 const REQUEST_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_TIMEOUT_MS || 15000);
 const ALERT_COOLDOWN_MS = Number(process.env.TERMINAL_HEALTH_ALERT_COOLDOWN_MS || 30 * 60 * 1000);
 const TDCC_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_TDCC_MIN_COUNT || 0);
+const HEATMAP_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_HEATMAP_MIN_COUNT || 500);
+const MARKET_AI_START_SECONDS = 9 * 60 * 60;
 
 function readLocalVersion() {
   const override = String(process.env.EXPECTED_TERMINAL_VERSION || "").trim();
@@ -40,6 +43,55 @@ function readJsonSafe(file, fallback) {
 function num(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
+}
+
+function compactDate(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(parsed)).replace(/\D/g, "");
+  }
+  return text.replace(/\D/g, "").slice(0, 8);
+}
+
+function taipeiClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const hour = Number(parts.hour || 0);
+  const minute = Number(parts.minute || 0);
+  const second = Number(parts.second || 0);
+  return {
+    ymd: `${parts.year}${parts.month}${parts.day}`,
+    time: `${parts.hour}:${parts.minute}:${parts.second}`,
+    seconds: hour * 60 * 60 + minute * 60 + second,
+    weekday: String(parts.weekday || ""),
+  };
+}
+
+function isWeekend(clock = taipeiClock()) {
+  const weekday = String(clock.weekday || "").toLowerCase();
+  return weekday.startsWith("sat") || weekday.startsWith("sun");
+}
+
+function shouldRequireToday(clock = taipeiClock(), payloadClosed = false) {
+  return Boolean(!payloadClosed && !isWeekend(clock) && clock.seconds >= MARKET_AI_START_SECONDS);
 }
 
 function countPayload(payload) {
@@ -161,6 +213,143 @@ async function checkVersion(expectedVersion) {
   };
 }
 
+async function checkHeatmapLiveApi(clock = taipeiClock()) {
+  const issues = [];
+  const pathname = "/api/heatmap?limit=999&stocks=999&source=desktop-live-contract";
+  try {
+    const result = await fetchJson(pathname);
+    const payload = result.payload || {};
+    const contract = payload.health?.contract || payload.sourceInfo || {};
+    const count = num(payload.stockCount || payload.health?.stockCount || countPayload(payload));
+    const formalSource = payload.formalSource || contract.source || payload.sourceInfo?.source || "";
+    const tradeDate = compactDate(payload.today || payload.resolvedTradeDate || payload.tradeDate || payload.health?.today || payload.meta?.today);
+    const badDate = num(payload.health?.badDate ?? payload.health?.badDateCount ?? payload.meta?.badDateCount);
+    const fallbackUsed = payload.sourceInfo?.fallbackUsed === true || contract.fallbackUsed === true;
+    const todayRequired = shouldRequireToday(clock);
+
+    if (payload.ok === false) issues.push(issue("critical", "熱力圖 live API 回傳 ok=false", { error: payload.error || payload.health?.issue || "" }));
+    if (formalSource !== "supabase:fugle_quotes_live") {
+      issues.push(issue("critical", "熱力圖正式水源不是 supabase:fugle_quotes_live", { formalSource }));
+    }
+    if (count < HEATMAP_MIN_COUNT) {
+      issues.push(issue("critical", "熱力圖 live rows 低於門檻", { count, min: HEATMAP_MIN_COUNT }));
+    }
+    if (payload.health?.isHealthy === false) {
+      issues.push(issue("critical", "熱力圖 health.isHealthy=false", { issue: payload.health?.issue || payload.sourceInfo?.issue || "" }));
+    }
+    if (todayRequired && tradeDate !== clock.ymd) {
+      issues.push(issue("critical", "熱力圖不是今日正式資料", { today: clock.ymd, tradeDate }));
+    }
+    if (todayRequired && badDate > 0) {
+      issues.push(issue("critical", "熱力圖含非今日 quote row", { badDate }));
+    }
+    if (todayRequired && fallbackUsed) {
+      issues.push(issue("critical", "熱力圖使用 degraded fallback", {
+        fallbackUsed,
+        fallbackReason: payload.sourceInfo?.fallbackReason || contract.fallbackReason || "",
+      }));
+    }
+    return {
+      name: "熱力圖 live API",
+      ok: issues.filter((item) => item.severity === "critical").length === 0,
+      status: result.status,
+      cacheControl: result.cacheControl,
+      endpoint: pathname,
+      formalSource,
+      tradeDate,
+      count,
+      badDate,
+      fallbackUsed,
+      todayRequired,
+      isHealthy: payload.health?.isHealthy !== false,
+      issues,
+    };
+  } catch (error) {
+    return {
+      name: "熱力圖 live API",
+      ok: false,
+      count: 0,
+      endpoint: pathname,
+      issues: [issue("critical", "熱力圖 live API 讀取失敗", { error: error.message })],
+    };
+  }
+}
+
+async function checkMarketAiLiveApi(clock = taipeiClock()) {
+  const issues = [];
+  const pathname = "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";
+  try {
+    const result = await fetchJson(pathname);
+    const payload = result.payload || {};
+    const freshness = payload.dataFreshness || {};
+    const dashboardTradeDate = compactDate(payload.dashboard?.tradeDate);
+    const heatmapTradeDate = compactDate(freshness.heatmapTradeDate);
+    const radarTradeDate = compactDate(freshness.radarTradeDate);
+    const baseTradeDate = compactDate(freshness.baseTradeDate);
+    const sourceIssues = Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : [];
+    const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
+    const payloadClosed = payload.marketSession?.closed === true;
+    const todayRequired = shouldRequireToday(clock, payloadClosed);
+
+    if (payload.ok === false) issues.push(issue("critical", "AI 判讀 live API 回傳 ok=false", { error: payload.error || "" }));
+    if (payload.source !== "live-api-bundle") {
+      issues.push(issue("critical", "AI 判讀不是 live-api-bundle", { source: payload.source || "" }));
+    }
+    if (payload.cacheSource !== "api/market-ai-live") {
+      issues.push(issue("critical", "AI 判讀 cacheSource 不是正式 API", { cacheSource: payload.cacheSource || "" }));
+    }
+    if (todayRequired && dashboardTradeDate !== clock.ymd) {
+      issues.push(issue("critical", "AI dashboardTradeDate 不是今日", { today: clock.ymd, dashboardTradeDate }));
+    }
+    if (todayRequired && heatmapTradeDate !== clock.ymd) {
+      issues.push(issue("critical", "AI heatmapTradeDate 不是今日", { today: clock.ymd, heatmapTradeDate }));
+    }
+    if (todayRequired && freshness.heatmapUsable !== true) {
+      issues.push(issue("critical", "AI heatmapUsable 不是 true", { heatmapUsable: freshness.heatmapUsable }));
+    }
+    if (todayRequired && staleSources.length) {
+      issues.push(issue("critical", "AI 判讀存在 staleSources", { staleSources }));
+    }
+    if (sourceIssues.length) {
+      issues.push(issue("critical", "AI 判讀存在 sourceIssues", { sourceIssues }));
+    }
+    if (todayRequired && payload.marketSession?.stale === true) {
+      issues.push(issue("critical", "AI marketSession.stale=true 但今日 live 判讀應已更新", {
+        marketDataDate: payload.marketSession?.marketDataDate || "",
+        reason: payload.marketSession?.reason || "",
+      }));
+    }
+
+    return {
+      name: "AI 判讀 live API",
+      ok: issues.filter((item) => item.severity === "critical").length === 0,
+      status: result.status,
+      cacheControl: result.cacheControl,
+      endpoint: pathname,
+      source: payload.source || "",
+      cacheSource: payload.cacheSource || "",
+      dashboardTradeDate,
+      heatmapTradeDate,
+      radarTradeDate,
+      baseTradeDate,
+      heatmapUsable: freshness.heatmapUsable === true,
+      staleSources,
+      sourceIssues,
+      todayRequired,
+      marketSession: payload.marketSession || null,
+      issues,
+    };
+  } catch (error) {
+    return {
+      name: "AI 判讀 live API",
+      ok: false,
+      count: 0,
+      endpoint: pathname,
+      issues: [issue("critical", "AI 判讀 live API 讀取失敗", { error: error.message })],
+    };
+  }
+}
+
 async function checkChipFrontendContract() {
   const issues = [];
   try {
@@ -275,12 +464,14 @@ function buildAlert(status) {
   return lines.join("\n").trim();
 }
 
-async function notifyIfNeeded(status) {
+async function notifyIfNeeded(status, options = {}) {
   const critical = status.issues.filter((item) => item.severity === "critical");
   if (!critical.length) return { sent: false, reason: "no critical issues" };
 
+  const dryRun = options.dryRun === true || process.env.TERMINAL_HEALTH_ALERT_DRY_RUN === "1";
   const signature = critical.map((item) => `${item.message}:${JSON.stringify(item.detail || {})}`).join("|");
-  const previous = readJsonSafe(ALERT_STATE_FILE, {});
+  const alertStateFile = options.alertStateFile || ALERT_STATE_FILE;
+  const previous = dryRun ? {} : readJsonSafe(alertStateFile, {});
   const now = Date.now();
   const stillCoolingDown = previous.signature === signature && now - Number(previous.sentAtMs || 0) < ALERT_COOLDOWN_MS;
   if (stillCoolingDown) return { sent: false, reason: "cooldown", signature };
@@ -288,37 +479,65 @@ async function notifyIfNeeded(status) {
   const text = buildAlert(status);
   const channels = [];
   const errors = [];
+  const subject = critical.length ? "富滿終端 API 健康檢查異常" : "富滿終端 API 健康檢查警告";
+  if (hasEmailConfig()) {
+    if (dryRun) {
+      channels.push("email:dry-run");
+    } else {
+      try {
+        await sendEmailText(subject, text);
+        channels.push("email");
+      } catch (error) {
+        errors.push(`email: ${error.message}`);
+      }
+    }
+  }
   if (hasTelegramConfig()) {
-    try {
-      await sendTelegramText(text);
-      channels.push("telegram");
-    } catch (error) {
-      errors.push(`telegram: ${error.message}`);
+    if (dryRun) {
+      channels.push("telegram:dry-run");
+    } else {
+      try {
+        await sendTelegramText(text);
+        channels.push("telegram");
+      } catch (error) {
+        errors.push(`telegram: ${error.message}`);
+      }
     }
   }
   if (hasLineConfig()) {
-    try {
-      await sendLineText(text);
-      channels.push("line");
-    } catch (error) {
-      errors.push(`line: ${error.message}`);
+    if (dryRun) {
+      channels.push("line:dry-run");
+    } else {
+      try {
+        await sendLineText(text);
+        channels.push("line");
+      } catch (error) {
+        errors.push(`line: ${error.message}`);
+      }
     }
   }
-  fs.writeFileSync(ALERT_STATE_FILE, JSON.stringify({
-    signature,
-    sentAt: new Date().toISOString(),
-    sentAtMs: now,
-    channels,
-    errors,
-  }, null, 2));
-  return { sent: channels.length > 0, channels, errors, signature };
+  if (!channels.length) errors.push("no notification channel configured");
+  const notification = { sent: channels.length > 0, channels, errors, signature, dryRun };
+  if (!dryRun) {
+    fs.writeFileSync(alertStateFile, JSON.stringify({
+      signature,
+      sentAt: new Date().toISOString(),
+      sentAtMs: now,
+      channels,
+      errors,
+    }, null, 2));
+  }
+  return notification;
 }
 
 async function main() {
   ensureStateDir();
   const expectedVersion = readLocalVersion();
+  const clock = taipeiClock();
   const checks = [];
   checks.push(await checkVersion(expectedVersion));
+  checks.push(await checkHeatmapLiveApi(clock));
+  checks.push(await checkMarketAiLiveApi(clock));
   checks.push(await checkApi("買賣超 API", "/api/institution-latest", {
     minCount: 1,
     requireNoStore: true,
@@ -370,7 +589,7 @@ async function main() {
   if (!status.ok) process.exitCode = 1;
 }
 
-main().catch((error) => {
+function handleFatal(error) {
   ensureStateDir();
   const status = {
     ok: false,
@@ -385,4 +604,19 @@ main().catch((error) => {
   fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
   console.error(error);
   process.exitCode = 1;
-});
+}
+
+if (require.main === module) {
+  main().catch(handleFatal);
+}
+
+module.exports = {
+  buildAlert,
+  checkHeatmapLiveApi,
+  checkMarketAiLiveApi,
+  checkVersion,
+  issue,
+  notifyIfNeeded,
+  shouldRequireToday,
+  taipeiClock,
+};

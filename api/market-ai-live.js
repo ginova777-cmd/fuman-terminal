@@ -229,6 +229,27 @@ function requiresTodayDetection(clock, session) {
   return Boolean(isMarketAiTodayRequiredWindow(clock) && !session?.closed && !session?.hasTodayMarketData);
 }
 
+function reconcileMarketSessionWithFreshness(session, dataFreshness, clock) {
+  const base = { ...(session || {}) };
+  if (base.closed) return base;
+  const today = clock?.ymd || base.today || "";
+  const hasLiveToday = Boolean(
+    (dataFreshness?.heatmapUsable === true && dataFreshness?.heatmapTradeDate === today)
+    || (dataFreshness?.radarIsToday === true && dataFreshness?.radarTradeDate === today)
+    || (dataFreshness?.baseIsToday === true && dataFreshness?.baseTradeDate === today)
+  );
+  if (!hasLiveToday) return base;
+  return {
+    ...base,
+    today,
+    marketDataDate: today,
+    hasTodayMarketData: true,
+    stale: false,
+    reason: dataFreshness?.heatmapUsable === true ? "live-heatmap-today" : "live-source-today",
+    freshnessReconciledBy: "market-ai-live",
+  };
+}
+
 function canServeCachedPayload(request, detectWindowActive, mustDetectToday) {
   return Boolean(!mustDetectToday && (!shouldRefresh(request) || !detectWindowActive));
 }
@@ -727,10 +748,12 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
     payload?.realtimeRadar || null
   );
   const insights = buildMarketAiInsights(payload, heatmapPayload || {}, radarPayload || {}, clock, session);
+  const marketSession = reconcileMarketSessionWithFreshness(payload?.marketSession || session, insights.dataFreshness, clock);
   return {
     ...payload,
     ok: payload?.ok !== false,
     updatedAt: payload?.updatedAt || new Date().toISOString(),
+    marketSession,
     heatmap: heatmapPayload ? {
       source: heatmapPayload.source || "",
       cacheSource: heatmapPayload.cacheSource || heatmapPayload.cache?.source || "",
@@ -882,6 +905,7 @@ module.exports.__test = {
   scoreRow,
   taipeiClock,
   marketSessionState,
+  reconcileMarketSessionWithFreshness,
   requiresTodayDetection,
   canServeCachedPayload,
   heatmapQueryForMarketAi,

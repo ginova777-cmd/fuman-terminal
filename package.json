@@ -59,6 +59,7 @@
     "verify:sw": "node scripts/verify-service-worker-smoke.js",
     "verify:source-sync": "node scripts/verify-source-sync.js",
     "verify:heatmap": "node --use-system-ca scripts/verify-heatmap-realtime.js",
+    "verify:heatmap-ai-alert-path": "node --use-system-ca scripts/verify-heatmap-ai-alert-path.js",
     "verify:market-surfaces-chain": "node --use-system-ca scripts/verify-market-surfaces-chain.js",
     "verify:market-ai-freshness": "node scripts/verify-market-ai-freshness-guard.js",
     "verify:post-scan-snapshot-refresh": "node --use-system-ca scripts/verify-post-scan-snapshot-refresh-contract.js",

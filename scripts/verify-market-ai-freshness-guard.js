@@ -11,6 +11,7 @@ const {
   heatmapQueryForMarketAi,
   marketSessionState,
   normalizeStockRow,
+  reconcileMarketSessionWithFreshness,
   requiresTodayDetection,
   scoreRow,
 } = marketAiLive.__test;
@@ -195,6 +196,15 @@ const freshRadarInsights = buildMarketAiInsights(
 assert.strictEqual(freshRadarInsights.dataFreshness.radarIsToday, true);
 assert.notStrictEqual(freshRadarInsights.priorityObservation.stock?.score, 100);
 assert.strictEqual(freshRadarInsights.priorityObservation.stock?.percentSource, "change_percent");
+const reconciledSession = reconcileMarketSessionWithFreshness(
+  session,
+  { heatmapTradeDate: "20260629", heatmapUsable: true, radarTradeDate: "20260629", radarIsToday: true },
+  clock
+);
+assert.strictEqual(reconciledSession.stale, false);
+assert.strictEqual(reconciledSession.hasTodayMarketData, true);
+assert.strictEqual(reconciledSession.marketDataDate, "20260629");
+assert.strictEqual(reconciledSession.reason, "live-heatmap-today");
 
 const unhealthyTodayHeatmapInsights = buildMarketAiInsights(
   { dashboard: { tradeDate: "20260629" }, rows: [] },
