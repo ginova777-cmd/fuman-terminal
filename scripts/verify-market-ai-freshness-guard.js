@@ -26,6 +26,7 @@ const terminalAppSource = readText("terminal-app.js");
 const indexHtml = readText("index.html");
 const apiSource = readText("api/market-ai-live.js");
 const heatmapApiSource = readText("api/heatmap.js");
+const heatmapVerifierSource = readText("scripts/verify-heatmap-realtime.js");
 const productionMonitorSource = readText("scripts/monitor-production-health.js");
 const alertPathSource = readText("scripts/verify-heatmap-ai-alert-path.js");
 const scheduleRegistry = readJson("scripts/fuman-schedule-registry.json");
@@ -75,6 +76,10 @@ assert(heatmapApiSource.includes("supabaseHeatmapQuoteRejectReason") && heatmapA
 assert(heatmapApiSource.includes("forceLiveContract") && heatmapApiSource.includes("desktop-live-contract") && heatmapApiSource.includes("market-ai-live"), "heatmap API must let formal live consumers bypass after-close snapshot fallback");
 assert(heatmapApiSource.includes("fallbackUsed") && heatmapApiSource.includes("fallbackReason") && heatmapApiSource.includes("twse-tpex-mis"), "heatmap API must label MIS as degraded fallback only");
 assert(heatmapApiSource.includes("isFinalCloseHeatmapPayload(snapshot.payload, clock)") && heatmapApiSource.includes("isFinalCloseHeatmapPayload(localSnapshot.payload, clock)"), "heatmap snapshot/cache must only serve same-day final close payloads");
+assert(heatmapVerifierSource.includes('FUMAN_HEATMAP_VERIFY_TARGET || "both"'), "verify:heatmap must default to local+production live checks");
+assert(heatmapVerifierSource.includes('checks.push(["local", await callHeatmap()])') && heatmapVerifierSource.includes('checks.push(["live", await fetchLiveHeatmap()])'), "verify:heatmap must validate both local handler and production live API by default");
+assert(heatmapVerifierSource.includes("validateHeatmapPayload(label, result)") && heatmapVerifierSource.includes("missingRequired.map"), "verify:heatmap must fail when required symbols are missing from either checked payload");
+assert(heatmapVerifierSource.includes("FUMAN_VERIFY_BASE_URL") && heatmapVerifierSource.includes("release-guard-live"), "verify:heatmap live check must target the formal production contract URL");
 assert(productionMonitorSource.includes("/api/heatmap?limit=999&stocks=999&source=desktop-live-contract"), "production monitor must check live heatmap contract");
 assert(productionMonitorSource.includes("/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40"), "production monitor must check market-ai-live contract");
 assert(productionMonitorSource.includes("sourceIssues.length") && productionMonitorSource.includes("heatmapUsable=false"), "production monitor must fail on AI sourceIssues or heatmapUsable=false");

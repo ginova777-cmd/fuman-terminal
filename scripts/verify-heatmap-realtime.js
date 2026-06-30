@@ -16,7 +16,8 @@ function callHeatmap() {
 }
 
 async function fetchLiveHeatmap() {
-  const url = `https://fuman-terminal.vercel.app/api/heatmap?limit=999&stocks=999&source=release-guard-live&t=${Date.now()}`;
+  const baseUrl = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+  const url = `${baseUrl}/api/heatmap?limit=999&stocks=999&source=release-guard-live&t=${Date.now()}`;
   const response = await fetch(url, { cache: "no-store" });
   return { code: response.status, payload: await response.json(), live: true };
 }
@@ -135,29 +136,30 @@ function fail(message, detail) {
   process.exit(1);
 }
 
-(async () => {
-  const startedAt = Date.now();
-  let { code, payload, live = false } = await callHeatmap();
-  if (code !== 200 || !payload?.ok) {
-    const errors = payload?.errors || {};
-    const fetchFailed = Object.values(errors).some((message) => String(message || "").includes("fetch failed"));
-    if (fetchFailed) ({ code, payload, live } = await fetchLiveHeatmap());
-  }
-  if (code !== 200 || !payload?.ok) fail("API did not return a healthy payload", { code, ok: payload?.ok, health: payload?.health, errors: payload?.errors });
+const requiredCodes = ["3037", "2492", "2327", "2059"];
 
-  const sectors = Array.isArray(payload.sectors) ? payload.sectors : [];
-  const rows = sectors.flatMap((sector) => (Array.isArray(sector.stocks) ? sector.stocks : [])
+function normalizeRows(payload) {
+  const sectors = Array.isArray(payload?.sectors) ? payload.sectors : [];
+  return sectors.flatMap((sector) => (Array.isArray(sector.stocks) ? sector.stocks : [])
     .map((stock) => ({ ...stock, sector: sector.name })));
+}
+
+function validateHeatmapPayload(label, result) {
+  const { code, payload } = result;
+  if (code !== 200 || !payload?.ok) {
+    fail(`${label} API did not return a healthy payload`, { code, ok: payload?.ok, health: payload?.health, errors: payload?.errors });
+  }
+
+  const rows = normalizeRows(payload);
   const today = payload.health?.today || taipeiToday();
   const badDate = rows.filter((stock) => String(stock.quoteDate || "") !== today);
   const notRealtime = rows.filter((stock) => stock.isRealtime !== true);
   const noPrice = rows.filter((stock) => !Number(stock.close));
-  const requiredCodes = ["3037", "2492", "2327", "2059"];
   const required = Object.fromEntries(requiredCodes.map((target) => [target, rows.find((stock) => String(stock.code) === target) || null]));
   const missingRequired = Object.entries(required).filter(([, stock]) => !stock || stock.isRealtime !== true || !Number(stock.close));
 
   if (rows.length < 500 || badDate.length || notRealtime.length || noPrice.length || missingRequired.length) {
-    fail("heatmap contains stale or invalid quotes", {
+    fail(`${label} heatmap contains stale or invalid quotes`, {
       today,
       rows: rows.length,
       badDate: badDate.length,
@@ -172,11 +174,34 @@ function fail(message, detail) {
     });
   }
 
+  return {
+    label,
+    payload,
+    rows,
+    today,
+    required,
+    stocks: rows.length,
+    realtime: payload.realtimeStockCount,
+    quoteTime: payload.health?.quoteTime || "",
+    formalSource: payload.formalSource || payload.sourceInfo?.formalSource || payload.health?.formalSource || "",
+  };
+}
+
+(async () => {
+  const startedAt = Date.now();
+  const target = String(process.env.FUMAN_HEATMAP_VERIFY_TARGET || "both").trim().toLowerCase();
+  const checks = [];
+  if (target !== "live") checks.push(["local", await callHeatmap()]);
+  if (target !== "local") checks.push(["live", await fetchLiveHeatmap()]);
+  if (!checks.length) fail("no heatmap verification target selected", { target });
+
+  const summaries = checks.map(([label, result]) => validateHeatmapPayload(label, result));
+  const crossCheckSummary = summaries.find((summary) => summary.label === "live") || summaries[0];
   const crossChecks = [];
   const mismatches = [];
   for (const code of requiredCodes) {
-    const stock = required[code];
-    const reference = await fetchReferenceQuote(code, today);
+    const stock = crossCheckSummary.required[code];
+    const reference = await fetchReferenceQuote(code, crossCheckSummary.today);
     if (!reference) {
       crossChecks.push({ code, source: "none", close: stock.close, reference: null, skipped: true });
       continue;
@@ -189,7 +214,8 @@ function fail(message, detail) {
 
   if (mismatches.length) {
     fail("heatmap prices disagree with FinMind/Yahoo reference quotes", {
-      today,
+      today: crossCheckSummary.today,
+      target: crossCheckSummary.label,
       mismatches,
       crossChecks,
     });
@@ -197,5 +223,8 @@ function fail(message, detail) {
 
   const checked = crossChecks.filter((item) => !item.skipped).length;
   const skipped = crossChecks.length - checked;
-  console.log(`[heatmap-realtime] ok source=${live ? "live" : "local"} stocks=${rows.length} realtime=${payload.realtimeStockCount} quoteTime=${payload.health?.quoteTime || ""} crossCheck=${checked} skipped=${skipped} ms=${Date.now() - startedAt}`);
+  const targetSummary = summaries
+    .map((summary) => `${summary.label}:${summary.stocks}/${summary.realtime || 0}/${summary.quoteTime}`)
+    .join(",");
+  console.log(`[heatmap-realtime] ok source=${summaries.map((summary) => summary.label).join("+")} stocks=${crossCheckSummary.stocks} realtime=${crossCheckSummary.realtime} quoteTime=${crossCheckSummary.quoteTime} targets=${targetSummary} crossCheck=${checked} skipped=${skipped} ms=${Date.now() - startedAt}`);
 })();
