@@ -303,6 +303,14 @@ async function main() {
       returnedCount: payloadCount(strategy5Api.body || {}, "matches"),
       usedDate: strategy5Api.body?.usedDate || "",
       sourceDate: strategy5Api.body?.sourceDate || "",
+      sourceStatus: strategy5Api.body?.sourceStatus || "",
+      sourceCoverage: strategy5Api.body?.sourceCoverage || null,
+      publishGate: strategy5Api.body?.publishGate || null,
+      fallbackUsed: strategy5Api.body?.fallbackUsed,
+      fallback: strategy5Api.body?.fallback || null,
+      writeBudget: strategy5Api.body?.writeBudget || null,
+      retentionOk: strategy5Api.body?.retentionOk,
+      retention: strategy5Api.body?.retention || null,
       dataFreshness: strategy5Api.body?.dataFreshness || null,
       unattended: strategy5Api.body?.unattended || null,
       cacheSource: strategy5Api.body?.cacheSource || strategy5Api.body?.source || "",
@@ -330,6 +338,23 @@ async function main() {
   });
   pushIssue(issues, details.api.strategy5.dataFreshness?.status === "fresh" && details.api.strategy5.dataFreshness?.priorityStaleBlocked !== true, "strategy5_data_freshness_not_fresh", {
     dataFreshness: details.api.strategy5.dataFreshness,
+  });
+  pushIssue(issues, details.api.strategy5.sourceCoverage?.ok === true, "strategy5_source_coverage_not_ok", {
+    sourceCoverage: details.api.strategy5.sourceCoverage,
+  });
+  pushIssue(issues, details.api.strategy5.publishGate?.publishAllowed === true && details.api.strategy5.publishGate?.latestOverwriteAllowed === true, "strategy5_publish_gate_not_allowed", {
+    publishGate: details.api.strategy5.publishGate,
+  });
+  pushIssue(issues, details.api.strategy5.fallbackUsed === false && details.api.strategy5.fallback?.used === false, "strategy5_fallback_not_disclosed_or_used", {
+    fallbackUsed: details.api.strategy5.fallbackUsed,
+    fallback: details.api.strategy5.fallback,
+  });
+  pushIssue(issues, details.api.strategy5.writeBudget?.ok === true && cleanNumber(details.api.strategy5.writeBudget?.estimatedRowsWritten) > 0, "strategy5_write_budget_not_ok", {
+    writeBudget: details.api.strategy5.writeBudget,
+  });
+  pushIssue(issues, details.api.strategy5.retentionOk === true && details.api.strategy5.retention?.ok === true, "strategy5_retention_not_ok", {
+    retentionOk: details.api.strategy5.retentionOk,
+    retention: details.api.strategy5.retention,
   });
 
   const [scannerHealth, institutionHealthResult, chipHealthResult, chipLatestResult, strategy5Run, institutionRun] = await Promise.all([
@@ -493,6 +518,10 @@ async function main() {
     details,
     gate: {
       sourceCoverageReady: sourceSummary.coverageStatus === "ready" && sourceSummary.validAfterExclusionRows >= sourceSummary.minRequiredRows,
+      apiPublishAllowed: details.api.strategy5.publishGate?.publishAllowed === true,
+      fallbackUsed: details.api.strategy5.fallbackUsed === true || details.api.strategy5.fallback?.used === true,
+      writeBudgetOk: details.api.strategy5.writeBudget?.ok === true,
+      retentionOk: details.api.strategy5.retentionOk === true,
       scannerBehavior: issues.length === 0
         ? "allow Strategy5/institution publish; chip source health ready"
         : "preserve latest complete run; show chip/source health reason; do not publish stale or insufficient chip data",

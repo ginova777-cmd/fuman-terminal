@@ -16,6 +16,8 @@ const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_str
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
 const UNATTENDED_CONTRACT = "strategy5-unattended-api-20260630-01";
 const MAX_CHIP_SOURCE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
+const WRITE_BUDGET_LIMIT_ROWS = Number(process.env.STRATEGY5_WRITE_BUDGET_LIMIT_ROWS || 3000);
+const RAW_RETENTION_DAYS = Number(process.env.STRATEGY5_RAW_RETENTION_DAYS || 7);
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 const STRATEGY5_UI_MATCH_META = {
   chip_k_confluence: { label: "籌碼共振", short: "籌碼共振" },
@@ -60,6 +62,48 @@ function apiOnlyError(reason = "") {
       gate: COMPLETE_RUN_GATE,
       via: "api/strategy5-latest",
       fetchedAt: new Date().toISOString(),
+    },
+    sourceCoverage: {
+      ok: false,
+      sourceStatus: "unavailable",
+      strategyAuthority: "chip",
+      quoteFreshCoverage120s: null,
+      today1mSymbols: null,
+      readyGe35: null,
+      preopenCoverage: null,
+      chipCoverageStatus: "",
+      fallbackUsed: false,
+    },
+    publishGate: {
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      degradedBlocksLatest: true,
+      reason: reason || "strategy5_api_only_unavailable",
+    },
+    fallbackUsed: false,
+    fallback: {
+      used: false,
+      source: "",
+      reason: "",
+      contractAllowed: false,
+      officialSource: false,
+    },
+    writeBudget: {
+      ok: false,
+      limitRows: WRITE_BUDGET_LIMIT_ROWS,
+      estimatedRowsWritten: 0,
+      remainingRows: WRITE_BUDGET_LIMIT_ROWS,
+      overBudget: false,
+      reason: reason || "strategy5_api_only_unavailable",
+    },
+    retentionOk: false,
+    retention: {
+      ok: false,
+      rawRetentionDays: RAW_RETENTION_DAYS,
+      latestUpsert: true,
+      runsPreserved: true,
+      dailySummaryTable: "strategy_cache_status",
+      reason: reason || "strategy5_api_only_unavailable",
     },
   };
 }
@@ -192,6 +236,8 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
   const marginRows = cleanNumber(chipSourceHealth?.margin_rows);
   const validRows = cleanNumber(chipSourceHealth?.valid_after_exclusion_rows);
   const readbackCount = cleanNumber(run?.readback_count);
+  const estimatedRowsWritten = cleanNumber(scannedCount) + cleanNumber(resultCount) + 1;
+  const writeBudgetOk = estimatedRowsWritten > 0 && estimatedRowsWritten <= WRITE_BUDGET_LIMIT_ROWS;
   const issues = [];
   const sourceReady = coverageStatus === "ready";
   const sourceFresh = Boolean(sourceDate) && ageDays != null && ageDays <= MAX_CHIP_SOURCE_AGE_DAYS;
@@ -209,6 +255,7 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
   if (!resultReadbackOk) issues.push(`result_readback_mismatch:${readbackCount}/${resultCount}`);
   if (!dateAligned) issues.push(`source_date_mismatch:${sourceDate}/${latestTradeDate}`);
   if (cleanNumber(returnedCount) <= 0) issues.push("api_rows_empty");
+  if (!writeBudgetOk) issues.push(`write_budget_exceeded:${estimatedRowsWritten}/${WRITE_BUDGET_LIMIT_ROWS}`);
   const ok = issues.length === 0;
   const today = taipeiDateKey();
   const dataFreshness = {
@@ -226,6 +273,72 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
   };
   return {
     dataFreshness,
+    sourceStatus: ok ? "ready" : (sourceReady ? "stale" : "degraded"),
+    sourceCoverage: {
+      ok: sourceReady && sourceFresh,
+      sourceStatus: sourceReady && sourceFresh ? "ready" : (sourceReady ? "stale" : "degraded"),
+      strategyAuthority: "chip",
+      quoteFreshCoverage120s: null,
+      quoteFreshnessRequired: false,
+      today1mSymbols: null,
+      readyGe35: null,
+      intraday1mFreshnessRequired: false,
+      latestCandleTime: null,
+      intraday1mStaleSeconds: null,
+      preopenCoverage: null,
+      preopenRequired: false,
+      dailyVolumeFresh: null,
+      dailyVolumeRequired: false,
+      chipCoverageStatus: chipSourceHealth?.coverage_status || "",
+      chipLatestTradeDate: chipSourceHealth?.latest_trade_date || "",
+      chipAgeDays: ageDays,
+      institutionalRows,
+      marginRows,
+      unifiedRows: cleanNumber(chipSourceHealth?.unified_rows),
+      validAfterExclusionRows: validRows,
+      minRequiredRows: minRows,
+      fallbackUsed: false,
+    },
+    publishGate: {
+      publishAllowed: ok,
+      latestOverwriteAllowed: ok,
+      degradedBlocksLatest: true,
+      reason: ok ? "source_ready_complete_run_readback_aligned" : issues.join(";"),
+      hardGate: `coverage_status=ready && chip source age <= ${MAX_CHIP_SOURCE_AGE_DAYS}d && scanned_count=expected_total && result readback=result_count && write budget <= ${WRITE_BUDGET_LIMIT_ROWS}`,
+    },
+    fallback: {
+      used: false,
+      source: "",
+      reason: "",
+      contractAllowed: false,
+      officialSource: false,
+      rescueDisplayOnly: false,
+    },
+    writeBudget: {
+      ok: writeBudgetOk,
+      budgetName: "strategy5-daily-complete-run",
+      limitRows: WRITE_BUDGET_LIMIT_ROWS,
+      estimatedRowsWritten,
+      scannedCount: cleanNumber(scannedCount),
+      resultCount: cleanNumber(resultCount),
+      runRows: 1,
+      remainingRows: Math.max(0, WRITE_BUDGET_LIMIT_ROWS - estimatedRowsWritten),
+      overBudget: !writeBudgetOk,
+      reason: writeBudgetOk ? "within_strategy5_write_budget" : "strategy5_write_budget_exceeded",
+    },
+    retention: {
+      ok: ok && resultReadbackOk,
+      rawRetentionDays: RAW_RETENTION_DAYS,
+      latestUpsert: true,
+      latestRunPreserved: completeRun,
+      runsPreserved: true,
+      dailySummaryTable: "strategy_cache_status",
+      runsTable: "strategy5_scan_runs",
+      rawResultsTable: TABLE,
+      resultReadbackCount: readbackCount,
+      resultCount: cleanNumber(resultCount),
+      reason: resultReadbackOk ? "latest complete run and raw result readback aligned" : "result readback mismatch",
+    },
     marketSession: {
       today,
       marketDataDate: sourceDate,
@@ -255,6 +368,10 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
       scanComplete,
       resultReadbackOk,
       dateAligned,
+      publishAllowed: ok,
+      fallbackUsed: false,
+      writeBudgetOk,
+      retentionOk: ok && resultReadbackOk,
       snapshotGuard: "live=1/noSnapshot=1 bypasses snapshot; stale or missing unattended snapshots are rejected",
       reasons: ok ? ["ready"] : issues,
     },
@@ -387,6 +504,14 @@ function buildPayload(rows, run, options = {}) {
     usedDate: sourceDate || scanDate,
     sourceDate: sourceDate || scanDate,
     dataFreshness: apiState.dataFreshness,
+    sourceStatus: apiState.sourceStatus,
+    sourceCoverage: apiState.sourceCoverage,
+    publishGate: apiState.publishGate,
+    fallbackUsed: apiState.fallback.used,
+    fallback: apiState.fallback,
+    writeBudget: apiState.writeBudget,
+    retentionOk: apiState.retention.ok,
+    retention: apiState.retention,
     marketSession: apiState.marketSession,
     unattended: apiState.unattended,
     schedule: run?.payload?.schedule || "daily complete scan",
