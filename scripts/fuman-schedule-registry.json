@@ -5,6 +5,7 @@
   "policy": {
     "activeTasks": [
       "Fuman API-Only Retired Artifact Cleanup 1535",
+      "Fuman API Unattended Scorecard",
       "Fuman CB Battle Verify 2150",
       "Fuman CB Complete Scan 2125",
       "Fuman CB Watchdog 2145",
@@ -96,7 +97,8 @@
       ],
       "Fuman Strategy2 LINE Start 0900": [
         0,
-        267009
+        267009,
+        267014
       ],
       "Fuman Strategy2 LINE Stop 1200": [
         0,
@@ -150,6 +152,20 @@
       "description": "Retired API artifact cleanup.",
       "time": "15:35",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman API Unattended Scorecard",
+      "displayName": "Fuman API Unattended Scorecard",
+      "description": "All-strategy API unattended scorecard from the local production mirror.",
+      "time": "08:35,09:10,09:35,12:05,20:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:35",
+        "09:10",
+        "09:35",
+        "12:05",
+        "20:35"
+      ]
     },
     {
       "taskName": "\\Fuman CB Battle Verify 2150",

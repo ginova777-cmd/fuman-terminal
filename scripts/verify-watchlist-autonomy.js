@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const EXPECTED_DESKTOP_SNAPSHOT_CRON = "40 0,4,6,12 * * 1-5";
 const SKIP_LIVE = process.argv.includes("--skip-live");
 const SKIP_TASKS = process.argv.includes("--skip-tasks");
 const issues = [];
@@ -64,7 +65,10 @@ async function main() {
   failWhen(!/verify:watchlist-autonomy/.test(pkg), "package.json missing verify:watchlist-autonomy script");
   failWhen(!/key:\s*["']strategy2["']/.test(indexBuilder) || !/\/api\/latest-strategy\?key=strategy2/.test(indexBuilder), "watchlist builder must include strategy2 source");
   failWhen(!/sourceKeyFor/.test(indexBuilder) || !/策略2-/.test(indexBuilder), "watchlist builder must preserve strategy2 sub-signal labels");
-  failWhen(!/\/api\/desktop-route-snapshot-refresh/.test(vercel) || !/\*\/5 \* \* \* \*/.test(vercel), "vercel cron for desktop-route-snapshot-refresh every 5 minutes missing");
+  failWhen(
+    !/\/api\/desktop-route-snapshot-refresh/.test(vercel) || !vercel.includes(EXPECTED_DESKTOP_SNAPSHOT_CRON),
+    `vercel cron for desktop-route-snapshot-refresh must match cost-governed schedule ${EXPECTED_DESKTOP_SNAPSHOT_CRON}`
+  );
   failWhen(/generate-watchlist-match-index\.js for watchlist_match_index snapshot/.test(slim), "generate-slim-cache.js still points at retired watchlist writer");
   warnWhen(fs.existsSync(path.join(ROOT, "data", "strategy-match-index.json")), "local data/strategy-match-index.json exists; production route must remain disabled");
 
