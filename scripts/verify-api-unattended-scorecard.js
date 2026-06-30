@@ -38,6 +38,11 @@ const NO_FAIL = ARGS.flags.has("no-fail") || process.env.FUMAN_API_UNATTENDED_NO
 const TIMEOUT_MS = Math.max(5000, Number(ARGS.values.get("timeout-ms") || process.env.FUMAN_API_UNATTENDED_TIMEOUT_MS || 45000));
 const VERIFIER_TIMEOUT_MS = Math.max(10000, Number(ARGS.values.get("verifier-timeout-ms") || process.env.FUMAN_API_UNATTENDED_VERIFIER_TIMEOUT_MS || 120000));
 const MAX_SAMPLE_MISSING = Math.max(1, Number(ARGS.values.get("sample-missing") || 25));
+const CHECKED_AT = new Date();
+const TAIPEI_MINUTE = taipeiMinute(CHECKED_AT);
+const MARKET_WINDOW = TAIPEI_MINUTE >= 8 * 60 + 30 && TAIPEI_MINUTE <= 13 * 60 + 40;
+const PROFILE = ARGS.values.get("profile") || process.env.FUMAN_API_UNATTENDED_PROFILE || (MARKET_WINDOW ? "market" : "off-session");
+const STRICT_LIVE = PROFILE === "market" || ARGS.flags.has("strict-live") || process.env.FUMAN_API_UNATTENDED_STRICT_LIVE === "1";
 
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
@@ -232,8 +237,64 @@ const STRATEGIES = [
     writeBudget: "realtime radar cache writer",
     expectedRows: 1200,
     groups: COMMON_GROUPS,
+    liveSessionSurface: true,
+    skipVerifiersOffSession: true,
     verifierCommands: [
       ["scripts/check-realtime-radar-health.js"],
+    ],
+  },
+  {
+    key: "heatmap",
+    name: "Heatmap live surface",
+    endpoints: ["/api/heatmap?canvas=1&limit=999&stocks=999&source=desktop-live-contract"],
+    rowPaths: ["sectors.*.stocks"],
+    sourceChain: ["supabase:fugle_quotes_live", "api/heatmap"],
+    writerRunner: "Fuman Public Slot Shared Source 0800 / Watchdog-PublicSlotSharedSource.ps1",
+    latestView: "fugle_quotes_live",
+    runsTable: "live surface",
+    resultsTable: "fugle_quotes_live",
+    dailySummaryTable: "market live surface",
+    retentionPolicy: "live quote surface; static cache cannot be treated as normal data",
+    writeBudget: "live quote writer budget guarded by public-slot source and production monitor",
+    runIdOptional: true,
+    liveSessionSurface: true,
+    skipVerifiersOffSession: true,
+    groups: {
+      identity: ["code", "symbol"],
+      name: ["name"],
+      price: ["close", "price"],
+      percent: ["pct", "percent", "changePercent"],
+      volume: ["value", "tradeValue", "volume", "tradeVolume"],
+      time: ["quoteTime", "quoteDate", "quoteUpdatedAt", "updatedAt"],
+      signal: ["sector", "industry", "primaryIndustry", "heatmapSector"],
+      lineage: ["quotePriceSource", "source", "cacheSource", "updatedAt"],
+    },
+    verifierCommands: [
+      ["scripts/verify-heatmap-realtime.js"],
+    ],
+  },
+  {
+    key: "market-ai",
+    name: "Market AI live surface",
+    endpoints: ["/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40"],
+    sourceChain: ["api/market-ai-live", "live heatmap", "realtime radar", "base market bundle"],
+    writerRunner: "terminal-market-ai-live-watchdog.js / production monitor",
+    latestView: "market-ai-live API",
+    runsTable: "live surface",
+    resultsTable: "market-ai-live response rows",
+    dailySummaryTable: "market live surface",
+    retentionPolicy: "live API surface; staleSources/sourceIssues must be exposed",
+    writeBudget: "read-only live bundle",
+    runIdOptional: true,
+    liveSessionSurface: true,
+    skipVerifiersOffSession: true,
+    groups: {
+      ...COMMON_GROUPS,
+      signal: ["reason", "score", "source", "side", "tags"],
+    },
+    verifierCommands: [
+      ["scripts/verify-market-ai-freshness-guard.js"],
+      ["scripts/verify-heatmap-ai-alert-path.js"],
     ],
   },
 ];
@@ -297,7 +358,34 @@ function collectArrays(value, pathName = "", out = []) {
   return out;
 }
 
-function rowsOf(payload) {
+function rowsAtConfiguredPath(payload, pathText) {
+  const parts = String(pathText || "").split(".").filter(Boolean);
+  let current = [payload];
+  for (const part of parts) {
+    const next = [];
+    for (const value of current) {
+      if (value === null || value === undefined) continue;
+      if (part === "*") {
+        if (Array.isArray(value)) next.push(...value);
+        else if (typeof value === "object") next.push(...Object.values(value));
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item && typeof item === "object") next.push(item[part]);
+        }
+      } else if (typeof value === "object") {
+        next.push(value[part]);
+      }
+    }
+    current = next;
+  }
+  return current.flatMap((value) => Array.isArray(value) ? value : [value]).filter((item) => item && typeof item === "object");
+}
+
+function rowsOf(payload, strategy = {}) {
+  for (const pathText of strategy.rowPaths || []) {
+    const rows = rowsAtConfiguredPath(payload, pathText);
+    if (rows.length) return { rows, path: pathText };
+  }
   const preferredPaths = [
     "rows", "results", "matches", "items", "data", "top", "stocks", "sectors",
     "hotStocks", "snapshot.rows", "snapshot.results", "snapshot.items",
@@ -340,6 +428,19 @@ function firstValue(payload, names, fallback = "") {
   }
   const values = collectValuesByNames(payload, names);
   return values.length ? values[0] : fallback;
+}
+
+function firstDirectValue(payload, names, fallback = "") {
+  for (const name of names) {
+    const direct = getPath(payload, name);
+    if (!isBlank(direct)) return direct;
+  }
+  return fallback;
+}
+
+function directArray(payload, names) {
+  const value = firstDirectValue(payload, names, []);
+  return Array.isArray(value) ? value : [];
 }
 
 function toNumber(value, fallback = null) {
@@ -492,22 +593,22 @@ function runCommand(command, extraEnv = {}) {
 }
 
 function extractBasic(payload, rows) {
-  const updatedAt = firstValue(payload, ["updatedAt", "generatedAt", "servedAt", "snapshot.updatedAt", "transport.generatedAt"]);
+  const updatedAt = firstDirectValue(payload, ["updatedAt", "generatedAt", "servedAt", "snapshot.updatedAt", "transport.generatedAt"]);
   return {
-    apiOk: firstValue(payload, ["ok"], null),
-    status: firstValue(payload, ["status", "qualityStatus", "dataFreshness.status", "sourceHealth.status"], ""),
-    reason: firstValue(payload, ["reason", "error", "detail", "dataFreshness.reason", "sourceHealth.reason"], ""),
-    runId: firstValue(payload, ["runId", "latestRunId", "transport.runId", "snapshot.runId"], ""),
-    scanDate: firstValue(payload, ["scanDate", "date", "snapshot.date"], ""),
-    tradeDate: firstValue(payload, ["tradeDate", "usedDate", "sourceDate", "marketSession.marketDataDate", "snapshot.tradeDate"], ""),
+    apiOk: firstDirectValue(payload, ["ok"], null),
+    status: firstDirectValue(payload, ["status", "qualityStatus", "dataFreshness.status", "sourceHealth.status"], ""),
+    reason: firstDirectValue(payload, ["reason", "error", "detail", "dataFreshness.reason", "sourceHealth.reason"], ""),
+    runId: firstDirectValue(payload, ["runId", "latestRunId", "transport.runId", "snapshot.runId"], ""),
+    scanDate: firstDirectValue(payload, ["scanDate", "date", "snapshot.date"], ""),
+    tradeDate: firstDirectValue(payload, ["tradeDate", "usedDate", "sourceDate", "marketSession.marketDataDate", "snapshot.tradeDate"], ""),
     updatedAt,
-    generatedAt: firstValue(payload, ["generatedAt", "servedAt", "transport.generatedAt"], ""),
+    generatedAt: firstDirectValue(payload, ["generatedAt", "servedAt", "transport.generatedAt"], ""),
     updatedAtAgeSeconds: ageSeconds(updatedAt),
     rows: rows.length,
-    totalCount: toNumber(firstValue(payload, ["totalCount", "total", "expectedTotal", "expected_total"], null)),
-    resultCount: toNumber(firstValue(payload, ["resultCount", "count", "resultReadbackCount", "rows"], null)),
-    cacheSource: firstValue(payload, ["cacheSource", "source", "transport.source", "dataContractSource"], ""),
-    dataContractSource: firstValue(payload, ["dataContractSource", "sourceContract", "contractVersion", "fieldContractVersion"], ""),
+    totalCount: toNumber(firstDirectValue(payload, ["totalCount", "total", "expectedTotal", "expected_total"], null)),
+    resultCount: toNumber(firstDirectValue(payload, ["resultCount", "count", "resultReadbackCount", "rows"], null)),
+    cacheSource: firstDirectValue(payload, ["cacheSource", "source", "transport.source", "dataContractSource"], ""),
+    dataContractSource: firstDirectValue(payload, ["dataContractSource", "sourceContract", "contractVersion", "fieldContractVersion"], ""),
   };
 }
 
@@ -517,8 +618,8 @@ function extractFreshness(payload) {
     latestCandleTime: firstValue(payload, ["latestCandleTime", "latest_candle_time", "latest_candle_time_taipei"], ""),
     intraday1mStaleSeconds: toNumber(firstValue(payload, ["intraday_1m_stale_seconds", "intraday1mStaleSeconds", "latest_candle_age_seconds"], null)),
     latestTradeDate: firstValue(payload, ["latestTradeDate", "latest_trade_date", "sourceDate", "usedDate", "tradeDate"], ""),
-    dataFreshnessStatus: firstValue(payload, ["dataFreshness.status", "freshness.status", "qualityStatus"], ""),
-    dataFreshnessReason: firstValue(payload, ["dataFreshness.reason", "freshness.reason", "sourceHealth.reason"], ""),
+    dataFreshnessStatus: firstDirectValue(payload, ["dataFreshness.status", "freshness.status", "qualityStatus"], ""),
+    dataFreshnessReason: firstDirectValue(payload, ["dataFreshness.reason", "freshness.reason", "sourceHealth.reason"], ""),
   };
 }
 
@@ -539,20 +640,31 @@ function extractCoverage(payload, rows) {
 }
 
 function extractFallback(payload) {
-  const fallbackValue = firstValue(payload, ["fallbackUsed", "fallback_used", "fallback", "usedFallback"], null);
-  const source = firstValue(payload, ["fallbackSource", "fallback_source", "fallback.source"], "");
-  const reason = firstValue(payload, ["fallbackReason", "fallback_reason", "fallback.reason"], "");
-  const cacheSource = firstValue(payload, ["cacheSource", "source", "transport.source"], "");
+  const fallbackValue = firstDirectValue(payload, ["fallbackUsed", "fallback_used", "fallback", "usedFallback"], null);
+  const scope = directArray(payload, ["fallbackScope", "fallback_scope"]);
+  const details = directArray(payload, ["fallbackDetails", "fallback_details"]);
+  const contract = payload?.fallbackContract && typeof payload.fallbackContract === "object" ? payload.fallbackContract : {};
+  const source = firstDirectValue(payload, ["fallbackSource", "fallback_source", "fallback.source"], "");
+  const reason = firstDirectValue(payload, ["fallbackReason", "fallback_reason", "fallback.reason"], "");
+  const cacheSource = firstDirectValue(payload, ["cacheSource", "source", "transport.source"], "");
   const truthy = fallbackValue === true || /^true$/i.test(String(fallbackValue || ""));
   const staticLike = /static|retired|old cache|legacy json|data\/|\.json/i.test(String(cacheSource || ""))
     && !/^supabase-snapshot$/i.test(String(cacheSource || ""));
+  const allowedByContract = truthy
+    && !staticLike
+    && scope.length > 0
+    && scope.every((item) => contract?.[item]?.allowed === true)
+    && !scope.includes("source")
+    && details.length > 0;
   return {
     fallback: truthy || staticLike,
     fallbackRaw: fallbackValue,
-    fallbackSource: source || (staticLike ? cacheSource : ""),
-    fallbackReason: reason || (staticLike ? "cacheSource looks like retired static JSON/cache" : ""),
-    contractAllowed: false,
-    officialSource: !(truthy || staticLike),
+    fallbackScope: scope,
+    fallbackDetailsCount: details.length,
+    fallbackSource: source || details[0]?.fallbackSource || details[0]?.candleSource || (staticLike ? cacheSource : ""),
+    fallbackReason: reason || details[0]?.fallbackReason || (staticLike ? "cacheSource looks like retired static JSON/cache" : ""),
+    contractAllowed: allowedByContract,
+    officialSource: !(truthy || staticLike) || allowedByContract,
   };
 }
 
@@ -618,18 +730,44 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   if (/critical|error|failed|blocked/i.test(String(basic.status))) issues.push(`api_status_${basic.status}`);
   if (/stale|degraded|partial|not_ready/i.test(String(basic.status))) warnings.push(`api_status_${basic.status}`);
   if (/stale|degraded|partial|not_ready/i.test(String(freshness.dataFreshnessStatus))) warnings.push(`freshness_${freshness.dataFreshnessStatus}`);
-  if (!basic.runId) warnings.push("run_id_missing");
+  if (!basic.runId && !strategy.runIdOptional) warnings.push("run_id_missing");
   if (!basic.updatedAt && !basic.generatedAt) warnings.push("updated_at_missing");
   if (!basic.cacheSource && !basic.dataContractSource) warnings.push("source_marker_missing");
   if (!fields.rowsChecked) issues.push("api_rows_empty");
   if (strategy.expectedRows && fields.rowsChecked < strategy.expectedRows) issues.push(`rows_below_expected_${fields.rowsChecked}_${strategy.expectedRows}`);
   if (fields.blankTotal > 0) issues.push(`field_blanks_${fields.blankTotal}`);
-  if (fallback.fallback) issues.push("fallback_or_static_cache_used");
+  if (fallback.fallback && !fallback.contractAllowed) issues.push("fallback_or_static_cache_used");
+  if (fallback.fallback && fallback.contractAllowed) warnings.push(`allowed_fallback_${fallback.fallbackScope.join("+")}`);
   if (coverage.staleQuoteCount > 0) warnings.push(`stale_quote_count_${coverage.staleQuoteCount}`);
   if (coverage.failedBatchCount > 0) issues.push(`failed_batch_count_${coverage.failedBatchCount}`);
   if (frontend.endpointReferences.length === 0) warnings.push("frontend_endpoint_reference_missing");
   if (frontend.retiredStaticJsonReferences.length) issues.push("frontend_retired_static_json_reference");
   return { issues, warnings };
+}
+
+function applyProfileJudgement(strategy, endpointResult, judgement) {
+  if (STRICT_LIVE || !strategy.liveSessionSurface || !judgement.issues.length) return judgement;
+  const downgraded = [];
+  const kept = [];
+  for (const issue of judgement.issues) {
+    if (/^(http_status_0|http_status_503|api_ok_false|api_rows_empty|rows_below_expected_|field_blanks_)/.test(issue)) {
+      downgraded.push(issue);
+    } else {
+      kept.push(issue);
+    }
+  }
+  if (!downgraded.length) return judgement;
+  const staleHint = JSON.stringify(endpointResult.json || {}).slice(0, 1600) + " " + String(endpointResult.text || "");
+  const reason = /stale|not_today|fresh_rows_0_below|trading_day_radar_cache_stale|marketDataDate|off.?session/i.test(staleHint)
+    ? "off_session_live_stale"
+    : "off_session_live_unavailable";
+  return {
+    issues: kept,
+    warnings: [
+      ...judgement.warnings,
+      ...downgraded.map((issue) => `${reason}:${issue}`),
+    ],
+  };
 }
 
 async function evaluateStrategy(strategy) {
@@ -643,7 +781,7 @@ async function evaluateStrategy(strategy) {
       json: null,
       text: error?.message || String(error),
     }));
-    const rowsInfo = response.json ? rowsOf(response.json) : { rows: [], path: "" };
+    const rowsInfo = response.json ? rowsOf(response.json, strategy) : { rows: [], path: "" };
     const basic = response.json ? extractBasic(response.json, rowsInfo.rows) : {};
     const freshness = response.json ? extractFreshness(response.json) : {};
     const coverage = response.json ? extractCoverage(response.json, rowsInfo.rows) : {};
@@ -651,7 +789,7 @@ async function evaluateStrategy(strategy) {
     const fallback = response.json ? extractFallback(response.json) : { fallback: false, contractAllowed: false };
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
-    const judgement = apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, frontend);
+    const judgement = applyProfileJudgement(strategy, response, apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, frontend));
     endpointResults.push({
       endpoint,
       url: response.url,
@@ -672,7 +810,19 @@ async function evaluateStrategy(strategy) {
   }
   if (RUN_VERIFIERS) {
     for (const command of strategy.verifierCommands || []) {
-      verifierResults.push(runCommand(command));
+      if (!STRICT_LIVE && strategy.skipVerifiersOffSession) {
+        verifierResults.push({
+          command: `node --use-system-ca ${command.join(" ")}`,
+          exitCode: 0,
+          signal: "",
+          ok: true,
+          skipped: true,
+          stdout: "",
+          stderr: `skipped in ${PROFILE} profile; rerun with --profile=market or --strict-live during market window`,
+        });
+      } else {
+        verifierResults.push(runCommand(command));
+      }
     }
   }
   const issues = endpointResults.flatMap((item) => item.issues.map((issue) => `${item.endpoint}: ${issue}`));
@@ -719,6 +869,8 @@ function writeOutputs(scorecard) {
     `- computer: ${scorecard.computer}`,
     `- productionUrl: ${scorecard.productionUrl}`,
     `- sourceSha: ${scorecard.sourceSha || "unknown"}`,
+    `- profile: ${scorecard.profile}`,
+    `- strictLive: ${scorecard.strictLive}`,
     `- unattendedStatus: ${scorecard.unattendedStatus}`,
     `- needsHumanWatch: ${scorecard.needsHumanWatch}`,
     `- blockers: ${scorecard.blockers.length}`,
@@ -756,9 +908,8 @@ function writeOutputs(scorecard) {
 }
 
 async function main() {
-  const now = new Date();
-  const minute = taipeiMinute(now);
-  const marketWindow = minute >= 8 * 60 + 30 && minute <= 13 * 60 + 40;
+  const now = CHECKED_AT;
+  const marketWindow = MARKET_WINDOW;
   const strategies = [];
   for (const strategy of STRATEGIES) {
     console.log(`[api-unattended] checking ${strategy.key}`);
@@ -773,6 +924,8 @@ async function main() {
     checkedAt: now.toISOString(),
     taipeiCheckedAt: taipeiStamp(now),
     marketWindow,
+    profile: PROFILE,
+    strictLive: STRICT_LIVE,
     computer: COMPUTER_LABEL,
     productionUrl: BASE_URL,
     sourceSha: gitValue(["rev-parse", "HEAD"]),

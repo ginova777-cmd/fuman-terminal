@@ -1402,7 +1402,7 @@ function labelChipTradeMode() {
 
 const endpoints = {
   backend: "/api/market",
-  heatmapLatest: "/data/heatmap-latest.json",
+  heatmapLatest: "/api/heatmap",
   heatmap: "/api/heatmap",
   institution: "/api/institution",
   history: "/api/history",

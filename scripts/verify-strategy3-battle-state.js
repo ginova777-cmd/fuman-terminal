@@ -22,6 +22,35 @@ function asArray(value) {
 const MIN_RESULT_ROWS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_MIN_RESULT_ROWS || 1));
 const REST_ATTEMPTS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_REST_ATTEMPTS || 3));
 
+function parseArgs(argv) {
+  const flags = new Set();
+  const values = new Map();
+  for (const arg of argv) {
+    if (!arg.startsWith("--")) continue;
+    const body = arg.slice(2);
+    const splitAt = body.indexOf("=");
+    if (splitAt === -1) flags.add(body);
+    else values.set(body.slice(0, splitAt), body.slice(splitAt + 1));
+  }
+  return { flags, values };
+}
+
+function taipeiMinute(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+const ARGS = parseArgs(process.argv.slice(2));
+const TAIPEI_MINUTE = taipeiMinute();
+const MARKET_WINDOW = TAIPEI_MINUTE >= 8 * 60 + 30 && TAIPEI_MINUTE <= 13 * 60 + 40;
+const PROFILE = ARGS.values.get("profile") || process.env.FUMAN_STRATEGY3_BATTLE_PROFILE || (MARKET_WINDOW ? "market" : "off-session");
+const STRICT_LIVE = PROFILE === "market" || ARGS.flags.has("strict-live") || process.env.FUMAN_STRATEGY3_BATTLE_STRICT_LIVE === "1";
+
 function fail(message, details = {}) {
   const error = new Error(message);
   error.details = details;
@@ -156,6 +185,7 @@ function runLiveSourceChainCheck() {
 
 async function main() {
   const issues = [];
+  const warnings = [];
   const details = {};
   const strategy3Latest = require("../api/strategy3-latest");
 
@@ -346,8 +376,14 @@ async function main() {
     stderr: liveSourceChain.stderr,
     stdout: liveSourceChain.stdout,
   };
-  if (!liveSourceChain.ok || livePayload.ok !== true) issues.push("live_source_chain_check_failed");
-  if (liveSourceChain.ok && livePayload.ready !== true) issues.push("live_source_chain_not_ready");
+  if (!liveSourceChain.ok || livePayload.ok !== true) {
+    if (STRICT_LIVE) issues.push("live_source_chain_check_failed");
+    else warnings.push("off_session_live_source_chain_check_failed");
+  }
+  if (liveSourceChain.ok && livePayload.ready !== true) {
+    if (STRICT_LIVE) issues.push("live_source_chain_not_ready");
+    else warnings.push("off_session_live_source_chain_not_ready");
+  }
   const liveTvOk = cleanNumber(livePayload.tvOk);
   const apiTvPassCount = cleanNumber(api.body?.tvPassCount);
   if (liveTvOk > apiTvPassCount) {
@@ -376,7 +412,13 @@ async function main() {
   details.sourceCounts = Object.fromEntries(sourceCounts);
   for (const [name, item] of sourceCounts) {
     if (item.readError) continue;
-    if (cleanNumber(item.count) < cleanNumber(item.minRequired || 1000)) issues.push(`${name}_count_${item.count}_below_${item.minRequired || 1000}`);
+    if (cleanNumber(item.count) < cleanNumber(item.minRequired || 1000)) {
+      if (!STRICT_LIVE && name === "v_strategy3_intraday_1m_status") {
+        warnings.push(`${name}_off_session_count_${item.count}_below_${item.minRequired || 1000}`);
+      } else {
+        issues.push(`${name}_count_${item.count}_below_${item.minRequired || 1000}`);
+      }
+    }
   }
 
   const retention = await restSafe(
@@ -403,7 +445,16 @@ async function main() {
     }
   }
 
-  const output = { ok: issues.length === 0, checkedAt: new Date().toISOString(), issues, details };
+  const output = {
+    ok: issues.length === 0,
+    checkedAt: new Date().toISOString(),
+    profile: PROFILE,
+    strictLive: STRICT_LIVE,
+    marketWindow: MARKET_WINDOW,
+    issues,
+    warnings,
+    details,
+  };
   process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   if (issues.length) process.exit(1);
 }
