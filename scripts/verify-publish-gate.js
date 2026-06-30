@@ -591,6 +591,7 @@ const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
 const terminalSourceContracts = read("scripts/verify-terminal-source-contracts.js");
 const terminalApp = read("terminal-app.js");
+const marketAiLiveWatchdog = read("terminal-market-ai-live-watchdog.js");
 const desktopFastShell = read("terminal-desktop-fast-shell.js");
 const mobileShell = read("mobile.html");
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
@@ -1644,12 +1645,23 @@ for (const marker of [
 for (const marker of [
   "verifyMarketAiPriorityRiskGuard",
   "terminal-ai-risk-guard.js",
+  "terminal-market-ai-live-watchdog.js",
+  "market-ai-live-watchdog hash mismatch",
   "installMarketAiPriorityRiskGuard",
   "事件波動風險最高",
   "個股極端波動風險",
   "AI 盤中/盤後模式風險",
 ]) {
   if (!liveVersionVerifier.includes(marker)) issues.push(`verify-live-version.js missing AI priority risk marker ${marker}`);
+}
+for (const marker of [
+  "installMarketAiLiveWatchdog",
+  "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
+  "載入今日正式 AI 判讀",
+  "不顯示舊 panel cache",
+  "live-contract-watchdog",
+]) {
+  if (!marketAiLiveWatchdog.includes(marker)) issues.push(`terminal-market-ai-live-watchdog.js missing ${marker}`);
 }
 const aiRiskGuard = read("terminal-ai-risk-guard.js");
 for (const marker of [
@@ -1661,6 +1673,7 @@ for (const marker of [
   if (!aiRiskGuard.includes(marker)) issues.push(`terminal-ai-risk-guard.js missing ${marker}`);
 }
 if (!read("index.html").includes("terminal-ai-risk-guard.js")) issues.push("index.html missing terminal-ai-risk-guard.js");
+if (!read("index.html").includes("terminal-market-ai-live-watchdog.js")) issues.push("index.html missing terminal-market-ai-live-watchdog.js");
 if (!read("index.github.html").includes("terminal-ai-risk-guard.js")) issues.push("index.github.html missing terminal-ai-risk-guard.js");
 if (!gate.includes("verify:live-version")) {
   issues.push("run-live-freshness-gate.ps1 must include verify:live-version for market event reminders");
@@ -1704,6 +1717,7 @@ for (const file of [
   "check-fuman-schedules.ps1",
   "post-scan-snapshot-refreshAGENTS.MD",
   "terminal-live-check.js",
+  "terminal-market-ai-live-watchdog.js",
   "terminal-watchlist-module.js",
   "api/scorecard.js",
   "api/scorecard-health.js",

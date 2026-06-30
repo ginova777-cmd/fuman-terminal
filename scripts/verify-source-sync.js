@@ -16,6 +16,7 @@ const KEY_FILES = [
   "terminal-desktop-fast-shell.js",
   "terminal-modules.js",
   "terminal-live-check.js",
+  "terminal-market-ai-live-watchdog.js",
   "fuman-sw.js",
   "api/release-manifest.js",
   "api/version.js",

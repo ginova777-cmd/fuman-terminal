@@ -40,7 +40,7 @@ const swCacheVersion = sw.match(/CACHE_VERSION\s*=\s*"fuman-terminal-sw-([^"]+)"
 if (version && swCacheVersion !== version) {
   issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version}`);
 }
-for (const asset of ["styles.css", "terminal-core.js"]) {
+for (const asset of ["styles.css", "terminal-core.js", "terminal-market-ai-live-watchdog.js"]) {
   if (version && !index.includes(`${asset}?v=${version}`)) {
     issues.push(`index.html must load ${asset} with ?v=${version}`);
   }
@@ -61,7 +61,7 @@ for (const asset of lazyStaticAssets) {
     issues.push(`${asset} must be listed in STATIC_ASSETS with the current version`);
   }
 }
-for (const asset of ["styles.css", "terminal-core.js", "terminal.js", "terminal-app.js"]) {
+for (const asset of ["styles.css", "terminal-core.js", "terminal.js", "terminal-app.js", "terminal-market-ai-live-watchdog.js"]) {
   if (version && !sw.includes(`/${asset}?v=${version}`)) {
     issues.push(`${asset} must be listed in STATIC_ASSETS with the current version`);
   }

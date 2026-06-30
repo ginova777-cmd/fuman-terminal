@@ -43,6 +43,7 @@ const FILES = [
   "terminal-desktop-fast-shell.js",
   "terminal-runtime-config.js",
   "terminal-live-check.js",
+  "terminal-market-ai-live-watchdog.js",
   "terminal-modules.js",
   "terminal-warrant-flow.js",
   "terminal-watchlist-module.js",

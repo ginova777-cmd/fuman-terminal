@@ -113,15 +113,21 @@ async function verifyOnce() {
       }
     });
   }
-  const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`terminal-ai-risk-guard.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
+  const home = await expectOk("home", "/", (body) => body.includes(`terminal-core.js?v=${version}`) && body.includes(`terminal-ai-risk-guard.js?v=${version}`) && body.includes(`terminal-market-ai-live-watchdog.js?v=${version}`) && body.includes(`styles.css?v=${version}`));
   await expectOk("core", `/terminal-core.js?v=${version}`, (body) => body.includes(`const version = "${version}"`) && body.includes("FUMAN_TERMINAL_VERSION"));
   await expectOk("bootstrap", `/terminal.js?v=${version}`, (body) => body.includes("terminal-app.js"));
-  await expectOk("service-worker", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`) && body.includes(`/terminal-app.js?v=${version}`) && body.includes("networkFirstStatic"));
+  await expectOk("service-worker", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`) && body.includes(`/terminal-app.js?v=${version}`) && body.includes(`/terminal-market-ai-live-watchdog.js?v=${version}`) && body.includes("networkFirstStatic"));
   const app = await expectOk("terminal-app", `/terminal-app.js?v=${version}`, (body) => body.includes("FUMAN_SUPABASE_URL") && body.includes("renderWatchlist"));
   const localAppHash = sha256(read("terminal-app.js"));
   const liveAppHash = sha256(app);
   if (localAppHash !== liveAppHash) {
     throw new Error(`terminal-app hash mismatch local=${localAppHash} live=${liveAppHash}`);
+  }
+  const watchdog = await expectOk("market-ai-live-watchdog", `/terminal-market-ai-live-watchdog.js?v=${version}`, (body) => body.includes("installMarketAiLiveWatchdog") && body.includes("/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40") && body.includes("不顯示舊 panel cache"));
+  const localWatchdogHash = sha256(read("terminal-market-ai-live-watchdog.js"));
+  const liveWatchdogHash = sha256(watchdog);
+  if (localWatchdogHash !== liveWatchdogHash) {
+    throw new Error(`market-ai-live-watchdog hash mismatch local=${localWatchdogHash} live=${liveWatchdogHash}`);
   }
   verifyMarketEventReminderGuard(app);
   const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
