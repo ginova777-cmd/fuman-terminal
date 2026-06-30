@@ -432,6 +432,9 @@ if (!String(packageJson.scripts?.["strategy2:snapshot:publish"] || "").includes(
 if (!String(packageJson.scripts?.["verify:terminal-fields"] || "").includes("scripts/verify-terminal-field-completeness.js")) {
   issues.push("package.json missing scripts.verify:terminal-fields for row/card field completeness gate");
 }
+if (!String(packageJson.scripts?.["verify:realtime-radar-frontend-contract"] || "").includes("scripts/verify-realtime-radar-frontend-contract.js")) {
+  issues.push("package.json missing scripts.verify:realtime-radar-frontend-contract for realtime radar frontend contract");
+}
 if (!String(packageJson.scripts?.["verify:strategy4-standard-gate"] || "").includes("scripts/verify-strategy4-standard-gate.js")) {
   issues.push("package.json missing scripts.verify:strategy4-standard-gate for Strategy4 resource/source/history/API/terminal standard gate");
 }
@@ -588,6 +591,7 @@ const mobileFragmentApi = read("api/mobile-fragment.js");
 const cbDetectLatestApi = read("api/cb-detect-latest.js");
 const strategy4Scanner = read("scripts/scan-strategy4-cache.js");
 const realtimeRadarScanner = read("scripts/scan-realtime-radar-cache.js");
+const realtimeRadarFrontendContract = read("scripts/verify-realtime-radar-frontend-contract.js");
 const strategy4StandardGate = read("scripts/verify-strategy4-standard-gate.js");
 const cbDetectScanner = read("scripts/generate-cb-detect.js");
 const runStrategy4 = read("run-strategy4.ps1");
@@ -1447,6 +1451,19 @@ for (const marker of [
   "hasMore",
 ]) {
   if (!realtimeRadarApi.includes(marker)) issues.push(`api/realtime-radar-latest.js missing full-session API marker ${marker}`);
+}
+for (const marker of [
+  "/api/realtime-radar-latest?full=1&limit=1200",
+  "/api/realtime-radar-latest?compact=1&shell=1&limit=1200",
+  "staleQuoteCount",
+  "failedBatchCount",
+  "supabase-radar-cache",
+  "apiFull.rows === 1200",
+  "apiShell1200.rows === 1200",
+  "terminal-desktop-fast-shell.js",
+  "terminal-realtime-radar.css",
+]) {
+  if (!realtimeRadarFrontendContract.includes(marker)) issues.push(`verify-realtime-radar-frontend-contract.js missing frontend contract marker ${marker}`);
 }
 for (const marker of [
   "function renderRealtimeRadarDomShell",
