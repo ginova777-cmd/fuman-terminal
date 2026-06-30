@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { hasLineConfig, sendLineText } = require("./line-push");
-const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
+const { spawnSync } = require("child_process");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
@@ -11,6 +10,7 @@ const OUT_FILE = path.join(DATA_DIR, "realtime-radar-latest.json");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
 const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
 const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
+const ALERT_RECEIPT_FILE = path.join(STATE_DIR, "realtime-radar-alert-receipt.json");
 const SUPABASE_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-supabase-status.json");
 const WRITE_BUDGET_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-write-budget.json");
 const BASE_URL = process.env.FUMAN_BASE_URL || "https://fuman-terminal.vercel.app";
@@ -106,15 +106,22 @@ function persistWriteBudget(writeBudget, status = "open") {
 }
 
 async function sendOpsText(text) {
-  if (hasTelegramConfig()) {
-    await sendTelegramText(text);
-    return "telegram";
-  }
-  if (hasLineConfig()) {
-    await sendLineText(text);
-    return "line";
-  }
-  return "";
+  const result = spawnSync(process.execPath, [path.join(__dirname, "send-workflow-alert.js")], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+    env: {
+      ...process.env,
+      FUMAN_ALERT_KIND: "realtime-radar",
+      FUMAN_ALERT_SOURCE: "realtime-radar-runtime",
+      FUMAN_ALERT_SUBJECT: "即時雷達資料源警示",
+      FUMAN_ALERT_TEXT: text,
+      FUMAN_ALERT_RECEIPT_FILE: process.env.REALTIME_RADAR_ALERT_RECEIPT_FILE || ALERT_RECEIPT_FILE,
+    },
+  });
+  if (result.status === 0) return "workflow-alert";
+  const detail = [result.stderr, result.stdout].filter(Boolean).join("\n").trim();
+  throw new Error(`workflow alert failed${detail ? `: ${detail.slice(0, 500)}` : ""}`);
 }
 
 function alertSignature(payload) {
