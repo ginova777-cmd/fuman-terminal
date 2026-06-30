@@ -85,18 +85,18 @@ select
   first_candle_time,
   today_candle_count,
   latest_candle_age_seconds,
-  (has_today_data and continuous_candle_count >= 35) as ready_ge_35,
-  (has_today_data and continuous_candle_count >= 80) as ready_ge_80,
-  (has_today_data and continuous_candle_count >= 200) as ready_ge_200,
-  (has_today_data and continuous_candle_count >= 35) as ma35_available,
+  (continuous_candle_count >= 35) as ready_ge_35,
+  (continuous_candle_count >= 80) as ready_ge_80,
+  (continuous_candle_count >= 200) as ready_ge_200,
+  (continuous_candle_count >= 35) as ma35_available,
   today_candle_count as rows_today,
   latest_candle_time_taipei,
-  (has_today_data and continuous_candle_count >= 20) as ready_ge_20,
+  (continuous_candle_count >= 20) as ready_ge_20,
   warmup_candle_count,
   continuous_candle_count,
-  (has_today_data and continuous_candle_count >= 20) as ready_ma20_continuous,
-  (has_today_data and continuous_candle_count >= 35) as ready_ma35_continuous,
-  (has_today_data and continuous_candle_count >= 80) as ready_macd_continuous
+  (continuous_candle_count >= 20) as ready_ma20_continuous,
+  (continuous_candle_count >= 35) as ready_ma35_continuous,
+  (continuous_candle_count >= 80) as ready_macd_continuous
 from grouped
 $view$, v_count_cast, v_age_cast);
 end $$;

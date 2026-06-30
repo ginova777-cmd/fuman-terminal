@@ -146,11 +146,11 @@ begin
       coalesce(s.continuous_candle_count, 0) as continuous_candle_count,
       s.latest_candle_time,
       s.updated_at,
-      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 20) as ready_ma20_continuous,
-      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 35) as ready_ma35_continuous,
-      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 80) as ready_macd_continuous,
-      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 80) as ready_ge_80,
-      (coalesce(s.has_today_data, false) and coalesce(s.continuous_candle_count, 0) >= 200) as ready_ge_200
+      (coalesce(s.continuous_candle_count, 0) >= 20) as ready_ma20_continuous,
+      (coalesce(s.continuous_candle_count, 0) >= 35) as ready_ma35_continuous,
+      (coalesce(s.continuous_candle_count, 0) >= 80) as ready_macd_continuous,
+      (coalesce(s.continuous_candle_count, 0) >= 80) as ready_ge_80,
+      (coalesce(s.continuous_candle_count, 0) >= 200) as ready_ge_200
     from universe p
     left join lateral (
       with recent as (
