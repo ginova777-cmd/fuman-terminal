@@ -581,6 +581,7 @@ function frontendEvidence(strategy) {
   const references = [];
   const staleMarkers = [];
   const staticReferences = [];
+  const staticGuardReferences = [];
   for (const file of files) {
     const abs = path.join(ROOT, file);
     if (!fs.existsSync(abs)) continue;
@@ -588,8 +589,15 @@ function frontendEvidence(strategy) {
     if (endpointPaths.some((endpoint) => text.includes(endpoint))) references.push(file);
     if (/stale|degraded|partial|source_status|qualityStatus/i.test(text)) staleMarkers.push(file);
     const staticNeedle = strategy.key === "cb" ? "cb-detect" : strategy.key;
-    if (new RegExp(`data[/\\\\][^'"\\s]*${staticNeedle}[^'"\\s]*\\.json`, "i").test(text)) {
-      staticReferences.push(file);
+    const staticRe = new RegExp(`data[/\\\\][^'"\\s]*${staticNeedle}[^'"\\s]*\\.json`, "ig");
+    let match = null;
+    while ((match = staticRe.exec(text))) {
+      const context = text.slice(Math.max(0, match.index - 240), Math.min(text.length, match.index + 360));
+      if (/mobile large payload blocked|large payload blocked|retired static|static json blocked|returns 410/i.test(context)) {
+        staticGuardReferences.push(file);
+      } else {
+        staticReferences.push(file);
+      }
     }
   }
   return {
@@ -597,7 +605,8 @@ function frontendEvidence(strategy) {
     desktopUsesSameApi: references.length > 0,
     mobileUsesSameApi: references.some((file) => /mobile|terminal-app|terminal-modules/i.test(file)),
     staleDegradedMarkers: [...new Set(staleMarkers)],
-    retiredStaticJsonReferences: staticReferences,
+    retiredStaticJsonReferences: [...new Set(staticReferences)],
+    retiredStaticJsonGuardReferences: [...new Set(staticGuardReferences)],
   };
 }
 

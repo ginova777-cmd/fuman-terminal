@@ -134,12 +134,25 @@ function rowsFromCompleteRun(resultRows = []) {
   return resultRows
     .map((row, index) => {
       const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+      const volume = cleanNumber(
+        payload.volume
+        || payload.tradeVolume
+        || payload.latestVolume
+        || payload.technical?.latestVolume
+        || payload.entryPlan?.latestVolume
+        || payload.volumeRatio20
+        || payload.entryPlan?.volumeRatio20
+        || payload.scoreBreakdown?.volume
+      );
       return {
         ...payload,
         symbol: payload.symbol || row.symbol || "",
         cbCode: payload.cbCode || row.symbol || "",
         name: payload.name || row.name || payload.code || row.symbol || "",
         cbName: payload.cbName || row.name || "",
+        volume,
+        tradeVolume: cleanNumber(payload.tradeVolume || payload.latestVolume || payload.technical?.latestVolume || volume),
+        volumeRatio20: cleanNumber(payload.volumeRatio20 || payload.entryPlan?.volumeRatio20),
         rank: cleanNumber(payload.rank) || index + 1,
       };
     })
