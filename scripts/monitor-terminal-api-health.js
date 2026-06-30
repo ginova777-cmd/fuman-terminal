@@ -6,7 +6,12 @@ const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 const { hasEmailConfig, sendEmailText } = require("./ops-email");
 
 const ROOT = path.resolve(__dirname, "..");
-const BASE_URL = (process.env.FUMAN_TERMINAL_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const BASE_URL = (
+  process.env.FUMAN_TERMINAL_BASE_URL
+  || process.env.FUMAN_VERIFY_BASE_URL
+  || process.env.FUMAN_PRODUCTION_URL
+  || "https://fuman-terminal.vercel.app"
+).replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const STATUS_FILE = path.join(STATE_DIR, "terminal-api-health-latest.json");

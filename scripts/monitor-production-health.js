@@ -2,6 +2,12 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+  issue: terminalIssue,
+  notifyIfNeeded,
+  shouldRequireToday,
+  taipeiClock,
+} = require("./monitor-terminal-api-health");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -59,10 +65,123 @@ function endpointHasStrategy2(endpoints = {}) {
   return Object.keys(endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint));
 }
 
+function num(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
+}
+
+function compactDate(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(parsed)).replace(/\D/g, "");
+  }
+  return text.replace(/\D/g, "").slice(0, 8);
+}
+
+async function checkHeatmapLiveContract(clock) {
+  const result = await requestJson("/api/heatmap?limit=999&stocks=999&source=desktop-live-contract", 120000).catch((error) => ({
+    status: 0,
+    body: { ok: false, error: error.message },
+  }));
+  const body = result.body || {};
+  const health = body.health || {};
+  const contract = health.contract || body.sourceInfo || {};
+  const formalSource = body.formalSource || health.formalSource || contract.source || "";
+  const tradeDate = compactDate(body.today || body.resolvedTradeDate || body.tradeDate || health.today || body.meta?.today);
+  const stockCount = num(body.stockCount || health.stockCount);
+  const badDate = num(health.badDate ?? health.badDateCount ?? body.meta?.badDateCount);
+  const fallbackUsed = body.fallbackUsed === true || health.formalSourceFallbackUsed === true || contract.fallbackUsed === true;
+  const todayRequired = shouldRequireToday(clock, false);
+  const issues = [];
+
+  if (result.status < 200 || result.status >= 300 || body.ok === false) {
+    issues.push(`heatmap live API unhealthy HTTP ${result.status}: ${body.error || body.reason || "ok=false"}`);
+  }
+  if (formalSource !== "supabase:fugle_quotes_live") {
+    issues.push(`heatmap formalSource mismatch: ${formalSource || "(missing)"}`);
+  }
+  if (stockCount < 500) issues.push(`heatmap stockCount too low: ${stockCount}`);
+  if (health.isHealthy === false) issues.push(`heatmap health.isHealthy=false: ${health.issue || body.error || ""}`);
+  if (todayRequired && tradeDate !== clock.ymd) issues.push(`heatmap tradeDate stale: live=${tradeDate || "(missing)"} today=${clock.ymd}`);
+  if (todayRequired && badDate > 0) issues.push(`heatmap badDate rows: ${badDate}`);
+  if (todayRequired && fallbackUsed) issues.push(`heatmap fallbackUsed=true`);
+
+  return {
+    ok: issues.length === 0,
+    status: result.status,
+    endpoint: "/api/heatmap?limit=999&stocks=999&source=desktop-live-contract",
+    formalSource,
+    tradeDate,
+    stockCount,
+    badDate,
+    fallbackUsed,
+    isHealthy: health.isHealthy !== false,
+    todayRequired,
+    issues,
+  };
+}
+
+async function checkMarketAiLiveContract(clock) {
+  const result = await requestJson("/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40", 120000).catch((error) => ({
+    status: 0,
+    body: { ok: false, error: error.message },
+  }));
+  const body = result.body || {};
+  const freshness = body.dataFreshness || {};
+  const sourceIssues = Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : [];
+  const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
+  const payloadClosed = body.marketSession?.closed === true;
+  const todayRequired = shouldRequireToday(clock, payloadClosed);
+  const dashboardTradeDate = compactDate(body.dashboard?.tradeDate);
+  const heatmapTradeDate = compactDate(freshness.heatmapTradeDate);
+  const radarTradeDate = compactDate(freshness.radarTradeDate);
+  const baseTradeDate = compactDate(freshness.baseTradeDate);
+  const issues = [];
+
+  if (result.status < 200 || result.status >= 300 || body.ok === false) {
+    issues.push(`market-ai-live unhealthy HTTP ${result.status}: ${body.error || "ok=false"}`);
+  }
+  if (body.source !== "live-api-bundle") issues.push(`market-ai-live source mismatch: ${body.source || "(missing)"}`);
+  if (body.cacheSource !== "api/market-ai-live") issues.push(`market-ai-live cacheSource mismatch: ${body.cacheSource || "(missing)"}`);
+  if (todayRequired && dashboardTradeDate !== clock.ymd) issues.push(`market-ai dashboardTradeDate stale: live=${dashboardTradeDate || "(missing)"} today=${clock.ymd}`);
+  if (todayRequired && heatmapTradeDate !== clock.ymd) issues.push(`market-ai heatmapTradeDate stale: live=${heatmapTradeDate || "(missing)"} today=${clock.ymd}`);
+  if (todayRequired && freshness.heatmapUsable !== true) issues.push(`market-ai heatmapUsable=false`);
+  if (staleSources.length) issues.push(`market-ai staleSources: ${staleSources.join("; ")}`);
+  if (sourceIssues.length) issues.push(`market-ai sourceIssues: ${sourceIssues.join("; ")}`);
+  if (todayRequired && body.marketSession?.stale === true) {
+    issues.push(`market-ai marketSession.stale=true: ${body.marketSession?.reason || ""}`);
+  }
+
+  return {
+    ok: issues.length === 0,
+    status: result.status,
+    endpoint: "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
+    source: body.source || "",
+    cacheSource: body.cacheSource || "",
+    dashboardTradeDate,
+    heatmapTradeDate,
+    radarTradeDate,
+    baseTradeDate,
+    heatmapUsable: freshness.heatmapUsable === true,
+    staleSources,
+    sourceIssues,
+    todayRequired,
+    marketSession: body.marketSession || null,
+    issues,
+  };
+}
+
 async function main() {
   const issues = [];
   const warnings = [];
   const strictGit = process.env.FUMAN_PRODUCTION_MONITOR_STRICT_GIT === "1";
+  const clock = taipeiClock();
   const version = detectVersion();
   const localHead = git(["rev-parse", "HEAD"]);
   const originHead = git(["ls-remote", "origin", "refs/heads/main"]);
@@ -84,6 +203,8 @@ async function main() {
     status: 0,
     body: { ok: false, error: error.message },
   }));
+  const heatmapLive = await checkHeatmapLiveContract(clock);
+  const marketAiLive = await checkMarketAiLiveContract(clock);
 
   if (!localHead.ok) (strictGit ? issues : warnings).push(`local git head unavailable: ${localHead.stderr}`);
   if (originHead.ok && originSha && localHead.stdout && originSha !== localHead.stdout) {
@@ -113,6 +234,16 @@ async function main() {
   if (health.status < 200 || health.status >= 300 || h.ok === false) {
     issues.push(`production-health unhealthy HTTP ${health.status}: ${(h.issues || [h.error]).filter(Boolean).join("; ")}`);
   }
+  for (const item of heatmapLive.issues) issues.push(item);
+  for (const item of marketAiLive.issues) issues.push(item);
+
+  const notification = await notifyIfNeeded({
+    ok: issues.length === 0,
+    source: "production-health-monitor",
+    baseUrl: BASE_URL,
+    updatedAt: new Date().toISOString(),
+    issues: issues.map((message) => terminalIssue("critical", message)),
+  });
 
   const payload = {
     ok: issues.length === 0,
@@ -123,6 +254,7 @@ async function main() {
     originHead: originSha,
     issues,
     warnings,
+    notification,
     releaseManifest: {
       status: manifest.status,
       ok: m.ok,
@@ -140,6 +272,10 @@ async function main() {
       hasStrategy2Snapshot: endpointHasStrategy2(b.endpoints || {}),
       cacheSource: b.cacheSource || "",
       updatedAt: b.updatedAt || "",
+    },
+    liveContracts: {
+      heatmap: heatmapLive,
+      marketAi: marketAiLive,
     },
   };
 
