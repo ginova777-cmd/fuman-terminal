@@ -6,6 +6,7 @@ const marketAiLive = require("../api/market-ai-live");
 const {
   buildMarketAiInsights,
   canServeCachedPayload,
+  heatmapQueryForMarketAi,
   marketSessionState,
   normalizeStockRow,
   requiresTodayDetection,
@@ -38,6 +39,14 @@ assert.strictEqual(openingSession.closed, false);
 assert.strictEqual(openingSession.reason, "awaiting-today-market-data");
 assert.strictEqual(requiresTodayDetection(clock, openingSession), true);
 assert.strictEqual(canServeCachedPayload({ method: "GET", query: {} }, true, true), false);
+assert.deepStrictEqual(
+  heatmapQueryForMarketAi({ snapshot: "1", compact: "1", shell: "1", limit: "60" }, true),
+  { limit: "999", stocks: "999", source: "market-ai-live" }
+);
+assert.deepStrictEqual(
+  heatmapQueryForMarketAi({ limit: "30" }, false),
+  { limit: "60", snapshot: "1", compact: "1", shell: "1" }
+);
 
 const weekendClock = {
   date: "2026-06-28",

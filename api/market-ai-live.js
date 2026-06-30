@@ -646,11 +646,37 @@ function withTimeout(promise, timeoutMs, fallback) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
+  const query = { ...(baseQuery || {}) };
+  if (mustDetectToday) {
+    delete query.snapshot;
+    delete query.cache;
+    delete query.fast;
+    delete query.compact;
+    delete query.shell;
+    return {
+      ...query,
+      limit: "999",
+      stocks: "999",
+      source: "market-ai-live",
+    };
+  }
+
+  return {
+    ...query,
+    snapshot: "1",
+    compact: "1",
+    shell: "1",
+    limit: "60",
+  };
+}
+
 async function enrichMarketAiPayload(payload, request, clock, session, deps = {}) {
+  const mustDetectToday = session?.requiresTodayDetection === true;
   const req = {
     ...request,
     method: "GET",
-    query: { ...(request.query || {}), snapshot: "1", compact: "1", shell: "1", limit: "60" },
+    query: heatmapQueryForMarketAi(request.query, mustDetectToday),
   };
   const embeddedHeatmap = Array.isArray(payload?.heatmap?.sectors) ? payload.heatmap : null;
   const heatmapPayload = deps.heatmapPayload || embeddedHeatmap || await withTimeout(
@@ -764,11 +790,12 @@ module.exports = async function handler(request, response) {
   }
 
   const req = { ...request, method: "GET", query: request.query || {} };
+  const heatmapQuery = heatmapQueryForMarketAi(request.query, mustDetectToday);
   const [marketResult, strategy2Result, radarResult, heatmapResult] = await Promise.all([
     capture(market, req),
     capture(latestStrategy, { ...req, query: { key: "strategy2" } }),
     capture(realtimeRadarLatest, req),
-    capture(heatmap, { ...req, query: { ...(req.query || {}), snapshot: "1", compact: "1", shell: "1", limit: "60" } }),
+    capture(heatmap, { ...req, query: heatmapQuery }),
   ]);
   const strategy2 = strategy2Result.payload || {};
   const realtimeRadar = radarResult.payload || {};
@@ -819,6 +846,7 @@ module.exports.__test = {
   marketSessionState,
   requiresTodayDetection,
   canServeCachedPayload,
+  heatmapQueryForMarketAi,
 };
 
 
