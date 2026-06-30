@@ -560,6 +560,7 @@ const runOpenBuy = read("run-open-buy.ps1");
 const runStrategy1Preopen = read("run-strategy1-preopen-common.ps1");
 const runStrategy2Intraday = read("run-strategy2-intraday.ps1");
 const runStrategy3Complete = read("run-strategy3-complete-scan.ps1");
+const runStrategy3BattleVerify = read("run-strategy3-battle-verify.ps1");
 const runStrategy5 = read("run-strategy5.ps1");
 const runInstitution = read("run-institution.ps1");
 const runWarrantFlow = read("run-warrant-flow.ps1");
@@ -571,6 +572,7 @@ const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
 const workflowAlertSender = read("scripts/send-workflow-alert.js");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const watchlistMatchIndexGenerator = read("scripts/generate-watchlist-match-index.js");
+const strategy3BattleStateVerifier = read("scripts/verify-strategy3-battle-state.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
@@ -597,6 +599,7 @@ const terminalLiveCheck = read("terminal-live-check.js");
 const terminalSourceContracts = read("scripts/verify-terminal-source-contracts.js");
 const terminalApp = read("terminal-app.js");
 const marketAiLiveWatchdog = read("terminal-market-ai-live-watchdog.js");
+const marketAiLiveApi = read("api/market-ai-live.js");
 const desktopFastShell = read("terminal-desktop-fast-shell.js");
 const mobileShell = read("mobile.html");
 const mobileHealthVerifier = read("scripts/verify-mobile-health.js");
@@ -1145,11 +1148,15 @@ for (const marker of [
   "isRetiredStaticOutput",
   "strategy-match-index-static-retired",
   "realtime-radar-api-only-static-disabled",
+  "market-ai-live",
 ]) {
   if (!slimCacheGenerator.includes(marker)) issues.push(`generate-slim-cache.js missing retired realtime/static marker ${marker}`);
 }
-if (/readOptional\("data\/realtime-radar-latest\.json"|readOptional\("data\/strategy-match-index\.json"|writeToBoth\("data\/strategy-match-index\.json"|source:\s*"data\/strategy-match-index\.json"/.test(slimCacheGenerator)) {
-  issues.push("generate-slim-cache.js must not read/write retired realtime radar or strategy-match static JSON");
+if (/readOptional\("data\/realtime-radar-latest\.json"|readOptional\("data\/strategy-match-index\.json"|writeToBoth\("data\/strategy-match-index\.json"|source:\s*"data\/strategy-match-index\.json"|source:\s*"data\/market-ai-live\.json"/.test(slimCacheGenerator)) {
+  issues.push("generate-slim-cache.js must not read/write retired realtime radar, market-ai-live, or strategy-match static JSON");
+}
+for (const marker of ["FUMAN_MARKET_AI_ALLOW_CODE_REPO_CACHE", "runtime:market-ai-live.json"]) {
+  if (!marketAiLiveApi.includes(marker)) issues.push(`api/market-ai-live.js missing runtime-only cache marker ${marker}`);
 }
 if (!/api-driven-watchlist-match-index/.test(watchlistMatchIndexGenerator) || /writeJson\(|data\/strategy-match-index\.json/.test(watchlistMatchIndexGenerator)) {
   issues.push("generate-watchlist-match-index.js must be API-driven snapshot-only and must not write data/strategy-match-index.json");
@@ -1944,6 +1951,12 @@ if (fs.existsSync(path.join(ROOT, deletedStrategy3ReadinessScript))) {
 const strategy3SessionReadiness = read("scripts/check-strategy3-session-readiness.js");
 for (const marker of ["sessionReadyCount", "minIntraday1mCandidates", "09:00-12:59 intraday status ready"]) {
   if (!strategy3SessionReadiness.includes(marker)) issues.push(`check-strategy3-session-readiness.js missing session readiness marker ${marker}`);
+}
+for (const marker of ["check-strategy3-source-chain.js", "liveSourceChain", "live_source_chain_tv_drift_api_"]) {
+  if (!strategy3BattleStateVerifier.includes(marker)) issues.push(`verify-strategy3-battle-state.js missing live source-chain drift marker ${marker}`);
+}
+for (const marker of ["run-strategy3-complete-scan.ps1", "live_source_chain_tv_drift_api_", "post-repair"]) {
+  if (!runStrategy3BattleVerify.includes(marker)) issues.push(`run-strategy3-battle-verify.ps1 missing battle self-repair marker ${marker}`);
 }
 const deletedPostSessionPattern = new RegExp(["after" + "1300", "after_" + "1300", ["STRATEGY3_MIN", "AFTER", "1300"].join("_")].join("|"), "i");
 if (deletedPostSessionPattern.test(strategy3SessionReadiness)) {

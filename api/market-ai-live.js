@@ -18,12 +18,12 @@ const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
 const AI_TODAY_REQUIRED_START_SECONDS = AI_WINDOW_START_SECONDS;
 const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
 const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
+const ALLOW_CODE_REPO_CACHE = process.env.FUMAN_MARKET_AI_ALLOW_CODE_REPO_CACHE === "1";
 
 function cacheCandidates(file = CACHE_FILE) {
-  return [
-    path.join(RUNTIME_ROOT, "data", file),
-    path.join(ROOT, "data", file),
-  ];
+  const candidates = [path.join(RUNTIME_ROOT, "data", file)];
+  if (ALLOW_CODE_REPO_CACHE) candidates.push(path.join(ROOT, "data", file));
+  return candidates;
 }
 
 function readJson(file) {
@@ -258,7 +258,7 @@ function cachedResponsePayload(cached, breadth, clock, reason = "cache") {
   return {
     ...cached,
     breadth: hasBreadthPayload(cached.breadth) ? cached.breadth : breadth || null,
-    cacheSource: cached.cacheSource || "data/market-ai-live.json",
+    cacheSource: cached.cacheSource || "runtime:market-ai-live.json",
     servedAt: new Date().toISOString(),
     aiDetectWindow: {
       timezone: "Asia/Taipei",

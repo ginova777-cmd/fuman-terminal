@@ -58,7 +58,7 @@ function isDesktopApiOnlyStaticOutput(output) {
 
 function isRetiredStaticOutput(output) {
   const normalized = String(output || "").replace(/\\/g, "/");
-  return /^(data\/(?:strategy-match-index|data-status-index|realtime-radar-latest)\.json|data\/scan-receipts\/realtime-radar\.json)$/i.test(normalized);
+  return /^(data\/(?:strategy-match-index|data-status-index|realtime-radar-latest|market-ai-live|market-ai-breadth-latest|market-ai-panel-latest)\.json|data\/scan-receipts\/realtime-radar\.json)$/i.test(normalized);
 }
 
 function writeToBoth(output, payload) {
@@ -967,7 +967,7 @@ function marketAiLiveCache() {
   return {
     ok: Boolean(marketPayload?.ok !== false || strategy2?.ok !== false || realtimeRadar?.ok !== false),
     source: "scan-data-bundle",
-    cacheSource: "data/market-ai-live.json",
+    cacheSource: "api/market-ai-live",
     updatedAt: new Date().toISOString(),
     market: marketPayload,
     breadth,
@@ -2069,7 +2069,7 @@ async function main() {
     const marketAiLive = marketAiLiveCache();
     writeToBoth("data/market-ai-live.json", marketAiLive);
     await safeUpsertSnapshot("market_ai_live", marketAiLive, {
-      source: "data/market-ai-live.json",
+      source: "api/market-ai-live",
       snapshotId: marketAiLive.runId || `market-ai-live-${marketAiLive.updatedAt || Date.now()}`,
     });
     const marketAiPanel = marketAiPanelLatest();

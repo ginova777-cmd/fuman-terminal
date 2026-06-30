@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
+const ROOT = path.resolve(__dirname, "..");
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -56,6 +58,55 @@ async function rest(pathname, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function runLiveSourceChainCheck() {
+  const timeout = Math.max(15000, cleanNumber(process.env.STRATEGY3_BATTLE_LIVE_SOURCE_CHAIN_TIMEOUT_MS || 70000));
+  const result = spawnSync(process.execPath, [
+    "--use-system-ca",
+    path.join(ROOT, "scripts", "check-strategy3-source-chain.js"),
+  ], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout,
+    windowsHide: true,
+  });
+  const stdout = String(result.stdout || "").trim();
+  const stderr = String(result.stderr || "").trim();
+  let parsed = null;
+  if (stdout) {
+    try {
+      parsed = JSON.parse(stdout);
+    } catch (error) {
+      return {
+        ok: false,
+        status: result.status,
+        error: `live source-chain JSON parse failed: ${error.message}`,
+        stderr: stderr.slice(0, 500),
+        stdout: stdout.slice(0, 500),
+      };
+    }
+  }
+  if (result.error) {
+    return {
+      ok: false,
+      status: result.status,
+      error: result.error.message || String(result.error),
+      stderr: stderr.slice(0, 500),
+    };
+  }
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      status: result.status,
+      error: stderr || stdout || `check-strategy3-source-chain exited ${result.status}`,
+    };
+  }
+  return {
+    ok: true,
+    status: result.status,
+    payload: parsed || {},
+  };
 }
 
 async function main() {
@@ -151,6 +202,33 @@ async function main() {
   if (tvBreakdownRows !== resultRows.length) issues.push(`tvBreakdownRows_${tvBreakdownRows}_does_not_match_result_rows_${resultRows.length}`);
   if (!resultRows.every((row) => row?.payload?.tvBreakdown && typeof row.payload.tvBreakdown.controlOk === "boolean" && typeof row.payload.tvBreakdown.obvOk === "boolean")) {
     issues.push("tv_breakdown_boolean_fields_missing");
+  }
+
+  const liveSourceChain = runLiveSourceChainCheck();
+  const livePayload = liveSourceChain.payload || {};
+  details.liveSourceChain = liveSourceChain.ok ? {
+    ok: livePayload.ok,
+    ready: livePayload.ready,
+    source: livePayload.source,
+    latestQuoteRows: livePayload.latestQuoteRows,
+    sessionReadyCount: livePayload.sessionReadyCount,
+    fieldGateReadyCount: livePayload.fieldGateReadyCount,
+    tvChecked: livePayload.tvChecked,
+    tvOk: livePayload.tvOk,
+    reason: livePayload.reason,
+  } : {
+    ok: false,
+    status: liveSourceChain.status,
+    error: liveSourceChain.error,
+    stderr: liveSourceChain.stderr,
+    stdout: liveSourceChain.stdout,
+  };
+  if (!liveSourceChain.ok || livePayload.ok !== true) issues.push("live_source_chain_check_failed");
+  if (liveSourceChain.ok && livePayload.ready !== true) issues.push("live_source_chain_not_ready");
+  const liveTvOk = cleanNumber(livePayload.tvOk);
+  const apiTvPassCount = cleanNumber(api.body?.tvPassCount);
+  if (liveTvOk > apiTvPassCount) {
+    issues.push(`live_source_chain_tv_drift_api_${apiTvPassCount}_live_${liveTvOk}`);
   }
 
   const sourceCounts = await Promise.all([
