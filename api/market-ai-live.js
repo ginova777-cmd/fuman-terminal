@@ -16,6 +16,7 @@ const STOCKS_SLIM_FILE = "stocks-slim.json";
 const AI_WINDOW_START_SECONDS = 9 * 60 * 60;
 const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
 const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
+const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
 
 function cacheCandidates(file = CACHE_FILE) {
   return [
@@ -553,7 +554,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const confidence = !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
   const bias = hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
   const action = hasDirectionalBreadth ? (up >= down ? "降低追價" : "等待方向") : "等待方向";
-  const tradeDate = heatmapUsable ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.health?.today || clock.ymd) : radarIsToday ? radarTradeDate : session?.marketDataDate || clock.ymd;
+  const tradeDate = heatmapUsable ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.health?.today || clock.ymd) : radarIsToday ? radarTradeDate : clock.ymd;
   const priorityStaleBlocked = Boolean(staleSources.length && !topStock);
   const priorityObservation = topStock ? {
     title: `${topStock.code} ${topStock.name}`,
@@ -703,15 +704,16 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
 
 async function enrichMarketAiPayload(payload, request, clock, session, deps = {}) {
   const mustDetectToday = session?.requiresTodayDetection === true;
+  const requireLiveHeatmap = mustDetectToday || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
   const req = {
     ...request,
     method: "GET",
-    query: heatmapQueryForMarketAi(request.query, mustDetectToday),
+    query: heatmapQueryForMarketAi(request.query, requireLiveHeatmap),
   };
-  const embeddedHeatmap = Array.isArray(payload?.heatmap?.sectors) ? payload.heatmap : null;
+  const embeddedHeatmap = !requireLiveHeatmap && Array.isArray(payload?.heatmap?.sectors) ? payload.heatmap : null;
   const heatmapPayload = deps.heatmapPayload || embeddedHeatmap || await withTimeout(
     capture(heatmap, req).then((result) => result.payload || null),
-    1900,
+    requireLiveHeatmap ? HEATMAP_LIVE_TIMEOUT_MS : 1900,
     null
   );
   const radarPayload = deps.radarPayload || payload?.realtimeRadar || await withTimeout(
@@ -820,7 +822,8 @@ module.exports = async function handler(request, response) {
   }
 
   const req = { ...request, method: "GET", query: request.query || {} };
-  const heatmapQuery = heatmapQueryForMarketAi(request.query, mustDetectToday);
+  const requireLiveHeatmap = mustDetectToday || Boolean(detectWindowActive && !session.closed);
+  const heatmapQuery = heatmapQueryForMarketAi(request.query, requireLiveHeatmap);
   const [marketResult, strategy2Result, radarResult, heatmapResult] = await Promise.all([
     capture(market, req),
     capture(latestStrategy, { ...req, query: { key: "strategy2" } }),

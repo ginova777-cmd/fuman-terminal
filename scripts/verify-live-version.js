@@ -77,6 +77,13 @@ function verifyMarketEventReminderGuard(app) {
 function verifyMarketAiPriorityRiskGuard(text) {
   const required = [
     "installMarketAiPriorityRiskGuard",
+    "installMarketAiLiveContractPanel",
+    "installMarketHeatmapLiveContractPanel",
+    "載入今日正式 AI 判讀/熱力圖資料中",
+    "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
+    "/api/heatmap?limit=999&stocks=999&source=desktop-live-contract",
+    "staleLegacyPanel",
+    "staleLegacyHeatmap",
     "事件波動風險最高",
     "個股極端波動風險",
     "AI 盤中/盤後模式風險",

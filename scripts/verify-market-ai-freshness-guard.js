@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const marketAiLive = require("../api/market-ai-live");
 
 const {
@@ -12,6 +14,41 @@ const {
   requiresTodayDetection,
   scoreRow,
 } = marketAiLive.__test;
+
+const ROOT = path.resolve(__dirname, "..");
+const readText = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
+const readJson = (file) => JSON.parse(readText(file));
+
+const aiGuardSource = readText("terminal-ai-risk-guard.js");
+const indexHtml = readText("index.html");
+const apiSource = readText("api/market-ai-live.js");
+const scheduleRegistry = readJson("scripts/fuman-schedule-registry.json");
+const activeTasks = new Set(scheduleRegistry.policy.activeTasks || []);
+const retiredTasks = new Set(scheduleRegistry.policy.retiredTasks || []);
+
+assert(aiGuardSource.includes("installMarketAiLiveContractPanel"), "frontend AI live contract guard missing");
+assert(aiGuardSource.includes("installMarketHeatmapLiveContractPanel"), "frontend heatmap live contract guard missing");
+assert(aiGuardSource.includes("載入今日正式 AI 判讀/熱力圖資料中"), "same-day loading copy missing");
+assert(aiGuardSource.includes("/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40"), "frontend AI must fetch official market-ai-live API");
+assert(aiGuardSource.includes("/api/heatmap?limit=999&stocks=999&source=desktop-live-contract"), "frontend heatmap must fetch official live heatmap API");
+assert(aiGuardSource.includes('panel.dataset.marketApiAi = "live-contract"'), "AI panel live-contract marker missing");
+assert(aiGuardSource.includes('panel.dataset.heatmapApi = "live-contract"'), "heatmap live-contract marker missing");
+assert(aiGuardSource.includes("staleLegacyPanel"), "AI stale first-paint detector missing");
+assert(aiGuardSource.includes("staleLegacyHeatmap"), "heatmap stale first-paint detector missing");
+assert(aiGuardSource.includes("不使用舊 heatmap cache 當正常資料"), "heatmap stale/no-data display must reject old cache");
+assert(aiGuardSource.includes("不顯示舊 panel cache"), "AI loading display must reject old panel cache");
+assert(indexHtml.includes("terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-01"), "index must load the AI/heatmap freshness guard through the terminal version contract");
+assert(
+  indexHtml.indexOf("terminal-ai-risk-guard.js") > indexHtml.indexOf("terminal-core.js"),
+  "freshness guard must load after terminal core so it can intercept rendered panels"
+);
+assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
+assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
+assert(activeTasks.has("Fuman Freshness Gate Fast 0845-1645"), "schedule registry missing fast live freshness gate");
+assert(activeTasks.has("Fuman Freshness Gate Full 2010"), "schedule registry missing full freshness gate");
+assert(activeTasks.has("Fuman Terminal Local Freshness Verify 0830-2230"), "schedule registry missing local terminal freshness verify");
+assert(retiredTasks.has("Fuman Market Overview Patrol 0900"), "old market overview patrol must stay retired");
+assert(retiredTasks.has("Fuman Market Overview Watchdog 0901"), "old market overview watchdog must stay retired");
 
 const clock = {
   date: "2026-06-29",
