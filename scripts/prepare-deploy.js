@@ -25,6 +25,8 @@ function runCheck(label, command) {
 }
 
 run("verify:sync-hard-gate", ["npm", "run", "verify:sync-hard-gate"]);
+run("verify:vercel-cost", ["npm", "run", "verify:vercel-cost"]);
+run("verify:vercel-projects", ["npm", "run", "verify:vercel-projects"]);
 run("guard:source", ["npm", "run", "guard:source"]);
 run("verify:retired-artifacts", ["npm", "run", "verify:retired-artifacts"]);
 run("verify:publish-gate", ["npm", "run", "verify:publish-gate"]);

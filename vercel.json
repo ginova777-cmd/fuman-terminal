@@ -4,11 +4,11 @@
   "crons": [
     {
       "path": "/api/desktop-route-snapshot-refresh",
-      "schedule": "*/5 * * * *"
+      "schedule": "40 0,4,6,12 * * 1-5"
     },
     {
       "path": "/api/production-health",
-      "schedule": "*/10 * * * *"
+      "schedule": "0,30 1-6 * * 1-5"
     }
   ],
   "functions": {

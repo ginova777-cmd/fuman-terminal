@@ -716,13 +716,14 @@ Fuman Scorecard Snapshot 1538
 
 ```powershell
 git status --short
+npm run verify:upload-gate
 npm run verify:publish-gate
 npm run guard:production
 git add <changed files>
 git commit -m "<message>"
 git push origin main
 npm run guard:production
-vercel --prod
+npm run deploy
 ```
 
 部署後檢查：

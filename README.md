@@ -20,7 +20,8 @@ http://localhost:3000
 ## 部署
 
 ```powershell
-vercel --prod
+npm run verify:upload-gate
+npm run deploy
 ```
 
 部署後前端會優先抓：

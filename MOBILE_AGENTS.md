@@ -116,10 +116,11 @@ npm run verify:publish-gate
 
 ```powershell
 git status --short --branch
+npm run verify:upload-gate
 npm run verify:mobile-api-only
 npm run verify:publish-gate
 npm run guard:production:pre
-vercel --prod
+npm run deploy
 npm run guard:production
 npm run verify:mobile-api-only:live
 npm run verify:mobile-cache-contract:live

@@ -16,5 +16,6 @@ ops/public-slot/runtime/
 ops/public-slot/*.bak-*
 data/mobile-analysis/*.json
 !data/mobile-analysis/index.json
+data/market-ai-live.json
 
 .env*

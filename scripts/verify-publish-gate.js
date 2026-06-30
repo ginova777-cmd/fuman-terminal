@@ -269,11 +269,20 @@ if (vercelJson) {
     }
   }
 }
-if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.deploy || ""))) {
-  issues.push("package.json scripts.deploy must require version/deploy approval");
+const deployScript = String(packageJson.scripts?.deploy || "");
+if (!/deploy-production-safe\.js/.test(deployScript)) {
+  issues.push("package.json scripts.deploy must use scripts/deploy-production-safe.js");
 }
-if (!/deploy-production-with-release-env\.js/.test(String(packageJson.scripts?.deploy || ""))) {
-  issues.push("package.json scripts.deploy must use deploy-production-with-release-env.js so release manifest gets gitSha/deployId");
+if (/vercel\s+--prod/i.test(deployScript)) {
+  issues.push("package.json scripts.deploy must not call vercel --prod directly");
+}
+for (const [scriptName, marker] of [
+  ["verify:vercel-cost", "verify-vercel-cost-guard.js"],
+  ["verify:vercel-projects", "verify-vercel-project-inventory.js"],
+  ["monitor:vercel-cost", "monitor-vercel-cost-health.js"],
+  ["monitor:vercel-cost:install", "install-vercel-cost-health-monitor-task.ps1"],
+]) {
+  if (!String(packageJson.scripts?.[scriptName] || "").includes(marker)) issues.push(`package.json missing scripts.${scriptName}`);
 }
 if (!/require-version-bump-approval\.js/.test(String(packageJson.scripts?.["release:main"] || ""))) {
   issues.push("package.json scripts.release:main must require version/deploy approval");
@@ -550,6 +559,11 @@ const agentsGuide = read("AGENTS.md");
 const postScanSnapshotAgents = read("post-scan-snapshot-refreshAGENTS.MD");
 const prepareDeploy = read("scripts/prepare-deploy.js");
 const deployProductionWithReleaseEnv = read("scripts/deploy-production-with-release-env.js");
+const deployProductionSafe = read("scripts/deploy-production-safe.js");
+const vercelCostGuard = read("scripts/verify-vercel-cost-guard.js");
+const vercelProjectInventory = read("scripts/verify-vercel-project-inventory.js");
+const vercelCostMonitor = read("scripts/monitor-vercel-cost-health.js");
+const vercelCostMonitorInstaller = read("scripts/install-vercel-cost-health-monitor-task.ps1");
 const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeApi = read("api/realtime.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
@@ -714,6 +728,28 @@ for (const marker of ["scorecard.duckdb", "export-scorecard-snapshot.py"]) {
 if (!/verify:publish-gate/.test(prepareDeploy)) {
   issues.push("scripts/prepare-deploy.js must run verify:publish-gate before production deploy");
 }
+for (const marker of ["FUMAN_DEPLOY_LOCK_FILE", "fuman-vercel-deploy.lock", "FUMAN_ALLOW_DUPLICATE_DEPLOY", "verify-sync-hard-gate.js", "verify-vercel-cost-guard.js", "verify-vercel-project-inventory.js", "deploy-production-with-release-env.js", "require-version-bump-approval.js"]) {
+  if (!deployProductionSafe.includes(marker)) issues.push(`deploy-production-safe.js missing guarded deploy marker ${marker}`);
+}
+for (const marker of ["FUMAN_VERCEL_CRON_DAILY_BUDGET", "/api/desktop-route-snapshot-refresh", "/api/production-health", "@vercel/analytics", "@vercel/speed-insights", ".vercelignore", "outputs/", "cronInvocationsPerActiveDay"]) {
+  if (!vercelCostGuard.includes(marker)) issues.push(`verify-vercel-cost-guard.js missing cost guard marker ${marker}`);
+}
+for (const marker of ["FUMAN_VERCEL_PROJECT_STRICT", "fuman-terminal", "fuman-terminal-strategy3", "fuman-terminal-strategy4", "fuman-terminal-strategy5-unattended", "fuman-strategy1-clean", "fuman-watchlist-limit", "unexpected Fuman Vercel project", "vercel", "project", "ls", "--format=json"]) {
+  if (!vercelProjectInventory.includes(marker)) issues.push(`verify-vercel-project-inventory.js missing project inventory marker ${marker}`);
+}
+for (const marker of ["send-workflow-alert.js", "vercel_cost_health_failed", "verify-vercel-cost-guard.js", "verify-vercel-project-inventory.js", "verify-production-mirror-guard.js", "vercel-cost-health-status.json"]) {
+  if (!vercelCostMonitor.includes(marker)) issues.push(`monitor-vercel-cost-health.js missing Vercel cost monitor marker ${marker}`);
+}
+for (const marker of ["Fuman Vercel Cost Health Monitor 2115", "Register-ScheduledTask", "run-vercel-cost-health-monitor.ps1", "21:15"]) {
+  if (!vercelCostMonitorInstaller.includes(marker)) issues.push(`install-vercel-cost-health-monitor-task.ps1 missing Vercel cost monitor task marker ${marker}`);
+}
+if (!/verify:vercel-cost/.test(prepareDeploy) || !/verify:vercel-projects/.test(prepareDeploy)) {
+  issues.push("scripts/prepare-deploy.js must run verify:vercel-cost and verify:vercel-projects before production deploy");
+}
+if (!read("run-vercel-cost-health-monitor.ps1").includes("monitor-vercel-cost-health.js") || !read("run-vercel-cost-health-monitor.ps1").includes("--use-system-ca")) {
+  issues.push("run-vercel-cost-health-monitor.ps1 missing monitor runner markers");
+}
+
 for (const marker of ["FUMAN_RELEASE_SHA", "FUMAN_DEPLOY_SHA", "FUMAN_DEPLOY_ID", "--env", "vercel", "rev-parse"]) {
   if (!deployProductionWithReleaseEnv.includes(marker)) issues.push(`deploy-production-with-release-env.js missing release env marker ${marker}`);
 }
@@ -1725,6 +1761,14 @@ for (const marker of [
 }
 for (const marker of [
   "scripts/deploy-production-with-release-env.js",
+  ".vercelignore",
+  "VERCEL-COST-UPLOAD-GUARD.md",
+  "scripts/deploy-production-safe.js",
+  "scripts/verify-vercel-cost-guard.js",
+  "scripts/verify-vercel-project-inventory.js",
+  "scripts/monitor-vercel-cost-health.js",
+  "scripts/install-vercel-cost-health-monitor-task.ps1",
+  "run-vercel-cost-health-monitor.ps1",
   "scripts/monitor-production-health.js",
   "scripts/send-workflow-alert.js",
   "run-production-health-monitor.ps1",
@@ -2517,6 +2561,17 @@ if (fetchResult.status !== 0) {
   } else {
     const allowedDirty = new Set([
       ".gitignore",
+      "README.md",
+      ".vercelignore",
+      "VERCEL-COST-UPLOAD-GUARD.md",
+      "scripts/deploy-production-safe.js",
+      "scripts/verify-vercel-cost-guard.js",
+      "scripts/verify-vercel-project-inventory.js",
+      "scripts/monitor-vercel-cost-health.js",
+      "scripts/install-vercel-cost-health-monitor-task.ps1",
+      "run-vercel-cost-health-monitor.ps1",
+      "scripts/prepare-deploy.js",
+      "scripts/verify-upload-gate.js",
       "AGENTS.md",
       "MOBILE_AGENTS.md",
       "post-scan-snapshot-refreshAGENTS.MD",
