@@ -117,6 +117,7 @@ function installMarketAiLiveContractPanel() {
   function paint(payload) {
     const panel = aiPanel();
     if (!panel) return;
+    if (panel.dataset.marketApiAi === "live-contract-watchdog" && panel.querySelector("[data-market-ai-live-watchdog]")) return;
     const dashboard = payload?.dashboard || {};
     const fresh = payload?.dataFreshness || {};
     const summary = payload?.summary || {};

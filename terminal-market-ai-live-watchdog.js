@@ -6,6 +6,8 @@
   const loadingPattern = /載入今日正式 AI 判讀|載入最新 AI 判讀|等待市場資料載入|不顯示舊 panel cache/;
   let loading = false;
   let lastSignature = "";
+  let lastPayload = null;
+  let lastFetchedAt = 0;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;",
@@ -168,7 +170,12 @@
     const panel = ensurePanel();
     if (!panel) return;
     const bodyText = text(panel);
-    if (!force && !loadingPattern.test(bodyText) && panel.querySelector("[data-market-ai-live-watchdog]")) return;
+    const hasWatchdogDom = Boolean(panel.querySelector("[data-market-ai-live-watchdog]"));
+    if (!force && !loadingPattern.test(bodyText) && hasWatchdogDom) return;
+    if (!force && lastPayload && Date.now() - lastFetchedAt < 30000) {
+      renderPayload(panel, lastPayload);
+      return;
+    }
     loading = true;
     try {
       const response = await fetch(`${endpoint}&t=${Date.now()}`, {
@@ -176,7 +183,9 @@
         headers: { "Cache-Control": "no-store" },
       });
       if (!response.ok) throw new Error(`market_ai_live_http_${response.status}`);
-      renderPayload(panel, await response.json());
+      lastPayload = await response.json();
+      lastFetchedAt = Date.now();
+      renderPayload(panel, lastPayload);
     } catch (error) {
       panel.dataset.marketApiAi = "live-contract-watchdog-error";
       panel.innerHTML = `<div class="empty-state">AI 判讀正式水源讀取失敗：${esc(error?.message || error)}。不使用舊 panel cache 當正常資料。</div>`;
@@ -196,5 +205,5 @@
   }, { passive: true });
   window.addEventListener("focus", () => refresh(true), { passive: true });
   setTimeout(() => refresh(true), 2200);
-  setInterval(() => refresh(false), 5000);
+  setInterval(() => refresh(false), 900);
 })();
