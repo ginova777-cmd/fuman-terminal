@@ -8385,14 +8385,16 @@ body.fuman-light-theme {
   }
 
   html body.fuman-light-theme.public-terminal .red,
-  html body.fuman-light-theme.public-terminal .down,
+  html body.fuman-light-theme.public-terminal .up,
+  html body.fuman-light-theme.public-terminal .positive,
   html body.fuman-light-theme.public-terminal .pct.red,
   html body.fuman-light-theme.public-terminal .watch-up {
     color: #dc2626 !important;
   }
 
   html body.fuman-light-theme.public-terminal .green,
-  html body.fuman-light-theme.public-terminal .up,
+  html body.fuman-light-theme.public-terminal .down,
+  html body.fuman-light-theme.public-terminal .negative,
   html body.fuman-light-theme.public-terminal .pct.green,
   html body.fuman-light-theme.public-terminal .watch-down {
     color: #059669 !important;

@@ -973,7 +973,7 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
   border-radius: 999px;
   background:
     radial-gradient(circle at center, rgba(10, 18, 31, 0.98) 0 54%, transparent 55%),
-    conic-gradient(#22c55e 0 calc(var(--ai-up) * 1%), #94a3b8 0 calc((var(--ai-up) + 100 - var(--ai-up) - var(--ai-down)) * 1%), #fb7185 0 100%);
+    conic-gradient(#fb7185 0 calc(var(--ai-up) * 1%), #94a3b8 0 calc((var(--ai-up) + 100 - var(--ai-up) - var(--ai-down)) * 1%), #22c55e 0 100%);
   box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.18), 0 20px 60px rgba(0, 0, 0, 0.28);
 }
 
@@ -1015,7 +1015,7 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
 }
 
 #market-view .market-ai-stack-up {
-  background: linear-gradient(90deg, #059669, #34d399);
+  background: linear-gradient(90deg, #e11d48, #fb7185);
 }
 
 #market-view .market-ai-stack-flat {
@@ -1023,7 +1023,7 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
 }
 
 #market-view .market-ai-stack-down {
-  background: linear-gradient(90deg, #f43f5e, #fb7185);
+  background: linear-gradient(90deg, #059669, #34d399);
 }
 
 #market-view .market-ai-mini-stats {
@@ -1079,12 +1079,12 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
 
 #market-view .market-ai-bar-row b {
   justify-self: end;
-  color: #34d399;
+  color: #fb7185;
   font-size: 13px;
 }
 
 #market-view .market-ai-bar-row.down b {
-  color: #fb7185;
+  color: #34d399;
 }
 
 #market-view .market-ai-bar-track {
@@ -1098,13 +1098,13 @@ body.fuman-light-theme #market-view .sector-section .tabs button:focus-visible {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #0f766e, #34d399);
-  box-shadow: 0 0 18px rgba(52, 211, 153, 0.18);
+  background: linear-gradient(90deg, #9f1239, #fb7185);
+  box-shadow: 0 0 18px rgba(251, 113, 133, 0.18);
 }
 
 #market-view .market-ai-bar-row.down .market-ai-bar-track i {
-  background: linear-gradient(90deg, #9f1239, #fb7185);
-  box-shadow: 0 0 18px rgba(251, 113, 133, 0.18);
+  background: linear-gradient(90deg, #0f766e, #34d399);
+  box-shadow: 0 0 18px rgba(52, 211, 153, 0.18);
 }
 
 #market-view .market-ai-stock-row {
@@ -1260,7 +1260,7 @@ body.fuman-light-theme #market-view .market-ai-summary .market-ai-card p {
 body.fuman-light-theme #market-view .market-ai-gauge {
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.98) 0 54%, transparent 55%),
-    conic-gradient(#16a34a 0 calc(var(--ai-up) * 1%), #cbd5e1 0 calc((var(--ai-up) + 100 - var(--ai-up) - var(--ai-down)) * 1%), #e11d48 0 100%);
+    conic-gradient(#e11d48 0 calc(var(--ai-up) * 1%), #cbd5e1 0 calc((var(--ai-up) + 100 - var(--ai-up) - var(--ai-down)) * 1%), #16a34a 0 100%);
 }
 
 body.fuman-light-theme #market-view .market-ai-gauge > div,
