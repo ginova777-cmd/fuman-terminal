@@ -227,7 +227,7 @@ function sessionWithSupabaseRunDate(marketSession, runDate) {
 }
 
 function apiOnlyError(error, detail = "") {
-  return {
+  return attachStrategy2SelfCheck({
     ok: false,
     cacheSource: "api-only",
     error,
@@ -241,7 +241,7 @@ function apiOnlyError(error, detail = "") {
       via: "api/strategy2-latest",
       fetchedAt: new Date().toISOString(),
     },
-  };
+  }, { status: "blocked", reason: error });
 }
 
 function parseRequestOptions(request) {
@@ -391,8 +391,55 @@ function rankStrategy2Rows(rows) {
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
+function strategy2PayloadMarketDate(payload) {
+  return compactDate(payload?.marketSession?.marketDataDate || payload?.date || payload?.usedDate || payload?.sourceDate || "");
+}
+
+function attachStrategy2SelfCheck(payload, options = {}) {
+  const cacheSource = String(payload?.cacheSource || "");
+  const transportSource = String(payload?.transport?.source || "");
+  const gate = String(payload?.gate || payload?.transport?.gate || "");
+  const sourceOk = cacheSource === "supabase-api" && transportSource === "supabase" && gate === AUTHORITATIVE_GATE;
+  const marketDate = strategy2PayloadMarketDate(payload);
+  const updatedAt = payload?.updatedAt || payload?.generatedAt || "";
+  const updatedAtOk = Number.isFinite(Date.parse(String(updatedAt || "")));
+  const qualityStatus = String(payload?.qualityStatus || "");
+  const issues = [];
+  if (!sourceOk) issues.push("official_source_not_confirmed");
+  if (!payload?.runId && !payload?.transport?.runId) issues.push("run_id_missing");
+  if (!marketDate) issues.push("market_date_missing");
+  if (!updatedAtOk) issues.push("updated_at_invalid");
+  if (!qualityStatus) issues.push("quality_status_missing");
+  const status = options.status || (payload?.ok === false ? "blocked" : sourceOk && !issues.length ? "ready" : cacheSource.includes("runtime") || cacheSource.includes("snapshot") ? "degraded" : issues.length ? "degraded" : "ready");
+  return {
+    ...payload,
+    selfCheck: {
+      strategy: "strategy2",
+      contract: "api-self-check-v1",
+      checkedAt: new Date().toISOString(),
+      status,
+      reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : "ready"),
+      officialSource: "Supabase complete-run: v_strategy2_latest_complete_run + strategy2_scan_results",
+      sourceOk,
+      cacheSource,
+      runId: payload?.runId || payload?.transport?.runId || "",
+      marketDate,
+      updatedAt,
+      qualityStatus,
+      freshness: {
+        runId: payload?.runId || payload?.transport?.runId || "",
+        marketDate,
+        updatedAt,
+        date: payload?.date || "",
+      },
+      transport: payload?.transport || null,
+      issues,
+    },
+  };
+}
+
 function compactStrategy2Payload(payload, options) {
-  if (!options?.compact) return payload;
+  if (!options?.compact) return attachStrategy2SelfCheck(payload);
   const limit = options.limit || 60;
   const battleMode = Boolean(options.today || options.live);
   const payloadRows = rankStrategy2Rows(payload?.rows);
@@ -418,7 +465,7 @@ function compactStrategy2Payload(payload, options) {
   const reason = hasRows && payload?.reason === "today-complete-run-empty"
     ? "complete-run-authoritative"
     : payload?.reason || "complete-run-authoritative";
-  return {
+  const compactPayload = {
     ok: payload?.ok !== false,
     compact: true,
     canvas: Boolean(options.canvas),
@@ -462,6 +509,7 @@ function compactStrategy2Payload(payload, options) {
       fetchedAt: new Date().toISOString(),
     },
   };
+  return attachStrategy2SelfCheck(compactPayload);
 }
 
 async function fetchRows(base, table, query) {
@@ -832,12 +880,6 @@ module.exports = async function handler(request, response) {
       }
     }
     const marketSession = marketSessionState();
-    const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
-    if (runtimeHistoryPayload) {
-      setStrategy2LiveShellCache(response, options);
-      response.status(200).json(runtimeHistoryPayload);
-      return;
-    }
     const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
     if (!base || !SUPABASE_KEY) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
@@ -851,6 +893,12 @@ module.exports = async function handler(request, response) {
     if (completeRun) {
       setStrategy2LiveShellCache(response, options);
       response.status(200).json(attachStrategy2Readiness(completeRun, readiness, tradingDay));
+      return;
+    }
+    const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
+    if (runtimeHistoryPayload) {
+      setStrategy2LiveShellCache(response, options);
+      response.status(200).json(runtimeHistoryPayload);
       return;
     }
     response.status(404).json(apiOnlyError("strategy2_complete_run_empty"));

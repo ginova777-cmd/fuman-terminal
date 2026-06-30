@@ -488,9 +488,63 @@ function buildMarketSession(tradingDay, payload) {
   };
 }
 
+function warrantPayloadMarketDate(payload) {
+  return compactDateKey(payload?.marketSession?.marketDataDate || payload?.sourceDate || payload?.usedDate || payload?.tradeDate || "");
+}
+
+function attachWarrantSelfCheck(payload, options = {}) {
+  const dataContractOk = payload?.dataContract?.ok === true || payload?.dataContract?.skipped === true;
+  const sourceOk = payload?.source === "supabase:warrant_flow_scan_results"
+    && ["supabase-api", "supabase:desktop_route_snapshot"].includes(String(payload?.cacheSource || ""));
+  const marketDate = warrantPayloadMarketDate(payload);
+  const updatedAtOk = Number.isFinite(Date.parse(String(payload?.updatedAt || "")));
+  const qualityStatus = String(payload?.qualityStatus || "");
+  const issues = [];
+  if (!sourceOk) issues.push("official_source_not_confirmed");
+  if (!payload?.runId) issues.push("run_id_missing");
+  if (!marketDate) issues.push("market_date_missing");
+  if (!updatedAtOk) issues.push("updated_at_invalid");
+  if (!qualityStatus) issues.push("quality_status_missing");
+  if (!dataContractOk) issues.push("data_contract_not_ok");
+  if (payload?.snapshotStale === true) issues.push("desktop_snapshot_stale");
+  const status = options.status || (payload?.ok === false ? "blocked" : payload?.snapshotStale === true ? "stale" : issues.length ? "degraded" : "ready");
+  return {
+    ...payload,
+    selfCheck: {
+      strategy: "warrant-flow",
+      contract: "api-self-check-v1",
+      checkedAt: new Date().toISOString(),
+      status,
+      reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : "ready"),
+      officialSource: "Supabase complete-run: warrant_flow_scan_runs + warrant_flow_scan_results",
+      sourceOk,
+      cacheSource: payload?.cacheSource || "",
+      runId: payload?.runId || "",
+      marketDate,
+      updatedAt: payload?.updatedAt || "",
+      qualityStatus,
+      freshness: {
+        runId: payload?.runId || "",
+        marketDate,
+        updatedAt: payload?.updatedAt || "",
+        sourceDate: payload?.sourceDate || "",
+        usedDate: payload?.usedDate || "",
+      },
+      dataContract: {
+        ok: dataContractOk,
+        schemaVersion: payload?.schemaVersion || "",
+        requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
+        issues: payload?.dataContract?.issues || payload?.issues || [],
+      },
+      transport: payload?.transport || null,
+      issues,
+    },
+  };
+}
+
 function withMarketSession(payload, marketSession) {
   const closed = marketSession?.closed === true;
-  return {
+  return attachWarrantSelfCheck({
     ...payload,
     reason: closed ? "non-trading-day-cache" : "run_id",
     marketSession,
@@ -499,7 +553,7 @@ function withMarketSession(payload, marketSession) {
       gate: closed ? "non-trading-day-cache" : payload.transport?.gate || "run_id",
       fetchedAt: new Date().toISOString(),
     },
-  };
+  });
 }
 
 module.exports = async function handler(request, response) {
@@ -518,7 +572,7 @@ module.exports = async function handler(request, response) {
   });
   if (cached) {
     setDesktopSnapshotCache(response);
-    sendJson(request, response, cached, "warrant-flow");
+    sendJson(request, response, attachWarrantSelfCheck(cached, { status: cached.snapshotStale ? "stale" : "ready", reason: cached.snapshotStale ? "desktop_snapshot_stale" : "desktop_snapshot_self_checked" }), "warrant-flow");
     return;
   }
 
@@ -538,10 +592,10 @@ module.exports = async function handler(request, response) {
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       if (options.snapshotFriendly) {
-        response.status(200).json(emptySnapshotPayload("supabase_not_configured", tradingDay, options));
+        response.status(200).json(attachWarrantSelfCheck(emptySnapshotPayload("supabase_not_configured", tradingDay, options), { status: "degraded" }));
         return;
       }
-      response.status(503).json(apiOnlyError("supabase_not_configured", tradingDay));
+      response.status(503).json(attachWarrantSelfCheck(apiOnlyError("supabase_not_configured", tradingDay), { status: "blocked" }));
       return;
     }
     const sourceErrors = [];
@@ -555,10 +609,10 @@ module.exports = async function handler(request, response) {
     }
     if (!latest.rows.length) {
       if (options.snapshotFriendly) {
-        response.status(200).json(emptySnapshotPayload(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay, options));
+        response.status(200).json(attachWarrantSelfCheck(emptySnapshotPayload(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay, options), { status: "degraded" }));
         return;
       }
-      response.status(404).json(apiOnlyError(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay));
+      response.status(404).json(attachWarrantSelfCheck(apiOnlyError(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay), { status: "blocked" }));
       return;
     }
     const fullPayload = buildPayload(latest.rows, latest.run);
@@ -585,7 +639,7 @@ module.exports = async function handler(request, response) {
     payload.dataContract = dataContract;
     if (!dataContract.ok) {
       const errorPayload = apiOnlyError("warrant_flow_contract_invalid", tradingDay);
-      response.status(503).json({
+      response.status(503).json(attachWarrantSelfCheck({
         ...errorPayload,
         error: "warrant_flow_contract_invalid",
         detail: dataContract.issues.join("; "),
@@ -596,16 +650,16 @@ module.exports = async function handler(request, response) {
         schemaVersion: payload.schemaVersion,
         dataContract,
         issues: dataContract.issues,
-      });
+      }, { status: "blocked", reason: "warrant_flow_contract_invalid" }));
       return;
     }
     setDesktopSnapshotCache(response);
     sendJson(request, response, withMarketSession(payload, buildMarketSession(tradingDay, payload)), "warrant-flow");
   } catch (error) {
     if (options.snapshotFriendly) {
-      response.status(200).json(emptySnapshotPayload(error?.message || String(error), tradingDay, options));
+      response.status(200).json(attachWarrantSelfCheck(emptySnapshotPayload(error?.message || String(error), tradingDay, options), { status: "degraded" }));
       return;
     }
-    response.status(503).json(apiOnlyError(error?.message || String(error), tradingDay));
+    response.status(503).json(attachWarrantSelfCheck(apiOnlyError(error?.message || String(error), tradingDay), { status: "blocked" }));
   }
 };

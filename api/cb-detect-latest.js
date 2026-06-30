@@ -129,6 +129,83 @@ function rowsFromCompleteRun(resultRows = []) {
     .sort((a, b) => (cleanNumber(a.rank) || 99999) - (cleanNumber(b.rank) || 99999) || cleanNumber(b.score) - cleanNumber(a.score));
 }
 
+function normalizeCbHealthStatus(value) {
+  const status = String(value || "").toLowerCase();
+  if (["ok", "ready", "complete"].includes(status)) return "ok";
+  if (["blocked", "failed", "error"].includes(status)) return "blocked";
+  if (["stale", "not_ready", "missing"].includes(status)) return "stale";
+  if (!status) return "degraded";
+  return "degraded";
+}
+
+function buildCbSourceHealth(health, scannerHealth) {
+  const completeRunStatus = normalizeCbHealthStatus(health?.source_status || health?.status || "ready");
+  const scannerStatus = normalizeCbHealthStatus(scannerHealth?.status || "ready");
+  const issues = [];
+  const warnings = [];
+  if (completeRunStatus !== "ok") issues.push(`complete_run_${completeRunStatus}`);
+  if (scannerStatus !== "ok") warnings.push(`scanner_${scannerStatus}`);
+  return {
+    completeRun: health || null,
+    scanner: scannerHealth || null,
+    status: issues.length ? "degraded" : "ok",
+    normalizedFrom: {
+      completeRun: health?.source_status || health?.status || "ready",
+      scanner: scannerHealth?.status || "ready",
+    },
+    reason: health?.reason || scannerHealth?.reason || (issues.length ? issues.join(";") : "ready"),
+    issues,
+    warnings,
+    warningCount: warnings.length,
+    warningLimit: 3,
+  };
+}
+
+function attachCbSelfCheck(payload, options = {}) {
+  const cacheSource = String(payload?.cacheSource || "");
+  const transportSource = String(payload?.transport?.source || "");
+  const gate = String(payload?.transport?.gate || "");
+  const sourceOk = cacheSource === "supabase-api" && transportSource === "supabase" && gate === "run_id";
+  const updatedAt = payload?.updatedAt || payload?.generatedAt || "";
+  const updatedAtOk = Number.isFinite(Date.parse(String(updatedAt || "")));
+  const qualityStatus = String(payload?.qualityStatus || "");
+  const sourceHealthStatus = String(payload?.sourceHealth?.status || "");
+  const issues = [];
+  if (!sourceOk) issues.push("official_source_not_confirmed");
+  if (!payload?.runId) issues.push("run_id_missing");
+  if (!updatedAtOk) issues.push("updated_at_invalid");
+  if (!qualityStatus) issues.push("quality_status_missing");
+  if (sourceHealthStatus && sourceHealthStatus !== "ok") issues.push(`source_health_${sourceHealthStatus}`);
+  const status = options.status || (payload?.ok === false ? "blocked" : issues.length ? "degraded" : "ready");
+  return {
+    ...payload,
+    selfCheck: {
+      strategy: "cb-detect",
+      contract: "api-self-check-v1",
+      checkedAt: new Date().toISOString(),
+      status,
+      reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : "ready"),
+      officialSource: "Supabase complete-run: cb_detect_scan_runs + cb_detect_scan_results",
+      sourceOk,
+      cacheSource,
+      runId: payload?.runId || "",
+      updatedAt,
+      qualityStatus,
+      freshness: {
+        runId: payload?.runId || "",
+        updatedAt,
+        generatedAt: payload?.generatedAt || "",
+      },
+      dataContract: {
+        source: payload?.dataContractSource || "",
+        ok: String(payload?.dataContractSource || "").includes("cb_detect_scan_runs/results"),
+      },
+      sourceHealth: payload?.sourceHealth || null,
+      transport: payload?.transport || null,
+      issues,
+    },
+  };
+}
 async function readLatestCompleteRun(options) {
   const runRows = await fetchSupabaseRows(
     CB_DETECT_RUNS_TABLE,
@@ -160,7 +237,7 @@ async function readLatestCompleteRun(options) {
   const scannerHealth = await readSupabaseSingle("v_scanner_resource_health", "select=strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at&strategy=eq.CB&limit=1", 4500).catch((error) => ({ status: "degraded", reason: error?.message || String(error) }));
   const completeRunStatus = String(health?.source_status || health?.status || "ready").toLowerCase();
   const scannerStatus = String(scannerHealth?.status || "ready").toLowerCase();
-  const qualityStatus = completeRunStatus === "ready" && scannerStatus === "ready" ? (run.quality_status || "complete") : (completeRunStatus !== "ready" ? completeRunStatus : scannerStatus);
+  const qualityStatus = completeRunStatus === "ready" ? (run.quality_status || "complete") : completeRunStatus;
   const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
   return {
     ok: true,
@@ -179,7 +256,7 @@ async function readLatestCompleteRun(options) {
     updatedAt: run.updated_at || run.finished_at || run.generated_at || "",
     generatedAt: run.generated_at || "",
     dataContractSource: run.data_contract_source || "cb_detect_scan_runs/results",
-    sourceHealth: { completeRun: health || null, scanner: scannerHealth || null, status: qualityStatus, reason: health?.reason || scannerHealth?.reason || "" },
+    sourceHealth: buildCbSourceHealth(health, scannerHealth),
     transport: {
       source: "supabase",
       via: "api/cb-detect-latest",
@@ -206,11 +283,13 @@ module.exports = async function handler(request, response) {
     const completeRunPayload = await readLatestCompleteRun(options);
     if (completeRunPayload) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(completeRunPayload);
+      response.status(200).json(attachCbSelfCheck(completeRunPayload));
       return;
     }
-    response.status(200).json(emptyPayload("cb_detect_complete_run_missing", options));
+    response.status(200).json(attachCbSelfCheck(emptyPayload("cb_detect_complete_run_missing", options), { status: "degraded" }));
   } catch (error) {
-    response.status(503).json(apiOnlyError(error?.message || String(error)));
+    response.status(503).json(attachCbSelfCheck(apiOnlyError(error?.message || String(error)), { status: "blocked" }));
   }
 };
+
+

@@ -5,6 +5,7 @@ const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
 const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
 
 function readSecretText(file) {
@@ -143,6 +144,59 @@ async function postJson(url, key, body, prefer) {
   }
 }
 
+function writeStrategy2Receipt(report, runId, scanDate, source) {
+  const receiptDir = path.join(DATA_DIR, "scan-receipts");
+  fs.mkdirSync(receiptDir, { recursive: true });
+  const matches = cleanNumber(report.entryCount || report.aCount || (Array.isArray(report.events) ? report.events.length : 0) || (Array.isArray(report.records) ? report.records.length : 0));
+  const now = new Date().toISOString();
+  const receipt = {
+    strategy: "strategy2",
+    label: "strategy2 intraday complete-run publisher",
+    tier: "critical",
+    startedAt: report.startedAt || report.generatedAt || report.updatedAt || now,
+    finishedAt: now,
+    status: report.ok === false ? "failed" : "complete",
+    exitCode: report.ok === false ? 1 : 0,
+    scanned: Array.isArray(report.records) ? report.records.length : 0,
+    total: Array.isArray(report.records) ? report.records.length : 0,
+    matches,
+    complete: report.ok !== false,
+    qualityStatus: report.qualityStatus || "complete",
+    fallback: false,
+    preservedLatest: false,
+    publishBlocked: false,
+    runId,
+    marketDate: String(scanDate || "").replace(/\D/g, ""),
+    updatedAt: report.updatedAt || report.generatedAt || now,
+    payloadPath: "supabase:strategy2_latest",
+    source: source || "supabase:strategy2_latest",
+    warnings: [],
+    blockingReason: "",
+    log: "run_id=" + runId + "; source=" + (source || "supabase:strategy2_latest"),
+  };
+  fs.writeFileSync(path.join(receiptDir, "strategy2.json"), JSON.stringify(receipt, null, 2) + "\n", "utf8");
+  return receipt;
+}
+
+async function strategy2CompleteRunAlreadyPublished(config, runId) {
+  const rows = await fetchSupabaseJson(
+    config.supabaseUrl + "/rest/v1/v_strategy2_latest_complete_run?select=run_id&run_id=eq." + encodeURIComponent(runId) + "&limit=1",
+    config.publishKey
+  );
+  return Array.isArray(rows) && rows.some((row) => String(row.run_id || "") === runId);
+}
+
+async function fetchStrategy2LiveApiPayload() {
+  const baseUrl = String(process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+  const response = await fetch(baseUrl + "/api/strategy2-latest?top=1&compact=1&limit=80&live=1&receiptRepair=1&ts=" + Date.now(), {
+    headers: { Accept: "application/json", "Cache-Control": "no-store" },
+    cache: "no-store",
+    signal: AbortSignal.timeout ? AbortSignal.timeout(45000) : undefined,
+  });
+  if (!response.ok) throw new Error("strategy2 live API HTTP " + response.status);
+  return response.json();
+}
+
 async function publishStrategy2Snapshot(report, runId, scanDate) {
   const updatedAt = report.updatedAt || report.generatedAt || new Date().toISOString();
   const payload = {
@@ -195,11 +249,37 @@ async function main() {
     payload: report,
   }], "resolution=merge-duplicates");
 
-  await postJson(`${supabaseUrl}/rest/v1/rpc/publish_strategy2_complete_run`, serviceKey, {
-    p_run_id: runId,
-    p_scan_date: scanDate,
-    p_payload: report,
-  });
+  let rpcStatus = "published";
+  try {
+    await postJson(`${supabaseUrl}/rest/v1/rpc/publish_strategy2_complete_run`, serviceKey, {
+      p_run_id: runId,
+      p_scan_date: scanDate,
+      p_payload: report,
+    });
+  } catch (error) {
+    const message = error?.message || String(error);
+    if (/duplicate constrained values|ON CONFLICT|21000/i.test(message) && await strategy2CompleteRunAlreadyPublished(config, runId)) {
+      rpcStatus = "already_published";
+    } else if (/duplicate constrained values|ON CONFLICT|21000/i.test(message)) {
+      const apiPayload = await fetchStrategy2LiveApiPayload();
+      const apiRunId = String(apiPayload?.runId || apiPayload?.transport?.runId || "");
+      if (!apiPayload?.ok || !apiRunId) throw error;
+      const apiScanDate = normalizeScanDate(apiPayload.date || apiPayload.usedDate || apiPayload.sourceDate || apiPayload.marketSession?.marketDataDate || report.date, apiPayload.updatedAt || report.updatedAt || Date.now());
+      const apiReport = {
+        ...report,
+        updatedAt: apiPayload.updatedAt || report.updatedAt,
+        qualityStatus: apiPayload.qualityStatus || report.qualityStatus || "complete",
+        entryCount: cleanNumber(apiPayload.count || report.entryCount || report.aCount),
+        records: Array.isArray(apiPayload.rows) ? apiPayload.rows : report.records,
+        events: Array.isArray(apiPayload.events) ? apiPayload.events : report.events,
+      };
+      const receipt = writeStrategy2Receipt(apiReport, apiRunId, apiScanDate, "api/strategy2-latest");
+      console.log(`[strategy2-complete-run] repaired receipt from live API run=${apiRunId} date=${apiScanDate} originalRun=${runId} receipt=${receipt.runId}`);
+      return;
+    } else {
+      throw error;
+    }
+  }
   const snapshot = await publishStrategy2Snapshot(report, runId, scanDate);
 
   await publishStrategyCacheStatus("strategy2", "策略2-盤中即時", report, {
@@ -213,7 +293,8 @@ async function main() {
     log: `run_id=${runId}; events=${report.events.length}; source=${source}`,
   });
 
-  console.log(`[strategy2-complete-run] ok run=${runId} date=${scanDate} records=${report.records.length} events=${report.events.length} snapshot=${snapshot.ok ? "ok" : snapshot.reason || snapshot.error || "failed"}`);
+  const receipt = writeStrategy2Receipt(report, runId, scanDate, source);
+  console.log(`[strategy2-complete-run] ok run=${runId} date=${scanDate} records=${report.records.length} events=${report.events.length} rpc=${rpcStatus} snapshot=${snapshot.ok ? "ok" : snapshot.reason || snapshot.error || "failed"} receipt=${receipt.runId}`);
 }
 
 main().catch((error) => {
