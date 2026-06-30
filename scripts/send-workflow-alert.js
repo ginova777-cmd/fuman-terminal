@@ -109,6 +109,7 @@ async function sendMail({ host, port, user, pass, to, subject, text }) {
 
 async function main() {
   const receiptFile = readArg("--receipt") || process.env.FUMAN_ALERT_RECEIPT_FILE || "";
+  const dryRun = process.argv.includes("--dry-run") || process.env.FUMAN_ALERT_DRY_RUN === "1";
   const startedAt = new Date().toISOString();
   const workflow = process.env.GITHUB_WORKFLOW || "Intraday Radar Scorecard";
   const runUrl = process.env.GITHUB_RUN_URL || "";
@@ -141,6 +142,7 @@ async function main() {
     host: secretValue("SMTP_HOST", ["smtp-host.txt"]) || "smtp.gmail.com",
     port: Number(secretValue("SMTP_PORT", ["smtp-port.txt"]) || 465),
     receiptFile,
+    dryRun,
     error: "",
   };
 
@@ -148,19 +150,23 @@ async function main() {
     if (!to || !user || !pass) {
       throw new Error("Missing REPORT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
     }
-    await sendMail({
-      host: payload.host,
-      port: payload.port,
-      user,
-      pass,
-      to,
-      subject,
-      text,
-    });
+    if (dryRun) {
+      payload.channel = "smtp:dry-run";
+    } else {
+      await sendMail({
+        host: payload.host,
+        port: payload.port,
+        user,
+        pass,
+        to,
+        subject,
+        text,
+      });
+    }
     payload.ok = true;
     payload.finishedAt = new Date().toISOString();
     writeReceipt(receiptFile, payload);
-    console.log(`failure alert sent to ${to}`);
+    console.log(dryRun ? `failure alert dry-run to ${to}` : `failure alert sent to ${to}`);
   } catch (error) {
     payload.error = error?.message || String(error);
     payload.finishedAt = new Date().toISOString();

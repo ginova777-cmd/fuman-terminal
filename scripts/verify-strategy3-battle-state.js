@@ -232,9 +232,9 @@ async function main() {
   }
 
   const sourceCounts = await Promise.all([
-    rest("v_strategy3_quote_ready?select=symbol&limit=1", { count: true }).then((r) => ["v_strategy3_quote_ready", r.exactCount]),
     rest("strategy3_ready_snapshot?select=symbol&limit=1", { count: true }).then((r) => ["strategy3_ready_snapshot", r.exactCount]),
     rest("fugle_quotes_latest?select=symbol&limit=1", { count: true }).then((r) => ["fugle_quotes_latest", r.exactCount]),
+    rest("v_strategy3_intraday_1m_status?select=symbol&limit=1", { count: true }).then((r) => ["v_strategy3_intraday_1m_status", r.exactCount]),
     rest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true }).then((r) => ["stock_daily_volume", r.exactCount, r.rows?.[0]?.trade_date]),
   ]);
   details.sourceCounts = Object.fromEntries(sourceCounts.map(([name, count, latestDate]) => [name, { count, latestDate }]));

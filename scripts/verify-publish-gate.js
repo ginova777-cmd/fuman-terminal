@@ -573,6 +573,7 @@ const workflowAlertSender = read("scripts/send-workflow-alert.js");
 const slimCacheGenerator = read("scripts/generate-slim-cache.js");
 const watchlistMatchIndexGenerator = read("scripts/generate-watchlist-match-index.js");
 const strategy3BattleStateVerifier = read("scripts/verify-strategy3-battle-state.js");
+const strategy3AlertPathVerifier = read("scripts/verify-strategy3-alert-path.js");
 const sourceSync = read("scripts/sync-main-deploy-source.js");
 const sourceSyncVerifier = read("scripts/verify-source-sync.js");
 const productionGuard = read("scripts/verify-production-guard.js");
@@ -1918,8 +1919,9 @@ for (const marker of [
 
 const strategy3Scanner = read("scripts/scan-strategy3-cache.js");
 for (const marker of [
-  "fetchStrategy3QuoteReady",
   "fetchStrategy3QuoteLatestReady",
+  "strategy3 latest quotes unavailable",
+  "STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS",
   "hydrateSession1mStatusFromSupabase",
   "latestStockDateKey",
   "fetchStrategy3Intraday1mLatestN",
@@ -1957,6 +1959,12 @@ for (const marker of ["check-strategy3-source-chain.js", "liveSourceChain", "liv
 }
 for (const marker of ["run-strategy3-complete-scan.ps1", "live_source_chain_tv_drift_api_", "post-repair"]) {
   if (!runStrategy3BattleVerify.includes(marker)) issues.push(`run-strategy3-battle-verify.ps1 missing battle self-repair marker ${marker}`);
+}
+for (const marker of ["Invoke-Strategy3FailureAlert", "send-workflow-alert.js", "strategy3-battle-verify-alert.json", "FumanStrategy3BattleVerify1305"]) {
+  if (!runStrategy3BattleVerify.includes(marker)) issues.push(`run-strategy3-battle-verify.ps1 missing Strategy3 Gmail alert marker ${marker}`);
+}
+for (const marker of ["FUMAN_ALERT_DRY_RUN", "smtp:dry-run", "strategy3-battle-verify", "FumanStrategy3BattleVerify1305"]) {
+  if (!strategy3AlertPathVerifier.includes(marker)) issues.push(`verify-strategy3-alert-path.js missing Strategy3 alert-path marker ${marker}`);
 }
 const deletedPostSessionPattern = new RegExp(["after" + "1300", "after_" + "1300", ["STRATEGY3_MIN", "AFTER", "1300"].join("_")].join("|"), "i");
 if (deletedPostSessionPattern.test(strategy3SessionReadiness)) {
@@ -2032,7 +2040,9 @@ for (const marker of [
 for (const marker of [
   "fugle_quotes_latest",
   "updated_at.desc",
-  "v_strategy3_quote_ready",
+  "formal Strategy3 quote source",
+  "formal Strategy3 intraday session readiness source",
+  "TERMINAL_SOURCE_CONTRACT_FETCH_ATTEMPTS",
   "strategy4_daily_ohlcv_view",
   "v_chip_flows_latest",
   "cb_detect_scan_runs",
@@ -2162,6 +2172,9 @@ for (const marker of ["Invoke-FailureAlert", "send-workflow-alert.js", "producti
 }
 for (const marker of ["REPORT_EMAIL_TO", "SMTP_USER", "SMTP_PASS", "gmail-app-password.txt", "FUMAN_ALERT_KIND", "FUMAN_ALERT_RECEIPT_FILE", "writeReceipt"]) {
   if (!workflowAlertSender.includes(marker)) issues.push(`send-workflow-alert.js missing generic SMTP alert marker ${marker}`);
+}
+for (const marker of ["FUMAN_ALERT_DRY_RUN", "--dry-run", "smtp:dry-run"]) {
+  if (!workflowAlertSender.includes(marker)) issues.push(`send-workflow-alert.js missing dry-run SMTP alert marker ${marker}`);
 }
 
 for (const legacyScript of [

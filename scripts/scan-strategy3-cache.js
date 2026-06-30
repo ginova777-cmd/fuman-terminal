@@ -8,7 +8,6 @@ const {
   fetchStrategy3Intraday1mLatestN,
   fetchStrategy3LiveSideVolumeMap,
   fetchStrategy3QuoteLatestReady,
-  fetchStrategy3QuoteReady,
   verifyStrategy3ReadAccess,
 } = require("../lib/supabase-public-slot");
 const {
@@ -67,9 +66,9 @@ const STRATEGY3_API_ONLY = true;
 const SUPABASE_RESULTS_ATTEMPTS = Math.max(1, Number(process.env.STRATEGY3_SUPABASE_RESULTS_ATTEMPTS || 3));
 const STRATEGY3_NO_TV_PASS_REASON = "資源已就緒；硬門檻後 TradingView 隔日沖條件本輪 0 檔通過";
 const STRATEGY3_MIN_FIELD_GATE_CANDIDATES = Number(process.env.STRATEGY3_MIN_FIELD_GATE_CANDIDATES || 1);
-const STRATEGY3_DRIFT_MIN_QUOTE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_QUOTE_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_FUGLE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_FUGLE_ROWS || 1000);
+const STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS || 1000);
 const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISABLED === "1";
 const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 20);
@@ -278,12 +277,6 @@ async function fetchStrategy3SourceDriftHealth() {
   const checks = [];
   const add = (item) => checks.push(item);
   try {
-    const result = await fetchSupabaseRest("v_strategy3_quote_ready?select=symbol&limit=1", { count: true });
-    add({ source: "v_strategy3_quote_ready", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_QUOTE_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_QUOTE_ROWS ? "ready" : "failed" });
-  } catch (error) {
-    add({ source: "v_strategy3_quote_ready", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_QUOTE_ROWS, status: "failed", reason: error?.message || String(error) });
-  }
-  try {
     const result = await fetchSupabaseRest("strategy3_ready_snapshot?select=symbol&limit=1", { count: true });
     add({ source: "strategy3_ready_snapshot", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS ? "ready" : "failed" });
   } catch (error) {
@@ -294,6 +287,12 @@ async function fetchStrategy3SourceDriftHealth() {
     add({ source: "fugle_quotes_latest", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_FUGLE_ROWS ? "ready" : "failed" });
   } catch (error) {
     add({ source: "fugle_quotes_latest", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: "failed", reason: error?.message || String(error) });
+  }
+  try {
+    const result = await fetchSupabaseRest("v_strategy3_intraday_1m_status?select=symbol&limit=1", { count: true });
+    add({ source: "v_strategy3_intraday_1m_status", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
+  } catch (error) {
+    add({ source: "v_strategy3_intraday_1m_status", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
     const result = await fetchSupabaseRest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true });
@@ -847,15 +846,8 @@ async function fetchUniverse() {
 async function fetchSupabaseStrategy3Universe() {
   const access = await verifyStrategy3ReadAccess();
   const warnings = [];
-  let quoteResult = null;
-  try {
-    quoteResult = await fetchStrategy3QuoteReady({ minQuotes: 500 });
-    if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 quote ready unavailable");
-  } catch (error) {
-    warnings.push(`strategy3 quote-ready view fallback to latest quotes: ${error?.message || String(error)}`);
-    quoteResult = await fetchStrategy3QuoteLatestReady({ minQuotes: 500 });
-    if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 latest quotes unavailable");
-  }
+  const quoteResult = await fetchStrategy3QuoteLatestReady({ minQuotes: 500 });
+  if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 latest quotes unavailable");
   const stocks = quoteResult.quotes.map((quote) => ({
     code: quote.code,
     name: quote.name,

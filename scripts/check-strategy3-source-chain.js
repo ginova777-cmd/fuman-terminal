@@ -2,7 +2,6 @@ const {
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3LiveSideVolumeMap,
   fetchStrategy3QuoteLatestReady,
-  fetchStrategy3QuoteReady,
 } = require("../lib/supabase-public-slot");
 const {
   chipTradeExclusion,
@@ -85,12 +84,6 @@ async function main() {
   const minIntraday1mCandidates = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
   const minIntraday1mCandles = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
   const tvLimit = Math.max(1, Number(process.env.STRATEGY3_DIAG_TV_LIMIT || 120));
-  const quoteReady = await fetchStrategy3QuoteReady({ minQuotes: 500, timeout: 8000 }).catch((error) => ({
-    ok: false,
-    error: error?.message || String(error),
-    quotes: [],
-    source: "v_strategy3_quote_ready",
-  }));
   const latest = await fetchStrategy3QuoteLatestReady({ minQuotes: 500, timeout: 20000 });
   const status = await fetchStrategy3Intraday1mStatus(latest.quotes.map((quote) => quote.code));
   const side = await fetchStrategy3LiveSideVolumeMap(latest.quotes.map((quote) => quote.code)).catch(() => ({ byCode: new Map(), ok: false }));
@@ -165,10 +158,18 @@ async function main() {
     ready,
     source: latest.source,
     quoteReadyView: {
-      ok: quoteReady.ok,
-      error: quoteReady.error || "",
-      rows: quoteReady.quotes?.length || 0,
-      source: quoteReady.source,
+      status: "retired",
+      retired: true,
+      formal: false,
+      source: "v_strategy3_quote_ready",
+      replacement: "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+      reason: "Strategy3 formal gating no longer reads quote-ready view",
+    },
+    retiredDiagnostics: {
+      v_strategy3_quote_ready: {
+        status: "retired",
+        replacement: "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+      },
     },
     latestQuoteRows: latest.quotes.length,
     chipReadyCount: chipReady.length,

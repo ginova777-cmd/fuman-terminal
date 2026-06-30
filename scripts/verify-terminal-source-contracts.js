@@ -80,15 +80,12 @@ const CONTRACTS = [
         "symbol", "code", "name", "market", "updated_at", "quote_time", "last_trade_time", "close", "last_price", "open", "high", "low",
         "prev_close", "previous_close", "change_percent", "trade_volume", "trade_volume_lots", "trade_volume_shares", "total_volume",
         "trade_value", "quote_source", "quote_age_seconds", "session", "stock_type", "is_halted", "is_trial",
-      ], { order: "updated_at.desc", requireToday: true }),
+      ], { order: "updated_at.desc", requireToday: true, purpose: "formal Strategy3 quote source" }),
       sourceTable("v_strategy3_intraday_1m_status", [
         "symbol", "latest_candle_time", "today_candle_count",
-      ], { level: "warning" }),
+      ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
-      sourceTable("v_strategy3_quote_ready", [
-        "symbol", "code", "name", "close", "trade_volume", "trade_value", "updated_at", "today_candle_count", "latest_candle_time",
-      ], { level: "warning", purpose: "preferred source; scanner may fall back to fugle_quotes_latest + RPC readback" }),
     ],
   },
   {
@@ -353,6 +350,7 @@ function rowDate(row = {}) {
     || row.trade_date
     || row.latest_trade_date
     || row.checked_trade_date
+    || row.latest_candle_time
   );
 }
 
@@ -411,28 +409,45 @@ function dateAgeDays(dateKey) {
 
 async function fetchRows(table, select, query = "", timeoutMs = 25000) {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}${query ? `&${query}` : ""}`;
-    const response = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    if (!response.ok) return { ok: false, status: response.status, rows: [], error: text.slice(0, 220) };
-    const rows = JSON.parse(text || "[]");
-    return { ok: true, status: response.status, rows: Array.isArray(rows) ? rows : [], error: "" };
-  } catch (error) {
-    return { ok: false, status: 0, rows: [], error: error?.message || String(error) };
-  } finally {
-    clearTimeout(timer);
+  const attempts = Math.max(1, Number(process.env.TERMINAL_SOURCE_CONTRACT_FETCH_ATTEMPTS || 3));
+  let last = { ok: false, status: 0, rows: [], error: "not attempted" };
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(select)}${query ? `&${query}` : ""}`;
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        last = { ok: false, status: response.status, rows: [], error: text.slice(0, 220) };
+      } else {
+        const rows = JSON.parse(text || "[]");
+        return { ok: true, status: response.status, rows: Array.isArray(rows) ? rows : [], error: "", attempts: attempt };
+      }
+    } catch (error) {
+      last = { ok: false, status: 0, rows: [], error: error?.message || String(error) };
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < attempts && (last.status === 0 || last.status === 408 || last.status === 429 || last.status >= 500)) {
+      await sleep(300 * attempt);
+      continue;
+    }
+    break;
   }
+  return { ...last, attempts };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function checkOne(strategy, check) {
