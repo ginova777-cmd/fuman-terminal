@@ -2699,6 +2699,23 @@ h1 {
   gap: 8px;
 }
 
+#market-view #heatmap > .heatmap-health-bar {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 1.35;
+}
+
+#market-view #heatmap > .heatmap-health-bar span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 #market-view.market-overview-mode.market-index-pending > .metric-grid {
   display: none !important;
 }
