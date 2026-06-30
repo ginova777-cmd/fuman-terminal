@@ -137,8 +137,26 @@ requireIncludes("package.json", [
 requireIncludes("scripts/verify-buy-sell-field-contract.js", [
   'const EXPECTED_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01"',
   "captureInstitutionApi",
+  "fetchProductionInstitutionApi",
+  "production-api",
+  "complete-run-readback",
   "foreignTrustVolumePct",
   "fiveDayAvgVolume",
+]);
+
+requireIncludes("run-flow-watchdog.ps1", [
+  "Invoke-WatchdogFailureAlert",
+  "send-workflow-alert.js",
+  "FUMAN_ALERT_RECEIPT_FILE",
+  "watchdog_failed",
+  "-watchdog-alert.json",
+]);
+
+requireIncludes("run-institution-battle-verify.ps1", [
+  "Invoke-InstitutionBattleFailureAlert",
+  "send-workflow-alert.js",
+  "FUMAN_ALERT_RECEIPT_FILE",
+  "institution-battle-verify-alert.json",
 ]);
 
 requireIncludes("index.html", [

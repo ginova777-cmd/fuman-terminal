@@ -13,8 +13,11 @@ $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
 $logDir = Join-Path $runtime "logs"
+$receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $log = Join-Path $logDir ("flow-watchdog-{0}-{1}.log" -f $Scope, (Get-Date -Format "yyyyMMdd-HHmmss"))
+$alertReceipt = Join-Path $receiptDir ("{0}-watchdog-alert.json" -f $Scope)
 
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
@@ -22,6 +25,56 @@ $log = Join-Path $logDir ("flow-watchdog-{0}-{1}.log" -f $Scope, (Get-Date -Form
 function Write-WatchdogLog($message) {
   Write-Host $message
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
+}
+
+function Invoke-WatchdogFailureAlert($Status, $Reason, $ExitCode = 1) {
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node" }
+  $tailText = ""
+  try { $tailText = (Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Last 40) -join "`n" } catch {}
+  $env:FUMAN_ALERT_KIND = "$Scope-watchdog"
+  $env:FUMAN_ALERT_SOURCE = "Fuman $Scope watchdog"
+  $env:FUMAN_ALERT_SUBJECT = "Fuman $Scope watchdog failed"
+  $env:FUMAN_ALERT_RECEIPT_FILE = $alertReceipt
+  $env:FUMAN_ALERT_TEXT = @"
+Fuman $Scope watchdog failed
+
+status: $Status
+exitCode: $ExitCode
+expectedTime: $ExpectedTime
+reason: $Reason
+log: $log
+receipt: $alertReceipt
+checkedAt: $((Get-Date).ToString("o"))
+
+tail:
+$tailText
+"@
+  $alertOutput = New-Object System.Collections.Generic.List[string]
+  try {
+    Push-Location $PSScriptRoot
+    & $nodeExe "--use-system-ca" "scripts\send-workflow-alert.js" "--kind=$Scope-watchdog" "--receipt=$alertReceipt" *>&1 | ForEach-Object {
+      $text = [string]$_
+      $alertOutput.Add($text) | Out-Null
+      Add-Content -LiteralPath $log -Value "[alert] $text" -Encoding utf8
+    }
+    $alertExit = $LASTEXITCODE
+  } catch {
+    $alertExit = 1
+    $alertOutput.Add($_.Exception.Message) | Out-Null
+    Add-Content -LiteralPath $log -Value "[alert] EXCEPTION $($_.Exception.Message)" -Encoding utf8
+  } finally {
+    Pop-Location
+  }
+  return [ordered]@{
+    ok = ($alertExit -eq 0)
+    source = "send-workflow-alert.js"
+    kind = "$Scope-watchdog"
+    receipt = $alertReceipt
+    exitCode = $alertExit
+    tail = @($alertOutput.ToArray() | Select-Object -Last 20)
+    checkedAt = (Get-Date).ToString("o")
+  }
 }
 
 function Get-TaipeiDateKey {
@@ -131,7 +184,8 @@ if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {
   Write-WatchdogLog "Watchdog rerun failed exit=$exit"
-  Write-FumanFlowHealth -Scope $Scope -Status watchdog_failed -Message "Watchdog rerun failed" -Detail @{ exitCode = $exit; expectedTime = $ExpectedTime; reason = $result.reason; log = $log }
+  $alert = Invoke-WatchdogFailureAlert "watchdog_failed" $result.reason $exit
+  Write-FumanFlowHealth -Scope $Scope -Status watchdog_failed -Message "Watchdog rerun failed" -Detail @{ exitCode = $exit; expectedTime = $ExpectedTime; reason = $result.reason; log = $log; alert = $alert }
   exit $exit
 }
 Write-WatchdogLog "Watchdog rerun completed"
