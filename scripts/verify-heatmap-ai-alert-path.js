@@ -16,10 +16,8 @@ const {
 
 (async () => {
   const clock = taipeiClock();
-  const [heatmap, marketAi] = await Promise.all([
-    checkHeatmapLiveApi(clock),
-    checkMarketAiLiveApi(clock),
-  ]);
+  const heatmap = await checkHeatmapLiveApi(clock);
+  const marketAi = await checkMarketAiLiveApi(clock);
 
   assert.strictEqual(heatmap.name, "熱力圖 live API");
   assert.strictEqual(marketAi.name, "AI 判讀 live API");
@@ -44,5 +42,6 @@ const {
   const notification = await notifyIfNeeded(simulatedStatus, { dryRun: true });
   assert(notification.channels.includes("email:dry-run"), "Gmail/email dry-run channel missing");
 
-  console.log(`[heatmap-ai-alert-path] ok heatmap=${heatmap.ok} ai=${marketAi.ok} issues=${liveIssues.length} email=${notification.channels.join(",")}`);
+  const issueText = liveIssues.map((item) => `${item.message || item.severity}:${item.detail?.error || item.detail?.reason || ""}`).slice(0, 3).join(" | ");
+  console.log(`[heatmap-ai-alert-path] ok heatmap=${heatmap.ok} ai=${marketAi.ok} issues=${liveIssues.length} email=${notification.channels.join(",")}${issueText ? ` detail=${issueText}` : ""}`);
 })();

@@ -11,10 +11,12 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const STATUS_FILE = path.join(STATE_DIR, "terminal-api-health-latest.json");
 const ALERT_STATE_FILE = path.join(STATE_DIR, "terminal-api-health-alert-state.json");
-const REQUEST_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_TIMEOUT_MS || 15000);
+const REQUEST_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_TIMEOUT_MS || 30000);
 const ALERT_COOLDOWN_MS = Number(process.env.TERMINAL_HEALTH_ALERT_COOLDOWN_MS || 30 * 60 * 1000);
 const TDCC_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_TDCC_MIN_COUNT || 0);
 const HEATMAP_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_HEATMAP_MIN_COUNT || 500);
+const HEATMAP_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_HEATMAP_TIMEOUT_MS || 120000);
+const MARKET_AI_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_MARKET_AI_TIMEOUT_MS || 120000);
 const MARKET_AI_START_SECONDS = 9 * 60 * 60;
 
 function readLocalVersion() {
@@ -135,9 +137,9 @@ function issue(severity, message, detail = {}) {
   return { severity, message, detail };
 }
 
-async function fetchJson(pathname) {
+async function fetchJson(pathname, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const url = `${BASE_URL}${pathname}${pathname.includes("?") ? "&" : "?"}t=${Date.now()}-${Math.random()}`;
   try {
     const response = await fetch(url, {
@@ -217,7 +219,7 @@ async function checkHeatmapLiveApi(clock = taipeiClock()) {
   const issues = [];
   const pathname = "/api/heatmap?limit=999&stocks=999&source=desktop-live-contract";
   try {
-    const result = await fetchJson(pathname);
+    const result = await fetchJson(pathname, HEATMAP_TIMEOUT_MS);
     const payload = result.payload || {};
     const contract = payload.health?.contract || payload.sourceInfo || {};
     const count = num(payload.stockCount || payload.health?.stockCount || countPayload(payload));
@@ -279,7 +281,7 @@ async function checkMarketAiLiveApi(clock = taipeiClock()) {
   const issues = [];
   const pathname = "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";
   try {
-    const result = await fetchJson(pathname);
+    const result = await fetchJson(pathname, MARKET_AI_TIMEOUT_MS);
     const payload = result.payload || {};
     const freshness = payload.dataFreshness || {};
     const dashboardTradeDate = compactDate(payload.dashboard?.tradeDate);
