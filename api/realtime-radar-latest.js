@@ -96,7 +96,7 @@ function radarPayloadRunId(payload, row = {}) {
   if (explicit) return explicit;
   const date = radarPayloadTradeDate(payload) || compactDateKey(row.updated_at) || taipeiDateKey();
   const updatedAt = payloadUpdatedAtMs(payload) || Date.parse(row.updated_at || "") || 0;
-  const rowCount = Array.isArray(payload?.rows) ? payload.rows.length : cleanNumber(payload?.count);
+  const rowCount = cleanNumber(payload?.totalCount) || cleanNumber(payload?.sourceTotalCount) || (Array.isArray(payload?.rows) ? payload.rows.length : cleanNumber(payload?.count));
   return `realtime-radar-${date || "unknown"}-${updatedAt || "unknown"}-${rowCount || 0}`;
 }
 
