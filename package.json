@@ -133,7 +133,9 @@
     "verify:terminal-cold-start": "npm run warm:terminal-cold-start && node --use-system-ca scripts/verify-terminal-cold-start-performance.js",
     "verify:terminal-cold-start:strict": "npm run warm:terminal-cold-start && node --use-system-ca scripts/verify-terminal-cold-start-performance.js --strict-strategy2",
     "monitor:terminal-cold-start": "node --use-system-ca scripts/monitor-terminal-cold-start-stability.js",
-    "verify:terminal-route-stress": "node --use-system-ca scripts/verify-terminal-route-switch-stress.js"
+    "verify:terminal-route-stress": "node --use-system-ca scripts/verify-terminal-route-switch-stress.js",
+    "verify:cb-autonomy": "node --use-system-ca scripts/verify-cb-autonomy-readonly.js",
+    "verify:strategy1-autonomy": "node --use-system-ca scripts/verify-strategy1-autonomy-readonly.js"
   },
   "engines": {
     "node": "24.x"

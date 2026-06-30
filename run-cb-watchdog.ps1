@@ -12,14 +12,60 @@ $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
 $env:NODE_OPTIONS = "--use-system-ca"
 $logDir = Join-Path $runtime "logs"
+$receiptDir = Join-Path $runtime "data\scan-receipts"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $log = Join-Path $logDir ("cb-watchdog-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+$alertReceipt = Join-Path $receiptDir "cb-watchdog-alert.json"
 
 . "${PSScriptRoot}\schedule-guard.ps1"
 
 function Write-WatchdogLog($message) {
   Write-Host $message
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
+}
+
+function Invoke-CbFailureAlert {
+  param(
+    [string]$Reason,
+    [int]$ExitCode = 1
+  )
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node" }
+  $env:FUMAN_ALERT_KIND = "cb-watchdog"
+  $env:FUMAN_ALERT_SOURCE = "FumanCbWatchdog"
+  $env:FUMAN_ALERT_SUBJECT = "Fuman Terminal CB watchdog failed"
+  $env:FUMAN_ALERT_RECEIPT_FILE = $alertReceipt
+  $tail = ""
+  try { $tail = (Get-Content -LiteralPath $log -Tail 40 -ErrorAction SilentlyContinue) -join "`n" } catch {}
+  $env:FUMAN_ALERT_TEXT = @"
+Fuman Terminal CB watchdog failed
+
+source: FumanCbWatchdog
+exitCode: $ExitCode
+reason: $Reason
+log: $log
+receipt: $alertReceipt
+checkedAt: $((Get-Date).ToString("o"))
+
+tail:
+$tail
+"@
+  Push-Location $PSScriptRoot
+  try {
+    & $nodeExe "--use-system-ca" "scripts\send-workflow-alert.js" "--kind=cb-watchdog" "--receipt=$alertReceipt" *>&1 | ForEach-Object {
+      Write-WatchdogLog "[alert] $([string]$_)"
+    }
+  } catch {
+    Write-WatchdogLog "[alert] EXCEPTION $($_.Exception.Message)"
+  } finally {
+    Pop-Location
+  }
+  if ($LASTEXITCODE -ne 0) {
+    Write-WatchdogLog "[alert] failed exit=$LASTEXITCODE receipt=$alertReceipt"
+  } else {
+    Write-WatchdogLog "[alert] sent receipt=$alertReceipt"
+  }
 }
 
 function Get-TaipeiTimeFromValue($value) {
@@ -50,16 +96,15 @@ function Test-UpdatedAfterSlot($updatedAt, $slot) {
 }
 
 function Test-CbFresh {
-  $path = Join-Path $env:FUMAN_DATA_DIR "cb-detect-latest.json"
-  if (-not (Test-Path -LiteralPath $path)) { return @{ ok = $false; reason = "missing CB cache" } }
-  $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-  $count = if ($json.rows) { @($json.rows).Count } else { 0 }
-  if ($count -lt 1) { return @{ ok = $false; reason = "CB count too low: $count" } }
+  $url = "https://fuman-terminal.vercel.app/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60&live=1&watchdog=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  try { $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45; $json = $response.Content | ConvertFrom-Json } catch { return @{ ok = $false; reason = "CB official API unreadable: $($_.Exception.Message)" } }
+  if ($response.StatusCode -ne 200 -or $json.ok -ne $true) { return @{ ok = $false; reason = "CB official API not ok: status=$($response.StatusCode) ok=$($json.ok) error=$($json.error) detail=$($json.detail)" } }
+  if ($json.complete -ne $true) { return @{ ok = $false; reason = "CB official API not complete: qualityStatus=$($json.qualityStatus) reason=$($json.reason)" } }
+  if ($json.cacheSource -ne "supabase-api" -or $json.transport.gate -ne "run_id") { return @{ ok = $false; reason = "CB official API not complete-run source: cacheSource=$($json.cacheSource) gate=$($json.transport.gate)" } }
+  $count = [int]($json.count); if ($count -lt 1) { return @{ ok = $false; reason = "CB official API count too low: $count" } }
   $slotTime = Get-ExpectedSlotTime $ExpectedTime
-  if (-not (Test-UpdatedAfterSlot $json.updatedAt $ExpectedTime)) {
-    return @{ ok = $false; reason = "CB not updated after threshold=$($slotTime.ToString("yyyy-MM-dd HH:mm:ss")); updatedAt=$($json.updatedAt)" }
-  }
-  return @{ ok = $true; reason = "ok count=$count updatedAt=$($json.updatedAt) threshold=$($slotTime.ToString("yyyy-MM-dd HH:mm:ss"))" }
+  if (-not (Test-UpdatedAfterSlot $json.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "CB official API not updated after threshold=$($slotTime.ToString("yyyy-MM-dd HH:mm:ss")); updatedAt=$($json.updatedAt); runId=$($json.runId)" } }
+  return @{ ok = $true; reason = "ok runId=$($json.runId) count=$count cacheSource=$($json.cacheSource) updatedAt=$($json.updatedAt) threshold=$($slotTime.ToString("yyyy-MM-dd HH:mm:ss"))" }
 }
 
 Write-WatchdogLog "=== CB watchdog start expected=$ExpectedTime $(Get-Date) ==="
@@ -78,6 +123,7 @@ if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
 $exit = $LASTEXITCODE
 if ($exit -ne 0) {
   Write-WatchdogLog "Watchdog rerun failed exit=$exit"
+  Invoke-CbFailureAlert -Reason "CB watchdog rerun failed after stale official API: $($result.reason)" -ExitCode $exit
   exit $exit
 }
 Write-WatchdogLog "Watchdog rerun completed"

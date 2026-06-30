@@ -1,5 +1,3 @@
-const { readSnapshot } = require("../lib/supabase-snapshots");
-const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { serviceRoleKey, terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:/fuman-runtime";
@@ -24,8 +22,10 @@ function apiOnlyError(reason = "") {
     cacheSource: "none",
     rows: [],
     transport: {
-      source: "supabase-snapshot",
-      snapshotKey: "cb_detect_latest",
+      source: "supabase",
+      gate: "run_id",
+      runTable: CB_DETECT_RUNS_TABLE,
+      resultTable: CB_DETECT_RESULTS_TABLE,
       via: "api/cb-detect-latest",
       fetchedAt: new Date().toISOString(),
     },
@@ -34,11 +34,11 @@ function apiOnlyError(reason = "") {
 
 function emptyPayload(reason = "cb_detect_snapshot_missing", options = {}) {
   return {
-    ok: true,
+    ok: false,
     complete: false,
-    qualityStatus: "waiting_snapshot",
+    qualityStatus: "not_ready",
     cacheSource: "none",
-    source: "cb-detect-empty-state",
+    source: "cb-detect-complete-run",
     count: 0,
     returnedCount: 0,
     canvas: Boolean(options.canvas),
@@ -50,8 +50,9 @@ function emptyPayload(reason = "cb_detect_snapshot_missing", options = {}) {
     reason,
     transport: {
       source: "none",
-      snapshotKey: "cb_detect_latest",
-      gate: "waiting_snapshot",
+      gate: "complete_run_missing",
+      runTable: CB_DETECT_RUNS_TABLE,
+      resultTable: CB_DETECT_RESULTS_TABLE,
       via: "api/cb-detect-latest",
       fetchedAt: new Date().toISOString(),
     },
@@ -107,6 +108,11 @@ async function fetchSupabaseRows(table, query, timeoutMs = 4500) {
   }
 }
 
+async function readSupabaseSingle(table, query, timeoutMs = 4500) {
+  const rows = await fetchSupabaseRows(table, query, timeoutMs);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
 function rowsFromCompleteRun(resultRows = []) {
   return resultRows
     .map((row, index) => {
@@ -149,11 +155,17 @@ async function readLatestCompleteRun(options) {
   const rows = rowsFromCompleteRun(resultRows || []);
   const count = cleanNumber(run.result_count) || rows.length;
   if (count > 0 && rows.length <= 0) throw new Error(`cb complete run ${run.run_id} has no result rows`);
+  if (count !== rows.length) throw new Error(`cb complete run ${run.run_id} count mismatch: run=${count} results=${rows.length}`);
+  const health = await readSupabaseSingle("v_cb_latest_complete_run_health", "select=*&limit=1", 4500).catch((error) => ({ source_status: "degraded", reason: error?.message || String(error) }));
+  const scannerHealth = await readSupabaseSingle("v_scanner_resource_health", "select=strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at&strategy=eq.CB&limit=1", 4500).catch((error) => ({ status: "degraded", reason: error?.message || String(error) }));
+  const completeRunStatus = String(health?.source_status || health?.status || "ready").toLowerCase();
+  const scannerStatus = String(scannerHealth?.status || "ready").toLowerCase();
+  const qualityStatus = completeRunStatus === "ready" && scannerStatus === "ready" ? (run.quality_status || "complete") : (completeRunStatus !== "ready" ? completeRunStatus : scannerStatus);
   const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
   return {
     ok: true,
     complete: true,
-    qualityStatus: run.quality_status || "complete",
+    qualityStatus,
     cacheSource: "supabase-api",
     source: run.source || "CBAS",
     count,
@@ -167,6 +179,7 @@ async function readLatestCompleteRun(options) {
     updatedAt: run.updated_at || run.finished_at || run.generated_at || "",
     generatedAt: run.generated_at || "",
     dataContractSource: run.data_contract_source || "cb_detect_scan_runs/results",
+    sourceHealth: { completeRun: health || null, scanner: scannerHealth || null, status: qualityStatus, reason: health?.reason || scannerHealth?.reason || "" },
     transport: {
       source: "supabase",
       via: "api/cb-detect-latest",
@@ -188,16 +201,6 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 650,
-    via: "api/cb-detect-latest",
-  });
-  if (cached) {
-    setDesktopSnapshotCache(response);
-    response.status(200).json(cached);
-    return;
-  }
-
   try {
     const options = readRequestOptions(request);
     const completeRunPayload = await readLatestCompleteRun(options);
@@ -206,43 +209,7 @@ module.exports = async function handler(request, response) {
       response.status(200).json(completeRunPayload);
       return;
     }
-    const snapshot = await readSnapshot("cb_detect_latest", { allowLatestFallback: true, timeoutMs: 5000 });
-    if (!snapshot?.payload) {
-      response.status(200).json(emptyPayload("cb_detect_snapshot_missing", options));
-      return;
-    }
-    const rows = Array.isArray(snapshot.payload.rows)
-      ? snapshot.payload.rows
-      : Array.isArray(snapshot.payload.matches)
-        ? snapshot.payload.matches
-        : [];
-    const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
-    setDesktopSnapshotCache(response);
-    response.status(200).json({
-      ...snapshot.payload,
-      ok: snapshot.payload.ok !== false,
-      complete: snapshot.payload.complete !== false,
-      qualityStatus: snapshot.payload.qualityStatus || "complete",
-      count: Number(snapshot.payload.count || rows.length || 0),
-      returnedCount: outputRows.length,
-      canvas: Boolean(options.canvas),
-      compact: Boolean(options.compact),
-      shell: Boolean(options.shell),
-      rows: outputRows,
-      matches: outputRows,
-      cacheSource: "supabase-snapshot",
-      runId: snapshot.payload.runId || snapshot.snapshotId || "",
-      updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || "",
-      transport: {
-        ...(snapshot.payload.transport || {}),
-        source: "supabase-snapshot",
-        snapshotKey: "cb_detect_latest",
-        snapshotId: snapshot.snapshotId || "",
-        gate: "latest-snapshot",
-        via: "api/cb-detect-latest",
-        fetchedAt: new Date().toISOString(),
-      },
-    });
+    response.status(200).json(emptyPayload("cb_detect_complete_run_missing", options));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
