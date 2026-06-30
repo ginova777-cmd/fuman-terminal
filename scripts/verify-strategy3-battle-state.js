@@ -16,6 +16,7 @@ function cleanNumber(value) {
 }
 
 const MIN_RESULT_ROWS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_MIN_RESULT_ROWS || 1));
+const REST_ATTEMPTS = Math.max(1, cleanNumber(process.env.STRATEGY3_BATTLE_REST_ATTEMPTS || 3));
 
 function fail(message, details = {}) {
   const error = new Error(message);
@@ -41,23 +42,46 @@ async function captureHandler(handler, query = {}) {
 
 async function rest(pathname, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) fail("missing Supabase service credentials");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 25000);
-  try {
-    const headers = {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    };
-    if (options.count) headers.Prefer = "count=exact";
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, { headers, signal: controller.signal });
-    const text = await response.text();
-    if (!response.ok) fail(`${pathname} HTTP ${response.status}`, { body: text.slice(0, 500) });
-    const range = response.headers.get("content-range") || "";
-    const exactCount = range.includes("/") ? Number(range.split("/").pop()) : null;
-    return { rows: text ? JSON.parse(text) : [], exactCount };
-  } finally {
-    clearTimeout(timer);
+  const attempts = Math.max(1, cleanNumber(options.attempts || REST_ATTEMPTS));
+  let last = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs || 25000);
+    try {
+      const headers = {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      };
+      if (options.count) headers.Prefer = "count=exact";
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, { headers, signal: controller.signal });
+      const text = await response.text();
+      if (!response.ok) {
+        last = { message: `${pathname} HTTP ${response.status}`, details: { body: text.slice(0, 500), attempts: attempt } };
+      } else {
+        const range = response.headers.get("content-range") || "";
+        const exactCount = range.includes("/") ? Number(range.split("/").pop()) : null;
+        return { rows: text ? JSON.parse(text) : [], exactCount, attempts: attempt };
+      }
+    } catch (error) {
+      last = { message: `${pathname} fetch failed`, details: { error: error?.message || String(error), attempts: attempt } };
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < attempts) await sleep(300 * attempt);
   }
+  fail(last?.message || `${pathname} unreadable`, last?.details || {});
+}
+
+async function restSafe(pathname, options = {}) {
+  try {
+    return { ok: true, ...(await rest(pathname, options)) };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error), details: error?.details || {} };
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function runLiveSourceChainCheck() {
@@ -134,10 +158,16 @@ async function main() {
   if (!Object.prototype.hasOwnProperty.call(api.body || {}, "tvPassCount")) issues.push("api_missing_tvPassCount");
   if (!api.body?.runId) issues.push("api_missing_runId");
 
-  const health = await rest("v_scanner_resource_health?select=strategy,status,latest_date,row_count,reason&strategy=eq.Strategy3&limit=1");
+  const health = await restSafe("v_scanner_resource_health?select=strategy,status,latest_date,row_count,reason&strategy=eq.Strategy3&limit=1", { attempts: REST_ATTEMPTS, timeoutMs: 20000 });
   const healthRow = health.rows?.[0] || {};
-  details.health = healthRow;
-  if (healthRow.status !== "ready") issues.push(`health_not_ready_${healthRow.status || "missing"}`);
+  details.health = health.ok ? healthRow : {
+    status: "read_failed",
+    source: "v_scanner_resource_health",
+    error: health.error,
+    details: health.details,
+    fallback: "latest_complete_run_and_live_source_chain",
+  };
+  if (health.ok && healthRow.status !== "ready") issues.push(`health_not_ready_${healthRow.status || "missing"}`);
 
   const runs = await rest("strategy3_scan_runs?select=run_id,expected_total,scanned_count,result_count,payload,updated_at&strategy=eq.strategy3&status=eq.complete&order=updated_at.desc&limit=1");
   const run = runs.rows?.[0] || {};
