@@ -2704,13 +2704,15 @@ do {
     }
 
     $session = Get-PublicSlotSession
+    $earlyShouldWritePreopenRows = Test-ShouldWritePreopenRows -Session $session
+    [void](Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-rest-quote" -Session $session -ShouldWritePreopenRows $earlyShouldWritePreopenRows)
     $warmupSymbols = @(Get-WarmupSymbols)
     $preQuoteRows = @(Convert-QuotesToRows -Quotes $quotes -Payload $payload)
     $priorityQuoteSymbols = @(Order-SymbolsForPriority -Symbols $warmupSymbols -QuoteRows $preQuoteRows)
     $restQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
     $quoteFullCoverageFloor = [math]::Max(500, [int][math]::Ceiling([double]$seeded * 0.95))
     $quoteFreshEnoughForRegular = ($quotes.Count -ge $quoteFullCoverageFloor -and $age -le $StaleSeconds)
-    if ($session -eq "preopen" -or $quotes.Count -eq 0 -or -not $quoteFreshEnoughForRegular) {
+    if ($quotes.Count -eq 0 -or -not $quoteFreshEnoughForRegular) {
       $restQuotePayload = Invoke-FugleStockQuoteBatch -Symbols $priorityQuoteSymbols -ApiKey $fugleApiKey
       $quotes = Merge-QuoteObjectsByCode -PrimaryQuotes $quotes -FallbackQuotes @($restQuotePayload.quotes)
     }

@@ -239,6 +239,7 @@ function Test-FailureText($text) {
 }
 
 function Convert-ResultText($result) {
+  if ([int64]$result -eq 2147946720) { return "2147946720 start-refused/already-running" }
   switch ($result) {
     0 { return "0 success" }
     267009 { return "267009 running" }
@@ -367,6 +368,11 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
   } elseif (-not (Test-ExpectedTriggers $entry.ExpectedTriggers $triggers)) {
     $status = "TRIGGER_MISMATCH"
     $detail = "expected triggers $($entry.ExpectedTriggers -join ', '); actual $($triggers -join ', ')"
+  } elseif ($state -eq "Running" -and ($allowed -contains 267009)) {
+    $status = "OK_RUNNING"
+    if ($allowed -notcontains $result) {
+      $detail = "$detail; currently running, stale last result $(Convert-ResultText $result)"
+    }
   } elseif ($result -eq 267009 -and ($allowed -contains 267009)) {
     $status = "OK_RUNNING"
   } elseif ($result -eq 267011 -and ($allowed -contains 267011)) {

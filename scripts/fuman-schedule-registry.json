@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-30T10:20:00+08:00",
+  "updatedAt": "2026-06-30T10:55:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -75,13 +75,25 @@
         0,
         267011
       ],
+      "Fuman Public Slot Anti Rollback Guard 1m": [
+        0,
+        267009
+      ],
       "Fuman Public Slot Shared Source 0800": [
+        0,
+        267009
+      ],
+      "Fuman Public Slot Shared Source Watchdog": [
         0,
         267009
       ],
       "Fuman Strategy2 Readiness Source 0800": [
         0,
         267014
+      ],
+      "Fuman Strategy2 LINE Start 0900": [
+        0,
+        267009
       ],
       "Fuman Strategy2 LINE Stop 1200": [
         0,
