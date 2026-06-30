@@ -766,7 +766,7 @@ module.exports = async function handler(request, response) {
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
-  if (snapshot?.payload) {
+  if (snapshot?.payload && !mustDetectToday) {
     const payload = {
       ...snapshotResponsePayload(snapshot, breadth, clock),
       marketSession: sessionForPayload,
