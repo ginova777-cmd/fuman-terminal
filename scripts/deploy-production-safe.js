@@ -26,8 +26,8 @@ function run(label, args) {
   const result = spawnSync(args[0], args.slice(1), {
     cwd: ROOT,
     stdio: "inherit",
-    shell: process.platform === "win32",
     env: process.env,
+    windowsHide: true,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status || 1);
