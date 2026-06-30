@@ -105,6 +105,23 @@ function persistWriteBudget(writeBudget, status = "open") {
   return snapshot;
 }
 
+function runtimeSecret(fileNames = []) {
+  for (const name of fileNames) {
+    for (const dir of [
+      path.join(RUNTIME_DIR, "secrets"),
+      path.join(ROOT, "secrets"),
+    ]) {
+      const value = readSecretText(path.join(dir, name));
+      if (value) return value;
+    }
+  }
+  return "";
+}
+
+function alertEnvSecret(envName, fileNames = []) {
+  return runtimeSecret(fileNames) || process.env[envName] || "";
+}
+
 async function sendOpsText(text) {
   const result = spawnSync(process.execPath, [path.join(__dirname, "send-workflow-alert.js")], {
     cwd: ROOT,
@@ -117,6 +134,11 @@ async function sendOpsText(text) {
       FUMAN_ALERT_SUBJECT: "即時雷達資料源警示",
       FUMAN_ALERT_TEXT: text,
       FUMAN_ALERT_RECEIPT_FILE: process.env.REALTIME_RADAR_ALERT_RECEIPT_FILE || ALERT_RECEIPT_FILE,
+      REPORT_EMAIL_TO: alertEnvSecret("REPORT_EMAIL_TO", ["report-email-to.txt", "smtp-to.txt", "gmail-to.txt"]),
+      SMTP_USER: alertEnvSecret("SMTP_USER", ["smtp-user.txt", "gmail-user.txt"]),
+      SMTP_PASS: alertEnvSecret("SMTP_PASS", ["smtp-pass.txt", "gmail-app-password.txt"]),
+      SMTP_HOST: alertEnvSecret("SMTP_HOST", ["smtp-host.txt"]),
+      SMTP_PORT: alertEnvSecret("SMTP_PORT", ["smtp-port.txt"]),
     },
   });
   if (result.status === 0) return "workflow-alert";

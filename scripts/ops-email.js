@@ -1,14 +1,59 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const tls = require("tls");
+
+const ROOT = path.resolve(__dirname, "..");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+
+function readSecretText(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+function secretValue(envName, fileNames = []) {
+  const envValue = process.env[envName];
+  if (envValue) return envValue;
+  for (const name of fileNames) {
+    for (const dir of [
+      path.join(RUNTIME_DIR, "secrets"),
+      path.join(ROOT, "secrets"),
+    ]) {
+      const value = readSecretText(path.join(dir, name));
+      if (value) return value;
+    }
+  }
+  return "";
+}
+
+function secretFileValue(fileNames = []) {
+  for (const name of fileNames) {
+    for (const dir of [
+      path.join(RUNTIME_DIR, "secrets"),
+      path.join(ROOT, "secrets"),
+    ]) {
+      const value = readSecretText(path.join(dir, name));
+      if (value) return value;
+    }
+  }
+  return "";
+}
+
+function normalizeSmtpPassword(pass, host) {
+  const value = String(pass || "");
+  if (!/gmail\.com$/i.test(String(host || ""))) return value;
+  return value.replace(/\s+/g, "");
+}
 
 function emailConfigFromEnv() {
   return {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 465),
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-    to: process.env.REPORT_EMAIL_TO || process.env.ALERT_EMAIL_TO || process.env.OPS_EMAIL_TO || "",
+    host: secretValue("SMTP_HOST", ["smtp-host.txt"]) || "smtp.gmail.com",
+    port: Number(secretValue("SMTP_PORT", ["smtp-port.txt"]) || 465),
+    user: secretValue("SMTP_USER", ["smtp-user.txt", "gmail-user.txt"]),
+    pass: secretFileValue(["smtp-pass.txt", "gmail-app-password.txt"]) || secretValue("SMTP_PASS", []),
+    to: secretValue("REPORT_EMAIL_TO", ["report-email-to.txt", "smtp-to.txt", "gmail-to.txt"])
+      || secretValue("ALERT_EMAIL_TO", ["alert-email-to.txt"])
+      || secretValue("OPS_EMAIL_TO", ["ops-email-to.txt"]),
   };
 }
 
@@ -52,7 +97,7 @@ async function sendEmailText(subject, text, config = emailConfigFromEnv()) {
   await smtpCommand(socket, "EHLO fuman-terminal");
   await smtpCommand(socket, "AUTH LOGIN", /^334/);
   await smtpCommand(socket, Buffer.from(config.user).toString("base64"), /^334/);
-  await smtpCommand(socket, Buffer.from(config.pass).toString("base64"));
+  await smtpCommand(socket, Buffer.from(normalizeSmtpPassword(config.pass, config.host)).toString("base64"));
   await smtpCommand(socket, `MAIL FROM:<${config.user}>`);
   await smtpCommand(socket, `RCPT TO:<${config.to}>`);
   await smtpCommand(socket, "DATA", /^354/);
@@ -70,10 +115,19 @@ async function sendEmailText(subject, text, config = emailConfigFromEnv()) {
   await smtpCommand(socket, message);
   await smtpCommand(socket, "QUIT");
   socket.end();
+  return {
+    ok: true,
+    host: config.host,
+    port: config.port,
+    to: config.to,
+    sentAt: new Date().toISOString(),
+  };
 }
 
 module.exports = {
   emailConfigFromEnv,
   hasEmailConfig,
+  normalizeSmtpPassword,
+  secretValue,
   sendEmailText,
 };
