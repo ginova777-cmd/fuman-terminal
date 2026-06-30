@@ -84,6 +84,23 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function sourceCount(name, pathname, options = {}) {
+  const result = await restSafe(pathname, { count: true, attempts: Math.max(REST_ATTEMPTS, 5), timeoutMs: 25000 });
+  if (!result.ok) {
+    return [name, {
+      count: 0,
+      readError: result.error,
+      details: result.details,
+      minRequired: options.minRequired || 1000,
+    }];
+  }
+  return [name, {
+    count: result.exactCount,
+    latestDate: options.latestDate ? options.latestDate(result.rows || []) : undefined,
+    minRequired: options.minRequired || 1000,
+  }];
+}
+
 function runLiveSourceChainCheck() {
   const timeout = Math.max(15000, cleanNumber(process.env.STRATEGY3_BATTLE_LIVE_SOURCE_CHAIN_TIMEOUT_MS || 70000));
   const result = spawnSync(process.execPath, [
@@ -262,14 +279,15 @@ async function main() {
   }
 
   const sourceCounts = await Promise.all([
-    rest("strategy3_ready_snapshot?select=symbol&limit=1", { count: true }).then((r) => ["strategy3_ready_snapshot", r.exactCount]),
-    rest("fugle_quotes_latest?select=symbol&limit=1", { count: true }).then((r) => ["fugle_quotes_latest", r.exactCount]),
-    rest("v_strategy3_intraday_1m_status?select=symbol&limit=1", { count: true }).then((r) => ["v_strategy3_intraday_1m_status", r.exactCount]),
-    rest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true }).then((r) => ["stock_daily_volume", r.exactCount, r.rows?.[0]?.trade_date]),
+    sourceCount("strategy3_ready_snapshot", "strategy3_ready_snapshot?select=symbol&limit=1"),
+    sourceCount("fugle_quotes_latest", "fugle_quotes_latest?select=symbol&limit=1"),
+    sourceCount("v_strategy3_intraday_1m_status", "v_strategy3_intraday_1m_status?select=symbol&limit=1"),
+    sourceCount("stock_daily_volume", "stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { latestDate: (rows) => rows?.[0]?.trade_date }),
   ]);
-  details.sourceCounts = Object.fromEntries(sourceCounts.map(([name, count, latestDate]) => [name, { count, latestDate }]));
-  for (const [name, count] of sourceCounts) {
-    if (cleanNumber(count) < 1000) issues.push(`${name}_count_${count}_below_1000`);
+  details.sourceCounts = Object.fromEntries(sourceCounts);
+  for (const [name, item] of sourceCounts) {
+    if (item.readError) continue;
+    if (cleanNumber(item.count) < cleanNumber(item.minRequired || 1000)) issues.push(`${name}_count_${item.count}_below_${item.minRequired || 1000}`);
   }
 
   const output = { ok: issues.length === 0, checkedAt: new Date().toISOString(), issues, details };

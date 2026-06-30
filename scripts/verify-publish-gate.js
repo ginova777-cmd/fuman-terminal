@@ -1961,7 +1961,7 @@ for (const marker of ["sessionReadyCount", "minIntraday1mCandidates", "09:00-12:
 for (const marker of ["check-strategy3-source-chain.js", "liveSourceChain", "live_source_chain_tv_drift_api_"]) {
   if (!strategy3BattleStateVerifier.includes(marker)) issues.push(`verify-strategy3-battle-state.js missing live source-chain drift marker ${marker}`);
 }
-for (const marker of ["STRATEGY3_BATTLE_REST_ATTEMPTS", "restSafe", "latest_complete_run_and_live_source_chain"]) {
+for (const marker of ["STRATEGY3_BATTLE_REST_ATTEMPTS", "restSafe", "sourceCount", "latest_complete_run_and_live_source_chain"]) {
   if (!strategy3BattleStateVerifier.includes(marker)) issues.push(`verify-strategy3-battle-state.js missing resilient health-read marker ${marker}`);
 }
 for (const marker of ["run-strategy3-complete-scan.ps1", "live_source_chain_tv_drift_api_", "post-repair"]) {
