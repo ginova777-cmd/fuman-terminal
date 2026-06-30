@@ -49,6 +49,18 @@ function taipeiDateKey(date = new Date()) {
   return `${byType.year}${byType.month}${byType.day}`;
 }
 
+function taipeiTimeLabel(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.hour || "00"}:${byType.minute || "00"}:${byType.second || "00"}`;
+}
+
 function compactDateKey(value) {
   const text = String(value || "");
   const parsed = Date.parse(text);
@@ -194,6 +206,8 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
       if (!/^\d{4}$/.test(code) || !close) return null;
       const side = percent < 0 ? "short" : "long";
       const quoteAt = Date.parse(row.quote_updated_at || row.last_trade_time || "") || now;
+      const quoteIso = new Date(quoteAt).toISOString();
+      const quoteTime = taipeiTimeLabel(new Date(quoteAt));
       return {
         code,
         name: row.name || code,
@@ -215,6 +229,10 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
         signal: side === "short" ? "短線轉弱" : "短線強勢",
         state: side,
         reason: `${side === "short" ? "短線轉弱" : "短線強勢"} / Live報價`,
+        time: quoteTime,
+        quoteTime,
+        updatedAt: quoteIso,
+        latestSeenAt: quoteIso,
         radarUpdatedAt: quoteAt,
         radarDate: date,
         radarMode: "intraday",
