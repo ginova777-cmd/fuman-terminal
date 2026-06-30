@@ -303,6 +303,8 @@ async function main() {
       returnedCount: payloadCount(strategy5Api.body || {}, "matches"),
       usedDate: strategy5Api.body?.usedDate || "",
       sourceDate: strategy5Api.body?.sourceDate || "",
+      dataFreshness: strategy5Api.body?.dataFreshness || null,
+      unattended: strategy5Api.body?.unattended || null,
       cacheSource: strategy5Api.body?.cacheSource || strategy5Api.body?.source || "",
       transport: strategy5Api.body?.transport || null,
       error: strategy5Api.body?.error || strategy5Api.body?.detail || "",
@@ -323,6 +325,12 @@ async function main() {
   pushIssue(issues, institutionApi.statusCode >= 200 && institutionApi.statusCode < 300 && institutionApi.body?.ok === true, "institution_api_not_ok", details.api.institution);
   pushIssue(issues, Boolean(details.api.strategy5.runId), "strategy5_api_missing_run_id");
   pushIssue(issues, Boolean(details.api.institution.runId), "institution_api_missing_run_id");
+  pushIssue(issues, details.api.strategy5.unattended?.status === "YES" && details.api.strategy5.unattended?.canRunUnattended === true, "strategy5_unattended_not_yes", {
+    unattended: details.api.strategy5.unattended,
+  });
+  pushIssue(issues, details.api.strategy5.dataFreshness?.status === "fresh" && details.api.strategy5.dataFreshness?.priorityStaleBlocked !== true, "strategy5_data_freshness_not_fresh", {
+    dataFreshness: details.api.strategy5.dataFreshness,
+  });
 
   const [scannerHealth, institutionHealthResult, chipHealthResult, chipLatestResult, strategy5Run, institutionRun] = await Promise.all([
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),

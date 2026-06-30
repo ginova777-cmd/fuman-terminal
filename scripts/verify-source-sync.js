@@ -74,6 +74,7 @@ const KEY_FILES = [
   "scripts/scan-warrant-flow-cache.js",
   "scripts/verify-mobile-layout.js",
   "scripts/verify-terminal-ui-e2e.js",
+  "scripts/verify-strategy5-battle-state.js",
   "scripts/verify-heatmap-realtime.js",
   "scripts/verify-market-ai-freshness-guard.js",
   "scripts/verify-production-guard.js",

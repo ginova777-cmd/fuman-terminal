@@ -433,6 +433,19 @@ function dateAgeDays(dateKey) {
   return Math.floor((toUtc(today) - toUtc(compact)) / 86400000);
 }
 
+function compactDateKey(value) {
+  const compact = String(value || "").replace(/\D/g, "").slice(0, 8);
+  return /^\d{8}$/.test(compact) ? compact : "";
+}
+
+function latestDateKey(values = []) {
+  return values
+    .map(compactDateKey)
+    .filter(Boolean)
+    .sort()
+    .pop() || "";
+}
+
 function taipeiParts(date = new Date()) {
   return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -610,6 +623,10 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     });
   });
   return map;
+}
+
+function latestFinMindChipTradeDate(finmindMap = new Map()) {
+  return latestDateKey(Array.from(finmindMap.values()).map((row) => row.tradeDate));
 }
 
 function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) {
@@ -1212,15 +1229,21 @@ async function main() {
   if (finmindChipMap.size) console.log(`strategy5 FinMind chip supplement rows=${finmindChipMap.size}`);
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map);
-  const quoteDate = stocks.find((stock) => stock.quoteDate)?.quoteDate || institution.usedDate || institution.date || "";
+  const quoteDate = compactDateKey(stocks.find((stock) => stock.quoteDate)?.quoteDate);
+  const institutionDate = compactDateKey(institution.usedDate || institution.date);
+  const chipLatestTradeDate = latestDateKey([
+    latestFinMindChipTradeDate(finmindChipMap),
+    institutionDate,
+  ]);
+  const sourceDate = chipLatestTradeDate || institutionDate || quoteDate || taipeiDateKey();
   const now = new Date();
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
     updatedAt: now.toISOString(),
     generatedDate: taipeiDateKey(now),
-    usedDate: quoteDate,
-    sourceDate: quoteDate,
+    usedDate: sourceDate,
+    sourceDate,
     schedule: "daily complete scan",
     fullScan: true,
     complete: true,
@@ -1231,6 +1254,9 @@ async function main() {
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
       finmindChipCount: finmindChipMap.size,
+      chipLatestTradeDate,
+      institutionLatestDate: institutionDate,
+      marketQuoteDate: quoteDate,
       warningCount: sourceWarnings.length,
       warnings: sourceWarnings.slice(0, 8),
     },

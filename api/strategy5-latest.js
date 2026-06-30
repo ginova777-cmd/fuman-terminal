@@ -14,6 +14,8 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_strategy5_latest_complete_run";
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
+const UNATTENDED_CONTRACT = "strategy5-unattended-api-20260630-01";
+const MAX_CHIP_SOURCE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 const STRATEGY5_UI_MATCH_META = {
   chip_k_confluence: { label: "籌碼共振", short: "籌碼共振" },
@@ -45,6 +47,13 @@ function apiOnlyError(reason = "") {
     detail: reason,
     cacheSource: "none",
     matches: [],
+    unattended: {
+      status: "NO",
+      canRunUnattended: false,
+      contract: UNATTENDED_CONTRACT,
+      reasons: [reason || "strategy5_api_only_unavailable"],
+      checkedAt: new Date().toISOString(),
+    },
     transport: {
       source: "supabase",
       latestRunView: LATEST_RUN_VIEW,
@@ -106,16 +115,163 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function compactDateKey(value) {
+  const compact = String(value || "").replace(/\D/g, "").slice(0, 8);
+  return /^\d{8}$/.test(compact) ? compact : "";
+}
+
+function taipeiDateKey(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}${parts.month}${parts.day}`;
+}
+
+function dateAgeDays(dateKey) {
+  const compact = compactDateKey(dateKey);
+  if (!compact) return null;
+  const today = taipeiDateKey();
+  const toUtc = (value) => Date.UTC(Number(value.slice(0, 4)), Number(value.slice(4, 6)) - 1, Number(value.slice(6, 8)));
+  return Math.floor((toUtc(today) - toUtc(compact)) / 86400000);
+}
+
+function staleStrategy5SnapshotReason(payload) {
+  if (!payload || typeof payload !== "object") return "snapshot_payload_missing";
+  if (payload.unattended?.contract !== UNATTENDED_CONTRACT) return "snapshot_unattended_contract_missing";
+  const status = String(payload.dataFreshness?.status || payload.qualityStatus || "").toLowerCase();
+  if (["stale", "degraded", "partial", "incomplete"].includes(status)) return `snapshot_status_${status}`;
+  const sourceDate = compactDateKey(payload.sourceDate || payload.usedDate || payload.marketSession?.marketDataDate);
+  const ageDays = dateAgeDays(sourceDate);
+  if (!sourceDate) return "snapshot_source_date_missing";
+  if (ageDays == null || ageDays > MAX_CHIP_SOURCE_AGE_DAYS) return `snapshot_source_date_stale:${sourceDate}`;
+  return "";
+}
+
+function resolveStrategy5SourceDate(run, scanDate, chipSourceHealth = null) {
+  const payloadHealth = run?.payload?.sourceHealth && typeof run.payload.sourceHealth === "object" ? run.payload.sourceHealth : {};
+  const healthStatus = String(chipSourceHealth?.coverage_status || "").toLowerCase();
+  const liveHealthDate = ["ready", "ok"].includes(healthStatus) ? compactDateKey(chipSourceHealth?.latest_trade_date) : "";
+  return liveHealthDate
+    || compactDateKey(payloadHealth.chipLatestTradeDate)
+    || compactDateKey(payloadHealth.institutionLatestDate)
+    || compactDateKey(run?.payload?.sourceDate)
+    || compactDateKey(run?.payload?.usedDate)
+    || compactDateKey(scanDate);
+}
+
+async function fetchChipSourceHealth() {
+  try {
+    const rows = await fetchRowsFrom(
+      "v_institution_source_health",
+      [
+        "select=coverage_status,latest_trade_date,institutional_latest_trade_date,margin_latest_trade_date,unified_latest_trade_date,institutional_rows,margin_rows,unified_rows,valid_after_exclusion_rows,min_required_rows,stale_days,reason,unified_latest_updated_at,margin_latest_updated_at,institutional_latest_updated_at,suggested_scanner_behavior",
+        "limit=1",
+      ].join("&")
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function isoDateKey(compact) {
+  const date = compactDateKey(compact);
+  return date ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}` : "";
+}
+
+function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount, expectedTotal, scannedCount, returnedCount }) {
+  const checkedAt = new Date().toISOString();
+  const coverageStatus = String(chipSourceHealth?.coverage_status || "").toLowerCase();
+  const latestTradeDate = compactDateKey(chipSourceHealth?.latest_trade_date);
+  const ageDays = dateAgeDays(sourceDate);
+  const minRows = cleanNumber(chipSourceHealth?.min_required_rows) || 1500;
+  const institutionalRows = cleanNumber(chipSourceHealth?.institutional_rows);
+  const marginRows = cleanNumber(chipSourceHealth?.margin_rows);
+  const validRows = cleanNumber(chipSourceHealth?.valid_after_exclusion_rows);
+  const readbackCount = cleanNumber(run?.readback_count);
+  const issues = [];
+  const sourceReady = coverageStatus === "ready";
+  const sourceFresh = Boolean(sourceDate) && ageDays != null && ageDays <= MAX_CHIP_SOURCE_AGE_DAYS;
+  const completeRun = String(run?.status || "").toLowerCase() === "complete" && run?.complete === true;
+  const scanComplete = cleanNumber(expectedTotal) > 0 && cleanNumber(expectedTotal) === cleanNumber(scannedCount);
+  const resultReadbackOk = readbackCount > 0 && readbackCount === cleanNumber(resultCount);
+  const dateAligned = !latestTradeDate || latestTradeDate === compactDateKey(sourceDate);
+  if (!sourceReady) issues.push(`chip_source_not_ready:${coverageStatus || "missing"}`);
+  if (!sourceFresh) issues.push(`chip_source_stale:${sourceDate || "missing"}`);
+  if (institutionalRows < minRows) issues.push(`institutional_rows_below_min:${institutionalRows}/${minRows}`);
+  if (marginRows < minRows) issues.push(`margin_rows_below_min:${marginRows}/${minRows}`);
+  if (validRows < minRows) issues.push(`valid_rows_below_min:${validRows}/${minRows}`);
+  if (!completeRun) issues.push("complete_run_not_complete");
+  if (!scanComplete) issues.push(`scan_count_mismatch:${scannedCount}/${expectedTotal}`);
+  if (!resultReadbackOk) issues.push(`result_readback_mismatch:${readbackCount}/${resultCount}`);
+  if (!dateAligned) issues.push(`source_date_mismatch:${sourceDate}/${latestTradeDate}`);
+  if (cleanNumber(returnedCount) <= 0) issues.push("api_rows_empty");
+  const ok = issues.length === 0;
+  const today = taipeiDateKey();
+  const dataFreshness = {
+    status: ok ? "fresh" : (sourceReady ? "stale" : "degraded"),
+    reason: ok ? "chip_source_ready_and_complete_run_aligned" : issues.join(";"),
+    today,
+    sourceDate,
+    sourceDateIso: isoDateKey(sourceDate),
+    latestTradeDate: chipSourceHealth?.latest_trade_date || "",
+    latestTradeDateKey: latestTradeDate,
+    ageDays,
+    maxAgeDays: MAX_CHIP_SOURCE_AGE_DAYS,
+    coverageStatus: chipSourceHealth?.coverage_status || "",
+    priorityStaleBlocked: !ok,
+  };
+  return {
+    dataFreshness,
+    marketSession: {
+      today,
+      marketDataDate: sourceDate,
+      marketDataIsoDate: isoDateKey(sourceDate),
+      hasTodayMarketData: sourceDate === today,
+      acceptableLatestTradingDate: sourceFresh,
+    },
+    unattended: {
+      status: ok ? "YES" : "NO",
+      canRunUnattended: ok,
+      contract: UNATTENDED_CONTRACT,
+      checkedAt,
+      officialSources: [
+        "v_institution_source_health",
+        "v_chip_flows_latest",
+        LATEST_RUN_VIEW,
+        TABLE,
+      ],
+      autoUpdateTrigger: "run-strategy5.ps1 -> scripts/scan-strategy5-cache.js -> Supabase complete run -> refresh-desktop-route-snapshot.ps1",
+      freshnessGate: `coverage_status=ready && chip source age <= ${MAX_CHIP_SOURCE_AGE_DAYS}d && complete run readback aligned`,
+      scannerBehavior: ok
+        ? "allow Strategy5 publish and immediate display"
+        : "preserve latest complete run; expose source health reason; do not publish stale result as fresh",
+      sourceReady,
+      sourceFresh,
+      completeRun,
+      scanComplete,
+      resultReadbackOk,
+      dateAligned,
+      snapshotGuard: "live=1/noSnapshot=1 bypasses snapshot; stale or missing unattended snapshots are rejected",
+      reasons: ok ? ["ready"] : issues,
+    },
+  };
+}
+
 function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
     const canvas = url.searchParams.get("canvas") === "1"
       || url.searchParams.get("compact") === "1"
       || url.searchParams.get("shell") === "1";
+    const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
     const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
-    return { canvas, limit };
+    return { canvas, live, limit };
   } catch {
-    return { canvas: false, limit: 2000 };
+    return { canvas: false, live: false, limit: 2000 };
   }
 }
 
@@ -191,6 +347,36 @@ function buildPayload(rows, run, options = {}) {
     .map(normalizePayload)
     .filter((row) => row.matches.length);
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
+  const chipSourceHealth = options.chipSourceHealth || null;
+  const sourceDate = resolveStrategy5SourceDate(run, scanDate, chipSourceHealth);
+  const sourceHealth = {
+    ...(run?.payload?.sourceHealth || {}),
+    ...(chipSourceHealth ? {
+      coverageStatus: chipSourceHealth.coverage_status || "",
+      latestTradeDate: chipSourceHealth.latest_trade_date || "",
+      institutionalLatestTradeDate: chipSourceHealth.institutional_latest_trade_date || "",
+      marginLatestTradeDate: chipSourceHealth.margin_latest_trade_date || "",
+      unifiedLatestTradeDate: chipSourceHealth.unified_latest_trade_date || "",
+      institutionalRows: cleanNumber(chipSourceHealth.institutional_rows),
+      marginRows: cleanNumber(chipSourceHealth.margin_rows),
+      unifiedRows: cleanNumber(chipSourceHealth.unified_rows),
+      validAfterExclusionRows: cleanNumber(chipSourceHealth.valid_after_exclusion_rows),
+      minRequiredRows: cleanNumber(chipSourceHealth.min_required_rows),
+      staleDays: cleanNumber(chipSourceHealth.stale_days),
+      healthReason: chipSourceHealth.reason || "",
+      healthUpdatedAt: chipSourceHealth.unified_latest_updated_at || chipSourceHealth.margin_latest_updated_at || chipSourceHealth.institutional_latest_updated_at || "",
+      suggestedScannerBehavior: chipSourceHealth.suggested_scanner_behavior || "",
+    } : {}),
+  };
+  const apiState = buildStrategy5ApiState({
+    run,
+    sourceDate,
+    chipSourceHealth,
+    resultCount,
+    expectedTotal,
+    scannedCount,
+    returnedCount: matches.length,
+  });
   return {
     ok: true,
     source: "supabase:strategy5_scan_results",
@@ -198,8 +384,11 @@ function buildPayload(rows, run, options = {}) {
     runId: String(first.run_id || run?.run_id || ""),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
     generatedDate: scanDate,
-    usedDate: run?.payload?.usedDate || scanDate,
-    sourceDate: run?.payload?.sourceDate || run?.payload?.usedDate || scanDate,
+    usedDate: sourceDate || scanDate,
+    sourceDate: sourceDate || scanDate,
+    dataFreshness: apiState.dataFreshness,
+    marketSession: apiState.marketSession,
+    unattended: apiState.unattended,
     schedule: run?.payload?.schedule || "daily complete scan",
     fullScan: true,
     complete: true,
@@ -214,7 +403,7 @@ function buildPayload(rows, run, options = {}) {
     scannedThisRun: scannedCount || matches.length,
     count: resultCount,
     returnedCount: matches.length,
-    sourceHealth: run?.payload?.sourceHealth || {},
+    sourceHealth,
     matches,
     transport: {
       source: "supabase",
@@ -291,14 +480,18 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 650,
-    via: "api/strategy5-latest",
-  });
-  if (cached) {
-    setDesktopSnapshotCache(response);
-    response.status(200).json(cached);
-    return;
+  const options = parseRequestOptions(request);
+  if (!options.live) {
+    const cached = await readEndpointFromDesktopSnapshot(request, {
+      timeoutMs: 650,
+      via: "api/strategy5-latest",
+    });
+    const staleReason = staleStrategy5SnapshotReason(cached);
+    if (cached && !staleReason) {
+      setDesktopSnapshotCache(response);
+      response.status(200).json(cached);
+      return;
+    }
   }
 
   try {
@@ -306,12 +499,12 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const options = parseRequestOptions(request);
     const latest = await fetchLatestCompleteRows(options.limit);
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError(latest.gate || "strategy5_scan_results_latest_empty"));
       return;
     }
+    options.chipSourceHealth = await fetchChipSourceHealth();
     setDesktopSnapshotCache(response);
     response.status(200).json(buildPayload(latest.rows, latest.run, options));
   } catch (error) {

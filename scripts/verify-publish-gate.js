@@ -594,6 +594,7 @@ const strategy2ReadinessGate = read("scripts/check-strategy2-readiness-gate.js")
 const strategy2TradingDayGate = read("scripts/check-strategy2-trading-day.js");
 const postScanSnapshotVerifier = read("scripts/verify-post-scan-snapshot-refresh-contract.js");
 const strategy2BattleStateVerifier = read("scripts/verify-strategy2-battle-state.js");
+const strategy5BattleVerifier = read("scripts/verify-strategy5-battle-state.js");
 const scannerResourceHealthRunner = read("scanner-resource-health.ps1");
 const runIdCompleteGate = read("scripts/verify-run-id-complete-gates.js");
 const terminalLiveCheck = read("terminal-live-check.js");
@@ -2145,6 +2146,27 @@ if (/run-cache-sync|generate-slim-cache|Sync-InstitutionLocalCache|data\\institu
 const strategy5Scanner = read("scripts/scan-strategy5-cache.js");
 for (const marker of ["STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS", "dateAgeDays", "v_chip_flows_latest"]) {
   if (!strategy5Scanner.includes(marker)) issues.push(`scan-strategy5-cache.js missing stale FinMind chip guard marker ${marker}`);
+}
+for (const marker of [
+  "strategy5-unattended-api-20260630-01",
+  "unattended",
+  "status: ok ? \"YES\" : \"NO\"",
+  "canRunUnattended",
+  "dataFreshness",
+  "priorityStaleBlocked",
+  "staleStrategy5SnapshotReason",
+  "snapshot_unattended_contract_missing",
+  "v_institution_source_health",
+  "latest_trade_date",
+]) {
+  if (!strategy5LatestApi.includes(marker)) issues.push(`api/strategy5-latest.js missing unattended API marker ${marker}`);
+}
+for (const marker of [
+  "strategy5_unattended_not_yes",
+  "strategy5_data_freshness_not_fresh",
+  "unattended?.status === \"YES\"",
+]) {
+  if (!strategy5BattleVerifier.includes(marker)) issues.push(`verify-strategy5-battle-state.js missing unattended verifier marker ${marker}`);
 }
 if (/run-sync-after-output|generate-slim-cache|data\\strategy5|data\/strategy5/.test(runStrategy5) || !/api\/strategy5-latest/.test(runStrategy5) || !/Strategy5 API-only/.test(runStrategy5)) {
   issues.push("run-strategy5.ps1 must be API-only after scanner success: no slim generation, cache sync, or static strategy5 data publish");

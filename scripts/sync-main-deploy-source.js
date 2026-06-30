@@ -135,6 +135,7 @@ const FILES = [
   "scripts/verify-production-guard.js",
   "scripts/verify-publish-gate.js",
   "scripts/verify-terminal-ui-e2e.js",
+  "scripts/verify-strategy5-battle-state.js",
   "scripts/verify-heatmap-realtime.js",
   "scripts/verify-market-ai-freshness-guard.js",
   "scripts/verify-market-surfaces-chain.js",
