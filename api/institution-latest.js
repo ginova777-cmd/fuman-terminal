@@ -24,10 +24,20 @@ function setDesktopSnapshotCache(response) {
 function apiOnlyError(reason = "") {
   return {
     ok: false,
+    status: "critical",
     error: "institution_api_only_unavailable",
     detail: reason,
     cacheSource: "none",
     fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
+    sourceCoverage: {},
+    staleSeconds: 999999,
+    latestRunId: "",
+    fallbackUsed: false,
+    writeBudget: { status: "blocked", allowed: false, reason },
+    retentionOk: false,
+    issues: [{ severity: "critical", id: "institution-api-unavailable", message: reason || "institution API unavailable" }],
+    warnings: [],
+    publishAllowed: false,
     data: {},
     rows: [],
     transport: {
@@ -67,18 +77,36 @@ function readRequestOptions(request) {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
     const canvas = url.searchParams.get("canvas") === "1";
     const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
+    const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
     const smallPayload = canvas || compact;
     const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
     const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
-    return { canvas, compact, smallPayload, limit, fieldContract };
+    return { canvas, compact, live, smallPayload, limit, fieldContract };
   } catch {
-    return { canvas: false, compact: false, smallPayload: false, limit: 3000, fieldContract: "" };
+    return { canvas: false, compact: false, live: false, smallPayload: false, limit: 3000, fieldContract: "" };
   }
 }
 
 function payloadMatchesFieldContract(payload, requestedContract = "") {
   if (!requestedContract) return true;
   return String(payload?.fieldContractVersion || "") === requestedContract;
+}
+
+function payloadHasMachineState(payload) {
+  return Boolean(
+    payload
+    && typeof payload === "object"
+    && "ok" in payload
+    && "status" in payload
+    && payload.sourceCoverage
+    && "staleSeconds" in payload
+    && "latestRunId" in payload
+    && "fallbackUsed" in payload
+    && payload.writeBudget
+    && "retentionOk" in payload
+    && Array.isArray(payload.issues)
+    && Array.isArray(payload.warnings)
+  );
 }
 
 function normalizeRow(row) {
@@ -131,6 +159,37 @@ function normalizeRow(row) {
   };
 }
 
+function normalizeSourceHealth(row = {}) {
+  return {
+    coverageStatus: String(row.coverage_status || row.coverageStatus || "").toLowerCase(),
+    latestTradeDate: String(row.latest_trade_date || row.latestTradeDate || ""),
+    institutionalRows: cleanNumber(row.institutional_rows || row.institutionalRows),
+    marginRows: cleanNumber(row.margin_rows || row.marginRows),
+    unifiedRows: cleanNumber(row.unified_rows || row.unifiedRows),
+    validAfterExclusionRows: cleanNumber(row.valid_after_exclusion_rows || row.validAfterExclusionRows),
+    minRequiredRows: cleanNumber(row.min_required_rows || row.minRequiredRows || 1500),
+    reason: String(row.reason || ""),
+    updatedAt: row.unified_latest_updated_at || row.margin_latest_updated_at || row.institutional_latest_updated_at || row.updated_at || "",
+  };
+}
+
+function secondsSince(value) {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) return 999999;
+  return Math.max(0, Math.round((Date.now() - parsed) / 1000));
+}
+
+async function fetchInstitutionSourceHealth() {
+  const rows = await fetchRowsFrom(
+    "v_institution_source_health",
+    [
+      "select=coverage_status,latest_trade_date,institutional_rows,margin_rows,unified_rows,valid_after_exclusion_rows,min_required_rows,reason,unified_latest_updated_at,margin_latest_updated_at,institutional_latest_updated_at",
+      "limit=1",
+    ].join("&")
+  );
+  return normalizeSourceHealth(rows[0] || {});
+}
+
 function buildPayload(rows, run, options = {}) {
   const sorted = rows
     .slice()
@@ -142,11 +201,33 @@ function buildPayload(rows, run, options = {}) {
   const expectedTotal = cleanNumber(run?.expected_total);
   const scannedCount = cleanNumber(run?.scanned_count);
   const resultCount = cleanNumber(run?.result_count) || sorted.length;
+  const sourceHealth = normalizeSourceHealth(options.sourceHealth || run?.payload?.sourceHealth || {});
+  const sourceCoverageReady = sourceHealth.coverageStatus === "ready"
+    && sourceHealth.validAfterExclusionRows >= sourceHealth.minRequiredRows;
+  const sourceCoverage = {
+    coverageStatus: sourceHealth.coverageStatus,
+    latestTradeDate: sourceHealth.latestTradeDate,
+    institutionalRows: sourceHealth.institutionalRows,
+    marginRows: sourceHealth.marginRows,
+    unifiedRows: sourceHealth.unifiedRows,
+    validAfterExclusionRows: sourceHealth.validAfterExclusionRows,
+    minRequiredRows: sourceHealth.minRequiredRows,
+  };
+  const issues = sourceCoverageReady ? [] : [{
+    severity: "critical",
+    id: "institution-source-coverage-not-ready",
+    message: sourceHealth.reason || "institution source coverage is not ready",
+    details: sourceCoverage,
+  }];
+  const warnings = [];
+  const status = issues.length ? "degraded" : "ready";
   return {
     ok: true,
+    status,
     source: "supabase:institution_scan_results",
     cacheSource: "supabase-api",
     runId: String(run?.run_id || rows[0]?.run_id || ""),
+    latestRunId: String(run?.run_id || rows[0]?.run_id || ""),
     updatedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),
     usedDate: run?.payload?.usedDate || scanDate,
     quoteUpdatedAt: run?.payload?.quoteUpdatedAt || "",
@@ -157,11 +238,26 @@ function buildPayload(rows, run, options = {}) {
     fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
     count: resultCount,
     returnedCount: outputRows.length,
+    sourceCoverage,
+    staleSeconds: secondsSince(sourceHealth.updatedAt || run?.finished_at || rows[0]?.updated_at),
+    fallbackUsed: false,
+    writeBudget: {
+      status: sourceCoverageReady ? "allow" : "blocked",
+      allowed: sourceCoverageReady,
+      reason: sourceCoverageReady ? "institution source coverage ready" : "preserve previous complete run; source coverage degraded",
+    },
+    retentionOk: true,
+    issues,
+    warnings,
+    publishAllowed: sourceCoverageReady,
     canvas: Boolean(options.canvas),
     compact: Boolean(options.compact),
     data,
     rows: outputRows,
-    sourceHealth: run?.payload?.sourceHealth || {},
+    sourceHealth: {
+      ...(run?.payload?.sourceHealth || {}),
+      ...sourceHealth,
+    },
     readback: {
       expectedTotal,
       scannedCount,
@@ -246,14 +342,16 @@ module.exports = async function handler(request, response) {
   }
 
   const options = readRequestOptions(request);
-  const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 650,
-    via: "api/institution-latest",
-  });
-  if (cached && payloadMatchesFieldContract(cached, options.fieldContract)) {
-    setDesktopSnapshotCache(response);
-    response.status(200).json(cached);
-    return;
+  if (!options.live) {
+    const cached = await readEndpointFromDesktopSnapshot(request, {
+      timeoutMs: 650,
+      via: "api/institution-latest",
+    });
+    if (cached && payloadMatchesFieldContract(cached, options.fieldContract) && payloadHasMachineState(cached)) {
+      setDesktopSnapshotCache(response);
+      response.status(200).json(cached);
+      return;
+    }
   }
 
   try {
@@ -261,13 +359,14 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
+    const sourceHealth = await fetchInstitutionSourceHealth().catch(() => ({}));
     const latest = await fetchLatestCompleteRows();
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
     setDesktopSnapshotCache(response);
-    response.status(200).json(buildPayload(latest.rows, latest.run, options));
+    response.status(200).json(buildPayload(latest.rows, latest.run, { ...options, sourceHealth }));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

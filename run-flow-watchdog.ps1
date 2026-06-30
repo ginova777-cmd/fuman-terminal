@@ -133,15 +133,8 @@ function Test-InstitutionFresh {
     if (-not (Test-UpdatedAfterSlot $payload.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "institution API not updated after $ExpectedTime; updatedAt=$($payload.updatedAt)" } }
     return @{ ok = $true; reason = "api ok count=$count runId=$($payload.runId)" }
   } catch {
-    Write-WatchdogLog "Institution API freshness check failed: $($_.Exception.Message); falling back to runtime cache"
+    return @{ ok = $false; reason = "institution API freshness check failed; no local cache fallback allowed: $($_.Exception.Message)" }
   }
-  $path = Join-Path $env:FUMAN_DATA_DIR "institution-latest.json"
-  if (-not (Test-Path -LiteralPath $path)) { return @{ ok = $false; reason = "missing institution cache" } }
-  $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-  $count = if ($json.count) { [int]$json.count } else { 0 }
-  if ($count -lt 1000) { return @{ ok = $false; reason = "institution count too low: $count" } }
-  if (-not (Test-UpdatedAfterSlot $json.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "institution not updated after $ExpectedTime; updatedAt=$($json.updatedAt)" } }
-  return @{ ok = $true; reason = "ok count=$count usedDate=$($json.usedDate)" }
 }
 
 function Test-WarrantFresh {

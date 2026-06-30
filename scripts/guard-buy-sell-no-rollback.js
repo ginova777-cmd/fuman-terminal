@@ -88,6 +88,15 @@ const institutionApi = requireIncludes("api/institution-latest.js", [
   "validateCompleteRun",
   "validateReadback",
   "complete-run-readback",
+  "v_institution_source_health",
+  "sourceCoverage",
+  "staleSeconds",
+  "latestRunId",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+  "publishAllowed",
+  "payloadHasMachineState",
   "no-store",
 ]);
 
@@ -150,7 +159,18 @@ requireIncludes("run-flow-watchdog.ps1", [
   "FUMAN_ALERT_RECEIPT_FILE",
   "watchdog_failed",
   "-watchdog-alert.json",
+  "no local cache fallback allowed",
 ]);
+
+requireIncludes("scripts/send-workflow-alert.js", [
+  "FUMAN_ALERT_DRY_RUN",
+  "--dry-run",
+  "smtp:dry-run",
+  "failure alert dry-run",
+]);
+if (/institution-latest\.json/.test(read("run-flow-watchdog.ps1"))) {
+  fail("run-flow-watchdog.ps1 must not use runtime institution-latest.json as a buy-sell freshness fallback");
+}
 
 requireIncludes("run-institution-battle-verify.ps1", [
   "Invoke-InstitutionBattleFailureAlert",
