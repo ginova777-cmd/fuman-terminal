@@ -5,6 +5,9 @@
 create index if not exists idx_fugle_intraday_1m_symbol_candle_time_desc
   on public.fugle_intraday_1m (symbol, candle_time desc);
 
+create index if not exists idx_fugle_intraday_1m_symbol_trade_date_candle_desc
+  on public.fugle_intraday_1m (symbol, trade_date, candle_time desc);
+
 create or replace function public.get_fugle_intraday_1m_coverage_stats(
   p_symbols text[] default null
 )
@@ -44,34 +47,31 @@ as $$
     union
     select symbol from active_symbols
   ),
+  recent_rows as (
+    select
+      m.symbol,
+      m.trade_date,
+      m.candle_time
+    from public.fugle_intraday_1m m
+    join symbols s
+      on s.symbol = m.symbol
+    where m.trade_date >= (((now() at time zone 'Asia/Taipei')::date) - 8)
+  ),
   per_symbol as (
     select
       s.symbol,
-      coalesce(k.today_candle_count, 0) as today_candle_count,
-      coalesce(k.warmup_candle_count, 0) as warmup_candle_count,
-      coalesce(k.continuous_candle_count, 0) as continuous_candle_count,
-      k.latest_candle_time
+      coalesce(count(r.*) filter (
+        where r.trade_date = ((now() at time zone 'Asia/Taipei')::date)
+      ), 0)::integer as today_candle_count,
+      coalesce(count(r.*) filter (
+        where r.trade_date < ((now() at time zone 'Asia/Taipei')::date)
+      ), 0)::integer as warmup_candle_count,
+      least(coalesce(count(r.*), 0), 200)::integer as continuous_candle_count,
+      max(r.candle_time) as latest_candle_time
     from symbols s
-    left join lateral (
-      select
-        count(*) filter (
-          where r.trade_date = ((now() at time zone 'Asia/Taipei')::date)
-        )::integer as today_candle_count,
-        count(*) filter (
-          where r.trade_date < ((now() at time zone 'Asia/Taipei')::date)
-        )::integer as warmup_candle_count,
-        count(*)::integer as continuous_candle_count,
-        max(r.candle_time) as latest_candle_time
-      from (
-        select
-          m.trade_date,
-          m.candle_time
-        from public.fugle_intraday_1m m
-        where m.symbol = s.symbol
-        order by m.candle_time desc
-        limit 200
-      ) r
-    ) k on true
+    left join recent_rows r
+      on r.symbol = s.symbol
+    group by s.symbol
   ),
   aggregated as (
     select

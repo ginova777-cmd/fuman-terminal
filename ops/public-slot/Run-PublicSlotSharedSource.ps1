@@ -576,7 +576,7 @@ function Get-Intraday1mCoverageStats {
   }
 
   try {
-    if ($candidateSymbols.Count -gt 0) {
+    if ($candidateSymbols.Count -gt 0 -and $candidateSymbols.Count -le 100) {
       $batchSize = 25
       $collected = New-Object System.Collections.Generic.List[object]
       for ($offset = 0; $offset -lt $candidateSymbols.Count; $offset += $batchSize) {
@@ -2439,8 +2439,12 @@ function Invoke-FugleFutoptQuoteBatch {
   }
   $cursor = [int]($state.cursor)
   if ($cursor -lt 0 -or $cursor -ge $FutureSymbols.Count) { $cursor = 0 }
+  $effectiveFutoptQuoteBatchSize = $FutoptQuoteBatchSize
+  if ((Get-PublicSlotSession) -eq "regular") {
+    $effectiveFutoptQuoteBatchSize = [math]::Min($effectiveFutoptQuoteBatchSize, 20)
+  }
   $batch = New-Object System.Collections.Generic.List[string]
-  for ($i = 0; $i -lt [math]::Min($FutoptQuoteBatchSize, $FutureSymbols.Count); $i++) {
+  for ($i = 0; $i -lt [math]::Min($effectiveFutoptQuoteBatchSize, $FutureSymbols.Count); $i++) {
     $batch.Add([string]$FutureSymbols[($cursor + $i) % $FutureSymbols.Count])
   }
 
@@ -2457,7 +2461,7 @@ function Invoke-FugleFutoptQuoteBatch {
       Write-Log "WARN futopt quote rate limited; stopping current batch and cooling down."
       break
     }
-    Start-Sleep -Milliseconds ([math]::Max(100, $FutoptQuoteDelayMilliseconds))
+    Start-Sleep -Milliseconds ([math]::Max(40, [math]::Min(100, $FutoptQuoteDelayMilliseconds)))
   }
   $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $FutureSymbols.Count
   Write-JsonFile -Path $FutoptQuoteStateFile -Value ([ordered]@{
