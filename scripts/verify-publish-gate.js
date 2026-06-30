@@ -444,6 +444,9 @@ if (!String(packageJson.scripts?.["verify:cb-alert-path:send"] || "").includes("
 if (!String(packageJson.scripts?.["verify:cost-governance-audit"] || "").includes("scripts/verify-cost-governance-audit.js")) {
   issues.push("package.json missing scripts.verify:cost-governance-audit for Supabase cleanup before/after audit proof");
 }
+if (!String(packageJson.scripts?.["verify:supabase-publish-hard-gate"] || "").includes("scripts/verify-supabase-publish-hard-gate.js")) {
+  issues.push("package.json missing scripts.verify:supabase-publish-hard-gate for source coverage publish blocker");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -603,7 +606,9 @@ const retiredArtifactsVerifier = read("scripts/verify-retired-artifacts-clean.js
 const releaseManifestApi = read("api/release-manifest.js");
 const strategy2CompleteRunPublisher = read("scripts/publish-strategy2-complete-run.js");
 const strategy2SharedSource = read("lib/supabase-public-slot.js");
+const strategy2SourcePublishGate = read("lib/strategy2-source-publish-gate.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
+const supabasePublishHardGate = read("scripts/verify-supabase-publish-hard-gate.js");
 const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
 const warrantFlowScanner = read("scripts/scan-warrant-flow-cache.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
@@ -2294,6 +2299,49 @@ for (const marker of [
 ]) {
   if (!costGovernanceAuditPatch.includes(marker)) {
     issues.push(`SupabaseCostGovernanceAuditPatch_20260630.sql missing cleanup audit marker ${marker}`);
+  }
+}
+for (const marker of [
+  "assertStrategy2SourcePublishGate",
+  "source_status fugle_shared_source",
+  "fresh_quote_coverage_120s",
+  "today_1m_symbols",
+  "ready_ge_35",
+  "intraday_1m_stale_seconds",
+  "fallbackUsed=true",
+  "PreserveLatest; do not write latest",
+]) {
+  if (!strategy2SourcePublishGate.includes(marker)) {
+    issues.push(`strategy2-source-publish-gate.js missing source publish gate marker ${marker}`);
+  }
+}
+for (const marker of [
+  "verify-supabase-publish-hard-gate.js",
+  "sourceCoverage",
+  "staleSeconds",
+  "latestRunId",
+  "fallbackUsed",
+  "writeBudget",
+  "retentionOk",
+  "publish_blocked; preserve previous complete run; do not write latest",
+  "send-workflow-alert.js",
+  "supabase-publish-hard-gate-alert.json",
+]) {
+  if (!supabasePublishHardGate.includes(marker)) {
+    issues.push(`verify-supabase-publish-hard-gate.js missing source hard gate marker ${marker}`);
+  }
+}
+for (const marker of [
+  "assertStrategy2SourcePublishGate",
+  "writeStrategy2BlockedReceipt",
+  "preservedLatest",
+  "publishBlocked",
+  "sendStrategy2SourceGateAlert",
+  "did not write latest",
+  "strategy2-source-publish-gate-alert.json",
+]) {
+  if (!strategy2CompleteRunPublisher.includes(marker)) {
+    issues.push(`publish-strategy2-complete-run.js missing source publish blocker marker ${marker}`);
   }
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {

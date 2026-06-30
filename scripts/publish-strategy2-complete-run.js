@@ -1,12 +1,16 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { assertStrategy2SourcePublishGate } = require("../lib/strategy2-source-publish-gate");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
 const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
+const STRATEGY2_SOURCE_GATE_ALERT_RECEIPT = process.env.STRATEGY2_SOURCE_GATE_ALERT_RECEIPT
+  || path.join(DATA_DIR, "scan-receipts", "strategy2-source-publish-gate-alert.json");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -178,6 +182,86 @@ function writeStrategy2Receipt(report, runId, scanDate, source) {
   return receipt;
 }
 
+function writeStrategy2BlockedReceipt(gate, error) {
+  const receiptDir = path.join(DATA_DIR, "scan-receipts");
+  fs.mkdirSync(receiptDir, { recursive: true });
+  const now = new Date().toISOString();
+  const latestRunId = gate?.latestRunId || gate?.sourceCoverage?.payload?.latest_run_id || "";
+  const receipt = {
+    strategy: "strategy2",
+    label: "strategy2 intraday complete-run publisher",
+    tier: "critical",
+    startedAt: now,
+    finishedAt: now,
+    status: "blocked",
+    exitCode: 3,
+    scanned: 0,
+    total: 0,
+    matches: 0,
+    complete: false,
+    qualityStatus: "blocked",
+    fallback: false,
+    preservedLatest: true,
+    publishBlocked: true,
+    publishBlockedReason: error?.message || gate?.issues?.join("; ") || "source gate blocked",
+    runId: latestRunId,
+    marketDate: "",
+    updatedAt: now,
+    payloadPath: "preserve-latest",
+    source: "supabase-publish-hard-gate",
+    warnings: Array.isArray(gate?.warnings) ? gate.warnings : [],
+    blockingReason: error?.message || gate?.issues?.join("; ") || "source gate blocked",
+    sourceGate: gate || null,
+    log: "publish blocked before write; preserved previous complete run",
+  };
+  fs.writeFileSync(path.join(receiptDir, "strategy2.json"), JSON.stringify(receipt, null, 2) + "\n", "utf8");
+  return receipt;
+}
+
+function sendStrategy2SourceGateAlert(gate, error) {
+  const text = [
+    "Strategy2 complete-run publish was blocked before write.",
+    "Action: preserved previous complete run; did not write latest; did not overwrite complete run.",
+    "",
+    `reason=${error?.message || ""}`,
+    `latestRunId=${gate?.latestRunId || ""}`,
+    `fallbackUsed=${gate?.fallbackUsed === true}`,
+    `staleSeconds=${gate?.staleSeconds ?? ""}`,
+    "",
+    JSON.stringify({
+      sourceCoverage: gate?.sourceCoverage || {},
+      issues: gate?.issues || [],
+      warnings: gate?.warnings || [],
+      thresholds: gate?.thresholds || {},
+    }, null, 2),
+  ].join("\n");
+  const result = spawnSync(process.execPath, [
+    "--use-system-ca",
+    path.join(ROOT, "scripts", "send-workflow-alert.js"),
+    "--kind=strategy2-source-publish-gate",
+    `--receipt=${STRATEGY2_SOURCE_GATE_ALERT_RECEIPT}`,
+    "--subject=Fuman Strategy2 publish blocked by Supabase source gate",
+  ], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      FUMAN_ALERT_KIND: "strategy2-source-publish-gate",
+      FUMAN_ALERT_SOURCE: "publish-strategy2-complete-run.js",
+      FUMAN_ALERT_RECEIPT_FILE: STRATEGY2_SOURCE_GATE_ALERT_RECEIPT,
+      FUMAN_ALERT_SUBJECT: "Fuman Strategy2 publish blocked by Supabase source gate",
+      FUMAN_ALERT_TEXT: text,
+    },
+  });
+  return {
+    ok: result.status === 0,
+    exitCode: result.status,
+    receiptFile: STRATEGY2_SOURCE_GATE_ALERT_RECEIPT,
+    stdout: String(result.stdout || "").slice(0, 1000),
+    stderr: String(result.stderr || "").slice(0, 1000),
+  };
+}
+
 async function strategy2CompleteRunAlreadyPublished(config, runId) {
   const rows = await fetchSupabaseJson(
     config.supabaseUrl + "/rest/v1/v_strategy2_latest_complete_run?select=run_id&run_id=eq." + encodeURIComponent(runId) + "&limit=1",
@@ -228,6 +312,15 @@ async function publishStrategy2Snapshot(report, runId, scanDate) {
 
 async function main() {
   const config = supabaseConfig();
+  try {
+    await assertStrategy2SourcePublishGate(config, { stage: "complete-run-publish" });
+  } catch (error) {
+    const receipt = writeStrategy2BlockedReceipt(error.gate, error);
+    const alert = sendStrategy2SourceGateAlert(error.gate, error);
+    console.log(`[strategy2-complete-run] blocked source gate preservedLatest=true receipt=${receipt.runId || "none"} alert=${alert.ok ? "ok" : "failed"}`);
+    process.exitCode = 3;
+    return;
+  }
   const { source, payload } = await readLatestReportFromSupabase(config);
   const report = buildCompleteRunPayload(payload);
   if (report.records.length <= 0 && report.events.length <= 0) {
