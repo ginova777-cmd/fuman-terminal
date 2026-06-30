@@ -113,11 +113,26 @@ async function main() {
   const fieldReady = sessionReady.filter((quote) => passesFieldGate(quote).ok);
   const ranked = rankCandidates(fieldReady).slice(0, tvLimit);
   let tvOk = 0;
+  let fallbackUsed = false;
+  const fallbackDetails = [];
   const examples = [];
   for (const quote of ranked) {
     const result = await fetchStrategy3TvCandles(quote.code, 160).catch((error) => ({ error: error?.message || String(error), candles: [], rows: [], quality: {} }));
     const tv = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
     if (tv.ok) tvOk += 1;
+    if (result.fallbackFrom) {
+      fallbackUsed = true;
+      if (fallbackDetails.length < 12) {
+        fallbackDetails.push({
+          symbol: quote.code,
+          name: quote.name,
+          fallbackFrom: result.fallbackFrom,
+          fallbackReason: result.fallbackReason || "",
+          fallbackError: result.fallbackError || "",
+          candleSource: result.source || "",
+        });
+      }
+    }
     if (examples.length < 12) {
       examples.push({
         symbol: quote.code,
@@ -153,10 +168,19 @@ async function main() {
   const latestQuoteDate = latestDate(merged.map((quote) => quote.updatedAt || quote.quoteTimeRaw));
   const latestCandleDate = latestDate(merged.map((quote) => quote.latestCandleTime));
   const ready = latest.ok && sessionReady.length >= minIntraday1mCandidates;
+  const issues = ready ? [] : [`latest quotes ok=${latest.ok}; session1m=${sessionReady.length}/${minIntraday1mCandidates}`];
+  const warnings = fallbackUsed
+    ? ["TV candle diagnostic fallback used; publish gate remains formal Supabase source-chain"]
+    : [];
   process.stdout.write(`${JSON.stringify({
     ok: true,
     ready,
     source: latest.source,
+    fallbackUsed,
+    fallbackScope: fallbackUsed ? ["tv_candle_diagnostic"] : [],
+    fallbackDetails,
+    issues,
+    warnings,
     quoteReadyView: {
       status: "retired",
       retired: true,

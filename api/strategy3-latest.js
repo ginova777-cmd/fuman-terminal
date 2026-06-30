@@ -16,12 +16,42 @@ const TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_re
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
 const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
 const DESKTOP_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || process.env.FUMAN_STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2500);
+const FORMAL_SOURCE_CHAIN = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume";
 
 function apiOnlyError(reason = "") {
   return {
     ok: false,
+    status: "critical",
     error: "strategy3_api_only_unavailable",
     detail: reason,
+    sourceCoverage: {
+      source: FORMAL_SOURCE_CHAIN,
+      fresh_quote_coverage_120s: 0,
+      freshQuoteCoverage120s: 0,
+      today_1m_symbols: 0,
+      today1mSymbols: 0,
+      ready_ge_35: 0,
+      readyGe35: 0,
+      latest_candle_time: "",
+      latestCandleTime: "",
+      intraday_1m_stale_seconds: null,
+      intraday1mStaleSeconds: null,
+      preopenCoverage: null,
+      dailyVolumeFreshness: "",
+    },
+    staleSeconds: null,
+    latestRunId: "",
+    fallbackUsed: false,
+    writeBudget: {
+      ok: false,
+      status: "blocked",
+      mode: "complete-run-preserve-on-degraded",
+      latestOverwriteBlockedOnDegraded: true,
+      reason,
+    },
+    retentionOk: false,
+    issues: [reason || "strategy3 api unavailable"].filter(Boolean),
+    warnings: [],
     cacheSource: "none",
     matches: [],
     transport: {
@@ -60,6 +90,12 @@ async function fetchRowsFrom(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function secondsSince(value) {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.round((Date.now() - parsed) / 1000));
 }
 
 function parseRequestOptions(request) {
@@ -116,17 +152,162 @@ function strategy3TvOk(row) {
   return Boolean(payload?.tvOk || payload?.tvFlame || payload?.tvOvernightEntry?.ok);
 }
 
-function normalizeStrategy3ApiContract(payload) {
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function findSourceCheck(sourceDriftHealth, source) {
+  return asArray(sourceDriftHealth?.checks).find((item) => item?.source === source) || {};
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = cleanNumber(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function hasTvDiagnosticFallback(rows) {
+  return asArray(rows).some((row) => {
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : row;
+    return Boolean(payload?.candleFallbackFrom || payload?.tvCandleFallbackFrom);
+  });
+}
+
+function hasSourceFallback(sourceWarnings) {
+  return asArray(sourceWarnings).some((warning) => /fallback/i.test(String(warning || "")));
+}
+
+function liveProbeIssues(probe) {
+  const issues = [];
+  const sourceStatus = String(probe?.sourceStatus?.status || "").toLowerCase();
+  const scannerStatus = String(probe?.scannerHealth?.status || "").toLowerCase();
+  if (sourceStatus && !["ok", "ready"].includes(sourceStatus)) {
+    issues.push(`source_status=${sourceStatus}${probe?.sourceStatus?.message ? `: ${probe.sourceStatus.message}` : ""}`);
+  }
+  if (scannerStatus && scannerStatus !== "ready") {
+    issues.push(`scanner_resource_health=${scannerStatus}${probe?.scannerHealth?.reason ? `: ${probe.scannerHealth.reason}` : ""}`);
+  }
+  for (const issue of asArray(probe?.issues)) issues.push(issue);
+  return issues;
+}
+
+function buildUnattendedContract(payload, context = {}) {
+  const sourceHealth = payload?.sourceHealth && typeof payload.sourceHealth === "object" ? payload.sourceHealth : {};
+  const sourceDriftHealth = payload?.sourceDriftHealth && typeof payload.sourceDriftHealth === "object" ? payload.sourceDriftHealth : {};
+  const scanCoverage = payload?.scanCoverage && typeof payload.scanCoverage === "object" ? payload.scanCoverage : {};
+  const sourceWarnings = asArray(payload?.sourceWarnings);
+  const rows = normalizeSnapshotRows(payload);
+  const liveProbe = context.liveProbe || null;
+  const sourceStatusPayload = liveProbe?.sourceStatus?.payload && typeof liveProbe.sourceStatus.payload === "object" ? liveProbe.sourceStatus.payload : {};
+  const quoteCheck = findSourceCheck(sourceDriftHealth, "fugle_quotes_latest");
+  const intradayCheck = findSourceCheck(sourceDriftHealth, "v_strategy3_intraday_1m_status");
+  const dailyVolumeCheck = findSourceCheck(sourceDriftHealth, "stock_daily_volume");
+  const latestCandleTime = sourceStatusPayload.latest_candle_time
+    || sourceStatusPayload.intraday_1m_latest_candle_time
+    || sourceHealth.latestCandleTime
+    || "";
+  const staleSeconds = firstNumber(
+    sourceStatusPayload.intraday_1m_stale_seconds,
+    sourceStatusPayload.stale_seconds,
+    latestCandleTime ? secondsSince(latestCandleTime) : null
+  );
+  const tvDiagnosticFallbackUsed = hasTvDiagnosticFallback(rows);
+  const sourceFallbackUsed = hasSourceFallback(sourceWarnings);
+  const fallbackUsed = sourceFallbackUsed || tvDiagnosticFallbackUsed;
+  const issues = [
+    ...asArray(sourceHealth.issues),
+    ...(sourceDriftHealth.status && sourceDriftHealth.status !== "ready" ? [`sourceDriftHealth=${sourceDriftHealth.status}: ${sourceDriftHealth.reason || ""}`.trim()] : []),
+    ...liveProbeIssues(liveProbe),
+  ].filter(Boolean);
+  const warnings = [
+    ...sourceWarnings,
+    ...asArray(sourceHealth.warnings),
+    ...(tvDiagnosticFallbackUsed ? ["TV candle diagnostic fallback used; publish gate remains formal Supabase source-chain"] : []),
+  ].filter(Boolean);
+  const liveSourceStatus = String(liveProbe?.sourceStatus?.status || "").toLowerCase();
+  const scannerStatus = String(liveProbe?.scannerHealth?.status || "").toLowerCase();
+  const hardSourceStatus = ["critical", "failed", "error"].includes(liveSourceStatus)
+    || ["failed", "not_ready"].includes(scannerStatus);
+  const degradedSourceStatus = liveSourceStatus === "degraded"
+    || scannerStatus === "stale"
+    || scannerStatus === "degraded"
+    || sourceFallbackUsed
+    || issues.length > 0;
+  const status = hardSourceStatus
+    ? "critical"
+    : degradedSourceStatus
+      ? "degraded"
+      : "ready";
+  return {
+    status,
+    sourceCoverage: {
+      source: FORMAL_SOURCE_CHAIN,
+      fresh_quote_coverage_120s: cleanNumber(sourceStatusPayload.fresh_quote_coverage_120s),
+      freshQuoteCoverage120s: cleanNumber(sourceStatusPayload.fresh_quote_coverage_120s),
+      today_1m_symbols: cleanNumber(sourceStatusPayload.today_1m_symbols || sourceStatusPayload.intraday_1m_symbols_today),
+      today1mSymbols: cleanNumber(sourceStatusPayload.today_1m_symbols || sourceStatusPayload.intraday_1m_symbols_today),
+      ready_ge_35: cleanNumber(sourceStatusPayload.ready_ge_35 || sourceStatusPayload.ready_ge_35_symbols),
+      readyGe35: cleanNumber(sourceStatusPayload.ready_ge_35 || sourceStatusPayload.ready_ge_35_symbols),
+      latest_candle_time: latestCandleTime,
+      latestCandleTime,
+      intraday_1m_stale_seconds: staleSeconds,
+      intraday1mStaleSeconds: staleSeconds,
+      preopenCoverage: sourceStatusPayload.preopen_coverage ?? sourceStatusPayload.preopen_hot_coverage ?? null,
+      dailyVolumeFreshness: dailyVolumeCheck.latestDate || "",
+      quoteRows: cleanNumber(quoteCheck.rowCount),
+      quoteMinRequired: cleanNumber(quoteCheck.minRequired),
+      intradayStatusRows: cleanNumber(intradayCheck.rowCount),
+      intradayStatusMinRequired: cleanNumber(intradayCheck.minRequired),
+      dailyVolumeRows: cleanNumber(dailyVolumeCheck.rowCount),
+      dailyVolumeMinRequired: cleanNumber(dailyVolumeCheck.minRequired),
+      sessionReadyCount: cleanNumber(sourceHealth.intraday1mReadyCount || scanCoverage.sessionReadyCandidates),
+      sourceUniverseCount: cleanNumber(sourceHealth.stockUniverseCount || scanCoverage.sourceUniverseCount || payload.total),
+      fieldGateCandidates: cleanNumber(scanCoverage.fieldGateCandidates || payload.count),
+    },
+    staleSeconds,
+    latestRunId: String(payload.runId || context.latestRunId || ""),
+    fallbackUsed,
+    fallbackScope: [
+      sourceFallbackUsed ? "source" : "",
+      tvDiagnosticFallbackUsed ? "tv_candle_diagnostic" : "",
+    ].filter(Boolean),
+    writeBudget: {
+      ok: status === "ready",
+      status: status === "ready" ? "protected" : "blocked",
+      mode: "complete-run-preserve-on-degraded",
+      latestOverwriteBlockedOnDegraded: status !== "ready",
+      reason: status === "ready" ? "" : issues.join("; ") || `source status ${status}`,
+    },
+    retentionOk: Boolean(payload.complete !== false && (payload.runId || context.latestRunId)),
+    issues,
+    warnings,
+  };
+}
+
+function attachStrategy3UnattendedContract(payload, context = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const contract = buildUnattendedContract(payload, context);
+  return {
+    ...payload,
+    ...contract,
+    sourceHealth: payload.sourceHealth || null,
+  };
+}
+
+function normalizeStrategy3ApiContract(payload, context = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const rows = normalizeSnapshotRows(payload);
   const tvPassCount = Object.prototype.hasOwnProperty.call(payload, "tvPassCount")
     ? cleanNumber(payload.tvPassCount)
     : cleanNumber(payload.selfTest?.tvPassCount || payload.publishedSelfTest?.tvPassCount)
       || rows.filter(strategy3TvOk).length;
-  return {
+  return attachStrategy3UnattendedContract({
     ...payload,
     tvPassCount,
-  };
+  }, context);
 }
 
 function normalizeSourceHealth(value) {
@@ -144,6 +325,30 @@ function normalizeSourceHealth(value) {
   return sourceHealth;
 }
 
+async function fetchStrategy3LiveHealthProbe() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const [scannerResult, sourceStatusResult] = await Promise.allSettled([
+    fetchRowsFrom("v_scanner_resource_health", [
+      "select=strategy,status,latest_date,row_count,reason,suggested_scanner_behavior,updated_at",
+      "strategy=eq.Strategy3",
+      "limit=1",
+    ].join("&")),
+    fetchRowsFrom("source_status", [
+      "select=source_name,status,updated_at,stale_seconds,message,payload",
+      "source_name=eq.fugle_shared_source",
+      "limit=1",
+    ].join("&")),
+  ]);
+  const issues = [];
+  if (scannerResult.status === "rejected") issues.push(`v_scanner_resource_health read failed: ${scannerResult.reason?.message || scannerResult.reason}`);
+  if (sourceStatusResult.status === "rejected") issues.push(`source_status read failed: ${sourceStatusResult.reason?.message || sourceStatusResult.reason}`);
+  return {
+    scannerHealth: scannerResult.status === "fulfilled" ? scannerResult.value?.[0] || null : null,
+    sourceStatus: sourceStatusResult.status === "fulfilled" ? sourceStatusResult.value?.[0] || null : null,
+    issues,
+  };
+}
+
 function buildPayload(rows, run, options = {}) {
   const first = rows[0] || {};
   const matches = rows
@@ -156,7 +361,7 @@ function buildPayload(rows, run, options = {}) {
   const resultCount = cleanNumber(run?.result_count || run?.payload?.count);
   const displayMode = String(run?.payload?.displayMode || first.payload?.displayMode || "").trim();
   const noMatchReason = String(run?.payload?.noMatchReason || first.payload?.noMatchReason || "").trim();
-  return {
+  return attachStrategy3UnattendedContract({
     ok: true,
     source: "supabase:strategy3_scan_results",
     cacheSource: "supabase-api",
@@ -184,7 +389,7 @@ function buildPayload(rows, run, options = {}) {
       via: "api/strategy3-latest",
       fetchedAt: new Date().toISOString(),
     },
-  };
+  }, { liveProbe: options.liveProbe, latestRunId: String(first.run_id || run?.run_id || "") });
 }
 
 function buildSnapshotPayload(snapshot, options = {}) {
@@ -196,7 +401,7 @@ function buildSnapshotPayload(snapshot, options = {}) {
     .map((row, index) => normalizePayload({ ...row, rank: row.rank || index + 1, payload: row }));
   const count = Math.max(cleanNumber(sourcePayload.count), rows.length);
   const total = Math.max(cleanNumber(sourcePayload.total), count);
-  return {
+  return attachStrategy3UnattendedContract({
     ...sourcePayload,
     ok: sourcePayload.ok !== false,
     source: sourcePayload.source || "strategy3_scan_results",
@@ -224,7 +429,7 @@ function buildSnapshotPayload(snapshot, options = {}) {
       via: "api/strategy3-latest",
       fetchedAt: new Date().toISOString(),
     },
-  };
+  }, { liveProbe: options.liveProbe, latestRunId: String(sourcePayload.runId || snapshot.snapshotId || "") });
 }
 
 async function readLatestSnapshot(options) {
@@ -276,13 +481,15 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const options = parseRequestOptions(request);
+  const liveProbe = await fetchStrategy3LiveHealthProbe().catch((error) => ({ issues: [`strategy3 live health probe failed: ${error?.message || String(error)}`] }));
   const cached = await readEndpointFromDesktopSnapshot(request, {
     timeoutMs: DESKTOP_SNAPSHOT_READ_TIMEOUT_MS,
     via: "api/strategy3-latest",
   });
   if (cached) {
     setDesktopSnapshotCache(response);
-    response.status(200).json(normalizeStrategy3ApiContract(cached));
+    response.status(200).json(normalizeStrategy3ApiContract(cached, { liveProbe }));
     return;
   }
 
@@ -291,11 +498,10 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const options = parseRequestOptions(request);
-    const snapshot = await readLatestSnapshot(options);
+    const snapshot = await readLatestSnapshot({ ...options, liveProbe });
     if (snapshot) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(normalizeStrategy3ApiContract(snapshot));
+      response.status(200).json(normalizeStrategy3ApiContract(snapshot, { liveProbe }));
       return;
     }
     const latest = await fetchLatestCompleteRows(options.limit);
@@ -304,7 +510,7 @@ module.exports = async function handler(request, response) {
       return;
     }
     setDesktopSnapshotCache(response);
-    response.status(200).json(buildPayload(latest.rows, latest.run, options));
+    response.status(200).json(buildPayload(latest.rows, latest.run, { ...options, liveProbe }));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

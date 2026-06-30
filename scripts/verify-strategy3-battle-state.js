@@ -165,15 +165,48 @@ async function main() {
   details.api = {
     statusCode: api.statusCode,
     ok: api.body?.ok,
+    status: api.body?.status,
     runId: api.body?.runId,
+    latestRunId: api.body?.latestRunId,
     count: api.body?.count,
     tvPassCount: api.body?.tvPassCount,
     usedDate: api.body?.usedDate,
+    staleSeconds: api.body?.staleSeconds,
+    fallbackUsed: api.body?.fallbackUsed,
+    fallbackScope: api.body?.fallbackScope,
+    writeBudget: api.body?.writeBudget,
+    retentionOk: api.body?.retentionOk,
+    sourceCoverage: api.body?.sourceCoverage,
+    issues: api.body?.issues,
+    warnings: api.body?.warnings,
   };
   if (api.statusCode !== 200 || api.body?.ok !== true) issues.push("api_not_ok");
   if (cleanNumber(api.body?.count) < MIN_RESULT_ROWS) issues.push(`api_count_${api.body?.count}_below_${MIN_RESULT_ROWS}`);
   if (!Object.prototype.hasOwnProperty.call(api.body || {}, "tvPassCount")) issues.push("api_missing_tvPassCount");
   if (!api.body?.runId) issues.push("api_missing_runId");
+  for (const field of ["status", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "writeBudget", "retentionOk", "issues", "warnings"]) {
+    if (!Object.prototype.hasOwnProperty.call(api.body || {}, field)) issues.push(`api_missing_${field}`);
+  }
+  if (api.body?.latestRunId && api.body?.runId && String(api.body.latestRunId) !== String(api.body.runId)) {
+    issues.push(`api_latestRunId_${api.body.latestRunId}_does_not_match_runId_${api.body.runId}`);
+  }
+  if (!["ready", "degraded", "critical", "stale"].includes(String(api.body?.status || ""))) {
+    issues.push(`api_bad_status_${api.body?.status || "missing"}`);
+  }
+  if (!api.body?.sourceCoverage || typeof api.body.sourceCoverage !== "object") {
+    issues.push("api_sourceCoverage_not_object");
+  } else {
+    for (const field of ["fresh_quote_coverage_120s", "today_1m_symbols", "ready_ge_35", "latest_candle_time", "intraday_1m_stale_seconds", "dailyVolumeFreshness"]) {
+      if (!Object.prototype.hasOwnProperty.call(api.body.sourceCoverage, field)) issues.push(`api_sourceCoverage_missing_${field}`);
+    }
+  }
+  if (!api.body?.writeBudget || typeof api.body.writeBudget !== "object") issues.push("api_writeBudget_not_object");
+  if (api.body?.retentionOk !== true) issues.push("api_retentionOk_not_true");
+  if (!Array.isArray(api.body?.issues)) issues.push("api_issues_not_array");
+  if (!Array.isArray(api.body?.warnings)) issues.push("api_warnings_not_array");
+  if (api.body?.fallbackUsed === true && Array.isArray(api.body?.fallbackScope) && api.body.fallbackScope.includes("source")) {
+    issues.push("api_source_fallback_used");
+  }
 
   const health = await restSafe("v_scanner_resource_health?select=strategy,status,latest_date,row_count,reason&strategy=eq.Strategy3&limit=1", { attempts: REST_ATTEMPTS, timeoutMs: 20000 });
   const healthRow = health.rows?.[0] || {};
@@ -262,6 +295,11 @@ async function main() {
     fieldGateReadyCount: livePayload.fieldGateReadyCount,
     tvChecked: livePayload.tvChecked,
     tvOk: livePayload.tvOk,
+    fallbackUsed: livePayload.fallbackUsed,
+    fallbackScope: livePayload.fallbackScope,
+    fallbackDetails: livePayload.fallbackDetails,
+    issues: livePayload.issues,
+    warnings: livePayload.warnings,
     reason: livePayload.reason,
   } : {
     ok: false,

@@ -106,6 +106,11 @@ const CONTRACTS = [
       sourceTable("v_strategy3_intraday_1m_status", [
         "symbol", "latest_candle_time", "today_candle_count",
       ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
+      retiredSourceTable(
+        "v_strategy3_quote_ready",
+        "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+        "Strategy3 formal gating no longer reads quote-ready view"
+      ),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
     ],
@@ -253,6 +258,20 @@ function sourceTable(table, fields, options = {}) {
     purpose: options.purpose || "",
     healthStatusField: options.healthStatusField || "",
     acceptedHealthStatuses: options.acceptedHealthStatuses || ["ready", "ok", "healthy", "complete"],
+  };
+}
+
+function retiredSourceTable(table, replacement, reason = "") {
+  return {
+    kind: "retired-source-table",
+    table,
+    select: "",
+    query: "",
+    level: "info",
+    minRows: 0,
+    purpose: "retired source; not a formal gate",
+    replacement,
+    reason,
   };
 }
 
@@ -473,6 +492,17 @@ function sleep(ms) {
 }
 
 async function checkOne(strategy, check) {
+  if (check.kind === "retired-source-table") {
+    return {
+      ...check,
+      ok: true,
+      level: "info",
+      rowCount: 0,
+      newestDate: "",
+      retired: true,
+      issues: [],
+    };
+  }
   const result = await fetchRows(check.table, check.select, check.query);
   const issues = [];
   if (!result.ok) {
@@ -558,7 +588,9 @@ function markdown(results) {
   ];
   for (const strategy of results) {
     for (const check of strategy.checks) {
-      const verdict = check.ok ? "OK" : `${check.level.toUpperCase()}: ${check.issues.join("; ")}`;
+      const verdict = check.retired
+        ? `RETIRED: replaced by ${check.replacement}${check.reason ? ` (${check.reason})` : ""}`
+        : check.ok ? "OK" : `${check.level.toUpperCase()}: ${check.issues.join("; ")}`;
       lines.push(`| ${strategy.label} | ${check.table} | ${check.kind} | ${check.rowCount} | ${check.newestDate || "--"} | ${verdict} |`);
     }
   }
