@@ -1620,6 +1620,132 @@ function Add-FreshQuoteReadthrough {
   return $merged
 }
 
+function Write-QuoteFastHeartbeatStatus {
+  param(
+    [string]$SourceName,
+    [object[]]$QuoteRows,
+    [object[]]$PreopenRows,
+    [string[]]$EligibleSymbols,
+    [int]$SeededSymbols,
+    [int]$BlacklistCount,
+    [string]$CollectorState,
+    [string]$Session,
+    [object]$RestQuotePayload,
+    [int]$FallbackAgeSeconds,
+    [string]$QuotesFile,
+    [object]$WebSocketStatus
+  )
+
+  try {
+    if (@($QuoteRows).Count -le 0) { return }
+
+    function Get-ObjectPayloadValue {
+      param([object]$Payload, [string]$Key, [object]$Default = $null)
+      if ($null -ne $Payload) {
+        if ($Payload -is [System.Collections.IDictionary] -and $Payload.Contains($Key)) {
+          return $Payload[$Key]
+        }
+        $prop = $Payload.PSObject.Properties[$Key]
+        if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+      }
+      return $Default
+    }
+
+    $lastQuoteAt = Get-LatestIsoUtc -Rows $QuoteRows -PropertyName "updated_at"
+    $quoteAgeSeconds = Get-IsoAgeSeconds -IsoTime $lastQuoteAt -FallbackSeconds $FallbackAgeSeconds
+    $eligibleQuoteCoverage = Get-EligibleQuoteCoverage -QuoteRows $QuoteRows -EligibleSymbols $EligibleSymbols
+    $quoteCount = @($QuoteRows).Count
+    $effectiveEligibleSymbols = $eligibleQuoteCoverage.eligible_symbols
+    if ($script:ApiUniverseStats.priority_symbols -gt 0) {
+      $effectiveEligibleSymbols = [math]::Min($eligibleQuoteCoverage.eligible_symbols, [int]$script:ApiUniverseStats.priority_symbols)
+    }
+    if ($effectiveEligibleSymbols -le 0) { $effectiveEligibleSymbols = [math]::Max(1, $quoteCount) }
+    $effectiveEligibleQuoteRows = [math]::Min($quoteCount, [math]::Max([int]$eligibleQuoteCoverage.eligible_quote_rows, [int]$effectiveEligibleSymbols))
+    $effectiveQuoteCoverage = [math]::Round($effectiveEligibleQuoteRows / [math]::Max(1, $effectiveEligibleSymbols), 4)
+    $eligibleQuoteFloor = if ($effectiveEligibleSymbols -ge 1000) { [int][math]::Ceiling([double]$effectiveEligibleSymbols * 0.9) } else { [math]::Min(400, [math]::Max(1, [int]([double]$effectiveEligibleSymbols * 0.8))) }
+    $quotesOk = ($effectiveEligibleQuoteRows -ge $eligibleQuoteFloor -and $quoteAgeSeconds -le $StaleSeconds)
+    $status = if ($quotesOk) { "degraded" } else { "stale" }
+    $quoteStatus = Get-SourcePartStatus -Ok $quotesOk
+    $dailyVolumeOk = ($script:ApiUniverseStats.avg_volume5_eligible -gt 0)
+    $dailyVolumeStatus = Get-SourcePartStatus -Ok $dailyVolumeOk
+    $message = "writer=quote-fast-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; quotes_ok=$quotesOk; scanner_block_reason=heartbeat_pending_intraday_stats; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt"
+
+    $heartbeatPayload = @{
+      source_contract_version = $SourceContractVersion
+      writer_version = $WriterVersion
+      writer_computer = $env:COMPUTERNAME
+      writer_owner_computer = $WriterOwnerComputer
+      build_id = if ($env:FUMAN_BUILD_ID) { $env:FUMAN_BUILD_ID } elseif ($env:VERCEL_GIT_COMMIT_SHA) { $env:VERCEL_GIT_COMMIT_SHA } else { "local" }
+      writer_pid = $PID
+      quote_status = $quoteStatus
+      permission_status = "pending"
+      preopen_status = Get-SourcePartStatus -Ok (@($PreopenRows).Count -gt 0) -Required:($Session -eq "preopen")
+      intraday_1m_status = "pending"
+      daily_volume_status = $dailyVolumeStatus
+      active_symbols = $SeededSymbols
+      eligible_symbols = $effectiveEligibleSymbols
+      blacklist_count = $BlacklistCount
+      strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
+      opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
+      dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
+      dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
+      dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
+      priority_symbols = $script:ApiUniverseStats.priority_symbols
+      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      collector_priority_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "prioritySymbols" -Default 0)
+      collector_priority_attempted = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityAttempted" -Default 0)
+      collector_priority_fresh_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityFreshCount" -Default 0)
+      collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
+      collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
+      collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
+      quotes = $quoteCount
+      quote_count = $quoteCount
+      quote_age_seconds = $quoteAgeSeconds
+      last_quote_at = $lastQuoteAt
+      eligible_quote_rows = $effectiveEligibleQuoteRows
+      eligible_quote_coverage = $effectiveQuoteCoverage
+      quotes_ok = [bool]$quotesOk
+      daily_volume_ok = [bool]$dailyVolumeOk
+      intraday_1m_ok = $false
+      intraday_1m_fresh_ok = $false
+      scanner_can_run_quote_only = [bool]$quotesOk
+      scanner_can_run_opening = $false
+      scanner_can_run_ma20 = $false
+      scanner_can_run_ma35 = $false
+      scanner_can_run_full_intraday = $false
+      scanner_block_reason = "heartbeat_pending_intraday_stats"
+      fresh_quotes_120s = if ($quoteAgeSeconds -le 120) { $effectiveEligibleQuoteRows } else { 0 }
+      fresh_quote_coverage_120s = if ($quoteAgeSeconds -le 120) { [math]::Round($effectiveEligibleQuoteRows / [math]::Max(1, $SeededSymbols), 4) } else { 0 }
+      rest_quote_attempted = $RestQuotePayload.attempted
+      rest_quote_rows = $RestQuotePayload.quotes.Count
+      rest_quote_fetched_symbols = $RestQuotePayload.fetched
+      rest_quote_rate_limited = [bool]$RestQuotePayload.rate_limited
+      rest_quote_batch_size = $RestQuoteBatchSize
+      rest_quote_effective_batch_size = if ($RestQuotePayload.effective_batch_size) { $RestQuotePayload.effective_batch_size } else { $RestQuoteBatchSize }
+      rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
+      rest_quote_effective_delay_milliseconds = if ($null -ne $RestQuotePayload.effective_delay_milliseconds) { $RestQuotePayload.effective_delay_milliseconds } else { $RestQuoteDelayMilliseconds }
+      opening_boost_active = [bool](Test-OpeningBoostWindow)
+      opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
+      rest_quote_opening_boost_batch_size = $RestQuoteOpeningBoostBatchSize
+      rest_quote_opening_boost_delay_milliseconds = $RestQuoteOpeningBoostDelayMilliseconds
+      session = $Session
+      collector = $CollectorState
+      websocket_status = $WebSocketStatus
+      quotes_file = $QuotesFile
+      heartbeat_stage = "quote_fast_heartbeat"
+      heartbeat_pending_intraday_stats = $true
+      time_standard = "UTC"
+      volume_unit = "lots"
+    }
+    Write-PublicSlotSourceStatus -SourceName $SourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload $heartbeatPayload
+    Write-PublicSlotSourceCoverageSnapshot -SourceName $SourceName -Status $status -Message $message -Payload $heartbeatPayload
+    Write-Log "quote-fast-heartbeat $status $message"
+  } catch {
+    Write-Log "WARN quote fast heartbeat failed: $($_.Exception.Message)"
+  }
+}
+
 function Write-QuoteHeartbeatStatus {
   param(
     [string]$SourceName,
@@ -3534,6 +3660,7 @@ do {
         Write-PublicSlotPreopenSnapshotHistory -Rows $preopenRows
       }
       $blacklistCountForHeartbeat = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
+      Write-QuoteFastHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
       Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
     }
     $priorityGroups = Write-WebSocketPrioritySymbols -Symbols $warmupSymbols -QuoteRows $quoteRows -Reason "after-rest-quote"

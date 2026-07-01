@@ -616,10 +616,34 @@ async function tick() {
   const finmindMergedCount = finmindRecovery.quotes.length ? mergeQuotes(finmindRecovery.quotes) : 0;
   if (Date.now() < cooldownUntil) {
     const existing = readJson(FUGLE_WS_QUOTES_FILE, {});
+    const cooldownPriority = readPrioritySymbols(symbols);
+    const cooldownDelayMs = adaptiveDelayMs(beforeFugle.delayMs, beforeFugle.concurrency, rateState.allowedRpm);
     writeStatus({
       subscribed: symbols.length,
       quotes: finmindMergedCount || existing.count || 0,
       cooldown: true,
+      prioritySymbols: cooldownPriority.symbols.length,
+      priorityAttempted: 0,
+      priorityFreshCount: 0,
+      prioritySource: cooldownPriority.source,
+      priorityFileUpdatedAt: cooldownPriority.updatedAt,
+      priorityStrategy1Symbols: cooldownPriority.counts.strategy1,
+      priorityStrategy3Symbols: cooldownPriority.counts.strategy3,
+      priorityStrategy4Symbols: cooldownPriority.counts.strategy4,
+      priorityThreeDayOpenHighFadeSymbols: cooldownPriority.counts.threeDayOpenHighFade,
+      priorityDynamicSymbols: cooldownPriority.counts.dynamic,
+      priorityHotSymbols: cooldownPriority.counts.hot,
+      adaptiveRpm: rateState.allowedRpm,
+      adaptiveDelayMs: cooldownDelayMs,
+      adaptiveStableTicks: rateState.stableTicks,
+      adaptiveRateLimited: true,
+      adaptiveCooldownUntil: new Date(cooldownUntil).toISOString(),
+      openingBoostActive: beforeFugle.openingBoostActive,
+      openingBoostFreshCount: beforeFugle.freshCount,
+      openingBoostCoverage: Number(beforeFugle.coverage.toFixed(4)),
+      batchSize: beforeFugle.batchSize,
+      concurrency: beforeFugle.concurrency,
+      perSymbolDelayMs: cooldownDelayMs,
       finmindRecoveryRequested: finmindRecovery.requested,
       finmindRecoveryFetched: finmindRecovery.recovered,
       finmindRecoverySkipped: finmindRecovery.skipped,
