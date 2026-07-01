@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const LIVE_BASE_URL = "https://fuman-terminal.vercel.app";
@@ -52,6 +53,54 @@ function hasNoStore(vercel, source) {
   return /no-store/i.test(headerValue(item, "Cache-Control")) ||
     /no-store/i.test(headerValue(item, "CDN-Cache-Control")) ||
     /no-store/i.test(headerValue(item, "Vercel-CDN-Cache-Control"));
+}
+
+function responseFromPowerShell(payload) {
+  const headers = payload?.headers && typeof payload.headers === "object" ? payload.headers : {};
+  return {
+    ok: payload?.status >= 200 && payload?.status < 300,
+    status: Number(payload?.status || 0),
+    headers: {
+      get(key) {
+        const found = Object.keys(headers).find((item) => item.toLowerCase() === String(key).toLowerCase());
+        return found ? String(headers[found] || "") : "";
+      },
+    },
+  };
+}
+
+function fetchLiveWithPowerShell(url) {
+  const safeUrl = String(url).replace(/'/g, "''");
+  const command = [
+    "$ProgressPreference='SilentlyContinue'",
+    "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12",
+    `$u='${safeUrl}'`,
+    "try {",
+    "  $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 45 -Headers @{'Cache-Control'='no-cache';'Accept'='*/*'} $u",
+    "  $h=@{}; foreach($k in $r.Headers.Keys){ $h[$k]=[string]$r.Headers[$k] }",
+    "  [pscustomobject]@{ok=$true;status=[int]$r.StatusCode;headers=$h;text=[string]$r.Content} | ConvertTo-Json -Depth 8",
+    "} catch {",
+    "  [pscustomobject]@{ok=$false;status=0;headers=@{};text='';error=$_.Exception.Message} | ConvertTo-Json -Depth 4",
+    "  exit 2",
+    "}",
+  ].join("; ");
+  const powershell = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+  const result = spawnSync(powershell, ["-NoProfile", "-Command", command], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 60000,
+  });
+  const stdout = String(result.stdout || "").trim();
+  let payload = null;
+  try { payload = JSON.parse(stdout); } catch {}
+  if (result.status !== 0 || !payload?.ok) {
+    throw new Error(payload?.error || result.stderr || `PowerShell fetch failed status=${result.status}`);
+  }
+  return {
+    response: responseFromPowerShell(payload),
+    text: String(payload.text || ""),
+  };
 }
 
 function listDataFiles() {
@@ -201,7 +250,11 @@ async function fetchLive(rel) {
       await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
     }
   }
-  throw new Error(`fetchLive failed ${clean}: ${lastError?.cause?.message || lastError?.message || lastError}`);
+  try {
+    return fetchLiveWithPowerShell(url);
+  } catch (fallbackError) {
+    throw new Error(`fetchLive failed ${clean}: ${lastError?.cause?.message || lastError?.message || lastError}; powershell fallback failed: ${fallbackError?.message || fallbackError}`);
+  }
 }
 
 async function checkLive() {
@@ -260,6 +313,9 @@ async function checkLive() {
   }
   if (!strategy2Fragment.text.includes("data-run-id")) {
     pushIssue("live /api/mobile-fragment must render data-run-id");
+  }
+  if (/empty-state/.test(strategy2Fragment.text) || !/mobile-terminal-row/.test(strategy2Fragment.text)) {
+    pushIssue("live /api/mobile-fragment?tab=strategy2 must render Strategy2 cards instead of empty-state");
   }
 }
 
