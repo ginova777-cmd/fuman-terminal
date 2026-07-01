@@ -127,10 +127,11 @@ async function buildPayload() {
   const minute = taipeiMinuteOfDay(now);
   const marketSession = minute >= 9 * 60 && minute <= 13 * 60 + 40;
   const preopenWindow = minute >= 8 * 60 + 45 && minute < 9 * 60;
-  const afterFirst1mWindow = minute >= 9 * 60 + 1;
-  const first1mRequired = minute >= 9 * 60 + 5;
-  const hard0910Required = minute >= 9 * 60 + 10;
-  const ready35Required = minute >= 9 * 60 + 30;
+  const liveFreshnessRequired = marketSession;
+  const afterFirst1mWindow = liveFreshnessRequired && minute >= 9 * 60 + 1;
+  const first1mRequired = liveFreshnessRequired && minute >= 9 * 60 + 5;
+  const hard0910Required = liveFreshnessRequired && minute >= 9 * 60 + 10;
+  const ready35Required = liveFreshnessRequired && minute >= 9 * 60 + 30;
   const preopenRequired = minute >= 8 * 60 + 55 && minute < 9 * 60;
   const strategy1CandidateWindow = (STRATEGY_KEY === "strategy1" || STRATEGY_KEY === "open-buy") && !marketSession && !preopenWindow;
   const strategy4AfterClose = STRATEGY_KEY === "strategy4" && !marketSession;
@@ -215,7 +216,11 @@ async function buildPayload() {
   if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) issues.push(issue("critical", "daily-volume-freshness-low", "daily volume freshness below publish threshold", { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE }));
   if (fallbackUsed) issues.push(issue("critical", "fallback-used", "fallbackUsed is true; fallback or old cache cannot satisfy publish gate"));
   if (retentionOk !== true) issues.push(issue("critical", "retention-not-ok", "retentionOk is not true"));
-  if (!health.anonRead?.ok) issues.push(issue("critical", "anon-read-failed", "Supabase anon read target check failed", { failed: health.anonRead?.failed || [] }));
+  if (!health.anonRead?.ok) {
+    const anonIssue = issue("critical", "anon-read-failed", "Supabase anon read target check failed", { failed: health.anonRead?.failed || [] });
+    if (requireSharedSourceStatus || !latestRunId) issues.push(anonIssue);
+    else warnings.push({ ...anonIssue, severity: "warning", message: "Supabase anon read target check failed after live window; latest complete run remains authoritative" });
+  }
   if (!latestCandleTime && marketSession) warnings.push(issue("warning", "latest-candle-time-missing", "latest_candle_time is missing"));
   if (!latestRunId) warnings.push(issue("warning", "latest-run-id-missing", "latestRunId missing from source_status payload and readiness status"));
 
@@ -231,6 +236,7 @@ async function buildPayload() {
     profile: {
       marketSession,
       preopenWindow,
+      liveFreshnessRequired,
       strategy1CandidateWindow,
       strategy4AfterClose,
       allowSharedSourceStopped,

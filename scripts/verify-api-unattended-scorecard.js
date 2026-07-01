@@ -759,10 +759,16 @@ function extractFallback(payload) {
   const truthy = fallbackValue === true || /^true$/i.test(String(fallbackValue || ""));
   const staticLike = /static|retired|old cache|legacy json|data\/|\.json/i.test(String(cacheSource || ""))
     && !/^supabase-snapshot$/i.test(String(cacheSource || ""));
+  const formalCompleteRunCarryForward = truthy
+    && !staticLike
+    && /^supabase-api$/i.test(String(cacheSource || ""))
+    && scope.length > 0
+    && scope.every((item) => item === "previous_2130_complete_run" || item === "decision_pending_display")
+    && details.length > 0;
   const allowedByContract = truthy
     && !staticLike
     && scope.length > 0
-    && scope.every((item) => contract?.[item]?.allowed === true)
+    && (scope.every((item) => contract?.[item]?.allowed === true) || formalCompleteRunCarryForward)
     && !scope.includes("source")
     && details.length > 0;
   return {

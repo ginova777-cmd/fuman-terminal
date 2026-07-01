@@ -1701,6 +1701,12 @@ for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readines
 for (const marker of ["readStrategy2SourceGate", "fetchStrategy2SourceGate", "attachStrategy2PublishGate", "staleSeconds", "latestRunId", "writeBudget", "retentionOk", "publishAllowed", "sourceCoverage"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 source publish gate API marker ${marker}`);
 }
+if (/\(sourceGate\?\.publishAllowed === true \|\| afterhoursHold\)|payload\.publishBlocked !== true \|\| afterhoursHold/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must not let afterhoursHold bypass Strategy2 source publish gate");
+}
+if (!/normalizedSourceCoverage\.ready === true/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must require normalized sourceCoverage.ready before publishAllowed");
+}
 for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", "snapshotFirst", "supabase:strategy2_latest_snapshot", "options.snapshot && !options.live"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 snapshot-first marker ${marker}`);
 }

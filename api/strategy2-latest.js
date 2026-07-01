@@ -835,10 +835,12 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && readinessCoverage.ready === true
     && payload.complete === true
     && payload.runId);
+  const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
   const publishAllowed = Boolean(
-    (sourceGate?.publishAllowed === true || afterhoursHold)
-    && (payload.publishBlocked !== true || afterhoursHold)
+    sourceGate?.publishAllowed === true
+    && payload.publishBlocked !== true
     && readinessCoverage.ready === true
+    && normalizedSourceCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
@@ -850,7 +852,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     reason: publishAllowed ? "source publish gate ready" : "source publish gate blocked",
   };
   const retentionOk = sourceGate?.retentionOk !== false;
-  const sourceGateCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
+  const sourceGateCoverage = normalizedSourceCoverage;
   const today = payload?.marketSession?.today || taipeiClock().ymd;
   const payloadTradeDate = compactDate(payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "");
   const runCompleteReady = Boolean(
@@ -882,8 +884,9 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     sourceCoverage: topLevelSourceCoverage,
     currentSourceGateCoverage: sourceGateCoverage,
     sourceGate: {
-      ok: sourceGate?.ok === true,
-      publishAllowed: sourceGate?.publishAllowed === true,
+      ok: publishAllowed,
+      publishAllowed,
+      rawPublishAllowed: sourceGate?.publishAllowed === true,
       sourceStatus: sourceGate?.sourceStatus || "",
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
       latestRunId: sourceGate?.latestRunId || "",

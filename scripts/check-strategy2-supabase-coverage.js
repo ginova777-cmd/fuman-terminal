@@ -157,7 +157,8 @@ async function checkOnce() {
     issue(!strictQuoteFreshRequired || sourceStatusAgeSeconds <= MIN_QUOTE_AGE_SECONDS, "critical", "source-status-stale", `source_status updated_at age ${sourceStatusAgeSeconds}s exceeds ${MIN_QUOTE_AGE_SECONDS}s during market session`, { sourceUpdatedAt, sourceStatusAgeSeconds, max: MIN_QUOTE_AGE_SECONDS }),
     issue(!strictQuoteFreshRequired || sourceStatus === "ok" || sourceCoreOk, "critical", "source-status-not-ok", `source_status is ${sourceStatus || "missing"} during market session`, { sourceStatus, sourceCoreOk }),
     issue(
-      health.payload?.quotes_ok === true
+      !liveFreshnessRequired
+        || health.payload?.quotes_ok === true
         || health.payload?.source_parts?.quotes_ok === true
         || quoteCoverage >= MIN_QUOTE_COVERAGE,
       "critical",

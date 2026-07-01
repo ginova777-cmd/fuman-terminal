@@ -177,6 +177,11 @@ function validateApi(payload, hardGate, issues) {
     if (!Array.isArray(payload.issues) || payload.issues.length <= 0) issues.push("api_degraded_issues_empty");
     if (payload.sourceGate?.publishAllowed !== false) issues.push("api_sourceGate_publishAllowed_not_false");
   }
+  if (payload?.sourceCoverage?.ready === false || payload?.sourceCoverage?.ok === false) {
+    if (payload.publishAllowed !== false) issues.push("api_sourceCoverage_not_ready_publishAllowed_not_false");
+    if (payload.publishBlocked !== true) issues.push("api_sourceCoverage_not_ready_publishBlocked_not_true");
+    if (!/^(degraded|blocked|not_ready|stale)$/i.test(String(payload.status || ""))) issues.push(`api_sourceCoverage_not_ready_status_unexpected:${payload.status || "missing"}`);
+  }
 }
 
 async function main() {
