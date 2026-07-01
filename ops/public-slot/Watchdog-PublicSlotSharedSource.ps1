@@ -21,14 +21,65 @@ $LogFile = Join-Path $LogDir ("public-slot-watchdog-{0}.log" -f (Get-Date -Forma
 $AnonKeyFile = Join-Path $RuntimeDir "secrets\supabase-anon-key.txt"
 $CollectorScript = Join-Path $FumanRoot "scripts\fugle-websocket-collector.js"
 $NodeExe = "C:\Program Files\nodejs\node.exe"
+$AlertReceiptDir = Join-Path $RuntimeDir "data\scan-receipts"
+$AlertReceiptFile = Join-Path $AlertReceiptDir "public-slot-shared-source-watchdog-alert.json"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+New-Item -ItemType Directory -Force -Path $AlertReceiptDir | Out-Null
 
 function Write-WatchdogLog {
   param([string]$Message)
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
   Write-Host $line
   Add-Content -LiteralPath $LogFile -Value $line -Encoding utf8
+}
+
+function Invoke-PublicSlotWatchdogAlert {
+  param(
+    [string]$Reason,
+    [switch]$Restart
+  )
+
+  $node = $NodeExe
+  if (-not (Test-Path -LiteralPath $node)) { $node = "node" }
+  $tail = ""
+  try { $tail = (Get-Content -LiteralPath $LogFile -Tail 60 -ErrorAction SilentlyContinue) -join "`n" } catch {}
+
+  $env:FUMAN_RUNTIME_DIR = $RuntimeDir
+  $env:FUMAN_ALERT_KIND = "public-slot-shared-source-watchdog"
+  $env:FUMAN_ALERT_SOURCE = "Fuman Public Slot Shared Source Watchdog"
+  $env:FUMAN_ALERT_SUBJECT = "Fuman shared source 1m writer self-heal watchdog"
+  $env:FUMAN_ALERT_RECEIPT_FILE = $AlertReceiptFile
+  $env:FUMAN_ALERT_TEXT = @"
+Fuman shared source watchdog triggered
+
+source: Fuman Public Slot Shared Source Watchdog
+task: $TaskName
+restart: $([bool]$Restart)
+reason: $Reason
+log: $LogFile
+receipt: $AlertReceiptFile
+checkedAt: $((Get-Date).ToUniversalTime().ToString("o"))
+
+tail:
+$tail
+"@
+
+  Push-Location $FumanRoot
+  try {
+    & $node "--use-system-ca" "scripts\send-workflow-alert.js" "--kind=public-slot-shared-source-watchdog" "--receipt=$AlertReceiptFile" *>&1 | ForEach-Object {
+      Write-WatchdogLog "[alert] $([string]$_)"
+    }
+    if ($LASTEXITCODE -ne 0) {
+      Write-WatchdogLog "[alert] failed exit=$LASTEXITCODE receipt=$AlertReceiptFile"
+    } else {
+      Write-WatchdogLog "[alert] sent receipt=$AlertReceiptFile"
+    }
+  } catch {
+    Write-WatchdogLog "[alert] EXCEPTION $($_.Exception.Message)"
+  } finally {
+    Pop-Location
+  }
 }
 
 function Convert-HHmmToTimeSpan {
@@ -293,8 +344,11 @@ function Restart-FugleQuoteCollector {
 }
 
 function Start-SharedSourceTask {
-  param([string]$Reason, [switch]$Restart)
+  param([string]$Reason, [switch]$Restart, [switch]$Alert)
   Write-WatchdogLog "需要重啟 shared source：$Reason"
+  if ($Alert) {
+    Invoke-PublicSlotWatchdogAlert -Reason $Reason -Restart:$Restart
+  }
   try {
     if ($Restart) {
       schtasks /End /TN $TaskName | Out-String | ForEach-Object {
@@ -369,7 +423,7 @@ if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
 }
 
 if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
-  Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒；quote/collector 健康不可遮蔽 1m writer 失速" -Restart
+  Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒；quote/collector 健康不可遮蔽 1m writer 失速" -Restart -Alert
   exit 0
 }
 
