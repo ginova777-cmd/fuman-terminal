@@ -1084,6 +1084,14 @@ for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10",
 if (/-StopAt 12:05/.test(publicSlotSharedSourceStarter) || /-StopAt 12:05/.test(strategy2ReadinessSourceStarter)) {
   issues.push("public-slot source cmd entrypoints must not pass -StopAt 12:05");
 }
+for (const [name, text] of [
+  ["Start-PublicSlotSharedSource.cmd", publicSlotSharedSourceStarter],
+  ["Start-Strategy2ReadinessSource.cmd", strategy2ReadinessSourceStarter],
+]) {
+  for (const marker of ["-RestQuoteBatchSize 240", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
+    if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
+  }
+}
 for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
   if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
 }

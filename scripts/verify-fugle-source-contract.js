@@ -215,6 +215,15 @@ function staticChecks() {
     "strategy2 ready cache partial refresh",
   ]);
 
+  for (const [name, text] of [
+    ["Start-PublicSlotSharedSource.cmd", read("ops/public-slot/Start-PublicSlotSharedSource.cmd")],
+    ["Start-Strategy2ReadinessSource.cmd", read("ops/public-slot/Start-Strategy2ReadinessSource.cmd")],
+  ]) {
+    for (const marker of ["-RestQuoteBatchSize 240", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
+      if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
+    }
+  }
+
   requireIncludes("ops/public-slot/SupabasePublicSlotSource.ps1", [
     "Write-PublicSlotFutoptQuotesLive",
     "underlying_symbol",
