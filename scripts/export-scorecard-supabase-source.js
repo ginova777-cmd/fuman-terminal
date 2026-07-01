@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "scorecard-latest.json");
 const DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_DAYS || "30"));
 const RECORD_LIMIT = Math.max(1000, Number(process.env.FUMAN_SCORECARD_RECORD_LIMIT || String(DAYS * 800)));
+const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 
 function argValue(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -29,6 +30,14 @@ function dateDaysAgo(days) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - Math.max(0, days - 1));
   return date.toISOString().slice(0, 10);
+}
+
+function compactDate(value) {
+  return cleanText(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function scorecardRunId(latestDate) {
+  return `scorecard-${compactDate(latestDate) || "unknown"}-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
 }
 
 async function supabaseGet(table, query) {
@@ -186,6 +195,10 @@ async function main() {
 
   const payload = {
     ok: true,
+    contract: SCORECARD_CONTRACT,
+    qualityStatus: "complete",
+    marketDate: latestDate,
+    runId: scorecardRunId(latestDate),
     source: "supabase-scorecard-source",
     cacheSource: "supabase-snapshot",
     exportSource: "supabase:trade_records+strategy_daily_summary",

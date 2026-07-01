@@ -239,6 +239,26 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .status-line {
+      margin: 10px 0 0;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .status-line.complete {
+      border-color: rgba(94, 224, 160, .45);
+      color: var(--good);
+    }
+    .status-line.degraded,
+    .status-line.stale,
+    .status-line.blocked {
+      border-color: rgba(255, 122, 144, .55);
+      color: var(--bad);
+    }
     @media (max-width: 760px) {
       main { padding: 16px 10px 32px; }
       .top { display: block; }
@@ -281,6 +301,7 @@
   </section>
 
   <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
+  <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status"></section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
   <nav class="result-pills" id="resultPills" data-testid="scorecard-result-pills"></nav>
@@ -407,6 +428,21 @@ function metric(label, value, cls = "", testid = "") {
   return `<article class="card" ${testid ? `data-testid="${testid}"` : ""}><span>${label}</span><strong class="${cls}">${value}</strong></article>`;
 }
 
+function sourceStatus(payload, latestDate) {
+  const qualityStatus = String(payload?.qualityStatus || "unknown").trim() || "unknown";
+  const cacheSource = payload?.cacheSource || payload?.source || "scorecard";
+  const reason = payload?.fallbackReason || payload?.reason || "";
+  const pieces = [
+    `狀態：${qualityStatus}`,
+    `source=${cacheSource}`,
+    `contract=${payload?.contract || "--"}`,
+    `runId=${payload?.runId || "--"}`,
+    `marketDate=${payload?.marketDate || latestDate || "--"}`,
+  ];
+  if (reason) pieces.push(`reason=${reason}`);
+  return { qualityStatus, text: pieces.join("｜") };
+}
+
 function preferredTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved === "sun" || saved === "night") return saved;
@@ -489,6 +525,10 @@ function render() {
   const latestDate = summary.latestDate || payload.latestDate || "--";
   const updatedAt = payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
   byId("subtitle").textContent = `資料日期 ${latestDate}｜可選最近 ${payload.days || 30} 天｜${updatedAt}`;
+  const status = sourceStatus(payload, latestDate);
+  const statusNode = byId("sourceStatus");
+  statusNode.className = `status-line ${status.qualityStatus}`;
+  statusNode.textContent = status.text;
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),
@@ -537,7 +577,7 @@ function render() {
     </tr>
   `).join("") : `<tr><td colspan="12" class="empty">沒有符合條件的資料</td></tr>`;
 
-  byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
+  byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
 }
 
 async function load(date = "") {

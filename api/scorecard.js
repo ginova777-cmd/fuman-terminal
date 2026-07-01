@@ -4,6 +4,7 @@ const { readSnapshot } = require("../lib/supabase-snapshots");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
+const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 
 function cleanText(value) {
   return String(value ?? "").trim();
@@ -17,6 +18,32 @@ function cleanNumber(value) {
 function isoDate(value) {
   const text = cleanText(value);
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function compactDate(value) {
+  return cleanText(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function compactTimestamp(value) {
+  return cleanText(value).replace(/\D/g, "").slice(0, 14);
+}
+
+function withScorecardContract(payload, status, reason = "") {
+  const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
+  const snapshotTradeDate = cleanText(payload?.snapshot?.tradeDate || "");
+  const marketDate = latestDate || (snapshotTradeDate.length === 8
+    ? `${snapshotTradeDate.slice(0, 4)}-${snapshotTradeDate.slice(4, 6)}-${snapshotTradeDate.slice(6, 8)}`
+    : "");
+  const runDate = compactDate(marketDate || snapshotTradeDate || payload?.updatedAt || "");
+  const runStamp = compactTimestamp(payload?.updatedAt || payload?.snapshot?.updatedAt || "");
+  return {
+    ...payload,
+    contract: cleanText(payload?.contract || SCORECARD_CONTRACT),
+    qualityStatus: cleanText(payload?.qualityStatus || status),
+    marketDate: cleanText(payload?.marketDate || marketDate || latestDate),
+    runId: cleanText(payload?.runId || `scorecard-${runDate || "unknown"}-${runStamp || "snapshot"}`),
+    fallbackReason: cleanText(payload?.fallbackReason || reason),
+  };
 }
 
 function historyDates(records) {
@@ -86,18 +113,18 @@ function selectPayloadDate(payload, requestedDate = "") {
 function readStaticSnapshot(reason = "scorecard_static_snapshot") {
   const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
   const payload = JSON.parse(raw);
-  return {
+  return withScorecardContract({
     ok: payload.ok !== false,
     ...payload,
-    cacheSource: payload.cacheSource || "json-snapshot",
+    cacheSource: "json-snapshot",
     fallbackReason: reason,
-  };
+  }, "degraded", reason);
 }
 
 async function buildPayload(requestedDate = "") {
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 30000 }).catch(() => null);
   if (snapshot?.payload && typeof snapshot.payload === "object") {
-    return selectPayloadDate({
+    return selectPayloadDate(withScorecardContract({
       ok: snapshot.payload.ok !== false,
       ...snapshot.payload,
       source: snapshot.payload.source || "supabase:scorecard_snapshot",
@@ -108,7 +135,7 @@ async function buildPayload(requestedDate = "") {
         updatedAt: snapshot.updatedAt || "",
         source: snapshot.source || "",
       },
-    }, requestedDate);
+    }, "complete"), requestedDate);
   }
   return selectPayloadDate(readStaticSnapshot("supabase_scorecard_snapshot_missing"), requestedDate);
 }

@@ -48,6 +48,11 @@ function summarizePayload(payload, source = "") {
     cacheSource: payload?.cacheSource || source,
     latestDate: payload?.latestDate || payload?.summary?.latestDate || "",
     updatedAt: payload?.updatedAt || "",
+    runId: payload?.runId || "",
+    marketDate: payload?.marketDate || "",
+    contract: payload?.contract || "",
+    qualityStatus: payload?.qualityStatus || "",
+    fallbackReason: payload?.fallbackReason || "",
     days: cleanNumber(payload?.days),
     rows: records.length || cleanNumber(payload?.summary?.rows),
     strategies: new Set(records.map((row) => cleanText(row.strategy || "未分類")).filter(Boolean)).size,
@@ -273,6 +278,8 @@ async function main() {
     hasSearch: /id="search"/.test(page),
     hasFilter: /id="result"|id="resultPills"|data-testid="scorecard-result-pills"/.test(page),
     showsSource: /來源/.test(page),
+    showsStatusLine: /scorecard-source-status/.test(page),
+    showsRunContract: /qualityStatus|runId|marketDate|contract/.test(page),
   };
   addCheck(checks, Object.values(details.uiShell).every(Boolean), "ui-shell-contract", "/88 shell has title, API call, tabs, search/filter, source footer", details.uiShell);
 
@@ -349,6 +356,16 @@ async function main() {
   addCheck(checks, Boolean(snapshotPayload), "supabase-snapshot-exists", "Supabase snapshot scorecard_latest exists", details.supabaseSnapshot);
   addCheck(checks, details.supabaseSnapshot.rows > 0, "supabase-snapshot-rows", "Supabase scorecard_latest has rows", details.supabaseSnapshot);
   addCheck(checks, details.supabaseSnapshot.cacheSource === "supabase-snapshot", "supabase-snapshot-cache-source", "Supabase scorecard_latest payload cacheSource=supabase-snapshot", details.supabaseSnapshot);
+  addCheck(
+    checks,
+    Boolean(details.supabaseSnapshot.runId)
+      && Boolean(details.supabaseSnapshot.marketDate)
+      && details.supabaseSnapshot.contract === "scorecard-resource-chain-v1"
+      && details.supabaseSnapshot.qualityStatus === "complete",
+    "supabase-snapshot-freshness-contract",
+    "Supabase scorecard_latest exposes runId, marketDate, contract, and qualityStatus=complete",
+    details.supabaseSnapshot,
+  );
   addCheck(checks, details.supabaseSnapshot.missingRecordSources === 0 && details.supabaseSnapshot.missingDailySources === 0, "supabase-snapshot-source-fields", "Supabase scorecard rows have source fields", details.supabaseSnapshot);
 
   details.schedule = queryScorecardTask();
@@ -371,6 +388,16 @@ async function main() {
     addCheck(checks, liveApi.status >= 200 && liveApi.status < 300, "live-api-http", "live /api/scorecard returns 2xx", details.liveApi);
     addCheck(checks, details.liveApi.rows > 0, "live-api-rows", "live /api/scorecard has rows", details.liveApi);
     addCheck(checks, details.liveApi.cacheSource === "supabase-snapshot", "live-api-supabase", "live /api/scorecard uses Supabase snapshot", details.liveApi);
+    addCheck(
+      checks,
+      Boolean(details.liveApi.runId)
+        && Boolean(details.liveApi.marketDate)
+        && details.liveApi.contract === "scorecard-resource-chain-v1"
+        && details.liveApi.qualityStatus === "complete",
+      "live-api-freshness-contract",
+      "live /api/scorecard exposes runId, marketDate, contract, and qualityStatus=complete",
+      details.liveApi,
+    );
     addCheck(checks, /no-store/i.test(details.liveApi.cacheControl), "live-api-no-store", "live /api/scorecard has no-store cache header", details.liveApi);
 
     const livePage = await fetchText("/88", 35000);
@@ -380,9 +407,11 @@ async function main() {
       hasTitle: /輔滿成績單|FUMAN SCORECARD/.test(livePage.body),
       callsApi: /\/api\/scorecard/.test(livePage.body),
       hasRowsContainer: /id="rows"/.test(livePage.body),
+      hasSourceStatus: /scorecard-source-status/.test(livePage.body),
+      hasFreshnessMarkers: /qualityStatus|runId|marketDate|contract/.test(livePage.body),
     };
     addCheck(checks, livePage.status >= 200 && livePage.status < 300, "live-page-http", "live /88 returns 2xx", details.livePage);
-    addCheck(checks, details.livePage.hasTitle && details.livePage.callsApi && details.livePage.hasRowsContainer, "live-page-shell", "live /88 renders scorecard shell and calls /api/scorecard", details.livePage);
+    addCheck(checks, details.livePage.hasTitle && details.livePage.callsApi && details.livePage.hasRowsContainer && details.livePage.hasSourceStatus && details.livePage.hasFreshnessMarkers, "live-page-shell", "live /88 renders scorecard shell, calls /api/scorecard, and exposes freshness markers", details.livePage);
   }
 
   const latestDates = [

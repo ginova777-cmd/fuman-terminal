@@ -7,9 +7,18 @@ const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_late
 const SNAPSHOT_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--file="))?.slice("--file=".length)
   || process.env.FUMAN_SCORECARD_SNAPSHOT_FILE
   || path.join(ROOT, "data", "scorecard-latest.json"));
+const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 
 function cleanText(value) {
   return String(value ?? "").trim();
+}
+
+function compactDate(value) {
+  return cleanText(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function compactTimestamp(value) {
+  return cleanText(value).replace(/\D/g, "").slice(0, 14);
 }
 
 function rowSource(row = {}, fallback = "") {
@@ -28,6 +37,9 @@ function normalizeRecord(row = {}, fallback = "scorecard") {
 
 function normalizePayload(payload) {
   const source = cleanText(payload.source || "supabase:scorecard_snapshot");
+  const latestDate = cleanText(payload.latestDate || payload.summary?.latestDate || "");
+  const updatedAt = cleanText(payload.updatedAt || new Date().toISOString());
+  const runId = cleanText(payload.runId || `scorecard-${compactDate(latestDate) || "unknown"}-${compactTimestamp(updatedAt) || "snapshot"}`);
   const records = Array.isArray(payload.records)
     ? payload.records.map((row) => normalizeRecord(row, payload.exportSource || source))
     : [];
@@ -37,6 +49,10 @@ function normalizePayload(payload) {
   }
   return {
     ...payload,
+    contract: cleanText(payload.contract || SCORECARD_CONTRACT),
+    qualityStatus: cleanText(payload.qualityStatus || "complete"),
+    marketDate: cleanText(payload.marketDate || latestDate),
+    runId,
     source,
     records,
     summary,
