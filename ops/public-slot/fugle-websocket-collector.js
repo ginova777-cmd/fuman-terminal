@@ -24,7 +24,7 @@ const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQ
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
-const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "10:30";
+const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "12:00";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 1200));
 const OPENING_BOOST_CONCURRENCY = Math.max(CONCURRENCY, Math.min(12, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY || 8)));
 const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS || 0));
@@ -115,7 +115,7 @@ function taipeiMinutesNow() {
 function inOpeningBoostWindow() {
   const now = taipeiMinutesNow();
   const start = minutesFromHHmm(OPENING_BOOST_START, 8 * 60 + 45);
-  const end = minutesFromHHmm(OPENING_BOOST_END, 10 * 60 + 30);
+  const end = minutesFromHHmm(OPENING_BOOST_END, 12 * 60);
   return now >= start && now <= end;
 }
 
