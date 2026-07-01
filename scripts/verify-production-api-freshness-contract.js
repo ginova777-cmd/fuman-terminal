@@ -240,6 +240,85 @@ function fallbackDisclosure(payload) {
   };
 }
 
+function runtimeSourceSnapshot(payload) {
+  const capturedAt = firstValue(payload, [
+    "source_snapshot_captured_at",
+    "sourceSnapshotCapturedAt",
+    "runTimeSourceSnapshot.capturedAt",
+    "runTimeSourceSnapshot.source_snapshot_captured_at",
+    "runtimeSourceSnapshot.capturedAt",
+    "runtimeSourceSnapshot.source_snapshot_captured_at",
+    "sourceSnapshot.capturedAt",
+    "sourceSnapshot.source_snapshot_captured_at",
+    "sourceEvidence.source_snapshot_captured_at",
+    "sourceEvidence.runTimeSnapshot.capturedAt",
+  ]);
+  const sourceStatus = firstValue(payload, [
+    "source_status_at_run",
+    "sourceStatusAtRun",
+    "runTimeSourceSnapshot.source_status_at_run",
+    "runTimeSourceSnapshot.sourceStatusAtRun",
+    "runtimeSourceSnapshot.source_status_at_run",
+    "runtimeSourceSnapshot.sourceStatusAtRun",
+    "sourceSnapshot.source_status_at_run",
+    "sourceEvidence.source_status_at_run",
+    "sourceEvidence.runTimeSnapshot.sourceStatusAtRun",
+  ]);
+  const quoteCoverage = firstValue(payload, [
+    "quote_coverage_at_run",
+    "quoteCoverageAtRun",
+    "runTimeSourceSnapshot.quote_coverage_at_run",
+    "runTimeSourceSnapshot.quoteCoverageAtRun",
+    "runtimeSourceSnapshot.quote_coverage_at_run",
+    "runtimeSourceSnapshot.quoteCoverageAtRun",
+    "sourceSnapshot.quote_coverage_at_run",
+  ]);
+  const intradayReadiness = firstValue(payload, [
+    "intraday_1m_readiness_at_run",
+    "intraday1mReadinessAtRun",
+    "runTimeSourceSnapshot.intraday_1m_readiness_at_run",
+    "runTimeSourceSnapshot.intraday1mReadinessAtRun",
+    "runtimeSourceSnapshot.intraday_1m_readiness_at_run",
+    "runtimeSourceSnapshot.intraday1mReadinessAtRun",
+    "sourceSnapshot.intraday_1m_readiness_at_run",
+  ]);
+  const publishQuality = firstValue(payload, [
+    "run_quality_at_publish",
+    "runQualityAtPublish",
+    "runTimeSourceSnapshot.run_quality_at_publish",
+    "runTimeSourceSnapshot.runQualityAtPublish",
+    "runtimeSourceSnapshot.run_quality_at_publish",
+    "runtimeSourceSnapshot.runQualityAtPublish",
+    "sourceSnapshot.run_quality_at_publish",
+  ]);
+  const evidenceStatus = String(firstValue(payload, [
+    "evidenceStatus",
+    "unattendedEvidenceStatus",
+    "runTimeSourceSnapshot.evidenceStatus",
+    "runtimeSourceSnapshot.evidenceStatus",
+  ]) || "").toLowerCase();
+  const hasCapturedAt = Boolean(capturedAt);
+  const hasSourceStatus = sourceStatus && typeof sourceStatus === "object";
+  const hasQuoteCoverage = quoteCoverage && typeof quoteCoverage === "object";
+  const hasIntradayReadiness = intradayReadiness && typeof intradayReadiness === "object";
+  const hasPublishQuality = publishQuality && typeof publishQuality === "object";
+  const complete = hasCapturedAt
+    && (hasSourceStatus || hasQuoteCoverage || hasIntradayReadiness)
+    && hasPublishQuality
+    && evidenceStatus !== "insufficient"
+    && evidenceStatus !== "evidence_insufficient";
+  return {
+    complete,
+    capturedAt: capturedAt || "",
+    hasSourceStatus,
+    hasQuoteCoverage,
+    hasIntradayReadiness,
+    hasPublishQuality,
+    evidenceStatus: evidenceStatus || "",
+    reason: complete ? "runtime_source_snapshot_complete" : "runtime_source_snapshot_missing",
+  };
+}
+
 function payloadTradeDate(payload, today = taipeiDateKey()) {
   const topLevelCandidates = [
     "tradeDate",
@@ -296,6 +375,7 @@ async function evaluateApi(item, now) {
   const tradeDate = payloadTradeDate(payload, today);
   const sourceCoverage = sourceCoverageReady(payload);
   const fallback = fallbackDisclosure(payload);
+  const runtimeSnapshot = runtimeSourceSnapshot(payload);
   result.evidence = {
     httpStatus: response.status,
     apiOk: payload?.ok,
@@ -311,6 +391,7 @@ async function evaluateApi(item, now) {
       status: sourceCoverage.coverage?.status || sourceCoverage.coverage?.coverageStatus || sourceCoverage.coverage?.coverage_status || "",
       ok: sourceCoverage.coverage?.ok,
     },
+    runtimeSourceSnapshot: runtimeSnapshot,
     fallback,
     responseText: response.ok ? undefined : response.text,
   };
@@ -318,6 +399,7 @@ async function evaluateApi(item, now) {
   if (!tradeDate) addFinding(result, due.due, "issue", "tradeDate_missing");
   if (due.due && tradeDate && tradeDate !== today) result.issues.push(`tradeDate_not_today_${tradeDate}_${today}`);
   if (!sourceCoverage.ready) addFinding(result, due.due, "issue", sourceCoverage.reason);
+  if (!runtimeSnapshot.complete) addFinding(result, due.due, "issue", runtimeSnapshot.reason);
   if (!fallback.disclosed) addFinding(result, due.due, "issue", fallback.reason);
   return result;
 }
@@ -363,7 +445,7 @@ async function main() {
     taipeiCheckedAt: taipeiStamp(new Date()),
     expectedToday: taipeiDateKey(now),
     productionUrl: BASE_URL,
-    requirement: "production API must expose tradeDate=today after due window, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
+    requirement: "production API must expose tradeDate=today after due window, run-time source snapshot, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
     apiResults,
     static410,
     blockers,

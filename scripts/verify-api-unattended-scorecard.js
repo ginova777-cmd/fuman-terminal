@@ -715,6 +715,85 @@ function extractCost(payload) {
   };
 }
 
+function extractRuntimeSourceSnapshot(payload) {
+  const capturedAt = firstValue(payload, [
+    "source_snapshot_captured_at",
+    "sourceSnapshotCapturedAt",
+    "runTimeSourceSnapshot.capturedAt",
+    "runTimeSourceSnapshot.source_snapshot_captured_at",
+    "runtimeSourceSnapshot.capturedAt",
+    "runtimeSourceSnapshot.source_snapshot_captured_at",
+    "sourceSnapshot.capturedAt",
+    "sourceSnapshot.source_snapshot_captured_at",
+    "sourceEvidence.source_snapshot_captured_at",
+    "sourceEvidence.runTimeSnapshot.capturedAt",
+  ]);
+  const sourceStatus = firstValue(payload, [
+    "source_status_at_run",
+    "sourceStatusAtRun",
+    "runTimeSourceSnapshot.source_status_at_run",
+    "runTimeSourceSnapshot.sourceStatusAtRun",
+    "runtimeSourceSnapshot.source_status_at_run",
+    "runtimeSourceSnapshot.sourceStatusAtRun",
+    "sourceSnapshot.source_status_at_run",
+    "sourceEvidence.source_status_at_run",
+    "sourceEvidence.runTimeSnapshot.sourceStatusAtRun",
+  ]);
+  const quoteCoverage = firstValue(payload, [
+    "quote_coverage_at_run",
+    "quoteCoverageAtRun",
+    "runTimeSourceSnapshot.quote_coverage_at_run",
+    "runTimeSourceSnapshot.quoteCoverageAtRun",
+    "runtimeSourceSnapshot.quote_coverage_at_run",
+    "runtimeSourceSnapshot.quoteCoverageAtRun",
+    "sourceSnapshot.quote_coverage_at_run",
+  ]);
+  const intradayReadiness = firstValue(payload, [
+    "intraday_1m_readiness_at_run",
+    "intraday1mReadinessAtRun",
+    "runTimeSourceSnapshot.intraday_1m_readiness_at_run",
+    "runTimeSourceSnapshot.intraday1mReadinessAtRun",
+    "runtimeSourceSnapshot.intraday_1m_readiness_at_run",
+    "runtimeSourceSnapshot.intraday1mReadinessAtRun",
+    "sourceSnapshot.intraday_1m_readiness_at_run",
+  ]);
+  const publishQuality = firstValue(payload, [
+    "run_quality_at_publish",
+    "runQualityAtPublish",
+    "runTimeSourceSnapshot.run_quality_at_publish",
+    "runTimeSourceSnapshot.runQualityAtPublish",
+    "runtimeSourceSnapshot.run_quality_at_publish",
+    "runtimeSourceSnapshot.runQualityAtPublish",
+    "sourceSnapshot.run_quality_at_publish",
+  ]);
+  const evidenceStatus = String(firstValue(payload, [
+    "evidenceStatus",
+    "unattendedEvidenceStatus",
+    "runTimeSourceSnapshot.evidenceStatus",
+    "runtimeSourceSnapshot.evidenceStatus",
+  ]) || "").toLowerCase();
+  const hasCapturedAt = !isBlank(capturedAt);
+  const hasSourceStatus = sourceStatus && typeof sourceStatus === "object";
+  const hasQuoteCoverage = quoteCoverage && typeof quoteCoverage === "object";
+  const hasIntradayReadiness = intradayReadiness && typeof intradayReadiness === "object";
+  const hasPublishQuality = publishQuality && typeof publishQuality === "object";
+  const complete = hasCapturedAt
+    && (hasSourceStatus || hasQuoteCoverage || hasIntradayReadiness)
+    && hasPublishQuality
+    && evidenceStatus !== "insufficient"
+    && evidenceStatus !== "evidence_insufficient";
+  return {
+    complete,
+    capturedAt: capturedAt || "",
+    hasSourceStatus,
+    hasQuoteCoverage,
+    hasIntradayReadiness,
+    hasPublishQuality,
+    evidenceStatus: evidenceStatus || "",
+    reason: complete ? "runtime_source_snapshot_complete" : "runtime_source_snapshot_missing",
+  };
+}
+
 function frontendEvidence(strategy) {
   const files = [
     "terminal-app.js",
@@ -759,7 +838,7 @@ function frontendEvidence(strategy) {
   };
 }
 
-function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, frontend, dueStatus = { due: true }) {
+function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, dueStatus = { due: true }) {
   const issues = [];
   const warnings = [];
   const addDueIssue = (issue) => {
@@ -779,6 +858,7 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   if (fields.blankTotal > 0) addDueIssue(`field_blanks_${fields.blankTotal}`);
   if (fallback.fallback && !fallback.contractAllowed) addDueIssue("fallback_or_static_cache_used");
   if (fallback.fallback && fallback.contractAllowed) warnings.push(`allowed_fallback_${fallback.fallbackScope.join("+")}`);
+  if (!runtimeSnapshot.complete) addDueIssue(runtimeSnapshot.reason);
   if (coverage.staleQuoteCount > 0) warnings.push(`stale_quote_count_${coverage.staleQuoteCount}`);
   if (coverage.failedBatchCount > 0) addDueIssue(`failed_batch_count_${coverage.failedBatchCount}`);
   if (frontend.endpointReferences.length === 0) warnings.push("frontend_endpoint_reference_missing");
@@ -829,12 +909,13 @@ async function evaluateStrategy(strategy, context = {}) {
     const coverage = response.json ? extractCoverage(response.json, rowsInfo.rows) : {};
     const fields = response.json ? checkFields(strategy, rowsInfo.rows, response.json) : checkFields(strategy, []);
     const fallback = response.json ? extractFallback(response.json) : { fallback: false, contractAllowed: false };
+    const runtimeSnapshot = response.json ? extractRuntimeSourceSnapshot(response.json) : { complete: false, reason: "runtime_source_snapshot_missing" };
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
     const judgement = applyProfileJudgement(
       strategy,
       response,
-      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, frontend, dueStatus)
+      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, dueStatus)
     );
     endpointResults.push({
       endpoint,
@@ -847,6 +928,7 @@ async function evaluateStrategy(strategy, context = {}) {
       coverage,
       fieldCompleteness: fields,
       fallback,
+      runtimeSourceSnapshot: runtimeSnapshot,
       cost,
       frontend,
       dueStatus,
@@ -932,8 +1014,8 @@ function writeOutputs(scorecard) {
     `- needsHumanWatch: ${scorecard.needsHumanWatch}`,
     `- blockers: ${scorecard.blockers.length}`,
     "",
-    "| strategy | unattended | rows | blanks | issues | warnings | runId | source |",
-    "|---|---:|---:|---:|---:|---:|---|---|",
+    "| strategy | unattended | rows | blanks | snapshot | issues | warnings | runId | source |",
+    "|---|---:|---:|---:|---:|---:|---:|---|---|",
   ];
   for (const strategy of scorecard.strategies) {
     const primary = strategy.endpoints[0] || {};
@@ -942,6 +1024,7 @@ function writeOutputs(scorecard) {
       strategy.unattendedStatus,
       primary.fieldCompleteness?.rowsChecked ?? 0,
       primary.fieldCompleteness?.blankTotal ?? 0,
+      primary.runtimeSourceSnapshot?.complete === true ? "YES" : "NO",
       strategy.issues.length,
       strategy.warnings.length,
       primary.basic?.runId || "--",
@@ -992,6 +1075,11 @@ async function main() {
     runVerifiers: RUN_VERIFIERS,
     requirements: {
       sourceCoverageFields: [
+        "source_snapshot_captured_at",
+        "source_status_at_run",
+        "quote_coverage_at_run",
+        "intraday_1m_readiness_at_run",
+        "run_quality_at_publish",
         "fresh_quote_coverage_120s",
         "today_1m_symbols",
         "ready_ge_35",
