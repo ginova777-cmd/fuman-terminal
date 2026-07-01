@@ -549,7 +549,7 @@ async function checkOne(strategy, check) {
     const expected = await expectedQuoteDateKey();
     const payloadDate = realtimeRadarPayloadDate(payload || {});
     const updatedAtMs = realtimeRadarPayloadUpdatedAtMs(payload || {}, row);
-    const expectedExcludedCodes = ["1475", "2254", "7732", "8488"];
+    const expectedExcludedCodes = ["1475", "1538", "2254", "2321", "2901", "5906", "7732", "8101", "8488"];
     if (!payload) issues.push(`${check.table} latest payload missing`);
     if (payload && payloadRows.length < check.minPayloadRows) issues.push(`${check.table} payload rows ${payloadRows.length}<${check.minPayloadRows}`);
     if (payload && payloadDate < expected) issues.push(`${check.table} payload date ${payloadDate || "--"} < expected quote date ${expected}`);
