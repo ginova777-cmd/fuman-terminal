@@ -67,6 +67,7 @@ function runSupabasePublishHardGate(stage = "strategy1-complete-publish") {
     env: {
       ...process.env,
       FUMAN_ALERT_SOURCE: "scan-open-buy-cache.js",
+      FUMAN_PUBLISH_GATE_STRATEGY: "strategy1",
       FUMAN_PUBLISH_STAGE: stage,
     },
     timeout: 180000,

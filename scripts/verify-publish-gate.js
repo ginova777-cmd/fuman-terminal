@@ -767,6 +767,21 @@ for (const marker of [
     issues.push(`run-time-source-snapshot-contract.js missing run-time source snapshot marker ${marker}`);
   }
 }
+for (const marker of [
+  "allowSharedSourceStopped",
+  "strategy1CandidateWindow",
+  "strategy4AfterClose",
+  "requireSharedSourceStatus",
+  "requireFreshQuote",
+  "requireIntraday1m",
+]) {
+  if (!supabasePublishHardGate.includes(marker)) {
+    issues.push(`verify-supabase-publish-hard-gate.js missing market-window source gate marker ${marker}`);
+  }
+}
+if (!read("scripts/scan-open-buy-cache.js").includes('FUMAN_PUBLISH_GATE_STRATEGY: "strategy1"')) {
+  issues.push("scan-open-buy-cache.js must call publish hard gate with FUMAN_PUBLISH_GATE_STRATEGY=strategy1");
+}
 for (const [file, text] of Object.entries({
   "api/open-buy-latest.js": read("api/open-buy-latest.js"),
   "api/strategy2-latest.js": read("api/strategy2-latest.js"),

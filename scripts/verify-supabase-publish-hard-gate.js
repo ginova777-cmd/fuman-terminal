@@ -22,7 +22,13 @@ const REQUESTED_STRATEGY = String(
   || "strategy2"
 ).trim().toLowerCase();
 const STRATEGY_KEY = REQUESTED_STRATEGY.replace(/[^a-z0-9_-]/g, "") || "strategy2";
-const STRATEGY_LABEL = STRATEGY_KEY === "strategy4" ? "Strategy4" : STRATEGY_KEY === "strategy3" ? "Strategy3" : "Strategy2";
+const STRATEGY_LABEL = STRATEGY_KEY === "strategy1" || STRATEGY_KEY === "open-buy"
+  ? "Strategy1"
+  : STRATEGY_KEY === "strategy4"
+    ? "Strategy4"
+    : STRATEGY_KEY === "strategy3"
+      ? "Strategy3"
+      : "Strategy2";
 const OUT_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, STRATEGY_KEY === "strategy2" ? "supabase-publish-hard-gate.json" : `${STRATEGY_KEY}-supabase-publish-hard-gate.json`);
 const ALERT_RECEIPT = process.env.FUMAN_SUPABASE_PUBLISH_GATE_ALERT_RECEIPT || path.join(RECEIPT_DIR, STRATEGY_KEY === "strategy2" ? "supabase-publish-hard-gate-alert.json" : `${STRATEGY_KEY}-supabase-publish-hard-gate-alert.json`);
 
@@ -120,11 +126,18 @@ async function buildPayload() {
   const now = new Date();
   const minute = taipeiMinuteOfDay(now);
   const marketSession = minute >= 9 * 60 && minute <= 13 * 60 + 40;
+  const preopenWindow = minute >= 8 * 60 + 45 && minute < 9 * 60;
   const afterFirst1mWindow = minute >= 9 * 60 + 1;
   const first1mRequired = minute >= 9 * 60 + 5;
   const hard0910Required = minute >= 9 * 60 + 10;
   const ready35Required = minute >= 9 * 60 + 30;
   const preopenRequired = minute >= 8 * 60 + 55 && minute < 9 * 60;
+  const strategy1CandidateWindow = (STRATEGY_KEY === "strategy1" || STRATEGY_KEY === "open-buy") && !marketSession && !preopenWindow;
+  const strategy4AfterClose = STRATEGY_KEY === "strategy4" && !marketSession;
+  const allowSharedSourceStopped = strategy1CandidateWindow || strategy4AfterClose;
+  const requireSharedSourceStatus = !allowSharedSourceStopped;
+  const requireFreshQuote = !allowSharedSourceStopped && hard0910Required;
+  const requireIntraday1m = !allowSharedSourceStopped;
 
   const health = await getStrategy2SourceHealth({
     verifyAnonReadAccess: true,
@@ -187,14 +200,17 @@ async function buildPayload() {
 
   const issues = [];
   const warnings = [];
-  if (sourceStatusResult.ok === false || !sourceStatus) issues.push(issue("critical", "source-status-missing", "source_status readback failed", { error: sourceStatusResult.error || "" }));
-  if (sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "source-status-stale", "source_status is stale before publish", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
-  if (sourceStatus && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok before publish", { sourceStatus }));
-  if (hard0910Required && freshQuoteCoverage120s < MIN_QUOTE_COVERAGE) issues.push(issue("critical", "fresh-quote-coverage-low", "fresh_quote_coverage_120s below publish threshold", { freshQuoteCoverage120s, min: MIN_QUOTE_COVERAGE }));
-  if (quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "quote-stale", "quote age exceeds publish threshold", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
-  if (first1mRequired && sourceCoverage.today_1m_symbols < MIN_TODAY_1M_SYMBOLS) issues.push(issue("critical", "today-1m-missing", "09:05 today 1m symbols missing", { today1mSymbols: sourceCoverage.today_1m_symbols, min: MIN_TODAY_1M_SYMBOLS }));
-  if (afterFirst1mWindow && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
-  if (ready35Required && readyGe35 < MIN_READY_GE_35) issues.push(issue("critical", "ready-ge35-low", "09:30 ready_ge_35 hard gate failed", { readyGe35, min: MIN_READY_GE_35 }));
+  if (sourceStatusResult.ok === false || !sourceStatus) {
+    const item = issue(requireSharedSourceStatus ? "critical" : "warning", "source-status-missing", "source_status readback failed", { error: sourceStatusResult.error || "" });
+    (requireSharedSourceStatus ? issues : warnings).push(item);
+  }
+  if (requireSharedSourceStatus && sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "source-status-stale", "source_status is stale before publish", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
+  if (requireSharedSourceStatus && sourceStatus && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok before publish", { sourceStatus }));
+  if (requireFreshQuote && freshQuoteCoverage120s < MIN_QUOTE_COVERAGE) issues.push(issue("critical", "fresh-quote-coverage-low", "fresh_quote_coverage_120s below publish threshold", { freshQuoteCoverage120s, min: MIN_QUOTE_COVERAGE }));
+  if (requireFreshQuote && quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "quote-stale", "quote age exceeds publish threshold", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
+  if (requireIntraday1m && first1mRequired && sourceCoverage.today_1m_symbols < MIN_TODAY_1M_SYMBOLS) issues.push(issue("critical", "today-1m-missing", "09:05 today 1m symbols missing", { today1mSymbols: sourceCoverage.today_1m_symbols, min: MIN_TODAY_1M_SYMBOLS }));
+  if (requireIntraday1m && afterFirst1mWindow && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
+  if (requireIntraday1m && ready35Required && readyGe35 < MIN_READY_GE_35) issues.push(issue("critical", "ready-ge35-low", "09:30 ready_ge_35 hard gate failed", { readyGe35, min: MIN_READY_GE_35 }));
   if (preopenRequired && sourceCoverage.preopen_coverage < MIN_PREOPEN_ROWS) issues.push(issue("critical", "preopen-coverage-low", "08:55 preopen snapshot coverage below threshold", { preopenRows: sourceCoverage.preopen_coverage, min: MIN_PREOPEN_ROWS }));
   if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) issues.push(issue("critical", "daily-volume-freshness-low", "daily volume freshness below publish threshold", { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE }));
   if (fallbackUsed) issues.push(issue("critical", "fallback-used", "fallbackUsed is true; fallback or old cache cannot satisfy publish gate"));
@@ -212,7 +228,21 @@ async function buildPayload() {
     strategy: STRATEGY_KEY,
     strategyLabel: STRATEGY_LABEL,
     sourceCoverage,
-    staleSeconds: Math.max(sourceStatusStaleSeconds, marketSession ? quoteAgeSeconds : 0, latestCandleTime ? intraday1mStaleSeconds : 0),
+    profile: {
+      marketSession,
+      preopenWindow,
+      strategy1CandidateWindow,
+      strategy4AfterClose,
+      allowSharedSourceStopped,
+      requireSharedSourceStatus,
+      requireFreshQuote,
+      requireIntraday1m,
+    },
+    staleSeconds: Math.max(
+      requireSharedSourceStatus ? sourceStatusStaleSeconds : 0,
+      requireFreshQuote ? quoteAgeSeconds : 0,
+      requireIntraday1m && latestCandleTime ? intraday1mStaleSeconds : 0
+    ),
     latestRunId,
     latestRunIdSource,
     fallbackUsed,
