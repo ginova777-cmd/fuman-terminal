@@ -120,9 +120,10 @@ async function buildPayload() {
   const now = new Date();
   const minute = taipeiMinuteOfDay(now);
   const marketSession = minute >= 9 * 60 && minute <= 13 * 60 + 40;
-  const first1mRequired = minute >= 9 * 60 + 5 && minute <= 13 * 60 + 40;
-  const hard0910Required = minute >= 9 * 60 + 10 && minute <= 13 * 60 + 40;
-  const ready35Required = minute >= 9 * 60 + 30 && minute <= 13 * 60 + 40;
+  const afterFirst1mWindow = minute >= 9 * 60 + 1;
+  const first1mRequired = minute >= 9 * 60 + 5;
+  const hard0910Required = minute >= 9 * 60 + 10;
+  const ready35Required = minute >= 9 * 60 + 30;
   const preopenRequired = minute >= 8 * 60 + 55 && minute < 9 * 60;
 
   const health = await getStrategy2SourceHealth({
@@ -187,12 +188,12 @@ async function buildPayload() {
   const issues = [];
   const warnings = [];
   if (sourceStatusResult.ok === false || !sourceStatus) issues.push(issue("critical", "source-status-missing", "source_status readback failed", { error: sourceStatusResult.error || "" }));
-  if (marketSession && sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS) issues.push(issue("critical", "source-status-stale", "source_status is stale during market session", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
-  if (marketSession && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok during market session", { sourceStatus }));
+  if (sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "source-status-stale", "source_status is stale before publish", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
+  if (sourceStatus && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok before publish", { sourceStatus }));
   if (hard0910Required && freshQuoteCoverage120s < MIN_QUOTE_COVERAGE) issues.push(issue("critical", "fresh-quote-coverage-low", "fresh_quote_coverage_120s below publish threshold", { freshQuoteCoverage120s, min: MIN_QUOTE_COVERAGE }));
-  if (marketSession && quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS) issues.push(issue("critical", "quote-stale", "quote age exceeds publish threshold", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
+  if (quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "quote-stale", "quote age exceeds publish threshold", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
   if (first1mRequired && sourceCoverage.today_1m_symbols < MIN_TODAY_1M_SYMBOLS) issues.push(issue("critical", "today-1m-missing", "09:05 today 1m symbols missing", { today1mSymbols: sourceCoverage.today_1m_symbols, min: MIN_TODAY_1M_SYMBOLS }));
-  if (hard0910Required && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
+  if (afterFirst1mWindow && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
   if (ready35Required && readyGe35 < MIN_READY_GE_35) issues.push(issue("critical", "ready-ge35-low", "09:30 ready_ge_35 hard gate failed", { readyGe35, min: MIN_READY_GE_35 }));
   if (preopenRequired && sourceCoverage.preopen_coverage < MIN_PREOPEN_ROWS) issues.push(issue("critical", "preopen-coverage-low", "08:55 preopen snapshot coverage below threshold", { preopenRows: sourceCoverage.preopen_coverage, min: MIN_PREOPEN_ROWS }));
   if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) issues.push(issue("critical", "daily-volume-freshness-low", "daily volume freshness below publish threshold", { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE }));

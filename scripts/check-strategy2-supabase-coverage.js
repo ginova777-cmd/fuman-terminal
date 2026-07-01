@@ -140,14 +140,16 @@ async function checkOnce() {
   const activeSymbols = cleanNumber(health.payload?.active_symbols || health.payload?.eligible_symbols || health.payload?.symbols || health.quoteHealth?.active_symbols);
   const dailyVolumeCoverage = quoteCodes.length ? dailyVolumeRows / Math.min(quoteCodes.length, 500) : 0;
   const minuteOfDay = taipeiMinuteOfDay(checkedAt);
-  const strictQuoteFreshRequired = minuteOfDay >= 9 * 60 && minuteOfDay <= 13 * 60 + 40;
-  const intraday1mMa35Required = minuteOfDay >= 9 * 60 + 35 && minuteOfDay <= 13 * 60 + 35;
+  const strictQuoteFreshRequired = minuteOfDay >= 9 * 60;
+  const intraday1mMa35Required = minuteOfDay >= 9 * 60 + 35;
   const sourceStatus = health.status?.status || sourceStatusResult.latest?.status || "";
   const sourceUpdatedAt = health.status?.updated_at || sourceStatusResult.latest?.updated_at || "";
   const sourceStatusAgeSeconds = ageSeconds(sourceUpdatedAt, checkedAt);
   const sourceCoreOk = health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true;
   const intraday1mOk = health.payload?.intraday_1m_ok === true || health.payload?.source_parts?.intraday_1m_ok === true;
   const intraday1mReadyGe35 = cleanNumber(health.payload?.ready_ge_35);
+  const latestCandleTime = health.payload?.latest_candle_time || health.payload?.intraday_1m_latest_candle_time || "";
+  const intraday1mStaleSeconds = cleanNumber(health.payload?.intraday_1m_stale_seconds) || ageSeconds(latestCandleTime, checkedAt);
 
   const issues = [
     issue(sourceStatusResult.ok !== false && Boolean(sourceStatusResult.latest || health.status), "critical", "source-status-missing", "source_status fugle_shared_source readback failed", { error: sourceStatusResult.error || "" }),
@@ -170,6 +172,7 @@ async function checkOnce() {
     issue(intradayRowsReady > 0 || taipeiMinuteOfDay(checkedAt) < 9 * 60, "warning", "intraday-1m-not-ready", "fugle_intraday_1m status has no today rows yet", { intradayRowsReady, error: statusResult.error || "" }),
     issue(!intraday1mMa35Required || intraday1mOk, "critical", "intraday-1m-source-not-ok", "source_status reports intraday_1m_ok=false after MA35 gate time", { intraday1mOk, sourceStatus, sourceUpdatedAt }),
     issue(!intraday1mMa35Required || intraday1mReadyGe35 > 0, "critical", "intraday-1m-ready-ge35-zero", "ready_ge_35 is zero after MA35 gate time", { readyGe35: intraday1mReadyGe35, latestCandleTime: health.payload?.latest_candle_time || health.payload?.intraday_1m_latest_candle_time || "" }),
+    issue(minuteOfDay < 9 * 60 + 1 || intraday1mStaleSeconds <= 180, "critical", "intraday-1m-stale-critical", "intraday_1m_stale_seconds exceeds 180s hard threshold", { intraday1mStaleSeconds, latestCandleTime }),
     issue(dailyVolumeCoverage >= MIN_DAILY_VOLUME_COVERAGE, "warning", "daily-volume-coverage-low", `daily volume coverage ${dailyVolumeCoverage.toFixed(4)} below ${MIN_DAILY_VOLUME_COVERAGE}`, { dailyVolumeRows, sampleSize: Math.min(quoteCodes.length, 500) }),
     issue(countRows(preopenResult.rows) >= MIN_PREOPEN_ROWS || taipeiMinuteOfDay(checkedAt) >= 9 * 60, "warning", "preopen-snapshot-low", "preopen snapshot rows are not ready", { rows: countRows(preopenResult.rows), error: preopenResult.error || "" }),
     issue(countRows(finalBlindBuyResult.rows) >= 0, "warning", "final-blind-buy-read-failed", "final blind buy ready read failed", { error: finalBlindBuyResult.error || "" }),
@@ -208,6 +211,7 @@ async function checkOnce() {
       intraday1mOk,
       intraday1mMa35Required,
       intraday1mReadyGe35,
+      intraday1mStaleSeconds,
       dailyVolumeRows,
       dailyVolumeCoverage,
       preopenRows: countRows(preopenResult.rows),
