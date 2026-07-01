@@ -303,6 +303,10 @@ async function main() {
       returnedCount: payloadCount(strategy5Api.body || {}, "matches"),
       usedDate: strategy5Api.body?.usedDate || "",
       sourceDate: strategy5Api.body?.sourceDate || "",
+      sourceSnapshotCapturedAt: strategy5Api.body?.source_snapshot_captured_at || "",
+      sourceStatusAtRun: strategy5Api.body?.source_status_at_run || null,
+      chipSourceStatusAtRun: strategy5Api.body?.chip_source_status_at_run || null,
+      runQualityAtPublish: strategy5Api.body?.run_quality_at_publish || null,
       sourceStatus: strategy5Api.body?.sourceStatus || "",
       sourceCoverage: strategy5Api.body?.sourceCoverage || null,
       publishGate: strategy5Api.body?.publishGate || null,
@@ -338,6 +342,16 @@ async function main() {
   });
   pushIssue(issues, details.api.strategy5.dataFreshness?.status === "fresh" && details.api.strategy5.dataFreshness?.priorityStaleBlocked !== true, "strategy5_data_freshness_not_fresh", {
     dataFreshness: details.api.strategy5.dataFreshness,
+  });
+  pushIssue(issues, Boolean(details.api.strategy5.sourceSnapshotCapturedAt), "strategy5_source_snapshot_captured_at_missing", {
+    sourceSnapshotCapturedAt: details.api.strategy5.sourceSnapshotCapturedAt,
+  });
+  pushIssue(issues, details.api.strategy5.sourceStatusAtRun?.ok === true && details.api.strategy5.sourceStatusAtRun?.strategyAuthority === "chip", "strategy5_source_status_at_run_not_chip_ready", {
+    sourceStatusAtRun: details.api.strategy5.sourceStatusAtRun,
+    chipSourceStatusAtRun: details.api.strategy5.chipSourceStatusAtRun,
+  });
+  pushIssue(issues, details.api.strategy5.runQualityAtPublish?.publishAllowed === true && details.api.strategy5.runQualityAtPublish?.degradedBlocksLatest === true, "strategy5_run_quality_at_publish_not_safe", {
+    runQualityAtPublish: details.api.strategy5.runQualityAtPublish,
   });
   pushIssue(issues, details.api.strategy5.sourceCoverage?.ok === true, "strategy5_source_coverage_not_ok", {
     sourceCoverage: details.api.strategy5.sourceCoverage,

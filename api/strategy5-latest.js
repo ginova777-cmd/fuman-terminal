@@ -227,6 +227,96 @@ function isoDateKey(compact) {
   return date ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}` : "";
 }
 
+function buildChipSourceStatusAtRun(sourceHealth = {}, sourceDate = "") {
+  const coverageStatus = String(sourceHealth.coverageStatus || sourceHealth.coverage_status || "").toLowerCase();
+  const minRows = cleanNumber(sourceHealth.minRequiredRows || sourceHealth.min_required_rows) || 1500;
+  const institutionalRows = cleanNumber(sourceHealth.institutionalRows || sourceHealth.institutional_rows);
+  const marginRows = cleanNumber(sourceHealth.marginRows || sourceHealth.margin_rows);
+  const unifiedRows = cleanNumber(sourceHealth.unifiedRows || sourceHealth.unified_rows);
+  const validRows = cleanNumber(sourceHealth.validAfterExclusionRows || sourceHealth.valid_after_exclusion_rows);
+  const latestTradeDate = sourceHealth.latestTradeDate || sourceHealth.latest_trade_date || sourceDate || "";
+  const ok = coverageStatus === "ready" && validRows >= minRows;
+  return {
+    ok,
+    status: ok ? "ready" : (coverageStatus || "not_ready"),
+    strategyAuthority: "chip",
+    source: "run_payload.sourceHealth",
+    coverageStatus,
+    latestTradeDate,
+    latestTradeDateKey: compactDateKey(latestTradeDate),
+    institutionalRows,
+    marginRows,
+    marginCoverageRequired: false,
+    unifiedRows,
+    validAfterExclusionRows: validRows,
+    minRequiredRows: minRows,
+    staleDays: cleanNumber(sourceHealth.staleDays || sourceHealth.stale_days),
+    reason: sourceHealth.healthReason || sourceHealth.reason || (ok ? "chip source ready at run" : "chip source not ready at run"),
+  };
+}
+
+function notRequiredSourceEvidence(reason) {
+  return { ok: true, status: "not_required", reason };
+}
+
+function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiState, expectedTotal, scannedCount, resultCount }) {
+  const persisted = runTimeSourceSnapshotResponseFields(run?.payload || {});
+  const persistedStatus = persisted.source_status_at_run && typeof persisted.source_status_at_run === "object"
+    ? persisted.source_status_at_run
+    : null;
+  const shouldUseChipStatus = !persistedStatus?.ok && (sourceHealth.coverageStatus || sourceHealth.validAfterExclusionRows || sourceHealth.latestTradeDate);
+  const chipStatus = run?.payload?.chip_source_status_at_run || buildChipSourceStatusAtRun(sourceHealth, sourceDate);
+  const sourceStatusAtRun = shouldUseChipStatus ? chipStatus : (persisted.source_status_at_run || chipStatus);
+  const capturedAt = persisted.source_snapshot_captured_at || run?.finished_at || run?.updated_at || new Date().toISOString();
+  const persistedQuality = persisted.run_quality_at_publish && typeof persisted.run_quality_at_publish === "object"
+    ? persisted.run_quality_at_publish
+    : {};
+  const runQuality = {
+    ...persistedQuality,
+    runId: run?.run_id || persistedQuality.runId || "",
+    status: run?.quality_status || run?.status || persistedQuality.status || "",
+    publishAllowed: apiState.publishGate.publishAllowed,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    fallbackUsed: apiState.fallback.used,
+    fallbackScope: Array.isArray(persistedQuality.fallbackScope) ? persistedQuality.fallbackScope : [],
+    fallbackAllowed: false,
+    fallbackDetails: Array.isArray(persistedQuality.fallbackDetails) ? persistedQuality.fallbackDetails : [],
+    expectedTotal: cleanNumber(expectedTotal),
+    scannedCount: cleanNumber(scannedCount),
+    resultCount: cleanNumber(resultCount),
+    readbackCount: cleanNumber(run?.readback_count),
+    writeBudget: apiState.writeBudget,
+    retentionOk: apiState.retention.ok,
+    qualityStatus: run?.quality_status || persistedQuality.qualityStatus || "",
+  };
+  const snapshot = {
+    ...(persisted.runTimeSourceSnapshot || {}),
+    contract: "run-time-source-snapshot-v1",
+    strategy: "strategy5",
+    runId: run?.run_id || "",
+    source_snapshot_captured_at: capturedAt,
+    source_status_at_run: sourceStatusAtRun,
+    quote_coverage_at_run: persisted.quote_coverage_at_run || notRequiredSourceEvidence("strategy5 chip source does not require intraday quote freshness"),
+    intraday_1m_readiness_at_run: persisted.intraday_1m_readiness_at_run || notRequiredSourceEvidence("strategy5 chip source does not require intraday 1m"),
+    ma_readiness_at_run: persisted.ma_readiness_at_run || notRequiredSourceEvidence("strategy5 chip source does not require MA readiness"),
+    preopen_futopt_daily_readiness_at_run: persisted.preopen_futopt_daily_readiness_at_run || notRequiredSourceEvidence("strategy5 chip source does not require preopen/futopt/daily volume readiness"),
+    run_quality_at_publish: runQuality,
+  };
+  return {
+    runTimeSourceSnapshot: snapshot,
+    run_time_source_snapshot: snapshot,
+    source_snapshot_captured_at: snapshot.source_snapshot_captured_at,
+    source_status_at_run: snapshot.source_status_at_run,
+    chip_source_status_at_run: sourceStatusAtRun,
+    quote_coverage_at_run: snapshot.quote_coverage_at_run,
+    intraday_1m_readiness_at_run: snapshot.intraday_1m_readiness_at_run,
+    ma_readiness_at_run: snapshot.ma_readiness_at_run,
+    preopen_futopt_daily_readiness_at_run: snapshot.preopen_futopt_daily_readiness_at_run,
+    run_quality_at_publish: snapshot.run_quality_at_publish,
+  };
+}
+
 function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount, expectedTotal, scannedCount, returnedCount }) {
   const checkedAt = new Date().toISOString();
   const coverageStatus = String(chipSourceHealth?.coverage_status || "").toLowerCase();
@@ -501,11 +591,20 @@ function buildPayload(rows, run, options = {}) {
     scannedCount,
     returnedCount: matches.length,
   });
+  const runTimeEvidence = strategy5RunTimeSourceEvidence({
+    run,
+    sourceHealth,
+    sourceDate,
+    apiState,
+    expectedTotal,
+    scannedCount,
+    resultCount,
+  });
   return {
     ok: true,
     source: "supabase:strategy5_scan_results",
     cacheSource: "supabase-api",
-    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
+    ...runTimeEvidence,
     runId: String(first.run_id || run?.run_id || ""),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
     generatedDate: scanDate,

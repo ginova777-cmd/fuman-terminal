@@ -78,6 +78,33 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function buildChipSourceStatusAtRun(sourceHealth = {}, dataFreshness = {}) {
+  const coverageStatus = String(sourceHealth.coverageStatus || sourceHealth.coverage_status || dataFreshness.coverageStatus || "").toLowerCase();
+  const latestTradeDate = sourceHealth.latestTradeDate || sourceHealth.latest_trade_date || dataFreshness.latestTradeDate || "";
+  const minRequiredRows = cleanNumber(sourceHealth.minRequiredRows || sourceHealth.min_required_rows || 1500);
+  const institutionalRows = cleanNumber(sourceHealth.institutionalRows || sourceHealth.institutional_rows);
+  const marginRows = cleanNumber(sourceHealth.marginRows || sourceHealth.margin_rows);
+  const unifiedRows = cleanNumber(sourceHealth.unifiedRows || sourceHealth.unified_rows);
+  const validAfterExclusionRows = cleanNumber(sourceHealth.validAfterExclusionRows || sourceHealth.valid_after_exclusion_rows);
+  const ok = coverageStatus === "ready" && validAfterExclusionRows >= minRequiredRows;
+  return {
+    ok,
+    status: ok ? "ready" : (coverageStatus || "not_ready"),
+    strategyAuthority: "chip",
+    source: "v_institution_source_health",
+    coverageStatus,
+    latestTradeDate,
+    latestTradeDateKey: compactDateKey(latestTradeDate),
+    institutionalRows,
+    marginRows,
+    unifiedRows,
+    validAfterExclusionRows,
+    minRequiredRows,
+    staleDays: cleanNumber(sourceHealth.staleDays || sourceHealth.stale_days),
+    reason: sourceHealth.healthReason || sourceHealth.reason || dataFreshness.reason || (ok ? "chip source ready at run" : "chip source not ready at run"),
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -105,8 +132,9 @@ function strategy5Signals(item) {
 function buildStrategy5RunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
-  const sourceReady = String(output.sourceHealth?.status || output.dataFreshness?.status || "").toLowerCase();
-  const publishAllowed = complete && !/stale|degraded|failed|blocked|not_ready/.test(sourceReady);
+  const chipSourceStatusAtRun = buildChipSourceStatusAtRun(output.sourceHealth || {}, output.dataFreshness || {});
+  const publishAllowed = complete && chipSourceStatusAtRun.ok;
+  const notRequired = (reason) => ({ ok: true, status: "not_required", reason });
   return {
     run_id: runId,
     strategy: "strategy5",
@@ -134,16 +162,17 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
         expectedTotal: cleanNumber(output.total),
         scannedCount: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
         resultCount: complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0,
-        sourceStatus: output.sourceHealth || output.dataFreshness || {},
-        quoteCoverage: { status: "not_applicable", reason: "strategy5 chip source does not require intraday quote freshness" },
-        intraday1mReadiness: { status: "not_applicable", reason: "strategy5 chip source does not require intraday 1m" },
-        maReadiness: { status: "not_applicable", reason: "strategy5 chip source does not require MA readiness" },
-        preopenFutoptDailyReadiness: output.sourceHealth || output.dataFreshness || {},
+        sourceStatus: chipSourceStatusAtRun,
+        quoteCoverage: notRequired("strategy5 chip source does not require intraday quote freshness"),
+        intraday1mReadiness: notRequired("strategy5 chip source does not require intraday 1m"),
+        maReadiness: notRequired("strategy5 chip source does not require MA readiness"),
+        preopenFutoptDailyReadiness: notRequired("strategy5 chip source does not require preopen/futopt/daily volume readiness"),
         publishAllowed,
-        degradedBlocksLatest: !publishAllowed,
-        preservePreviousGood: !publishAllowed,
+        degradedBlocksLatest: true,
+        preservePreviousGood: true,
         qualityStatus: complete ? "complete" : status,
       }),
+      chip_source_status_at_run: chipSourceStatusAtRun,
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       usedDate: output.usedDate || "",
@@ -309,6 +338,33 @@ async function fetchSupabaseRows(table, query, timeout = 20000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchInstitutionSourceHealth() {
+  const rows = await fetchSupabaseRows(
+    "v_institution_source_health",
+    [
+      "select=coverage_status,latest_trade_date,institutional_latest_trade_date,margin_latest_trade_date,unified_latest_trade_date,institutional_rows,margin_rows,unified_rows,valid_after_exclusion_rows,min_required_rows,stale_days,reason,unified_latest_updated_at,margin_latest_updated_at,institutional_latest_updated_at,suggested_scanner_behavior",
+      "limit=1",
+    ].join("&")
+  );
+  const row = rows[0] || {};
+  return {
+    coverageStatus: row.coverage_status || "",
+    latestTradeDate: row.latest_trade_date || "",
+    institutionalLatestTradeDate: row.institutional_latest_trade_date || "",
+    marginLatestTradeDate: row.margin_latest_trade_date || "",
+    unifiedLatestTradeDate: row.unified_latest_trade_date || "",
+    institutionalRows: cleanNumber(row.institutional_rows),
+    marginRows: cleanNumber(row.margin_rows),
+    unifiedRows: cleanNumber(row.unified_rows),
+    validAfterExclusionRows: cleanNumber(row.valid_after_exclusion_rows),
+    minRequiredRows: cleanNumber(row.min_required_rows),
+    staleDays: cleanNumber(row.stale_days),
+    healthReason: row.reason || "",
+    healthUpdatedAt: row.unified_latest_updated_at || row.margin_latest_updated_at || row.institutional_latest_updated_at || "",
+    suggestedScannerBehavior: row.suggested_scanner_behavior || "",
+  };
 }
 
 async function fetchText(url, timeout = 30000) {
@@ -1233,6 +1289,10 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const institution = await loadInstitutionLatestPayload();
+  const chipSourceHealth = await fetchInstitutionSourceHealth().catch((error) => {
+    console.warn(`strategy5 chip source health snapshot skipped: ${error.message}`);
+    return {};
+  });
   const finmindChipMap = await fetchFinMindChipLatestMap().catch((error) => {
     console.warn(`strategy5 FinMind chip supplement skipped: ${error.message}`);
     return new Map();
@@ -1254,6 +1314,7 @@ async function main() {
   const quoteDate = compactDateKey(stocks.find((stock) => stock.quoteDate)?.quoteDate);
   const institutionDate = compactDateKey(institution.usedDate || institution.date);
   const chipLatestTradeDate = latestDateKey([
+    chipSourceHealth.latestTradeDate,
     latestFinMindChipTradeDate(finmindChipMap),
     institutionDate,
   ]);
@@ -1273,6 +1334,7 @@ async function main() {
     scannedThisRun: stocks.length,
     scannedCodes: stocks.map((stock) => stock.code),
     sourceHealth: {
+      ...chipSourceHealth,
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
       finmindChipCount: finmindChipMap.size,
