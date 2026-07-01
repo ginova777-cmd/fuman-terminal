@@ -100,7 +100,9 @@ https://fuman-terminal.vercel.app/mobile
 
 ## 發布 / 上傳規則
 
-只改本檔或 `AGENTS.md` 這類純文件，不需要 Vercel deploy；需要 commit / push。
+Production deploy 由 release owner 統一處理。手機/策略 Codex 只交分支、commit SHA、改檔清單、read-only 成績單與是否寫 Supabase/cache/runtime；不要直接 push `main`、不要直接 deploy。完整規則見 `RELEASE-OWNER-RUNBOOK.md`。
+
+只改本檔或 `AGENTS.md` 這類純文件，不需要 Vercel deploy；需要交給 release owner commit / push。
 
 修改 `mobile.html`、`api/mobile-*`、手機 runtime、package scripts、E2E 或 publish gate 後，至少要跑：
 
@@ -127,6 +129,8 @@ npm run verify:mobile-cache-contract:live
 npm run verify:runtime-hotfix -- --live
 npm run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun --routes=strategy1,strategy2,strategy3,strategy4,strategy5,watch --route-timeout=120000 --eval-timeout=60000
 ```
+
+上面 deploy 流程只能由 release owner 在 `22:00 Asia/Taipei merge queue` 或使用者指定的 emergency release window 執行。
 
 不可從 dirty worktree deploy。不可從 `C:\fuman-terminal` 或 `C:\fuman-terminal-sync` deploy。`C:\fuman-terminal` 只可當 production mirror。
 

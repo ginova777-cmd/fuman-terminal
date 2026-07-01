@@ -19,6 +19,8 @@ http://localhost:3000
 
 ## 部署
 
+Production deploys are owned by the release owner. Strategy/source Codex agents must hand off branches and read-only scorecards instead of pushing `main` or deploying directly. See `RELEASE-OWNER-RUNBOOK.md`.
+
 ```powershell
 npm run verify:upload-gate
 npm run deploy

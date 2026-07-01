@@ -161,6 +161,12 @@ $env:FUMAN_RELEASE_SHA = git rev-parse HEAD
 
 `FUMAN_DEPLOY_SHA` is accepted as an equivalent fallback. When a release SHA is set, production guards must compare local `HEAD` and live `/api/release-manifest.gitSha` with that release SHA, not with a later moving `origin/main` commit.
 
+## Release Owner Merge Queue
+
+Production `main` is release-owner-only. Strategy/source Codex agents must not push `main`, deploy Vercel, or edit `C:\fuman-terminal`; they must work on `agent/<scope>-<yyyymmdd>` branches and hand off the branch name, commit SHA, changed file list, read-only scorecard, and whether Supabase/cache/runtime was written.
+
+The default production integration window is the `22:00 Asia/Taipei merge queue`. During that window, the release owner integrates one branch at a time, reruns gates, and deploys only with `npm run deploy`. Direct `vercel --prod` is forbidden outside the guarded wrapper. See `RELEASE-OWNER-RUNBOOK.md`.
+
 ## Verification Fence And Mirror
 
 During a final verification window, use a scheduler fence: do not allow another full scan or publish gate to start while UI E2E, health, readiness, freshness, and post-scan snapshot validation are reading the release state. After validation, restore the production schedules and verify next run times.

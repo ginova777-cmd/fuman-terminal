@@ -156,6 +156,26 @@ function queryScheduledTask(taskName) {
 }
 
 const packageJson = JSON.parse(read("package.json"));
+const releaseOwnerRunbookPath = "RELEASE-OWNER-RUNBOOK.md";
+if (!fs.existsSync(path.join(ROOT, releaseOwnerRunbookPath))) {
+  issues.push("RELEASE-OWNER-RUNBOOK.md must exist for release-owner-only deploy governance");
+} else {
+  const releaseOwnerRunbook = read(releaseOwnerRunbookPath);
+  for (const marker of [
+    "main is release-owner-only",
+    "agent/<scope>-<yyyymmdd>",
+    "Do not push main",
+    "22:00 Asia/Taipei merge queue",
+    "FUMAN_DEPLOY_LOCK_FILE",
+    "Do not deploy from C:\\fuman-terminal",
+    "npm run deploy",
+    "vercel --prod",
+  ]) {
+    if (!releaseOwnerRunbook.includes(marker)) {
+      issues.push(`RELEASE-OWNER-RUNBOOK.md missing release owner marker ${marker}`);
+    }
+  }
+}
 const fumanScheduleRegistry = readJsonFile("scripts/fuman-schedule-registry.json");
 if (fumanScheduleRegistry) {
   const tasks = Array.isArray(fumanScheduleRegistry.tasks) ? fumanScheduleRegistry.tasks : [];

@@ -9,12 +9,15 @@ npm run deploy
 
 Do not call `vercel --prod` directly. `npm run deploy` is the guarded wrapper that locks the deploy, blocks duplicate uploads, checks the production mirror, checks Vercel cron cost, checks project inventory, and then calls `scripts/deploy-production-with-release-env.js` so the production bundle is pinned to a release SHA.
 
+Production deploy authority is defined in `RELEASE-OWNER-RUNBOOK.md`. `main` is release-owner-only; other Codex agents must hand off branches, commit SHAs, changed files, read-only scorecards, and whether Supabase/cache/runtime was written.
+
 ## Source Rules
 
 - Formal source must be a clean GitHub `main` worktree.
 - `C:\fuman-terminal` is production mirror only.
 - Never deploy from a dirty worktree.
 - Never deploy from a preview URL, temporary clone, or stale branch.
+- Never bypass the `22:00 Asia/Taipei merge queue` unless the user explicitly opens an emergency release window.
 
 ## Cost Rules
 
