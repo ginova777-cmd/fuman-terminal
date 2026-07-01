@@ -183,12 +183,14 @@ async function main() {
     subject,
     startedAt,
     finishedAt: "",
+    deliveredAt: "",
     channel: "smtp",
     host: secretValue("SMTP_HOST", ["smtp-host.txt"]) || "smtp.gmail.com",
     port: Number(secretValue("SMTP_PORT", ["smtp-port.txt"]) || 465),
     receiptFile,
     dryRun,
     error: "",
+    delivery_error: "",
   };
 
   try {
@@ -210,10 +212,13 @@ async function main() {
     }
     payload.ok = true;
     payload.finishedAt = new Date().toISOString();
+    payload.deliveredAt = dryRun ? "" : payload.finishedAt;
+    payload.delivery_error = "";
     writeReceipt(receiptFile, payload);
     console.log(dryRun ? `failure alert dry-run to ${to}` : `failure alert sent to ${to}`);
   } catch (error) {
     payload.error = error?.message || String(error);
+    payload.delivery_error = payload.error;
     payload.finishedAt = new Date().toISOString();
     writeReceipt(receiptFile, payload);
     throw error;

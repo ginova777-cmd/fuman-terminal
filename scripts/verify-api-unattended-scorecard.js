@@ -793,6 +793,52 @@ function extractCost(payload) {
   };
 }
 
+function extractRealtimeRadarEvidence(payload) {
+  const requiredFields = firstDirectValue(payload, ["requiredFields", "run_quality_at_publish.requiredFields", "runTimeSourceSnapshot.run_quality_at_publish.requiredFields"], null);
+  const blankCounts = firstDirectValue(payload, ["blankCounts", "run_quality_at_publish.blankCounts", "runTimeSourceSnapshot.run_quality_at_publish.blankCounts"], null);
+  const sampleMissingRows = firstDirectValue(payload, ["sampleMissingRows", "run_quality_at_publish.sampleMissingRows", "runTimeSourceSnapshot.run_quality_at_publish.sampleMissingRows"], null);
+  const writeBudget = firstDirectValue(payload, ["writeBudget", "run_quality_at_publish.writeBudget", "runTimeSourceSnapshot.run_quality_at_publish.writeBudget"], null);
+  const alertReceipt = firstDirectValue(payload, ["alertReceipt", "run_quality_at_publish.alertReceipt", "runTimeSourceSnapshot.run_quality_at_publish.alertReceipt"], null);
+  const evidence = {
+    freshQuoteCoverage120s: toNumber(firstDirectValue(payload, ["fresh_quote_coverage_120s", "quote_coverage_at_run.fresh_quote_coverage_120s", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quote_coverage_120s"], null), null),
+    freshQuotes: toNumber(firstDirectValue(payload, ["fresh_quotes", "quote_coverage_at_run.fresh_quotes", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quotes"], null), null),
+    activeSymbols: toNumber(firstDirectValue(payload, ["active_symbols", "quote_coverage_at_run.active_symbols", "runTimeSourceSnapshot.quote_coverage_at_run.active_symbols"], null), null),
+    quoteAgeSeconds: toNumber(firstDirectValue(payload, ["quote_age_seconds", "quote_coverage_at_run.quote_age_seconds", "runTimeSourceSnapshot.quote_coverage_at_run.quote_age_seconds"], null), null),
+    requiredFields,
+    blankCounts,
+    sampleMissingRows,
+    rawKeepDays: toNumber(firstDirectValue(payload, ["rawKeepDays", "run_quality_at_publish.rawKeepDays", "runTimeSourceSnapshot.run_quality_at_publish.rawKeepDays"], null), null),
+    writeBudget,
+    writeBudgetFinalStatus: String(writeBudget?.finalStatus || "").toLowerCase(),
+    writeBudgetWritesCompleted: toNumber(writeBudget?.writesCompleted, null),
+    alertReceipt,
+    alertReceiptKind: String(alertReceipt?.kind || "").toLowerCase(),
+    alertReceiptDeliveredAt: String(alertReceipt?.deliveredAt || ""),
+  };
+  const missingFields = [];
+  for (const [field, value] of Object.entries({
+    fresh_quote_coverage_120s: evidence.freshQuoteCoverage120s,
+    fresh_quotes: evidence.freshQuotes,
+    active_symbols: evidence.activeSymbols,
+    quote_age_seconds: evidence.quoteAgeSeconds,
+    requiredFields: evidence.requiredFields,
+    blankCounts: evidence.blankCounts,
+    sampleMissingRows: evidence.sampleMissingRows,
+    rawKeepDays: evidence.rawKeepDays,
+    "writeBudget.finalStatus": evidence.writeBudgetFinalStatus,
+    "writeBudget.writesCompleted": evidence.writeBudgetWritesCompleted,
+    "alertReceipt.kind": evidence.alertReceiptKind,
+    "alertReceipt.deliveredAt": evidence.alertReceiptDeliveredAt,
+  })) {
+    if (field === "sampleMissingRows") {
+      if (!Array.isArray(value)) missingFields.push(field);
+    } else if (isBlank(value)) {
+      missingFields.push(field);
+    }
+  }
+  return { ...evidence, missingFields };
+}
+
 function extractRuntimeSourceSnapshot(payload) {
   const capturedAt = firstValue(payload, [
     "source_snapshot_captured_at",
@@ -916,7 +962,7 @@ function frontendEvidence(strategy) {
   };
 }
 
-function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus = { due: true }) {
+function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus = { due: true }, realtimeRadarEvidence = null) {
   const issues = [];
   const warnings = [];
   const addDueIssue = (issue) => {
@@ -944,6 +990,15 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   if (sourceEvidence?.status === "insufficient") addDueIssue(`run_time_source_snapshot_insufficient_${sourceEvidence.missingFields.join("_")}`);
   if (sourceEvidence?.apiEvidenceStatus === "insufficient") addDueIssue("api_evidence_status_insufficient");
   if (sourceEvidence?.apiUnattendedStatus === "NO") addDueIssue("api_unattended_status_no");
+  if (strategy.key === "realtime-radar" && realtimeRadarEvidence) {
+    realtimeRadarEvidence.missingFields.forEach((field) => addDueIssue(`realtime_radar_evidence_missing_${field}`));
+    if (realtimeRadarEvidence.freshQuoteCoverage120s !== null && realtimeRadarEvidence.freshQuoteCoverage120s < 0.95) addDueIssue(`fresh_quote_coverage_120s_low_${realtimeRadarEvidence.freshQuoteCoverage120s}`);
+    if (realtimeRadarEvidence.quoteAgeSeconds !== null && realtimeRadarEvidence.quoteAgeSeconds > 120) addDueIssue(`quote_age_seconds_stale_${realtimeRadarEvidence.quoteAgeSeconds}`);
+    if (["", "pending", "committing", "open", "unknown"].includes(realtimeRadarEvidence.writeBudgetFinalStatus)) addDueIssue(`write_budget_final_status_${realtimeRadarEvidence.writeBudgetFinalStatus || "missing"}`);
+    if (realtimeRadarEvidence.writeBudgetWritesCompleted !== null && realtimeRadarEvidence.writeBudgetWritesCompleted < 1) addDueIssue(`write_budget_writes_completed_${realtimeRadarEvidence.writeBudgetWritesCompleted}`);
+    if (!["smoke", "failure"].includes(realtimeRadarEvidence.alertReceiptKind)) addDueIssue(`alert_receipt_kind_${realtimeRadarEvidence.alertReceiptKind || "missing"}`);
+    if (!realtimeRadarEvidence.alertReceiptDeliveredAt) addDueIssue("alert_receipt_deliveredAt_missing");
+  }
   return { issues, warnings };
 }
 
@@ -993,6 +1048,7 @@ async function evaluateStrategy(strategy, context = {}) {
     const runtimeSnapshot = response.json ? extractRuntimeSourceSnapshot(response.json) : { complete: false, reason: "runtime_source_snapshot_missing" };
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
+    const realtimeRadarEvidence = response.json && strategy.key === "realtime-radar" ? extractRealtimeRadarEvidence(response.json) : null;
     const snapshotAudit = response.json ? auditRunTimeSourceSnapshot(response.json) : { ok: false, status: "insufficient", missingFields: ["response_json"], snapshot: null };
     const sourceEvidence = {
       ok: snapshotAudit.ok,
@@ -1005,7 +1061,7 @@ async function evaluateStrategy(strategy, context = {}) {
     const judgement = applyProfileJudgement(
       strategy,
       response,
-      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus)
+      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus, realtimeRadarEvidence)
     );
     endpointResults.push({
       endpoint,
@@ -1020,6 +1076,7 @@ async function evaluateStrategy(strategy, context = {}) {
       fallback,
       runtimeSourceSnapshot: runtimeSnapshot,
       cost,
+      realtimeRadarEvidence,
       runTimeSourceSnapshot: sourceEvidence,
       frontend,
       dueStatus,
@@ -1203,6 +1260,17 @@ async function main() {
         "intraday_1m_readiness_at_run",
         "run_quality_at_publish",
         "fresh_quote_coverage_120s",
+        "fresh_quotes",
+        "active_symbols",
+        "quote_age_seconds",
+        "requiredFields",
+        "blankCounts",
+        "sampleMissingRows",
+        "rawKeepDays",
+        "writeBudget.finalStatus",
+        "writeBudget.writesCompleted",
+        "alertReceipt.kind",
+        "alertReceipt.deliveredAt",
         "today_1m_symbols",
         "ready_ge_35",
         "latest_candle_time",

@@ -85,6 +85,75 @@ function firstValue(object, paths) {
   return "";
 }
 
+function firstPresentValue(object, paths, fallback = null) {
+  for (const key of paths) {
+    const value = getPath(object, key);
+    if (value !== undefined && value !== null) return value;
+  }
+  return fallback;
+}
+
+function evidenceFieldMissing(value, options = {}) {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (typeof value === "number") return !Number.isFinite(value);
+  if (Array.isArray(value)) return options.allowEmptyArray !== true && value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return false;
+}
+
+function evidenceNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(String(value).replace(/[,%+]/g, "").trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+function realtimeRadarEvidence(payload = {}) {
+  const requiredFields = firstPresentValue(payload, ["requiredFields", "run_quality_at_publish.requiredFields", "runTimeSourceSnapshot.run_quality_at_publish.requiredFields"]);
+  const blankCounts = firstPresentValue(payload, ["blankCounts", "run_quality_at_publish.blankCounts", "runTimeSourceSnapshot.run_quality_at_publish.blankCounts"]);
+  const sampleMissingRows = firstPresentValue(payload, ["sampleMissingRows", "run_quality_at_publish.sampleMissingRows", "runTimeSourceSnapshot.run_quality_at_publish.sampleMissingRows"], []);
+  const writeBudget = firstPresentValue(payload, ["writeBudget", "run_quality_at_publish.writeBudget", "runTimeSourceSnapshot.run_quality_at_publish.writeBudget"], {});
+  const alertReceipt = firstPresentValue(payload, ["alertReceipt", "run_quality_at_publish.alertReceipt", "runTimeSourceSnapshot.run_quality_at_publish.alertReceipt"], {});
+  const evidence = {
+    freshQuoteCoverage120s: evidenceNumber(firstPresentValue(payload, ["fresh_quote_coverage_120s", "quote_coverage_at_run.fresh_quote_coverage_120s", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quote_coverage_120s"], null)),
+    freshQuotes: evidenceNumber(firstPresentValue(payload, ["fresh_quotes", "quote_coverage_at_run.fresh_quotes", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quotes"], null)),
+    activeSymbols: evidenceNumber(firstPresentValue(payload, ["active_symbols", "quote_coverage_at_run.active_symbols", "runTimeSourceSnapshot.quote_coverage_at_run.active_symbols"], null)),
+    quoteAgeSeconds: evidenceNumber(firstPresentValue(payload, ["quote_age_seconds", "quote_coverage_at_run.quote_age_seconds", "runTimeSourceSnapshot.quote_coverage_at_run.quote_age_seconds"], null)),
+    requiredFields,
+    blankCounts,
+    sampleMissingRows,
+    rawKeepDays: evidenceNumber(firstPresentValue(payload, ["rawKeepDays", "run_quality_at_publish.rawKeepDays", "runTimeSourceSnapshot.run_quality_at_publish.rawKeepDays"], null)),
+    writeBudget,
+    writeBudgetFinalStatus: String(writeBudget?.finalStatus || "").toLowerCase(),
+    writeBudgetWritesCompleted: evidenceNumber(writeBudget?.writesCompleted),
+    alertReceipt,
+    alertReceiptKind: String(alertReceipt?.kind || "").toLowerCase(),
+    alertReceiptDeliveredAt: String(alertReceipt?.deliveredAt || ""),
+  };
+  const missingFields = [];
+  for (const [field, value] of Object.entries({
+    fresh_quote_coverage_120s: evidence.freshQuoteCoverage120s,
+    fresh_quotes: evidence.freshQuotes,
+    active_symbols: evidence.activeSymbols,
+    quote_age_seconds: evidence.quoteAgeSeconds,
+    requiredFields: evidence.requiredFields,
+    blankCounts: evidence.blankCounts,
+    sampleMissingRows: evidence.sampleMissingRows,
+    rawKeepDays: evidence.rawKeepDays,
+    "writeBudget.finalStatus": evidence.writeBudgetFinalStatus,
+    "writeBudget.writesCompleted": evidence.writeBudgetWritesCompleted,
+    "alertReceipt.kind": evidence.alertReceiptKind,
+    "alertReceipt.deliveredAt": evidence.alertReceiptDeliveredAt,
+  })) {
+    if (field === "sampleMissingRows") {
+      if (evidenceFieldMissing(value, { allowEmptyArray: true })) missingFields.push(field);
+    } else if (evidenceFieldMissing(value)) {
+      missingFields.push(field);
+    }
+  }
+  return { ...evidence, missingFields };
+}
+
 function dueStatus(item, now = new Date()) {
   const minute = taipeiMinute(now);
   const start = item.dueStartMinute ?? 0;
@@ -378,6 +447,7 @@ async function evaluateApi(item, now) {
   const fallback = fallbackDisclosure(payload);
   const runtimeSnapshot = runtimeSourceSnapshot(payload);
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
+  const radarEvidence = item.key === "realtime-radar" ? realtimeRadarEvidence(payload) : null;
   result.evidence = {
     httpStatus: response.status,
     apiOk: payload?.ok,
@@ -403,6 +473,7 @@ async function evaluateApi(item, now) {
       evidenceStatus: payload?.evidenceStatus || payload?.sourceEvidenceStatus || "",
       unattendedStatus: payload?.unattendedStatus || payload?.unattended?.status || "",
     },
+    realtimeRadarEvidence: radarEvidence,
     responseText: response.ok ? undefined : response.text,
   };
   if (response.status !== 200 || payload?.ok === false) addFinding(result, due.due, "issue", `api_not_ready_http_${response.status}`);
@@ -414,6 +485,15 @@ async function evaluateApi(item, now) {
   if (!snapshotAudit.ok) addFinding(result, due.due, "issue", `run_time_source_snapshot_insufficient_${snapshotAudit.missingFields.join("_")}`);
   if (payload?.evidenceStatus === "insufficient" || payload?.sourceEvidenceStatus === "insufficient") addFinding(result, due.due, "issue", "api_evidence_status_insufficient");
   if (payload?.unattendedStatus === "NO" || payload?.unattended?.status === "NO") addFinding(result, due.due, "issue", "api_unattended_status_no");
+  if (radarEvidence) {
+    radarEvidence.missingFields.forEach((field) => addFinding(result, due.due, "issue", `realtime_radar_evidence_missing_${field}`));
+    if (radarEvidence.freshQuoteCoverage120s !== null && radarEvidence.freshQuoteCoverage120s < 0.95) addFinding(result, due.due, "issue", `fresh_quote_coverage_120s_low_${radarEvidence.freshQuoteCoverage120s}`);
+    if (radarEvidence.quoteAgeSeconds !== null && radarEvidence.quoteAgeSeconds > 120) addFinding(result, due.due, "issue", `quote_age_seconds_stale_${radarEvidence.quoteAgeSeconds}`);
+    if (["", "pending", "committing", "open", "unknown"].includes(radarEvidence.writeBudgetFinalStatus)) addFinding(result, due.due, "issue", `write_budget_final_status_${radarEvidence.writeBudgetFinalStatus || "missing"}`);
+    if (radarEvidence.writeBudgetWritesCompleted !== null && radarEvidence.writeBudgetWritesCompleted < 1) addFinding(result, due.due, "issue", `write_budget_writes_completed_${radarEvidence.writeBudgetWritesCompleted}`);
+    if (!["smoke", "failure"].includes(radarEvidence.alertReceiptKind)) addFinding(result, due.due, "issue", `alert_receipt_kind_${radarEvidence.alertReceiptKind || "missing"}`);
+    if (!radarEvidence.alertReceiptDeliveredAt) addFinding(result, due.due, "issue", "alert_receipt_deliveredAt_missing");
+  }
   return result;
 }
 
