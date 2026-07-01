@@ -203,9 +203,18 @@ function normalizeRows(payload, tab = "") {
     "mobile.top",
   ]);
   if (tab === "strategy2") {
-    return [...rows].filter(inStrategy2Window).sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a)).slice(0, 20);
+    const sortedRows = [...rows].sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a));
+    const windowRows = sortedRows.filter(inStrategy2Window);
+    return (windowRows.length ? windowRows : sortedRows).slice(0, 20);
   }
   return rows.slice(0, 20);
+}
+
+function isEmptyStrategy2Snapshot(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const rows = normalizeRows(payload, "strategy2");
+  const count = Number(payload.count ?? payload.displayCount ?? payload.resultCount ?? payload.result_count ?? 0) || 0;
+  return rows.length === 0 && count > 0;
 }
 
 function isEmptyStrategy1WaitingSnapshot(payload) {
@@ -494,7 +503,9 @@ module.exports = async function handler(request, response) {
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const payload = !snapshotPayload || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
+    const payload = !snapshotPayload
+      || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
+      || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000)
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
