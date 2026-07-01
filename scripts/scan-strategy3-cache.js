@@ -88,12 +88,17 @@ function preserveScorecardSource(payload) {
   }, null, 2)}\n`);
 }
 
-function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats = {}) {
+function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats = {}, sourceDriftHealth = null) {
   const issues = [];
   const warnings = [];
   const intradayReadyCount = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
   const latestCandleTime = latestTime(stocks.map((stock) => stock.latestCandleTime));
   const latestCandleMinute = candleMinutes({ candleTime: latestCandleTime });
+  const driftIntradayStatus = Array.isArray(sourceDriftHealth?.checks)
+    ? sourceDriftHealth.checks.find((item) => item.source === "v_strategy3_intraday_1m_status")
+    : null;
+  const driftIntradayReady = sourceDriftHealth?.status === "ready"
+    && cleanNumber(driftIntradayStatus?.rowCount) >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS;
   if (STRATEGY3_REQUIRE_TURNOVER && issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
   } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
@@ -105,10 +110,18 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     warnings.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}; volume ratio is advisory for TV-only strategy3`);
   }
   if (STRATEGY3_REQUIRE_INTRADAY_1M && intradayReadyCount < STRATEGY3_MIN_INTRADAY_1M_CANDIDATES) {
-    issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${STRATEGY3_MIN_INTRADAY_1M_CANDIDATES}`);
+    if (driftIntradayReady) {
+      warnings.push(`intraday1mReadyCount ${intradayReadyCount} below ${STRATEGY3_MIN_INTRADAY_1M_CANDIDATES}; accepted by v_strategy3_intraday_1m_status rows=${cleanNumber(driftIntradayStatus?.rowCount)}`);
+    } else {
+      issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${STRATEGY3_MIN_INTRADAY_1M_CANDIDATES}`);
+    }
   }
   if (STRATEGY3_REQUIRE_INTRADAY_1M && latestCandleMinute != null && latestCandleMinute < STRATEGY3_SESSION_LATEST_MINUTE) {
-    issues.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}`);
+    if (driftIntradayReady) {
+      warnings.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}; accepted by v_strategy3_intraday_1m_status rows=${cleanNumber(driftIntradayStatus?.rowCount)}`);
+    } else {
+      issues.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}`);
+    }
   }
   const warningCount = sourceWarnings.length + warnings.length;
   if (warningCount > SOURCE_WARNING_LIMIT) {
@@ -134,6 +147,8 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
     requireVolumeAverage: STRATEGY3_REQUIRE_VOLUME_AVERAGE,
     requireIntraday1m: STRATEGY3_REQUIRE_INTRADAY_1M,
+    driftIntradayReady,
+    driftIntradayStatus,
     issues,
     warnings,
   };
@@ -1380,18 +1395,18 @@ async function main() {
   stocks = exclusionResult.stocks;
   exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
+  const sourceDriftHealth = await fetchStrategy3SourceDriftHealth();
+  if (sourceDriftHealth.status !== "ready") {
+    throw new Error(`Strategy3 source drift failed: ${sourceDriftHealth.reason}`);
+  }
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
-  const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats);
+  const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats, sourceDriftHealth);
   (sourceHealth.warnings || []).forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   if (sourceHealth.status !== "ok") {
     console.warn(`strategy3 source health ${sourceHealth.status}: ${sourceHealth.issues.join("; ") || "warnings present"}`);
   }
   if (sourceHealth.status === "failed") {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
-  }
-  const sourceDriftHealth = await fetchStrategy3SourceDriftHealth();
-  if (sourceDriftHealth.status !== "ready") {
-    throw new Error(`Strategy3 source drift failed: ${sourceDriftHealth.reason}`);
   }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
   const quoteDate = latestStockDateKey(stocks);
