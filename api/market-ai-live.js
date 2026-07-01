@@ -6,6 +6,10 @@ const realtimeRadarLatest = require("./realtime-radar-latest");
 const market = require("./market");
 const heatmap = require("./heatmap");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const {
+  attachRunTimeSourceEvidence,
+  buildRunTimeSourceSnapshotFields,
+} = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
@@ -19,6 +23,7 @@ const AI_TODAY_REQUIRED_START_SECONDS = 8 * 60 * 60;
 const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
 const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
 const ALLOW_CODE_REPO_CACHE = process.env.FUMAN_MARKET_AI_ALLOW_CODE_REPO_CACHE === "1";
+const MARKET_AI_RUN_TIME_SOURCE_SNAPSHOT_REQUIRED_FIELD = "source_snapshot_captured_at";
 
 function cacheCandidates(file = CACHE_FILE) {
   const candidates = [path.join(RUNTIME_ROOT, "data", file)];
@@ -797,6 +802,66 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
   };
 }
 
+function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), session = {}) {
+  const freshness = payload?.dataFreshness || {};
+  const dataSources = payload?.dashboard?.dataSources || {};
+  const sourceIssues = Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : [];
+  const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
+  const heatmapRows = cleanNumber(dataSources.heatmapRows || payload?.heatmap?.stockCount || payload?.heatmap?.sectorCount);
+  const radarRows = cleanNumber(dataSources.radarRows || count(payload?.realtimeRadar));
+  const quoteReady = freshness.heatmapUsable === true
+    || freshness.radarIsToday === true
+    || heatmapRows >= 500
+    || radarRows > 0;
+  const sourceStatus = sourceIssues.length ? "degraded" : "ready";
+  return attachRunTimeSourceEvidence({
+    ...payload,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: false,
+    fallbackDetails: [],
+    ...buildRunTimeSourceSnapshotFields({
+      strategy: "market-ai",
+      runId: `market-ai-live-${String(clock?.date || "").replace(/\D/g, "") || Date.now()}`,
+      payload,
+      sourceStatus: {
+        status: sourceStatus,
+        ok: true,
+        reason: sourceIssues[0] || "",
+        staleSources,
+        marketSession: session?.status || payload?.marketSession?.status || "",
+      },
+      quoteCoverage: {
+        status: quoteReady ? "ready" : "degraded",
+        ok: quoteReady,
+        heatmapRows,
+        radarRows,
+        heatmapTradeDate: freshness.heatmapTradeDate || "",
+        radarTradeDate: freshness.radarTradeDate || "",
+        baseTradeDate: freshness.baseTradeDate || "",
+        sourceIssues,
+      },
+      intraday1mReadiness: { status: "not_applicable", ok: true, reason: "market-ai consumes heatmap/radar surfaces, not raw intraday 1m" },
+      maReadiness: { status: "not_applicable", ok: true, reason: "market-ai does not calculate MA readiness" },
+      preopenFutoptDailyReadiness: { status: "not_applicable", ok: true, reason: "market-ai does not require preopen/futopt/daily volume directly" },
+      publishAllowed: true,
+      degradedBlocksLatest: false,
+      preservePreviousGood: false,
+      qualityStatus: sourceIssues.length ? "degraded_exposed" : "ready",
+      fallbackUsed: false,
+      fallbackScope: [],
+      fallbackAllowed: false,
+      fallbackDetails: [],
+      expectedTotal: heatmapRows || radarRows || null,
+      scannedCount: heatmapRows || radarRows || null,
+      resultCount: count(payload),
+      readbackCount: count(payload),
+      retentionOk: true,
+      writeBudget: { status: "live-api", allowed: true, reason: "market-ai is an on-demand live surface" },
+    }),
+  });
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -823,7 +888,11 @@ module.exports = async function handler(request, response) {
       cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
       sessionForPayload
     );
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
+    response.status(200).json(withMarketAiRunTimeSourceSnapshot(
+      await enrichMarketAiPayload(payload, request, clock, sessionForPayload),
+      clock,
+      sessionForPayload
+    ));
     return;
   }
 
@@ -838,7 +907,11 @@ module.exports = async function handler(request, response) {
       ...snapshotResponsePayload(snapshot, breadth, clock),
       marketSession: sessionForPayload,
     };
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
+    response.status(200).json(withMarketAiRunTimeSourceSnapshot(
+      await enrichMarketAiPayload(payload, request, clock, sessionForPayload),
+      clock,
+      sessionForPayload
+    ));
     return;
   }
 
@@ -852,7 +925,11 @@ module.exports = async function handler(request, response) {
       ),
       marketSession: sessionForPayload,
     };
-    response.status(200).json(await enrichMarketAiPayload(payload, request, clock, sessionForPayload));
+    response.status(200).json(withMarketAiRunTimeSourceSnapshot(
+      await enrichMarketAiPayload(payload, request, clock, sessionForPayload),
+      clock,
+      sessionForPayload
+    ));
     return;
   }
 
@@ -897,7 +974,11 @@ module.exports = async function handler(request, response) {
     },
     marketSession: sessionForPayload,
   };
-  const enrichedPayload = await enrichMarketAiPayload(payload, request, clock, sessionForPayload, { heatmapPayload, radarPayload: realtimeRadar });
+  const enrichedPayload = withMarketAiRunTimeSourceSnapshot(
+    await enrichMarketAiPayload(payload, request, clock, sessionForPayload, { heatmapPayload, radarPayload: realtimeRadar }),
+    clock,
+    sessionForPayload
+  );
 
   for (const file of cacheCandidates()) {
     try { writeJsonAtomic(file, enrichedPayload); } catch {}

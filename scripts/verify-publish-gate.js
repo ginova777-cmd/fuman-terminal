@@ -765,6 +765,23 @@ for (const [file, text] of Object.entries({
   }
 }
 for (const [file, text] of Object.entries({
+  "api/latest-strategy.js": read("api/latest-strategy.js"),
+  "api/heatmap.js": read("api/heatmap.js"),
+  "api/market-ai-live.js": read("api/market-ai-live.js"),
+})) {
+  for (const marker of ["attachRunTimeSourceEvidence", "run-time-source-snapshot-contract"]) {
+    if (!text.includes(marker)) issues.push(`${file} missing run-time source evidence marker ${marker}`);
+  }
+}
+for (const [file, text] of Object.entries({
+  "api/heatmap.js": read("api/heatmap.js"),
+  "api/market-ai-live.js": read("api/market-ai-live.js"),
+})) {
+  for (const marker of ["buildRunTimeSourceSnapshotFields", "source_snapshot_captured_at"]) {
+    if (!text.includes(marker)) issues.push(`${file} missing live run-time source snapshot marker ${marker}`);
+  }
+}
+for (const [file, text] of Object.entries({
   "scripts/scan-open-buy-cache.js": read("scripts/scan-open-buy-cache.js"),
   "scripts/publish-strategy2-complete-run.js": read("scripts/publish-strategy2-complete-run.js"),
   "scripts/scan-strategy3-cache.js": read("scripts/scan-strategy3-cache.js"),

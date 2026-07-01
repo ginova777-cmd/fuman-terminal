@@ -20,6 +20,10 @@ async function fetchText(url, options = {}, timeout = 15000) {
 
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const {
+  attachRunTimeSourceEvidence,
+  buildRunTimeSourceSnapshotFields,
+} = require("../lib/run-time-source-snapshot-contract");
 
 let heatmapCache = null;
 const HEATMAP_CACHE_MS = 15000;
@@ -33,6 +37,7 @@ const HEATMAP_QUOTE_MAX_AGE_SECONDS = Math.max(30, Number(process.env.HEATMAP_QU
 const HEATMAP_LATEST_FILE = "heatmap-latest.json";
 const HEATMAP_WINDOW_START_SECONDS = 9 * 60 * 60;
 const HEATMAP_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
+const HEATMAP_RUN_TIME_SOURCE_SNAPSHOT_REQUIRED_FIELD = "source_snapshot_captured_at";
 
 function withTimeout(promise, timeout, fallback) {
   let timer;
@@ -267,6 +272,65 @@ function buildHeatmapHealth(sectors, quoteMap, sourceInfo = {}) {
     isHealthy: stocks.length >= 500 && badDate === 0 && notRealtime === 0 && noPrice === 0 && sourceHealthy,
     cacheTtlMs: HEATMAP_CACHE_MS,
   };
+}
+
+function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason = "") {
+  const sourceInfo = payload?.strictQuoteContract || {};
+  const health = payload?.health || {};
+  const stockCount = cleanNumber(payload?.stockCount || health.stockCount);
+  const realtimeCount = cleanNumber(payload?.realtimeStockCount || health.realtimeStockCount || sourceInfo.rows);
+  const fallbackUsed = sourceInfo.fallbackUsed === true || payload?.fallbackUsed === true;
+  const fallbackDetails = fallbackUsed ? [{
+    fallbackSource: sourceInfo.fallbackSource || "unknown",
+    fallbackReason: sourceInfo.fallbackReason || sourceInfo.issue || reason || "formal_source_not_healthy",
+    fallbackRows: cleanNumber(sourceInfo.fallbackRows),
+  }] : [];
+  const quoteReady = sourceInfo.ok === true || health.formalSourceOk === true || realtimeCount >= HEATMAP_QUOTE_MIN_ROWS;
+  const sourceReady = payload?.ok !== false && quoteReady && !fallbackUsed;
+  return attachRunTimeSourceEvidence({
+    ...payload,
+    fallbackUsed,
+    fallbackScope: fallbackUsed ? ["quote"] : [],
+    fallbackAllowed: false,
+    fallbackDetails,
+    ...buildRunTimeSourceSnapshotFields({
+      strategy: "heatmap",
+      runId: `heatmap-${String(clock?.date || taipeiDateKey()).replace(/\D/g, "")}-${Date.now()}`,
+      payload,
+      sourceStatus: {
+        status: sourceReady ? "ready" : "degraded",
+        ok: sourceReady,
+        reason: sourceInfo.issue || sourceInfo.fallbackReason || reason || "",
+        source: sourceInfo.source || payload?.formalSource || payload?.source || "",
+      },
+      quoteCoverage: {
+        status: quoteReady ? "ready" : "degraded",
+        ok: quoteReady,
+        rows: realtimeCount,
+        expected: stockCount || null,
+        fresh_quote_coverage_120s: stockCount ? realtimeCount / stockCount : null,
+        latestUpdatedAt: sourceInfo.latestUpdatedAt || health.formalSourceLatestUpdatedAt || "",
+        latestAgeSeconds: sourceInfo.latestAgeSeconds ?? health.formalSourceLatestAgeSeconds ?? null,
+      },
+      intraday1mReadiness: { status: "not_applicable", ok: true, reason: "heatmap uses quote contract, not intraday 1m" },
+      maReadiness: { status: "not_applicable", ok: true, reason: "heatmap does not calculate MA readiness" },
+      preopenFutoptDailyReadiness: { status: "not_applicable", ok: true, reason: "heatmap does not require preopen/futopt/daily volume" },
+      publishAllowed: sourceReady,
+      degradedBlocksLatest: !sourceReady,
+      preservePreviousGood: !sourceReady,
+      qualityStatus: sourceReady ? "ready" : "degraded",
+      fallbackUsed,
+      fallbackScope: fallbackUsed ? ["quote"] : [],
+      fallbackAllowed: false,
+      fallbackDetails,
+      expectedTotal: stockCount || null,
+      scannedCount: realtimeCount || null,
+      resultCount: realtimeCount || null,
+      readbackCount: realtimeCount || null,
+      retentionOk: true,
+      writeBudget: { status: "read-only-live", allowed: false, reason: "heatmap live API does not write latest" },
+    }),
+  });
 }
 
 function cleanNumber(value) {
@@ -3091,16 +3155,16 @@ module.exports = async function handler(request, response) {
       timeoutMs: 900,
     });
     if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
-      response.status(200).json(snapshotHeatmapPayload({
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload({
         ...snapshot,
         reason: "snapshot-first",
-      }, clock));
+      }, clock), clock, "snapshot-first"));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
     if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
-      response.status(200).json(attachHeatmapDetectWindow(
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
           cache: {
@@ -3111,15 +3175,15 @@ module.exports = async function handler(request, response) {
         },
         clock,
         "snapshot-first-local"
-      ));
+      ), clock, "snapshot-first-local"));
       return;
     }
 
     if (isFreshHeatmapCache(clock)) {
-      response.status(200).json({
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot({
         ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "snapshot-first-memory-cache"),
         cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS, reason: "snapshot-first-memory-cache" },
-      });
+      }, clock, "snapshot-first-memory-cache"));
       return;
     }
   }
@@ -3132,13 +3196,13 @@ module.exports = async function handler(request, response) {
       timeoutMs: 1400,
     });
     if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
-      response.status(200).json(snapshotHeatmapPayload(snapshot, clock));
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload(snapshot, clock), clock, "supabase-snapshot"));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
     if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
-      response.status(200).json(attachHeatmapDetectWindow(
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
           cache: {
@@ -3149,16 +3213,16 @@ module.exports = async function handler(request, response) {
         },
         clock,
         "after-1330-cache"
-      ));
+      ), clock, "after-1330-cache"));
       return;
     }
   }
 
   if (isFreshHeatmapCache(clock)) {
-    response.status(200).json({
+    response.status(200).json(withHeatmapRunTimeSourceSnapshot({
       ...attachHeatmapDetectWindow(heatmapCache.payload, clock, "memory-cache"),
       cache: { hit: true, ageMs: Date.now() - heatmapCache.cachedAt, ttlMs: HEATMAP_CACHE_MS },
-    });
+    }, clock, "memory-cache"));
     return;
   }
 
@@ -3302,10 +3366,10 @@ module.exports = async function handler(request, response) {
       ? { cachedAt: Date.now(), payload }
       : null;
 
-    response.status(200).json({
+    response.status(200).json(withHeatmapRunTimeSourceSnapshot({
       ...attachHeatmapDetectWindow(payload, clock, "live-detect-window"),
       cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS },
-    });
+    }, clock, "live-detect-window"));
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message });
   }

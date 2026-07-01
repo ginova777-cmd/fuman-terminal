@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -144,7 +145,7 @@ module.exports = async function handler(request, response) {
       transport.payloadRunId = payloadRunId;
       transport.payloadVia = payload.transport.via || "";
     }
-    response.status(200).json({
+    const body = {
       ok: row?.scan_status !== "failed" && payload?.cacheSource !== "static-fallback" && payload?.ok !== false,
       strategyKey: row?.strategy_key || key,
       label: row?.label || key,
@@ -164,7 +165,8 @@ module.exports = async function handler(request, response) {
       cacheSource: payload?.cacheSource || "",
       payload,
       transport,
-    });
+    };
+    response.status(200).json(attachRunTimeSourceEvidence(body));
   } catch (error) {
     response.status(502).json({ ok: false, error: error?.message || String(error), strategyKey: key });
   }
