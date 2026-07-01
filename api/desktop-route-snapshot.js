@@ -38,6 +38,12 @@ function livePreviewEnabled(request) {
     || process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_ALLOW_LIVE_PREVIEW === "1";
 }
 
+function liveReadFallbackEnabled(request) {
+  if (request.query?.snapshotOnly === "1" || request.query?.noLiveReadFallback === "1") return false;
+  return process.env.DESKTOP_ROUTE_SNAPSHOT_DISABLE_LIVE_READ_FALLBACK !== "1"
+    && process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_DISABLE_LIVE_READ_FALLBACK !== "1";
+}
+
 function readMissPayload(reason = "desktop_route_snapshot_unavailable") {
   return {
     ok: true,
@@ -104,7 +110,7 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
-    if (!livePreviewEnabled(request)) {
+    if (!livePreviewEnabled(request) && !liveReadFallbackEnabled(request)) {
       if (request.method === "HEAD") {
         response.status(204).end("");
         return;
@@ -122,7 +128,7 @@ module.exports = async function handler(request, response) {
   try {
     const result = wantsRefresh
       ? await buildAndWriteDesktopRouteSnapshot(request, { reason: "manual-desktop-route-snapshot-refresh" })
-      : { payload: await buildDesktopRouteSnapshot(request), write: { ok: false, skipped: true, reason: "read_miss_live_preview" } };
+      : { payload: await buildDesktopRouteSnapshot(request), write: { ok: false, skipped: true, reason: "read_miss_live_readonly_fallback" } };
 
     if (request.method === "HEAD") {
       response.status(200).end("");
@@ -133,6 +139,7 @@ module.exports = async function handler(request, response) {
       ...result.payload,
       write: result.write,
       snapshotHit: false,
+      snapshotReadFallback: !wantsRefresh,
     });
   } catch (error) {
     response.status(503).json({

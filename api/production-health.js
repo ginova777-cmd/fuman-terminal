@@ -1,5 +1,6 @@
 const strategy2Latest = require("./strategy2-latest");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { buildDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-builder");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const SNAPSHOT_MAX_AGE_MS = Number(
@@ -96,6 +97,52 @@ async function writeHealthSnapshot(result) {
   } catch {}
 }
 
+async function readSnapshotForHealth(request) {
+  const snapshot = await readDesktopRouteSnapshot({
+    timeoutMs: SNAPSHOT_READ_TIMEOUT_MS,
+    maxAgeMs: SNAPSHOT_MAX_AGE_MS,
+  });
+  if (snapshot?.payload) return { snapshot, fallback: false, error: "" };
+  if (process.env.FUMAN_PRODUCTION_HEALTH_DISABLE_LIVE_SNAPSHOT_FALLBACK === "1") {
+    return { snapshot: null, fallback: false, error: "desktop_route_snapshot_read_miss" };
+  }
+  try {
+    const payload = await buildDesktopRouteSnapshot({
+      ...request,
+      method: "GET",
+      url: "/api/production-health?snapshotBuild=1",
+      query: {
+        ...(request.query || {}),
+        snapshotBuild: "1",
+        healthFallback: "1",
+      },
+    });
+    return {
+      snapshot: {
+        updatedAt: payload.updatedAt || "",
+        payload: {
+          ...payload,
+          cacheSource: "production-health-live-readonly",
+          snapshotHit: false,
+          snapshotFresh: true,
+          snapshotStale: false,
+          snapshotReadFallback: true,
+          snapshotAgeMs: 0,
+          snapshotMaxAgeMs: SNAPSHOT_MAX_AGE_MS,
+        },
+      },
+      fallback: true,
+      error: "",
+    };
+  } catch (error) {
+    return {
+      snapshot: null,
+      fallback: false,
+      error: error?.message || String(error),
+    };
+  }
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -108,10 +155,8 @@ module.exports = async function handler(request, response) {
   }
 
   const issues = [];
-  const snapshot = await readDesktopRouteSnapshot({
-    timeoutMs: SNAPSHOT_READ_TIMEOUT_MS,
-    maxAgeMs: SNAPSHOT_MAX_AGE_MS,
-  });
+  const snapshotRead = await readSnapshotForHealth(request);
+  const snapshot = snapshotRead.snapshot;
   const payload = snapshot?.payload || {};
   const endpoints = payload.endpoints || {};
   const endpointCount = Object.keys(endpoints).length;
@@ -143,6 +188,8 @@ module.exports = async function handler(request, response) {
       hit: Boolean(payload.snapshotHit),
       fresh: Boolean(payload.snapshotFresh),
       partial: Boolean(payload.partial),
+      readFallback: Boolean(snapshotRead.fallback || payload.snapshotReadFallback),
+      readFallbackError: snapshotRead.error || "",
       ageMs: payload.snapshotAgeMs ?? null,
       maxAgeMs: payload.snapshotMaxAgeMs ?? SNAPSHOT_MAX_AGE_MS,
       endpointCount,
