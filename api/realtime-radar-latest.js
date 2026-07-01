@@ -28,6 +28,44 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function firstDefined(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string" && value.trim() === "") continue;
+    return value;
+  }
+  return null;
+}
+
+function normalizeWriteBudgetEvidence(writeBudget = {}) {
+  const status = String(writeBudget.status || "").trim().toLowerCase();
+  const finalStatus = String(writeBudget.finalStatus || "").trim()
+    || ({
+      ok: "completed",
+      completed: "completed",
+      failed: "failed",
+      blocked: "blocked",
+      preserved: "preserved",
+      skipped: "skipped",
+      committing: "pending",
+      open: "pending",
+    }[status] || status || "unknown");
+  const limit = cleanNumber(writeBudget.limit);
+  const writesAttempted = cleanNumber(writeBudget.writesAttempted);
+  const writesCompleted = cleanNumber(writeBudget.writesCompleted);
+  return {
+    ...writeBudget,
+    status: writeBudget.status || status || "unknown",
+    finalStatus,
+    limit,
+    writesAttempted,
+    writesCompleted,
+    allowed: writeBudget.allowed ?? (writeBudget.blocked !== true && writesAttempted <= limit),
+    used: cleanNumber(writeBudget.used ?? writesAttempted),
+    remaining: Math.max(0, cleanNumber(writeBudget.remaining ?? (limit - writesAttempted))),
+  };
+}
+
 function clampLimit(value, fallback = DEFAULT_RADAR_LIMIT) {
   const number = Math.round(cleanNumber(value));
   return Math.max(1, Math.min(MAX_RADAR_LIMIT, number || fallback));
@@ -256,9 +294,10 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
         table: normalizedPayload?.transport?.table || TABLE,
       }]
       : [];
-  const writeBudget = normalizedPayload?.writeBudget || {
+  const writeBudget = normalizeWriteBudgetEvidence(normalizedPayload?.writeBudget || {
     source: "realtime-radar-write-budget",
     status: "pending_next_writer_run",
+    finalStatus: "pending",
     runId,
     limit: 0,
     writesAttempted: 0,
@@ -266,7 +305,7 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     blocked: false,
     reason: "payload missing writer writeBudget; waiting for next scanner run",
     checkedAt: new Date().toISOString(),
-  };
+  });
   const snapshotFields = Object.keys(runTimeSourceSnapshotResponseFields(normalizedPayload)).length
     ? runTimeSourceSnapshotResponseFields(normalizedPayload)
     : buildRunTimeSourceSnapshotFields({
@@ -296,14 +335,59 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
       retentionOk: true,
       qualityStatus: freshness.fresh ? "ready" : "degraded",
     });
+  const quoteCoverageAtRun = snapshotFields.quote_coverage_at_run
+    || normalizedPayload?.quote_coverage_at_run
+    || normalizedPayload?.quoteCoverageAtRun
+    || sourceCoverage
+    || {};
+  const runQualityAtPublish = snapshotFields.run_quality_at_publish || normalizedPayload?.run_quality_at_publish || {};
+  const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields);
+  const blankCounts = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts);
+  const sampleMissingRows = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, []);
+  const rawKeepDays = firstDefined(normalizedPayload?.rawKeepDays, runQualityAtPublish.rawKeepDays);
+  const retentionOk = firstDefined(normalizedPayload?.retentionOk, runQualityAtPublish.retentionOk);
+  const alertReceipt = firstDefined(normalizedPayload?.alertReceipt, runQualityAtPublish.alertReceipt);
+  const enrichedRunQualityAtPublish = {
+    ...runQualityAtPublish,
+    writeBudget,
+    requiredFields,
+    blankCounts,
+    sampleMissingRows,
+    rawKeepDays,
+    retentionOk,
+    alertReceipt,
+  };
+  const runTimeSourceSnapshot = snapshotFields.runTimeSourceSnapshot
+    ? {
+      ...snapshotFields.runTimeSourceSnapshot,
+      quote_coverage_at_run: quoteCoverageAtRun,
+      run_quality_at_publish: enrichedRunQualityAtPublish,
+    }
+    : null;
   return {
     ...normalizedPayload,
     ...snapshotFields,
+    ...(runTimeSourceSnapshot ? {
+      runTimeSourceSnapshot,
+      run_time_source_snapshot: runTimeSourceSnapshot,
+    } : {}),
     runId,
     tradeDate: marketSession?.marketDataDate || normalizedPayload?.tradeDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
     sourceCoverage,
+    quote_coverage_at_run: quoteCoverageAtRun,
+    run_quality_at_publish: enrichedRunQualityAtPublish,
+    fresh_quote_coverage_120s: firstDefined(normalizedPayload?.fresh_quote_coverage_120s, quoteCoverageAtRun.fresh_quote_coverage_120s, quoteCoverageAtRun.freshQuoteCoverage120s),
+    fresh_quotes: firstDefined(normalizedPayload?.fresh_quotes, quoteCoverageAtRun.fresh_quotes, quoteCoverageAtRun.freshQuotes),
+    active_symbols: firstDefined(normalizedPayload?.active_symbols, quoteCoverageAtRun.active_symbols, quoteCoverageAtRun.activeSymbols),
+    quote_age_seconds: firstDefined(normalizedPayload?.quote_age_seconds, quoteCoverageAtRun.quote_age_seconds, quoteCoverageAtRun.quoteAgeSeconds),
+    requiredFields,
+    blankCounts,
+    sampleMissingRows,
+    rawKeepDays,
+    retentionOk,
+    alertReceipt,
     freshness: {
       ...(normalizedPayload?.freshness || {}),
       decision: normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale"),

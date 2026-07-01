@@ -3,6 +3,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const { cleanNumber, isIntradayTradable } = require("./intraday-radar-rules");
 const { isTwseTradingDay } = require("./twse-trading-day");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -54,6 +55,13 @@ const MARKET_END_SECONDS = MARKET_END_MINUTES * 60;
 const REALTIME_RADAR_SESSION_LIMIT = Math.max(120, Number(process.env.REALTIME_RADAR_SESSION_LIMIT || 1200));
 const REALTIME_RADAR_WRITE_BUDGET_PER_SCAN = Math.max(1, Number(process.env.REALTIME_RADAR_WRITE_BUDGET_PER_SCAN || 3));
 const REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS = Math.max(60 * 1000, Number(process.env.REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS || 5 * 60 * 1000));
+const REALTIME_RADAR_FRESH_QUOTE_SECONDS = Math.max(1, Number(process.env.REALTIME_RADAR_FRESH_QUOTE_SECONDS || 120));
+const REALTIME_RADAR_RAW_KEEP_DAYS = Math.max(0, Number(process.env.REALTIME_RADAR_RAW_KEEP_DAYS || 0));
+const REQUIRED_RADAR_FIELDS = {
+  identity: ["code", "name"],
+  quote: ["close", "percent", "value", "volume"],
+  signal: ["side", "score", "time", "signalTags"],
+};
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -87,13 +95,25 @@ function createWriteBudget(runId) {
 }
 
 function writeBudgetSnapshot(writeBudget, status = "open") {
+  const finalStatus = {
+    ok: "completed",
+    completed: "completed",
+    failed: "failed",
+    blocked: "blocked",
+    preserved: "preserved",
+    skipped: "skipped",
+  }[status] || (status === "committing" || status === "open" ? "pending" : status);
   return {
     source: writeBudget.source,
     status,
+    finalStatus,
     runId: writeBudget.runId,
     limit: writeBudget.limit,
     writesAttempted: writeBudget.writesAttempted,
     writesCompleted: writeBudget.writesCompleted,
+    allowed: writeBudget.blocked !== true && writeBudget.writesAttempted <= writeBudget.limit,
+    used: writeBudget.writesAttempted,
+    remaining: Math.max(0, writeBudget.limit - writeBudget.writesAttempted),
     blocked: writeBudget.blocked,
     reason: writeBudget.reason,
     checkedAt: new Date().toISOString(),
@@ -130,7 +150,7 @@ async function sendOpsText(text) {
     windowsHide: true,
     env: {
       ...process.env,
-      FUMAN_ALERT_KIND: "realtime-radar",
+      FUMAN_ALERT_KIND: "failure",
       FUMAN_ALERT_SOURCE: "realtime-radar-runtime",
       FUMAN_ALERT_SUBJECT: "即時雷達資料源警示",
       FUMAN_ALERT_TEXT: text,
@@ -147,6 +167,38 @@ async function sendOpsText(text) {
   throw new Error(`workflow alert failed${detail ? `: ${detail.slice(0, 500)}` : ""}`);
 }
 
+function normalizeAlertReceipt(receipt = {}, fallback = {}) {
+  const source = String(receipt.source || fallback.source || "").toLowerCase();
+  const rawKind = String(receipt.kind || fallback.kind || "").toLowerCase();
+  const kind = /smoke/.test(source) || /smoke/.test(rawKind)
+    ? "smoke"
+    : /failure|failed|alert/.test(rawKind) || /runtime/.test(source)
+      ? "failure"
+      : rawKind || fallback.kind || "none";
+  const deliveredAt = receipt.deliveredAt || (!receipt.dryRun && receipt.ok === true ? receipt.finishedAt : "") || "";
+  return {
+    ok: receipt.ok === true,
+    kind,
+    channel: receipt.channel || fallback.channel || "",
+    deliveredAt,
+    delivery_error: receipt.delivery_error || receipt.deliveryError || receipt.error || "",
+    dryRun: receipt.dryRun === true,
+    receiptFile: receipt.receiptFile || fallback.receiptFile || ALERT_RECEIPT_FILE,
+    requiredForRun: fallback.requiredForRun === true,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function noAlertReceipt() {
+  const latestReceipt = readJson(ALERT_RECEIPT_FILE, {});
+  return normalizeAlertReceipt(latestReceipt, {
+    kind: "smoke",
+    channel: "smtp",
+    receiptFile: ALERT_RECEIPT_FILE,
+    requiredForRun: false,
+  });
+}
+
 function alertSignature(payload) {
   const staleCodes = (payload.staleQuoteDetails || []).map((item) => item.code).filter(Boolean).join(",");
   const issues = (payload.externalSourceIssues || [])
@@ -156,15 +208,31 @@ function alertSignature(payload) {
 }
 
 async function maybeSendRealtimeRadarAlert(payload) {
-  if (process.env.REALTIME_RADAR_NOTIFY === "0") return;
+  const noAlert = noAlertReceipt();
   const staleDetails = payload.staleQuoteDetails || [];
   const issues = payload.externalSourceIssues || [];
   const hasProblem = Number(payload.staleQuoteCount || 0) > 0 || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
-  if (!hasProblem) return;
+  if (!hasProblem) return noAlert;
+  if (process.env.REALTIME_RADAR_NOTIFY === "0") {
+    return {
+      ...noAlert,
+      kind: "failure",
+      skipped: true,
+      skipReason: "REALTIME_RADAR_NOTIFY=0",
+    };
+  }
   const previous = readJson(ALERT_STATUS_FILE, {});
   const signature = alertSignature(payload);
   const lastAlertAt = previous.lastAlertAt ? Date.parse(previous.lastAlertAt) : 0;
-  if (previous.signature === signature && lastAlertAt && Date.now() - lastAlertAt < REALTIME_RADAR_ALERT_COOLDOWN_MS) return;
+  if (previous.signature === signature && lastAlertAt && Date.now() - lastAlertAt < REALTIME_RADAR_ALERT_COOLDOWN_MS) {
+    return {
+      ...noAlert,
+      kind: "failure",
+      skipped: true,
+      skipReason: "alert_cooldown",
+      lastAlertAt: previous.lastAlertAt || "",
+    };
+  }
   const staleLines = staleDetails.slice(0, 10).map((item) => `${item.code} ${item.name || ""} age=${item.quoteAgeSeconds ?? ""}s quote=${item.quoteTime || "--"}`);
   const issueLines = issues.slice(0, 8).map((item) => `${item.source || ""} ${item.type || ""}${item.status ? ` HTTP ${item.status}` : ""} x${item.count || 0}${item.sampleCodes ? ` ${item.sampleCodes}` : ""}`.trim());
   const text = [
@@ -181,10 +249,20 @@ async function maybeSendRealtimeRadarAlert(payload) {
   ].filter((line) => line !== null).join("\n");
   try {
     const channel = await sendOpsText(text);
-    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: new Date().toISOString(), channel, lastError: "" });
+    const receipt = normalizeAlertReceipt(readJson(ALERT_RECEIPT_FILE, {}), { kind: "failure", channel });
+    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: new Date().toISOString(), channel, lastError: "", receipt });
+    return receipt;
   } catch (error) {
-    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: previous.lastAlertAt || "", channel: "", lastError: String(error.message || error).slice(0, 500), checkedAt: new Date().toISOString() });
+    const receipt = normalizeAlertReceipt(readJson(ALERT_RECEIPT_FILE, {}), { kind: "failure" });
+    const failedReceipt = {
+      ...receipt,
+      ok: false,
+      kind: "failure",
+      delivery_error: String(error.message || error).slice(0, 500),
+    };
+    writeJson(ALERT_STATUS_FILE, { signature, lastAlertAt: previous.lastAlertAt || "", channel: "", lastError: failedReceipt.delivery_error, checkedAt: new Date().toISOString(), receipt: failedReceipt });
     console.log(`realtime radar alert failed: ${error.message}`);
+    return failedReceipt;
   }
 }
 
@@ -247,21 +325,33 @@ async function safeUploadRealtimeRadarPayload(payload, writeBudget = null) {
       writeBudget.blocked = true;
       writeBudget.reason = `write budget exceeded ${writeBudget.writesAttempted}/${writeBudget.limit}`;
       payload.writeBudget = persistWriteBudget(writeBudget, "blocked");
+      refreshRealtimeRadarEvidence(payload);
       return updateSupabaseUploadStatus(false, writeBudget.reason);
     }
-    payload.writeBudget = writeBudgetSnapshot(writeBudget, "committing");
+    persistWriteBudget(writeBudget, "committing");
+    payload.writeBudget = writeBudgetSnapshot({
+      ...writeBudget,
+      writesCompleted: writeBudget.writesCompleted + 1,
+    }, "completed");
+    refreshRealtimeRadarEvidence(payload);
   }
   try {
     const uploaded = await uploadRealtimeRadarPayload(payload);
     if (writeBudget && uploaded !== false) {
       writeBudget.writesCompleted += 1;
-      payload.writeBudget = persistWriteBudget(writeBudget, "ok");
+      payload.writeBudget = persistWriteBudget(writeBudget, "completed");
+      refreshRealtimeRadarEvidence(payload);
+    } else if (writeBudget) {
+      writeBudget.reason = "Supabase credentials missing; upload skipped.";
+      payload.writeBudget = persistWriteBudget(writeBudget, "skipped");
+      refreshRealtimeRadarEvidence(payload);
     }
     return updateSupabaseUploadStatus(uploaded !== false, uploaded === false ? "Supabase credentials missing; upload skipped." : "");
   } catch (error) {
     if (writeBudget) {
       writeBudget.reason = error.message || String(error);
       payload.writeBudget = persistWriteBudget(writeBudget, "failed");
+      refreshRealtimeRadarEvidence(payload);
     }
     console.log(`realtime radar supabase upload failed: ${error.message}`);
     return updateSupabaseUploadStatus(false, error.message);
@@ -327,13 +417,29 @@ function rejectedScanSummary(payload = {}) {
     staleQuoteDetails: Array.isArray(payload.staleQuoteDetails) ? payload.staleQuoteDetails.slice(0, 20) : [],
     failedBatchDetails: Array.isArray(payload.failedBatchDetails) ? payload.failedBatchDetails.slice(0, 20) : [],
     externalSourceIssues: Array.isArray(payload.externalSourceIssues) ? payload.externalSourceIssues.slice(0, 20) : [],
+    sourceCoverage: payload.sourceCoverage || null,
+    quote_coverage_at_run: payload.quote_coverage_at_run || null,
+    run_quality_at_publish: payload.run_quality_at_publish || null,
+    alertReceipt: payload.alertReceipt || null,
   };
 }
 
 async function publishRealtimeRadarPayload(payload, previousPayload, writeBudget) {
-  const hasBlockingSourceIssue = cleanNumber(payload.staleQuoteCount) > 0 || cleanNumber(payload.failedBatchCount) > 0;
+  refreshRealtimeRadarEvidence(payload);
+  const qualityBlocksLatest = payload?.run_quality_at_publish?.publishAllowed === false
+    || payload?.run_quality_at_publish?.degradedBlocksLatest === true;
+  const hasBlockingSourceIssue = cleanNumber(payload.staleQuoteCount) > 0
+    || cleanNumber(payload.failedBatchCount) > 0
+    || qualityBlocksLatest;
   if (hasBlockingSourceIssue && canPreservePreviousGoodPayload(previousPayload, payload.date, Date.now())) {
     const reason = `preserved previous good latest; rejected run ${payload.runId || ""} stale=${cleanNumber(payload.staleQuoteCount)} failed=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`;
+    payload.alertReceipt = await maybeSendRealtimeRadarAlert({
+      ...payload,
+      status: "degraded_preserved_latest",
+      publishBlocked: true,
+      preserveReason: reason,
+    });
+    refreshRealtimeRadarEvidence(payload);
     const preservedPayload = {
       ...previousPayload,
       preservedLatest: true,
@@ -344,21 +450,16 @@ async function publishRealtimeRadarPayload(payload, previousPayload, writeBudget
     };
     writeJson(OUT_FILE, preservedPayload);
     updateSupabaseUploadStatus(false, reason);
-    await maybeSendRealtimeRadarAlert({
-      ...payload,
-      status: "degraded_preserved_latest",
-      publishBlocked: true,
-      preserveReason: reason,
-    });
     console.log(`realtime radar ${payload.timestamp}: ${reason}`);
     return preservedPayload;
   }
 
+  payload.alertReceipt = await maybeSendRealtimeRadarAlert(payload);
+  refreshRealtimeRadarEvidence(payload);
   writeJson(OUT_FILE, payload);
   const supabaseUpload = await safeUploadRealtimeRadarPayload(payload, writeBudget);
   const uploadedPayload = { ...payload, supabaseUpload };
   writeJson(OUT_FILE, uploadedPayload);
-  await maybeSendRealtimeRadarAlert(uploadedPayload);
   return uploadedPayload;
 }
 
@@ -411,6 +512,219 @@ function hasFreshQuote(stock) {
 function hasFreshLastTrade(stock, scanTimestamp) {
   const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
   return age != null && age <= MAX_QUOTE_AGE_SECONDS;
+}
+
+function finiteQuoteAges(stocks = [], scanTimestamp = "") {
+  return stocks
+    .filter((stock) => hasFreshQuote(stock))
+    .map((stock) => quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time))
+    .filter((age) => Number.isFinite(age));
+}
+
+function buildQuoteCoverageAtRun({
+  liveStocks = [],
+  scanTimestamp = "",
+  failedBatchCount = 0,
+  staleQuoteCount = 0,
+} = {}) {
+  const activeSymbols = liveStocks.filter((stock) => stock?.code).length;
+  const realtimeStocks = liveStocks.filter((stock) => hasFreshQuote(stock));
+  const quoteAges = finiteQuoteAges(liveStocks, scanTimestamp);
+  const freshQuotes = realtimeStocks.filter((stock) => {
+    const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
+    return Number.isFinite(age) && age <= REALTIME_RADAR_FRESH_QUOTE_SECONDS;
+  }).length;
+  const quoteAgeSeconds = quoteAges.length ? Math.max(...quoteAges) : null;
+  const freshQuoteCoverage120s = activeSymbols ? freshQuotes / activeSymbols : 0;
+  const ready = Boolean(
+    activeSymbols > 0
+    && freshQuoteCoverage120s >= 0.95
+    && (quoteAgeSeconds === null || quoteAgeSeconds <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
+    && cleanNumber(failedBatchCount) === 0
+    && cleanNumber(staleQuoteCount) === 0
+  );
+  return {
+    status: ready ? "ready" : "degraded",
+    ok: ready,
+    ready,
+    reason: ready ? "fresh_quote_coverage_120s_ready" : "fresh_quote_coverage_120s_below_threshold_or_stale",
+    fresh_quote_coverage_120s: Number(freshQuoteCoverage120s.toFixed(4)),
+    freshQuoteCoverage120s: Number(freshQuoteCoverage120s.toFixed(4)),
+    fresh_quotes: freshQuotes,
+    freshQuotes,
+    active_symbols: activeSymbols,
+    activeSymbols,
+    quote_age_seconds: quoteAgeSeconds,
+    quoteAgeSeconds,
+    maxAllowedQuoteAgeSeconds: REALTIME_RADAR_FRESH_QUOTE_SECONDS,
+    staleQuoteCount: cleanNumber(staleQuoteCount),
+    failedBatchCount: cleanNumber(failedBatchCount),
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+function radarRequiredFieldValue(row, field) {
+  if (field === "signalTags") return Array.isArray(row.signalTags) ? row.signalTags : row.tags;
+  if (field === "time") return row.firstSignalTime || row.time || row.quoteTime || row.lastSignalTime;
+  if (field === "volume") return row.volume || row.tradeVolume;
+  if (field === "percent") return row.percent ?? row.pct;
+  return row[field];
+}
+
+function isRadarFieldBlank(field, value) {
+  if (Array.isArray(value)) return value.length === 0;
+  if (value === null || value === undefined || value === "") return true;
+  if (["close", "value", "volume", "score"].includes(field)) return cleanNumber(value) <= 0;
+  return false;
+}
+
+function buildRadarFieldCompleteness(rows = []) {
+  const fields = [...new Set(Object.values(REQUIRED_RADAR_FIELDS).flat())];
+  const blankCounts = Object.fromEntries(fields.map((field) => [field, 0]));
+  const sampleMissingRows = [];
+  for (const row of rows) {
+    const missing = fields.filter((field) => isRadarFieldBlank(field, radarRequiredFieldValue(row, field)));
+    for (const field of missing) blankCounts[field] += 1;
+    if (missing.length && sampleMissingRows.length < 10) {
+      sampleMissingRows.push({
+        code: row.code || "",
+        name: row.name || "",
+        missing,
+        time: row.firstSignalTime || row.time || row.quoteTime || "",
+      });
+    }
+  }
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  return {
+    requiredFields: REQUIRED_RADAR_FIELDS,
+    blankCounts,
+    blankTotal,
+    sampleMissingRows,
+  };
+}
+
+function realtimeRadarNotRequired(reason) {
+  return { status: "not_required", ok: true, reason };
+}
+
+function refreshRealtimeRadarEvidence(payload, options = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const quoteCoverage = options.quoteCoverage || payload.quote_coverage_at_run || payload.quoteCoverageAtRun || payload.sourceCoverage || {};
+  const fieldCompleteness = options.fieldCompleteness || {
+    requiredFields: payload.requiredFields || REQUIRED_RADAR_FIELDS,
+    blankCounts: payload.blankCounts || {},
+    blankTotal: cleanNumber(payload.blankTotal),
+    sampleMissingRows: Array.isArray(payload.sampleMissingRows) ? payload.sampleMissingRows : [],
+  };
+  const writeBudget = options.writeBudget || payload.writeBudget || null;
+  const fallbackUsed = payload.fallbackUsed === true;
+  const budgetFinalStatus = String(writeBudget?.finalStatus || writeBudget?.status || "").toLowerCase();
+  const publishAllowed = Boolean(
+    quoteCoverage.ok !== false
+    && cleanNumber(payload.staleQuoteCount) === 0
+    && cleanNumber(payload.failedBatchCount) === 0
+    && cleanNumber(fieldCompleteness.blankTotal) === 0
+    && fallbackUsed === false
+    && !(writeBudget?.blocked === true)
+    && !["failed", "blocked"].includes(budgetFinalStatus)
+  );
+  const snapshotFields = buildRunTimeSourceSnapshotFields({
+    strategy: "realtime-radar",
+    runId: payload.runId,
+    payload,
+    capturedAt: payload.updatedAt || new Date().toISOString(),
+    startedAt: payload.startedAt || payload.updatedAt || "",
+    finishedAt: payload.updatedAt || "",
+    sourceStatus: {
+      ...quoteCoverage,
+      status: publishAllowed ? "ready" : quoteCoverage.status || "degraded",
+      ok: publishAllowed,
+      ready: publishAllowed,
+    },
+    quoteCoverage,
+    intraday1mReadiness: realtimeRadarNotRequired("realtime radar does not require intraday 1m"),
+    maReadiness: realtimeRadarNotRequired("realtime radar does not require MA readiness"),
+    preopenFutoptDailyReadiness: realtimeRadarNotRequired("realtime radar does not require preopen/futopt/daily readiness"),
+    expectedTotal: options.expectedTotal ?? payload.active_symbols ?? payload.totalCount ?? payload.count,
+    scannedCount: options.scannedCount ?? payload.active_symbols ?? payload.totalCount ?? payload.count,
+    resultCount: Array.isArray(payload.rows) ? payload.rows.length : payload.count,
+    readbackCount: Array.isArray(payload.rows) ? payload.rows.length : payload.count,
+    publishAllowed,
+    degradedBlocksLatest: !publishAllowed,
+    preservePreviousGood: !publishAllowed,
+    fallbackUsed,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    fallbackAllowed: fallbackUsed === false,
+    fallbackDetails: Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : [],
+    writeBudget,
+    retentionOk: payload.retentionOk !== false,
+    qualityStatus: publishAllowed ? "ready" : "degraded",
+  });
+  const alertReceipt = payload.alertReceipt || noAlertReceipt();
+  Object.assign(payload, snapshotFields, {
+    sourceCoverage: quoteCoverage,
+    quote_coverage_at_run: snapshotFields.quote_coverage_at_run,
+    fresh_quote_coverage_120s: quoteCoverage.fresh_quote_coverage_120s,
+    fresh_quotes: quoteCoverage.fresh_quotes,
+    active_symbols: quoteCoverage.active_symbols,
+    quote_age_seconds: quoteCoverage.quote_age_seconds,
+    requiredFields: fieldCompleteness.requiredFields,
+    blankCounts: fieldCompleteness.blankCounts,
+    blankTotal: fieldCompleteness.blankTotal,
+    sampleMissingRows: fieldCompleteness.sampleMissingRows,
+    rawKeepDays: REALTIME_RADAR_RAW_KEEP_DAYS,
+    retentionOk: payload.retentionOk !== false,
+    alertReceipt,
+  });
+  payload.run_quality_at_publish = {
+    ...(payload.run_quality_at_publish || {}),
+    requiredFields: fieldCompleteness.requiredFields,
+    blankCounts: fieldCompleteness.blankCounts,
+    blankTotal: fieldCompleteness.blankTotal,
+    sampleMissingRows: fieldCompleteness.sampleMissingRows,
+    rawKeepDays: REALTIME_RADAR_RAW_KEEP_DAYS,
+    alertReceipt,
+    writeBudget,
+  };
+  if (payload.runTimeSourceSnapshot) payload.runTimeSourceSnapshot.run_quality_at_publish = payload.run_quality_at_publish;
+  if (payload.run_time_source_snapshot) payload.run_time_source_snapshot.run_quality_at_publish = payload.run_quality_at_publish;
+  return payload;
+}
+
+function attachRealtimeRadarRunEvidence(payload, {
+  liveStocks = [],
+  scanTimestamp = "",
+  writeBudget = null,
+} = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const quoteCoverage = buildQuoteCoverageAtRun({
+    liveStocks,
+    scanTimestamp,
+    failedBatchCount: payload.failedBatchCount,
+    staleQuoteCount: payload.staleQuoteCount,
+  });
+  const fieldCompleteness = buildRadarFieldCompleteness(Array.isArray(payload.rows) ? payload.rows : []);
+  payload.quoteCoverageAtRun = quoteCoverage;
+  payload.quote_coverage_at_run = quoteCoverage;
+  payload.sourceCoverage = quoteCoverage;
+  payload.fresh_quote_coverage_120s = quoteCoverage.fresh_quote_coverage_120s;
+  payload.fresh_quotes = quoteCoverage.fresh_quotes;
+  payload.active_symbols = quoteCoverage.active_symbols;
+  payload.quote_age_seconds = quoteCoverage.quote_age_seconds;
+  payload.requiredFields = fieldCompleteness.requiredFields;
+  payload.blankCounts = fieldCompleteness.blankCounts;
+  payload.blankTotal = fieldCompleteness.blankTotal;
+  payload.sampleMissingRows = fieldCompleteness.sampleMissingRows;
+  payload.rawKeepDays = REALTIME_RADAR_RAW_KEEP_DAYS;
+  payload.retentionOk = true;
+  payload.alertReceipt = payload.alertReceipt || noAlertReceipt();
+  return refreshRealtimeRadarEvidence(payload, {
+    quoteCoverage,
+    fieldCompleteness,
+    writeBudget: writeBudget || payload.writeBudget,
+    expectedTotal: quoteCoverage.active_symbols,
+    scannedCount: liveStocks.length,
+  });
 }
 
 function chunkStocks(stocks = [], size = REALTIME_RESCAN_BATCH_SIZE) {
@@ -983,6 +1297,7 @@ async function main() {
   const queuedBatches = hydrateQueuedBatches(readFailedBatchQueue(), rawStocks);
   const realtime = await fetchRealtime(rawStocks, timestamp);
   const liveStocks = realtime.stocks;
+  let finalLiveStocks = liveStocks;
   const freshStocks = liveStocks.filter((stock) => hasFreshQuote(stock));
   const staleStocks = liveStocks.filter((stock) => !hasFreshQuote(stock));
   const lastTradeStaleStocks = freshStocks.filter((stock) => !hasFreshLastTrade(stock, timestamp));
@@ -1076,6 +1391,7 @@ async function main() {
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
         const retryLiveStocksByCode = new Map(liveStocks.map((stock) => [String(stock.code || ""), stock]));
         for (const retryStock of retryStocks) retryLiveStocksByCode.set(String(retryStock.code || ""), retryStock);
+        finalLiveStocks = [...retryLiveStocksByCode.values()];
         const patchedFreshStocks = [...retryLiveStocksByCode.values()].filter((stock) => hasFreshQuote(stock));
         const patchedLastTradeStaleStocks = patchedFreshStocks.filter((stock) => !hasFreshLastTrade(stock, timestamp));
         const patchedStaleQuoteDetails = buildStaleQuoteDetails(remainingStaleStocks, timestamp);
@@ -1103,6 +1419,11 @@ async function main() {
       }
     }
   }
+  attachRealtimeRadarRunEvidence(payload, {
+    liveStocks: finalLiveStocks,
+    scanTimestamp: timestamp,
+    writeBudget: payload.writeBudget || writeBudgetSnapshot(writeBudget, "open"),
+  });
   payload = await publishRealtimeRadarPayload(payload, previousPayload, writeBudget);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} lastTradeStale ${payload.lastTradeStaleCount || 0} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
   writeFailedBatchQueue(deferredRetry ? deferredRetry.failedBatches || [] : realtime.failedBatches || []);
