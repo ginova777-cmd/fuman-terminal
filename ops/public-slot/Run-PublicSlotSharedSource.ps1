@@ -3635,6 +3635,13 @@ do {
     }
 
     $session = Get-PublicSlotSession
+    $earlyQuoteRows = @(Convert-QuotesToRows -Quotes $quotes -Payload $payload)
+    if ($earlyQuoteRows.Count -gt 0) {
+      $earlyEligibleSymbols = @($earlyQuoteRows | ForEach-Object { [string]$_.symbol } | Where-Object { $_ -match '^\d{4}$' } | Select-Object -Unique)
+      $earlyBlacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
+      $earlyRestQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
+      Write-QuoteFastHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $earlyQuoteRows -PreopenRows @() -EligibleSymbols $earlyEligibleSymbols -SeededSymbols $seeded -BlacklistCount $earlyBlacklistCount -CollectorState $collectorState -Session $session -RestQuotePayload $earlyRestQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
+    }
     $earlyShouldWritePreopenRows = Test-ShouldWritePreopenRows -Session $session
     [void](Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-rest-quote" -Session $session -ShouldWritePreopenRows $earlyShouldWritePreopenRows)
     $warmupSymbols = @(Get-WarmupSymbols)
