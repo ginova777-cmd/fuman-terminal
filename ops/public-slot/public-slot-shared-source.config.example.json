@@ -17,6 +17,8 @@
   "fugleCollectorOpeningBoostBatchSize": 2000,
   "fugleCollectorOpeningBoostConcurrency": 12,
   "fugleCollectorOpeningBoostDelayMilliseconds": 0,
+  "fugleCollectorTwseMisEnabled": true,
+  "fugleCollectorTwseMisBatchSize": 80,
   "direct1mBatchSize": 8,
   "direct1mEverySeconds": 20,
   "direct1mPrewarmEnabled": true,

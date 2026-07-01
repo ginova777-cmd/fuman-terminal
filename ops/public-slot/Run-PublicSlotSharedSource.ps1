@@ -30,6 +30,8 @@ param(
   [int]$FugleCollectorOpeningBoostBatchSize = 2000,
   [int]$FugleCollectorOpeningBoostConcurrency = 12,
   [int]$FugleCollectorOpeningBoostDelayMilliseconds = 0,
+  [bool]$FugleCollectorTwseMisEnabled = $true,
+  [int]$FugleCollectorTwseMisBatchSize = 80,
   [int]$FugleCollectorLoopMilliseconds = 1000,
   [int]$FugleCollectorBatchSize = 320,
   [int]$FugleCollectorConcurrency = 4,
@@ -199,6 +201,8 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorOpeningBoostBatchSize" -ConfigNames @("fugleCollectorOpeningBoostBatchSize", "FugleCollectorOpeningBoostBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorOpeningBoostConcurrency" -ConfigNames @("fugleCollectorOpeningBoostConcurrency", "FugleCollectorOpeningBoostConcurrency") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorOpeningBoostDelayMilliseconds" -ConfigNames @("fugleCollectorOpeningBoostDelayMilliseconds", "FugleCollectorOpeningBoostDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorTwseMisEnabled" -ConfigNames @("fugleCollectorTwseMisEnabled", "FugleCollectorTwseMisEnabled") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_TWSE_MIS_ENABLED" -Type "bool"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorTwseMisBatchSize" -ConfigNames @("fugleCollectorTwseMisBatchSize", "FugleCollectorTwseMisBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_TWSE_MIS_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorLoopMilliseconds" -ConfigNames @("fugleCollectorLoopMilliseconds", "FugleCollectorLoopMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_LOOP_MS"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorBatchSize" -ConfigNames @("fugleCollectorBatchSize", "FugleCollectorBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorConcurrency" -ConfigNames @("fugleCollectorConcurrency", "FugleCollectorConcurrency") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_CONCURRENCY"
@@ -1337,6 +1341,9 @@ function Write-QuoteHeartbeatStatus {
       $previousRows = @(Invoke-PublicSlotRestGet -PathAndQuery "source_status?source_name=eq.$SourceName&select=payload&limit=1")
       if ($previousRows.Count -gt 0) {
         $previousSourcePayload = @($previousRows)[0].payload
+        if ($previousSourcePayload -is [string] -and -not [string]::IsNullOrWhiteSpace($previousSourcePayload)) {
+          try { $previousSourcePayload = $previousSourcePayload | ConvertFrom-Json -Depth 80 } catch {}
+        }
       }
     } catch {}
     function Get-PreviousPayloadValue {
@@ -2179,6 +2186,8 @@ function Start-FugleWebSocketCollector {
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE"] = [string]$FugleCollectorOpeningBoostBatchSize
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY"] = [string]$FugleCollectorOpeningBoostConcurrency
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS"] = [string]$FugleCollectorOpeningBoostDelayMilliseconds
+  $psi.Environment["FUGLE_COLLECTOR_TWSE_MIS_ENABLED"] = if ($FugleCollectorTwseMisEnabled) { "1" } else { "0" }
+  $psi.Environment["FUGLE_COLLECTOR_TWSE_MIS_BATCH_SIZE"] = [string]$FugleCollectorTwseMisBatchSize
   $process = [System.Diagnostics.Process]::Start($psi)
   return "started pid=$($process.Id)"
 }
@@ -3106,7 +3115,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms collectorTwseMisEnabled=$FugleCollectorTwseMisEnabled collectorTwseMisBatch=$FugleCollectorTwseMisBatchSize direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt

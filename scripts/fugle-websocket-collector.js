@@ -23,6 +23,9 @@ const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TT
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
+const TWSE_MIS_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_TWSE_MIS_ENABLED || "1"));
+const TWSE_MIS_BATCH_SIZE = Math.max(1, Math.min(120, Number(process.env.FUGLE_COLLECTOR_TWSE_MIS_BATCH_SIZE || 80)));
+const TWSE_MIS_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_TWSE_MIS_TIMEOUT_MS || 12000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
 const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "12:00";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 2000));
@@ -81,6 +84,8 @@ function writeStatus(extra = {}) {
     quoteTtlMs: QUOTE_TTL_MS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     requestRetries: REQUEST_RETRIES,
+    twseMisEnabled: TWSE_MIS_ENABLED,
+    twseMisBatchSize: TWSE_MIS_BATCH_SIZE,
     openingBoostStart: OPENING_BOOST_START,
     openingBoostEnd: OPENING_BOOST_END,
     openingBoostBatchSize: OPENING_BOOST_BATCH_SIZE,
@@ -216,6 +221,92 @@ function normalizeQuote(payload, requestedCode) {
   };
 }
 
+function firstPositive(...values) {
+  for (const value of values) {
+    const parts = String(value ?? "").split("_");
+    for (const part of parts) {
+      const number = cleanNumber(part);
+      if (number > 0) return number;
+    }
+  }
+  return 0;
+}
+
+function normalizeTwseMisQuote(item) {
+  const code = normalizeCode(item?.c);
+  if (!/^\d{4}$/.test(code)) return null;
+  const prevClose = cleanNumber(item?.y);
+  const close = firstPositive(item?.z, item?.pz, item?.b, item?.a, item?.h, item?.l, item?.o, item?.y);
+  if (!close || !prevClose) return null;
+  const now = nowIso();
+  const bidPrice = firstPositive(item?.b);
+  const askPrice = firstPositive(item?.a);
+  const bidSize = firstPositive(item?.g);
+  const askSize = firstPositive(item?.f);
+  const change = close - prevClose;
+  return {
+    code,
+    name: item?.n || code,
+    close,
+    closeSource: "twse-mis",
+    change,
+    percent: prevClose ? (change / prevClose) * 100 : 0,
+    open: cleanNumber(item?.o),
+    high: firstPositive(item?.h, item?.z, item?.pz, item?.o, item?.y),
+    low: firstPositive(item?.l, item?.z, item?.pz, item?.o, item?.y),
+    prevClose,
+    tradeVolume: firstPositive(item?.v, item?.tv),
+    tradeValue: cleanNumber(item?.tlong),
+    bidPrice,
+    bidSize,
+    askPrice,
+    askSize,
+    market: item?.ex || "",
+    time: item?.t || item?.ot || now,
+    quoteTime: item?.t || item?.ot || now,
+    quoteSeenAt: now,
+    updatedAt: now,
+    quoteSource: "twse-mis",
+    realtimeFallback: "twse-mis",
+    recoveredFromRealtimeFallback: true,
+  };
+}
+
+async function fetchTwseMisChunk(codes) {
+  const channels = codes.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TWSE_MIS_TIMEOUT_MS);
+  try {
+    const response = await fetch(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(channels.join("|"))}&json=1&delay=0&_=${Date.now()}`, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FumanPublicSlotTwseMisRecovery/1.0)",
+        "Referer": "https://mis.twse.com.tw/",
+        "Accept": "application/json,text/plain,*/*",
+      },
+    });
+    if (!response.ok) throw new Error(`twse-mis HTTP ${response.status}`);
+    const payload = await response.json();
+    return (payload?.msgArray || []).map(normalizeTwseMisQuote).filter(Boolean);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchTwseMisQuotes(symbols) {
+  if (!TWSE_MIS_ENABLED) return [];
+  const normalized = [...new Set((symbols || []).map(normalizeCode).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
+  const byCode = new Map();
+  for (let index = 0; index < normalized.length; index += TWSE_MIS_BATCH_SIZE) {
+    const chunk = normalized.slice(index, index + TWSE_MIS_BATCH_SIZE);
+    try {
+      const quotes = await fetchTwseMisChunk(chunk);
+      for (const quote of quotes) byCode.set(quote.code, quote);
+    } catch {}
+  }
+  return [...byCode.values()];
+}
+
 async function fetchQuote(code, apiKey) {
   const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${encodeURIComponent(code)}`;
   let lastError = null;
@@ -261,9 +352,11 @@ async function tick() {
     writeStatus({ ok: false, subscribed: 0, error: "symbols missing" });
     return;
   }
+  const twseMisQuotes = await fetchTwseMisQuotes(symbols);
+  const twseMisMergedCount = twseMisQuotes.length ? mergeQuotes(twseMisQuotes) : 0;
   if (Date.now() < cooldownUntil) {
     const existing = readJson(FUGLE_WS_QUOTES_FILE, {});
-    writeStatus({ subscribed: symbols.length, quotes: existing.count || 0, cooldown: true });
+    writeStatus({ subscribed: symbols.length, quotes: twseMisMergedCount || existing.count || 0, cooldown: true, twseMisFetched: twseMisQuotes.length });
     return;
   }
 
@@ -305,6 +398,8 @@ async function tick() {
     pending: Math.max(0, symbols.length - count),
     quotes: count,
     fetched: quotes.length,
+    fugleFetched: quotes.length,
+    twseMisFetched: twseMisQuotes.length,
     attempted: batch.length,
     openingBoostActive: effective.openingBoostActive,
     openingBoostFreshCount: effective.freshCount,

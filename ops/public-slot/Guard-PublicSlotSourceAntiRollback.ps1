@@ -49,6 +49,8 @@ function Write-DefaultRuntimeConfig {
     fugleCollectorOpeningBoostBatchSize = 2000
     fugleCollectorOpeningBoostConcurrency = 12
     fugleCollectorOpeningBoostDelayMilliseconds = 0
+    fugleCollectorTwseMisEnabled = $true
+    fugleCollectorTwseMisBatchSize = 80
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
@@ -102,6 +104,8 @@ function Test-RepoRuntimeConfigSupport {
     "OpeningBoostEnd",
     "RestQuoteOpeningBoostBatchSize",
     "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+    "FUGLE_COLLECTOR_TWSE_MIS_ENABLED",
+    "FugleCollectorTwseMisEnabled",
     "Add-FreshQuoteReadthrough",
     "Get-FreshPublicSlotQuoteRows",
     "Get-ActiveCommonStockSymbols",
@@ -183,6 +187,8 @@ function Test-RuntimeConfig {
     "fugleCollectorOpeningBoostBatchSize",
     "fugleCollectorOpeningBoostConcurrency",
     "fugleCollectorOpeningBoostDelayMilliseconds",
+    "fugleCollectorTwseMisEnabled",
+    "fugleCollectorTwseMisBatchSize",
     "direct1mBatchSize",
     "direct1mEverySeconds",
     "direct1mPrewarmEnabled",
@@ -226,6 +232,8 @@ function Test-RuntimeConfig {
     fugleCollectorOpeningBoostBatchSize = 2000
     fugleCollectorOpeningBoostConcurrency = 12
     fugleCollectorOpeningBoostDelayMilliseconds = 0
+    fugleCollectorTwseMisEnabled = $true
+    fugleCollectorTwseMisBatchSize = 80
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
