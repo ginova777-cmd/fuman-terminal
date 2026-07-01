@@ -53,6 +53,7 @@ const MARKET_START_SECONDS = MARKET_START_MINUTES * 60;
 const MARKET_END_SECONDS = MARKET_END_MINUTES * 60;
 const REALTIME_RADAR_SESSION_LIMIT = Math.max(120, Number(process.env.REALTIME_RADAR_SESSION_LIMIT || 1200));
 const REALTIME_RADAR_WRITE_BUDGET_PER_SCAN = Math.max(1, Number(process.env.REALTIME_RADAR_WRITE_BUDGET_PER_SCAN || 3));
+const REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS = Math.max(60 * 1000, Number(process.env.REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS || 5 * 60 * 1000));
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -289,6 +290,76 @@ async function uploadRealtimeRadarPayload(payload) {
     throw new Error(`supabase upload failed HTTP ${response.status} ${text}`.trim());
   }
   return true;
+}
+
+function radarPayloadUpdatedAtMs(payload = {}) {
+  const explicit = cleanNumber(payload.updatedAtMs);
+  if (explicit > 0) return explicit;
+  const parsed = Date.parse(payload.updatedAt || payload.timestamp || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isGoodRealtimeRadarPayload(payload, tradeDate) {
+  return Boolean(
+    payload
+    && payload.date === tradeDate
+    && Array.isArray(payload.rows)
+    && payload.rows.length > 0
+    && cleanNumber(payload.staleQuoteCount) === 0
+    && cleanNumber(payload.failedBatchCount) === 0
+  );
+}
+
+function canPreservePreviousGoodPayload(previousPayload, tradeDate, nowMs = Date.now()) {
+  if (!isGoodRealtimeRadarPayload(previousPayload, tradeDate)) return false;
+  const updatedAtMs = radarPayloadUpdatedAtMs(previousPayload);
+  return Boolean(updatedAtMs && nowMs - updatedAtMs <= REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS);
+}
+
+function rejectedScanSummary(payload = {}) {
+  return {
+    runId: payload.runId || "",
+    timestamp: payload.timestamp || "",
+    updatedAt: payload.updatedAt || "",
+    staleQuoteCount: cleanNumber(payload.staleQuoteCount),
+    failedBatchCount: cleanNumber(payload.failedBatchCount),
+    totalBatchCount: cleanNumber(payload.totalBatchCount),
+    staleQuoteDetails: Array.isArray(payload.staleQuoteDetails) ? payload.staleQuoteDetails.slice(0, 20) : [],
+    failedBatchDetails: Array.isArray(payload.failedBatchDetails) ? payload.failedBatchDetails.slice(0, 20) : [],
+    externalSourceIssues: Array.isArray(payload.externalSourceIssues) ? payload.externalSourceIssues.slice(0, 20) : [],
+  };
+}
+
+async function publishRealtimeRadarPayload(payload, previousPayload, writeBudget) {
+  const hasBlockingSourceIssue = cleanNumber(payload.staleQuoteCount) > 0 || cleanNumber(payload.failedBatchCount) > 0;
+  if (hasBlockingSourceIssue && canPreservePreviousGoodPayload(previousPayload, payload.date, Date.now())) {
+    const reason = `preserved previous good latest; rejected run ${payload.runId || ""} stale=${cleanNumber(payload.staleQuoteCount)} failed=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`;
+    const preservedPayload = {
+      ...previousPayload,
+      preservedLatest: true,
+      publishBlocked: true,
+      preserveReason: reason,
+      lastRejectedScan: rejectedScanSummary(payload),
+      writeBudget: writeBudgetSnapshot(writeBudget, "preserved"),
+    };
+    writeJson(OUT_FILE, preservedPayload);
+    updateSupabaseUploadStatus(false, reason);
+    await maybeSendRealtimeRadarAlert({
+      ...payload,
+      status: "degraded_preserved_latest",
+      publishBlocked: true,
+      preserveReason: reason,
+    });
+    console.log(`realtime radar ${payload.timestamp}: ${reason}`);
+    return preservedPayload;
+  }
+
+  writeJson(OUT_FILE, payload);
+  const supabaseUpload = await safeUploadRealtimeRadarPayload(payload, writeBudget);
+  const uploadedPayload = { ...payload, supabaseUpload };
+  writeJson(OUT_FILE, uploadedPayload);
+  await maybeSendRealtimeRadarAlert(uploadedPayload);
+  return uploadedPayload;
 }
 
 function taipeiParts(date = new Date()) {
@@ -989,13 +1060,6 @@ async function main() {
       console.log(`realtime radar ${timestamp}: kept previous rows ${previous.rows.length} after ${realtime.failedBatches.length}/${realtime.totalBatches} failed batches`);
     }
   }
-  writeJson(OUT_FILE, payload);
-  const supabaseUpload = await safeUploadRealtimeRadarPayload(payload, writeBudget);
-  payload = { ...payload, supabaseUpload };
-  writeJson(OUT_FILE, payload);
-  await maybeSendRealtimeRadarAlert(payload);
-  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} lastTradeStale ${payload.lastTradeStaleCount || 0} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
-
   const staleStocksForRescan = selectStaleStocksForRescan(staleStocks);
   const deferredBatches = [...queuedBatches, ...realtime.failedBatches, ...chunkStocks(staleStocksForRescan).map((batch) => ({ ...batch, reason: "stale_quote" }))];
   let deferredRetry = null;
@@ -1007,7 +1071,7 @@ async function main() {
         .filter((stock) => hasFreshQuote(stock));
       const retryRows = buildRadarRows(retryStocks, detectedAt, timestamp);
       const mergedRows = mergeRadarSessionRows(payload, retryRows, timestamp, key);
-      if (mergedRows.length > payload.rows.length || radarRowsSignature(mergedRows) !== radarRowsSignature(payload.rows)) {
+      if (retryStocks.length || mergedRows.length > payload.rows.length || radarRowsSignature(mergedRows) !== radarRowsSignature(payload.rows)) {
         const retryFreshCodes = new Set(retryStocks.map((stock) => String(stock.code || "")).filter(Boolean));
         const remainingStaleStocks = staleStocks.filter((stock) => !retryFreshCodes.has(String(stock.code || "")));
         const retryLiveStocksByCode = new Map(liveStocks.map((stock) => [String(stock.code || ""), stock]));
@@ -1034,13 +1098,13 @@ async function main() {
           externalSourceIssues: buildExternalSourceIssues({ failedBatchDetails: patchedFailedBatchDetails, staleQuoteDetails: patchedStaleQuoteDetails }),
           writeBudget: writeBudgetSnapshot(writeBudget, "open"),
         };
-        writeJson(OUT_FILE, patchedPayload);
-        await safeUploadRealtimeRadarPayload(patchedPayload, writeBudget);
-        await maybeSendRealtimeRadarAlert(patchedPayload);
+        payload = patchedPayload;
         console.log(`realtime radar ${timestamp}: deferred rescan merged rows ${mergedRows.length} ${staleQuoteLogText(patchedPayload.staleQuoteDetails, patchedPayload.staleQuoteCount)} lastTradeStale ${patchedPayload.lastTradeStaleCount || 0} recovered ${retry.recoveredBatches}/${deferredBatches.length}`);
       }
     }
   }
+  payload = await publishRealtimeRadarPayload(payload, previousPayload, writeBudget);
+  console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} lastTradeStale ${payload.lastTradeStaleCount || 0} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
   writeFailedBatchQueue(deferredRetry ? deferredRetry.failedBatches || [] : realtime.failedBatches || []);
 }
 
