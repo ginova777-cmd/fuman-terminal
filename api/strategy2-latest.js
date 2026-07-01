@@ -790,10 +790,12 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && readinessCoverage.ready === true
     && payload.complete === true
     && payload.runId);
+  const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
   const publishAllowed = Boolean(
-    (sourceGate?.publishAllowed === true || afterhoursHold)
-    && (payload.publishBlocked !== true || afterhoursHold)
+    sourceGate?.publishAllowed === true
+    && payload.publishBlocked !== true
     && readinessCoverage.ready === true
+    && normalizedSourceCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
@@ -809,10 +811,11 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     ...payload,
     status: publishAllowed ? "ready" : "degraded",
     qualityStatus: publishAllowed ? payload.qualityStatus || "complete" : "degraded",
-    sourceCoverage: normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage),
+    sourceCoverage: normalizedSourceCoverage,
     sourceGate: {
-      ok: sourceGate?.ok === true,
-      publishAllowed: sourceGate?.publishAllowed === true,
+      ok: publishAllowed,
+      publishAllowed,
+      rawPublishAllowed: sourceGate?.publishAllowed === true,
       sourceStatus: sourceGate?.sourceStatus || "",
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
       latestRunId: sourceGate?.latestRunId || "",
