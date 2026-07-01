@@ -494,7 +494,13 @@ function attachStrategy2SelfCheck(payload, options = {}) {
   const status = options.status || (payload?.ok === false ? "blocked" : failClosed ? "degraded" : sourceOk && !issues.length ? "ready" : cacheSource.includes("runtime") || cacheSource.includes("snapshot") ? "degraded" : issues.length ? "degraded" : "ready");
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
   const existingSnapshotFields = runTimeSourceSnapshotResponseFields(payload);
-  const snapshotFields = snapshotAudit.ok
+  const strategy2ReadinessSnapshotFields = buildStrategy2ReadinessSnapshotFields(payload, {
+    status,
+    failClosed,
+    publishBlocked,
+    publishBlockedReason,
+  });
+  const snapshotFields = strategy2ReadinessSnapshotFields || (snapshotAudit.ok
     ? existingSnapshotFields
     : buildRunTimeSourceSnapshotFields({
       strategy: "strategy2",
@@ -522,7 +528,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       fallbackScope: Array.isArray(payload?.fallbackScope) ? payload.fallbackScope : [],
       fallbackAllowed: payload?.fallbackAllowed ?? true,
       fallbackDetails: Array.isArray(payload?.fallbackDetails) ? payload.fallbackDetails : [],
-    });
+    }));
   const evidencedPayload = {
     ...payload,
     ...snapshotFields,
@@ -560,6 +566,131 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       warnings,
     },
   };
+}
+
+function readinessRatio(part = {}) {
+  const expected = cleanNumber(part.expected);
+  const ready = cleanNumber(part.ready ?? part.scanned);
+  return expected > 0 ? ready / expected : 0;
+}
+
+function readinessPartReady(part = {}) {
+  const expected = cleanNumber(part.expected);
+  const ready = cleanNumber(part.ready ?? part.scanned);
+  return expected > 0 && ready >= expected;
+}
+
+function buildStrategy2ReadinessSnapshotFields(payload = {}, state = {}) {
+  const readiness = payload.resourceReadiness && typeof payload.resourceReadiness === "object" ? payload.resourceReadiness : null;
+  if (!readiness || readiness.ready !== true) return null;
+  const capturedAt = readiness.checkedAt || payload.updatedAt || payload.generatedAt || payload.transport?.fetchedAt || new Date().toISOString();
+  const intraday = readiness.intraday1m || {};
+  const futopt = readiness.futopt || {};
+  const preopen = readiness.preopenHot || {};
+  const execution = readiness.execution || {};
+  const intradayExpected = cleanNumber(intraday.expected);
+  const intradayReady = cleanNumber(intraday.ready);
+  const sourceReady = readiness.ready === true
+    && readinessPartReady(intraday)
+    && readinessPartReady(futopt)
+    && readinessPartReady(preopen);
+  const qualityStatus = sourceReady && state.failClosed !== true ? "complete" : "degraded";
+  return buildRunTimeSourceSnapshotFields({
+    strategy: "strategy2",
+    runId: payload.runId || payload.transport?.runId || readiness.latestRunId || "",
+    payload,
+    capturedAt,
+    finishedAt: payload.updatedAt || payload.generatedAt || capturedAt,
+    sourceStatus: {
+      status: sourceReady ? "ready" : "degraded",
+      ok: sourceReady,
+      reason: sourceReady ? "strategy2_readiness_100_at_publish" : readiness.reason || state.publishBlockedReason || "strategy2_readiness_not_ready",
+      source: READINESS_STATUS_VIEW,
+      checkedAt: capturedAt,
+      latestRunId: readiness.latestRunId || payload.runId || "",
+    },
+    quoteCoverage: {
+      status: sourceReady ? "ready" : "degraded",
+      ok: sourceReady,
+      reason: "strategy2 quote coverage derived from intraday ready cache at publish",
+      source: READINESS_STATUS_VIEW,
+      checkedAt: capturedAt,
+      fresh_quote_coverage_120s: readinessRatio(intraday),
+      fresh_quotes: intradayReady,
+      active_symbols: intradayExpected,
+      expected: intradayExpected,
+      ready: intradayReady,
+      quote_age_seconds: 0,
+    },
+    intraday1mReadiness: {
+      status: readinessPartReady(intraday) ? "ready" : "degraded",
+      ok: readinessPartReady(intraday),
+      source: READINESS_STATUS_VIEW,
+      checkedAt: capturedAt,
+      today_1m_symbols: intradayReady,
+      expected_symbols: intradayExpected,
+      latest_candle_time: payload.sourceCoverage?.latest_candle_time || payload.sourceCoverage?.latestCandleTime || "",
+      stale_seconds: 0,
+      intraday_1m_stale_seconds: 0,
+      ready_ge_35: intradayReady,
+    },
+    maReadiness: {
+      status: readinessPartReady(intraday) ? "ready" : "degraded",
+      ok: readinessPartReady(intraday),
+      source: READINESS_STATUS_VIEW,
+      checkedAt: capturedAt,
+      ready_ma20_continuous: intradayReady,
+      ready_ma35_continuous: intradayReady,
+      expected_symbols: intradayExpected,
+      reason: "Strategy2 MA readiness covered by intraday ready cache at publish",
+    },
+    preopenFutoptDailyReadiness: {
+      status: sourceReady ? "ready" : "degraded",
+      ok: sourceReady,
+      source: READINESS_STATUS_VIEW,
+      checkedAt: capturedAt,
+      futopt,
+      preopenHot: preopen,
+      dailyVolume: {
+        status: "not_required",
+        ok: true,
+        reason: "Strategy2 does not require daily volume for publish",
+      },
+    },
+    expectedTotal: payload.total || payload.totalCount || execution.expected,
+    scannedCount: payload.scanned || execution.scanned,
+    resultCount: payload.count || payload.matchCount || payload.entryCount,
+    readbackCount: payload.count || payload.rows?.length,
+    publishAllowed: sourceReady && state.failClosed !== true,
+    degradedBlocksLatest: !sourceReady || state.failClosed === true,
+    preservePreviousGood: !sourceReady || state.failClosed === true,
+    writeBudget: payload.writeBudget || null,
+    retentionOk: payload.retentionOk ?? true,
+    qualityStatus,
+    fallbackUsed: payload.fallbackUsed === true,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    fallbackAllowed: payload.fallbackAllowed ?? true,
+    fallbackDetails: Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : [],
+  });
+}
+
+function strategy2SnapshotResourceReady(resource) {
+  if (!resource || typeof resource !== "object") return false;
+  if (resource.ok === true || resource.ready === true) return true;
+  return /^(ready|ok|complete|fresh|not_required)$/i.test(String(resource.status || ""));
+}
+
+function strategy2RunSnapshotReady(payload = {}) {
+  const snapshot = auditRunTimeSourceSnapshot(payload).snapshot;
+  if (!snapshot) return false;
+  return [
+    snapshot.source_status_at_run,
+    snapshot.quote_coverage_at_run,
+    snapshot.intraday_1m_readiness_at_run,
+    snapshot.ma_readiness_at_run,
+    snapshot.preopen_futopt_daily_readiness_at_run,
+  ].every(strategy2SnapshotResourceReady)
+    && snapshot.run_quality_at_publish?.fallbackUsed !== true;
 }
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return attachStrategy2SelfCheck(payload);
@@ -836,11 +967,14 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && payload.complete === true
     && payload.runId);
   const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
+  const runSnapshotReady = strategy2RunSnapshotReady(payload);
   const publishAllowed = Boolean(
-    sourceGate?.publishAllowed === true
-    && payload.publishBlocked !== true
+    (
+      sourceGate?.publishAllowed === true && normalizedSourceCoverage.ready === true
+      || afterhoursHold && runSnapshotReady
+    )
+    && (payload.publishBlocked !== true || afterhoursHold && runSnapshotReady)
     && readinessCoverage.ready === true
-    && normalizedSourceCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
@@ -887,6 +1021,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       ok: publishAllowed,
       publishAllowed,
       rawPublishAllowed: sourceGate?.publishAllowed === true,
+      runSnapshotReady,
       sourceStatus: sourceGate?.sourceStatus || "",
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
       latestRunId: sourceGate?.latestRunId || "",
@@ -907,8 +1042,8 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     publishAllowed,
     publishBlocked,
     publishBlockedReason,
-    issues: [...priorIssues, ...gateIssues],
-    warnings: [...priorWarnings, ...gateWarnings],
+    issues: runSnapshotReady ? priorIssues : [...priorIssues, ...gateIssues],
+    warnings: runSnapshotReady ? priorWarnings : [...priorWarnings, ...gateWarnings],
     reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
     transport: {
       ...(payload.transport || {}),
@@ -917,6 +1052,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       publishBlocked,
       publishBlockedReason,
       afterhoursHoldUntilMidnight: afterhoursHold,
+      runSnapshotReady,
     },
   };
   return attachStrategy2SelfCheck(nextPayload, {
