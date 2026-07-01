@@ -429,6 +429,9 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
     if ($allowed -notcontains $result) {
       $detail = "$detail; currently running, stale last result $(Convert-ResultText $result)"
     }
+  } elseif ($info.NextRunTime -gt (Get-Date) -and $info.NextRunTime.Date -eq (Get-Date).Date -and $info.LastRunTime.Date -lt (Get-Date).Date -and ($allowed -contains 267011)) {
+    $status = "OK_WAITING"
+    $detail = "waiting for today's scheduled run; previous result $(Convert-ResultText $result)"
   } elseif ($firstTriggerBoundary -and $info.LastRunTime -lt $firstTriggerBoundary -and ($allowed -contains 267011)) {
     $status = "OK_WAITING"
     $detail = "waiting for first run after current trigger install"

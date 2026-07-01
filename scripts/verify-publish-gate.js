@@ -278,6 +278,10 @@ if (fumanScheduleRegistry) {
   if (String(policy.alertSeverity?.OK_RECEIPT_COVERED || "") !== "warning") {
     issues.push("scripts/fuman-schedule-registry.json policy.alertSeverity must classify OK_RECEIPT_COVERED as warning");
   }
+  const monitorAllowed = Array.isArray(policy.allowedResults?.FumanTerminalProductionHealthMonitor) ? policy.allowedResults.FumanTerminalProductionHealthMonitor : [];
+  if (!monitorAllowed.includes(267009)) {
+    issues.push("scripts/fuman-schedule-registry.json policy.allowedResults must allow running production monitor 267009");
+  }
 }
 const fumanScheduleFullText = read("check-fuman-schedule-full.ps1");
 if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1330") || !fumanScheduleFullText.includes("09:00 後每 3 秒巡邏到 13:30")) {
@@ -287,7 +291,7 @@ if (/Fuman Strategy2 LINE Stop 1200|策略2 當沖雷達[\s\S]{0,120}12:00/.test
   issues.push("check-fuman-schedule-full.ps1 must not describe Strategy2 as stopping at 12:00");
 }
 const fumanScheduleCheckerText = read("check-fuman-schedules.ps1");
-for (const marker of ["receiptCoverage", "Test-ReceiptCoveredRule", "OK_RECEIPT_COVERED", "waiting for first run after current trigger install"]) {
+for (const marker of ["receiptCoverage", "Test-ReceiptCoveredRule", "OK_RECEIPT_COVERED", "waiting for first run after current trigger install", "waiting for today's scheduled run"]) {
   if (!fumanScheduleCheckerText.includes(marker)) issues.push(`check-fuman-schedules.ps1 missing schedule receipt coverage marker ${marker}`);
 }
 const liveFreshnessGateText = read("run-live-freshness-gate.ps1");
