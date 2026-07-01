@@ -580,6 +580,35 @@ function readinessPartReady(part = {}) {
   return expected > 0 && ready >= expected;
 }
 
+function latestStrategy2RunTime(rows = []) {
+  const candidates = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row || typeof row !== "object") continue;
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+    candidates.push(
+      row.latestCandleTime,
+      row.latest_candle_time,
+      payload.latestCandleTime,
+      payload.latest_candle_time,
+      row.quoteTime,
+      row.quote_time,
+      payload.quoteTime,
+      payload.quote_time,
+      row.latestSeenAt,
+      row.latest_seen_at,
+      payload.latestSeenAt,
+      payload.latest_seen_at,
+      row.timestamp,
+      payload.timestamp
+    );
+  }
+  return candidates
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .sort()
+    .at(-1) || "";
+}
+
 function buildStrategy2ReadinessSnapshotFields(payload = {}, state = {}) {
   const readiness = payload.resourceReadiness && typeof payload.resourceReadiness === "object" ? payload.resourceReadiness : null;
   if (!readiness || readiness.ready !== true) return null;
@@ -595,6 +624,12 @@ function buildStrategy2ReadinessSnapshotFields(payload = {}, state = {}) {
     && readinessPartReady(futopt)
     && readinessPartReady(preopen);
   const qualityStatus = sourceReady && state.failClosed !== true ? "complete" : "degraded";
+  const latestCandleTime = payload.sourceCoverage?.latest_candle_time
+    || payload.sourceCoverage?.latestCandleTime
+    || latestStrategy2RunTime(payload.rows)
+    || latestStrategy2RunTime(payload.records)
+    || latestStrategy2RunTime(payload.events)
+    || "";
   return buildRunTimeSourceSnapshotFields({
     strategy: "strategy2",
     runId: payload.runId || payload.transport?.runId || readiness.latestRunId || "",
@@ -629,7 +664,7 @@ function buildStrategy2ReadinessSnapshotFields(payload = {}, state = {}) {
       checkedAt: capturedAt,
       today_1m_symbols: intradayReady,
       expected_symbols: intradayExpected,
-      latest_candle_time: payload.sourceCoverage?.latest_candle_time || payload.sourceCoverage?.latestCandleTime || "",
+      latest_candle_time: latestCandleTime,
       stale_seconds: 0,
       intraday_1m_stale_seconds: 0,
       ready_ge_35: intradayReady,
