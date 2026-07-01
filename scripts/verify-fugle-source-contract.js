@@ -173,6 +173,7 @@ function staticChecks() {
     "OpeningBoostEnd",
     "RestQuoteOpeningBoostBatchSize",
     "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+    "progressive quote fill",
     "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
     "FugleCollectorFinMindRecoveryEnabled",
     "Add-FreshQuoteReadthrough",

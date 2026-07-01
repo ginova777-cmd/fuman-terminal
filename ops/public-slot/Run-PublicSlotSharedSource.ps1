@@ -20,22 +20,22 @@ param(
   [int]$QuoteDerivedOpeningBackfillMinutes = 6,
   [int]$Intraday1mFreshTargetSeconds = 60,
   [int]$Intraday1mFreshHardSeconds = 120,
-  [int]$RestQuoteBatchSize = 240,
+  [int]$RestQuoteBatchSize = 120,
   [int]$RestQuoteEverySeconds = 10,
   [int]$RestQuoteDelayMilliseconds = 40,
   [string]$OpeningBoostStart = "08:45",
   [string]$OpeningBoostEnd = "12:00",
-  [int]$RestQuoteOpeningBoostBatchSize = 900,
-  [int]$RestQuoteOpeningBoostDelayMilliseconds = 5,
-  [int]$FugleCollectorOpeningBoostBatchSize = 2000,
-  [int]$FugleCollectorOpeningBoostConcurrency = 12,
-  [int]$FugleCollectorOpeningBoostDelayMilliseconds = 0,
+  [int]$RestQuoteOpeningBoostBatchSize = 180,
+  [int]$RestQuoteOpeningBoostDelayMilliseconds = 80,
+  [int]$FugleCollectorOpeningBoostBatchSize = 240,
+  [int]$FugleCollectorOpeningBoostConcurrency = 2,
+  [int]$FugleCollectorOpeningBoostDelayMilliseconds = 80,
   [bool]$FugleCollectorFinMindRecoveryEnabled = $true,
   [int]$FugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000,
   [int]$FugleCollectorLoopMilliseconds = 1000,
-  [int]$FugleCollectorBatchSize = 320,
-  [int]$FugleCollectorConcurrency = 4,
-  [int]$FugleCollectorRequestDelayMilliseconds = 20,
+  [int]$FugleCollectorBatchSize = 120,
+  [int]$FugleCollectorConcurrency = 2,
+  [int]$FugleCollectorRequestDelayMilliseconds = 80,
   [int]$FugleCollectorQuoteTtlMilliseconds = 120000,
   [int]$MinAvgVolume5Lots = 0,
   [int]$MinCumulativeBidAskLots = 3000,
@@ -61,6 +61,7 @@ param(
   [switch]$NoStartCollector
 )
 
+# progressive quote fill: keep Fugle as primary source, fill missing symbols in small rolling batches to avoid 429.
 $ErrorActionPreference = "Continue"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -426,7 +427,7 @@ function Get-EffectiveRestQuoteBatchSize {
 
 function Get-EffectiveRestQuoteDelayMilliseconds {
   if (Test-OpeningBoostWindow) {
-    return [int][math]::Max(0, [math]::Min($RestQuoteDelayMilliseconds, $RestQuoteOpeningBoostDelayMilliseconds))
+    return [int][math]::Max($RestQuoteDelayMilliseconds, $RestQuoteOpeningBoostDelayMilliseconds)
   }
   return [int]$RestQuoteDelayMilliseconds
 }
