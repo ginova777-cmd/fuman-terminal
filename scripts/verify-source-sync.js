@@ -90,6 +90,7 @@ const KEY_FILES = [
   "scripts/verify-cb-alert-path.js",
   "scripts/verify-cost-governance-audit.js",
   "scripts/verify-supabase-publish-hard-gate.js",
+  "scripts/verify-strategy2-source-publish-gate.js",
   "scripts/verify-api-unattended-scorecard.js",
   "scripts/verify-production-api-freshness-contract.js",
   "scripts/verify-realtime-radar-frontend-contract.js",

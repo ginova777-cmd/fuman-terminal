@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { readStrategy2SourceGate } = require("../lib/strategy2-source-publish-gate");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 
 function readSecretText(file) {
@@ -307,6 +308,15 @@ function parseRequestOptions(request) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
+}
+
+function cleanNumberOr(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).replace(/[,+%]/g, "").trim();
+  if (!text) return fallback;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function compactText(value, limit = 160) {
@@ -659,6 +669,146 @@ async function fetchStrategy2Readiness(base) {
   }
 }
 
+async function fetchStrategy2SourceGate() {
+  try {
+    return await readStrategy2SourceGate({
+      supabaseUrl: SUPABASE_URL,
+      anonKey: SUPABASE_KEY,
+      publishKey: SUPABASE_KEY,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      publishAllowed: false,
+      sourceStatus: "degraded",
+      sourceCoverage: {},
+      staleSeconds: 999999,
+      latestRunId: "",
+      latestRunIdSource: "",
+      fallbackUsed: false,
+      writeBudget: {
+        status: "blocked",
+        allowed: false,
+        reason: "source publish gate read failed",
+      },
+      retentionOk: false,
+      issues: [`source_publish_gate_unavailable:${error?.message || String(error)}`],
+      warnings: [],
+      suggestedScannerBehavior: "PreserveLatest; do not write latest; do not overwrite previous complete run; surface degraded reason",
+    };
+  }
+}
+
+function normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage = {}) {
+  const gateCoverage = sourceGate?.sourceCoverage || {};
+  const motherPoolSymbols = cleanNumber(gateCoverage.motherPoolSymbols);
+  const dailyVolumeReady = cleanNumber(gateCoverage.dailyVolumeReady);
+  const dailyVolumeFreshness = cleanNumber(
+    gateCoverage.payload?.daily_volume_freshness
+      || gateCoverage.payload?.daily_volume_coverage
+      || (motherPoolSymbols > 0 ? dailyVolumeReady / motherPoolSymbols : 0)
+  );
+  const sourceReady = sourceGate?.ok === true && readinessCoverage?.ready === true;
+  const issues = Array.isArray(sourceGate?.issues) ? sourceGate.issues : [];
+  const readinessReason = readinessCoverage?.reason || "";
+  return {
+    ok: sourceReady,
+    ready: sourceReady,
+    status: sourceReady ? "ready" : sourceGate?.ok === true ? "not_ready" : "degraded",
+    reason: sourceReady
+      ? "strategy2_source_publish_gate_ready"
+      : issues.join("; ") || readinessReason || "strategy2_source_publish_gate_blocked",
+    fresh_quote_coverage_120s: cleanNumber(gateCoverage.freshQuoteCoverage120s),
+    today_1m_symbols: cleanNumber(gateCoverage.today1mSymbols),
+    ready_ge_35: cleanNumber(gateCoverage.readyGe35),
+    latest_candle_time: gateCoverage.latestCandleTime || "",
+    intraday_1m_stale_seconds: cleanNumberOr(gateCoverage.intraday1mStaleSeconds, 999999),
+    preopenCoverage: cleanNumber(gateCoverage.preopenRows),
+    preopenRows: cleanNumber(gateCoverage.preopenRows),
+    preopenExpected: motherPoolSymbols,
+    dailyVolumeFreshness: dailyVolumeFreshness || 0,
+    dailyVolumeReady: dailyVolumeReady || 0,
+    sourceStatus: gateCoverage.sourceStatus || sourceGate?.sourceStatus || "",
+    quoteStatus: gateCoverage.quoteStatus || "",
+    intraday1mStatus: gateCoverage.intraday1mStatus || "",
+    dailyVolumeStatus: gateCoverage.dailyVolumeStatus || "",
+    preopenStatus: gateCoverage.preopenStatus || "",
+    motherPoolSymbols,
+    tradeDate: readinessCoverage?.tradeDate || "",
+    today: readinessCoverage?.today || "",
+    rowCount: cleanNumber(readinessCoverage?.rowCount),
+    eventCount: cleanNumber(readinessCoverage?.eventCount),
+    recordCount: cleanNumber(readinessCoverage?.recordCount),
+    readinessStatus: readinessCoverage?.readinessStatus || "",
+    readinessReady: readinessCoverage?.readinessReady === true,
+    checkedAt: new Date().toISOString(),
+    readiness: readinessCoverage,
+  };
+}
+
+function attachStrategy2PublishGate(payload, sourceGate) {
+  if (!payload) return payload;
+  const gateIssues = Array.isArray(sourceGate?.issues) ? sourceGate.issues : [];
+  const gateWarnings = Array.isArray(sourceGate?.warnings) ? sourceGate.warnings : [];
+  const priorIssues = Array.isArray(payload.issues) ? payload.issues : [];
+  const priorWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+  const readinessCoverage = payload.sourceCoverage && typeof payload.sourceCoverage === "object" ? payload.sourceCoverage : {};
+  const publishAllowed = sourceGate?.publishAllowed === true && payload.publishBlocked !== true && readinessCoverage.ready === true;
+  const publishBlocked = !publishAllowed;
+  const publishBlockedReason = publishBlocked
+    ? gateIssues.join("; ") || payload.publishBlockedReason || readinessCoverage.reason || "strategy2 source publish gate blocked"
+    : "";
+  const writeBudget = sourceGate?.writeBudget || {
+    status: publishAllowed ? "allow" : "blocked",
+    allowed: publishAllowed,
+    reason: publishAllowed ? "source publish gate ready" : "source publish gate blocked",
+  };
+  const retentionOk = sourceGate?.retentionOk !== false;
+  const nextPayload = {
+    ...payload,
+    status: publishAllowed ? "ready" : "degraded",
+    qualityStatus: publishAllowed ? payload.qualityStatus || "complete" : "degraded",
+    sourceCoverage: normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage),
+    sourceGate: {
+      ok: sourceGate?.ok === true,
+      publishAllowed: sourceGate?.publishAllowed === true,
+      sourceStatus: sourceGate?.sourceStatus || "",
+      staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
+      latestRunId: sourceGate?.latestRunId || "",
+      latestRunIdSource: sourceGate?.latestRunIdSource || "",
+      fallbackUsed: sourceGate?.fallbackUsed === true,
+      writeBudget,
+      retentionOk,
+      issues: gateIssues,
+      warnings: gateWarnings,
+      thresholds: sourceGate?.thresholds || {},
+      suggestedScannerBehavior: sourceGate?.suggestedScannerBehavior || "",
+    },
+    staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
+    latestRunId: sourceGate?.latestRunId || payload.latestRunId || payload.runId || payload.transport?.runId || "",
+    fallbackUsed: payload.fallbackUsed === true || sourceGate?.fallbackUsed === true,
+    writeBudget,
+    retentionOk,
+    publishAllowed,
+    publishBlocked,
+    publishBlockedReason,
+    issues: [...priorIssues, ...gateIssues],
+    warnings: [...priorWarnings, ...gateWarnings],
+    reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
+    transport: {
+      ...(payload.transport || {}),
+      sourcePublishGate: "strategy2-source-publish-gate",
+      publishAllowed,
+      publishBlocked,
+      publishBlockedReason,
+    },
+  };
+  return attachStrategy2SelfCheck(nextPayload, {
+    status: publishAllowed ? "ready" : "degraded",
+    reason: publishBlockedReason || nextPayload.reason,
+  });
+}
+
 function attachStrategy2Readiness(payload, readiness, tradingDay) {
   if (!payload || !readiness) return payload;
   const marketClosed = tradingDay && tradingDay.isTradingDay === false;
@@ -982,14 +1132,18 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
-    const [completeRun, readiness, tradingDay] = await Promise.all([
+    const [completeRun, readiness, tradingDay, sourceGate] = await Promise.all([
       fetchCompleteRunPayload(base, marketSession, options),
       fetchStrategy2Readiness(base),
       strategy2TradingDayState(),
+      fetchStrategy2SourceGate(),
     ]);
     if (completeRun) {
       setStrategy2LiveShellCache(response, options);
-      response.status(200).json(attachStrategy2Readiness(completeRun, readiness, tradingDay));
+      response.status(200).json(attachStrategy2PublishGate(
+        attachStrategy2Readiness(completeRun, readiness, tradingDay),
+        sourceGate
+      ));
       return;
     }
     const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);

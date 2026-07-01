@@ -4,7 +4,9 @@
 --   2. refresh_strategy2_intraday_ready_cache is paged/cache based.
 --   3. v_futopt_stock_mapping_ready follows the current tradable stock-future contract.
 --   4. 08:55 preopen readiness reads a fixed gate cache, not a rolling last-1-minute view.
---   5. Strategy2 readiness remains compatible with public.v_fugle_intraday_1m_status,
+--   5. 08:45 futopt readiness uses today's persisted futures quote evidence, not a
+--      rolling 180-second freshness flag after the gate has passed.
+--   6. Strategy2 readiness remains compatible with public.v_fugle_intraday_1m_status,
 --      but refresh derives the current page directly from fugle_intraday_1m to avoid full-view timeouts.
 
 alter table public.strategy2_intraday_ready_cache
@@ -74,7 +76,8 @@ begin
     and coalesce(u.is_warrant, false) = false
     and coalesce(u.is_cb, false) = false
     and coalesce(u.is_blacklisted, false) = false
-    and coalesce(u.is_daytrade_unsuitable, false) = false;
+    and coalesce(u.is_daytrade_unsuitable, false) = false
+    and (q.updated_at at time zone 'Asia/Taipei')::date = v_trade_date;
 
   if v_total <= 0 then
     update public.strategy2_intraday_ready_refresh_state
@@ -130,6 +133,7 @@ begin
       and coalesce(u.is_cb, false) = false
       and coalesce(u.is_blacklisted, false) = false
       and coalesce(u.is_daytrade_unsuitable, false) = false
+      and (q.updated_at at time zone 'Asia/Taipei')::date = v_trade_date
   ),
   universe as (
     select distinct on (symbol) *
@@ -316,7 +320,9 @@ begin
    where id = 'strategy2';
 
   delete from public.strategy2_intraday_ready_cache
-   where refreshed_at < now() - interval '3 days';
+   where refreshed_at < now() - interval '3 days'
+      or quote_updated_at is null
+      or (quote_updated_at at time zone 'Asia/Taipei')::date <> v_trade_date;
 
   return jsonb_build_object(
     'ok', true,
@@ -383,7 +389,8 @@ select
   c.ready_ma35_continuous,
   c.ready_macd_continuous
 from public.strategy2_intraday_ready_cache c
-where c.symbol ~ '^[0-9]{4}$';
+where c.symbol ~ '^[0-9]{4}$'
+  and (c.quote_updated_at at time zone 'Asia/Taipei')::date = (now() at time zone 'Asia/Taipei')::date;
 
 grant select on public.v_strategy2_intraday_ready to anon;
 grant select on public.v_strategy2_intraday_ready to service_role;
@@ -450,10 +457,11 @@ select
   (
     c.future_symbol is not null
     and q.future_symbol is not null
-    and q.updated_at >= now() - interval '180 seconds'
+    and (q.updated_at at time zone 'Asia/Taipei')::date = (select trade_date from trade_clock)
     and coalesce(q.last_price, 0) > 0
   ) as futopt_ready,
-  s.symbol as symbol
+  s.symbol as symbol,
+  (q.updated_at at time zone 'Asia/Taipei')::date = (select trade_date from trade_clock) as quote_seen_today
 from public.stock_universe s
 left join current_contract c
   on c.underlying_symbol = s.symbol
@@ -518,8 +526,8 @@ as $$
 declare
   v_gate_date date := coalesce(p_gate_date, (now() at time zone 'Asia/Taipei')::date);
   v_pick_start timestamptz := (v_gate_date::text || ' 08:50:00+08')::timestamptz;
-  v_gate_start timestamptz := (v_gate_date::text || ' 08:54:00+08')::timestamptz;
-  v_gate_end timestamptz := (v_gate_date::text || ' 08:56:00+08')::timestamptz;
+  v_gate_start timestamptz := (v_gate_date::text || ' 08:50:00+08')::timestamptz;
+  v_gate_end timestamptz := (v_gate_date::text || ' 09:00:00+08')::timestamptz;
   v_rows integer := 0;
   v_ready integer := 0;
 begin
@@ -706,7 +714,7 @@ begin
     case
       when coalesce(has_mapping, false) = false then 'missing_mapping'
       when coalesce(has_quote, false) = false then 'missing_quote'
-      when coalesce(quote_fresh_180s, false) = false then 'stale_quote'
+      when coalesce(quote_seen_today, false) = false then 'missing_today_quote'
       when coalesce(futopt_ready, false) = false then 'futopt_not_ready'
       else 'unknown'
     end,
@@ -715,6 +723,7 @@ begin
       'contract_policy', 'current_tradable_contract_month',
       'has_mapping', has_mapping,
       'has_quote', has_quote,
+      'quote_seen_today', quote_seen_today,
       'quote_fresh_180s', quote_fresh_180s,
       'futopt_ready', futopt_ready,
       'quote_age_seconds', quote_age_seconds,
@@ -729,7 +738,7 @@ begin
   where coalesce(has_mapping, false) = true
     and not (
       coalesce(has_quote, false) = true
-      and coalesce(quote_fresh_180s, false) = true
+      and coalesce(quote_seen_today, false) = true
       and coalesce(futopt_ready, false) = true
     );
 
@@ -805,7 +814,7 @@ begin
     count(*) filter (
       where coalesce(has_mapping, false) = true
         and coalesce(has_quote, false) = true
-        and coalesce(quote_fresh_180s, false) = true
+        and coalesce(quote_seen_today, false) = true
         and coalesce(futopt_ready, false) = true
     )
   into v_futopt_expected, v_futopt_ready

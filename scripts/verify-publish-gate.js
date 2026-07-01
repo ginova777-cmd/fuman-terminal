@@ -462,6 +462,9 @@ if (!String(packageJson.scripts?.["verify:cost-governance-audit"] || "").include
 if (!String(packageJson.scripts?.["verify:supabase-publish-hard-gate"] || "").includes("scripts/verify-supabase-publish-hard-gate.js")) {
   issues.push("package.json missing scripts.verify:supabase-publish-hard-gate for source coverage publish blocker");
 }
+if (!String(packageJson.scripts?.["verify:strategy2-source-publish-gate"] || "").includes("scripts/verify-strategy2-source-publish-gate.js")) {
+  issues.push("package.json missing scripts.verify:strategy2-source-publish-gate for Strategy2 fail-closed publish gate proof");
+}
 if (!String(packageJson.scripts?.["verify:api-unattended-scorecard"] || "").includes("scripts/verify-api-unattended-scorecard.js")) {
   issues.push("package.json missing scripts.verify:api-unattended-scorecard for all-strategy API unattended scorecard");
 }
@@ -639,6 +642,7 @@ const strategy2SharedSource = read("lib/supabase-public-slot.js");
 const strategy2SourcePublishGate = read("lib/strategy2-source-publish-gate.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const supabasePublishHardGate = read("scripts/verify-supabase-publish-hard-gate.js");
+const strategy2SourcePublishGateVerifier = read("scripts/verify-strategy2-source-publish-gate.js");
 const apiUnattendedScorecard = read("scripts/verify-api-unattended-scorecard.js");
 const productionApiFreshnessContract = read("scripts/verify-production-api-freshness-contract.js");
 const apiUnattendedRunner = read("run-api-unattended-scorecard.ps1");
@@ -1499,11 +1503,14 @@ if (!/sessionWithSupabaseRunDate/.test(strategy2LatestApi) || !/supabase-latest-
 if (!/requestedTop/.test(strategy2LatestApi) || !/hasTopLimit/.test(strategy2LatestApi) || !/const minLimit = hasTopLimit \? 1 : 20/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must honor top=1 for lightweight mobile health checks without shrinking normal terminal payloads");
 }
-if (!/\[completeRun,\s*readiness,\s*tradingDay\]\s*=\s*await Promise\.all/.test(strategy2LatestApi)) {
-  issues.push("api/strategy2-latest.js must fetch complete run, readiness, and trading-day state in parallel so live Strategy2 cold start stays fast");
+if (!/\[completeRun,\s*readiness,\s*tradingDay,\s*sourceGate\]\s*=\s*await Promise\.all/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must fetch complete run, readiness, trading-day state, and source gate in parallel so live Strategy2 cold start stays fast");
 }
 for (const marker of ["isTwseTradingDay", "market_closed", "v_strategy2_readiness_status", "resourceReadiness", "publishBlocked", "publishBlockedReason"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 readiness API marker ${marker}`);
+}
+for (const marker of ["readStrategy2SourceGate", "fetchStrategy2SourceGate", "attachStrategy2PublishGate", "staleSeconds", "latestRunId", "writeBudget", "retentionOk", "publishAllowed", "sourceCoverage"]) {
+  if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 source publish gate API marker ${marker}`);
 }
 for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", "snapshotFirst", "supabase:strategy2_latest_snapshot", "options.snapshot && !options.live"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 snapshot-first marker ${marker}`);
@@ -2628,6 +2635,21 @@ for (const marker of [
   }
 }
 for (const marker of [
+  "verify-supabase-publish-hard-gate.js",
+  "--dry-run-alert",
+  "publisher_replay_bypass_marker_present",
+  "publishAllowed",
+  "publishBlocked",
+  "writePolicy",
+  "preservePreviousCompleteRun",
+  "smtp:dry-run",
+  "api_sourceCoverage",
+]) {
+  if (!strategy2SourcePublishGateVerifier.includes(marker)) {
+    issues.push(`verify-strategy2-source-publish-gate.js missing unattended source gate marker ${marker}`);
+  }
+}
+for (const marker of [
   "API Unattended Scorecard",
   "strategy1",
   "strategy2",
@@ -2706,6 +2728,9 @@ for (const marker of [
   if (!strategy2CompleteRunPublisher.includes(marker)) {
     issues.push(`publish-strategy2-complete-run.js missing source publish blocker marker ${marker}`);
   }
+}
+if (/readValidatedFullWindowReplayReport|source gate using validated full-window replay|LOCAL_COMPLETE_RUN_FILE|strategy2-full-window-1m-replay/.test(strategy2CompleteRunPublisher)) {
+  issues.push("publish-strategy2-complete-run.js must fail closed when source gate blocks; replay/local complete-run bypass is not allowed");
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
   issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");

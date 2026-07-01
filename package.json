@@ -152,6 +152,7 @@
     "verify:strategy4-publish-gate": "node --use-system-ca scripts/verify-supabase-publish-hard-gate.js --strategy=strategy4",
     "verify:cost-governance-audit": "node --use-system-ca scripts/verify-cost-governance-audit.js",
     "verify:supabase-publish-hard-gate": "node --use-system-ca scripts/verify-supabase-publish-hard-gate.js",
+    "verify:strategy2-source-publish-gate": "node --use-system-ca scripts/verify-strategy2-source-publish-gate.js",
     "verify:api-unattended-scorecard": "node --use-system-ca scripts/verify-api-unattended-scorecard.js",
     "verify:all-api-unattended": "node --use-system-ca scripts/verify-api-unattended-scorecard.js",
     "verify:production-api-freshness": "node --use-system-ca scripts/verify-production-api-freshness-contract.js"
