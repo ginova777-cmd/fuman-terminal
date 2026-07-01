@@ -166,6 +166,24 @@ if (fumanScheduleRegistry) {
   if (fumanScheduleRegistry.policyVersion !== 3) {
     issues.push(`scripts/fuman-schedule-registry.json policyVersion must be 3; current=${fumanScheduleRegistry.policyVersion || "(missing)"}`);
   }
+  const apiUnattendedScorecardTask = tasks.find((task) => task?.taskName === "\\Fuman API Unattended Scorecard");
+  if (!apiUnattendedScorecardTask) {
+    issues.push("scripts/fuman-schedule-registry.json must include Fuman API Unattended Scorecard");
+  } else {
+    if (apiUnattendedScorecardTask.time !== "21:35") {
+      issues.push(`scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard time must be 21:35; current=${apiUnattendedScorecardTask.time || "(missing)"}`);
+    }
+    const triggers = Array.isArray(apiUnattendedScorecardTask.expectedTriggers) ? apiUnattendedScorecardTask.expectedTriggers : [];
+    if (triggers.length !== 1 || triggers[0] !== "21:35") {
+      issues.push("scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard expectedTriggers must be exactly 21:35");
+    }
+  }
+  for (const retiredApiScorecardTime of ["08:35", "09:10", "09:35", "12:05", "20:35"]) {
+    if (tasks.some((task) => task?.taskName === "\\Fuman API Unattended Scorecard"
+      && (String(task?.time || "").includes(retiredApiScorecardTime) || (Array.isArray(task?.expectedTriggers) && task.expectedTriggers.includes(retiredApiScorecardTime))))) {
+      issues.push(`scripts/fuman-schedule-registry.json must not schedule Fuman API Unattended Scorecard at retired time ${retiredApiScorecardTime}`);
+    }
+  }
   const strategy2LineStart0900 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Start 0900");
   if (!strategy2LineStart0900) {
     issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE start as Fuman Strategy2 LINE Start 0900");

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-30T11:10:00+08:00",
+  "updatedAt": "2026-07-01T16:20:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -152,15 +152,11 @@
     {
       "taskName": "\\Fuman API Unattended Scorecard",
       "displayName": "Fuman API Unattended Scorecard",
-      "description": "All-strategy API unattended scorecard from the local production mirror.",
-      "time": "08:35,09:10,09:35,12:05,20:35",
+      "description": "All-strategy API unattended scorecard from the local production mirror. Runs once after strategy windows to avoid early false criticals.",
+      "time": "21:35",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "08:35",
-        "09:10",
-        "09:35",
-        "12:05",
-        "20:35"
+        "21:35"
       ]
     },
     {

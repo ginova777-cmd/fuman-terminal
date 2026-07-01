@@ -78,18 +78,40 @@ $startedAt = Get-Date
 $exitCode = 0
 $output = New-Object System.Collections.Generic.List[string]
 
+function Test-TransientMonitorFailure {
+  param([string[]]$Lines)
+  $text = ($Lines -join "`n")
+  return ($text -match "ECONNRESET|ETIMEDOUT|fetch failed|Assertion failed|UV_HANDLE_CLOSING|socket hang up|network timeout")
+}
+
 try {
   Write-MonitorLog "START production health monitor"
   Push-Location $ProjectRoot
   try {
     $env:FUMAN_PRODUCTION_HEALTH_LOG = Join-Path $logDir "production-health.jsonl"
-    & npm run monitor:production *>&1 | ForEach-Object {
-      $text = [string]$_
-      $output.Add($text) | Out-Null
-      Write-Host $text
-      Add-Content -LiteralPath $log -Value $text -Encoding utf8
+    $maxAttempts = 3
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+      $attemptOutput = New-Object System.Collections.Generic.List[string]
+      Write-MonitorLog "monitor attempt $attempt/$maxAttempts"
+      & npm run monitor:production *>&1 | ForEach-Object {
+        $text = [string]$_
+        $attemptOutput.Add($text) | Out-Null
+        $output.Add($text) | Out-Null
+        Write-Host $text
+        Add-Content -LiteralPath $log -Value $text -Encoding utf8
+      }
+      $exitCode = $LASTEXITCODE
+      if ($exitCode -eq 0) {
+        break
+      }
+      $isTransient = Test-TransientMonitorFailure -Lines $attemptOutput.ToArray()
+      if (($attempt -lt $maxAttempts) -and $isTransient) {
+        Write-MonitorLog "transient monitor failure exit=$exitCode; retrying"
+        Start-Sleep -Seconds 10
+        continue
+      }
+      break
     }
-    $exitCode = $LASTEXITCODE
   } finally {
     Pop-Location
   }
