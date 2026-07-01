@@ -140,8 +140,9 @@ async function checkOnce() {
   const activeSymbols = cleanNumber(health.payload?.active_symbols || health.payload?.eligible_symbols || health.payload?.symbols || health.quoteHealth?.active_symbols);
   const dailyVolumeCoverage = quoteCodes.length ? dailyVolumeRows / Math.min(quoteCodes.length, 500) : 0;
   const minuteOfDay = taipeiMinuteOfDay(checkedAt);
-  const strictQuoteFreshRequired = minuteOfDay >= 9 * 60;
-  const intraday1mMa35Required = minuteOfDay >= 9 * 60 + 35;
+  const liveFreshnessRequired = minuteOfDay >= 9 * 60 && minuteOfDay <= 13 * 60 + 40;
+  const strictQuoteFreshRequired = liveFreshnessRequired;
+  const intraday1mMa35Required = liveFreshnessRequired && minuteOfDay >= 9 * 60 + 35;
   const sourceStatus = health.status?.status || sourceStatusResult.latest?.status || "";
   const sourceUpdatedAt = health.status?.updated_at || sourceStatusResult.latest?.updated_at || "";
   const sourceStatusAgeSeconds = ageSeconds(sourceUpdatedAt, checkedAt);
@@ -165,14 +166,14 @@ async function checkOnce() {
       { status: health.status?.status || "", quotesOk: health.payload?.quotes_ok, quoteCoverage, minQuoteCoverage: MIN_QUOTE_COVERAGE }
     ),
     issue(!strictQuoteFreshRequired || (quoteAge > 0 && quoteAge <= MIN_QUOTE_AGE_SECONDS), "critical", "quote-age-stale", `quote age ${quoteAge || "missing"}s exceeds ${MIN_QUOTE_AGE_SECONDS}s during market session`, { quoteAge, max: MIN_QUOTE_AGE_SECONDS }),
-    issue(quoteCoverage >= MIN_QUOTE_COVERAGE || health.payload?.quotes_ok === true, "critical", "quote-coverage-low", `quote coverage ${quoteCoverage} below ${MIN_QUOTE_COVERAGE}`, { quoteCoverage, min: MIN_QUOTE_COVERAGE }),
+    issue(!liveFreshnessRequired || quoteCoverage >= MIN_QUOTE_COVERAGE || health.payload?.quotes_ok === true, "critical", "quote-coverage-low", `quote coverage ${quoteCoverage} below ${MIN_QUOTE_COVERAGE}`, { quoteCoverage, min: MIN_QUOTE_COVERAGE }),
     issue(quoteCount >= MIN_QUOTES, "warning", "quote-rows-low", `quote rows ${quoteCount} below ${MIN_QUOTES}`, { quoteCount, min: MIN_QUOTES }),
     issue(Boolean(health.anonRead?.ok), "critical", "anon-read-failed", "anon read target check failed", { failed: health.anonRead?.failed || [] }),
     issue(quoteRows.length > 0, "critical", "active-quotes-empty", "fugle_quotes_live returned no active common stock quotes", { error: quoteResult.error || "" }),
     issue(intradayRowsReady > 0 || taipeiMinuteOfDay(checkedAt) < 9 * 60, "warning", "intraday-1m-not-ready", "fugle_intraday_1m status has no today rows yet", { intradayRowsReady, error: statusResult.error || "" }),
     issue(!intraday1mMa35Required || intraday1mOk, "critical", "intraday-1m-source-not-ok", "source_status reports intraday_1m_ok=false after MA35 gate time", { intraday1mOk, sourceStatus, sourceUpdatedAt }),
     issue(!intraday1mMa35Required || intraday1mReadyGe35 > 0, "critical", "intraday-1m-ready-ge35-zero", "ready_ge_35 is zero after MA35 gate time", { readyGe35: intraday1mReadyGe35, latestCandleTime: health.payload?.latest_candle_time || health.payload?.intraday_1m_latest_candle_time || "" }),
-    issue(minuteOfDay < 9 * 60 + 1 || intraday1mStaleSeconds <= 180, "critical", "intraday-1m-stale-critical", "intraday_1m_stale_seconds exceeds 180s hard threshold", { intraday1mStaleSeconds, latestCandleTime }),
+    issue(!liveFreshnessRequired || minuteOfDay < 9 * 60 + 1 || intraday1mStaleSeconds <= 180, "critical", "intraday-1m-stale-critical", "intraday_1m_stale_seconds exceeds 180s hard threshold", { intraday1mStaleSeconds, latestCandleTime }),
     issue(dailyVolumeCoverage >= MIN_DAILY_VOLUME_COVERAGE, "warning", "daily-volume-coverage-low", `daily volume coverage ${dailyVolumeCoverage.toFixed(4)} below ${MIN_DAILY_VOLUME_COVERAGE}`, { dailyVolumeRows, sampleSize: Math.min(quoteCodes.length, 500) }),
     issue(countRows(preopenResult.rows) >= MIN_PREOPEN_ROWS || taipeiMinuteOfDay(checkedAt) >= 9 * 60, "warning", "preopen-snapshot-low", "preopen snapshot rows are not ready", { rows: countRows(preopenResult.rows), error: preopenResult.error || "" }),
     issue(countRows(finalBlindBuyResult.rows) >= 0, "warning", "final-blind-buy-read-failed", "final blind buy ready read failed", { error: finalBlindBuyResult.error || "" }),
@@ -202,6 +203,7 @@ async function checkOnce() {
       sourceCoreOk,
       quotesOk: health.payload?.quotes_ok === true || health.payload?.source_parts?.quotes_ok === true,
       quoteAgeSeconds: quoteAge,
+      liveFreshnessRequired,
       strictQuoteFreshRequired,
       quoteCoverageRatio: quoteCoverage,
       quoteCount,
