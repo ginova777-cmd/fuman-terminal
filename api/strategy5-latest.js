@@ -509,6 +509,8 @@ function buildPayload(rows, run, options = {}) {
     runId: String(first.run_id || run?.run_id || ""),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
     generatedDate: scanDate,
+    scanDate,
+    tradeDate: scanDate,
     usedDate: sourceDate || scanDate,
     sourceDate: sourceDate || scanDate,
     dataFreshness: apiState.dataFreshness,
