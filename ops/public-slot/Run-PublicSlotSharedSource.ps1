@@ -1261,7 +1261,7 @@ function Get-FreshPublicSlotQuoteRows {
   try {
     $since = [uri]::EscapeDataString((Get-Date).ToUniversalTime().AddSeconds(-1 * [math]::Max(1, $MaxAgeSeconds)).ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'"))
     $select = "symbol,name,market,updated_at,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_volume,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,stock_type,session,last_trade_time,is_halted,is_trial,payload"
-    $rows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRestGet -PathAndQuery "fugle_quotes_live?select=$select&updated_at=gte.$since&limit=5000" -LogError)
+    $rows = Convert-PublicSlotRestRows -Rows (Invoke-PublicSlotRestGetAll -PathAndQuery "fugle_quotes_live?select=$select&updated_at=gte.$since")
     $fresh = New-Object System.Collections.Generic.List[object]
     foreach ($row in @($rows)) {
       $symbol = [string]$row.symbol
