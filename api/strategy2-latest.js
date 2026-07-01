@@ -790,12 +790,10 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && readinessCoverage.ready === true
     && payload.complete === true
     && payload.runId);
-  const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
   const publishAllowed = Boolean(
-    sourceGate?.publishAllowed === true
-    && payload.publishBlocked !== true
+    (sourceGate?.publishAllowed === true || afterhoursHold)
+    && (payload.publishBlocked !== true || afterhoursHold)
     && readinessCoverage.ready === true
-    && normalizedSourceCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
@@ -811,11 +809,10 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     ...payload,
     status: publishAllowed ? "ready" : "degraded",
     qualityStatus: publishAllowed ? payload.qualityStatus || "complete" : "degraded",
-    sourceCoverage: normalizedSourceCoverage,
+    sourceCoverage: normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage),
     sourceGate: {
-      ok: publishAllowed,
-      publishAllowed,
-      rawPublishAllowed: sourceGate?.publishAllowed === true,
+      ok: sourceGate?.ok === true,
+      publishAllowed: sourceGate?.publishAllowed === true,
       sourceStatus: sourceGate?.sourceStatus || "",
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
       latestRunId: sourceGate?.latestRunId || "",
@@ -1202,9 +1199,10 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
-    const readiness = await fetchStrategy2Readiness(base);
-    const [completeRun, tradingDay, sourceGate] = await Promise.all([
-      fetchCompleteRunPayload(base, marketSession, options, readiness),
+    const readinessPromise = fetchStrategy2Readiness(base);
+    const [completeRun, readiness, tradingDay, sourceGate] = await Promise.all([
+      readinessPromise.then((ready) => fetchCompleteRunPayload(base, marketSession, options, ready)),
+      readinessPromise,
       strategy2TradingDayState(),
       fetchStrategy2SourceGate(),
     ]);
