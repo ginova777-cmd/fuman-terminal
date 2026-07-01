@@ -170,8 +170,6 @@ const KEY_FILES = [
   "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/SupabasePublicSlotSource.ps1",
-  "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
-  "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
   "ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1",
 ];
 

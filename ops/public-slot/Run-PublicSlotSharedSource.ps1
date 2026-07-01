@@ -4168,7 +4168,7 @@ do {
     } elseif ($Strategy2ReadyRefreshEnabled) {
       Write-Log "strategy2 readiness cache refresh skipped by interval strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s"
     } else {
-      Write-Log "strategy2 readiness cache refresh disabled in shared source; dedicated Strategy2 Readiness Source task owns cache refresh"
+      Write-Log "strategy2 readiness cache refresh disabled by config; main public slot shared source owns the retired dedicated task's coverage"
     }
     Write-Log "$status $message"
   } catch {

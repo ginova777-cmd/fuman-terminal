@@ -30,7 +30,6 @@
       "Fuman Strategy2 Intraday Scan",
       "Fuman Strategy2 LINE Start 0900",
       "Fuman Strategy2 LINE Stop 1330",
-      "Fuman Strategy2 Readiness Source 0800",
       "Fuman Strategy2 Supabase Coverage 0800",
       "Fuman Strategy3 Battle Verify 1305",
       "Fuman Strategy3 Complete Scan 1300",
@@ -59,6 +58,7 @@
       "Fuman Strategy3 Complete Scan 1318",
       "Fuman Strategy3 Refresh Snapshot 1308",
       "Fuman Strategy2 LINE Stop 1200",
+      "Fuman Strategy2 Readiness Source 0800",
       "Fuman Terminal API Health",
       "Fuman 即時雷達健檢 0910"
     ],
@@ -90,10 +90,6 @@
       "Fuman Public Slot Shared Source Watchdog": [
         0,
         267009
-      ],
-      "Fuman Strategy2 Readiness Source 0800": [
-        0,
-        267014
       ],
       "Fuman Strategy2 LINE Start 0900": [
         0,
@@ -343,13 +339,6 @@
       "expectedTriggers": [
         "13:30"
       ]
-    },
-    {
-      "taskName": "\\Fuman Strategy2 Readiness Source 0800",
-      "displayName": "Fuman Strategy2 Readiness Source 0800",
-      "description": "Strategy2 readiness source.",
-      "time": "08:00",
-      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy2 Supabase Coverage 0800",

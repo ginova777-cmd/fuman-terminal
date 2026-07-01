@@ -210,8 +210,6 @@ const FILES = [
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/SupabasePublicSlotSource.ps1",
   "ops/public-slot/public-slot-shared-source.config.example.json",
-  "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
-  "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
   "ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1",
   "ops/public-slot/MobileUpdateEventsMaintenance.sql",
   "legacy-entrypoint-guard.ps1",

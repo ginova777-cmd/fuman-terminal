@@ -39,6 +39,7 @@
   "publicSlotUpsertBatchSize": 300,
   "writePreopenRows": true,
   "writePreopenRowsMode": "preopen",
+  "strategy2ReadyRefreshEnabled": true,
   "strategy2ReadyPageSize": 500,
   "writerOwnerComputer": "",
   "readOnlyMonitor": false

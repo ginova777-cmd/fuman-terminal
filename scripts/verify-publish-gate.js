@@ -426,8 +426,8 @@ if (!String(packageJson.scripts?.["strategy2:readiness"] || "").includes("script
 if (!String(packageJson.scripts?.["strategy2:trading-day"] || "").includes("scripts/check-strategy2-trading-day.js")) {
   issues.push("package.json missing scripts.strategy2:trading-day for Strategy2 market-closed detection");
 }
-if (!String(packageJson.scripts?.["strategy2:readiness-source:install"] || "").includes("Install-Strategy2ReadinessSourceTask.ps1")) {
-  issues.push("package.json missing scripts.strategy2:readiness-source:install for Strategy2 source collector task");
+if (packageJson.scripts?.["strategy2:readiness-source:install"]) {
+  issues.push("package.json must not expose retired scripts.strategy2:readiness-source:install; Strategy2 readiness is owned by Fuman Public Slot Shared Source 0800");
 }
 if (!String(packageJson.scripts?.["strategy2:snapshot:publish"] || "").includes("scripts/publish-strategy2-latest-snapshot.js")) {
   issues.push("package.json missing scripts.strategy2:snapshot:publish for Strategy2 snapshot-first cache");
@@ -688,8 +688,6 @@ const publicSlotAntiRollbackGuard = read("ops/public-slot/Guard-PublicSlotSource
 const fugleWebsocketCollector = read("scripts/fugle-websocket-collector.js");
 const publicSlotFugleWebsocketCollector = read("ops/public-slot/fugle-websocket-collector.js");
 const publicSlotSharedSourceStarter = read("ops/public-slot/Start-PublicSlotSharedSource.cmd");
-const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
-const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
 const publicSlotSharedSourceWatchdogInstaller = read("ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1");
 const strategy2ReadinessSql = [
   read("ops/public-slot/Strategy2ReadinessContractCache.sql"),
@@ -1119,22 +1117,17 @@ if (/stopAt\s*=\s*"12:05"/.test(publicSlotAntiRollbackGuard)) {
 if (/Set-Content\s+-LiteralPath\s+\$path|Repair-CmdEntrypoints|Repair-RunnerText|Repair-HelperText|Repair-RepoRuntimeConfigSupport|RunnerSnapshotPath|repo runner repaired|Copy-Item[\s\S]{0,160}-Destination\s+\$RunnerPath/.test(publicSlotAntiRollbackGuard)) {
   issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not rewrite tracked public-slot source files");
 }
-for (const marker of ["check-strategy2-trading-day.js", "--closed-exit-code=10", "FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "Strategy2ReadyRefreshEnabled:$true", "08:45 futopt", "08:55 preopen", "08:45-13:35"]) {
-  if (!strategy2ReadinessSourceStarter.includes(marker)) issues.push(`Start-Strategy2ReadinessSource.cmd missing Strategy2 readiness source marker ${marker}`);
+for (const marker of ["FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "Strategy2ReadyRefreshEnabled:$true"]) {
+  if (!publicSlotSharedSourceStarter.includes(marker)) issues.push(`Start-PublicSlotSharedSource.cmd missing merged Strategy2 readiness marker ${marker}`);
 }
-if (/-StopAt 12:05/.test(publicSlotSharedSourceStarter) || /-StopAt 12:05/.test(strategy2ReadinessSourceStarter)) {
+if (/-StopAt 12:05/.test(publicSlotSharedSourceStarter)) {
   issues.push("public-slot source cmd entrypoints must not pass -StopAt 12:05");
 }
-for (const [name, text] of [
-  ["Start-PublicSlotSharedSource.cmd", publicSlotSharedSourceStarter],
-  ["Start-Strategy2ReadinessSource.cmd", strategy2ReadinessSourceStarter],
-]) {
-  for (const marker of ["-RestQuoteBatchSize 240", "-RestQuoteDelayMilliseconds 40", "-RestQuoteOpeningBoostBatchSize 180", "-RestQuoteOpeningBoostDelayMilliseconds 80", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
-    if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
-  }
+for (const marker of ["-RestQuoteBatchSize 240", "-RestQuoteDelayMilliseconds 40", "-RestQuoteOpeningBoostBatchSize 180", "-RestQuoteOpeningBoostDelayMilliseconds 80", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
+  if (publicSlotSharedSourceStarter.includes(marker)) issues.push(`Start-PublicSlotSharedSource.cmd must not pass old high-rate public-slot quote setting ${marker}`);
 }
-for (const marker of ["Fuman Strategy2 Readiness Source 0800", "Start-Strategy2ReadinessSource.cmd", "schtasks /Create", "/SC DAILY"]) {
-  if (!strategy2ReadinessSourceInstaller.includes(marker)) issues.push(`Install-Strategy2ReadinessSourceTask.ps1 missing Strategy2 readiness task marker ${marker}`);
+for (const retiredFile of ["ops/public-slot/Start-Strategy2ReadinessSource.cmd", "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1"]) {
+  if (fs.existsSync(path.join(ROOT, retiredFile))) issues.push(`${retiredFile} must stay retired; Strategy2 readiness is merged into Start-PublicSlotSharedSource.cmd`);
 }
 for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache", "refresh_strategy2_readiness_cache", "v_strategy2_readiness_status", "v_strategy2_readiness_missing", "stale_quote", "missing_3_snapshots_last_1m", "intraday_1m_not_ready_ma35_continuous", "continuous_candle_count", "ready_ma35_continuous", "strategy2_preopen_hot_gate_cache", "current_tradable_contract_month", "paged_strategy2_intraday_ready_cache"]) {
   if (!strategy2ReadinessSql.includes(marker)) issues.push(`Strategy2ReadinessContractCache.sql missing Strategy2 readiness SQL marker ${marker}`);
@@ -2179,8 +2172,6 @@ for (const file of [
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
   "ops/public-slot/SupabasePublicSlotSource.ps1",
   "ops/public-slot/public-slot-shared-source.config.example.json",
-  "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
-  "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
   "ops/public-slot/Install-PublicSlotSharedSourceWatchdog.ps1",
   "api/desktop-static-disabled.js",
   "api/scan-warrant-flow.js",
@@ -3041,8 +3032,6 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
       "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
       "ops/public-slot/public-slot-shared-source.config.example.json",
-      "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
-      "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",
       "ops/public-slot/Strategy2ReadinessContractCache.sql",
       "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
       "ops/public-slot/ScorecardSourceContract.sql",

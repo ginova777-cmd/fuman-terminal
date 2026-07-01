@@ -71,6 +71,7 @@ function Write-DefaultRuntimeConfig {
     publicSlotUpsertBatchSize = 300
     writePreopenRows = $true
     writePreopenRowsMode = "preopen"
+    strategy2ReadyRefreshEnabled = $true
     strategy2ReadyPageSize = 500
     writerOwnerComputer = ""
     readOnlyMonitor = $false
@@ -219,6 +220,7 @@ function Test-RuntimeConfig {
     "publicSlotUpsertTimeoutSec",
     "publicSlotUpsertBatchSize",
     "writePreopenRowsMode",
+    "strategy2ReadyRefreshEnabled",
     "strategy2ReadyPageSize",
     "writerOwnerComputer",
     "readOnlyMonitor"
@@ -265,6 +267,7 @@ function Test-RuntimeConfig {
     publicSlotUpsertTimeoutSec = 45
     publicSlotUpsertBatchSize = 300
     writePreopenRowsMode = "preopen"
+    strategy2ReadyRefreshEnabled = $true
     strategy2ReadyPageSize = 500
   }
   foreach ($name in $expected.Keys) {

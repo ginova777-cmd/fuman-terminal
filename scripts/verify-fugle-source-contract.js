@@ -229,7 +229,6 @@ function staticChecks() {
 
   for (const [name, text] of [
     ["Start-PublicSlotSharedSource.cmd", read("ops/public-slot/Start-PublicSlotSharedSource.cmd")],
-    ["Start-Strategy2ReadinessSource.cmd", read("ops/public-slot/Start-Strategy2ReadinessSource.cmd")],
   ]) {
     for (const marker of ["-RestQuoteBatchSize 240", "-RestQuoteDelayMilliseconds 40", "-RestQuoteOpeningBoostBatchSize 180", "-RestQuoteOpeningBoostDelayMilliseconds 80", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
       if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
