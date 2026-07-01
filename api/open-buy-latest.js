@@ -258,6 +258,33 @@ function strategy1StageCards(resultCount, buyCount, readyStatus = {}) {
   ];
 }
 
+function strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }) {
+  const today = compactDateKey(taipeiDateKey());
+  const decisionReady = readyStatus?.decision_ready === true;
+  const completeScan = expectedTotal > 0 && scannedCount > 0 && scannedCount >= expectedTotal;
+  const ready = Boolean(!carryForward2130 && decisionReady && usedDate === today && completeScan);
+  return {
+    ok: ready,
+    ready,
+    status: ready ? "ready" : carryForward2130 ? "carry_forward" : decisionReady ? "stale" : "not_ready",
+    reason: ready
+      ? "strategy1_today_decision_ready"
+      : carryForward2130
+        ? "strategy1_previous_2130_carry_forward"
+        : decisionReady
+          ? `strategy1_source_date_not_today:${usedDate || "missing"}!=${today}`
+          : decisionReadyError(readyStatus),
+    tradeDate: usedDate,
+    today,
+    expectedTotal,
+    scannedCount,
+    decisionReady,
+    displayMode,
+    readyStatusView: READY_STATUS_VIEW,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 function buildPayload(rows, run, readyStatus, options = {}) {
   const carryForward2130 = Boolean(options.previous2130CarryForward || run.__previous2130CarryForward);
   const normalized = rows
@@ -286,6 +313,16 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   const reason = carryForward2130
     ? carryForwardReason(readyStatus, usedDate)
     : readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus);
+  const fallbackUsed = Boolean(carryForward2130 || (decisionPending && options.pendingCandidateDisplay));
+  const fallbackScope = carryForward2130 ? ["previous_2130_complete_run"] : fallbackUsed ? ["decision_pending_display"] : [];
+  const fallbackDetails = fallbackUsed
+    ? [{
+      scope: fallbackScope.join("+"),
+      reason,
+      usedDate,
+      today: compactDateKey(taipeiDateKey()),
+    }]
+    : [];
 
   return {
     ok: true,
@@ -294,6 +331,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     gate: STRATEGY1_GATE,
     runId,
     updatedAt: String(run.finished_at || run.updated_at || rows[0]?.updated_at || new Date().toISOString()),
+    tradeDate: usedDate,
     usedDate,
     sourceDate: usedDate,
     marketSession: {
@@ -309,6 +347,10 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     complete: true,
     canvas: Boolean(options.canvas),
     qualityStatus,
+    sourceCoverage: strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }),
+    fallbackUsed,
+    fallbackScope,
+    fallbackDetails,
     decisionReady: readyStatus?.decision_ready === true,
     decisionPending,
     displayMode,
@@ -363,13 +405,29 @@ function buildPayload(rows, run, readyStatus, options = {}) {
 }
 
 function missingPayload(error, detail = "") {
+  const today = compactDateKey(taipeiDateKey());
   return {
     ok: false,
     error,
     detail,
     date: taipeiDateKey(),
+    tradeDate: today,
+    usedDate: today,
+    sourceDate: today,
     cacheSource: "none",
     gate: STRATEGY1_GATE,
+    sourceCoverage: {
+      ok: false,
+      ready: false,
+      status: "blocked",
+      reason: detail || error,
+      tradeDate: today,
+      today,
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     decisionReady: false,
     lastError: detail || error,
     expectedTotal: 0,

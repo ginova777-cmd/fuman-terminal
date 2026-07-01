@@ -480,6 +480,43 @@ function taipeiMinute(date = new Date()) {
   return Number(parts.hour) * 60 + Number(parts.minute);
 }
 
+function strategyDueStatus(strategy, date = new Date()) {
+  const minute = taipeiMinute(date);
+  const between = (start, end) => minute >= start && minute <= end;
+  const endOfEvidenceDay = 23 * 60 + 55;
+  const windows = {
+    strategy1: { start: 8 * 60 + 45, end: endOfEvidenceDay, label: "08:45-23:55 Asia/Taipei" },
+    strategy2: { start: 8 * 60 + 45, end: endOfEvidenceDay, label: "08:45-23:55 Asia/Taipei" },
+    strategy3: { start: 13 * 60 + 5, end: endOfEvidenceDay, label: "13:05-23:55 Asia/Taipei" },
+    strategy4: { start: 16 * 60, end: endOfEvidenceDay, label: "16:00-23:55 Asia/Taipei" },
+  };
+  if (windows[strategy.key]) {
+    const window = windows[strategy.key];
+    const due = between(window.start, window.end);
+    return {
+      due,
+      verifierDue: due,
+      window: window.label,
+      reason: due ? "strategy_evidence_due" : "strategy_not_due_for_current_taipei_time",
+    };
+  }
+  if (strategy.key === "realtime-radar") {
+    const due = between(9 * 60, endOfEvidenceDay);
+    return {
+      due,
+      verifierDue: due,
+      window: "09:00-23:55 Asia/Taipei",
+      reason: due ? "radar_today_cache_due" : "radar_not_due_before_0900_or_after_2355",
+    };
+  }
+  return {
+    due: true,
+    verifierDue: true,
+    window: "always",
+    reason: "always_due",
+  };
+}
+
 function payloadGroupSatisfied(group, fields, payload) {
   const fallbackGroups = new Set(strategyPayloadFallbackGroups(group));
   if (!fallbackGroups.has(group)) return false;
@@ -722,24 +759,28 @@ function frontendEvidence(strategy) {
   };
 }
 
-function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, frontend) {
+function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, frontend, dueStatus = { due: true }) {
   const issues = [];
   const warnings = [];
-  if (endpointResult.status !== 200) issues.push(`http_status_${endpointResult.status}`);
-  if (basic.apiOk === false) issues.push("api_ok_false");
-  if (/critical|error|failed|blocked/i.test(String(basic.status))) issues.push(`api_status_${basic.status}`);
+  const addDueIssue = (issue) => {
+    if (dueStatus.due === false) warnings.push(`not_due_${issue}`);
+    else issues.push(issue);
+  };
+  if (endpointResult.status !== 200) addDueIssue(`http_status_${endpointResult.status}`);
+  if (basic.apiOk === false) addDueIssue("api_ok_false");
+  if (/critical|error|failed|blocked/i.test(String(basic.status))) addDueIssue(`api_status_${basic.status}`);
   if (/stale|degraded|partial|not_ready/i.test(String(basic.status))) warnings.push(`api_status_${basic.status}`);
   if (/stale|degraded|partial|not_ready/i.test(String(freshness.dataFreshnessStatus))) warnings.push(`freshness_${freshness.dataFreshnessStatus}`);
   if (!basic.runId && !strategy.runIdOptional) warnings.push("run_id_missing");
   if (!basic.updatedAt && !basic.generatedAt) warnings.push("updated_at_missing");
   if (!basic.cacheSource && !basic.dataContractSource) warnings.push("source_marker_missing");
-  if (!fields.rowsChecked) issues.push("api_rows_empty");
-  if (strategy.expectedRows && fields.rowsChecked < strategy.expectedRows) issues.push(`rows_below_expected_${fields.rowsChecked}_${strategy.expectedRows}`);
-  if (fields.blankTotal > 0) issues.push(`field_blanks_${fields.blankTotal}`);
-  if (fallback.fallback && !fallback.contractAllowed) issues.push("fallback_or_static_cache_used");
+  if (!fields.rowsChecked) addDueIssue("api_rows_empty");
+  if (strategy.expectedRows && fields.rowsChecked < strategy.expectedRows) addDueIssue(`rows_below_expected_${fields.rowsChecked}_${strategy.expectedRows}`);
+  if (fields.blankTotal > 0) addDueIssue(`field_blanks_${fields.blankTotal}`);
+  if (fallback.fallback && !fallback.contractAllowed) addDueIssue("fallback_or_static_cache_used");
   if (fallback.fallback && fallback.contractAllowed) warnings.push(`allowed_fallback_${fallback.fallbackScope.join("+")}`);
   if (coverage.staleQuoteCount > 0) warnings.push(`stale_quote_count_${coverage.staleQuoteCount}`);
-  if (coverage.failedBatchCount > 0) issues.push(`failed_batch_count_${coverage.failedBatchCount}`);
+  if (coverage.failedBatchCount > 0) addDueIssue(`failed_batch_count_${coverage.failedBatchCount}`);
   if (frontend.endpointReferences.length === 0) warnings.push("frontend_endpoint_reference_missing");
   if (frontend.retiredStaticJsonReferences.length) issues.push("frontend_retired_static_json_reference");
   return { issues, warnings };
@@ -770,9 +811,10 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   };
 }
 
-async function evaluateStrategy(strategy) {
+async function evaluateStrategy(strategy, context = {}) {
   const endpointResults = [];
   const verifierResults = [];
+  const dueStatus = strategyDueStatus(strategy, context.now || new Date());
   for (const endpoint of strategy.endpoints) {
     const response = await fetchJson(endpoint).catch((error) => ({
       ok: false,
@@ -789,7 +831,11 @@ async function evaluateStrategy(strategy) {
     const fallback = response.json ? extractFallback(response.json) : { fallback: false, contractAllowed: false };
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
-    const judgement = applyProfileJudgement(strategy, response, apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, frontend));
+    const judgement = applyProfileJudgement(
+      strategy,
+      response,
+      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, frontend, dueStatus)
+    );
     endpointResults.push({
       endpoint,
       url: response.url,
@@ -803,12 +849,13 @@ async function evaluateStrategy(strategy) {
       fallback,
       cost,
       frontend,
+      dueStatus,
       issues: judgement.issues,
       warnings: judgement.warnings,
       responseSample: response.ok ? undefined : response.text,
     });
   }
-  if (RUN_VERIFIERS) {
+  if (RUN_VERIFIERS && dueStatus.verifierDue !== false) {
     for (const command of strategy.verifierCommands || []) {
       if (!STRICT_LIVE && strategy.skipVerifiersOffSession) {
         verifierResults.push({
@@ -824,6 +871,15 @@ async function evaluateStrategy(strategy) {
         verifierResults.push(runCommand(command));
       }
     }
+  } else if (RUN_VERIFIERS && dueStatus.verifierDue === false) {
+    verifierResults.push({
+      command: "verifiers skipped",
+      exitCode: 0,
+      signal: "",
+      ok: true,
+      skipped: true,
+      reason: dueStatus.reason,
+    });
   }
   const issues = endpointResults.flatMap((item) => item.issues.map((issue) => `${item.endpoint}: ${issue}`));
   const warnings = endpointResults.flatMap((item) => item.warnings.map((warning) => `${item.endpoint}: ${warning}`));
@@ -843,6 +899,7 @@ async function evaluateStrategy(strategy) {
     dailySummaryTable: strategy.dailySummaryTable,
     retentionPolicy: strategy.retentionPolicy,
     writeBudgetPolicy: strategy.writeBudget,
+    dueStatus,
     endpoints: endpointResults,
     verifierResults,
     issues,
@@ -913,7 +970,7 @@ async function main() {
   const strategies = [];
   for (const strategy of STRATEGIES) {
     console.log(`[api-unattended] checking ${strategy.key}`);
-    strategies.push(await evaluateStrategy(strategy));
+    strategies.push(await evaluateStrategy(strategy, { now }));
   }
   const blockers = strategies.flatMap((strategy) => strategy.issues.map((issue) => `${strategy.key}: ${issue}`));
   const warnings = strategies.flatMap((strategy) => strategy.warnings.map((warning) => `${strategy.key}: ${warning}`));

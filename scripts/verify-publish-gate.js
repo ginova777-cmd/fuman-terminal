@@ -462,6 +462,9 @@ if (!String(packageJson.scripts?.["verify:supabase-publish-hard-gate"] || "").in
 if (!String(packageJson.scripts?.["verify:api-unattended-scorecard"] || "").includes("scripts/verify-api-unattended-scorecard.js")) {
   issues.push("package.json missing scripts.verify:api-unattended-scorecard for all-strategy API unattended scorecard");
 }
+if (!String(packageJson.scripts?.["verify:production-api-freshness"] || "").includes("scripts/verify-production-api-freshness-contract.js")) {
+  issues.push("package.json missing scripts.verify:production-api-freshness for production API today/sourceCoverage/fallback/static410 contract");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -631,6 +634,7 @@ const strategy2SourcePublishGate = read("lib/strategy2-source-publish-gate.js");
 const strategy2Scanner = read("scripts/scan-intraday-signals.js");
 const supabasePublishHardGate = read("scripts/verify-supabase-publish-hard-gate.js");
 const apiUnattendedScorecard = read("scripts/verify-api-unattended-scorecard.js");
+const productionApiFreshnessContract = read("scripts/verify-production-api-freshness-contract.js");
 const apiUnattendedRunner = read("run-api-unattended-scorecard.ps1");
 const apiUnattendedInstaller = read("scripts/install-api-unattended-scorecard-task.ps1");
 const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
@@ -682,6 +686,25 @@ const strategy2ReadinessSql = [
 const intraday1mCoverageStatsRpcSql = read("ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
+}
+for (const marker of [
+  "production API must expose tradeDate=today after due window",
+  "sourceCoverage ready",
+  "fallback disclosure",
+  "retired static JSON 410",
+  "/data/open-buy-latest.json",
+  "/data/strategy2-intraday-latest.json",
+  "/data/strategy3-latest.json",
+  "/data/strategy4-latest.json",
+  "/data/strategy5-latest.json",
+  "/data/institution-latest.json",
+  "/data/warrant-flow-latest.json",
+  "/data/cb-detect-latest.json",
+  "/data/realtime-radar-latest.json",
+]) {
+  if (!productionApiFreshnessContract.includes(marker)) {
+    issues.push(`verify-production-api-freshness-contract.js missing production API freshness marker ${marker}`);
+  }
 }
 if (/dataManifest:\s*["']\/data\//.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js must not point dataManifest at static JSON data");
@@ -2470,15 +2493,16 @@ for (const marker of [
 for (const marker of [
   "Fuman API Unattended Scorecard",
   "run-api-unattended-scorecard.ps1",
-  "08:35",
-  "09:10",
-  "09:35",
-  "12:05",
-  "20:35",
+  "21:35",
   "Register-ScheduledTask",
 ]) {
   if (!apiUnattendedInstaller.includes(marker)) {
     issues.push(`install-api-unattended-scorecard-task.ps1 missing schedule installer marker ${marker}`);
+  }
+}
+for (const retiredEarlyTime of ["08:35", "09:10", "09:35", "12:05", "20:35"]) {
+  if (apiUnattendedInstaller.includes(retiredEarlyTime)) {
+    issues.push(`install-api-unattended-scorecard-task.ps1 must not install early all-strategy scorecard time ${retiredEarlyTime}`);
   }
 }
 for (const marker of [

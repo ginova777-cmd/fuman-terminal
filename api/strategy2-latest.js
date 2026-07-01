@@ -118,6 +118,21 @@ function readStrategy2RuntimeHistoryPayload(marketSession = null, options = {}) 
     ok: payload.ok !== false,
     cacheSource: "runtime-session-history",
     gate: "strategy2-session-history-0845-1200",
+    sourceCoverage: payload.sourceCoverage || {
+      ok: false,
+      ready: false,
+      status: "runtime_history",
+      reason: "strategy2_runtime_session_history_fallback",
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: true,
+    fallbackScope: ["runtime-session-history"],
+    fallbackDetails: [{
+      scope: "runtime-session-history",
+      reason: payload.reason || "runtime-session-history",
+      file: latest.file,
+      mtime: new Date(latest.mtime).toISOString(),
+    }],
     reason: payload.reason || "runtime-session-history",
     updatedAt: payload.updatedAt || new Date(latest.mtime).toISOString(),
     marketSession,
@@ -227,11 +242,27 @@ function sessionWithSupabaseRunDate(marketSession, runDate) {
 }
 
 function apiOnlyError(error, detail = "") {
+  const today = taipeiClock().ymd;
   return attachStrategy2SelfCheck({
     ok: false,
     cacheSource: "api-only",
     error,
     detail,
+    tradeDate: today,
+    usedDate: today,
+    sourceDate: today,
+    sourceCoverage: {
+      ok: false,
+      ready: false,
+      status: "blocked",
+      reason: detail || error,
+      tradeDate: today,
+      today,
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     events: [],
     records: [],
     transport: {
@@ -494,9 +525,16 @@ function compactStrategy2Payload(payload, options) {
     updatedAt: payload?.updatedAt || payload?.generatedAt || "",
     generatedAt: payload?.generatedAt || payload?.updatedAt || "",
     runId: payload?.runId || payload?.transport?.runId || "",
+    tradeDate: payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "",
+    usedDate: payload?.usedDate || payload?.tradeDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "",
+    sourceDate: payload?.sourceDate || payload?.tradeDate || payload?.usedDate || payload?.date || payload?.marketSession?.marketDataDate || "",
     date: payload?.date || "",
     complete: payload?.complete !== false,
     qualityStatus: payload?.qualityStatus || "complete",
+    sourceCoverage: payload?.sourceCoverage || null,
+    fallbackUsed: payload?.fallbackUsed === true,
+    fallbackScope: Array.isArray(payload?.fallbackScope) ? payload.fallbackScope : [],
+    fallbackDetails: Array.isArray(payload?.fallbackDetails) ? payload.fallbackDetails : [],
     scanWindow: payload?.scanWindow || null,
     marketSession: payload?.marketSession || null,
     count: rows.length,
@@ -638,8 +676,34 @@ function attachStrategy2Readiness(payload, readiness, tradingDay) {
   const publishBlockedReason = publishBlocked
     ? effectiveReadiness.reason || effectiveReadiness.status || "strategy2 readiness not ready"
     : "";
+  const tradeDate = compactDate(payload.tradeDate || payload.usedDate || payload.date || payload.marketSession?.marketDataDate || "");
+  const today = compactDate(payload.marketSession?.today || tradingDay?.date || taipeiClock().ymd);
+  const hasRows = hasStrategy2PayloadRows(payload);
+  const sourceReady = Boolean(!publishBlocked && hasRows && tradeDate && tradeDate === today && payload?.cacheSource === "supabase-api");
   const nextPayload = {
     ...payload,
+    tradeDate,
+    usedDate: payload.usedDate || tradeDate,
+    sourceDate: payload.sourceDate || tradeDate,
+    sourceCoverage: {
+      ok: sourceReady,
+      ready: sourceReady,
+      status: sourceReady ? "ready" : publishBlocked ? "not_ready" : "stale",
+      reason: sourceReady
+        ? "strategy2_today_readiness_ready"
+        : publishBlockedReason || (tradeDate !== today ? `strategy2_source_date_not_today:${tradeDate || "missing"}!=${today}` : "strategy2_source_not_ready"),
+      tradeDate,
+      today,
+      rowCount: Array.isArray(payload.rows) ? payload.rows.length : 0,
+      eventCount: Array.isArray(payload.events) ? payload.events.length : 0,
+      recordCount: Array.isArray(payload.records) ? payload.records.length : 0,
+      readinessStatus: effectiveReadiness.status || "",
+      readinessReady: effectiveReadiness.ready === true,
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: payload.fallbackUsed === true,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    fallbackDetails: Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : [],
     resourceReadiness: effectiveReadiness,
     publishBlocked,
     publishBlockedReason,
@@ -748,6 +812,9 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
     ok: payload.ok !== false,
     updatedAt: payload.updatedAt || run.updated_at || run.finished_at,
     runId: payload.runId || run.run_id,
+    tradeDate: runDate,
+    usedDate: runDate,
+    sourceDate: runDate,
     date: payload.date || run.scan_date || run.date,
     complete: true,
     qualityStatus: payload.qualityStatus || run.quality_status || "complete",
@@ -756,6 +823,9 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
     reason: emptyToday ? "today-complete-run-empty" : isTodayRun ? "complete-run-authoritative" : marketSession?.closed ? "non-trading-day-cache" : "complete-run-authoritative",
     noTodayDetections: Boolean(emptyToday),
     marketSession,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     latestCompleteRunCorrected: skippedEmptyRunIds.length > 0,
     correctionReason: skippedEmptyRunIds.length ? "empty_complete_run_skipped" : "",
     skippedEmptyRunIds,
@@ -785,6 +855,20 @@ async function readStrategy2SnapshotPayload(options = {}) {
     ok: payload.ok !== false,
     cacheSource: "supabase:strategy2_latest_snapshot",
     snapshotFirst: true,
+    sourceCoverage: payload.sourceCoverage || {
+      ok: false,
+      ready: false,
+      status: "snapshot",
+      reason: "strategy2_snapshot_first",
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: true,
+    fallbackScope: ["strategy2_latest_snapshot"],
+    fallbackDetails: [{
+      scope: "strategy2_latest_snapshot",
+      reason: payload.reason || "strategy2-snapshot-first",
+      snapshotUpdatedAt: snapshot.updatedAt || "",
+    }],
     reason: payload.reason || "strategy2-snapshot-first",
     updatedAt: payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
     transport: {

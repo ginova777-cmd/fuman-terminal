@@ -231,7 +231,10 @@ function hasTvDiagnosticFallback(rows) {
 }
 
 function hasSourceFallback(sourceWarnings) {
-  return asArray(sourceWarnings).some((warning) => /fallback/i.test(String(warning || "")));
+  return asArray(sourceWarnings).some((warning) => {
+    const text = String(warning || "");
+    return /fallback/i.test(text) && !/tv.*candle.*diagnostic|tv.*diagnostic|candle.*diagnostic/i.test(text);
+  });
 }
 
 function liveProbeIssues(probe) {

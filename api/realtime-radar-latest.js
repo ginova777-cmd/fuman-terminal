@@ -150,6 +150,25 @@ function isTradingDayPayloadFresh(marketSession, payload) {
   return Boolean(updatedAtMs && Date.now() - updatedAtMs <= payloadFreshnessMaxAgeMs(payload));
 }
 
+function radarSourceCoverage(payload, marketSession) {
+  const ready = Boolean(payload?.ok !== false && cleanNumber(payload?.count || payload?.rows?.length) > 0 && isTradingDayPayloadFresh(marketSession, payload));
+  return {
+    ok: ready,
+    ready,
+    status: ready ? "ready" : marketSession?.hasTodayMarketData ? "stale" : "not_ready",
+    reason: ready
+      ? "realtime_radar_today_quote_ready"
+      : marketSession?.hasTodayMarketData
+        ? "realtime_radar_payload_stale_or_empty"
+        : `realtime_radar_source_date_not_today:${marketSession?.marketDataDate || "missing"}!=${marketSession?.today || taipeiDateKey()}`,
+    tradeDate: marketSession?.marketDataDate || "",
+    today: marketSession?.today || taipeiDateKey(),
+    count: cleanNumber(payload?.count || payload?.rows?.length),
+    updatedAt: payload?.updatedAt || "",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
   if (!Array.isArray(payload?.rows)) return payload;
   const allRows = payload.rows.map((row) => {
@@ -184,6 +203,24 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
 function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_RADAR_LIMIT) {
   const normalizedPayload = normalizeRadarRows(payload, limit);
   const runId = radarPayloadRunId(normalizedPayload);
+  const fallbackUsed = normalizedPayload?.fallbackUsed === true
+    || /fallback/i.test(String(reason || ""))
+    || /fallback/i.test(String(normalizedPayload?.transport?.mode || ""))
+    || /fallback/i.test(String(normalizedPayload?.freshness?.decision || ""));
+  const fallbackScope = Array.isArray(normalizedPayload?.fallbackScope)
+    ? normalizedPayload.fallbackScope
+    : fallbackUsed
+      ? [normalizedPayload?.transport?.mode || normalizedPayload?.freshness?.decision || reason || "realtime_radar_fallback"]
+      : [];
+  const fallbackDetails = Array.isArray(normalizedPayload?.fallbackDetails)
+    ? normalizedPayload.fallbackDetails
+    : fallbackUsed
+      ? [{
+        scope: fallbackScope.join("+"),
+        reason: reason || normalizedPayload?.freshness?.reason || "realtime radar fallback path used",
+        table: normalizedPayload?.transport?.table || TABLE,
+      }]
+      : [];
   const writeBudget = normalizedPayload?.writeBudget || {
     source: "realtime-radar-write-budget",
     status: "pending_next_writer_run",
@@ -198,6 +235,13 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
   return {
     ...normalizedPayload,
     runId,
+    tradeDate: marketSession?.marketDataDate || normalizedPayload?.tradeDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
+    usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
+    sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
+    sourceCoverage: normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession),
+    fallbackUsed,
+    fallbackScope,
+    fallbackDetails,
     writeBudget,
     reason: reason || normalizedPayload?.reason,
     marketSession,
@@ -278,6 +322,7 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
     source: `supabase:${QUOTE_TABLE}`,
     cacheSource: "supabase-quote-view",
     date,
+    tradeDate: date,
     usedDate: date,
     sourceDate: date,
     updatedAt: new Date(latestQuoteAt).toISOString(),
@@ -291,6 +336,13 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
       quoteCount: normalized.length,
     },
     rows: normalized,
+    fallbackUsed: true,
+    fallbackScope: ["fugle_realtime_quote_latest"],
+    fallbackDetails: [{
+      scope: "fugle_realtime_quote_latest",
+      reason: normalized.length ? "radar cache unavailable/stale; using formal realtime quote view" : "formal realtime quote view returned no rows",
+      quoteCount: normalized.length,
+    }],
     transport: {
       source: "supabase",
       table: QUOTE_TABLE,
@@ -358,6 +410,21 @@ function unavailablePayload(reason = "") {
     reason,
     cacheSource: "none",
     source: "api-only",
+    tradeDate: taipeiDateKey(),
+    usedDate: taipeiDateKey(),
+    sourceDate: taipeiDateKey(),
+    sourceCoverage: {
+      ok: false,
+      ready: false,
+      status: "blocked",
+      reason,
+      tradeDate: taipeiDateKey(),
+      today: taipeiDateKey(),
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     count: 0,
     rows: [],
     transport: {
@@ -378,9 +445,23 @@ function staleTradingDayPayload(payload, marketSession, reason = "trading_day_ra
     reason,
     cacheSource: payload?.cacheSource || "supabase-radar-cache",
     source: payload?.source || "api-only",
+    tradeDate: payload?.tradeDate || payload?.usedDate || payload?.date || "",
     date: payload?.date || "",
     usedDate: payload?.usedDate || payload?.date || "",
     sourceDate: payload?.sourceDate || payload?.date || "",
+    sourceCoverage: {
+      ok: false,
+      ready: false,
+      status: "stale",
+      reason,
+      tradeDate: payload?.tradeDate || payload?.usedDate || payload?.date || "",
+      today: marketSession?.today || taipeiDateKey(),
+      updatedAt: payload?.updatedAt || "",
+      checkedAt: new Date().toISOString(),
+    },
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
     updatedAt: payload?.updatedAt || "",
     updatedAtMs: payload?.updatedAtMs || 0,
     count: 0,
