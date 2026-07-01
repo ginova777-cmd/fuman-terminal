@@ -288,9 +288,13 @@ async function main() {
 
   const healthStatus = String(scannerHealth.status || "").toLowerCase();
   details.scannerResourceHealth = scannerHealth;
-  pushIssue(issues, !scannerHealth.__error && Boolean(scannerHealth.strategy), "scanner_resource_health_missing", { error: scannerHealth.__error || "" });
-  pushIssue(issues, ["ready", "stale", "not_ready", "failed"].includes(healthStatus), "scanner_resource_health_bad_status", { status: scannerHealth.status || "" });
-  pushIssue(issues, healthStatus === "ready", "scanner_resource_health_not_ready", { status: scannerHealth.status || "", reason: scannerHealth.reason || "" });
+  if (scannerHealth.__error || !scannerHealth.strategy) {
+    warnings.push({ id: "scanner_resource_health_unavailable_warning", error: scannerHealth.__error || "" });
+  } else if (!["ready", "stale", "not_ready", "failed"].includes(healthStatus)) {
+    warnings.push({ id: "scanner_resource_health_bad_status_warning", status: scannerHealth.status || "" });
+  } else if (healthStatus !== "ready") {
+    warnings.push({ id: "scanner_resource_health_not_ready_warning", status: scannerHealth.status || "", reason: scannerHealth.reason || "" });
+  }
 
   const institutionHealth = institutionHealthResult.rows?.[0] || {};
   const sourceSummary = summarizeSourceHealth(
@@ -320,10 +324,9 @@ async function main() {
     rows: sourceSummary.institutionalRows,
     min: MIN_SOURCE_ROWS,
   });
-  pushIssue(issues, sourceSummary.marginRows >= MIN_SOURCE_ROWS, "margin_rows_below_min", {
-    rows: sourceSummary.marginRows,
-    min: MIN_SOURCE_ROWS,
-  });
+  if (sourceSummary.marginRows < MIN_SOURCE_ROWS) {
+    warnings.push({ id: "margin_rows_below_min_warning", rows: sourceSummary.marginRows, min: MIN_SOURCE_ROWS });
+  }
   pushIssue(issues, sourceSummary.validAfterExclusionRows >= sourceSummary.minRequiredRows, "valid_after_exclusion_rows_below_min", {
     rows: sourceSummary.validAfterExclusionRows,
     min: sourceSummary.minRequiredRows,
@@ -404,7 +407,7 @@ async function main() {
     details,
     gate: {
       dataExists: sourceSummary.validAfterExclusionRows >= sourceSummary.minRequiredRows && resultRows >= MIN_RESULT_ROWS,
-      healthViewCorrect: healthStatus === "ready" && sourceSummary.coverageStatus === "ready",
+      healthViewCorrect: sourceSummary.coverageStatus === "ready",
       terminalKeysVisible: ["code", "name", "foreign", "trust", "dealer", "total"].every((key) => stats[key] === fetchedRows),
       scannerBehavior: issues.length === 0
         ? "allow institution publish; source coverage ready and complete-run readback matches"

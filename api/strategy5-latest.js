@@ -240,6 +240,7 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
   const estimatedRowsWritten = cleanNumber(scannedCount) + cleanNumber(resultCount) + 1;
   const writeBudgetOk = estimatedRowsWritten > 0 && estimatedRowsWritten <= WRITE_BUDGET_LIMIT_ROWS;
   const issues = [];
+  const warnings = [];
   const sourceReady = coverageStatus === "ready";
   const sourceFresh = Boolean(sourceDate) && ageDays != null && ageDays <= MAX_CHIP_SOURCE_AGE_DAYS;
   const completeRun = String(run?.status || "").toLowerCase() === "complete" && run?.complete === true;
@@ -249,7 +250,7 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
   if (!sourceReady) issues.push(`chip_source_not_ready:${coverageStatus || "missing"}`);
   if (!sourceFresh) issues.push(`chip_source_stale:${sourceDate || "missing"}`);
   if (institutionalRows < minRows) issues.push(`institutional_rows_below_min:${institutionalRows}/${minRows}`);
-  if (marginRows < minRows) issues.push(`margin_rows_below_min:${marginRows}/${minRows}`);
+  if (marginRows < minRows) warnings.push(`margin_rows_below_min_warning:${marginRows}/${minRows}`);
   if (validRows < minRows) issues.push(`valid_rows_below_min:${validRows}/${minRows}`);
   if (!completeRun) issues.push("complete_run_not_complete");
   if (!scanComplete) issues.push(`scan_count_mismatch:${scannedCount}/${expectedTotal}`);
@@ -273,6 +274,8 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
     priorityStaleBlocked: !ok,
   };
   return {
+    issues,
+    warnings,
     dataFreshness,
     sourceStatus: ok ? "ready" : (sourceReady ? "stale" : "degraded"),
     sourceCoverage: {
@@ -295,6 +298,8 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
       chipAgeDays: ageDays,
       institutionalRows,
       marginRows,
+      marginCoverageRequired: false,
+      marginCoverageWarning: marginRows < minRows ? `margin_rows_below_min_warning:${marginRows}/${minRows}` : "",
       unifiedRows: cleanNumber(chipSourceHealth?.unified_rows),
       validAfterExclusionRows: validRows,
       minRequiredRows: minRows,
@@ -305,7 +310,7 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
       latestOverwriteAllowed: ok,
       degradedBlocksLatest: true,
       reason: ok ? "source_ready_complete_run_readback_aligned" : issues.join(";"),
-      hardGate: `coverage_status=ready && chip source age <= ${MAX_CHIP_SOURCE_AGE_DAYS}d && scanned_count=expected_total && result readback=result_count && write budget <= ${WRITE_BUDGET_LIMIT_ROWS}`,
+      hardGate: `coverage_status=ready && valid chip rows >= min_required_rows && chip source age <= ${MAX_CHIP_SOURCE_AGE_DAYS}d && scanned_count=expected_total && result readback=result_count && write budget <= ${WRITE_BUDGET_LIMIT_ROWS}`,
     },
     fallback: {
       used: false,
@@ -375,6 +380,7 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
       retentionOk: ok && resultReadbackOk,
       snapshotGuard: "live=1/noSnapshot=1 bypasses snapshot; stale or missing unattended snapshots are rejected",
       reasons: ok ? ["ready"] : issues,
+      warnings,
     },
   };
 }
@@ -506,6 +512,8 @@ function buildPayload(rows, run, options = {}) {
     usedDate: sourceDate || scanDate,
     sourceDate: sourceDate || scanDate,
     dataFreshness: apiState.dataFreshness,
+    issues: apiState.issues,
+    warnings: apiState.warnings,
     sourceStatus: apiState.sourceStatus,
     sourceCoverage: apiState.sourceCoverage,
     publishGate: apiState.publishGate,

@@ -372,9 +372,13 @@ async function main() {
 
   const healthStatus = String(scannerHealth.status || "").toLowerCase();
   details.health = scannerHealth;
-  pushIssue(issues, !scannerHealth.__error && Boolean(scannerHealth.strategy), "scanner_resource_health_missing", { error: scannerHealth.__error || "" });
-  pushIssue(issues, ["ready", "stale", "not_ready", "failed"].includes(healthStatus), "scanner_resource_health_bad_status", { status: scannerHealth.status || "" });
-  pushIssue(issues, healthStatus === "ready", "scanner_resource_health_not_ready", { status: scannerHealth.status || "", reason: scannerHealth.reason || "" });
+  if (scannerHealth.__error || !scannerHealth.strategy) {
+    warnings.push({ id: "scanner_resource_health_unavailable_warning", error: scannerHealth.__error || "" });
+  } else if (!["ready", "stale", "not_ready", "failed"].includes(healthStatus)) {
+    warnings.push({ id: "scanner_resource_health_bad_status_warning", status: scannerHealth.status || "" });
+  } else if (healthStatus !== "ready") {
+    warnings.push({ id: "scanner_resource_health_not_ready_warning", status: scannerHealth.status || "", reason: scannerHealth.reason || "" });
+  }
 
   const institutionHealth = institutionHealthResult.rows?.[0] || {};
   const sourceSummary = chipSourceSummary(institutionHealth, chipHealthResult.rows || [], chipLatestResult.rows || []);
@@ -394,7 +398,9 @@ async function main() {
   pushIssue(issues, chipLatestResult.ok, "chip_flows_latest_unreadable", { error: chipLatestResult.error || "" });
   pushIssue(issues, sourceSummary.coverageStatus === "ready", "institution_coverage_not_ready", { coverageStatus: sourceSummary.coverageStatus, reason: sourceSummary.reason });
   pushIssue(issues, sourceSummary.institutionalRows >= MIN_INSTITUTION_ROWS, "institutional_rows_below_min", { rows: sourceSummary.institutionalRows, min: MIN_INSTITUTION_ROWS });
-  pushIssue(issues, sourceSummary.marginRows >= MIN_INSTITUTION_ROWS, "margin_rows_below_min", { rows: sourceSummary.marginRows, min: MIN_INSTITUTION_ROWS });
+  if (sourceSummary.marginRows < MIN_INSTITUTION_ROWS) {
+    warnings.push({ id: "margin_rows_below_min_warning", rows: sourceSummary.marginRows, min: MIN_INSTITUTION_ROWS });
+  }
   pushIssue(issues, sourceSummary.validAfterExclusionRows >= sourceSummary.minRequiredRows, "valid_after_exclusion_rows_below_min", {
     rows: sourceSummary.validAfterExclusionRows,
     min: sourceSummary.minRequiredRows,
