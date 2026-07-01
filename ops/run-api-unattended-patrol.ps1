@@ -141,6 +141,13 @@ try {
   if (-not $pwsh) {
     $pwsh = Get-Command powershell.exe -ErrorAction Stop
   }
+  $node = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (-not $node) {
+    $node = Get-Command node -ErrorAction Stop
+  }
+
+  $scorecardJson = Join-Path $stateDir ("api-unattended-scorecard-{0}.json" -f $safeComputer)
+  $scorecardMd = Join-Path $reportDir ("api-unattended-scorecard-{0}.md" -f $safeComputer)
 
   Add-Content -LiteralPath $script:LogFile -Value ("[{0}] Fuman API unattended patrol start" -f (Get-Date -Format o))
   Add-Content -LiteralPath $script:LogFile -Value ("root={0}" -f $repoRoot)
@@ -150,26 +157,17 @@ try {
   Invoke-Step -Name "production-guard" -Command $npm.Source -Arguments @("run", "guard:production")
   Invoke-Step -Name "production-monitor" -Command $npm.Source -Arguments @("run", "monitor:production")
   Invoke-Step -Name "production-api-freshness" -Command $npm.Source -Arguments @("run", "verify:production-api-freshness")
-  Invoke-Step -Name "api-unattended-scorecard" -Command $pwsh.Source -Arguments @(
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    (Join-Path $repoRoot "run-api-unattended-scorecard.ps1"),
-    "-Root",
-    $repoRoot,
-    "-RuntimeDir",
-    $RuntimeDir,
-    "-ProductionUrl",
-    $ProductionUrl,
-    "-ReleaseSha",
-    $ReleaseSha,
-    "-ComputerLabel",
-    $ComputerLabel,
-    "-TimeoutMs",
-    "$TimeoutMs",
-    "-VerifierTimeoutMs",
-    "$VerifierTimeoutMs"
+  Invoke-Step -Name "api-unattended-scorecard" -Command $node.Source -Arguments @(
+    "--dns-result-order=ipv4first",
+    "--use-system-ca",
+    "scripts\verify-api-unattended-scorecard.js",
+    "--production-url=$ProductionUrl",
+    "--computer=$ComputerLabel",
+    "--release-sha=$ReleaseSha",
+    "--out=$scorecardJson",
+    "--md=$scorecardMd",
+    "--timeout-ms=$TimeoutMs",
+    "--verifier-timeout-ms=$VerifierTimeoutMs"
   )
 
   Write-PatrolState -Status "ok"
