@@ -1105,6 +1105,8 @@ for (const marker of [
   "collector_fallback_source",
   "finmind_recovery_fetched",
   "finmind_recovery_error",
+  "finmind_recovery_cooldown_until",
+  "websocket_status",
   "readonly_verdict",
   "grant select",
 ]) {

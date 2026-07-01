@@ -40,6 +40,8 @@ let cursor = 0;
 let lastMessageAt = "";
 let last429At = "";
 let cooldownUntil = 0;
+let finmindCooldownUntil = 0;
+let lastFinmindError = "";
 
 function readSecret(paths) {
   for (const file of paths) {
@@ -91,6 +93,8 @@ function writeStatus(extra = {}) {
     fallbackSource: "finmind",
     finmindRecoveryEnabled: FINMIND_RECOVERY_ENABLED,
     finmindRecoveryTimeoutMs: FINMIND_RECOVERY_TIMEOUT_MS,
+    finmindRecoveryCooldownUntil: finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : "",
+    finmindRecoveryLastError: lastFinmindError,
     openingBoostStart: OPENING_BOOST_START,
     openingBoostEnd: OPENING_BOOST_END,
     openingBoostBatchSize: OPENING_BOOST_BATCH_SIZE,
@@ -293,6 +297,14 @@ function normalizeFinMindQuote(row, today) {
   };
 }
 
+function applyFinMindCooldown(status, payload) {
+  const retryAfterSeconds = Number(payload?.retry_after || payload?.retryAfter || 0);
+  if ((status === 403 || status === 429 || retryAfterSeconds > 0) && retryAfterSeconds >= 0) {
+    const floorSeconds = status === 403 || status === 429 ? 60 : 0;
+    finmindCooldownUntil = Date.now() + Math.max(floorSeconds, retryAfterSeconds) * 1000;
+  }
+}
+
 async function fetchFinMindRecoveryQuotes(symbols, token) {
   if (!FINMIND_RECOVERY_ENABLED) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "" };
   if (!token) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "missing FinMind token" };
@@ -300,6 +312,16 @@ async function fetchFinMindRecoveryQuotes(symbols, token) {
   const fresh = freshCachedCodeSet(normalized);
   const missing = new Set(normalized.filter((code) => !fresh.has(code)));
   if (!missing.size) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "" };
+  if (finmindCooldownUntil && Date.now() < finmindCooldownUntil) {
+    return {
+      quotes: [],
+      requested: missing.size,
+      recovered: 0,
+      skipped: true,
+      error: `FinMind cooldown until ${new Date(finmindCooldownUntil).toISOString()}: ${lastFinmindError}`,
+      cooldownUntil: new Date(finmindCooldownUntil).toISOString(),
+    };
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FINMIND_RECOVERY_TIMEOUT_MS);
   try {
@@ -313,18 +335,36 @@ async function fetchFinMindRecoveryQuotes(symbols, token) {
         "Accept": "application/json,text/plain,*/*",
       },
     });
-    if (!response.ok) throw new Error(`FinMind snapshot HTTP ${response.status}`);
-    const payload = await response.json();
-    if (payload?.status && Number(payload.status) >= 400) throw new Error(`FinMind snapshot status ${payload.status}: ${payload.msg || ""}`);
+    const text = await response.text();
+    let payload = {};
+    try { payload = text ? JSON.parse(text) : {}; } catch {}
+    if (!response.ok) {
+      applyFinMindCooldown(response.status, payload);
+      throw new Error(`FinMind snapshot HTTP ${response.status}${payload?.msg ? `: ${payload.msg}` : ""}`);
+    }
+    if (payload?.status && Number(payload.status) >= 400) {
+      applyFinMindCooldown(Number(payload.status), payload);
+      throw new Error(`FinMind snapshot status ${payload.status}: ${payload.msg || ""}`);
+    }
     const today = currentTaipeiDate();
     const quotes = [];
     for (const row of Array.isArray(payload?.data) ? payload.data : []) {
       const quote = normalizeFinMindQuote(row, today);
       if (quote && missing.has(quote.code)) quotes.push(quote);
     }
+    lastFinmindError = "";
+    finmindCooldownUntil = 0;
     return { quotes, requested: missing.size, recovered: quotes.length, skipped: false, error: "" };
   } catch (error) {
-    return { quotes: [], requested: missing.size, recovered: 0, skipped: false, error: error?.message || String(error) };
+    lastFinmindError = error?.message || String(error);
+    return {
+      quotes: [],
+      requested: missing.size,
+      recovered: 0,
+      skipped: false,
+      error: lastFinmindError,
+      cooldownUntil: finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : "",
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -392,6 +432,7 @@ async function tick() {
       finmindRecoveryFetched: finmindRecovery.recovered,
       finmindRecoverySkipped: finmindRecovery.skipped,
       finmindRecoveryError: finmindRecovery.error,
+      finmindRecoveryCooldownUntil: finmindRecovery.cooldownUntil || (finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : ""),
     });
     return;
   }
@@ -439,6 +480,7 @@ async function tick() {
     finmindRecoveryFetched: finmindRecovery.recovered,
     finmindRecoverySkipped: finmindRecovery.skipped,
     finmindRecoveryError: finmindRecovery.error,
+    finmindRecoveryCooldownUntil: finmindRecovery.cooldownUntil || (finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : ""),
     attempted: batch.length,
     openingBoostActive: effective.openingBoostActive,
     openingBoostFreshCount: effective.freshCount,

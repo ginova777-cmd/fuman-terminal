@@ -147,12 +147,14 @@ select
     else 'degraded'
   end as readonly_verdict,
   payload,
-  payload ->> 'primarySource' as collector_primary_source,
-  payload ->> 'fallbackSource' as collector_fallback_source,
-  coalesce(nullif(payload ->> 'finmindRecoveryRequested', '')::integer, 0) as finmind_recovery_requested,
-  coalesce(nullif(payload ->> 'finmindRecoveryFetched', '')::integer, 0) as finmind_recovery_fetched,
-  lower(coalesce(payload ->> 'finmindRecoverySkipped', 'false')) = 'true' as finmind_recovery_skipped,
-  payload ->> 'finmindRecoveryError' as finmind_recovery_error
+  coalesce(payload ->> 'primarySource', payload #>> '{websocket_status,primarySource}') as collector_primary_source,
+  coalesce(payload ->> 'fallbackSource', payload #>> '{websocket_status,fallbackSource}') as collector_fallback_source,
+  coalesce(nullif(payload ->> 'finmindRecoveryRequested', '')::integer, nullif(payload #>> '{websocket_status,finmindRecoveryRequested}', '')::integer, 0) as finmind_recovery_requested,
+  coalesce(nullif(payload ->> 'finmindRecoveryFetched', '')::integer, nullif(payload #>> '{websocket_status,finmindRecoveryFetched}', '')::integer, 0) as finmind_recovery_fetched,
+  lower(coalesce(payload ->> 'finmindRecoverySkipped', payload #>> '{websocket_status,finmindRecoverySkipped}', 'false')) = 'true' as finmind_recovery_skipped,
+  coalesce(payload ->> 'finmindRecoveryError', payload #>> '{websocket_status,finmindRecoveryError}') as finmind_recovery_error,
+  coalesce(payload ->> 'finmindRecoveryCooldownUntil', payload #>> '{websocket_status,finmindRecoveryCooldownUntil}') as finmind_recovery_cooldown_until,
+  coalesce(payload ->> 'finmindRecoveryLastError', payload #>> '{websocket_status,finmindRecoveryLastError}') as finmind_recovery_last_error
 from parsed;
 
 comment on view public.v_fuman_shared_source_readonly_scorecard is
