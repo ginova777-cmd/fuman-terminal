@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -227,6 +227,7 @@ function buildPayload(rows, run, options = {}) {
     status,
     source: "supabase:institution_scan_results",
     cacheSource: "supabase-api",
+    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
     runId: String(run?.run_id || rows[0]?.run_id || ""),
     latestRunId: String(run?.run_id || rows[0]?.run_id || ""),
     updatedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),

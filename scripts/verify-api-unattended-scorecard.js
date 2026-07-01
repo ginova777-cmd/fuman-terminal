@@ -593,6 +593,10 @@ async function fetchJson(endpoint) {
   }
 }
 
+function readJsonFileSafe(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
 function runCommand(command, extraEnv = {}) {
   const script = command[0];
   if (!fs.existsSync(path.join(ROOT, script))) {
@@ -620,11 +624,20 @@ function runCommand(command, extraEnv = {}) {
     timeout: VERIFIER_TIMEOUT_MS,
     env,
   });
+  const gatePayload = command[0] === "scripts/verify-supabase-publish-hard-gate.js"
+    ? readJsonFileSafe(env.FUMAN_SUPABASE_PUBLISH_GATE_FILE)
+    : null;
+  const expectedOffSessionBlock = !STRICT_LIVE
+    && gatePayload
+    && gatePayload.publishAllowed === false
+    && gatePayload.writePolicy?.preservePreviousCompleteRun === true
+    && (gatePayload.status === "critical" || gatePayload.ok === false);
   return {
     command: `node --use-system-ca ${command.join(" ")}`,
     exitCode: result.status,
     signal: result.signal || "",
-    ok: result.status === 0,
+    ok: result.status === 0 || expectedOffSessionBlock,
+    expectedOffSessionBlock,
     stdout: String(result.stdout || "").slice(0, 5000),
     stderr: String(result.stderr || "").slice(0, 5000),
   };

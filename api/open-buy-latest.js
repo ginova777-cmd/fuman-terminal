@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -324,11 +324,15 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       today: compactDateKey(taipeiDateKey()),
     }]
     : [];
+  const fallbackAllowed = fallbackUsed
+    ? fallbackScope.every((scope) => ["decision_pending_display", "previous_2130_complete_run"].includes(scope))
+    : true;
 
   return {
     ok: true,
     source: "supabase:strategy1_open_buy_results",
     cacheSource: "supabase-api",
+    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
     gate: STRATEGY1_GATE,
     runId,
     updatedAt: String(run.finished_at || run.updated_at || rows[0]?.updated_at || new Date().toISOString()),
@@ -350,6 +354,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     qualityStatus,
     sourceCoverage: strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }),
     fallbackUsed,
+    fallbackAllowed,
     fallbackScope,
     fallbackDetails,
     decisionReady: readyStatus?.decision_ready === true,

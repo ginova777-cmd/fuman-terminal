@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { readStrategy2SourceGate } = require("../lib/strategy2-source-publish-gate");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
@@ -1002,6 +1002,7 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
   const isTodayRun = Boolean(runDate && runDate === marketSession?.today);
   const fullPayload = {
     ...payload,
+    ...runTimeSourceSnapshotResponseFields(payload),
     ok: payload.ok !== false,
     updatedAt: payload.updatedAt || run.updated_at || run.finished_at,
     runId: payload.runId || run.run_id,

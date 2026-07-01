@@ -64,12 +64,15 @@ function readSecret(name) {
   return "";
 }
 
-async function fetchHealthRows() {
+async function fetchHealthRows(strategy = "") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
-    const url = `${SUPABASE_URL}/rest/v1/v_scanner_resource_health?select=${encodeURIComponent("strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at")}&limit=50`;
+    const select = "strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at";
+    const filters = [`select=${encodeURIComponent(select)}`, "limit=10"];
+    if (strategy) filters.push(`strategy=eq.${encodeURIComponent(strategy)}`);
+    const url = `${SUPABASE_URL}/rest/v1/v_scanner_resource_health?${filters.join("&")}`;
     const response = await fetch(url, {
       headers: {
         apikey: SUPABASE_KEY,
@@ -251,7 +254,7 @@ async function main() {
       return;
     }
   }
-  const rows = await fetchHealthRows();
+  const rows = await fetchHealthRows(strategy);
   const row = rows.find((item) => String(item.strategy || "").toLowerCase() === String(strategy).toLowerCase());
   if (!row) throw new Error(`missing scanner resource health row for ${strategy}`);
   const status = String(row.status || "").toLowerCase();

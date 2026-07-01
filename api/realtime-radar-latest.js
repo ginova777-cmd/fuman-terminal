@@ -1,7 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const {
+  buildRunTimeSourceSnapshotFields,
+  runTimeSourceSnapshotResponseFields,
+  wrapJsonRunTimeSourceEvidence,
+} = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -233,6 +237,7 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
   const normalizedPayload = normalizeRadarRows(payload, limit);
   const freshness = payloadFreshnessSnapshot(marketSession, normalizedPayload);
   const runId = radarPayloadRunId(normalizedPayload);
+  const sourceCoverage = normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession);
   const fallbackUsed = normalizedPayload?.fallbackUsed === true
     || /fallback/i.test(String(reason || ""))
     || /fallback/i.test(String(normalizedPayload?.transport?.mode || ""))
@@ -262,13 +267,43 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     reason: "payload missing writer writeBudget; waiting for next scanner run",
     checkedAt: new Date().toISOString(),
   };
+  const snapshotFields = Object.keys(runTimeSourceSnapshotResponseFields(normalizedPayload)).length
+    ? runTimeSourceSnapshotResponseFields(normalizedPayload)
+    : buildRunTimeSourceSnapshotFields({
+      strategy: "realtime-radar",
+      runId,
+      payload: normalizedPayload,
+      capturedAt: normalizedPayload?.updatedAt || normalizedPayload?.generatedAt || new Date().toISOString(),
+      startedAt: normalizedPayload?.startedAt || "",
+      finishedAt: normalizedPayload?.updatedAt || normalizedPayload?.generatedAt || "",
+      sourceStatus: sourceCoverage,
+      quoteCoverage: sourceCoverage,
+      intraday1mReadiness: { status: "not_applicable", reason: "realtime radar does not require intraday 1m" },
+      maReadiness: { status: "not_applicable", reason: "realtime radar does not require MA readiness" },
+      preopenFutoptDailyReadiness: { status: "not_applicable", reason: "realtime radar does not require preopen/futopt/daily readiness" },
+      expectedTotal: normalizedPayload?.totalCount || normalizedPayload?.count,
+      scannedCount: normalizedPayload?.totalCount || normalizedPayload?.count,
+      resultCount: normalizedPayload?.count,
+      readbackCount: normalizedPayload?.count,
+      publishAllowed: !fallbackUsed,
+      degradedBlocksLatest: fallbackUsed,
+      preservePreviousGood: fallbackUsed,
+      fallbackUsed,
+      fallbackScope,
+      fallbackAllowed: !fallbackUsed,
+      fallbackDetails,
+      writeBudget,
+      retentionOk: true,
+      qualityStatus: freshness.fresh ? "ready" : "degraded",
+    });
   return {
     ...normalizedPayload,
+    ...snapshotFields,
     runId,
     tradeDate: marketSession?.marketDataDate || normalizedPayload?.tradeDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
-    sourceCoverage: normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession),
+    sourceCoverage,
     freshness: {
       ...(normalizedPayload?.freshness || {}),
       decision: normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale"),

@@ -3,7 +3,7 @@ const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 const { sendJson } = require("./_http-cache");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -314,6 +314,7 @@ function buildPayload(rows, run, options = {}) {
     ok: true,
     source: "supabase:warrant_flow_scan_results",
     cacheSource: "supabase-api",
+    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
     runId,
     updatedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),
     usedDate,

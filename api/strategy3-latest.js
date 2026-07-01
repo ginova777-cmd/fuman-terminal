@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 
@@ -477,6 +477,7 @@ function buildPayload(rows, run, options = {}) {
     ok: true,
     source: "supabase:strategy3_scan_results",
     cacheSource: "supabase-api",
+    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
     runId: String(first.run_id || run?.run_id || ""),
     generatedAt: String(first.generated_at || run?.generated_at || run?.finished_at || first.updated_at || new Date().toISOString()),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
@@ -529,6 +530,7 @@ function buildSnapshotPayload(snapshot, options = {}) {
   const total = Math.max(cleanNumber(sourcePayload.total), count);
   return attachStrategy3UnattendedContract({
     ...sourcePayload,
+    ...runTimeSourceSnapshotResponseFields(sourcePayload),
     ok: sourcePayload.ok !== false,
     source: sourcePayload.source || "strategy3_scan_results",
     cacheSource: "supabase-snapshot",

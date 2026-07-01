@@ -20,6 +20,7 @@ $log = Join-Path $logDir ("institution-{0}.log" -f (Get-Date -Format "yyyyMMdd-H
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
+$script:institutionDiagnosticWarnings = New-Object System.Collections.Generic.List[string]
 
 function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
   $receipt = [ordered]@{
@@ -39,6 +40,7 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     runId = $RunId
     payloadPath = "supabase:institution_scan_results"
     warnings = @($Warnings)
+    diagnosticWarnings = @($script:institutionDiagnosticWarnings.ToArray())
     blockingReason = $BlockingReason
     log = $log
   }
@@ -97,6 +99,21 @@ function Test-InstitutionControlledSourceNotReady($Message) {
   return $text -match "too few rows after exclusions" -or $text -match "source freshness" -or $text -match "tpex 5-day metrics failed"
 }
 
+function Test-InstitutionTransientResourceHealthFailure($ResourceGate) {
+  if ($null -eq $ResourceGate) { return $false }
+  if ([string]$ResourceGate.Status -ne "failed" -or [int]$ResourceGate.ExitCode -eq 0) { return $false }
+  $text = @(
+    [string]$ResourceGate.Reason
+    [string]($ResourceGate.Payload.error)
+    [string]($ResourceGate.Payload.raw)
+  ) -join "`n"
+  return $text -match "v_scanner_resource_health HTTP 500" `
+    -or $text -match "57014" `
+    -or $text -match "statement timeout" `
+    -or $text -match "AbortError" `
+    -or $text -match "timed out"
+}
+
 function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "") {
   $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
   if (Test-Path -LiteralPath $snapshotScript) {
@@ -121,7 +138,11 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
 Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
-if ($resourceGate.PreserveLatest) {
+if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
+  $diagnostic = "resource health diagnostic unavailable: $($resourceGate.Reason)"
+  "Institution resource health preflight was transiently unavailable; continuing to scanner/readback gates. $diagnostic" >> $log
+  $script:institutionDiagnosticWarnings.Add($diagnostic) | Out-Null
+} elseif ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   "Institution source gate blocked new publish; preserving latest complete run. $reason" >> $log
   $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete

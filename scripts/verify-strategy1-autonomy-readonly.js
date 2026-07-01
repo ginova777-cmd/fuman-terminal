@@ -7,7 +7,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
-const SUPABASE_PUBLISH_GATE_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, "supabase-publish-hard-gate.json");
+const SUPABASE_PUBLISH_GATE_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE || path.join(STATE_DIR, "strategy1-supabase-publish-hard-gate.json");
 const PUBLISH_SOURCE_GATE_FILE = process.env.FUMAN_PUBLISH_SOURCE_GATE_FILE || path.join(STATE_DIR, "publish-source-gate.json");
 const TASKS = [
   "Fuman Open Buy Cache 2130",
@@ -175,7 +175,7 @@ function runBattleState() {
 }
 
 function runSupabasePublishHardGate() {
-  const child = runNodeScript(["scripts/verify-supabase-publish-hard-gate.js"], { timeout: 180000 });
+  const child = runNodeScript(["scripts/verify-supabase-publish-hard-gate.js", "--strategy=strategy1"], { timeout: 180000 });
   const payload = readJsonSafe(SUPABASE_PUBLISH_GATE_FILE) || parseJsonText(child.stdout) || {};
   return {
     ok: child.status === 0 && payload.ok === true && payload.publishAllowed === true && payload.fallbackUsed !== true,

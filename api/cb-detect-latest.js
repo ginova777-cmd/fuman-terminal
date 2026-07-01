@@ -1,5 +1,5 @@
 const { serviceRoleKey, terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -342,6 +342,7 @@ async function readLatestCompleteRun(options) {
     qualityStatus,
     cacheSource: "supabase-api",
     source: run.source || "CBAS",
+    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
     count,
     returnedCount: outputRows.length,
     canvas: Boolean(options.canvas),
