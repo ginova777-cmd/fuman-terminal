@@ -1,6 +1,6 @@
 # Fuman Terminal AGENTS - Latest Operator Contract
 
-Last updated: 2026-06-29 Asia/Taipei.
+Last updated: 2026-07-01 Asia/Taipei.
 
 This file intentionally replaces the old accumulated AGENTS history. Keep only the latest executable contract here. Do not append legacy incident notes back into this file.
 
@@ -166,6 +166,39 @@ $env:FUMAN_RELEASE_SHA = git rev-parse HEAD
 Production `main` is release-owner-only. Strategy/source Codex agents must not push `main`, deploy Vercel, or edit `C:\fuman-terminal`; they must work on `agent/<scope>-<yyyymmdd>` branches and hand off the branch name, commit SHA, changed file list, read-only scorecard, and whether Supabase/cache/runtime was written.
 
 The default production integration window is the `22:00 Asia/Taipei merge queue`. During that window, the release owner integrates one branch at a time, reruns gates, and deploys only with `npm run deploy`. Direct `vercel --prod` is forbidden outside the guarded wrapper. See `RELEASE-OWNER-RUNBOOK.md`.
+
+## Mirror Clean Ownership
+
+`C:\fuman-terminal` mirror cleanup is owned by the release owner. Other Codex agents must not clean, reset, edit, deploy from, or run write flows from the mirror. If they find the mirror dirty or behind, they must stop and hand off: branch name, commit SHA, deployId if any, changed file list, scorecard, and whether Supabase/cache/runtime/schedules were written.
+
+Mirror clean must be conservative:
+
+1. Confirm the formal release SHA from `origin/main` or the production manifest.
+2. Run `git status --short --branch` and `git diff --name-only`.
+3. For dirty files, compare the working tree against `origin/main` with `git diff --name-only origin/main -- <files>`.
+4. If the dirty files already match `origin/main`, stash first with `mirror-dirty-before-ff-<shortSha>`, then fast-forward the mirror.
+5. If any dirty file differs from `origin/main`, do not overwrite it. Report the file list and owner; require a release-owner decision.
+6. Align only with `git merge --ff-only origin/main`. Do not use `git reset --hard`, `git checkout --`, or manual deletion for mirror hygiene unless the user explicitly approves that exact destructive action.
+
+After mirror cleanup, the release owner must verify:
+
+```powershell
+git status --short --branch
+git rev-parse HEAD
+git rev-parse origin/main
+npm run verify:source-sync
+npm run verify:publish-gate
+npm run guard:production
+```
+
+Expected reportable state:
+
+- `C:\fuman-terminal` is clean;
+- `HEAD == origin/main == production manifest gitSha`;
+- mirror dirty contents, if any, were preserved in a named stash before cleanup;
+- `verify:source-sync`, `verify:publish-gate`, and `guard:production` all pass.
+
+Never use a dirty mirror as proof that production is healthy. Use the clean release clone for deploy evidence, and use mirror hygiene only to prove the local production mirror is not polluted.
 
 ## Verification Fence And Mirror
 
