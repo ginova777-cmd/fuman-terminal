@@ -24,7 +24,15 @@ function detectVersion() {
   return match[1];
 }
 
-function requestJson(pathname, timeoutMs = 30000) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRequestError(error) {
+  return /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|fetch failed|timeout/i.test(String(error?.message || error || ""));
+}
+
+function requestJsonOnce(pathname, timeoutMs = 30000) {
   const fresh = pathname.includes("?") ? `&health=${Date.now()}` : `?health=${Date.now()}`;
   const url = `${BASE_URL}${pathname}${fresh}`;
   return new Promise((resolve, reject) => {
@@ -43,6 +51,23 @@ function requestJson(pathname, timeoutMs = 30000) {
     req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
     req.on("error", reject);
   });
+}
+
+async function requestJson(pathname, timeoutMs = 30000) {
+  const attempts = Math.max(1, Number(process.env.FUMAN_PRODUCTION_MONITOR_REQUEST_ATTEMPTS || 3) || 3);
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await requestJsonOnce(pathname, timeoutMs);
+      if (attempt > 1) result.retried = attempt - 1;
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts || !isTransientRequestError(error)) throw error;
+      await sleep(750 * attempt);
+    }
+  }
+  throw lastError;
 }
 
 function git(args) {
