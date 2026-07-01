@@ -297,6 +297,7 @@ function normalizeRow(row, context = {}) {
 
 function buildPayload(rows, run, options = {}) {
   const scanDate = compactDateKey(run?.scan_date || rows[0]?.scan_date || "");
+  const apiTradeDate = compactDateKey(run?.finished_at || run?.updated_at || rows[0]?.updated_at || scanDate);
   const usedDate = compactDateKey(run?.payload?.usedDate || run?.payload?.tradeDate || scanDate);
   const sourceDate = compactDateKey(run?.payload?.sourceDate || run?.payload?.tradeDate || scanDate || usedDate);
   const byType = (type) => rows
@@ -317,7 +318,8 @@ function buildPayload(rows, run, options = {}) {
     ready: runReady,
     status: runReady ? "ready" : "degraded",
     reason: runReady ? "warrant_flow_complete_run_ready" : "warrant_flow_complete_run_not_ready",
-    tradeDate: scanDate,
+    tradeDate: apiTradeDate,
+    scanDate,
     usedDate,
     sourceDate,
     rowCount: rows.length,
@@ -332,7 +334,8 @@ function buildPayload(rows, run, options = {}) {
     runId,
     updatedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),
     usedDate,
-    tradeDate: scanDate,
+    tradeDate: apiTradeDate,
+    scanDate,
     sourceDate,
     complete: true,
     qualityStatus,

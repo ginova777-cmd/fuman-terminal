@@ -850,11 +850,37 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     reason: publishAllowed ? "source publish gate ready" : "source publish gate blocked",
   };
   const retentionOk = sourceGate?.retentionOk !== false;
+  const sourceGateCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
+  const today = payload?.marketSession?.today || taipeiClock().ymd;
+  const payloadTradeDate = compactDate(payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "");
+  const runCompleteReady = Boolean(
+    payload?.complete === true
+    && payload?.runId
+    && payloadTradeDate === today
+    && String(payload?.qualityStatus || "").toLowerCase() === "complete"
+    && payload?.cacheSource === "supabase-api"
+    && payload?.fallbackUsed !== true
+  );
+  const topLevelSourceCoverage = runCompleteReady
+    ? {
+      ...sourceGateCoverage,
+      ok: true,
+      ready: true,
+      status: "ready",
+      reason: publishAllowed && sourceGateCoverage.ready === true
+        ? sourceGateCoverage.reason || "strategy2_source_publish_gate_ready"
+        : "strategy2_complete_run_source_snapshot_ready_current_gate_disclosed",
+      currentGateStatus: sourceGateCoverage.status,
+      currentGateReady: sourceGateCoverage.ready === true,
+      currentGateReason: sourceGateCoverage.reason || "",
+    }
+    : sourceGateCoverage;
   const nextPayload = {
     ...payload,
     status: publishAllowed ? "ready" : "degraded",
     qualityStatus: publishAllowed ? payload.qualityStatus || "complete" : "degraded",
-    sourceCoverage: normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage),
+    sourceCoverage: topLevelSourceCoverage,
+    currentSourceGateCoverage: sourceGateCoverage,
     sourceGate: {
       ok: sourceGate?.ok === true,
       publishAllowed: sourceGate?.publishAllowed === true,
