@@ -22,7 +22,7 @@ const TDCC_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_TDCC_MIN_COUNT || 0);
 const HEATMAP_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_HEATMAP_MIN_COUNT || 500);
 const HEATMAP_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_HEATMAP_TIMEOUT_MS || 120000);
 const MARKET_AI_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_MARKET_AI_TIMEOUT_MS || 120000);
-const MARKET_AI_START_SECONDS = 8 * 60 * 60;
+const MARKET_AI_START_SECONDS = 9 * 60 * 60;
 
 function readLocalVersion() {
   const override = String(process.env.EXPECTED_TERMINAL_VERSION || "").trim();
