@@ -56,10 +56,26 @@ function normalizeScanDate(value, fallbackTime) {
 function buildCompleteRunPayload(report) {
   const qualityStatus = report.qualityStatus
     || (report.realtime?.entrySourceHealthy === false || report.realtime?.skippedPartialCoverage ? "degraded" : "ok");
+  const dedupeRows = (rows, kind) => {
+    const seen = new Set();
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+      if (!row || typeof row !== "object") return false;
+      const key = [
+        kind,
+        row.code || row.symbol || "",
+        row.rowKind || row.row_kind || row.stateId || row.state_id || "",
+        row.signalId || row.signal_id || row.primaryStrategy || "",
+        row.entryAt || row.timestamp || row.time || row.latestSeenAt || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
   return {
     ...report,
-    events: Array.isArray(report.events) ? report.events : [],
-    records: Array.isArray(report.records) ? report.records : [],
+    events: dedupeRows(report.events, "event"),
+    records: dedupeRows(report.records, "record"),
     entryCount: cleanNumber(report.entryCount || report.aCount),
     qualityStatus,
     schemaVersion: report.schemaVersion || "strategy2-run-id-complete-v1",

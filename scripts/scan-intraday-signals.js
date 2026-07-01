@@ -695,10 +695,26 @@ function getStrategy2TaipeiParts(value) {
 function buildStrategy2CompleteRunPayload(report) {
   const qualityStatus = report.qualityStatus
     || (report.realtime?.entrySourceHealthy === false || report.realtime?.skippedPartialCoverage ? "degraded" : "ok");
+  const dedupeRows = (rows, kind) => {
+    const seen = new Set();
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+      if (!row || typeof row !== "object") return false;
+      const key = [
+        kind,
+        row.code || row.symbol || "",
+        row.rowKind || row.row_kind || row.stateId || row.state_id || "",
+        row.signalId || row.signal_id || row.primaryStrategy || "",
+        row.entryAt || row.timestamp || row.time || row.latestSeenAt || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
   return {
     ...report,
-    events: Array.isArray(report.events) ? report.events : [],
-    records: Array.isArray(report.records) ? report.records : [],
+    events: dedupeRows(report.events, "event"),
+    records: dedupeRows(report.records, "record"),
     entryCount: cleanNumber(report.entryCount || report.aCount),
     qualityStatus,
     schemaVersion: report.schemaVersion || "strategy2-run-id-complete-v1",
@@ -840,6 +856,28 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
     p_scan_date: scanDate,
     p_payload: report,
   };
+  const alreadyPublished = async () => {
+    try {
+      const params = new URLSearchParams({
+        select: "run_id",
+        run_id: `eq.${runId}`,
+        limit: "1",
+      });
+      const response = await fetch(`${supabaseUrl}/rest/v1/v_strategy2_latest_complete_run?${params.toString()}`, {
+        headers: {
+          apikey: publishKey,
+          Authorization: `Bearer ${publishKey}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+      });
+      if (!response.ok) return false;
+      const rows = await response.json();
+      return Array.isArray(rows) && rows.some((row) => String(row?.run_id || "") === runId);
+    } catch {
+      return false;
+    }
+  };
   try {
     const response = await fetch(`${supabaseUrl}/rest/v1/rpc/publish_strategy2_complete_run`, {
       method: "POST",
@@ -858,6 +896,10 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
     await broadcastStrategy2CompleteRun({ supabaseUrl, publishKey, report, runId });
     return true;
   } catch (error) {
+    if (/duplicate constrained values|ON CONFLICT|21000/i.test(error?.message || String(error)) && await alreadyPublished()) {
+      console.warn(`strategy2 complete run already published: runId=${runId}`);
+      return true;
+    }
     throw new Error(`strategy2 complete run publish failed: ${error?.message || String(error)}`);
   }
 }

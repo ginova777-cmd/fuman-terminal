@@ -132,6 +132,7 @@
   const canvasState = {
     route: "",
     source: "",
+    meta: null,
     query: "",
     signalFilter: "",
     zoneFilter: "",
@@ -1460,11 +1461,12 @@
     return realtimeRadarDomHealth;
   }
 
-  function setCanvasRows(route, rows, source = "memory", at = Date.now()) {
+  function setCanvasRows(route, rows, source = "memory", at = Date.now(), meta = null) {
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return false;
     canvasEmptyStates.delete(route);
-    canvasStore.set(route, { rows: cleanRows, source, at });
+    const storeMeta = meta && typeof meta === "object" ? meta : canvasStore.get(route)?.meta || null;
+    canvasStore.set(route, { rows: cleanRows, source, at, meta: storeMeta });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
     if (workerCanvasSupported() && !isRealtimeRadarRoute(route)) {
@@ -1473,6 +1475,7 @@
     if (canvasState.route === route) {
       canvasState.rows = cleanRows;
       canvasState.source = source;
+      canvasState.meta = storeMeta;
       applyCanvasFilter();
       if (isRealtimeRadarRoute(route)) {
         renderRealtimeRadarDomShell(linkForRouteKey(route) || route, source, cleanRows);
@@ -1489,11 +1492,11 @@
     return true;
   }
 
-  function rememberCanvasRows(route, rows, source = "memory", at = Date.now()) {
+  function rememberCanvasRows(route, rows, source = "memory", at = Date.now(), meta = null) {
     const cleanRows = (Array.isArray(rows) ? rows : []).filter((row) => row && (row.code || row.title || row.line));
     if (!route || !cleanRows.length) return [];
-    setCanvasRows(route, cleanRows, source, at);
-    const item = { ...(routeSnapshots.get(route) || {}), at, rows: cleanRows, html: "" };
+    setCanvasRows(route, cleanRows, source, at, meta);
+    const item = { ...(routeSnapshots.get(route) || {}), at, rows: cleanRows, html: "", meta: meta || undefined };
     routeSnapshots.set(route, item);
     writeSessionSnapshot(route, item);
     writeIndexedSnapshot(route, item);
@@ -1506,7 +1509,7 @@
     const snapshot = routeSnapshots.get(route);
     if (isStrategyRoute(route) && !isApiBackedSnapshotItem(snapshot)) return [];
     if (snapshot?.rows?.length) {
-      setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now());
+      setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now(), snapshot.meta || null);
       return snapshot.rows;
     }
     return [];
@@ -1559,7 +1562,7 @@
       if (!route) return;
       const rows = normalizeCanvasRowsFromPayload(endpointPayload, route);
       if (!rows.length) return;
-      rememberCanvasRows(route, rows, source, Date.now());
+      rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, endpointPayload));
       count += rows.length;
     });
     if (count && typeof window.FUMAN_HOTFIX_PRIME_API_CACHE === "function") {
@@ -1601,6 +1604,51 @@
         strategy2SnapshotFirstPrimePromise = null;
       });
     return strategy2SnapshotFirstPrimePromise;
+  }
+
+  function routePayloadMeta(route, payload) {
+    if (!payload || typeof payload !== "object") return null;
+    if (!isStrategy2Route(route)) return null;
+    return {
+      ok: payload.ok,
+      runId: payload.runId || payload.transport?.runId || "",
+      updatedAt: payload.updatedAt || payload.generatedAt || "",
+      qualityStatus: payload.qualityStatus || "",
+      reason: payload.publishBlockedReason || payload.selfCheck?.reason || payload.sourceCoverage?.reason || payload.resourceReadiness?.reason || payload.reason || "",
+      publishBlocked: payload.publishBlocked === true || payload.transport?.publishBlocked === true,
+      cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      sourceCoverage: payload.sourceCoverage || null,
+      resourceReadiness: payload.resourceReadiness || null,
+      selfCheck: payload.selfCheck || null,
+      freshness: payload.selfCheck?.freshness || null,
+    };
+  }
+
+  function strategy2HealthMeta() {
+    const stored = canvasStore.get("strategy|策略2")?.meta;
+    return canvasState.meta || stored || null;
+  }
+
+  function strategy2HealthBannerHtml(meta = strategy2HealthMeta()) {
+    if (!meta || typeof meta !== "object") return "";
+    const status = String(meta.selfCheck?.status || meta.qualityStatus || "").toLowerCase();
+    const blocked = meta.publishBlocked === true || /blocked|not_ready/.test(status);
+    const degraded = blocked || /degraded|stale|not_ready|blocked|preserved/.test(status);
+    if (!degraded) return "";
+    const title = blocked ? "策略2資料阻擋" : "策略2降級運行";
+    const reason = meta.reason || meta.selfCheck?.dataReadiness?.reason || meta.sourceCoverage?.reason || "正式資料源尚未通過 freshness gate";
+    const detail = [
+      meta.runId ? `run ${meta.runId}` : "",
+      meta.updatedAt ? `更新 ${meta.updatedAt}` : "",
+      meta.cacheSource ? `來源 ${meta.cacheSource}` : "",
+    ].filter(Boolean).join(" ｜ ");
+    return `
+      <section class="strategy2-health-banner ${blocked ? "blocked" : "degraded"}" data-strategy2-health-banner>
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(reason)}</span>
+        <small>${escapeHtml(detail)}</small>
+      </section>
+    `;
   }
 
   function installStrategy2SnapshotFirstPrime() {
@@ -1746,7 +1794,7 @@
       if (radarCached?.payload && Date.now() - Number(radarCached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
         const rows = normalizeCanvasRowsFromPayload(radarCached.payload, REALTIME_RADAR_ROUTE);
         if (rows.length) {
-          rememberCanvasRows(route, rows, "market-prime-cache", radarCached.at || Date.now());
+          rememberCanvasRows(route, rows, "market-prime-cache", radarCached.at || Date.now(), routePayloadMeta(route, radarCached.payload));
           return Promise.resolve(rows);
         }
       }
@@ -1754,7 +1802,7 @@
       if (radarInflight) {
         return radarInflight.then((payload) => {
           const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
-          if (rows.length) rememberCanvasRows(route, rows, "market-prime-inflight", Date.now());
+          if (rows.length) rememberCanvasRows(route, rows, "market-prime-inflight", Date.now(), routePayloadMeta(route, payload));
           return rows.length ? rows : rowsForRoute(route);
         });
       }
@@ -1790,7 +1838,7 @@
         const rows = normalizeCanvasRowsFromPayload(payload, route);
         if (rows.length) {
           const source = payload?.snapshotFirst ? "snapshot-first-refreshing" : "api";
-          rememberCanvasRows(route, rows, source, Date.now());
+          rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, payload));
         } else {
           const emptyState = routeEmptyStateFromPayload(payload, route);
           if (emptyState) {
@@ -5461,6 +5509,7 @@
             <button type="button" class="strategy2-battle-refresh" data-canvas-refresh>刷新</button>
           </div>
         </div>
+        ${strategy2HealthBannerHtml()}
         <div class="strategy2-battle-board">
           <section class="strategy2-battle-panel strategy2-entry-panel" aria-label="即時進場">
             <header>
@@ -5508,6 +5557,13 @@
     const historyCountNode = shell.querySelector("[data-strategy2-history-count]");
     const entryRows = shell.querySelector("[data-strategy2-entry-rows]");
     const historyRows = shell.querySelector("[data-strategy2-history-rows]");
+    const oldBanner = shell.querySelector("[data-strategy2-health-banner]");
+    const nextBanner = strategy2HealthBannerHtml();
+    if (oldBanner) oldBanner.remove();
+    if (nextBanner) {
+      const header = shell.querySelector(".strategy2-battle-header");
+      if (header) header.insertAdjacentHTML("afterend", nextBanner);
+    }
     if (title) title.textContent = meta.title;
     if (summary) summary.textContent = "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
     if (count) count.textContent = `${rows.length}筆`;
@@ -5796,11 +5852,12 @@
     if (!panel) return false;
     const key = strategyRouteKey(link);
     const previousRoute = canvasState.route;
-    const stored = canvasStore.get(key);
     const incomingRows = rows.length ? rows : rowsForRoute(key);
+    const stored = canvasStore.get(key);
     activeSnapshotRoute = key;
     canvasState.route = key;
     canvasState.source = source || stored?.source || "shell";
+    canvasState.meta = stored?.meta || null;
     canvasState.rows = incomingRows;
     if (previousRoute !== key) {
       canvasState.signalFilter = "";
@@ -6654,6 +6711,41 @@
         justify-content: flex-end;
         gap: 9px;
         flex-wrap: wrap;
+      }
+      .strategy2-health-banner {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid rgba(251, 191, 36, 0.38);
+        border-radius: 8px;
+        background: rgba(41, 23, 5, 0.82);
+        color: #fed7aa;
+        padding: 10px 14px;
+        font: 850 13px/1.35 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-health-banner.blocked {
+        border-color: rgba(248, 113, 113, 0.46);
+        background: rgba(42, 9, 14, 0.86);
+        color: #fecdd3;
+      }
+      .strategy2-health-banner strong {
+        color: #fde68a;
+        white-space: nowrap;
+      }
+      .strategy2-health-banner.blocked strong {
+        color: #fda4af;
+      }
+      .strategy2-health-banner span,
+      .strategy2-health-banner small {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .strategy2-health-banner small {
+        color: #aab6cc;
+        font-weight: 800;
       }
       .strategy2-battle-refresh {
         min-height: 38px;

@@ -79,6 +79,12 @@ function Assert-Strategy2ApiPreserve {
   }
 }
 
+function Get-TaipeiMinuteOfDay {
+  $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+  $now = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
+  return ($now.Hour * 60) + $now.Minute
+}
+
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
@@ -89,8 +95,12 @@ if ($resourceGate.PreserveLatest) {
   "Strategy2 source gate blocked new publish; preserving latest complete/live run. $reason" >> $log
   $verifiedPayload = Assert-Strategy2ApiPreserve
   Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
-  "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
-  exit 0
+  if ((Get-TaipeiMinuteOfDay) -lt [int]$env:STRATEGY2_SCAN_START_MINUTES) {
+    "Strategy2 source gate is not ready before scan window; keep unattended runner alive and retry at 08:45." >> $log
+  } else {
+    "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
+    exit 0
+  }
 }
 
 & $nodeExe "scripts\patrol-intraday-signals.js" >> $log 2>&1
