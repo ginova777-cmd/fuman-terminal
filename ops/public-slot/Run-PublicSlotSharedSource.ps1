@@ -27,8 +27,8 @@ param(
   [string]$OpeningBoostEnd = "12:00",
   [int]$RestQuoteOpeningBoostBatchSize = 900,
   [int]$RestQuoteOpeningBoostDelayMilliseconds = 5,
-  [int]$FugleCollectorOpeningBoostBatchSize = 1200,
-  [int]$FugleCollectorOpeningBoostConcurrency = 8,
+  [int]$FugleCollectorOpeningBoostBatchSize = 2000,
+  [int]$FugleCollectorOpeningBoostConcurrency = 12,
   [int]$FugleCollectorOpeningBoostDelayMilliseconds = 0,
   [int]$FugleCollectorLoopMilliseconds = 1000,
   [int]$FugleCollectorBatchSize = 320,
@@ -98,6 +98,9 @@ $script:ApiUniverseStats = @{
   intraday_1m_ok = $false
   daily_volume_ok = $false
 }
+$script:FreshQuoteReadthroughRows = 0
+$script:FreshQuoteReadthroughMergedRows = 0
+$script:FreshQuoteReadthroughReason = ""
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
@@ -1397,6 +1400,10 @@ function Write-QuoteHeartbeatStatus {
     $quoteDerivedOpeningBackfillSymbols = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "openingBackfillSymbols" -Default (Get-PreviousPayloadValue -Key "quote_derived_1m_opening_backfill_symbols" -Default 0))
     $quoteDerivedMaxAgeSeconds = [int](Get-ObjectPayloadValue -Payload $MinutePayload -Key "quoteDerivedMaxQuoteAgeSeconds" -Default $QuoteDerived1mMaxQuoteAgeSeconds)
     $strategy2RunEvidence = Get-Strategy2LatestRunEvidence -FallbackPayload $previousSourcePayload
+    $futoptStockMapped = [int](Get-PreviousPayloadValue -Key "futopt_stock_mapped" -Default (Get-PreviousPayloadValue -Key "mapped_underlying_count" -Default 0))
+    $futoptStockThisLoop = [int](Get-PreviousPayloadValue -Key "futopt_stock_this_loop" -Default (Get-PreviousPayloadValue -Key "futopt_stock_quotes_this_loop" -Default 0))
+    $futoptStockTickers = [int](Get-PreviousPayloadValue -Key "futopt_stock_tickers" -Default 0)
+    $futoptStockQuoteUniverse = [int](Get-PreviousPayloadValue -Key "futopt_stock_quote_universe" -Default 0)
 
     $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
 
@@ -1473,6 +1480,12 @@ function Write-QuoteHeartbeatStatus {
       preopen = @($PreopenRows).Count
       futopt = [int](Get-PreviousPayloadValue -Key "futopt" -Default 0)
       futopt_quotes = [int](Get-PreviousPayloadValue -Key "futopt_quotes" -Default 0)
+      futopt_stock_tickers = $futoptStockTickers
+      futopt_stock_mapped = $futoptStockMapped
+      mapped_underlying_count = $futoptStockMapped
+      futopt_stock_quote_universe = $futoptStockQuoteUniverse
+      futopt_stock_quotes_this_loop = $futoptStockThisLoop
+      futopt_stock_this_loop = $futoptStockThisLoop
       intraday_1m_symbols_today = $intradayStats.intraday_1m_symbols_today
       intraday_1m_rows_today = $intradayStats.intraday_1m_rows_today
       today_1m_rows = $intradayStats.intraday_1m_rows_today
@@ -3150,6 +3163,9 @@ do {
     [void](Filter-SymbolsByQuoteLiquidity -Symbols $priorityWarmupSymbols -QuoteRows $quoteRows)
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-quote-derived-1m" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "before-quote-derived-1m")
+    if ($quoteRows.Count -gt 0) {
+      Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
+    }
     $minutePayload = Update-MinuteRows -QuoteRows $quoteRows -CandidateSymbols $priorityWarmupSymbols
     if ($minutePayload.minuteRows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $minutePayload.minuteRows }
     if ($minutePayload.dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $minutePayload.dailyRows }
@@ -3173,11 +3189,20 @@ do {
     $direct1mPrewarmPayload = Invoke-Direct1mStartupPrewarm -Symbols $direct1mSymbols -ApiKey $fugleApiKey
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-direct-1m-prewarm" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "after-direct-1m-prewarm")
+    if ($quoteRows.Count -gt 0) {
+      Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus -MinutePayload $minutePayload
+    }
     $direct1mPayload = Invoke-Direct1mWarmupBatch -Symbols $direct1mSymbols -ApiKey $fugleApiKey
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-direct-1m-batch" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "after-direct-1m-batch")
+    if ($quoteRows.Count -gt 0) {
+      Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus -MinutePayload $minutePayload
+    }
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-futopt" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "before-futopt")
+    if ($quoteRows.Count -gt 0) {
+      Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus -MinutePayload $minutePayload
+    }
     $txfPayload = Convert-TaifexToFutoptRows -Payload (Invoke-TaifexFuturesQuote -Cid "TXF") -Product "TXF"
     $fugleFutoptTickerPayload = Invoke-FugleFutoptTickers -ApiKey $fugleApiKey
     $fugleFutoptTickerRows = @(Convert-FugleFutoptTickersToRows -Payload $fugleFutoptTickerPayload)
@@ -3226,7 +3251,8 @@ do {
     $latestQuoteObjects = @($latestQuotePayload.quotes)
     $latestQuoteRows = @(Convert-QuotesToRows -Quotes $latestQuoteObjects -Payload $latestQuotePayload)
     if ($latestQuoteRows.Count -gt 0) {
-      $quoteRows = $latestQuoteRows
+      $quoteRows = @(Merge-QuoteRowsBySymbol -PrimaryRows $latestQuoteRows -FallbackRows $quoteRows)
+      $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "final-status-readthrough")
       $preopenRows = @(Convert-QuotesToPreopenRows -Quotes $latestQuoteObjects -Payload $latestQuotePayload)
       Write-PublicSlotQuotesLive -Rows $quoteRows
       if ($shouldWritePreopenRows -and $preopenRows.Count -gt 0) { Write-PublicSlotPreopenSnapshot -Rows $preopenRows }
