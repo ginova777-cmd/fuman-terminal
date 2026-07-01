@@ -1,10 +1,11 @@
 {
-  "updatedAt": "2026-07-01T16:20:00+08:00",
+  "updatedAt": "2026-07-01T19:30:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [
       "Fuman API-Only Retired Artifact Cleanup 1535",
+      "Fuman API Unattended Patrol",
       "Fuman API Unattended Scorecard",
       "Fuman CB Battle Verify 2150",
       "Fuman CB Complete Scan 2125",
@@ -71,6 +72,11 @@
       ]
     },
     "allowedResults": {
+      "Fuman API Unattended Patrol": [
+        0,
+        267009,
+        267011
+      ],
       "Fuman API Unattended Scorecard": [
         0,
         267011
@@ -177,6 +183,21 @@
       "description": "Retired API artifact cleanup.",
       "time": "15:35",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman API Unattended Patrol",
+      "displayName": "Fuman API Unattended Patrol",
+      "description": "Read-only all-strategy API unattended patrol with production guard, monitor, freshness contract, scorecard, and Gmail alert on failure.",
+      "time": "08:55,09:05,09:30,13:35,16:10,22:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:55",
+        "09:05",
+        "09:30",
+        "13:35",
+        "16:10",
+        "22:00"
+      ]
     },
     {
       "taskName": "\\Fuman API Unattended Scorecard",

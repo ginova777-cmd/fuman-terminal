@@ -132,6 +132,27 @@ A finished release report must include:
 
 Do not mark the whole terminal unattended `YES` when only deploy hygiene passed.
 
+## API Read-Only Patrol
+
+The all-strategy API unattended patrol is a release identity check and a strategy API check.
+
+It must run from the current production mirror/source with a fixed release SHA:
+
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\run-api-unattended-scorecard.ps1
+```
+
+The runner sets `FUMAN_RELEASE_SHA` from `git rev-parse HEAD`, then the scorecard reads `/api/release-manifest`. A valid scorecard must report:
+
+- expectedReleaseSha
+- liveGitSha
+- deployId
+- matchedExpectedRelease=true
+- unattendedStatus=YES
+- blockers=0
+
+If the live manifest SHA differs from the fixed release SHA, this is not an API strategy failure; it is a release identity failure and the result is `NO`.
+
 Valid layered status examples:
 
 - deploy hygiene: YES

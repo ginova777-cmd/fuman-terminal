@@ -69,6 +69,8 @@ const KEY_FILES = [
   "scripts/install-vercel-cost-health-monitor-task.ps1",
   "run-vercel-cost-health-monitor.ps1",
   "run-api-unattended-scorecard.ps1",
+  "ops/run-api-unattended-patrol.ps1",
+  "ops/install-api-unattended-patrol-task.ps1",
   "VERCEL-COST-UPLOAD-GUARD.md",
   "scripts/runtime-paths.js",
   "scripts/generate-slim-cache.js",

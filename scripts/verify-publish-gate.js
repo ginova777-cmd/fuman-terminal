@@ -170,6 +170,11 @@ if (!fs.existsSync(path.join(ROOT, releaseOwnerRunbookPath))) {
     "Do not deploy from C:\\fuman-terminal",
     "npm run deploy",
     "vercel --prod",
+    "API Read-Only Patrol",
+    "expectedReleaseSha",
+    "liveGitSha",
+    "deployId",
+    "matchedExpectedRelease=true",
   ]) {
     if (!releaseOwnerRunbook.includes(marker)) {
       issues.push(`RELEASE-OWNER-RUNBOOK.md missing release owner marker ${marker}`);
@@ -185,6 +190,32 @@ if (fumanScheduleRegistry) {
   const retiredTasks = Array.isArray(policy.retiredTasks) ? policy.retiredTasks : [];
   if (fumanScheduleRegistry.policyVersion !== 3) {
     issues.push(`scripts/fuman-schedule-registry.json policyVersion must be 3; current=${fumanScheduleRegistry.policyVersion || "(missing)"}`);
+  }
+  const apiUnattendedPatrolTask = tasks.find((task) => task?.taskName === "\\Fuman API Unattended Patrol");
+  if (!apiUnattendedPatrolTask) {
+    issues.push("scripts/fuman-schedule-registry.json must include Fuman API Unattended Patrol");
+  } else {
+    for (const triggerTime of ["08:55", "09:05", "09:30", "13:35", "16:10", "22:00"]) {
+      if (!String(apiUnattendedPatrolTask.time || "").includes(triggerTime)) {
+        issues.push(`scripts/fuman-schedule-registry.json Fuman API Unattended Patrol time must include ${triggerTime}`);
+      }
+      const triggers = Array.isArray(apiUnattendedPatrolTask.expectedTriggers) ? apiUnattendedPatrolTask.expectedTriggers : [];
+      if (!triggers.includes(triggerTime)) {
+        issues.push(`scripts/fuman-schedule-registry.json Fuman API Unattended Patrol expectedTriggers must include ${triggerTime}`);
+      }
+    }
+    if (!String(apiUnattendedPatrolTask.description || "").includes("Read-only")) {
+      issues.push("scripts/fuman-schedule-registry.json Fuman API Unattended Patrol description must say Read-only");
+    }
+  }
+  if (!activeTasks.includes("Fuman API Unattended Patrol")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.activeTasks must include Fuman API Unattended Patrol");
+  }
+  const patrolAllowed = Array.isArray(policy.allowedResults?.["Fuman API Unattended Patrol"]) ? policy.allowedResults["Fuman API Unattended Patrol"] : [];
+  for (const code of [0, 267009, 267011]) {
+    if (!patrolAllowed.includes(code)) {
+      issues.push(`scripts/fuman-schedule-registry.json policy.allowedResults must allow Fuman API Unattended Patrol ${code}`);
+    }
   }
   const apiUnattendedScorecardTask = tasks.find((task) => task?.taskName === "\\Fuman API Unattended Scorecard");
   if (!apiUnattendedScorecardTask) {
@@ -539,6 +570,9 @@ if (!String(packageJson.scripts?.["verify:api-unattended-scorecard"] || "").incl
 if (!String(packageJson.scripts?.["verify:production-api-freshness"] || "").includes("scripts/verify-production-api-freshness-contract.js")) {
   issues.push("package.json missing scripts.verify:production-api-freshness for production API today/sourceCoverage/fallback/static410 contract");
 }
+if (!String(packageJson.scripts?.["monitor:api-unattended-patrol:install"] || "").includes("ops/install-api-unattended-patrol-task.ps1")) {
+  issues.push("package.json missing scripts.monitor:api-unattended-patrol:install for multi-checkpoint API read-only patrol");
+}
 if (!String(packageJson.scripts?.["verify:deploy-worktree-clean"] || "").includes("scripts/verify-deploy-worktree-clean.js")) {
   issues.push("package.json missing scripts.verify:deploy-worktree-clean for C:\\fuman-terminal static data dirty guard");
 }
@@ -716,6 +750,8 @@ const productionApiFreshnessContract = read("scripts/verify-production-api-fresh
 const runTimeSourceSnapshotContract = read("lib/run-time-source-snapshot-contract.js");
 const apiUnattendedRunner = read("run-api-unattended-scorecard.ps1");
 const apiUnattendedInstaller = read("scripts/install-api-unattended-scorecard-task.ps1");
+const apiUnattendedPatrolRunner = read("ops/run-api-unattended-patrol.ps1");
+const apiUnattendedPatrolInstaller = read("ops/install-api-unattended-patrol-task.ps1");
 const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
 const warrantFlowScanner = read("scripts/scan-warrant-flow-cache.js");
 const officialChipSync = read("scripts/sync-official-chip-data.js");
@@ -2165,6 +2201,8 @@ for (const marker of [
   "scripts/monitor-production-health.js",
   "scripts/send-workflow-alert.js",
   "run-production-health-monitor.ps1",
+  "ops/run-api-unattended-patrol.ps1",
+  "ops/install-api-unattended-patrol-task.ps1",
   "run-realtime-radar.ps1",
 ]) {
   if (!sourceSync.includes(marker)) issues.push(`sync-main-deploy-source.js missing release/monitor sync marker ${marker}`);
@@ -2836,6 +2874,13 @@ for (const marker of [
   "fallbackUsed",
   "writeBudget",
   "retentionOk",
+  "/api/release-manifest",
+  "releaseIdentity",
+  "expectedReleaseSha",
+  "liveGitSha",
+  "deployId",
+  "matchedExpectedRelease",
+  "release_sha_mismatch",
   "auditRunTimeSourceSnapshot",
   "run_time_source_snapshot_insufficient",
   "api_evidence_status_insufficient",
@@ -2865,8 +2910,12 @@ for (const marker of [
   "FUMAN_API_UNATTENDED_COMPUTER",
   "FUMAN_API_UNATTENDED_SCORECARD_FILE",
   "FUMAN_API_UNATTENDED_REPORT_FILE",
+  "FUMAN_RELEASE_SHA",
   "ComputerLabel",
   "ProductionUrl",
+  "ReleaseSha",
+  "rev-parse HEAD",
+  "--release-sha=$ReleaseSha",
   "SkipVerifiers",
 ]) {
   if (!apiUnattendedRunner.includes(marker)) {
@@ -2887,6 +2936,46 @@ for (const retiredEarlyTime of ["08:35", "09:10", "09:35", "12:05", "20:35"]) {
   if (apiUnattendedInstaller.includes(retiredEarlyTime)) {
     issues.push(`install-api-unattended-scorecard-task.ps1 must not install early all-strategy scorecard time ${retiredEarlyTime}`);
   }
+}
+for (const marker of [
+  "Fuman API unattended patrol start",
+  "guard:production",
+  "monitor:production",
+  "verify:production-api-freshness",
+  "run-api-unattended-scorecard.ps1",
+  "FUMAN_RELEASE_SHA",
+  "FUMAN_DEPLOY_SHA",
+  "rev-parse HEAD",
+  "send-workflow-alert.js",
+  "api-unattended-patrol-alert",
+  "Write-PatrolState",
+]) {
+  if (!apiUnattendedPatrolRunner.includes(marker)) {
+    issues.push(`ops/run-api-unattended-patrol.ps1 missing read-only patrol marker ${marker}`);
+  }
+}
+if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-cache-sync|vercel\s+--prod/i.test(apiUnattendedPatrolRunner)) {
+  issues.push("ops/run-api-unattended-patrol.ps1 must stay read-only: no full scan, daily release, freshness gate, cache sync, or direct deploy");
+}
+for (const marker of [
+  "Fuman API Unattended Patrol",
+  "ops",
+  "run-api-unattended-patrol.ps1",
+  "08:55",
+  "09:05",
+  "09:30",
+  "13:35",
+  "16:10",
+  "22:00",
+  "MultipleInstances IgnoreNew",
+  "Read-only Fuman production API unattended patrol",
+]) {
+  if (!apiUnattendedPatrolInstaller.includes(marker)) {
+    issues.push(`ops/install-api-unattended-patrol-task.ps1 missing schedule installer marker ${marker}`);
+  }
+}
+if (/9e4ed17d50e9e1f71ba12fd359fcf55f8963ad51/i.test(apiUnattendedPatrolRunner + "\n" + apiUnattendedPatrolInstaller)) {
+  issues.push("API unattended patrol must not hard-code a stale release SHA; resolve HEAD at runtime or accept explicit -ReleaseSha");
 }
 for (const marker of [
   "assertStrategy2SourcePublishGate",

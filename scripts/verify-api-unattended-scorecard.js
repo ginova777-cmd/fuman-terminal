@@ -44,6 +44,12 @@ const TAIPEI_MINUTE = taipeiMinute(CHECKED_AT);
 const MARKET_WINDOW = TAIPEI_MINUTE >= 8 * 60 + 30 && TAIPEI_MINUTE <= 13 * 60 + 40;
 const PROFILE = ARGS.values.get("profile") || process.env.FUMAN_API_UNATTENDED_PROFILE || (MARKET_WINDOW ? "market" : "off-session");
 const STRICT_LIVE = PROFILE === "market" || ARGS.flags.has("strict-live") || process.env.FUMAN_API_UNATTENDED_STRICT_LIVE === "1";
+const EXPECTED_RELEASE_SHA = normalizeSha(
+  ARGS.values.get("release-sha")
+  || process.env.FUMAN_RELEASE_SHA
+  || process.env.FUMAN_DEPLOY_SHA
+  || gitValue(["rev-parse", "HEAD"])
+);
 
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
@@ -481,6 +487,10 @@ function taipeiMinute(date = new Date()) {
   return Number(parts.hour) * 60 + Number(parts.minute);
 }
 
+function normalizeSha(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function strategyDueStatus(strategy, date = new Date()) {
   const minute = taipeiMinute(date);
   const between = (start, end) => minute >= start && minute <= end;
@@ -591,6 +601,50 @@ async function fetchJson(endpoint) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchReleaseIdentity() {
+  const result = await fetchJson("/api/release-manifest");
+  const manifest = result.json || {};
+  const liveGitSha = normalizeSha(manifest.gitSha || manifest.sha || manifest.commit || "");
+  const deployId = String(manifest.deployId || manifest.deploymentId || "").trim();
+  const issues = [];
+  const warnings = [];
+  if (!result.ok) {
+    issues.push(`release_manifest_http_${result.status}`);
+  }
+  if (manifest.ok === false) {
+    issues.push(`release_manifest_not_ok:${manifest.error || "unknown"}`);
+  }
+  if (!liveGitSha) {
+    issues.push("release_manifest_gitSha_missing");
+  }
+  if (!deployId) {
+    issues.push("release_manifest_deployId_missing");
+  }
+  if (!EXPECTED_RELEASE_SHA) {
+    issues.push("release_sha_missing");
+  } else if (liveGitSha && liveGitSha !== EXPECTED_RELEASE_SHA) {
+    issues.push(`release_sha_mismatch: live=${liveGitSha.slice(0, 8)} expected=${EXPECTED_RELEASE_SHA.slice(0, 8)}`);
+  }
+  const localSourceSha = normalizeSha(gitValue(["rev-parse", "HEAD"]));
+  if (localSourceSha && EXPECTED_RELEASE_SHA && localSourceSha !== EXPECTED_RELEASE_SHA) {
+    warnings.push(`local_source_sha_differs_from_expected_release: local=${localSourceSha.slice(0, 8)} expected=${EXPECTED_RELEASE_SHA.slice(0, 8)}`);
+  }
+  return {
+    ok: issues.length === 0,
+    endpoint: result.url,
+    status: result.status,
+    expectedReleaseSha: EXPECTED_RELEASE_SHA,
+    localSourceSha,
+    liveGitSha,
+    deployId,
+    version: manifest.version || "",
+    matchedExpectedRelease: Boolean(EXPECTED_RELEASE_SHA && liveGitSha && liveGitSha === EXPECTED_RELEASE_SHA),
+    matchedLocalSource: Boolean(localSourceSha && liveGitSha && liveGitSha === localSourceSha),
+    issues,
+    warnings,
+  };
 }
 
 function readJsonFileSafe(file) {
@@ -1035,6 +1089,10 @@ function writeOutputs(scorecard) {
     `- computer: ${scorecard.computer}`,
     `- productionUrl: ${scorecard.productionUrl}`,
     `- sourceSha: ${scorecard.sourceSha || "unknown"}`,
+    `- expectedReleaseSha: ${scorecard.releaseIdentity?.expectedReleaseSha || "unknown"}`,
+    `- liveManifestSha: ${scorecard.releaseIdentity?.liveGitSha || "unknown"}`,
+    `- deployId: ${scorecard.releaseIdentity?.deployId || "unknown"}`,
+    `- releaseIdentityOk: ${scorecard.releaseIdentity?.ok === true}`,
     `- profile: ${scorecard.profile}`,
     `- strictLive: ${scorecard.strictLive}`,
     `- unattendedStatus: ${scorecard.unattendedStatus}`,
@@ -1077,13 +1135,20 @@ function writeOutputs(scorecard) {
 async function main() {
   const now = CHECKED_AT;
   const marketWindow = MARKET_WINDOW;
+  const releaseIdentity = await fetchReleaseIdentity();
   const strategies = [];
   for (const strategy of STRATEGIES) {
     console.log(`[api-unattended] checking ${strategy.key}`);
     strategies.push(await evaluateStrategy(strategy, { now }));
   }
-  const blockers = strategies.flatMap((strategy) => strategy.issues.map((issue) => `${strategy.key}: ${issue}`));
-  const warnings = strategies.flatMap((strategy) => strategy.warnings.map((warning) => `${strategy.key}: ${warning}`));
+  const blockers = [
+    ...releaseIdentity.issues.map((issue) => `release: ${issue}`),
+    ...strategies.flatMap((strategy) => strategy.issues.map((issue) => `${strategy.key}: ${issue}`)),
+  ];
+  const warnings = [
+    ...releaseIdentity.warnings.map((warning) => `release: ${warning}`),
+    ...strategies.flatMap((strategy) => strategy.warnings.map((warning) => `${strategy.key}: ${warning}`)),
+  ];
   const scorecard = {
     ok: blockers.length === 0,
     unattendedStatus: blockers.length ? "NO" : "YES",
@@ -1098,6 +1163,7 @@ async function main() {
     sourceSha: gitValue(["rev-parse", "HEAD"]),
     sourceBranch: gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
     sourceStatusShort: gitValue(["status", "--short"]),
+    releaseIdentity,
     runtimeDir: RUNTIME_DIR,
     runVerifiers: RUN_VERIFIERS,
     requirements: {
@@ -1117,6 +1183,7 @@ async function main() {
         "fallbackUsed",
       ],
       publishRule: "If source coverage is degraded or critical, preserve latest, do not overwrite complete run, and alert.",
+      releaseRule: "API unattended patrol must pin FUMAN_RELEASE_SHA, read /api/release-manifest, and block if live gitSha/deployId do not match the fixed release.",
       fieldRule: "All returned API rows are checked; blank groups are blockers.",
     },
     strategies,
@@ -1142,6 +1209,7 @@ main().catch((error) => {
     computer: COMPUTER_LABEL,
     productionUrl: BASE_URL,
     sourceSha: gitValue(["rev-parse", "HEAD"]),
+    releaseShaExpected: EXPECTED_RELEASE_SHA,
     blockers: [`api-unattended-scorecard-error: ${error?.message || String(error)}`],
     error: error?.stack || error?.message || String(error),
   };

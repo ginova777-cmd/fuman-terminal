@@ -161,6 +161,29 @@ $env:FUMAN_RELEASE_SHA = git rev-parse HEAD
 
 `FUMAN_DEPLOY_SHA` is accepted as an equivalent fallback. When a release SHA is set, production guards must compare local `HEAD` and live `/api/release-manifest.gitSha` with that release SHA, not with a later moving `origin/main` commit.
 
+## API Read-Only Patrol
+
+The API unattended patrol is read-only with respect to Supabase, scanner cache, runtime source state, shared source, and Vercel deploys. It may write only its own scorecard/report/log files under `C:\fuman-runtime`.
+
+Canonical command:
+
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\run-api-unattended-scorecard.ps1
+```
+
+Scheduled multi-checkpoint patrol is `Fuman API Unattended Patrol` at `08:55`, `09:05`, `09:30`, `13:35`, `16:10`, and `22:00` Asia/Taipei. It must run only read-only checks: `guard:production`, `monitor:production`, `verify:production-api-freshness`, and the API unattended scorecard. On failure it must write a patrol state file and send a workflow alert receipt.
+
+The runner must resolve the current release SHA from the checked-out production mirror/source, set `FUMAN_RELEASE_SHA`, and pass `--release-sha=<sha>` into `scripts\verify-api-unattended-scorecard.js`.
+
+The scorecard must read live `/api/release-manifest` and include:
+
+- `expectedReleaseSha`;
+- `liveGitSha`;
+- `deployId`;
+- `matchedExpectedRelease`.
+
+If live manifest SHA/deployId is missing, or live SHA differs from the fixed release SHA, API unattended status is `NO`. Do not use a moving `main` or a live view snapshot to prove a past run was healthy.
+
 ## Release Owner Merge Queue
 
 Production `main` is release-owner-only. Strategy/source Codex agents must not push `main`, deploy Vercel, or edit `C:\fuman-terminal`; they must work on `agent/<scope>-<yyyymmdd>` branches and hand off the branch name, commit SHA, changed file list, read-only scorecard, and whether Supabase/cache/runtime was written.

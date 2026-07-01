@@ -3,6 +3,7 @@ param(
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$ProductionUrl = "https://fuman-terminal.vercel.app",
   [string]$ComputerLabel = $env:COMPUTERNAME,
+  [string]$ReleaseSha = "",
   [switch]$SkipVerifiers,
   [switch]$NoFail,
   [int]$TimeoutMs = 45000,
@@ -21,6 +22,16 @@ function Resolve-NodeRoot {
 }
 
 $repoRoot = Resolve-NodeRoot -Path $Root
+if ([string]::IsNullOrWhiteSpace($ReleaseSha)) {
+  $git = Get-Command git.exe -ErrorAction SilentlyContinue
+  if (-not $git) {
+    $git = Get-Command git -ErrorAction Stop
+  }
+  $ReleaseSha = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ReleaseSha)) {
+    throw "unable to resolve fixed release SHA from $repoRoot"
+  }
+}
 $stateDir = Join-Path $RuntimeDir "state"
 $reportDir = Join-Path $RuntimeDir "reports"
 $logDir = Join-Path $RuntimeDir "logs"
@@ -36,6 +47,7 @@ $env:FUMAN_API_UNATTENDED_COMPUTER = $ComputerLabel
 $env:FUMAN_API_UNATTENDED_PRODUCTION_URL = $ProductionUrl
 $env:FUMAN_API_UNATTENDED_SCORECARD_FILE = $jsonOut
 $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdOut
+$env:FUMAN_RELEASE_SHA = $ReleaseSha
 
 $scriptArgs = @(
   "run",
@@ -43,6 +55,7 @@ $scriptArgs = @(
   "--",
   "--production-url=$ProductionUrl",
   "--computer=$ComputerLabel",
+  "--release-sha=$ReleaseSha",
   "--out=$jsonOut",
   "--md=$mdOut",
   "--timeout-ms=$TimeoutMs",
@@ -62,7 +75,7 @@ try {
   if (-not $npm) {
     $npm = Get-Command npm -ErrorAction Stop
   }
-  "[$(Get-Date -Format o)] root=$repoRoot computer=$ComputerLabel production=$ProductionUrl" | Tee-Object -FilePath $logFile
+  "[$(Get-Date -Format o)] root=$repoRoot computer=$ComputerLabel production=$ProductionUrl releaseSha=$ReleaseSha" | Tee-Object -FilePath $logFile
   & $npm.Source @scriptArgs 2>&1 | Tee-Object -FilePath $logFile -Append
   $exitCode = $LASTEXITCODE
   if ($exitCode -ne 0 -and -not $NoFail) {

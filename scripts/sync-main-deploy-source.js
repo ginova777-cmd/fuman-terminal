@@ -228,6 +228,8 @@ const FILES = [
   "run-production-health-monitor.ps1",
   "run-vercel-cost-health-monitor.ps1",
   "run-api-unattended-scorecard.ps1",
+  "ops/run-api-unattended-patrol.ps1",
+  "ops/install-api-unattended-patrol-task.ps1",
   "VERCEL-COST-UPLOAD-GUARD.md",
   "install-api-only-cleanup-task.ps1",
   "run-open-buy.ps1",
