@@ -13,6 +13,25 @@ const SKIP_TASKS = process.argv.includes("--skip-tasks");
 const SKIP_FAST_GATE_LAST_RESULT = process.env.FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT === "1" || process.env.FUMAN_INSIDE_FRESHNESS_GATE === "1";
 const issues = [];
 const warnings = [];
+const REQUIRED_EVIDENCE_FIELDS = [
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "quote_coverage_at_run",
+  "intraday_1m_readiness_at_run",
+  "ma_readiness_at_run",
+  "preopen_futopt_daily_readiness_at_run",
+  "run_quality_at_publish",
+  "fallbackUsed",
+  "fallbackScope",
+  "fallbackAllowed",
+  "fallbackDetails",
+  "degradedBlocksLatest",
+  "preservePreviousGood",
+  "writeBudget",
+  "retentionOk",
+  "evidenceStatus",
+  "unattendedStatus",
+];
 
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), "utf8"); }
 function failWhen(condition, message) { if (condition) issues.push(message); }
@@ -62,10 +81,19 @@ async function main() {
   failWhen(!/readSnapshot\(\s*["']watchlist_match_index["']/.test(api), "api/watchlist-match-index.js must read watchlist_match_index snapshot");
   failWhen(/strategy-match-index\.json|readFileSync|fs\./.test(api), "api/watchlist-match-index.js must not read local/static JSON fallback");
   failWhen(!/status\(503\)/.test(api) || !/watchlist_match_index_unavailable/.test(api), "api/watchlist-match-index.js must hard-fail 503 when snapshot is unavailable");
+  for (const marker of ["source_snapshot_captured_at", "source_status_at_run", "quote_coverage_at_run", "evidenceStatus", "unattendedStatus", "missingEvidenceFields"]) {
+    failWhen(!api.includes(marker), `api/watchlist-match-index.js missing evidence marker ${marker}`);
+  }
   failWhen(writerHits.length !== 1 || writerHits[0] !== "lib/desktop-route-snapshot-builder.js", `official writer must be only desktop-route-snapshot-builder; actual=${writerHits.join(",") || "none"}`);
   failWhen(!/verify:watchlist-autonomy/.test(pkg), "package.json missing verify:watchlist-autonomy script");
   failWhen(!/key:\s*["']strategy2["']/.test(indexBuilder) || !/\/api\/latest-strategy\?key=strategy2/.test(indexBuilder), "watchlist builder must include strategy2 source");
   failWhen(!/sourceKeyFor/.test(indexBuilder) || !/策略2-/.test(indexBuilder), "watchlist builder must preserve strategy2 sub-signal labels");
+  for (const marker of ["buildRunEvidence", "source_snapshot_captured_at", "source_status_at_run", "quote_coverage_at_run", "fallbackUsed", "degradedBlocksLatest", "preservePreviousGood", "unattendedStatus"]) {
+    failWhen(!indexBuilder.includes(marker), `watchlist builder missing run-time evidence marker ${marker}`);
+  }
+  for (const marker of ["watchlist_match_index_write_blocked:evidence_incomplete", "watchlist_match_index_write_blocked:run_quality_degraded", "watchlist_match_index_write_blocked:fallback_used"]) {
+    failWhen(!builder.includes(marker), `desktop-route-snapshot-builder missing write-block marker ${marker}`);
+  }
   failWhen(
     !/\/api\/desktop-route-snapshot-refresh/.test(vercel) || !vercel.includes(EXPECTED_DESKTOP_SNAPSHOT_CRON),
     `vercel cron for desktop-route-snapshot-refresh must match cost-governed schedule ${EXPECTED_DESKTOP_SNAPSHOT_CRON}`
@@ -97,7 +125,18 @@ async function main() {
     ]);
     const bundleWatch = Object.entries(bundle.body?.endpoints || {}).find(([endpoint]) => endpoint.startsWith("/api/watchlist-match-index"))?.[1] || null;
     Object.assign(live, {
-      watch: { status: watch.status, cacheSource: watch.body?.cacheSource || "", runId: watch.body?.runId || "", count: Number(watch.body?.count || 0) || 0, transportUpdatedAt: watch.body?.transport?.updatedAt || "" },
+      watch: {
+        status: watch.status,
+        cacheSource: watch.body?.cacheSource || "",
+        runId: watch.body?.runId || "",
+        count: Number(watch.body?.count || 0) || 0,
+        transportUpdatedAt: watch.body?.transport?.updatedAt || "",
+        evidenceStatus: watch.body?.evidenceStatus || "",
+        unattendedStatus: watch.body?.unattendedStatus || "",
+        sourceSnapshotCapturedAt: watch.body?.source_snapshot_captured_at || "",
+        quoteCoverage120s: watch.body?.quote_coverage_at_run?.fresh_quote_coverage_120s ?? null,
+        missingEvidenceFields: watch.body?.missingEvidenceFields || [],
+      },
       staticJson: { status: staticJson.status, error: staticJson.body?.error || "" },
       bundleWatch: { present: Boolean(bundleWatch), runId: bundleWatch?.runId || "", hasStrategy2: Boolean(bundleWatch?.strategies?.strategy2) },
       mobileMeta: { status: meta.status, valid: Boolean(meta.body?.valid), stock: meta.body?.stock || null },
@@ -105,6 +144,15 @@ async function main() {
     failWhen(!watch.ok || watch.body?.ok === false, `live /api/watchlist-match-index failed status=${watch.status}`);
     failWhen(watch.body?.cacheSource !== "supabase:market_snapshots", `live watchlist cacheSource=${watch.body?.cacheSource || "missing"}`);
     failWhen(!watch.body?.runId, "live watchlist runId missing");
+    for (const field of REQUIRED_EVIDENCE_FIELDS) {
+      failWhen(watch.body?.[field] === undefined || watch.body?.[field] === null, `live watchlist missing evidence field ${field}`);
+    }
+    failWhen(watch.body?.evidenceStatus !== "complete", `live watchlist evidenceStatus=${watch.body?.evidenceStatus || "missing"}`);
+    failWhen(watch.body?.unattendedStatus !== "YES", `live watchlist unattendedStatus=${watch.body?.unattendedStatus || "missing"}`);
+    failWhen(watch.body?.run_quality_at_publish?.publishable !== true, "live watchlist run_quality_at_publish must be publishable");
+    failWhen(watch.body?.fallbackUsed !== false, `live watchlist fallbackUsed=${watch.body?.fallbackUsed}`);
+    const missingEvidenceFields = Array.isArray(watch.body?.missingEvidenceFields) ? watch.body.missingEvidenceFields : [];
+    failWhen(missingEvidenceFields.length > 0, `live watchlist missingEvidenceFields=${missingEvidenceFields.join(",")}`);
     failWhen(staticJson.status !== 410, `production /data/strategy-match-index.json must be disabled with 410 actual=${staticJson.status}`);
     failWhen(!bundleWatch, "terminal-fast-bundle missing watchlist endpoint");
     failWhen(!bundleWatch?.strategies?.strategy2, "terminal-fast-bundle watchlist endpoint missing strategy2 source");

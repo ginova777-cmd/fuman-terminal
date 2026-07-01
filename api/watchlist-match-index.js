@@ -4,6 +4,32 @@ function hasIndex(payload) {
   return Boolean(payload && payload.byCode && typeof payload.byCode === "object");
 }
 
+const REQUIRED_EVIDENCE_FIELDS = [
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "quote_coverage_at_run",
+  "intraday_1m_readiness_at_run",
+  "ma_readiness_at_run",
+  "preopen_futopt_daily_readiness_at_run",
+  "run_quality_at_publish",
+  "fallbackUsed",
+  "fallbackScope",
+  "fallbackAllowed",
+  "fallbackDetails",
+  "degradedBlocksLatest",
+  "preservePreviousGood",
+  "writeBudget",
+  "retentionOk",
+];
+
+function missingEvidenceFields(payload) {
+  return REQUIRED_EVIDENCE_FIELDS.filter((field) => payload?.[field] === undefined || payload?.[field] === null);
+}
+
+function evidenceValue(payload, field, fallback) {
+  return payload?.[field] === undefined || payload?.[field] === null ? fallback : payload[field];
+}
+
 function taipeiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -35,6 +61,9 @@ function normalizePayload(payload, cacheSource, transport = {}) {
   const rawRunId = payload?.runId || transport.snapshotId || "";
   const fallbackStamp = String(transport.updatedAt || payload?.updatedAt || "").replace(/\D/g, "").slice(0, 14);
   const runId = String(rawRunId || (fallbackStamp ? `watchlist-match-index-${fallbackStamp}` : ""));
+  const missingEvidence = missingEvidenceFields(payload);
+  const hasCompleteEvidence = missingEvidence.length === 0 && payload?.evidenceStatus === "complete";
+  const unattendedStatus = hasCompleteEvidence ? String(payload?.unattendedStatus || "NO") : "NO";
   return {
     ...payload,
     ok: payload?.ok !== false,
@@ -44,6 +73,24 @@ function normalizePayload(payload, cacheSource, transport = {}) {
     count: Number(payload?.count || Object.keys(byCode).length) || 0,
     byCode,
     strategies: payload?.strategies && typeof payload.strategies === "object" ? payload.strategies : {},
+    source_snapshot_captured_at: evidenceValue(payload, "source_snapshot_captured_at", null),
+    source_status_at_run: evidenceValue(payload, "source_status_at_run", null),
+    quote_coverage_at_run: evidenceValue(payload, "quote_coverage_at_run", null),
+    intraday_1m_readiness_at_run: evidenceValue(payload, "intraday_1m_readiness_at_run", null),
+    ma_readiness_at_run: evidenceValue(payload, "ma_readiness_at_run", null),
+    preopen_futopt_daily_readiness_at_run: evidenceValue(payload, "preopen_futopt_daily_readiness_at_run", null),
+    run_quality_at_publish: evidenceValue(payload, "run_quality_at_publish", null),
+    fallbackUsed: evidenceValue(payload, "fallbackUsed", null),
+    fallbackScope: evidenceValue(payload, "fallbackScope", null),
+    fallbackAllowed: evidenceValue(payload, "fallbackAllowed", null),
+    fallbackDetails: evidenceValue(payload, "fallbackDetails", []),
+    degradedBlocksLatest: evidenceValue(payload, "degradedBlocksLatest", null),
+    preservePreviousGood: evidenceValue(payload, "preservePreviousGood", null),
+    writeBudget: evidenceValue(payload, "writeBudget", null),
+    retentionOk: evidenceValue(payload, "retentionOk", null),
+    evidenceStatus: hasCompleteEvidence ? "complete" : "insufficient",
+    unattendedStatus,
+    missingEvidenceFields: missingEvidence,
     watchlistDetectWindow: {
       timezone: "Asia/Taipei",
       reason: transport.reason || (hasSnapshot ? "supabase-snapshot" : "api-only-unavailable"),
@@ -102,6 +149,24 @@ module.exports = async function handler(request, response) {
     byCode: {},
     strategies: {},
     count: 0,
+    source_snapshot_captured_at: null,
+    source_status_at_run: null,
+    quote_coverage_at_run: null,
+    intraday_1m_readiness_at_run: null,
+    ma_readiness_at_run: null,
+    preopen_futopt_daily_readiness_at_run: null,
+    run_quality_at_publish: null,
+    fallbackUsed: null,
+    fallbackScope: null,
+    fallbackAllowed: null,
+    fallbackDetails: [],
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    writeBudget: null,
+    retentionOk: null,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    missingEvidenceFields: REQUIRED_EVIDENCE_FIELDS,
     transport: {
       source: "none",
       via: "api/watchlist-match-index",
