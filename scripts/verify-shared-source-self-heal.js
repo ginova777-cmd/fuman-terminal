@@ -102,6 +102,11 @@ function staticChecks() {
     "public-slot-shared-source-watchdog-alert.json",
     "public-slot-shared-source-watchdog",
     "quote/collector 健康不可遮蔽 1m writer 失速",
+    "MinIntraday1mCoverage",
+    "MinReadyGe35Coverage",
+    "CoverageHardGateStart",
+    "today_1m_symbols coverage 低於",
+    "ready_ge35 coverage 低於",
     "Start-SharedSourceTask -Reason",
     "-Alert",
   ]);
@@ -125,6 +130,7 @@ function staticChecks() {
     runnerHasSelfHeal: runner.includes("function Invoke-Intraday1mSelfHeal"),
     runnerHasPayloadEvidence: runner.includes("intraday_1m_self_heal_triggered"),
     watchdogHasAlertReceipt: watchdog.includes("public-slot-shared-source-watchdog-alert.json"),
+    watchdogHasCoverageHardGate: watchdog.includes("today_1m_symbols coverage 低於") && watchdog.includes("ready_ge35 coverage 低於"),
     watchdogIntradayStaleBeforeQuoteEarlyExit: staleRestartIndex >= 0 && staleRestartIndex < quoteHealthyEarlyExitIndex,
   };
 }

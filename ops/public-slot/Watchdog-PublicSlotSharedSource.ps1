@@ -8,6 +8,9 @@ param(
   [int]$MinFreshQuoteCount120 = 1200,
   [int]$MaxQuoteAgeSeconds = 60,
   [int]$MaxIntraday1mStaleSeconds = 180,
+  [double]$MinIntraday1mCoverage = 0.95,
+  [double]$MinReadyGe35Coverage = 0.95,
+  [string]$CoverageHardGateStart = "09:05",
   [string]$ActiveStart = "08:00",
   [string]$ActiveEnd = "14:10"
 )
@@ -99,6 +102,13 @@ function Test-InActiveWindow {
   return ($now -ge $start -and $now -le $end)
 }
 
+function Test-AfterHHmm {
+  param([string]$Value)
+  $now = (Get-Date).TimeOfDay
+  $gate = Convert-HHmmToTimeSpan $Value
+  return ($now -ge $gate)
+}
+
 function Read-TextSecret {
   param([string]$Path)
   try {
@@ -148,6 +158,34 @@ function Get-SourceStatusAgeSeconds {
         $session = [string]$row.payload.session
       }
     } catch {}
+    $activeSymbols = 0
+    $today1mSymbols = 0
+    $readyGe35Symbols = 0
+    try {
+      if ($row.payload -and $null -ne $row.payload.active_symbols) {
+        $activeSymbols = [int]$row.payload.active_symbols
+      } elseif ($row.payload -and $null -ne $row.payload.seeded_symbols) {
+        $activeSymbols = [int]$row.payload.seeded_symbols
+      }
+    } catch {}
+    try {
+      if ($row.payload -and $null -ne $row.payload.today_1m_symbols) {
+        $today1mSymbols = [int]$row.payload.today_1m_symbols
+      } elseif ($row.payload -and $null -ne $row.payload.intraday_1m_symbols_today) {
+        $today1mSymbols = [int]$row.payload.intraday_1m_symbols_today
+      }
+    } catch {}
+    try {
+      if ($row.payload -and $null -ne $row.payload.ready_ge_35_symbols) {
+        $readyGe35Symbols = [int]$row.payload.ready_ge_35_symbols
+      } elseif ($row.payload -and $null -ne $row.payload.ready_ge_35) {
+        $readyGe35Symbols = [int]$row.payload.ready_ge_35
+      } elseif ($row.payload -and $null -ne $row.payload.ready_ma35_continuous_symbols) {
+        $readyGe35Symbols = [int]$row.payload.ready_ma35_continuous_symbols
+      }
+    } catch {}
+    $today1mCoverage = if ($activeSymbols -gt 0) { [math]::Round($today1mSymbols / [double]$activeSymbols, 4) } else { 0 }
+    $readyGe35Coverage = if ($activeSymbols -gt 0) { [math]::Round($readyGe35Symbols / [double]$activeSymbols, 4) } else { 0 }
     $usableForIntraday = $false
     try {
       if ($row.payload -and $null -ne $row.payload.degraded_but_usable_for_intraday) {
@@ -160,6 +198,11 @@ function Get-SourceStatusAgeSeconds {
       AgeSeconds = $age
       QuoteAgeSeconds = $quoteAge
       Intraday1mStaleSeconds = $intraday1mStale
+      ActiveSymbols = $activeSymbols
+      Today1mSymbols = $today1mSymbols
+      ReadyGe35Symbols = $readyGe35Symbols
+      Today1mCoverage = $today1mCoverage
+      ReadyGe35Coverage = $readyGe35Coverage
       Session = $session
       DegradedUsableForIntraday = $usableForIntraday
       Status = [string]$row.status
@@ -425,6 +468,17 @@ if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
 if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
   Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒；quote/collector 健康不可遮蔽 1m writer 失速" -Restart -Alert
   exit 0
+}
+
+if ($health.Session -eq "regular" -and (Test-AfterHHmm $CoverageHardGateStart) -and $health.ActiveSymbols -ge 1000) {
+  if ($health.Today1mCoverage -lt $MinIntraday1mCoverage) {
+    Start-SharedSourceTask -Reason "today_1m_symbols coverage 低於 $MinIntraday1mCoverage，目前 $($health.Today1mSymbols)/$($health.ActiveSymbols)=$($health.Today1mCoverage)；觸發 shared source 自修復重啟" -Restart -Alert
+    exit 0
+  }
+  if ($health.ReadyGe35Coverage -lt $MinReadyGe35Coverage) {
+    Start-SharedSourceTask -Reason "ready_ge35 coverage 低於 $MinReadyGe35Coverage，目前 $($health.ReadyGe35Symbols)/$($health.ActiveSymbols)=$($health.ReadyGe35Coverage)；觸發 shared source 自修復重啟" -Restart -Alert
+    exit 0
+  }
 }
 
 if (($collectorCache.Ok -or $quoteHealth.Ok) -and ((-not $health.Ok) -or $health.Status -ne "ok" -or $health.AgeSeconds -gt $MaxSourceAgeSeconds)) {
