@@ -149,6 +149,8 @@ function staticChecks() {
     "source_contract_version",
     "writer_version",
     "writer_pid",
+    "writer_computer",
+    "writer_owner_computer",
     "quote_status",
     "permission_status",
     "preopen_status",
@@ -167,6 +169,18 @@ function staticChecks() {
     "FugleCollectorBatchSize",
     "FUGLE_COLLECTOR_CONCURRENCY",
     "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+    "OpeningBoostStart",
+    "OpeningBoostEnd",
+    "RestQuoteOpeningBoostBatchSize",
+    "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+    "Add-FreshQuoteReadthrough",
+    "Get-FreshPublicSlotQuoteRows",
+    "fresh_quote_readthrough_rows",
+    "rest_quote_effective_batch_size",
+    "WriterOwnerComputer",
+    "FUMAN_PUBLIC_SLOT_WRITER_OWNER_COMPUTER",
+    "Assert-PublicSlotWriterOwner",
+    "writer_owner_computer",
     "quoteFullCoverageFloor",
     "Get-ActiveCommonStockSymbols",
     "stock_universe",
@@ -196,6 +210,61 @@ function staticChecks() {
     "Write-PublicSlotSourceCoverageSnapshot",
     "Get-Strategy2ReadyRefreshMaxPages",
     "strategy2 ready cache partial refresh",
+  ]);
+
+  requireIncludes("ops/public-slot/SupabasePublicSlotSource.ps1", [
+    "Write-PublicSlotFutoptQuotesLive",
+    "underlying_symbol",
+    "underlying_name",
+    "hasUnderlyingColumns",
+    "ConvertTo-PublicSlotPayloadHashtable",
+  ]);
+
+  requireIncludes("ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql", [
+    "v_fuman_shared_source_readonly_scorecard",
+    "fresh_quote_readthrough_rows",
+    "fresh_quote_readthrough_merged_rows",
+    "rest_quote_effective_batch_size",
+    "opening_boost_active",
+    "futopt_stock_this_loop",
+    "writer_owner_computer",
+    "readonly_verdict",
+    "grant select",
+  ]);
+
+  requireIncludes("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1", [
+    "v_fuman_shared_source_readonly_scorecard",
+    "mode = \"read-only\"",
+    "fresh_quote_coverage_120s",
+    "scanner_can_run_quote_only",
+    "scanner_can_run_opening",
+    "intraday_1m_stale_seconds",
+    "ready_ma35_continuous",
+    "futopt_stock_mapped",
+    "opening_boost_not_active_while_coverage_low",
+    "rest_quote_rate_limited_while_coverage_low",
+    "fresh_quote_readthrough_not_running",
+    "rest_quote_effective_batch_zero",
+  ]);
+
+  requireIncludes("scripts/fugle-websocket-collector.js", [
+    "OPENING_BOOST_START",
+    "OPENING_BOOST_END",
+    "OPENING_BOOST_BATCH_SIZE",
+    "effectiveCollectorConfig",
+    "openingBoostActive",
+    "REQUEST_TIMEOUT_MS",
+    "REQUEST_RETRIES",
+  ]);
+
+  requireIncludes("ops/public-slot/fugle-websocket-collector.js", [
+    "OPENING_BOOST_START",
+    "OPENING_BOOST_END",
+    "OPENING_BOOST_BATCH_SIZE",
+    "effectiveCollectorConfig",
+    "openingBoostActive",
+    "REQUEST_TIMEOUT_MS",
+    "REQUEST_RETRIES",
   ]);
 
   requireIncludes("ops/public-slot/Watchdog-PublicSlotSharedSource.ps1", [
@@ -245,6 +314,7 @@ function staticChecks() {
   ]);
 
   requireRegex("package.json", /"verify:fugle-source-contract"\s*:/, "verify:fugle-source-contract script");
+  requireRegex("package.json", /"verify:shared-source-readonly"\s*:/, "verify:shared-source-readonly script");
 
   for (const file of [
     "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
@@ -256,6 +326,26 @@ function staticChecks() {
     forbidRegex(file, /today_candle_count\W*>=\W*(20|35)|rows_today\W*>=\W*(20|35)/, "today-only candle count as MA readiness");
     forbidRegex(file, /intraday_1m_not_ready_ge_35/, "old intraday_1m_not_ready_ge_35 reason");
   }
+  forbidRegex(
+    "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+    /v_fugle_intraday_1m_status\?select=\$statusSelect&has_today_data=eq\.true/,
+    "has_today_data filter for MA readiness REST fallback"
+  );
+  forbidRegex(
+    "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
+    /today_candle_count\s*>\s*0\s+and\s+continuous_candle_count\s*>=\s*(20|35|80|200)/i,
+    "today-only coverage RPC MA readiness"
+  );
+  forbidRegex(
+    "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
+    /insert\s+into|update\s+public\.source_status|delete\s+from|truncate\s+/i,
+    "data writes in read-only shared source scorecard"
+  );
+  forbidRegex(
+    "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+    /Write-PublicSlot|Invoke-PublicSlotUpsert|Invoke-RestMethod[\s\S]{0,120}-Method\s+(Post|Patch|Delete)|Set-Content|Add-Content|Out-File/i,
+    "writes in read-only shared source verifier"
+  );
 }
 
 async function restGet(baseUrl, key, pathAndQuery) {

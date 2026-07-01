@@ -442,8 +442,13 @@ function Write-PublicSlotFutoptQuotesLive {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 
   $now = ConvertTo-IsoUtc
+  $hasUnderlyingColumns = (Test-PublicSlotColumnAvailable -Table "futopt_quotes_live" -Column "underlying_symbol") -and
+    (Test-PublicSlotColumnAvailable -Table "futopt_quotes_live" -Column "underlying_name")
   $normalized = foreach ($row in $Rows) {
-    @{
+    $payload = ConvertTo-PublicSlotPayloadHashtable $row.payload
+    $underlyingSymbol = if ($row.underlying_symbol) { $row.underlying_symbol } elseif ($payload.ContainsKey("underlying_symbol")) { $payload["underlying_symbol"] } else { $null }
+    $underlyingName = if ($row.underlying_name) { $row.underlying_name } elseif ($payload.ContainsKey("underlying_name")) { $payload["underlying_name"] } else { $null }
+    $out = @{
       future_symbol = [string]$row.future_symbol
       updated_at = if ($row.updated_at) { ConvertTo-IsoUtc $row.updated_at } else { $now }
       last_price = if ($null -ne $row.last_price) { $row.last_price } else { $row.price }
@@ -455,8 +460,13 @@ function Write-PublicSlotFutoptQuotesLive {
       total_volume = ConvertTo-PublicSlotLots $row.total_volume
       product = $row.product
       session = $row.session
-      payload = if ($row.payload) { $row.payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
+      payload = if ($payload.Count -gt 0) { $payload } else { @{ volume_unit = "lots"; time_standard = "UTC" } }
     }
+    if ($hasUnderlyingColumns) {
+      $out.underlying_symbol = $underlyingSymbol
+      $out.underlying_name = $underlyingName
+    }
+    $out
   }
 
   Invoke-PublicSlotUpsert -Table "futopt_quotes_live" -OnConflict "future_symbol" -Rows @($normalized)

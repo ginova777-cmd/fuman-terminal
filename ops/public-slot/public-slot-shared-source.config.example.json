@@ -5,11 +5,18 @@
   "restQuoteBatchSize": 240,
   "restQuoteEverySeconds": 10,
   "restQuoteDelayMilliseconds": 40,
+  "openingBoostStart": "08:45",
+  "openingBoostEnd": "10:30",
+  "restQuoteOpeningBoostBatchSize": 900,
+  "restQuoteOpeningBoostDelayMilliseconds": 5,
   "fugleCollectorLoopMilliseconds": 1000,
   "fugleCollectorBatchSize": 320,
   "fugleCollectorConcurrency": 4,
   "fugleCollectorRequestDelayMilliseconds": 20,
   "fugleCollectorQuoteTtlMilliseconds": 120000,
+  "fugleCollectorOpeningBoostBatchSize": 1200,
+  "fugleCollectorOpeningBoostConcurrency": 8,
+  "fugleCollectorOpeningBoostDelayMilliseconds": 0,
   "direct1mBatchSize": 8,
   "direct1mEverySeconds": 20,
   "direct1mPrewarmEnabled": true,
@@ -30,5 +37,7 @@
   "publicSlotUpsertBatchSize": 300,
   "writePreopenRows": true,
   "writePreopenRowsMode": "preopen",
-  "strategy2ReadyPageSize": 500
+  "strategy2ReadyPageSize": 500,
+  "writerOwnerComputer": "",
+  "readOnlyMonitor": false
 }

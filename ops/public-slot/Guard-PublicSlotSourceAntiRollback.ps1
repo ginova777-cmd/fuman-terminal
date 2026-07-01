@@ -37,11 +37,18 @@ function Write-DefaultRuntimeConfig {
     restQuoteBatchSize = 240
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 40
+    openingBoostStart = "08:45"
+    openingBoostEnd = "10:30"
+    restQuoteOpeningBoostBatchSize = 900
+    restQuoteOpeningBoostDelayMilliseconds = 5
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 320
     fugleCollectorConcurrency = 4
     fugleCollectorRequestDelayMilliseconds = 20
     fugleCollectorQuoteTtlMilliseconds = 120000
+    fugleCollectorOpeningBoostBatchSize = 1200
+    fugleCollectorOpeningBoostConcurrency = 8
+    fugleCollectorOpeningBoostDelayMilliseconds = 0
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
@@ -63,6 +70,8 @@ function Write-DefaultRuntimeConfig {
     writePreopenRows = $true
     writePreopenRowsMode = "preopen"
     strategy2ReadyPageSize = 500
+    writerOwnerComputer = ""
+    readOnlyMonitor = $false
   } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $ConfigPath -Encoding utf8
 }
 
@@ -89,6 +98,12 @@ function Test-RepoRuntimeConfigSupport {
     "FugleCollectorBatchSize",
     "FUGLE_COLLECTOR_CONCURRENCY",
     "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+    "OpeningBoostStart",
+    "OpeningBoostEnd",
+    "RestQuoteOpeningBoostBatchSize",
+    "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+    "Add-FreshQuoteReadthrough",
+    "Get-FreshPublicSlotQuoteRows",
     "Get-ActiveCommonStockSymbols",
     "stock_universe",
     "mother_pool_source",
@@ -101,6 +116,10 @@ function Test-RepoRuntimeConfigSupport {
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
     "sourceCoreOk",
+    "WriterOwnerComputer",
+    "FUMAN_PUBLIC_SLOT_WRITER_OWNER_COMPUTER",
+    "Assert-PublicSlotWriterOwner",
+    "writer_owner_computer",
     "intraday_1m_ma35_required",
     "warmup_candle_count",
     "continuous_candle_count",
@@ -152,11 +171,18 @@ function Test-RuntimeConfig {
     "restQuoteBatchSize",
     "restQuoteEverySeconds",
     "restQuoteDelayMilliseconds",
+    "openingBoostStart",
+    "openingBoostEnd",
+    "restQuoteOpeningBoostBatchSize",
+    "restQuoteOpeningBoostDelayMilliseconds",
     "fugleCollectorLoopMilliseconds",
     "fugleCollectorBatchSize",
     "fugleCollectorConcurrency",
     "fugleCollectorRequestDelayMilliseconds",
     "fugleCollectorQuoteTtlMilliseconds",
+    "fugleCollectorOpeningBoostBatchSize",
+    "fugleCollectorOpeningBoostConcurrency",
+    "fugleCollectorOpeningBoostDelayMilliseconds",
     "direct1mBatchSize",
     "direct1mEverySeconds",
     "direct1mPrewarmEnabled",
@@ -175,7 +201,9 @@ function Test-RuntimeConfig {
     "publicSlotUpsertTimeoutSec",
     "publicSlotUpsertBatchSize",
     "writePreopenRowsMode",
-    "strategy2ReadyPageSize"
+    "strategy2ReadyPageSize",
+    "writerOwnerComputer",
+    "readOnlyMonitor"
   )) {
     if ($null -eq $config.PSObject.Properties[$name]) { $missing.Add("config:$name") }
   }
@@ -186,11 +214,18 @@ function Test-RuntimeConfig {
     restQuoteBatchSize = 240
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 40
+    openingBoostStart = "08:45"
+    openingBoostEnd = "10:30"
+    restQuoteOpeningBoostBatchSize = 900
+    restQuoteOpeningBoostDelayMilliseconds = 5
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 320
     fugleCollectorConcurrency = 4
     fugleCollectorRequestDelayMilliseconds = 20
     fugleCollectorQuoteTtlMilliseconds = 120000
+    fugleCollectorOpeningBoostBatchSize = 1200
+    fugleCollectorOpeningBoostConcurrency = 8
+    fugleCollectorOpeningBoostDelayMilliseconds = 0
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true

@@ -1,6 +1,77 @@
--- Fugle source live repair B6, 2026-06-30.
--- Fast intraday 1m coverage/readiness aggregate for the shared source writer.
--- Purpose: avoid full scans of v_fugle_intraday_1m_status during market hours.
+-- Fugle source historical 1m MA readiness patch, 2026-07-01.
+-- Keep MA20/MA35 readiness separate from same-day freshness:
+-- historical warmup candles can satisfy MA readiness, while stale_seconds
+-- remains the separate live-session freshness gate.
+
+create or replace view public.v_fugle_intraday_1m_status as
+with recent as (
+  select *
+  from (
+    select
+      m.symbol,
+      m.market,
+      m.candle_time,
+      m.trade_date,
+      m.updated_at,
+      row_number() over (
+        partition by m.symbol
+        order by m.candle_time desc nulls last
+      ) as rn,
+      ((now() at time zone 'Asia/Taipei')::date) as taipei_today
+    from public.fugle_intraday_1m m
+    where m.symbol ~ '^\d{4}$'
+      and m.trade_date >= (((now() at time zone 'Asia/Taipei')::date) - 8)
+  ) ranked
+  where rn <= 200
+),
+per_symbol as (
+  select
+    symbol,
+    (array_agg(market order by candle_time desc nulls last))[1] as market,
+    max(candle_time) as latest_candle_time,
+    bool_or(trade_date = taipei_today) as has_today_data,
+    min(candle_time) as first_candle_time,
+    count(*) filter (where trade_date = taipei_today)::integer as today_candle_count,
+    greatest(0, extract(epoch from (now() - max(candle_time)))::integer) as latest_candle_age_seconds,
+    count(*) filter (
+      where trade_date = taipei_today
+        and (candle_time at time zone 'Asia/Taipei')::time >= time '13:00'
+    )::integer as after_1300_candle_count,
+    count(*) filter (where trade_date < taipei_today)::integer as warmup_candle_count,
+    count(*)::integer as continuous_candle_count,
+    count(*)::integer as candle_count,
+    max(updated_at) as updated_at
+  from recent
+  group by symbol
+)
+select
+  symbol,
+  market,
+  latest_candle_time,
+  candle_count,
+  has_today_data,
+  updated_at,
+  first_candle_time,
+  today_candle_count,
+  latest_candle_age_seconds,
+  continuous_candle_count >= 35 as ready_ge_35,
+  continuous_candle_count >= 80 as ready_ge_80,
+  continuous_candle_count >= 200 as ready_ge_200,
+  continuous_candle_count >= 35 as ma35_available,
+  today_candle_count as rows_today,
+  after_1300_candle_count,
+  after_1300_candle_count as candles_after_1300,
+  after_1300_candle_count > 0 as has_after_1300_candle,
+  (latest_candle_time at time zone 'Asia/Taipei')::text as latest_candle_time_taipei,
+  continuous_candle_count >= 20 as ready_ge_20,
+  warmup_candle_count,
+  continuous_candle_count,
+  continuous_candle_count >= 20 as ready_ma20_continuous,
+  continuous_candle_count >= 35 as ready_ma35_continuous,
+  continuous_candle_count >= 80 as ready_macd_continuous
+from per_symbol;
+
+grant select on public.v_fugle_intraday_1m_status to anon, authenticated, service_role;
 
 create index if not exists idx_fugle_intraday_1m_symbol_candle_time_desc
   on public.fugle_intraday_1m (symbol, candle_time desc);

@@ -50,6 +50,7 @@
     "guard:buy-sell-no-rollback": "node scripts/guard-buy-sell-no-rollback.js",
     "verify:buy-sell-field-contract": "node --use-system-ca scripts/verify-buy-sell-field-contract.js",
     "verify:fugle-source-contract": "node --use-system-ca scripts/verify-fugle-source-contract.js",
+    "verify:shared-source-readonly": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
     "guard:notifications": "node scripts/verify-notification-guard.js",
     "guard:production": "node --use-system-ca scripts/verify-production-guard.js",
     "guard:production:pre": "node --use-system-ca scripts/verify-production-guard.js --pre-deploy",

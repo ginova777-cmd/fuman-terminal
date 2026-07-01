@@ -414,6 +414,9 @@ if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts
 if (!String(packageJson.scripts?.["verify:fugle-source-contract"] || "").includes("scripts/verify-fugle-source-contract.js")) {
   issues.push("package.json missing scripts.verify:fugle-source-contract for four-layer shared source contract gate");
 }
+if (!String(packageJson.scripts?.["verify:shared-source-readonly"] || "").includes("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1")) {
+  issues.push("package.json missing scripts.verify:shared-source-readonly for read-only cross-computer shared source scorecard");
+}
 if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
   issues.push("package.json missing scripts.check:scanner-resource-health for scanner publish/preserve gate");
 }
@@ -675,6 +678,8 @@ const publicSlotSharedSourceRunner = read("ops/public-slot/Run-PublicSlotSharedS
 const publicSlotSupabaseSource = read("ops/public-slot/SupabasePublicSlotSource.ps1");
 const publicSlotRuntimeConfigExample = read("ops/public-slot/public-slot-shared-source.config.example.json");
 const publicSlotAntiRollbackGuard = read("ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1");
+const fugleWebsocketCollector = read("scripts/fugle-websocket-collector.js");
+const publicSlotFugleWebsocketCollector = read("ops/public-slot/fugle-websocket-collector.js");
 const publicSlotSharedSourceStarter = read("ops/public-slot/Start-PublicSlotSharedSource.cmd");
 const strategy2ReadinessSourceStarter = read("ops/public-slot/Start-Strategy2ReadinessSource.cmd");
 const strategy2ReadinessSourceInstaller = read("ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1");
@@ -684,6 +689,8 @@ const strategy2ReadinessSql = [
   read("ops/public-slot/Strategy2Readiness100SourcePatch.sql"),
 ].join("\n");
 const intraday1mCoverageStatsRpcSql = read("ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql");
+const sharedSourceReadonlyScorecardSql = read("ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql");
+const sharedSourceReadonlyVerifier = read("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -901,6 +908,18 @@ for (const marker of [
   "FugleCollectorBatchSize",
   "FUGLE_COLLECTOR_CONCURRENCY",
   "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+  "OpeningBoostStart",
+  "OpeningBoostEnd",
+  "RestQuoteOpeningBoostBatchSize",
+  "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+  "Add-FreshQuoteReadthrough",
+  "Get-FreshPublicSlotQuoteRows",
+  "fresh_quote_readthrough_rows",
+  "rest_quote_effective_batch_size",
+  "WriterOwnerComputer",
+  "FUMAN_PUBLIC_SLOT_WRITER_OWNER_COMPUTER",
+  "Assert-PublicSlotWriterOwner",
+  "writer_owner_computer",
   "quoteFullCoverageFloor",
   "Get-ActiveCommonStockSymbols",
   "stock_universe",
@@ -913,6 +932,37 @@ for (const marker of [
   "volume_strategy_usable",
 ]) {
   if (!publicSlotSharedSourceRunner.includes(marker)) issues.push(`Run-PublicSlotSharedSource.ps1 missing runtime tuning marker ${marker}`);
+}
+for (const marker of [
+  "Write-PublicSlotFutoptQuotesLive",
+  "underlying_symbol",
+  "underlying_name",
+  "hasUnderlyingColumns",
+  "ConvertTo-PublicSlotPayloadHashtable",
+]) {
+  if (!publicSlotSupabaseSource.includes(marker)) issues.push(`SupabasePublicSlotSource.ps1 missing futopt underlying quote marker ${marker}`);
+}
+for (const marker of [
+  "OPENING_BOOST_START",
+  "OPENING_BOOST_END",
+  "OPENING_BOOST_BATCH_SIZE",
+  "effectiveCollectorConfig",
+  "openingBoostActive",
+  "REQUEST_TIMEOUT_MS",
+  "REQUEST_RETRIES",
+]) {
+  if (!fugleWebsocketCollector.includes(marker)) issues.push(`scripts/fugle-websocket-collector.js missing opening quote boost marker ${marker}`);
+}
+for (const marker of [
+  "OPENING_BOOST_START",
+  "OPENING_BOOST_END",
+  "OPENING_BOOST_BATCH_SIZE",
+  "effectiveCollectorConfig",
+  "openingBoostActive",
+  "REQUEST_TIMEOUT_MS",
+  "REQUEST_RETRIES",
+]) {
+  if (!publicSlotFugleWebsocketCollector.includes(marker)) issues.push(`ops/public-slot/fugle-websocket-collector.js missing opening quote boost marker ${marker}`);
 }
 for (const marker of [
   "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC",
@@ -930,11 +980,18 @@ for (const marker of [
   "publicSlotUpsertBatchSize",
   "futoptQuoteDelayMilliseconds",
   "restQuoteDelayMilliseconds",
+  "openingBoostStart",
+  "openingBoostEnd",
+  "restQuoteOpeningBoostBatchSize",
+  "restQuoteOpeningBoostDelayMilliseconds",
   "fugleCollectorLoopMilliseconds",
   "fugleCollectorBatchSize",
   "fugleCollectorConcurrency",
   "fugleCollectorRequestDelayMilliseconds",
   "fugleCollectorQuoteTtlMilliseconds",
+  "fugleCollectorOpeningBoostBatchSize",
+  "fugleCollectorOpeningBoostConcurrency",
+  "fugleCollectorOpeningBoostDelayMilliseconds",
   "writePreopenRows",
   "writePreopenRowsMode",
   "strategy2ReadyPageSize",
@@ -949,6 +1006,8 @@ for (const marker of [
   "quoteDerivedOpeningBackfillMinutes",
   "intraday1mFreshTargetSeconds",
   "intraday1mFreshHardSeconds",
+  "writerOwnerComputer",
+  "readOnlyMonitor",
 ]) {
   if (!publicSlotRuntimeConfigExample.includes(marker)) issues.push(`public-slot-shared-source.config.example.json missing ${marker}`);
 }
@@ -979,6 +1038,16 @@ for (const marker of [
   "FugleCollectorBatchSize",
   "FUGLE_COLLECTOR_CONCURRENCY",
   "FUGLE_COLLECTOR_QUOTE_TTL_MS",
+  "OpeningBoostStart",
+  "OpeningBoostEnd",
+  "RestQuoteOpeningBoostBatchSize",
+  "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
+  "Add-FreshQuoteReadthrough",
+  "Get-FreshPublicSlotQuoteRows",
+  "WriterOwnerComputer",
+  "FUMAN_PUBLIC_SLOT_WRITER_OWNER_COMPUTER",
+  "Assert-PublicSlotWriterOwner",
+  "writer_owner_computer",
   "quote_derived_1m_full_universe",
   "quote_derived_1m_current_minute",
   "quote_derived_1m_rows",
@@ -1009,8 +1078,49 @@ for (const marker of ["strategy2_readiness_status_cache", "strategy2_readiness_m
 for (const marker of ["get_fugle_intraday_1m_coverage_stats", "idx_fugle_intraday_1m_symbol_candle_time_desc", "p_symbols text[]", "intraday_1m_stale_seconds"]) {
   if (!intraday1mCoverageStatsRpcSql.includes(marker)) issues.push(`FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql missing coverage RPC marker ${marker}`);
 }
+if (/today_candle_count\s*>\s*0\s+and\s+continuous_candle_count\s*>=\s*(20|35|80|200)/i.test(intraday1mCoverageStatsRpcSql)) {
+  issues.push("FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql must not require today_candle_count > 0 for MA readiness; historical 1m warmup must count");
+}
+for (const marker of [
+  "v_fuman_shared_source_readonly_scorecard",
+  "fresh_quote_readthrough_rows",
+  "fresh_quote_readthrough_merged_rows",
+  "rest_quote_effective_batch_size",
+  "opening_boost_active",
+  "futopt_stock_this_loop",
+  "writer_owner_computer",
+  "readonly_verdict",
+  "grant select",
+]) {
+  if (!sharedSourceReadonlyScorecardSql.includes(marker)) issues.push(`SharedSourceReadOnlyScorecardPatch_20260701.sql missing read-only visibility marker ${marker}`);
+}
+if (/insert\s+into|update\s+public\.source_status|delete\s+from|truncate\s+/i.test(sharedSourceReadonlyScorecardSql)) {
+  issues.push("SharedSourceReadOnlyScorecardPatch_20260701.sql must stay read-only except schema/view grants; no data writes or source_status overwrites");
+}
+for (const marker of [
+  "v_fuman_shared_source_readonly_scorecard",
+  "mode = \"read-only\"",
+  "fresh_quote_coverage_120s",
+  "scanner_can_run_quote_only",
+  "scanner_can_run_opening",
+  "intraday_1m_stale_seconds",
+  "ready_ma35_continuous",
+  "futopt_stock_mapped",
+  "opening_boost_not_active_while_coverage_low",
+  "rest_quote_rate_limited_while_coverage_low",
+  "fresh_quote_readthrough_not_running",
+  "rest_quote_effective_batch_zero",
+]) {
+  if (!sharedSourceReadonlyVerifier.includes(marker)) issues.push(`Test-PublicSlotSharedSourceReadOnly.ps1 missing read-only verifier marker ${marker}`);
+}
+if (/Write-PublicSlot|Invoke-PublicSlotUpsert|Invoke-RestMethod[\s\S]{0,120}-Method\s+(Post|Patch|Delete)|Set-Content|Add-Content|Out-File/i.test(sharedSourceReadonlyVerifier)) {
+  issues.push("Test-PublicSlotSharedSourceReadOnly.ps1 must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
+}
 if (!publicSlotSharedSourceRunner.includes("get_fugle_intraday_1m_coverage_stats")) {
   issues.push("Run-PublicSlotSharedSource.ps1 must prefer get_fugle_intraday_1m_coverage_stats before REST batch fallback");
+}
+if (/v_fugle_intraday_1m_status\?select=\$statusSelect&has_today_data=eq\.true/.test(publicSlotSharedSourceRunner)) {
+  issues.push("Run-PublicSlotSharedSource.ps1 must not filter v_fugle_intraday_1m_status by has_today_data when counting MA readiness");
 }
 if (!strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, false)") || !strategy2ReadinessSql.includes("refresh_strategy2_intraday_ready_cache(500, true)")) {
   issues.push("Strategy2Readiness100SourcePatch.sql must use 500-row refresh wrappers for intraday ready cache");
@@ -1978,6 +2088,8 @@ for (const file of [
   "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/ScorecardSourceContract.sql",
+  "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
+  "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
@@ -2823,6 +2935,9 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/fugle-websocket-collector.js",
       "ops/public-slot/FugleSourceResourceContract.sql",
       "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
+      "ops/public-slot/FugleSourceHistorical1mMaReadinessPatch_20260701.sql",
+      "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
+      "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
       "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Start-Strategy2ReadinessSource.cmd",
       "ops/public-slot/Install-Strategy2ReadinessSourceTask.ps1",

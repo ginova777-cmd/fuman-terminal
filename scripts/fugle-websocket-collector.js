@@ -23,6 +23,12 @@ const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TT
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
+const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
+const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "10:30";
+const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 1200));
+const OPENING_BOOST_CONCURRENCY = Math.max(CONCURRENCY, Math.min(12, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY || 8)));
+const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS || 0));
+const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_TARGET_COVERAGE || 0.95)));
 
 let cursor = 0;
 let lastMessageAt = "";
@@ -75,12 +81,70 @@ function writeStatus(extra = {}) {
     quoteTtlMs: QUOTE_TTL_MS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     requestRetries: REQUEST_RETRIES,
+    openingBoostStart: OPENING_BOOST_START,
+    openingBoostEnd: OPENING_BOOST_END,
+    openingBoostBatchSize: OPENING_BOOST_BATCH_SIZE,
+    openingBoostConcurrency: OPENING_BOOST_CONCURRENCY,
+    openingBoostDelayMs: OPENING_BOOST_DELAY_MS,
     lastMessageAt,
     last429At,
     cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : "",
     updatedAt: nowIso(),
     ...extra,
   });
+}
+
+function minutesFromHHmm(value, fallback) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return fallback;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function taipeiMinutesNow() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function inOpeningBoostWindow() {
+  const now = taipeiMinutesNow();
+  const start = minutesFromHHmm(OPENING_BOOST_START, 8 * 60 + 45);
+  const end = minutesFromHHmm(OPENING_BOOST_END, 10 * 60 + 30);
+  return now >= start && now <= end;
+}
+
+function countFreshCachedQuotes(symbols) {
+  const symbolSet = new Set(symbols);
+  const payload = readJson(FUGLE_WS_QUOTES_FILE, {});
+  const rows = Array.isArray(payload?.quotes) ? payload.quotes : [];
+  const cutoff = Date.now() - QUOTE_TTL_MS;
+  let count = 0;
+  for (const row of rows) {
+    const code = normalizeCode(row?.code);
+    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
+    if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) count += 1;
+  }
+  return count;
+}
+
+function effectiveCollectorConfig(symbols) {
+  const freshCount = countFreshCachedQuotes(symbols);
+  const coverage = symbols.length ? freshCount / symbols.length : 0;
+  const openingBoostActive = inOpeningBoostWindow() && coverage < OPENING_BOOST_TARGET_COVERAGE;
+  return {
+    openingBoostActive,
+    freshCount,
+    coverage,
+    batchSize: openingBoostActive ? Math.min(symbols.length, Math.max(BATCH_SIZE, OPENING_BOOST_BATCH_SIZE)) : BATCH_SIZE,
+    concurrency: openingBoostActive ? OPENING_BOOST_CONCURRENCY : CONCURRENCY,
+    delayMs: openingBoostActive ? Math.min(PER_SYMBOL_DELAY_MS, OPENING_BOOST_DELAY_MS) : PER_SYMBOL_DELAY_MS,
+  };
 }
 
 function mergeQuotes(newQuotes) {
@@ -204,14 +268,15 @@ async function tick() {
   }
 
   if (cursor < 0 || cursor >= symbols.length) cursor = 0;
+  const effective = effectiveCollectorConfig(symbols);
   const batch = [];
-  for (let i = 0; i < Math.min(BATCH_SIZE, symbols.length); i += 1) {
+  for (let i = 0; i < Math.min(effective.batchSize, symbols.length); i += 1) {
     batch.push(symbols[(cursor + i) % symbols.length]);
   }
 
   const quotes = [];
-  for (let offset = 0; offset < batch.length; offset += CONCURRENCY) {
-    const chunk = batch.slice(offset, offset + CONCURRENCY);
+  for (let offset = 0; offset < batch.length; offset += effective.concurrency) {
+    const chunk = batch.slice(offset, offset + effective.concurrency);
     const results = await Promise.all(chunk.map(async (code) => {
       try {
         const payload = await fetchQuote(code, apiKey);
@@ -228,8 +293,8 @@ async function tick() {
       if (quote) quotes.push(quote);
     }
     if (cooldownUntil && Date.now() < cooldownUntil) break;
-    if (PER_SYMBOL_DELAY_MS > 0) {
-      await new Promise((resolve) => setTimeout(resolve, PER_SYMBOL_DELAY_MS));
+    if (effective.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, effective.delayMs));
     }
   }
   cursor = (cursor + Math.max(1, batch.length)) % symbols.length;
@@ -241,6 +306,12 @@ async function tick() {
     quotes: count,
     fetched: quotes.length,
     attempted: batch.length,
+    openingBoostActive: effective.openingBoostActive,
+    openingBoostFreshCount: effective.freshCount,
+    openingBoostCoverage: Number(effective.coverage.toFixed(4)),
+    batchSize: effective.batchSize,
+    concurrency: effective.concurrency,
+    perSymbolDelayMs: effective.delayMs,
     cursor,
   });
 }
