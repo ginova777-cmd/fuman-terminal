@@ -20,6 +20,9 @@ param(
   [int]$QuoteDerivedOpeningBackfillMinutes = 6,
   [int]$Intraday1mFreshTargetSeconds = 60,
   [int]$Intraday1mFreshHardSeconds = 120,
+  [bool]$Intraday1mSelfHealEnabled = $true,
+  [int]$Intraday1mSelfHealStaleSeconds = 75,
+  [int]$Intraday1mSelfHealCooldownSeconds = 30,
   [int]$RestQuoteBatchSize = 40,
   [int]$RestQuoteEverySeconds = 10,
   [int]$RestQuoteDelayMilliseconds = 600,
@@ -71,6 +74,7 @@ $RuntimeConfigFile = Join-Path $RuntimeDir "config\public-slot-shared-source.jso
 $StateFile = Join-Path $LogDir "public-slot-minute-state.json"
 $Direct1mStateFile = Join-Path $LogDir "public-slot-direct-1m-state.json"
 $Direct1mPrewarmStateFile = Join-Path $LogDir "public-slot-direct-1m-prewarm-state.json"
+$Intraday1mSelfHealStateFile = Join-Path $LogDir "public-slot-intraday-1m-self-heal-state.json"
 $RestQuoteStateFile = Join-Path $LogDir "public-slot-rest-quote-state.json"
 $PrioritySymbolsFile = Join-Path $RuntimeDir "cache\intraday\fugle-ws-priority-symbols.json"
 $FutoptQuoteStateFile = Join-Path $LogDir "public-slot-futopt-quote-state.json"
@@ -236,6 +240,9 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "QuoteDerivedOpeningBackfillMinutes" -ConfigNames @("quoteDerivedOpeningBackfillMinutes", "QuoteDerivedOpeningBackfillMinutes") -EnvName "FUMAN_PUBLIC_SLOT_QUOTE_DERIVED_OPENING_BACKFILL_MINUTES"
   Set-RuntimeOverride -Config $config -VariableName "Intraday1mFreshTargetSeconds" -ConfigNames @("intraday1mFreshTargetSeconds", "Intraday1mFreshTargetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_INTRADAY_1M_FRESH_TARGET_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "Intraday1mFreshHardSeconds" -ConfigNames @("intraday1mFreshHardSeconds", "Intraday1mFreshHardSeconds") -EnvName "FUMAN_PUBLIC_SLOT_INTRADAY_1M_FRESH_HARD_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Intraday1mSelfHealEnabled" -ConfigNames @("intraday1mSelfHealEnabled", "Intraday1mSelfHealEnabled") -EnvName "FUMAN_PUBLIC_SLOT_INTRADAY_1M_SELF_HEAL_ENABLED" -Type "bool"
+  Set-RuntimeOverride -Config $config -VariableName "Intraday1mSelfHealStaleSeconds" -ConfigNames @("intraday1mSelfHealStaleSeconds", "Intraday1mSelfHealStaleSeconds") -EnvName "FUMAN_PUBLIC_SLOT_INTRADAY_1M_SELF_HEAL_STALE_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Intraday1mSelfHealCooldownSeconds" -ConfigNames @("intraday1mSelfHealCooldownSeconds", "Intraday1mSelfHealCooldownSeconds") -EnvName "FUMAN_PUBLIC_SLOT_INTRADAY_1M_SELF_HEAL_COOLDOWN_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "MinAvgVolume5Lots" -ConfigNames @("minAvgVolume5Lots", "MinAvgVolume5Lots") -EnvName "FUMAN_PUBLIC_SLOT_MIN_AVG_VOLUME5_LOTS"
   Set-RuntimeOverride -Config $config -VariableName "MinCumulativeBidAskLots" -ConfigNames @("minCumulativeBidAskLots", "MinCumulativeBidAskLots") -EnvName "FUMAN_PUBLIC_SLOT_MIN_CUMULATIVE_BID_ASK_LOTS"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteBatchSize" -ConfigNames @("futoptQuoteBatchSize", "FutoptQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_BATCH_SIZE"
@@ -817,6 +824,55 @@ function Get-Intraday1mCoverageStats {
   $stats.ready_ge_200 = @($readyGroups | Where-Object { $_.Count -ge 200 }).Count
   $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $latestFallback
   return $stats
+}
+
+function Merge-IntradayStatsWithFallbackRows {
+  param(
+    [hashtable]$Stats,
+    [object[]]$FallbackRows = @(),
+    [string]$SourceSuffix = "fallback_current_batch_newer"
+  )
+
+  if ($null -eq $Stats) { $Stats = @{} }
+  $fallbackRows = @($FallbackRows)
+  if ($fallbackRows.Count -le 0) { return $Stats }
+
+  $latestFallback = Get-LatestIsoUtc -Rows $fallbackRows -PropertyName "candle_time"
+  if ([string]::IsNullOrWhiteSpace($latestFallback)) { return $Stats }
+  $fallbackAge = Get-IsoAgeSeconds -IsoTime $latestFallback
+  $currentAge = [int](Get-Number $Stats.intraday_1m_stale_seconds)
+  if ($currentAge -le 0) {
+    $currentAge = Get-IsoAgeSeconds -IsoTime ([string]$Stats.intraday_1m_latest_candle_time)
+  }
+  if ($fallbackAge -ge $currentAge) { return $Stats }
+
+  $today = (Get-Date).ToString("yyyy-MM-dd")
+  $todayRows = @($fallbackRows | Where-Object { [string]$_.trade_date -eq $today })
+  if ($todayRows.Count -le 0) { return $Stats }
+
+  $todaySymbols = @($todayRows | ForEach-Object { [string]$_.symbol } | Where-Object { $_ } | Select-Object -Unique)
+  $fallbackGroups = @($fallbackRows | Group-Object symbol)
+  $readyMa20 = @($fallbackGroups | Where-Object { $_.Count -ge 20 }).Count
+  $readyMa35 = @($fallbackGroups | Where-Object { $_.Count -ge 35 }).Count
+  $ready80 = @($fallbackGroups | Where-Object { $_.Count -ge 80 }).Count
+  $ready200 = @($fallbackGroups | Where-Object { $_.Count -ge 200 }).Count
+
+  $Stats.intraday_1m_latest_candle_time = $latestFallback
+  $Stats.intraday_1m_stale_seconds = $fallbackAge
+  $Stats.intraday_1m_symbols_today = [math]::Max([int](Get-Number $Stats.intraday_1m_symbols_today), $todaySymbols.Count)
+  $Stats.intraday_1m_rows_today = [math]::Max([int](Get-Number $Stats.intraday_1m_rows_today), $todayRows.Count)
+  $Stats.today_candle_count = [math]::Max([int](Get-Number $Stats.today_candle_count), $todayRows.Count)
+  $Stats.warmup_candle_count = [math]::Max([int](Get-Number $Stats.warmup_candle_count), @($fallbackRows | Where-Object { [string]$_.trade_date -ne $today }).Count)
+  $Stats.continuous_candle_count = [math]::Max([int](Get-Number $Stats.continuous_candle_count), $fallbackRows.Count)
+  $Stats.ready_ma20_continuous = [math]::Max([int](Get-Number $Stats.ready_ma20_continuous), $readyMa20)
+  $Stats.ready_ma35_continuous = [math]::Max([int](Get-Number $Stats.ready_ma35_continuous), $readyMa35)
+  $Stats.ready_macd_continuous = [math]::Max([int](Get-Number $Stats.ready_macd_continuous), $ready80)
+  $Stats.ready_ge_20 = [math]::Max([int](Get-Number $Stats.ready_ge_20), $readyMa20)
+  $Stats.ready_ge_35 = [math]::Max([int](Get-Number $Stats.ready_ge_35), $readyMa35)
+  $Stats.ready_ge_80 = [math]::Max([int](Get-Number $Stats.ready_ge_80), $ready80)
+  $Stats.ready_ge_200 = [math]::Max([int](Get-Number $Stats.ready_ge_200), $ready200)
+  $Stats.intraday_1m_stats_source = "$($Stats.intraday_1m_stats_source)+$SourceSuffix"
+  return $Stats
 }
 
 function Copy-IntradayStatsFromSourcePayload {
@@ -3458,6 +3514,126 @@ function Update-MinuteRows {
   }
 }
 
+function New-Intraday1mSelfHealResult {
+  param(
+    [string]$Reason = "not_checked",
+    [bool]$Triggered = $false,
+    [object[]]$Rows = @(),
+    [object[]]$DailyRows = @(),
+    [int]$StaleBefore = -1,
+    [int]$StaleAfter = -1,
+    [string]$CurrentMinute = $null,
+    [int]$CandidateSymbols = 0,
+    [bool]$FullUniverse = $false,
+    [bool]$Skipped = $true
+  )
+
+  return [pscustomobject]@{
+    summary = [pscustomobject]@{
+      enabled = [bool]$Intraday1mSelfHealEnabled
+      triggered = [bool]$Triggered
+      skipped = [bool]$Skipped
+      reason = $Reason
+      checked_at = (Get-Date).ToUniversalTime().ToString("o")
+      threshold_seconds = [int]$Intraday1mSelfHealStaleSeconds
+      cooldown_seconds = [int]$Intraday1mSelfHealCooldownSeconds
+      stale_before = if ($StaleBefore -ge 0) { $StaleBefore } else { $null }
+      stale_after = if ($StaleAfter -ge 0) { $StaleAfter } else { $null }
+      rows_written = @($Rows).Count
+      daily_rows_written = @($DailyRows).Count
+      current_minute = $CurrentMinute
+      candidate_symbols = $CandidateSymbols
+      full_universe = [bool]$FullUniverse
+    }
+    rows = @($Rows)
+    dailyRows = @($DailyRows)
+  }
+}
+
+function Invoke-Intraday1mSelfHeal {
+  param(
+    [string]$Session,
+    [object[]]$QuoteRows = @(),
+    [string[]]$CandidateSymbols = @(),
+    [hashtable]$IntradayStats = @{}
+  )
+
+  $staleBefore = [int](Get-Number $IntradayStats.intraday_1m_stale_seconds)
+  $rowsToday = [int](Get-Number $IntradayStats.intraday_1m_rows_today)
+  $latestCandleTime = [string]$IntradayStats.intraday_1m_latest_candle_time
+  $candidateCount = @($CandidateSymbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique).Count
+  $fullUniverseMode = ($QuoteDerived1mCandidateCount -le 0)
+
+  if (-not $Intraday1mSelfHealEnabled) {
+    return (New-Intraday1mSelfHealResult -Reason "disabled" -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode)
+  }
+  if ($Session -ne "regular") {
+    return (New-Intraday1mSelfHealResult -Reason "session_not_regular" -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode)
+  }
+  $now = Get-Date
+  if ($now.TimeOfDay -lt [TimeSpan]::Parse("09:00") -or $now.TimeOfDay -gt [TimeSpan]::Parse("13:35")) {
+    return (New-Intraday1mSelfHealResult -Reason "outside_regular_write_window" -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode)
+  }
+  if (@($QuoteRows).Count -le 0) {
+    return (New-Intraday1mSelfHealResult -Reason "no_quote_rows" -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode)
+  }
+
+  $reason = "fresh"
+  $shouldHeal = $false
+  if ($rowsToday -le 0) {
+    $reason = "no_today_1m_rows"
+    $shouldHeal = $true
+  } elseif ([string]::IsNullOrWhiteSpace($latestCandleTime)) {
+    $reason = "missing_latest_candle_time"
+    $shouldHeal = $true
+  } elseif ($staleBefore -gt $Intraday1mSelfHealStaleSeconds) {
+    $reason = "intraday_1m_stale"
+    $shouldHeal = $true
+  }
+
+  if (-not $shouldHeal) {
+    return (New-Intraday1mSelfHealResult -Reason $reason -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode -Skipped:$false)
+  }
+
+  $state = Read-JsonFile -Path $Intraday1mSelfHealStateFile -Default ([pscustomobject]@{})
+  $lastRunAt = $null
+  try {
+    if (-not [string]::IsNullOrWhiteSpace([string]$state.last_run_at)) {
+      $lastRunAt = [datetimeoffset]::Parse([string]$state.last_run_at).ToUniversalTime()
+    }
+  } catch {}
+  if ($null -ne $lastRunAt -and (($now.ToUniversalTime() - $lastRunAt.UtcDateTime).TotalSeconds -lt $Intraday1mSelfHealCooldownSeconds)) {
+    return (New-Intraday1mSelfHealResult -Reason "cooldown_$reason" -StaleBefore $staleBefore -CandidateSymbols $candidateCount -FullUniverse:$fullUniverseMode)
+  }
+
+  $minutePayload = Update-MinuteRows -QuoteRows $QuoteRows -CandidateSymbols $CandidateSymbols
+  $rows = @($minutePayload.minuteRows)
+  $dailyRows = @($minutePayload.dailyRows)
+  if ($rows.Count -gt 0) { Write-PublicSlotIntraday1m -Rows $rows }
+  if ($dailyRows.Count -gt 0) { Write-PublicSlotDailyVolume -Rows $dailyRows }
+
+  $staleAfter = if ($rows.Count -gt 0) { 0 } else { $staleBefore }
+  $statePayload = [ordered]@{
+    last_run_at = (Get-Date).ToUniversalTime().ToString("o")
+    trade_date = (Get-Date).ToString("yyyy-MM-dd")
+    reason = $reason
+    stale_before = $staleBefore
+    stale_after = $staleAfter
+    rows_written = $rows.Count
+    daily_rows_written = $dailyRows.Count
+    current_minute = $minutePayload.currentMinute
+    candidate_symbols = $minutePayload.candidateSymbols
+    full_universe = [bool]$minutePayload.fullUniverse
+    quote_rows = @($QuoteRows).Count
+    threshold_seconds = [int]$Intraday1mSelfHealStaleSeconds
+    cooldown_seconds = [int]$Intraday1mSelfHealCooldownSeconds
+  }
+  Write-JsonFile -Path $Intraday1mSelfHealStateFile -Value $statePayload
+  Write-Log "intraday_1m_self_heal reason=$reason stale_before=$staleBefore rows=$($rows.Count) daily_rows=$($dailyRows.Count) current_minute=$($minutePayload.currentMinute) full_universe=$($minutePayload.fullUniverse)"
+
+  return (New-Intraday1mSelfHealResult -Reason $reason -Triggered:($rows.Count -gt 0) -Rows $rows -DailyRows $dailyRows -StaleBefore $staleBefore -StaleAfter $staleAfter -CurrentMinute $minutePayload.currentMinute -CandidateSymbols $minutePayload.candidateSymbols -FullUniverse:([bool]$minutePayload.fullUniverse) -Skipped:$false)
+}
+
 function Convert-IntradayRowsToDailyVolumeRows {
   param([object[]]$Rows)
 
@@ -3608,7 +3784,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms collectorPrimary=fugle collectorFallback=finmind collectorFinMindRecoveryEnabled=$FugleCollectorFinMindRecoveryEnabled collectorFinMindRecoveryTimeout=${FugleCollectorFinMindRecoveryTimeoutMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms collectorPrimary=fugle collectorFallback=finmind collectorFinMindRecoveryEnabled=$FugleCollectorFinMindRecoveryEnabled collectorFinMindRecoveryTimeout=${FugleCollectorFinMindRecoveryTimeoutMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s intradaySelfHealEnabled=$Intraday1mSelfHealEnabled intradaySelfHealStale=${Intraday1mSelfHealStaleSeconds}s intradaySelfHealCooldown=${Intraday1mSelfHealCooldownSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -3776,6 +3952,15 @@ do {
     $last1mAt = Get-LatestIsoUtc -Rows $combined1mRows -PropertyName "candle_time"
     $quoteAgeSeconds = Get-IsoAgeSeconds -IsoTime $lastQuoteAt -FallbackSeconds $age
     $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows -Symbols $priorityWarmupSymbols
+    $intraday1mSelfHeal = Invoke-Intraday1mSelfHeal -Session $session -QuoteRows $quoteRows -CandidateSymbols $priorityWarmupSymbols -IntradayStats $intradayStats
+    $intraday1mSelfHealSummary = $intraday1mSelfHeal.summary
+    $intraday1mSelfHealRows = @($intraday1mSelfHeal.rows)
+    if ($intraday1mSelfHealRows.Count -gt 0) {
+      $combined1mRows = @($combined1mRows) + @($intraday1mSelfHealRows)
+      $last1mAt = Get-LatestIsoUtc -Rows $combined1mRows -PropertyName "candle_time"
+      $intradayStats = Get-Intraday1mCoverageStats -FallbackRows $combined1mRows -Symbols $priorityWarmupSymbols
+      $intradayStats = Merge-IntradayStatsWithFallbackRows -Stats $intradayStats -FallbackRows $combined1mRows -SourceSuffix "self_heal_current_batch"
+    }
     $blacklistCount = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
     $rawSymbols = $seeded + $blacklistCount
     $cumulativeBidAskRows = @($quoteRows | Where-Object { $null -ne $_.cumulative_bid_ask_volume }).Count
@@ -3820,9 +4005,9 @@ do {
     $intraday1mStatus = Get-SourcePartStatus -Ok $intraday1mOk -Required:($session -eq "regular")
     $dailyVolumeStatus = Get-SourcePartStatus -Ok $dailyVolumeOk
     $latestCandleTimeTaipei = Convert-IsoUtcToTaipei -IsoTime $intradayStats.intraday_1m_latest_candle_time
-    $dailyVolumeRowsWritten = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count)
+    $dailyVolumeRowsWritten = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count + $intraday1mSelfHealSummary.daily_rows_written)
     $strategy2RunEvidence = Get-Strategy2LatestRunEvidence
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_self_heal_enabled=$Intraday1mSelfHealEnabled; intraday_1m_self_heal_triggered=$($intraday1mSelfHealSummary.triggered); intraday_1m_self_heal_reason=$($intraday1mSelfHealSummary.reason); intraday_1m_self_heal_rows=$($intraday1mSelfHealSummary.rows_written); intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count + $intraday1mSelfHealSummary.daily_rows_written); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
     $sourceStatusPayload = @{
       source_contract_version = $SourceContractVersion
       writer_version = $WriterVersion
@@ -3878,6 +4063,19 @@ do {
       intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
       intraday_1m_fresh_target_seconds = $Intraday1mFreshTargetSeconds
       intraday_1m_fresh_hard_seconds = $Intraday1mFreshHardSeconds
+      intraday_1m_self_heal_enabled = [bool]$Intraday1mSelfHealEnabled
+      intraday_1m_self_heal_triggered = [bool]$intraday1mSelfHealSummary.triggered
+      intraday_1m_self_heal_reason = [string]$intraday1mSelfHealSummary.reason
+      intraday_1m_self_heal_checked_at = [string]$intraday1mSelfHealSummary.checked_at
+      intraday_1m_self_heal_threshold_seconds = [int]$intraday1mSelfHealSummary.threshold_seconds
+      intraday_1m_self_heal_cooldown_seconds = [int]$intraday1mSelfHealSummary.cooldown_seconds
+      intraday_1m_self_heal_stale_before = $intraday1mSelfHealSummary.stale_before
+      intraday_1m_self_heal_stale_after = $intraday1mSelfHealSummary.stale_after
+      intraday_1m_self_heal_rows = [int]$intraday1mSelfHealSummary.rows_written
+      intraday_1m_self_heal_daily_rows = [int]$intraday1mSelfHealSummary.daily_rows_written
+      intraday_1m_self_heal_current_minute = $intraday1mSelfHealSummary.current_minute
+      intraday_1m_self_heal_candidate_symbols = [int]$intraday1mSelfHealSummary.candidate_symbols
+      intraday_1m_self_heal_full_universe = [bool]$intraday1mSelfHealSummary.full_universe
       intraday_1m_ma20_required = [bool]$intraday1mMa20Required
       intraday_1m_ma35_required = [bool]$intraday1mMa35Required
       daily_volume_ok = [bool]$dailyVolumeOk
@@ -3894,6 +4092,10 @@ do {
         intraday_1m_fresh_ok = [bool]$intraday1mFreshOk
         intraday_1m_fresh_target_seconds = $Intraday1mFreshTargetSeconds
         intraday_1m_fresh_hard_seconds = $Intraday1mFreshHardSeconds
+        intraday_1m_self_heal_enabled = [bool]$Intraday1mSelfHealEnabled
+        intraday_1m_self_heal_triggered = [bool]$intraday1mSelfHealSummary.triggered
+        intraday_1m_self_heal_reason = [string]$intraday1mSelfHealSummary.reason
+        intraday_1m_self_heal_rows = [int]$intraday1mSelfHealSummary.rows_written
         intraday_1m_ma20_required = [bool]$intraday1mMa20Required
         intraday_1m_ma35_required = [bool]$intraday1mMa35Required
         daily_volume_ok = [bool]$dailyVolumeOk

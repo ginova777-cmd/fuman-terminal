@@ -368,6 +368,11 @@ if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
   Write-WatchdogLog "quote health 尚未達標，但 collector cache 健康，暫不重啟 collector，讓 shared source 繼續寫入追平。"
 }
 
+if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
+  Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒；quote/collector 健康不可遮蔽 1m writer 失速" -Restart
+  exit 0
+}
+
 if (($collectorCache.Ok -or $quoteHealth.Ok) -and ((-not $health.Ok) -or $health.Status -ne "ok" -or $health.AgeSeconds -gt $MaxSourceAgeSeconds)) {
   Write-WatchdogLog "shared source 程序仍在跑，且 live collector/quote 有活資料；不因 source_status 落後而重啟，避免多 writer。$($health.Reason)"
   exit 0
@@ -390,11 +395,6 @@ if ($health.Status -ne "ok") {
 
 if ($health.AgeSeconds -gt $MaxSourceAgeSeconds) {
   Start-SharedSourceTask -Reason "source_status 超過 $MaxSourceAgeSeconds 秒未更新，目前 $($health.AgeSeconds) 秒" -Restart
-  exit 0
-}
-
-if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
-  Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒" -Restart
   exit 0
 }
 
