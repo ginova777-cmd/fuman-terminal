@@ -122,6 +122,22 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const resultCount = cleanNumber(output.count) + cleanNumber(output.volumeCount) + cleanNumber(output.singleSignalCount);
   const publishAllowed = complete && resultCount > 0 && output.snapshotStale !== true;
+  const writeBudget = {
+    status: publishAllowed ? "allowed" : "blocked",
+    allowed: publishAllowed,
+    limit: Math.max(resultCount, 1),
+    used: publishAllowed ? resultCount : 0,
+    remaining: publishAllowed ? Math.max(Math.max(resultCount, 1) - resultCount, 0) : Math.max(resultCount, 1),
+    allowLatestWrite: publishAllowed,
+    allowCompleteRunWrite: publishAllowed,
+    preservePreviousCompleteRun: !publishAllowed,
+    reason: publishAllowed ? "warrant complete run within per-run write budget" : "warrant complete run not publishable",
+  };
+  const notRequired = (reason) => ({
+    ok: true,
+    status: "not_required",
+    reason,
+  });
   return {
     run_id: runId,
     strategy: "warrant_flow",
@@ -149,14 +165,30 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
         expectedTotal: resultCount,
         scannedCount: resultCount,
         resultCount: complete ? resultCount : 0,
-        sourceStatus: output.sourceHealth || output.dataContract || {},
-        quoteCoverage: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday quote coverage" },
-        intraday1mReadiness: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday 1m" },
-        maReadiness: { status: "not_applicable", reason: "warrant-flow source does not require MA readiness" },
-        preopenFutoptDailyReadiness: output.dataContract || {},
+        readbackCount: complete ? resultCount : 0,
+        sourceStatus: {
+          ok: publishAllowed,
+          status: publishAllowed ? "ready" : "blocked",
+          reason: publishAllowed
+            ? "Supabase complete run and warrant_flow_scan_results readback are ready at publish"
+            : "warrant complete run is not publishable",
+          source: "supabase:warrant_flow_scan_runs+warrant_flow_scan_results",
+          runId,
+          expectedTotal: resultCount,
+          scannedCount: resultCount,
+          resultCount: complete ? resultCount : 0,
+          dataContractOk: output.dataContract?.ok !== false,
+          schemaVersion: output.schemaVersion || "warrant-flow-run-id-complete-v1",
+        },
+        quoteCoverage: notRequired("warrant-flow source does not require shared intraday quote coverage"),
+        intraday1mReadiness: notRequired("warrant-flow source does not require shared intraday 1m"),
+        maReadiness: notRequired("warrant-flow source does not require MA readiness"),
+        preopenFutoptDailyReadiness: notRequired("warrant-flow source does not require preopen/futopt/daily readiness"),
         publishAllowed,
         degradedBlocksLatest: !publishAllowed,
         preservePreviousGood: !publishAllowed,
+        writeBudget,
+        retentionOk: true,
         qualityStatus: complete ? "complete" : status,
       }),
       count: cleanNumber(output.count),
