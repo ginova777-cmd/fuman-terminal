@@ -149,6 +149,55 @@ function institutionRunIdFromOutput(output) {
   return String(output.runId || process.env.INSTITUTION_RUN_ID || `institution-${stamp}-${time}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
+function notRequiredReadiness(reason) {
+  return {
+    ok: true,
+    status: "not_required",
+    reason,
+  };
+}
+
+function buildInstitutionSourceStatusAtRun(output, { sourceCount = 0, resultCount = 0, dataAge = 0 } = {}) {
+  const sourceDates = output.sourceDates && typeof output.sourceDates === "object" ? output.sourceDates : {};
+  const errors = Array.isArray(output.errors) ? output.errors : [];
+  const ready = (
+    sourceCount >= MIN_SOURCE_ROWS
+    && resultCount >= MIN_OUTPUT_ROWS
+    && dataAge <= 3
+    && Boolean(output.usedDate)
+  );
+  return {
+    ok: ready,
+    status: ready ? "ready" : "degraded",
+    reason: ready
+      ? "institution official source rows, scan output rows, and trade date freshness passed at run time"
+      : "institution official source coverage or freshness failed at run time",
+    strategy: "institution",
+    sourceRows: sourceCount,
+    resultRows: resultCount,
+    minSourceRows: MIN_SOURCE_ROWS,
+    minOutputRows: MIN_OUTPUT_ROWS,
+    usedDate: output.usedDate || "",
+    sourceDates,
+    sources: Array.isArray(output.sources) ? output.sources : [],
+    dataAgeDays: dataAge,
+    sourceErrors: errors,
+    warningCount: errors.length,
+  };
+}
+
+function buildInstitutionWriteBudget(publishAllowed, reason) {
+  return {
+    allowed: Boolean(publishAllowed),
+    status: publishAllowed ? "allow" : "blocked",
+    limit: 1,
+    used: publishAllowed ? 1 : 0,
+    remaining: publishAllowed ? 0 : 1,
+    scope: "institution_complete_run_publish",
+    reason,
+  };
+}
+
 async function upsertSupabaseRows(table, rows, conflict) {
   if (!rows.length) return;
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("institution supabase credentials missing");
@@ -193,8 +242,18 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const sourceCount = Object.keys(output.data || {}).length;
-  const sourceReady = String(output.sourceHealth?.status || output.dataFreshness?.status || "").toLowerCase();
-  const publishAllowed = complete && !/stale|degraded|failed|blocked|not_ready/.test(sourceReady);
+  const rawSourceCount = cleanNumber(output.sourceCount || sourceCount);
+  const dataAge = ageInDays(output.usedDate);
+  const sourceStatusAtRun = buildInstitutionSourceStatusAtRun(output, {
+    sourceCount: rawSourceCount,
+    resultCount: sourceCount,
+    dataAge,
+  });
+  const publishAllowed = complete && sourceStatusAtRun.ok === true;
+  const writeBudget = buildInstitutionWriteBudget(publishAllowed, sourceStatusAtRun.reason);
+  const fallbackUsed = Boolean(output.fallbackUsed);
+  const fallbackScope = Array.isArray(output.fallbackScope) ? output.fallbackScope : [];
+  const fallbackDetails = Array.isArray(output.fallbackDetails) ? output.fallbackDetails : [];
   return {
     run_id: runId,
     strategy: "institution",
@@ -219,18 +278,24 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
         payload: output,
         startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
         finishedAt: scanTime,
-        expectedTotal: cleanNumber(output.sourceCount || sourceCount),
+        expectedTotal: rawSourceCount,
         scannedCount: cleanNumber(output.scannedCount || output.sourceCount || sourceCount),
         resultCount: complete ? sourceCount : 0,
         readbackCount: cleanNumber(output.readbackCount),
-        sourceStatus: output.sourceHealth || output.dataFreshness || {},
-        quoteCoverage: { status: "not_applicable", reason: "institution chip source does not require intraday quote freshness" },
-        intraday1mReadiness: { status: "not_applicable", reason: "institution chip source does not require intraday 1m" },
-        maReadiness: { status: "not_applicable", reason: "institution chip source does not require MA readiness" },
-        preopenFutoptDailyReadiness: output.sourceHealth || output.dataFreshness || {},
+        sourceStatus: sourceStatusAtRun,
+        quoteCoverage: notRequiredReadiness("institution chip source does not require intraday quote freshness"),
+        intraday1mReadiness: notRequiredReadiness("institution chip source does not require intraday 1m candles"),
+        maReadiness: notRequiredReadiness("institution chip source does not require intraday MA readiness"),
+        preopenFutoptDailyReadiness: notRequiredReadiness("institution chip source does not require preopen/futopt readiness; daily official institution source is captured in source_status_at_run"),
         publishAllowed,
         degradedBlocksLatest: !publishAllowed,
         preservePreviousGood: !publishAllowed,
+        writeBudget,
+        retentionOk: true,
+        fallbackUsed,
+        fallbackScope,
+        fallbackAllowed: fallbackUsed ? output.fallbackAllowed === true : true,
+        fallbackDetails,
         qualityStatus: complete ? "complete" : status,
       }),
       count: cleanNumber(output.count),
@@ -238,6 +303,13 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
       usedDate: output.usedDate || "",
       quoteUpdatedAt: output.quoteUpdatedAt || "",
       sourceHealth: output.sourceHealth || {},
+      sourceStatusAtRun,
+      writeBudget,
+      retentionOk: true,
+      fallbackUsed,
+      fallbackScope,
+      fallbackAllowed: fallbackUsed ? output.fallbackAllowed === true : true,
+      fallbackDetails,
     },
   };
 }
@@ -520,9 +592,11 @@ async function main() {
     console.warn(`stock universe quote enrichment weak: ok=${Boolean(stockPayload?.ok)}, rows=${stockRows}`);
   }
   const quoteMap = buildQuoteMap(stockPayload);
+  let quoteEnrichmentFallbackUsed = false;
   if (quoteMap.size < 100) {
     const backupQuoteMap = buildQuoteMapFromInstitutionData(backup.data || {});
     backupQuoteMap.forEach((quote, code) => quoteMap.set(code, quote));
+    quoteEnrichmentFallbackUsed = backupQuoteMap.size > 0;
     console.warn(`stock universe fallback used: backupQuotes=${backupQuoteMap.size}`);
   }
   const misQuotes = await fetchMisQuotes(Object.keys(payload.data || {}));
@@ -559,6 +633,13 @@ async function main() {
     source: "github-actions",
     updatedAt: new Date().toISOString(),
     quoteUpdatedAt: stockPayload?.updatedAt || "",
+    sourceCount: Object.keys(payload.data || {}).length,
+    fallbackUsed: quoteEnrichmentFallbackUsed,
+    fallbackScope: quoteEnrichmentFallbackUsed ? ["quote_enrichment_backup"] : [],
+    fallbackAllowed: true,
+    fallbackDetails: quoteEnrichmentFallbackUsed
+      ? [{ scope: "quote_enrichment_backup", reason: "stock universe quote enrichment was weak; existing quote values were used only for display enrichment, not official institution source gating" }]
+      : [],
     sourceHealth: {
       fiveDayMetricCount: tradingMetricResult.map.size,
       excludedBeforePublish: Object.values(excludedCounts).reduce((sum, value) => sum + value, 0),

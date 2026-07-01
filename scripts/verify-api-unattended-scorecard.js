@@ -50,6 +50,10 @@ const EXPECTED_RELEASE_SHA = normalizeSha(
   || process.env.FUMAN_DEPLOY_SHA
   || gitValue(["rev-parse", "HEAD"])
 );
+const STRATEGY_FILTER = String(ARGS.values.get("strategy") || ARGS.values.get("only") || process.env.FUMAN_API_UNATTENDED_STRATEGY || "")
+  .split(",")
+  .map((item) => item.trim().toLowerCase())
+  .filter(Boolean);
 
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
@@ -1077,6 +1081,21 @@ function gitValue(args) {
   return result.status === 0 ? String(result.stdout || "").trim() : "";
 }
 
+function strategyMatchesFilter(strategy) {
+  if (!STRATEGY_FILTER.length) return true;
+  const aliases = new Set([
+    String(strategy.key || "").toLowerCase(),
+    String(strategy.name || "").toLowerCase(),
+  ]);
+  if (strategy.key === "institution") {
+    aliases.add("buy-sell");
+    aliases.add("buy_sell");
+    aliases.add("institution");
+    aliases.add("買賣超");
+  }
+  return STRATEGY_FILTER.some((filter) => aliases.has(filter));
+}
+
 function writeOutputs(scorecard) {
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.mkdirSync(path.dirname(MD_FILE), { recursive: true });
@@ -1137,7 +1156,11 @@ async function main() {
   const marketWindow = MARKET_WINDOW;
   const releaseIdentity = await fetchReleaseIdentity();
   const strategies = [];
-  for (const strategy of STRATEGIES) {
+  const selectedStrategies = STRATEGIES.filter(strategyMatchesFilter);
+  if (!selectedStrategies.length) {
+    throw new Error(`No strategy matched --strategy=${STRATEGY_FILTER.join(",")}`);
+  }
+  for (const strategy of selectedStrategies) {
     console.log(`[api-unattended] checking ${strategy.key}`);
     strategies.push(await evaluateStrategy(strategy, { now }));
   }
