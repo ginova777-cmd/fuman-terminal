@@ -434,7 +434,17 @@ try {
 
   $gateMode = if ($SkipRawRefresh) { "publish" } elseif ($Fast) { "fast" } else { "full" }
   Invoke-DesktopRouteSnapshotRefresh "live-freshness-gate-$gateMode"
-  Invoke-NpmAt $publishRoot "verify:watchlist-autonomy"
+  $previousWatchlistSkipFastGate = $env:FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT
+  try {
+    $env:FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT = "1"
+    Invoke-NpmAt $publishRoot "verify:watchlist-autonomy"
+  } finally {
+    if ($null -eq $previousWatchlistSkipFastGate) {
+      Remove-Item Env:FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT -ErrorAction SilentlyContinue
+    } else {
+      $env:FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT = $previousWatchlistSkipFastGate
+    }
+  }
   Invoke-NpmAt $publishRoot "verify:live-version"
   Write-GateLog "Legacy terminal freshness diagnostic disabled; not writing data/live-freshness-ok.json"
 

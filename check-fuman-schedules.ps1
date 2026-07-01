@@ -8,6 +8,7 @@ $ErrorActionPreference = "Continue"
 
 $root = $PSScriptRoot
 $logDir = if ($env:FUMAN_LOG_DIR) { $env:FUMAN_LOG_DIR } else { "C:\fuman-runtime\logs" }
+$receiptDir = if ($env:FUMAN_RECEIPT_DIR) { $env:FUMAN_RECEIPT_DIR } else { "C:\fuman-runtime\data\scan-receipts" }
 if (-not $RegistryPath) {
   $RegistryPath = Join-Path $root "scripts\fuman-schedule-registry.json"
 }
@@ -156,6 +157,13 @@ function Build-Policy($Registry) {
     }
   }
 
+  $receiptCoverage = @{}
+  if ($Registry.policy.receiptCoverage) {
+    foreach ($prop in $Registry.policy.receiptCoverage.PSObject.Properties) {
+      $receiptCoverage[(Normalize-TaskName $prop.Name)] = $prop.Value
+    }
+  }
+
   $forbiddenTriggers = @{}
   if ($Registry.policy.forbiddenTriggers) {
     foreach ($prop in $Registry.policy.forbiddenTriggers.PSObject.Properties) {
@@ -177,6 +185,7 @@ function Build-Policy($Registry) {
     RetiredPatterns = $retiredPatterns
     AllowedResults = $allowedResults
     CoveredBy = $coveredBy
+    ReceiptCoverage = $receiptCoverage
     ForbiddenTriggers = $forbiddenTriggers
     Severity = $severity
   }
@@ -281,6 +290,41 @@ function Test-CoveredByRule($rule, $lastRunTime) {
   return $false
 }
 
+function Test-ReceiptCoveredRule($rule, $lastRunTime) {
+  if (-not $rule -or -not (Test-Path -LiteralPath $receiptDir)) { return $null }
+  $files = @($rule.files | ForEach-Object { [string]$_ } | Where-Object { $_ })
+  if ($files.Count -eq 0) { return $null }
+  foreach ($file in $files) {
+    $path = Join-Path $receiptDir $file
+    if (-not (Test-Path -LiteralPath $path)) { continue }
+    $item = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    if (-not $item) { continue }
+    if ($lastRunTime -ne [datetime]"1999-11-30" -and $item.LastWriteTime -lt $lastRunTime.AddMinutes(-5)) { continue }
+    try {
+      $json = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+      continue
+    }
+    $warnings = @($json.warnings)
+    $blockingReason = [string]$json.blockingReason
+    $okExit = ([int64]$json.exitCode -eq 0)
+    $complete = ($json.complete -eq $true -or [string]$json.status -eq "complete")
+    $qualityComplete = (-not $json.qualityStatus -or [string]$json.qualityStatus -eq "complete")
+    $fallbackClear = ($json.fallback -ne $true)
+    if ($okExit -and $complete -and $qualityComplete -and $fallbackClear -and $warnings.Count -eq 0 -and -not $blockingReason) {
+      $detail = if ($rule.detail) { [string]$rule.detail } else { "covered by later successful receipt" }
+      $runId = [string]$json.runId
+      if ($runId) { $detail = "$detail`: $runId" }
+      return [pscustomobject]@{
+        Covered = $true
+        File = $file
+        Detail = $detail
+      }
+    }
+  }
+  return $null
+}
+
 function Get-Severity($Policy, $Status) {
   if ($Policy.Severity.ContainsKey($Status)) { return $Policy.Severity[$Status] }
   if ($Status -like "OK*") { return "none" }
@@ -303,6 +347,14 @@ function Test-ExpectedTriggers($Expected, $Actual) {
     if ($expectedSet[$i] -ne $actualSet[$i]) { return $false }
   }
   return $true
+}
+
+function Get-FirstTriggerBoundary($task) {
+  $dates = @($task.Triggers | ForEach-Object {
+    try { [datetime]$_.StartBoundary } catch { $null }
+  } | Where-Object { $_ } | Sort-Object)
+  if ($dates.Count -gt 0) { return $dates[0] }
+  return $null
 }
 
 try {
@@ -345,10 +397,14 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
   $allowed = if ($policy.AllowedResults.ContainsKey($name)) { @($policy.AllowedResults[$name]) } else { @(0) }
   $coveredRule = if ($policy.CoveredBy.ContainsKey($name)) { $policy.CoveredBy[$name] } else { $null }
   $covered = Test-CoveredByRule $coveredRule $info.LastRunTime
+  $receiptRule = if ($policy.ReceiptCoverage.ContainsKey($name)) { $policy.ReceiptCoverage[$name] } else { $null }
+  $receiptCovered = Test-ReceiptCoveredRule $receiptRule $info.LastRunTime
+  $firstTriggerBoundary = Get-FirstTriggerBoundary $task
   $forbidden = if ($policy.ForbiddenTriggers.ContainsKey($name)) { @($policy.ForbiddenTriggers[$name]) } else { @() }
   $forbiddenHit = @($triggers | Where-Object { $forbidden -contains $_ })
 
   if ($covered -and -not $detail -and $coveredRule.detail) { $detail = [string]$coveredRule.detail }
+  if ($receiptCovered -and -not $detail) { $detail = [string]$receiptCovered.Detail }
   if (-not $detail -and $entry -and $entry.Description) { $detail = [string]$entry.Description }
 
   $status = "OK"
@@ -373,6 +429,9 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
     if ($allowed -notcontains $result) {
       $detail = "$detail; currently running, stale last result $(Convert-ResultText $result)"
     }
+  } elseif ($firstTriggerBoundary -and $info.LastRunTime -lt $firstTriggerBoundary -and ($allowed -contains 267011)) {
+    $status = "OK_WAITING"
+    $detail = "waiting for first run after current trigger install"
   } elseif ($result -eq 267009 -and ($allowed -contains 267009)) {
     $status = "OK_RUNNING"
   } elseif ($result -eq 267011 -and ($allowed -contains 267011)) {
@@ -380,7 +439,9 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
   } elseif ($result -eq 267014 -and ($allowed -contains 267014) -and -not $logFailed) {
     $status = "OK_STOPPED"
   } elseif ($allowed -notcontains $result) {
-    if ($covered) {
+    if ($receiptCovered) {
+      $status = "OK_RECEIPT_COVERED"
+    } elseif ($covered) {
       $status = "OK_COVERED"
     } else {
       $status = "FAIL"

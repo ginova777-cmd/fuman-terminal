@@ -71,6 +71,10 @@
       ]
     },
     "allowedResults": {
+      "Fuman API Unattended Scorecard": [
+        0,
+        267011
+      ],
       "Fuman Freshness Gate Full 2010": [
         0,
         267011
@@ -123,11 +127,32 @@
         "detail": "covered by later strategy1 preopen prepare/final success"
       }
     },
+    "receiptCoverage": {
+      "Fuman Strategy3 Battle Verify 1305": {
+        "files": [
+          "strategy3.json"
+        ],
+        "detail": "covered by later Strategy3 complete receipt"
+      },
+      "Fuman Strategy3 Complete Scan 1300": {
+        "files": [
+          "strategy3.json"
+        ],
+        "detail": "covered by later Strategy3 complete receipt"
+      },
+      "Fuman Strategy4 Cache 1600": {
+        "files": [
+          "strategy4.json"
+        ],
+        "detail": "covered by later Strategy4 complete receipt"
+      }
+    },
     "alertSeverity": {
       "OK": "none",
       "DISABLED_EXPECTED": "none",
       "OK_RUNNING": "info",
       "OK_WAITING": "info",
+      "OK_RECEIPT_COVERED": "warning",
       "OK_STOPPED": "info",
       "OK_COVERED": "warning",
       "LOG_CHECK": "warning",

@@ -10,6 +10,7 @@ const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCT
 const EXPECTED_DESKTOP_SNAPSHOT_CRON = "40 0,4,6,12 * * 1-5";
 const SKIP_LIVE = process.argv.includes("--skip-live");
 const SKIP_TASKS = process.argv.includes("--skip-tasks");
+const SKIP_FAST_GATE_LAST_RESULT = process.env.FUMAN_WATCHLIST_SKIP_FAST_GATE_LAST_RESULT === "1" || process.env.FUMAN_INSIDE_FRESHNESS_GATE === "1";
 const issues = [];
 const warnings = [];
 
@@ -77,7 +78,11 @@ async function main() {
     for (const [name, present] of Object.entries(tasks.active)) failWhen(!present, `scheduled task missing: ${name}`);
     failWhen(tasks.retiredPresent.length > 0, `retired scheduled tasks present: ${tasks.retiredPresent.join(",")}`);
     failWhen(tasks.active?.["Fuman Freshness Gate Fast 0845-1645"] && !tasks.fastGateLastResult, "Fuman Freshness Gate Fast last result could not be read");
-    failWhen(tasks.fastGateLastResult && !/^(0|267009)\b/.test(tasks.fastGateLastResult), `Fuman Freshness Gate Fast last result is ${tasks.fastGateLastResult}`);
+    if (SKIP_FAST_GATE_LAST_RESULT) {
+      warnWhen(tasks.fastGateLastResult && !/^(0|267009)\b/.test(tasks.fastGateLastResult), `Fuman Freshness Gate Fast last result skipped during active freshness gate: ${tasks.fastGateLastResult}`);
+    } else {
+      failWhen(tasks.fastGateLastResult && !/^(0|267009)\b/.test(tasks.fastGateLastResult), `Fuman Freshness Gate Fast last result is ${tasks.fastGateLastResult}`);
+    }
   } else {
     warnings.push(`task check not authoritative: ${tasks.reason}`);
   }
