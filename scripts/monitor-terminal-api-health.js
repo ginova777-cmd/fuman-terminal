@@ -22,7 +22,7 @@ const TDCC_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_TDCC_MIN_COUNT || 0);
 const HEATMAP_MIN_COUNT = Number(process.env.TERMINAL_HEALTH_HEATMAP_MIN_COUNT || 500);
 const HEATMAP_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_HEATMAP_TIMEOUT_MS || 120000);
 const MARKET_AI_TIMEOUT_MS = Number(process.env.TERMINAL_HEALTH_MARKET_AI_TIMEOUT_MS || 120000);
-const MARKET_AI_START_SECONDS = 9 * 60 * 60;
+const MARKET_AI_START_SECONDS = 8 * 60 * 60;
 
 function readLocalVersion() {
   const override = String(process.env.EXPECTED_TERMINAL_VERSION || "").trim();
@@ -233,16 +233,24 @@ async function checkHeatmapLiveApi(clock = taipeiClock()) {
     const badDate = num(payload.health?.badDate ?? payload.health?.badDateCount ?? payload.meta?.badDateCount);
     const fallbackUsed = payload.sourceInfo?.fallbackUsed === true || contract.fallbackUsed === true;
     const todayRequired = shouldRequireToday(clock);
+    const liveSeverity = todayRequired ? "critical" : "warning";
 
-    if (payload.ok === false) issues.push(issue("critical", "熱力圖 live API 回傳 ok=false", { error: payload.error || payload.health?.issue || "" }));
+    if (payload.ok === false) issues.push(issue(liveSeverity, "熱力圖 live API 回傳 ok=false", {
+      error: payload.error || payload.health?.issue || payload.health?.formalSourceIssue || "",
+      todayRequired,
+      reason: todayRequired ? "formal live quote required" : "premarket waiting for today's live quote",
+    }));
     if (formalSource !== "supabase:fugle_quotes_live") {
       issues.push(issue("critical", "熱力圖正式水源不是 supabase:fugle_quotes_live", { formalSource }));
     }
     if (count < HEATMAP_MIN_COUNT) {
-      issues.push(issue("critical", "熱力圖 live rows 低於門檻", { count, min: HEATMAP_MIN_COUNT }));
+      issues.push(issue(liveSeverity, "熱力圖 live rows 低於門檻", { count, min: HEATMAP_MIN_COUNT, todayRequired }));
     }
     if (payload.health?.isHealthy === false) {
-      issues.push(issue("critical", "熱力圖 health.isHealthy=false", { issue: payload.health?.issue || payload.sourceInfo?.issue || "" }));
+      issues.push(issue(liveSeverity, "熱力圖 health.isHealthy=false", {
+        issue: payload.health?.issue || payload.sourceInfo?.issue || payload.health?.formalSourceIssue || "",
+        todayRequired,
+      }));
     }
     if (todayRequired && tradeDate !== clock.ymd) {
       issues.push(issue("critical", "熱力圖不是今日正式資料", { today: clock.ymd, tradeDate }));
@@ -297,13 +305,14 @@ async function checkMarketAiLiveApi(clock = taipeiClock()) {
     const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
     const payloadClosed = payload.marketSession?.closed === true;
     const todayRequired = shouldRequireToday(clock, payloadClosed);
+    const liveSeverity = todayRequired ? "critical" : "warning";
 
     if (payload.ok === false) issues.push(issue("critical", "AI 判讀 live API 回傳 ok=false", { error: payload.error || "" }));
     if (payload.source !== "live-api-bundle") {
-      issues.push(issue("critical", "AI 判讀不是 live-api-bundle", { source: payload.source || "" }));
+      issues.push(issue(liveSeverity, "AI 判讀不是 live-api-bundle", { source: payload.source || "", todayRequired }));
     }
     if (payload.cacheSource !== "api/market-ai-live") {
-      issues.push(issue("critical", "AI 判讀 cacheSource 不是正式 API", { cacheSource: payload.cacheSource || "" }));
+      issues.push(issue(liveSeverity, "AI 判讀 cacheSource 不是正式 API", { cacheSource: payload.cacheSource || "", todayRequired }));
     }
     if (todayRequired && dashboardTradeDate !== clock.ymd) {
       issues.push(issue("critical", "AI dashboardTradeDate 不是今日", { today: clock.ymd, dashboardTradeDate }));
@@ -318,7 +327,7 @@ async function checkMarketAiLiveApi(clock = taipeiClock()) {
       issues.push(issue("critical", "AI 判讀存在 staleSources", { staleSources }));
     }
     if (sourceIssues.length) {
-      issues.push(issue("critical", "AI 判讀存在 sourceIssues", { sourceIssues }));
+      issues.push(issue(liveSeverity, "AI 判讀存在 sourceIssues", { sourceIssues, todayRequired }));
     }
     if (todayRequired && payload.marketSession?.stale === true) {
       issues.push(issue("critical", "AI marketSession.stale=true 但今日 live 判讀應已更新", {

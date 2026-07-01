@@ -13,6 +13,7 @@ const {
   normalizeStockRow,
   reconcileMarketSessionWithFreshness,
   requiresTodayDetection,
+  requiresTodayLiveSource,
   scoreRow,
 } = marketAiLive.__test;
 
@@ -65,7 +66,8 @@ assert(
 );
 assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
-assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after 09:00 until same-day data exists");
+assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after the shared-source start until same-day data exists");
+assert(apiSource.includes("requiresTodayLiveSource") && apiSource.includes("allowLatestFallback: !requireTodayLiveSource"), "market-ai-live must not use latest snapshot fallback after today's shared-source window starts");
 assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
 assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");
 assert(heatmapApiSource.includes("health.isHealthy !== false"), "heatmap memory cache must enforce health before serving");
@@ -115,6 +117,7 @@ const openingSession = marketSessionState(
 );
 assert.strictEqual(openingSession.closed, false);
 assert.strictEqual(openingSession.reason, "awaiting-today-market-data");
+assert.strictEqual(requiresTodayLiveSource(clock, openingSession), true);
 assert.strictEqual(requiresTodayDetection(clock, openingSession), true);
 assert.strictEqual(canServeCachedPayload({ method: "GET", query: {} }, true, true), false);
 assert.deepStrictEqual(
@@ -125,6 +128,23 @@ assert.deepStrictEqual(
   heatmapQueryForMarketAi({ limit: "30" }, false),
   { limit: "60", snapshot: "1", compact: "1", shell: "1" }
 );
+
+const sharedSourceStartClock = {
+  date: "2026-06-29",
+  ymd: "20260629",
+  time: "08:05:00",
+  seconds: 8 * 60 * 60 + 5 * 60,
+  weekday: "Mon",
+};
+const sharedSourceSession = marketSessionState(
+  sharedSourceStartClock,
+  null,
+  { marketDates: { twse: "20260626", tpex: "20260626" } },
+  { resolvedTradeDate: "20260626" },
+  null
+);
+assert.strictEqual(requiresTodayLiveSource(sharedSourceStartClock, sharedSourceSession), true);
+assert.strictEqual(requiresTodayDetection(sharedSourceStartClock, sharedSourceSession), true);
 
 const weekendClock = {
   date: "2026-06-28",

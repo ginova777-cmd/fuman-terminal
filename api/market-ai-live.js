@@ -15,7 +15,7 @@ const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
 const AI_WINDOW_START_SECONDS = 9 * 60 * 60;
 const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
-const AI_TODAY_REQUIRED_START_SECONDS = AI_WINDOW_START_SECONDS;
+const AI_TODAY_REQUIRED_START_SECONDS = 8 * 60 * 60;
 const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_MS || 1500);
 const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
 const ALLOW_CODE_REPO_CACHE = process.env.FUMAN_MARKET_AI_ALLOW_CODE_REPO_CACHE === "1";
@@ -225,8 +225,12 @@ function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
   };
 }
 
+function requiresTodayLiveSource(clock, session) {
+  return Boolean(isMarketAiTodayRequiredWindow(clock) && !session?.closed);
+}
+
 function requiresTodayDetection(clock, session) {
-  return Boolean(isMarketAiTodayRequiredWindow(clock) && !session?.closed && !session?.hasTodayMarketData);
+  return Boolean(requiresTodayLiveSource(clock, session) && !session?.hasTodayMarketData);
 }
 
 function reconcileMarketSessionWithFreshness(session, dataFreshness, clock) {
@@ -730,7 +734,9 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
 
 async function enrichMarketAiPayload(payload, request, clock, session, deps = {}) {
   const mustDetectToday = session?.requiresTodayDetection === true;
-  const requireLiveHeatmap = mustDetectToday || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
+  const requireLiveHeatmap = session?.requiresTodayLiveSource === true
+    || mustDetectToday
+    || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
   const req = {
     ...request,
     method: "GET",
@@ -808,8 +814,9 @@ module.exports = async function handler(request, response) {
   const marketSummary = readCachedMarketSummary();
   const stocksSlim = readCachedStocksSlim();
   const session = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
+  const requireTodayLiveSource = requiresTodayLiveSource(clock, session);
   const mustDetectToday = requiresTodayDetection(clock, session);
-  const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday };
+  const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
 
   if (cached && session.closed && !shouldRefresh(request)) {
     const payload = normalizeNonTradingCachePayload(
@@ -822,7 +829,7 @@ module.exports = async function handler(request, response) {
 
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
-    allowLatestFallback: !mustDetectToday,
+    allowLatestFallback: !requireTodayLiveSource,
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
@@ -850,7 +857,7 @@ module.exports = async function handler(request, response) {
   }
 
   const req = { ...request, method: "GET", query: request.query || {} };
-  const requireLiveHeatmap = mustDetectToday || Boolean(detectWindowActive && !session.closed);
+  const requireLiveHeatmap = requireTodayLiveSource || mustDetectToday || Boolean(detectWindowActive && !session.closed);
   const heatmapQuery = heatmapQueryForMarketAi(request.query, requireLiveHeatmap);
   const [marketResult, strategy2Result, radarResult, heatmapResult] = await Promise.all([
     capture(market, req),
@@ -906,6 +913,7 @@ module.exports.__test = {
   taipeiClock,
   marketSessionState,
   reconcileMarketSessionWithFreshness,
+  requiresTodayLiveSource,
   requiresTodayDetection,
   canServeCachedPayload,
   heatmapQueryForMarketAi,

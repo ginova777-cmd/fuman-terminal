@@ -99,15 +99,17 @@ async function checkHeatmapLiveContract(clock) {
   const fallbackUsed = body.fallbackUsed === true || health.formalSourceFallbackUsed === true || contract.fallbackUsed === true;
   const todayRequired = shouldRequireToday(clock, false);
   const issues = [];
+  const warnings = [];
+  const liveMessages = todayRequired ? issues : warnings;
 
   if (result.status < 200 || result.status >= 300 || body.ok === false) {
-    issues.push(`heatmap live API unhealthy HTTP ${result.status}: ${body.error || body.reason || "ok=false"}`);
+    liveMessages.push(`heatmap live API unhealthy HTTP ${result.status}: ${body.error || body.reason || health.formalSourceIssue || (todayRequired ? "ok=false" : "premarket waiting for today's live quote")}`);
   }
   if (formalSource !== "supabase:fugle_quotes_live") {
     issues.push(`heatmap formalSource mismatch: ${formalSource || "(missing)"}`);
   }
-  if (stockCount < 500) issues.push(`heatmap stockCount too low: ${stockCount}`);
-  if (health.isHealthy === false) issues.push(`heatmap health.isHealthy=false: ${health.issue || body.error || ""}`);
+  if (stockCount < 500) liveMessages.push(`heatmap stockCount too low: ${stockCount}`);
+  if (health.isHealthy === false) liveMessages.push(`heatmap health.isHealthy=false: ${health.issue || health.formalSourceIssue || body.error || ""}`);
   if (todayRequired && tradeDate !== clock.ymd) issues.push(`heatmap tradeDate stale: live=${tradeDate || "(missing)"} today=${clock.ymd}`);
   if (todayRequired && badDate > 0) issues.push(`heatmap badDate rows: ${badDate}`);
   if (todayRequired && fallbackUsed) issues.push(`heatmap fallbackUsed=true`);
@@ -124,6 +126,7 @@ async function checkHeatmapLiveContract(clock) {
     isHealthy: health.isHealthy !== false,
     todayRequired,
     issues,
+    warnings,
   };
 }
 
@@ -143,17 +146,19 @@ async function checkMarketAiLiveContract(clock) {
   const radarTradeDate = compactDate(freshness.radarTradeDate);
   const baseTradeDate = compactDate(freshness.baseTradeDate);
   const issues = [];
+  const warnings = [];
+  const liveMessages = todayRequired ? issues : warnings;
 
   if (result.status < 200 || result.status >= 300 || body.ok === false) {
     issues.push(`market-ai-live unhealthy HTTP ${result.status}: ${body.error || "ok=false"}`);
   }
-  if (body.source !== "live-api-bundle") issues.push(`market-ai-live source mismatch: ${body.source || "(missing)"}`);
-  if (body.cacheSource !== "api/market-ai-live") issues.push(`market-ai-live cacheSource mismatch: ${body.cacheSource || "(missing)"}`);
+  if (body.source !== "live-api-bundle") liveMessages.push(`market-ai-live source mismatch: ${body.source || "(missing)"}`);
+  if (body.cacheSource !== "api/market-ai-live") liveMessages.push(`market-ai-live cacheSource mismatch: ${body.cacheSource || "(missing)"}`);
   if (todayRequired && dashboardTradeDate !== clock.ymd) issues.push(`market-ai dashboardTradeDate stale: live=${dashboardTradeDate || "(missing)"} today=${clock.ymd}`);
   if (todayRequired && heatmapTradeDate !== clock.ymd) issues.push(`market-ai heatmapTradeDate stale: live=${heatmapTradeDate || "(missing)"} today=${clock.ymd}`);
   if (todayRequired && freshness.heatmapUsable !== true) issues.push(`market-ai heatmapUsable=false`);
-  if (staleSources.length) issues.push(`market-ai staleSources: ${staleSources.join("; ")}`);
-  if (sourceIssues.length) issues.push(`market-ai sourceIssues: ${sourceIssues.join("; ")}`);
+  if (staleSources.length) liveMessages.push(`market-ai staleSources: ${staleSources.join("; ")}`);
+  if (sourceIssues.length) liveMessages.push(`market-ai sourceIssues: ${sourceIssues.join("; ")}`);
   if (todayRequired && body.marketSession?.stale === true) {
     issues.push(`market-ai marketSession.stale=true: ${body.marketSession?.reason || ""}`);
   }
@@ -174,6 +179,7 @@ async function checkMarketAiLiveContract(clock) {
     todayRequired,
     marketSession: body.marketSession || null,
     issues,
+    warnings,
   };
 }
 
@@ -235,7 +241,9 @@ async function main() {
     issues.push(`production-health unhealthy HTTP ${health.status}: ${(h.issues || [h.error]).filter(Boolean).join("; ")}`);
   }
   for (const item of heatmapLive.issues) issues.push(item);
+  for (const item of heatmapLive.warnings || []) warnings.push(item);
   for (const item of marketAiLive.issues) issues.push(item);
+  for (const item of marketAiLive.warnings || []) warnings.push(item);
 
   const notification = await notifyIfNeeded({
     ok: issues.length === 0,
