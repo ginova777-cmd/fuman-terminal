@@ -16,6 +16,7 @@ const QUOTE_TABLE = process.env.FUMAN_REALTIME_QUOTE_TABLE || "fugle_realtime_qu
 const DEFAULT_RADAR_LIMIT = 120;
 const FULL_SESSION_RADAR_LIMIT = 1200;
 const MAX_RADAR_LIMIT = 1500;
+const MIN_TRADING_DAY_CACHE_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_API_MIN_CACHE_MAX_AGE_MS || 5 * 60 * 1000);
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
@@ -138,20 +139,45 @@ function payloadUpdatedAtMs(payload) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function payloadFreshnessAgeMs(payload, nowMs = Date.now()) {
+  const updatedAtMs = payloadUpdatedAtMs(payload);
+  return updatedAtMs ? Math.max(0, nowMs - updatedAtMs) : null;
+}
+
 function payloadFreshnessMaxAgeMs(payload) {
   const staleAfterMs = cleanNumber(payload?.staleAfterMs);
-  return Math.max(90000, staleAfterMs > 0 ? staleAfterMs * 3 : 90000);
+  const writerBudgetMs = staleAfterMs > 0 ? staleAfterMs * 15 : 0;
+  return Math.max(MIN_TRADING_DAY_CACHE_MAX_AGE_MS, writerBudgetMs);
+}
+
+function payloadFreshnessSnapshot(marketSession, payload, nowMs = Date.now()) {
+  const ageMs = payloadFreshnessAgeMs(payload, nowMs);
+  const maxAgeMs = payloadFreshnessMaxAgeMs(payload);
+  const inDetectionWindow = isMarketDetectionWindow(new Date(nowMs));
+  const fresh = Boolean(
+    marketSession?.hasTodayMarketData
+    && (!inDetectionWindow || (ageMs != null && ageMs <= maxAgeMs))
+  );
+  return {
+    fresh,
+    ageMs,
+    ageSeconds: ageMs == null ? null : Math.round(ageMs / 1000),
+    maxAgeMs,
+    maxAgeSeconds: Math.round(maxAgeMs / 1000),
+    updatedAtMs: payloadUpdatedAtMs(payload),
+    checkedAt: new Date(nowMs).toISOString(),
+  };
 }
 
 function isTradingDayPayloadFresh(marketSession, payload) {
   if (!marketSession?.hasTodayMarketData) return false;
   if (!isMarketDetectionWindow()) return true;
-  const updatedAtMs = payloadUpdatedAtMs(payload);
-  return Boolean(updatedAtMs && Date.now() - updatedAtMs <= payloadFreshnessMaxAgeMs(payload));
+  return payloadFreshnessSnapshot(marketSession, payload).fresh;
 }
 
 function radarSourceCoverage(payload, marketSession) {
-  const ready = Boolean(payload?.ok !== false && cleanNumber(payload?.count || payload?.rows?.length) > 0 && isTradingDayPayloadFresh(marketSession, payload));
+  const freshness = payloadFreshnessSnapshot(marketSession, payload);
+  const ready = Boolean(payload?.ok !== false && cleanNumber(payload?.count || payload?.rows?.length) > 0 && freshness.fresh);
   return {
     ok: ready,
     ready,
@@ -165,6 +191,8 @@ function radarSourceCoverage(payload, marketSession) {
     today: marketSession?.today || taipeiDateKey(),
     count: cleanNumber(payload?.count || payload?.rows?.length),
     updatedAt: payload?.updatedAt || "",
+    ageSeconds: freshness.ageSeconds,
+    maxAgeSeconds: freshness.maxAgeSeconds,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -202,6 +230,7 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
 
 function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_RADAR_LIMIT) {
   const normalizedPayload = normalizeRadarRows(payload, limit);
+  const freshness = payloadFreshnessSnapshot(marketSession, normalizedPayload);
   const runId = radarPayloadRunId(normalizedPayload);
   const fallbackUsed = normalizedPayload?.fallbackUsed === true
     || /fallback/i.test(String(reason || ""))
@@ -239,6 +268,16 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
     sourceCoverage: normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession),
+    freshness: {
+      ...(normalizedPayload?.freshness || {}),
+      decision: normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale"),
+      updatedAt: normalizedPayload?.updatedAt || "",
+      ageSeconds: freshness.ageSeconds,
+      maxAgeSeconds: freshness.maxAgeSeconds,
+      checkedAt: freshness.checkedAt,
+      marketDataDate: marketSession?.marketDataDate || "",
+      today: marketSession?.today || "",
+    },
     fallbackUsed,
     fallbackScope,
     fallbackDetails,
