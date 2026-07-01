@@ -225,6 +225,11 @@ function isSoftSnapshotEndpoint(endpoint) {
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
 
+function isOptionalLiveSnapshotEndpoint(endpoint) {
+  return String(endpoint || "").startsWith("/api/realtime-radar-latest")
+    || String(endpoint || "").startsWith("/api/heatmap");
+}
+
 function buildSoftSnapshotFallback(endpoint, result, via) {
   const isOpenBuy = String(endpoint || "").startsWith("/api/open-buy-latest");
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
@@ -276,6 +281,7 @@ function applySoftSnapshotFallbacks(results, endpoints, via) {
 }
 
 function isMiss(item) {
+  if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
   return Number(item.statusCode || 0) >= 500 || item.payload?.ok === false;
 }
