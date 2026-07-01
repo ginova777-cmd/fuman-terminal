@@ -207,6 +207,14 @@ async function main() {
     count: api.body?.count,
     tvPassCount: api.body?.tvPassCount,
     usedDate: api.body?.usedDate,
+    unattendedStatus: api.body?.unattendedStatus,
+    evidenceStatus: api.body?.evidenceStatus,
+    sourceEvidenceStatus: api.body?.sourceEvidenceStatus,
+    sourceEvidenceMissingFields: api.body?.sourceEvidenceMissingFields,
+    sourceEvidenceIssues: api.body?.sourceEvidenceIssues,
+    publishAllowed: api.body?.publishAllowed,
+    degradedBlocksLatest: api.body?.degradedBlocksLatest,
+    preservePreviousGood: api.body?.preservePreviousGood,
     staleSeconds: api.body?.staleSeconds,
     fallbackUsed: api.body?.fallbackUsed,
     fallbackScope: api.body?.fallbackScope,
@@ -225,9 +233,17 @@ async function main() {
   if (cleanNumber(api.body?.count) < MIN_RESULT_ROWS) issues.push(`api_count_${api.body?.count}_below_${MIN_RESULT_ROWS}`);
   if (!Object.prototype.hasOwnProperty.call(api.body || {}, "tvPassCount")) issues.push("api_missing_tvPassCount");
   if (!api.body?.runId) issues.push("api_missing_runId");
-  for (const field of ["status", "sourceStatus", "dataContractSource", "sourceCoverage", "staleSeconds", "latestRunId", "fallbackUsed", "fallbackScope", "fallbackDetails", "diagnosticFallbackUsed", "diagnosticFallbackScope", "diagnosticFallbackDetails", "writeBudget", "retentionOk", "issues", "warnings"]) {
+  for (const field of ["status", "sourceStatus", "dataContractSource", "sourceCoverage", "staleSeconds", "latestRunId", "unattendedStatus", "evidenceStatus", "sourceEvidenceStatus", "sourceEvidenceMissingFields", "sourceEvidenceIssues", "publishAllowed", "degradedBlocksLatest", "preservePreviousGood", "fallbackUsed", "fallbackScope", "fallbackDetails", "diagnosticFallbackUsed", "diagnosticFallbackScope", "diagnosticFallbackDetails", "writeBudget", "retentionOk", "issues", "warnings"]) {
     if (!Object.prototype.hasOwnProperty.call(api.body || {}, field)) issues.push(`api_missing_${field}`);
   }
+  if (api.body?.unattendedStatus !== "YES") issues.push(`api_unattendedStatus_${api.body?.unattendedStatus || "missing"}`);
+  if (api.body?.evidenceStatus !== "complete") issues.push(`api_evidenceStatus_${api.body?.evidenceStatus || "missing"}`);
+  if (api.body?.sourceEvidenceStatus !== "complete") issues.push(`api_sourceEvidenceStatus_${api.body?.sourceEvidenceStatus || "missing"}`);
+  if (asArray(api.body?.sourceEvidenceMissingFields).length) issues.push(`api_sourceEvidenceMissingFields_${asArray(api.body.sourceEvidenceMissingFields).join(",")}`);
+  if (asArray(api.body?.sourceEvidenceIssues).length) issues.push(`api_sourceEvidenceIssues_${asArray(api.body.sourceEvidenceIssues).join(",")}`);
+  if (api.body?.publishAllowed !== true) issues.push("api_publishAllowed_not_true");
+  if (api.body?.degradedBlocksLatest !== false) issues.push("api_degradedBlocksLatest_not_false");
+  if (api.body?.preservePreviousGood !== false) issues.push("api_preservePreviousGood_not_false");
   if (api.body?.latestRunId && api.body?.runId && String(api.body.latestRunId) !== String(api.body.runId)) {
     issues.push(`api_latestRunId_${api.body.latestRunId}_does_not_match_runId_${api.body.runId}`);
   }
@@ -300,7 +316,16 @@ async function main() {
     expectedTotal: run.expected_total,
     scannedCount: run.scanned_count,
     resultCount: run.result_count,
+    source_snapshot_captured_at: payload.source_snapshot_captured_at,
+    source_status_at_run: payload.source_status_at_run,
+    quote_coverage_at_run: payload.quote_coverage_at_run,
+    intraday_1m_readiness_at_run: payload.intraday_1m_readiness_at_run,
+    ma_readiness_at_run: payload.ma_readiness_at_run,
+    preopen_futopt_daily_readiness_at_run: payload.preopen_futopt_daily_readiness_at_run,
+    run_quality_at_publish: payload.run_quality_at_publish,
     scanCoverage: payload.scanCoverage,
+    sourceCoverage: payload.sourceCoverage,
+    sourceSnapshotAudit: payload.sourceSnapshotAudit,
     selfTest: payload.selfTest,
     sourceDriftHealth: payload.sourceDriftHealth,
     publishedSelfTest: payload.publishedSelfTest,
@@ -336,6 +361,15 @@ async function main() {
   }
   if (payload.sourceDriftHealth?.status !== "ready") issues.push("sourceDrift_not_ready");
   if (payload.publishedSelfTest?.ok !== true) issues.push("publishedSelfTest_not_ok");
+  for (const field of ["source_snapshot_captured_at", "source_status_at_run", "quote_coverage_at_run", "intraday_1m_readiness_at_run", "ma_readiness_at_run", "preopen_futopt_daily_readiness_at_run", "run_quality_at_publish"]) {
+    const value = payload[field];
+    const missing = value === null || value === undefined || value === "" || (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0);
+    if (missing) issues.push(`run_missing_${field}`);
+  }
+  if (payload.sourceSnapshotAudit?.ok !== true) issues.push(`run_sourceSnapshotAudit_not_ok_${payload.sourceSnapshotAudit?.status || "missing"}`);
+  if (payload.run_quality_at_publish?.publishAllowed !== true) issues.push("run_quality_publishAllowed_not_true");
+  if (payload.run_quality_at_publish?.degradedBlocksLatest !== false) issues.push("run_quality_degradedBlocksLatest_not_false");
+  if (payload.run_quality_at_publish?.preservePreviousGood !== false) issues.push("run_quality_preservePreviousGood_not_false");
 
   const resultReadLimit = Math.max(80, Math.min(2000, runResultCount + 5));
   const rows = await rest(`strategy3_scan_results?select=code,name,payload&run_id=eq.${encodeURIComponent(run.run_id || "")}&strategy=eq.strategy3&order=rank.asc&limit=${resultReadLimit}`, { count: true });

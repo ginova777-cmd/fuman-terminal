@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { auditRunTimeSourceSnapshot, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 
@@ -106,11 +106,16 @@ function secondsSince(value) {
 function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
-    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 60 : 2000)));
-    return { canvas, limit };
+    const query = request.query && typeof request.query === "object" ? request.query : {};
+    const param = (key) => url.searchParams.get(key) ?? query[key];
+    const canvas = param("canvas") === "1" || param("compact") === "1" || param("shell") === "1";
+    const live = param("live") === "1";
+    const verify = param("verify") === "1";
+    const noSnapshot = param("noSnapshot") === "1" || live || verify;
+    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(param("limit")) || (canvas ? 60 : 2000)));
+    return { canvas, limit, live, verify, noSnapshot };
   } catch {
-    return { canvas: false, limit: 2000 };
+    return { canvas: false, limit: 2000, live: false, verify: false, noSnapshot: false };
   }
 }
 
@@ -264,7 +269,48 @@ function buildUnattendedContract(payload, context = {}) {
   const quoteCheck = findSourceCheck(sourceDriftHealth, "fugle_quotes_latest");
   const intradayCheck = findSourceCheck(sourceDriftHealth, "v_strategy3_intraday_1m_status");
   const dailyVolumeCheck = findSourceCheck(sourceDriftHealth, "stock_daily_volume");
+  const freshQuoteCoverage120s = firstNumber(
+    sourceStatusPayload.fresh_quote_coverage_120s,
+    sourceStatusPayload.eligible_quote_coverage,
+    sourceStatusPayload.coverage_120s,
+    sourceStatusPayload.coverage120s,
+    ratio(sourceStatusPayload.fresh_quotes, sourceStatusPayload.active_symbols),
+    ratio(sourceStatusPayload.fresh_quote_count_120s, sourceStatusPayload.active_symbols)
+  );
+  const freshQuotes = firstNumber(
+    sourceStatusPayload.fresh_quotes,
+    sourceStatusPayload.fresh_quote_count_120s,
+    sourceStatusPayload.freshQuoteCount120s
+  );
+  const activeSymbols = firstNumber(
+    sourceStatusPayload.active_symbols,
+    sourceStatusPayload.activeSymbols,
+    sourceStatusPayload.eligible_quote_rows,
+    sourceStatusPayload.quote_count
+  );
+  const today1mSymbols = firstNumber(
+    sourceStatusPayload.today_1m_symbols,
+    sourceStatusPayload.intraday_1m_symbols_today,
+    sourceStatusPayload.today1mSymbols
+  );
+  const readyGe35 = firstNumber(
+    sourceStatusPayload.ready_ge_35,
+    sourceStatusPayload.ready_ge_35_symbols,
+    sourceStatusPayload.readyGe35
+  );
+  const readyMa20 = firstNumber(
+    sourceStatusPayload.ready_ma20_continuous,
+    sourceStatusPayload.ready_ma20_continuous_symbols,
+    sourceStatusPayload.readyMa20Continuous
+  );
+  const readyMa35 = firstNumber(
+    sourceStatusPayload.ready_ma35_continuous,
+    sourceStatusPayload.ready_ma35_continuous_symbols,
+    sourceStatusPayload.readyMa35Continuous,
+    readyGe35
+  );
   const latestCandleTime = sourceStatusPayload.latest_candle_time
+    || sourceStatusPayload.latest_candle_time_taipei
     || sourceStatusPayload.intraday_1m_latest_candle_time
     || sourceHealth.latestCandleTime
     || "";
@@ -326,12 +372,22 @@ function buildUnattendedContract(payload, context = {}) {
     dataContractSource: FORMAL_SOURCE_CHAIN,
     sourceCoverage: {
       source: FORMAL_SOURCE_CHAIN,
-      fresh_quote_coverage_120s: cleanNumber(sourceStatusPayload.fresh_quote_coverage_120s),
-      freshQuoteCoverage120s: cleanNumber(sourceStatusPayload.fresh_quote_coverage_120s),
-      today_1m_symbols: cleanNumber(sourceStatusPayload.today_1m_symbols || sourceStatusPayload.intraday_1m_symbols_today),
-      today1mSymbols: cleanNumber(sourceStatusPayload.today_1m_symbols || sourceStatusPayload.intraday_1m_symbols_today),
-      ready_ge_35: cleanNumber(sourceStatusPayload.ready_ge_35 || sourceStatusPayload.ready_ge_35_symbols),
-      readyGe35: cleanNumber(sourceStatusPayload.ready_ge_35 || sourceStatusPayload.ready_ge_35_symbols),
+      fresh_quote_coverage_120s: freshQuoteCoverage120s,
+      freshQuoteCoverage120s,
+      fresh_quotes: freshQuotes,
+      freshQuotes,
+      active_symbols: activeSymbols,
+      activeSymbols,
+      quote_age_seconds: firstNumber(sourceStatusPayload.quote_age_seconds, sourceStatusPayload.quoteAgeSeconds, sourceStatusPayload.stale_seconds),
+      quoteAgeSeconds: firstNumber(sourceStatusPayload.quote_age_seconds, sourceStatusPayload.quoteAgeSeconds, sourceStatusPayload.stale_seconds),
+      today_1m_symbols: today1mSymbols,
+      today1mSymbols,
+      ready_ge_35: readyGe35,
+      readyGe35,
+      ready_ma20_continuous: readyMa20,
+      ready_ma20_continuous_symbols: readyMa20,
+      ready_ma35_continuous: readyMa35,
+      ready_ma35_continuous_symbols: readyMa35,
       latest_candle_time: latestCandleTime,
       latestCandleTime,
       intraday_1m_stale_seconds: staleSeconds,
@@ -403,65 +459,32 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const contract = buildUnattendedContract(payload, context);
   const sourceFallbackBlocked = Array.isArray(contract.fallbackScope) && contract.fallbackScope.includes("source");
+  const currentSourceReady = contract.status === "ready" && !sourceFallbackBlocked;
   const sourceCoverage = {
     ...(contract.sourceCoverage || {}),
-    ok: !sourceFallbackBlocked,
-    ready: !sourceFallbackBlocked,
-    status: sourceFallbackBlocked ? "degraded" : "ready",
+    ok: currentSourceReady,
+    ready: currentSourceReady,
+    status: currentSourceReady ? "ready" : contract.status,
     currentLiveStatus: contract.status,
     currentLiveReason: contract.status === "ready" ? "" : contract.issues?.join("; ") || "",
   };
   const fallbackScope = Array.isArray(contract.fallbackScope) ? contract.fallbackScope : [];
   const fallbackAllowed = fallbackScope.every((scope) => contract.fallbackContract?.[scope]?.allowed === true);
+  const snapshotAudit = auditRunTimeSourceSnapshot(payload);
+  const existingSnapshotFields = snapshotAudit.ok ? runTimeSourceSnapshotResponseFields(payload) : {};
   const payloadWithContract = {
     ...payload,
     ...contract,
     sourceCoverage,
-    publishAllowed: true,
-    degradedBlocksLatest: false,
-    preservePreviousGood: false,
+    publishAllowed: snapshotAudit.ok ? payload.run_quality_at_publish?.publishAllowed !== false : false,
+    degradedBlocksLatest: snapshotAudit.ok ? payload.run_quality_at_publish?.degradedBlocksLatest === true : true,
+    preservePreviousGood: snapshotAudit.ok ? payload.run_quality_at_publish?.preservePreviousGood === true : true,
     fallbackAllowed,
     sourceHealth: payload.sourceHealth || null,
   };
-  const snapshotAudit = auditRunTimeSourceSnapshot(payloadWithContract);
-  const existingSnapshotFields = runTimeSourceSnapshotResponseFields(payloadWithContract);
-  const snapshotFields = snapshotAudit.ok
-    ? existingSnapshotFields
-    : buildRunTimeSourceSnapshotFields({
-      strategy: "strategy3",
-      runId: payloadWithContract.runId || context.latestRunId || "",
-      payload: payloadWithContract,
-      capturedAt: payloadWithContract.updatedAt || payloadWithContract.generatedAt || new Date().toISOString(),
-      startedAt: payloadWithContract.startedAt || "",
-      finishedAt: payloadWithContract.updatedAt || payloadWithContract.generatedAt || "",
-      sourceStatus: payloadWithContract.sourceHealth || { status: "ready", ok: true, source: FORMAL_SOURCE_CHAIN },
-      quoteCoverage: sourceCoverage,
-      intraday1mReadiness: sourceCoverage,
-      maReadiness: sourceCoverage,
-      preopenFutoptDailyReadiness: {
-        status: "not_applicable",
-        ok: true,
-        reason: "strategy3 does not require preopen/futopt readiness; daily volume is included in the formal source chain",
-        dailyVolumeFreshness: sourceCoverage.dailyVolumeFreshness || "",
-      },
-      expectedTotal: payloadWithContract.total,
-      scannedCount: payloadWithContract.total,
-      resultCount: payloadWithContract.count,
-      readbackCount: payloadWithContract.returnedCount || payloadWithContract.count,
-      publishAllowed: true,
-      degradedBlocksLatest: false,
-      preservePreviousGood: false,
-      writeBudget: payloadWithContract.writeBudget,
-      retentionOk: payloadWithContract.retentionOk,
-      qualityStatus: payloadWithContract.qualityStatus || "complete",
-      fallbackUsed: payloadWithContract.fallbackUsed === true,
-      fallbackScope,
-      fallbackAllowed,
-      fallbackDetails: Array.isArray(payloadWithContract.fallbackDetails) ? payloadWithContract.fallbackDetails : [],
-    });
   return {
     ...payloadWithContract,
-    ...snapshotFields,
+    ...existingSnapshotFields,
   };
 }
 
@@ -546,6 +569,11 @@ function buildPayload(rows, run, options = {}) {
     returnedCount: matches.length,
     total: Math.max(matches.length, cleanNumber(run?.expected_total || run?.scanned_count)),
     sourceHealth,
+    sourceCoverage: run?.payload?.sourceCoverage || null,
+    sourceDriftHealth: run?.payload?.sourceDriftHealth || null,
+    scanCoverage: run?.payload?.scanCoverage || null,
+    selfTest: run?.payload?.selfTest || null,
+    publishedSelfTest: run?.payload?.publishedSelfTest || null,
     displayMode,
     noMatchReason,
     matches,
@@ -668,14 +696,16 @@ module.exports = async function handler(request, response) {
 
   const options = parseRequestOptions(request);
   const liveProbe = await fetchStrategy3LiveHealthProbe().catch((error) => ({ issues: [`strategy3 live health probe failed: ${error?.message || String(error)}`] }));
-  const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: DESKTOP_SNAPSHOT_READ_TIMEOUT_MS,
-    via: "api/strategy3-latest",
-  });
-  if (cached) {
-    setDesktopSnapshotCache(response);
-    response.status(200).json(normalizeStrategy3ApiContract(cached, { liveProbe }));
-    return;
+  if (!options.noSnapshot) {
+    const cached = await readEndpointFromDesktopSnapshot(request, {
+      timeoutMs: DESKTOP_SNAPSHOT_READ_TIMEOUT_MS,
+      via: "api/strategy3-latest",
+    });
+    if (cached) {
+      setDesktopSnapshotCache(response);
+      response.status(200).json(normalizeStrategy3ApiContract(cached, { liveProbe }));
+      return;
+    }
   }
 
   try {
@@ -683,11 +713,13 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const snapshot = await readLatestSnapshot({ ...options, liveProbe });
-    if (snapshot) {
-      setDesktopSnapshotCache(response);
-      response.status(200).json(normalizeStrategy3ApiContract(snapshot, { liveProbe }));
-      return;
+    if (!options.noSnapshot) {
+      const snapshot = await readLatestSnapshot({ ...options, liveProbe });
+      if (snapshot) {
+        setDesktopSnapshotCache(response);
+        response.status(200).json(normalizeStrategy3ApiContract(snapshot, { liveProbe }));
+        return;
+      }
     }
     const latest = await fetchLatestCompleteRows(options.limit);
     if (!latest.rows.length && !latest.run?.run_id) {

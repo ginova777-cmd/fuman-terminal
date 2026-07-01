@@ -3,7 +3,10 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { auditRunTimeSourceSnapshot } = require("../lib/run-time-source-snapshot-contract");
+const {
+  auditRunTimeSourceSnapshot,
+  auditRunTimeSourceSnapshotQuality,
+} = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -855,11 +858,15 @@ function extractRuntimeSourceSnapshot(payload) {
   const hasQuoteCoverage = quoteCoverage && typeof quoteCoverage === "object";
   const hasIntradayReadiness = intradayReadiness && typeof intradayReadiness === "object";
   const hasPublishQuality = publishQuality && typeof publishQuality === "object";
-  const complete = hasCapturedAt
+  const structureComplete = hasCapturedAt
     && (hasSourceStatus || hasQuoteCoverage || hasIntradayReadiness)
     && hasPublishQuality
     && evidenceStatus !== "insufficient"
     && evidenceStatus !== "evidence_insufficient";
+  const qualityAudit = structureComplete
+    ? auditRunTimeSourceSnapshotQuality(payload)
+    : { ok: false, status: "insufficient", issues: [] };
+  const complete = structureComplete && qualityAudit.ok;
   return {
     complete,
     capturedAt: capturedAt || "",
@@ -868,7 +875,13 @@ function extractRuntimeSourceSnapshot(payload) {
     hasIntradayReadiness,
     hasPublishQuality,
     evidenceStatus: evidenceStatus || "",
-    reason: complete ? "runtime_source_snapshot_complete" : "runtime_source_snapshot_missing",
+    qualityStatus: qualityAudit.status || "",
+    qualityIssues: qualityAudit.issues || [],
+    reason: complete
+      ? "runtime_source_snapshot_complete"
+      : structureComplete
+        ? "runtime_source_snapshot_quality_fail"
+        : "runtime_source_snapshot_missing",
   };
 }
 
@@ -942,7 +955,12 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   if (frontend.endpointReferences.length === 0) warnings.push("frontend_endpoint_reference_missing");
   if (frontend.retiredStaticJsonReferences.length) issues.push("frontend_retired_static_json_reference");
   if (sourceEvidence?.status === "insufficient") addDueIssue(`run_time_source_snapshot_insufficient_${sourceEvidence.missingFields.join("_")}`);
+  if (sourceEvidence?.status === "source_quality_fail") addDueIssue("run_time_source_snapshot_source_quality_fail");
+  if (Array.isArray(sourceEvidence?.qualityIssues) && sourceEvidence.qualityIssues.length) {
+    addDueIssue(`run_time_source_snapshot_quality_issues_${sourceEvidence.qualityIssues.slice(0, 8).join("_")}`);
+  }
   if (sourceEvidence?.apiEvidenceStatus === "insufficient") addDueIssue("api_evidence_status_insufficient");
+  if (sourceEvidence?.apiEvidenceStatus === "source_quality_fail") addDueIssue("api_evidence_status_source_quality_fail");
   if (sourceEvidence?.apiUnattendedStatus === "NO") addDueIssue("api_unattended_status_no");
   return { issues, warnings };
 }
@@ -994,10 +1012,12 @@ async function evaluateStrategy(strategy, context = {}) {
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
     const snapshotAudit = response.json ? auditRunTimeSourceSnapshot(response.json) : { ok: false, status: "insufficient", missingFields: ["response_json"], snapshot: null };
+    const snapshotQualityAudit = response.json ? auditRunTimeSourceSnapshotQuality(response.json) : { ok: false, status: "insufficient", issues: ["response_json_missing"], snapshot: null };
     const sourceEvidence = {
-      ok: snapshotAudit.ok,
-      status: snapshotAudit.status,
+      ok: snapshotAudit.ok && snapshotQualityAudit.ok,
+      status: snapshotAudit.ok ? snapshotQualityAudit.status : snapshotAudit.status,
       missingFields: snapshotAudit.missingFields,
+      qualityIssues: snapshotQualityAudit.issues || [],
       capturedAt: snapshotAudit.snapshot?.source_snapshot_captured_at || "",
       apiEvidenceStatus: response.json?.evidenceStatus || response.json?.sourceEvidenceStatus || "",
       apiUnattendedStatus: response.json?.unattendedStatus || response.json?.unattended?.status || "",
