@@ -236,6 +236,16 @@ function marketSessionState(clock = taipeiClock()) {
   };
 }
 
+function strategy2SessionName(clock = taipeiClock(), closed = false) {
+  if (closed) return "closed";
+  const minuteOfDay = cleanNumber(clock.minuteOfDay);
+  return minuteOfDay < 8 * 60 + 45
+    ? "premarket"
+    : minuteOfDay <= 13 * 60 + 35
+      ? "regular"
+      : "afterhours_hold_until_midnight";
+}
+
 function payloadRunDate(payload, run) {
   return compactDate(payload?.date || run?.scan_date || run?.date);
 }
@@ -251,12 +261,17 @@ function sessionWithSupabaseRunDate(marketSession, runDate) {
   const runKey = compactDate(runDate);
   const marketKey = compactDate(marketSession?.marketDataDate);
   if (!runKey || (marketKey && runKey <= marketKey)) return marketSession;
+  const clock = taipeiClock();
+  const hasTodayMarketData = runKey === marketSession?.today;
+  const closed = isWeekend(clock) || !hasTodayMarketData;
   return {
     ...(marketSession || {}),
     marketDataDate: runKey,
     marketDataIsoDate: isoDate(runKey),
-    hasTodayMarketData: runKey === marketSession?.today,
-    reason: `${marketSession?.reason || "market-session"}+supabase-latest-run`,
+    hasTodayMarketData,
+    closed,
+    session: strategy2SessionName(clock, closed),
+    reason: `${hasTodayMarketData ? "today-market-data" : marketSession?.reason || "market-session"}+supabase-latest-run`,
   };
 }
 
@@ -771,13 +786,13 @@ function attachStrategy2PublishGate(payload, sourceGate) {
   const priorIssues = Array.isArray(payload.issues) ? payload.issues : [];
   const priorWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
   const readinessCoverage = payload.sourceCoverage && typeof payload.sourceCoverage === "object" ? payload.sourceCoverage : {};
-  const afterhoursHold = payload.marketSession?.session === "afterhours_hold_until_midnight"
+  const afterhoursHold = Boolean(payload.marketSession?.session === "afterhours_hold_until_midnight"
     && readinessCoverage.ready === true
     && payload.complete === true
-    && payload.runId;
+    && payload.runId);
   const publishAllowed = Boolean(
-    sourceGate?.publishAllowed === true
-    && payload.publishBlocked !== true
+    (sourceGate?.publishAllowed === true || afterhoursHold)
+    && (payload.publishBlocked !== true || afterhoursHold)
     && readinessCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
@@ -1073,7 +1088,32 @@ function setStrategy2LiveShellCache(response, options = {}) {
   response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=12, stale-while-revalidate=30");
 }
 
-async function fetchCompleteRunPayload(base, marketSession = null, options = null) {
+async function fetchCompleteRunPayload(base, marketSession = null, options = null, readiness = null) {
+  const readinessRunId = String(readiness?.latestRunId || "").trim();
+  if (readiness?.ready === true && readinessRunId) {
+    const readinessRun = await hydrateRunPayloadRows(base, {
+      run_id: readinessRunId,
+      scan_date: isoDate(marketSession?.today || taipeiClock().ymd),
+      status: "complete",
+      complete: true,
+      quality_status: "complete",
+      finished_at: readiness.checkedAt || "",
+      updated_at: readiness.checkedAt || "",
+      scanned_count: cleanNumber(readiness.execution?.scanned),
+      expected_total: cleanNumber(readiness.execution?.expected),
+      payload: {},
+    }, options);
+    const readinessRunDate = payloadRunDate(readinessRun?.payload || {}, readinessRun);
+    const readinessMarketSession = sessionWithSupabaseRunDate(marketSession, readinessRunDate);
+    if (readinessRun?.run_id && readinessRun?.payload && hasStrategy2PayloadRows(readinessRun.payload) && allowedForMarketSession(readinessRun, readinessMarketSession)) {
+      return buildStrategy2RunPayload(readinessRun, {
+        sourceTable: `${READINESS_STATUS_VIEW}+${RUNS_TABLE}+${RESULTS_TABLE}`,
+        marketSession: readinessMarketSession,
+        options,
+      });
+    }
+  }
+
   const latestRows = await fetchRows(
     base,
     LATEST_RUN_VIEW,
@@ -1159,9 +1199,9 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
-    const [completeRun, readiness, tradingDay, sourceGate] = await Promise.all([
-      fetchCompleteRunPayload(base, marketSession, options),
-      fetchStrategy2Readiness(base),
+    const readiness = await fetchStrategy2Readiness(base);
+    const [completeRun, tradingDay, sourceGate] = await Promise.all([
+      fetchCompleteRunPayload(base, marketSession, options, readiness),
       strategy2TradingDayState(),
       fetchStrategy2SourceGate(),
     ]);
