@@ -202,6 +202,35 @@ function Get-CollectorProcesses {
   }
 }
 
+function Stop-ExtraCollectorProcesses {
+  param(
+    [object[]]$CollectorProcesses,
+    [object[]]$SharedSourceProcesses
+  )
+  if ($CollectorProcesses.Count -le 1) { return }
+  $sharedPids = @($SharedSourceProcesses | ForEach-Object { [int]$_.ProcessId })
+  $keeper = $null
+  foreach ($proc in $CollectorProcesses) {
+    if ($sharedPids -contains [int]$proc.ParentProcessId) {
+      $keeper = $proc
+      break
+    }
+  }
+  if (-not $keeper) {
+    $keeper = @($CollectorProcesses | Sort-Object CreationDate -Descending | Select-Object -First 1)[0]
+  }
+  foreach ($proc in $CollectorProcesses) {
+    if ([int]$proc.ProcessId -eq [int]$keeper.ProcessId) { continue }
+    try {
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+      Write-WatchdogLog "已停止額外 collector pid=$($proc.ProcessId)"
+    } catch {
+      Write-WatchdogLog "停止額外 collector pid=$($proc.ProcessId) 失敗：$($_.Exception.Message)"
+    }
+  }
+  Write-WatchdogLog "保留 collector pid=$($keeper.ProcessId)"
+}
+
 function Get-CollectorCacheHealth {
   $statusFile = Join-Path $RuntimeDir "state\fugle-websocket-status.json"
   try {
@@ -309,8 +338,24 @@ if ($sharedSourceProcesses.Count -gt 1) {
   exit 0
 }
 
+if (-not $isRunning) {
+  Start-SharedSourceTask -Reason "shared source 程序沒有在跑"
+  exit 0
+}
+
+if ($isRunning -and $collectorProcesses.Count -gt 1) {
+  Write-WatchdogLog "偵測到多個 collector，但 shared source 正在跑；保留 runner 管理的 collector，避免 watchdog 額外製造 API 壓力。"
+  Stop-ExtraCollectorProcesses -CollectorProcesses $collectorProcesses -SharedSourceProcesses $sharedSourceProcesses
+  exit 0
+}
+
 if ($collectorProcesses.Count -ne 1) {
   Restart-FugleQuoteCollector -Reason "collector_count=$($collectorProcesses.Count)，應為 1"
+  exit 0
+}
+
+if ($isRunning -and -not $quoteHealth.Ok) {
+  Write-WatchdogLog "quote health 尚未達標，但 shared source 與 collector 都在跑；不重啟 collector，讓漸進補滿機制追平。"
   exit 0
 }
 
@@ -321,11 +366,6 @@ if (-not $quoteHealth.Ok -and -not $collectorCache.Ok) {
 
 if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
   Write-WatchdogLog "quote health 尚未達標，但 collector cache 健康，暫不重啟 collector，讓 shared source 繼續寫入追平。"
-}
-
-if (-not $isRunning) {
-  Start-SharedSourceTask -Reason "shared source 程序沒有在跑"
-  exit 0
 }
 
 if (($collectorCache.Ok -or $quoteHealth.Ok) -and ((-not $health.Ok) -or $health.Status -ne "ok" -or $health.AgeSeconds -gt $MaxSourceAgeSeconds)) {
