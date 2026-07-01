@@ -46,6 +46,7 @@ const KEY_FILES = [
   "lib/desktop-route-snapshot-cache.js",
   "lib/supabase-public-slot.js",
   "lib/strategy2-source-publish-gate.js",
+  "lib/run-time-source-snapshot-contract.js",
   "lib/scorecard-rule-locks.js",
   "terminal-strategy-config.js",
   "version.json",

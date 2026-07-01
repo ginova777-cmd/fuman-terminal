@@ -18,6 +18,7 @@ const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { fetchStrategy3TvCandles } = require("../lib/strategy3-tv-candles");
 const { analyzeTradingViewOvernightEntry } = require("../lib/strategy3-tv-entry");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
@@ -388,6 +389,10 @@ function normalizeStrategy3Signals(stock) {
 
 function buildSupabaseRunRow(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
+  const publishAllowed = status === "complete"
+    && output.sourceHealth?.status !== "failed"
+    && output.sourceDriftHealth?.status !== "failed"
+    && output.prePublishSelfTest?.ok !== false;
   return {
     run_id: runId,
     strategy: "strategy3",
@@ -405,6 +410,27 @@ function buildSupabaseRunRow(output, runId, status = "complete") {
     generated_at: scanTime,
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "strategy3",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: cleanNumber(output.total),
+        scannedCount: cleanNumber(output.scanCoverage?.scannedCount || output.total),
+        resultCount: status === "complete" ? cleanNumber(output.count) : 0,
+        sourceStatus: output.sourceHealth || output.sourceDriftHealth || {},
+        quoteCoverage: output.sourceCoverage || output.sourceDriftHealth || {},
+        intraday1mReadiness: output.sourceHealth || {},
+        maReadiness: output.sourceHealth || {},
+        preopenFutoptDailyReadiness: {
+          dailyVolume: output.sourceDriftHealth?.checks?.find?.((item) => item.source === "stock_daily_volume") || {},
+        },
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        qualityStatus: String(output.qualityStatus || status).trim(),
+      }),
       count: cleanNumber(output.count),
       tvPassCount: cleanNumber(output.tvPassCount),
       total: cleanNumber(output.total),

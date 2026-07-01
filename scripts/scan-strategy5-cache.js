@@ -4,6 +4,7 @@ const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { overlayFugleWebSocketQuotes } = require("../lib/fugle-quote-overlay");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const institutionLatestHandler = require("../api/institution-latest");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const OUT_FILE = dataPath("strategy5-latest.json");
@@ -104,6 +105,8 @@ function strategy5Signals(item) {
 function buildStrategy5RunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
+  const sourceReady = String(output.sourceHealth?.status || output.dataFreshness?.status || "").toLowerCase();
+  const publishAllowed = complete && !/stale|degraded|failed|blocked|not_ready/.test(sourceReady);
   return {
     run_id: runId,
     strategy: "strategy5",
@@ -122,6 +125,25 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
     generated_at: String(output.updatedAt || new Date().toISOString()),
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "strategy5",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: cleanNumber(output.total),
+        scannedCount: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
+        resultCount: complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0,
+        sourceStatus: output.sourceHealth || output.dataFreshness || {},
+        quoteCoverage: { status: "not_applicable", reason: "strategy5 chip source does not require intraday quote freshness" },
+        intraday1mReadiness: { status: "not_applicable", reason: "strategy5 chip source does not require intraday 1m" },
+        maReadiness: { status: "not_applicable", reason: "strategy5 chip source does not require MA readiness" },
+        preopenFutoptDailyReadiness: output.sourceHealth || output.dataFreshness || {},
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        qualityStatus: complete ? "complete" : status,
+      }),
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       usedDate: output.usedDate || "",

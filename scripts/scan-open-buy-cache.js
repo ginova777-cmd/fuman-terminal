@@ -5,6 +5,7 @@ const scanOpenBuy = require("../api/scan-open-buy");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const { ROOT, dataPath, statePath } = require("./runtime-paths");
 const OUT_FILE = dataPath("open-buy-latest.json");
@@ -214,6 +215,8 @@ function buildOpenBuyRunRow(output, runId) {
   const buyCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BUY").length : cleanNumber(output.buyCount || output.count);
   const watchCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "WATCH").length : cleanNumber(output.watchCount);
   const blockCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BLOCK").length : cleanNumber(output.blockCount);
+  const scannedCount = Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun);
+  const resultCount = rows.length || (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count));
   return {
     run_id: runId,
     strategy: "strategy1",
@@ -232,6 +235,23 @@ function buildOpenBuyRunRow(output, runId) {
     generated_at: String(output.startedAt || output.updatedAt || new Date().toISOString()),
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "strategy1",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: cleanNumber(output.total),
+        scannedCount,
+        resultCount,
+        sourceStatus: output.sourceCoverage || output.sourceHealth || {},
+        quoteCoverage: output.sourceCoverage || {},
+        preopenFutoptDailyReadiness: output.sourceCoverage || output.readyStatus || {},
+        publishAllowed: output.complete === true,
+        degradedBlocksLatest: output.complete !== true,
+        preservePreviousGood: output.complete !== true,
+        qualityStatus: output.complete ? "complete" : "incomplete",
+      }),
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       completedChunks: cleanNumber(output.completedChunks),

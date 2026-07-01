@@ -55,6 +55,7 @@ const FILES = [
   "lib/scorecard-rule-locks.js",
   "lib/supabase-public-slot.js",
   "lib/strategy2-source-publish-gate.js",
+  "lib/run-time-source-snapshot-contract.js",
   "lib/strategy-cache-status.js",
   "fuman-sw.js",
   "api/release-manifest.js",

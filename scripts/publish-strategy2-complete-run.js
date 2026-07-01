@@ -4,6 +4,7 @@ const { spawnSync } = require("child_process");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { assertStrategy2SourcePublishGate } = require("../lib/strategy2-source-publish-gate");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -330,8 +331,9 @@ async function main() {
   const config = supabaseConfig();
   let source = "";
   let payload = null;
+  let sourceGate = null;
   try {
-    await assertStrategy2SourcePublishGate(config, { stage: "complete-run-publish" });
+    sourceGate = await assertStrategy2SourcePublishGate(config, { stage: "complete-run-publish" });
   } catch (error) {
     const receipt = writeStrategy2BlockedReceipt(error.gate, error);
     const alert = sendStrategy2SourceGateAlert(error.gate, error);
@@ -350,6 +352,28 @@ async function main() {
   }
   const scanDate = normalizeScanDate(report.date, report.updatedAt || report.generatedAt || Date.now());
   const runId = buildCompleteRunId(report);
+  Object.assign(report, buildRunTimeSourceSnapshotFields({
+    strategy: "strategy2",
+    runId,
+    payload: report,
+    startedAt: report.startedAt || report.generatedAt || report.updatedAt || new Date().toISOString(),
+    finishedAt: report.updatedAt || report.generatedAt || new Date().toISOString(),
+    expectedTotal: Array.isArray(report.records) ? report.records.length : 0,
+    scannedCount: Array.isArray(report.records) ? report.records.length : 0,
+    resultCount: cleanNumber(report.entryCount || report.aCount || report.events.length),
+    sourceStatus: sourceGate?.sourceCoverage || {},
+    quoteCoverage: sourceGate?.sourceCoverage || {},
+    intraday1mReadiness: sourceGate?.sourceCoverage || {},
+    maReadiness: sourceGate?.sourceCoverage || {},
+    preopenFutoptDailyReadiness: sourceGate?.sourceCoverage || {},
+    publishAllowed: sourceGate?.publishAllowed === true,
+    degradedBlocksLatest: sourceGate?.publishAllowed !== true,
+    preservePreviousGood: sourceGate?.publishAllowed !== true,
+    fallbackUsed: sourceGate?.fallbackUsed === true,
+    writeBudget: sourceGate?.writeBudget || null,
+    retentionOk: sourceGate?.retentionOk ?? null,
+    qualityStatus: report.qualityStatus || "complete",
+  }));
   const { supabaseUrl, serviceKey, publishKey } = config;
   if (!supabaseUrl || !publishKey) throw new Error("missing Supabase publish credentials");
   if (!serviceKey) throw new Error("missing Supabase service role key for complete-run RPC");

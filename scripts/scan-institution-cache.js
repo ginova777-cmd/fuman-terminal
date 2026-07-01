@@ -4,6 +4,7 @@ const scanInstitution = require("../api/institution");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { writeSummary } = require("./cache-summary");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const { ROOT, dataPath } = require("./runtime-paths");
 const { chipTradeExclusion, loadChipTradeBlacklist } = require("../lib/chip-trade-exclusions");
@@ -192,6 +193,8 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const sourceCount = Object.keys(output.data || {}).length;
+  const sourceReady = String(output.sourceHealth?.status || output.dataFreshness?.status || "").toLowerCase();
+  const publishAllowed = complete && !/stale|degraded|failed|blocked|not_ready/.test(sourceReady);
   return {
     run_id: runId,
     strategy: "institution",
@@ -210,6 +213,26 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
     generated_at: scanTime,
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "institution",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: cleanNumber(output.sourceCount || sourceCount),
+        scannedCount: cleanNumber(output.scannedCount || output.sourceCount || sourceCount),
+        resultCount: complete ? sourceCount : 0,
+        readbackCount: cleanNumber(output.readbackCount),
+        sourceStatus: output.sourceHealth || output.dataFreshness || {},
+        quoteCoverage: { status: "not_applicable", reason: "institution chip source does not require intraday quote freshness" },
+        intraday1mReadiness: { status: "not_applicable", reason: "institution chip source does not require intraday 1m" },
+        maReadiness: { status: "not_applicable", reason: "institution chip source does not require MA readiness" },
+        preopenFutoptDailyReadiness: output.sourceHealth || output.dataFreshness || {},
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        qualityStatus: complete ? "complete" : status,
+      }),
       count: cleanNumber(output.count),
       readbackCount: cleanNumber(output.readbackCount),
       usedDate: output.usedDate || "",

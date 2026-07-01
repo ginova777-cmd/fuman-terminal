@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { auditRunTimeSourceSnapshot } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -838,7 +839,7 @@ function frontendEvidence(strategy) {
   };
 }
 
-function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, dueStatus = { due: true }) {
+function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus = { due: true }) {
   const issues = [];
   const warnings = [];
   const addDueIssue = (issue) => {
@@ -863,6 +864,9 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   if (coverage.failedBatchCount > 0) addDueIssue(`failed_batch_count_${coverage.failedBatchCount}`);
   if (frontend.endpointReferences.length === 0) warnings.push("frontend_endpoint_reference_missing");
   if (frontend.retiredStaticJsonReferences.length) issues.push("frontend_retired_static_json_reference");
+  if (sourceEvidence?.status === "insufficient") addDueIssue(`run_time_source_snapshot_insufficient_${sourceEvidence.missingFields.join("_")}`);
+  if (sourceEvidence?.apiEvidenceStatus === "insufficient") addDueIssue("api_evidence_status_insufficient");
+  if (sourceEvidence?.apiUnattendedStatus === "NO") addDueIssue("api_unattended_status_no");
   return { issues, warnings };
 }
 
@@ -912,10 +916,19 @@ async function evaluateStrategy(strategy, context = {}) {
     const runtimeSnapshot = response.json ? extractRuntimeSourceSnapshot(response.json) : { complete: false, reason: "runtime_source_snapshot_missing" };
     const cost = response.json ? extractCost(response.json) : {};
     const frontend = frontendEvidence(strategy);
+    const snapshotAudit = response.json ? auditRunTimeSourceSnapshot(response.json) : { ok: false, status: "insufficient", missingFields: ["response_json"], snapshot: null };
+    const sourceEvidence = {
+      ok: snapshotAudit.ok,
+      status: snapshotAudit.status,
+      missingFields: snapshotAudit.missingFields,
+      capturedAt: snapshotAudit.snapshot?.source_snapshot_captured_at || "",
+      apiEvidenceStatus: response.json?.evidenceStatus || response.json?.sourceEvidenceStatus || "",
+      apiUnattendedStatus: response.json?.unattendedStatus || response.json?.unattended?.status || "",
+    };
     const judgement = applyProfileJudgement(
       strategy,
       response,
-      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, dueStatus)
+      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus)
     );
     endpointResults.push({
       endpoint,
@@ -930,6 +943,7 @@ async function evaluateStrategy(strategy, context = {}) {
       fallback,
       runtimeSourceSnapshot: runtimeSnapshot,
       cost,
+      runTimeSourceSnapshot: sourceEvidence,
       frontend,
       dueStatus,
       issues: judgement.issues,

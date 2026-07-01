@@ -3,6 +3,7 @@ const fsSync = require("fs");
 const path = require("path");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const CBAS_BASE = "https://cbas16889.pscnet.com.tw/api/CbasQuote";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -1130,6 +1131,7 @@ async function fetchSupabaseRows(table, query) {
 
 function buildCbDetectRunRow({ runId, updatedAt, status, count, sourceCounts, compactedDuplicates }) {
   const complete = status === "complete";
+  const publishAllowed = complete && Number(count || 0) > 0;
   return {
     run_id: runId,
     strategy: "cb_detect",
@@ -1148,6 +1150,25 @@ function buildCbDetectRunRow({ runId, updatedAt, status, count, sourceCounts, co
     generated_at: updatedAt,
     updated_at: updatedAt,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "cb-detect",
+        runId,
+        payload: { sourceCounts, compactedDuplicates, count, updatedAt, qualityStatus: complete ? "complete" : status },
+        startedAt: updatedAt,
+        finishedAt: complete ? updatedAt : "",
+        expectedTotal: count,
+        scannedCount: count,
+        resultCount: complete ? count : 0,
+        sourceStatus: { status: publishAllowed ? "ready" : status, sourceCounts },
+        quoteCoverage: { status: "not_applicable", reason: "CB detect source does not require shared intraday quote freshness" },
+        intraday1mReadiness: { status: "not_applicable", reason: "CB detect source does not require intraday 1m" },
+        maReadiness: { status: "not_applicable", reason: "CB detect source does not require MA readiness" },
+        preopenFutoptDailyReadiness: { status: "not_applicable", reason: "CB detect source does not require preopen/futopt/daily volume readiness" },
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        qualityStatus: complete ? "complete" : status,
+      }),
       sourceCounts,
       compactedDuplicates,
     },

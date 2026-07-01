@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -519,6 +520,7 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
 }
 
 module.exports = async function handler(request, response) {
+  wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy1", endpoint: "api/open-buy-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");

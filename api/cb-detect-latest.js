@@ -1,4 +1,5 @@
 const { serviceRoleKey, terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -372,6 +373,7 @@ async function readLatestCompleteRun(options) {
 }
 
 module.exports = async function handler(request, response) {
+  wrapJsonRunTimeSourceEvidence(response, { strategy: "cb-detect", endpoint: "api/cb-detect-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");

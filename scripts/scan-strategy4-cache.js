@@ -5,6 +5,7 @@ const scanStrategy4 = require("../api/scan-strategy4");
 const fetchStocks = require("../stocks");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const BATCH_SIZE = Number(process.env.STRATEGY4_BATCH_SIZE || 80);
@@ -1143,6 +1144,10 @@ function strategy4RunIdFromOutput(output) {
 function buildSupabaseRunRow(output, runId) {
   const scanDate = scanDateFromOutput(output);
   const scanTime = String(output.updatedAt || new Date().toISOString());
+  const publishAllowed = output.complete === true
+    && String(output.qualityStatus || "") === "complete"
+    && output.prePublishSelfTest?.ok !== false
+    && output.supabasePublishGate?.publishAllowed !== false;
   return {
     run_id: runId,
     strategy: "strategy4",
@@ -1164,6 +1169,25 @@ function buildSupabaseRunRow(output, runId) {
     generated_at: String(output.generatedAt || output.updatedAt || new Date().toISOString()),
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "strategy4",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.generatedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: cleanNumber(output.total),
+        scannedCount: cleanNumber(output.scannedCount || output.scanned || output.total),
+        resultCount: cleanNumber(output.count),
+        sourceStatus: output.supabasePublishGate || output.supabaseCoverage || {},
+        quoteCoverage: output.sourceCoverage || output.supabasePublishGate?.sourceCoverage || {},
+        preopenFutoptDailyReadiness: output.supabaseCoverage || {},
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        writeBudget: output.supabasePublishGate?.writePolicy || null,
+        retentionOk: output.complete === true,
+        qualityStatus: String(output.qualityStatus || "").trim(),
+      }),
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       zones: output.zones || null,

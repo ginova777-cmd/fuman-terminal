@@ -645,6 +645,7 @@ const supabasePublishHardGate = read("scripts/verify-supabase-publish-hard-gate.
 const strategy2SourcePublishGateVerifier = read("scripts/verify-strategy2-source-publish-gate.js");
 const apiUnattendedScorecard = read("scripts/verify-api-unattended-scorecard.js");
 const productionApiFreshnessContract = read("scripts/verify-production-api-freshness-contract.js");
+const runTimeSourceSnapshotContract = read("lib/run-time-source-snapshot-contract.js");
 const apiUnattendedRunner = read("run-api-unattended-scorecard.ps1");
 const apiUnattendedInstaller = read("scripts/install-api-unattended-scorecard-task.ps1");
 const refreshIntradayLatestDates = read("scripts/refresh-intraday-latest-dates.js");
@@ -711,6 +712,7 @@ for (const marker of [
   "runtime_source_snapshot_missing",
   "sourceCoverage ready",
   "fallback disclosure",
+  "run-time source snapshot evidence",
   "retired static JSON 410",
   "/data/open-buy-latest.json",
   "/data/strategy2-intraday-latest.json",
@@ -724,6 +726,56 @@ for (const marker of [
 ]) {
   if (!productionApiFreshnessContract.includes(marker)) {
     issues.push(`verify-production-api-freshness-contract.js missing production API freshness marker ${marker}`);
+  }
+}
+for (const marker of [
+  "REQUIRED_RUN_TIME_SOURCE_SNAPSHOT_FIELDS",
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "quote_coverage_at_run",
+  "intraday_1m_readiness_at_run",
+  "ma_readiness_at_run",
+  "preopen_futopt_daily_readiness_at_run",
+  "run_quality_at_publish",
+  "attachRunTimeSourceEvidence",
+  "auditRunTimeSourceSnapshot",
+  "buildRunTimeSourceSnapshotFields",
+  "wrapJsonRunTimeSourceEvidence",
+  "evidenceStatus",
+  "unattendedStatus",
+  "run_time_source_snapshot_missing_or_incomplete",
+]) {
+  if (!runTimeSourceSnapshotContract.includes(marker)) {
+    issues.push(`run-time-source-snapshot-contract.js missing run-time source snapshot marker ${marker}`);
+  }
+}
+for (const [file, text] of Object.entries({
+  "api/open-buy-latest.js": read("api/open-buy-latest.js"),
+  "api/strategy2-latest.js": read("api/strategy2-latest.js"),
+  "api/strategy3-latest.js": read("api/strategy3-latest.js"),
+  "api/strategy4-latest.js": read("api/strategy4-latest.js"),
+  "api/strategy5-latest.js": read("api/strategy5-latest.js"),
+  "api/institution-latest.js": read("api/institution-latest.js"),
+  "api/warrant-flow-latest.js": read("api/warrant-flow-latest.js"),
+  "api/cb-detect-latest.js": read("api/cb-detect-latest.js"),
+  "api/realtime-radar-latest.js": read("api/realtime-radar-latest.js"),
+})) {
+  for (const marker of ["wrapJsonRunTimeSourceEvidence", "run-time-source-snapshot-contract"]) {
+    if (!text.includes(marker)) issues.push(`${file} missing run-time source evidence wrapper marker ${marker}`);
+  }
+}
+for (const [file, text] of Object.entries({
+  "scripts/scan-open-buy-cache.js": read("scripts/scan-open-buy-cache.js"),
+  "scripts/publish-strategy2-complete-run.js": read("scripts/publish-strategy2-complete-run.js"),
+  "scripts/scan-strategy3-cache.js": read("scripts/scan-strategy3-cache.js"),
+  "scripts/scan-strategy4-cache.js": read("scripts/scan-strategy4-cache.js"),
+  "scripts/scan-strategy5-cache.js": read("scripts/scan-strategy5-cache.js"),
+  "scripts/scan-institution-cache.js": read("scripts/scan-institution-cache.js"),
+  "scripts/scan-warrant-flow-cache.js": read("scripts/scan-warrant-flow-cache.js"),
+  "scripts/generate-cb-detect.js": read("scripts/generate-cb-detect.js"),
+})) {
+  for (const marker of ["buildRunTimeSourceSnapshotFields", "run-time-source-snapshot-contract"]) {
+    if (!text.includes(marker)) issues.push(`${file} missing run-time source snapshot writer marker ${marker}`);
   }
 }
 if (/dataManifest:\s*["']\/data\//.test(runtimeConfig)) {
@@ -2684,6 +2736,10 @@ for (const marker of [
   "fallbackUsed",
   "writeBudget",
   "retentionOk",
+  "auditRunTimeSourceSnapshot",
+  "run_time_source_snapshot_insufficient",
+  "api_evidence_status_insufficient",
+  "api_unattended_status_no",
   "rowsChecked",
   "blankCounts",
   "sampleMissingRows",
@@ -2692,6 +2748,16 @@ for (const marker of [
 ]) {
   if (!apiUnattendedScorecard.includes(marker)) {
     issues.push(`verify-api-unattended-scorecard.js missing all-strategy unattended marker ${marker}`);
+  }
+}
+for (const marker of [
+  "auditRunTimeSourceSnapshot",
+  "run_time_source_snapshot_insufficient",
+  "api_evidence_status_insufficient",
+  "api_unattended_status_no",
+]) {
+  if (!productionApiFreshnessContract.includes(marker)) {
+    issues.push(`verify-production-api-freshness-contract.js missing run-time source snapshot blocker marker ${marker}`);
   }
 }
 for (const marker of [

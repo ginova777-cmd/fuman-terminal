@@ -3,6 +3,7 @@ const path = require("path");
 const scanWarrantFlow = require("../api/scan-warrant-flow");
 const { writeSummary } = require("./cache-summary");
 const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const { dataPath, dataOutputPaths } = require("./runtime-paths");
 const OUT_FILE = dataPath("warrant-flow-latest.json");
@@ -120,6 +121,7 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const resultCount = cleanNumber(output.count) + cleanNumber(output.volumeCount) + cleanNumber(output.singleSignalCount);
+  const publishAllowed = complete && resultCount > 0 && output.snapshotStale !== true;
   return {
     run_id: runId,
     strategy: "warrant_flow",
@@ -138,6 +140,25 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
     generated_at: scanTime,
     updated_at: scanTime,
     payload: {
+      ...buildRunTimeSourceSnapshotFields({
+        strategy: "warrant-flow",
+        runId,
+        payload: output,
+        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+        finishedAt: scanTime,
+        expectedTotal: resultCount,
+        scannedCount: resultCount,
+        resultCount: complete ? resultCount : 0,
+        sourceStatus: output.sourceHealth || output.dataContract || {},
+        quoteCoverage: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday quote coverage" },
+        intraday1mReadiness: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday 1m" },
+        maReadiness: { status: "not_applicable", reason: "warrant-flow source does not require MA readiness" },
+        preopenFutoptDailyReadiness: output.dataContract || {},
+        publishAllowed,
+        degradedBlocksLatest: !publishAllowed,
+        preservePreviousGood: !publishAllowed,
+        qualityStatus: complete ? "complete" : status,
+      }),
       count: cleanNumber(output.count),
       volumeCount: cleanNumber(output.volumeCount),
       singleSignalCount: cleanNumber(output.singleSignalCount),

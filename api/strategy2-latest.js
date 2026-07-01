@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { readStrategy2SourceGate } = require("../lib/strategy2-source-publish-gate");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
@@ -1174,6 +1175,7 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
 }
 
 module.exports = async function handler(request, response) {
+  wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");

@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { auditRunTimeSourceSnapshot } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = String(process.env.FUMAN_AUDIT_BASE_URL || process.env.FUMAN_API_UNATTENDED_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -376,6 +377,7 @@ async function evaluateApi(item, now) {
   const sourceCoverage = sourceCoverageReady(payload);
   const fallback = fallbackDisclosure(payload);
   const runtimeSnapshot = runtimeSourceSnapshot(payload);
+  const snapshotAudit = auditRunTimeSourceSnapshot(payload);
   result.evidence = {
     httpStatus: response.status,
     apiOk: payload?.ok,
@@ -393,6 +395,14 @@ async function evaluateApi(item, now) {
     },
     runtimeSourceSnapshot: runtimeSnapshot,
     fallback,
+    runTimeSourceSnapshot: {
+      ok: snapshotAudit.ok,
+      status: snapshotAudit.status,
+      missingFields: snapshotAudit.missingFields,
+      capturedAt: snapshotAudit.snapshot?.source_snapshot_captured_at || "",
+      evidenceStatus: payload?.evidenceStatus || payload?.sourceEvidenceStatus || "",
+      unattendedStatus: payload?.unattendedStatus || payload?.unattended?.status || "",
+    },
     responseText: response.ok ? undefined : response.text,
   };
   if (response.status !== 200 || payload?.ok === false) addFinding(result, due.due, "issue", `api_not_ready_http_${response.status}`);
@@ -401,6 +411,9 @@ async function evaluateApi(item, now) {
   if (!sourceCoverage.ready) addFinding(result, due.due, "issue", sourceCoverage.reason);
   if (!runtimeSnapshot.complete) addFinding(result, due.due, "issue", runtimeSnapshot.reason);
   if (!fallback.disclosed) addFinding(result, due.due, "issue", fallback.reason);
+  if (!snapshotAudit.ok) addFinding(result, due.due, "issue", `run_time_source_snapshot_insufficient_${snapshotAudit.missingFields.join("_")}`);
+  if (payload?.evidenceStatus === "insufficient" || payload?.sourceEvidenceStatus === "insufficient") addFinding(result, due.due, "issue", "api_evidence_status_insufficient");
+  if (payload?.unattendedStatus === "NO" || payload?.unattended?.status === "NO") addFinding(result, due.due, "issue", "api_unattended_status_no");
   return result;
 }
 
@@ -445,7 +458,7 @@ async function main() {
     taipeiCheckedAt: taipeiStamp(new Date()),
     expectedToday: taipeiDateKey(now),
     productionUrl: BASE_URL,
-    requirement: "production API must expose tradeDate=today after due window, run-time source snapshot, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
+    requirement: "production API must expose tradeDate=today after due window, run-time source snapshot evidence, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
     apiResults,
     static410,
     blockers,
