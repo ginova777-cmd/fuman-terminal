@@ -163,10 +163,17 @@ function taipeiClock(now = new Date()) {
     if (part.type !== "literal") acc[part.type] = part.value;
     return acc;
   }, {});
+  const hour = Number(parts.hour || 0);
+  const minute = Number(parts.minute || 0);
+  const second = Number(parts.second || 0);
   return {
     date: parts.year + "-" + parts.month + "-" + parts.day,
     ymd: parts.year + parts.month + parts.day,
     weekday: String(parts.weekday || ""),
+    hour,
+    minute,
+    second,
+    minuteOfDay: hour * 60 + minute,
   };
 }
 
@@ -207,9 +214,20 @@ function marketSessionState(clock = taipeiClock()) {
   const marketDataDate = newestMarketDataDate(marketSummary, stocksSlim);
   const hasTodayMarketData = Boolean(marketDataDate && marketDataDate === clock.ymd);
   const closed = isWeekend(clock) || !hasTodayMarketData;
+  const minuteOfDay = cleanNumber(clock.minuteOfDay);
+  const session = closed
+    ? "closed"
+    : minuteOfDay < 8 * 60 + 45
+      ? "premarket"
+      : minuteOfDay <= 13 * 60 + 35
+        ? "regular"
+        : "afterhours_hold_until_midnight";
   return {
     taipeiDate: clock.date,
     today: clock.ymd,
+    minuteOfDay,
+    session,
+    resetAtTaipei: `${clock.date} 24:00:00`,
     marketDataDate,
     marketDataIsoDate: isoDate(marketDataDate),
     hasTodayMarketData,
@@ -753,7 +771,15 @@ function attachStrategy2PublishGate(payload, sourceGate) {
   const priorIssues = Array.isArray(payload.issues) ? payload.issues : [];
   const priorWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
   const readinessCoverage = payload.sourceCoverage && typeof payload.sourceCoverage === "object" ? payload.sourceCoverage : {};
-  const publishAllowed = sourceGate?.publishAllowed === true && payload.publishBlocked !== true && readinessCoverage.ready === true;
+  const afterhoursHold = payload.marketSession?.session === "afterhours_hold_until_midnight"
+    && readinessCoverage.ready === true
+    && payload.complete === true
+    && payload.runId;
+  const publishAllowed = Boolean(
+    sourceGate?.publishAllowed === true
+    && payload.publishBlocked !== true
+    && readinessCoverage.ready === true
+  );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
     ? gateIssues.join("; ") || payload.publishBlockedReason || readinessCoverage.reason || "strategy2 source publish gate blocked"
@@ -801,6 +827,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       publishAllowed,
       publishBlocked,
       publishBlockedReason,
+      afterhoursHoldUntilMidnight: afterhoursHold,
     },
   };
   return attachStrategy2SelfCheck(nextPayload, {

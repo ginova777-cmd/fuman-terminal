@@ -1619,6 +1619,7 @@
       cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
       sourceCoverage: payload.sourceCoverage || null,
       resourceReadiness: payload.resourceReadiness || null,
+      marketSession: payload.marketSession || null,
       selfCheck: payload.selfCheck || null,
       freshness: payload.selfCheck?.freshness || null,
     };
@@ -1627,6 +1628,10 @@
   function strategy2HealthMeta() {
     const stored = canvasStore.get("strategy|策略2")?.meta;
     return canvasState.meta || stored || null;
+  }
+
+  function strategy2AfterhoursHoldActive(meta = strategy2HealthMeta()) {
+    return String(meta?.marketSession?.session || "") === "afterhours_hold_until_midnight";
   }
 
   function strategy2HealthBannerHtml(meta = strategy2HealthMeta()) {
@@ -5514,7 +5519,7 @@
           <section class="strategy2-battle-panel strategy2-entry-panel" aria-label="即時進場">
             <header>
               <div>
-                <span>即時進場（最新在上）</span>
+                <span data-strategy2-entry-title>即時進場（最新在上）</span>
                 <strong data-strategy2-entry-count>0 筆</strong>
               </div>
               <small data-strategy2-entry-note>進場黃字，預備進場深藍</small>
@@ -5553,25 +5558,32 @@
     const status = shell.querySelector(".desktop-canvas-status");
     const emptyNote = shell.querySelector("[data-canvas-empty-note]");
     const entryCountNode = shell.querySelector("[data-strategy2-entry-count]");
+    const entryTitle = shell.querySelector("[data-strategy2-entry-title]");
     const entryNote = shell.querySelector("[data-strategy2-entry-note]");
     const historyCountNode = shell.querySelector("[data-strategy2-history-count]");
     const entryRows = shell.querySelector("[data-strategy2-entry-rows]");
     const historyRows = shell.querySelector("[data-strategy2-history-rows]");
     const oldBanner = shell.querySelector("[data-strategy2-health-banner]");
     const nextBanner = strategy2HealthBannerHtml();
+    const afterhoursHold = strategy2AfterhoursHoldActive();
     if (oldBanner) oldBanner.remove();
     if (nextBanner) {
       const header = shell.querySelector(".strategy2-battle-header");
       if (header) header.insertAdjacentHTML("afterend", nextBanner);
     }
     if (title) title.textContent = meta.title;
-    if (summary) summary.textContent = "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
+    if (summary) summary.textContent = afterhoursHold
+      ? "今日策略2圖卡收盤後保留顯示，24:00 自動重置。"
+      : "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
     if (count) count.textContent = `${rows.length}筆`;
     if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
       ? "快照先顯示｜即時刷新中"
       : canvasState.source || "api";
+    if (entryTitle) entryTitle.textContent = afterhoursHold ? "今日進場保留（24:00 重置）" : "即時進場（最新在上）";
     if (entryCountNode) entryCountNode.textContent = `${entryCount} 進場 / ${prepareCount} 預備`;
-    if (entryNote) entryNote.textContent = entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
+    if (entryNote) entryNote.textContent = afterhoursHold
+      ? "收盤後保留今日進場圖卡，24:00 重置"
+      : entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
     if (historyCountNode) historyCountNode.textContent = `${rows.length} 筆`;
     if (entryRows) entryRows.innerHTML = strategy2RowsHtml(liveRows, "entry");
     if (historyRows) historyRows.innerHTML = strategy2RowsHtml(rows, "history");
