@@ -43,7 +43,7 @@ const REALTIME_BATCH_RETRY_DELAY_MS = Math.max(0, Number(process.env.REALTIME_RA
 const REALTIME_STALE_RESCAN_LIMIT = Math.max(0, Number(process.env.REALTIME_RADAR_STALE_RESCAN_LIMIT || 180));
 const REALTIME_RADAR_ALERT_COOLDOWN_MS = Math.max(0, Number(process.env.REALTIME_RADAR_ALERT_COOLDOWN_MS || 15 * 60 * 1000));
 const USE_LOCAL_REALTIME_API = process.env.REALTIME_RADAR_USE_LOCAL_API !== "0";
-const REALTIME_RADAR_EXCLUDED_CODES = new Set(String(process.env.REALTIME_RADAR_EXCLUDED_CODES || "1475,2254,7732,8488")
+const REALTIME_RADAR_EXCLUDED_CODES = new Set(String(process.env.REALTIME_RADAR_EXCLUDED_CODES || "1475,1538,2254,2321,2901,5906,7732,8101,8488")
   .split(",")
   .map((code) => code.replace(/\D/g, "").slice(0, 4))
   .filter(Boolean));
@@ -326,6 +326,13 @@ function quoteAgeSeconds(scanTimestamp, quoteTime) {
   return Math.abs(scanSeconds - quoteSeconds);
 }
 
+function isFutureQuoteTime(scanTimestamp, quoteTime, toleranceSeconds = 90) {
+  const scanSeconds = secondsOfDay(scanTimestamp);
+  const quoteSeconds = secondsOfDay(quoteTime);
+  if (scanSeconds == null || quoteSeconds == null) return false;
+  return quoteSeconds > scanSeconds + toleranceSeconds;
+}
+
 function hasFreshQuote(stock) {
   return stock?.isRealtime === true && cleanNumber(stock.close) > 0;
 }
@@ -484,7 +491,7 @@ async function runWithConcurrency(items, limit, worker) {
   });
   await Promise.all(workers);
 }
-async function fetchRealtime(stocks) {
+async function fetchRealtime(stocks, scanTimestamp = "") {
   const quotes = new Map();
   const batchSize = REALTIME_BATCH_SIZE;
   const failedBatches = [];
@@ -545,7 +552,7 @@ async function fetchRealtime(stocks) {
       batchByCode.set(code, { batchIndex: batch.batchIndex, startCode: batch.codes[0], endCode: batch.codes.at(-1) });
     }
   }
-  const liveStocks = applyRealtimeQuotes(stocks, quotes).map((stock) => ({
+  const liveStocks = applyRealtimeQuotes(stocks, quotes, scanTimestamp).map((stock) => ({
     ...stock,
     realtimeBatch: batchByCode.get(stock.code) || null,
   }));
@@ -592,15 +599,25 @@ function normalizeRescanBatches(batches = []) {
   });
 }
 
-function applyRealtimeQuotes(stocks, quotes) {
+function applyRealtimeQuotes(stocks, quotes, scanTimestamp = "") {
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
     if (!quote?.close) return stock;
+    if (isFutureQuoteTime(scanTimestamp, quote.time)) {
+      return {
+        ...stock,
+        quoteTime: quote.time || stock.quoteTime || stock.time || "",
+        quoteSource: quote.quoteSource || quote.realtimeFallback || "api/realtime",
+        rejectedQuoteReason: "future_quote_time",
+        isRealtime: false,
+      };
+    }
     const volume = cleanNumber(quote.tradeVolume) || cleanNumber(stock.tradeVolume);
     const close = cleanNumber(quote.close) || cleanNumber(stock.close);
     return {
       ...stock,
       ...quote,
+      name: String(stock.name || quote.name || stock.code || quote.code || ""),
       close,
       quoteTime: quote.time || "",
       quoteSource: quote.quoteSource || quote.realtimeFallback || "api/realtime",
@@ -804,9 +821,11 @@ function radarRowSessionSeconds(row) {
   return secondsOfDay(row?.firstSignalTime || row?.time || row?.quoteTime || row?.lastSignalTime);
 }
 
-function isSessionRadarRow(row) {
+function isSessionRadarRow(row, scanTimestamp = "") {
   const seconds = radarRowSessionSeconds(row);
-  return seconds == null || (seconds >= MARKET_START_SECONDS && seconds <= MARKET_END_SECONDS);
+  const rowTime = row?.firstSignalTime || row?.time || row?.quoteTime || row?.lastSignalTime || "";
+  return (seconds == null || (seconds >= MARKET_START_SECONDS && seconds <= MARKET_END_SECONDS))
+    && !isFutureQuoteTime(scanTimestamp, rowTime);
 }
 
 function radarRowKey(row) {
@@ -828,7 +847,7 @@ function mergeRadarSessionRows(previousPayload, currentRows, scanTimestamp, trad
     : [];
   const rowsByKey = new Map();
   const addRow = (row, preferLatest) => {
-    if (!row || !row.code || !isSessionRadarRow(row)) return;
+    if (!row || !row.code || !isSessionRadarRow(row, scanTimestamp)) return;
     const firstSignalTime = row.firstSignalTime || row.time || row.quoteTime || String(scanTimestamp).match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || "";
     const normalized = {
       ...row,
@@ -861,7 +880,7 @@ function mergeRadarSessionRows(previousPayload, currentRows, scanTimestamp, trad
   previousRows.forEach((row) => addRow(row, false));
   currentRows.forEach((row) => addRow(row, true));
   return [...rowsByKey.values()]
-    .filter(isSessionRadarRow)
+    .filter((row) => isSessionRadarRow(row, scanTimestamp))
     .sort((a, b) => (radarRowSessionSeconds(b) ?? 0) - (radarRowSessionSeconds(a) ?? 0)
       || cleanNumber(b.score) - cleanNumber(a.score)
       || cleanNumber(b.value) - cleanNumber(a.value)
@@ -891,7 +910,7 @@ async function main() {
 
   const rawStocks = await fetchStocks();
   const queuedBatches = hydrateQueuedBatches(readFailedBatchQueue(), rawStocks);
-  const realtime = await fetchRealtime(rawStocks);
+  const realtime = await fetchRealtime(rawStocks, timestamp);
   const liveStocks = realtime.stocks;
   const freshStocks = liveStocks.filter((stock) => hasFreshQuote(stock));
   const staleStocks = liveStocks.filter((stock) => !hasFreshQuote(stock));
@@ -984,7 +1003,7 @@ async function main() {
     const retry = await rescanRealtimeBatches(deferredBatches);
     deferredRetry = retry;
     if (retry.quotes.size) {
-      const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes)
+      const retryStocks = applyRealtimeQuotes(deferredBatches.flatMap((batch) => batch.stocks || []), retry.quotes, timestamp)
         .filter((stock) => hasFreshQuote(stock));
       const retryRows = buildRadarRows(retryStocks, detectedAt, timestamp);
       const mergedRows = mergeRadarSessionRows(payload, retryRows, timestamp, key);

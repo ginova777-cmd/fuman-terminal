@@ -573,18 +573,21 @@ module.exports = async function handler(request, response) {
     };
     const session = buildMarketSession(tradingDay, payload);
     if (!isTradingDayPayloadFresh(session, payload)) {
-      try {
-        const quotePayload = await fetchQuoteViewFallback(requestedLimit);
-        const quoteSession = buildMarketSession(tradingDay, quotePayload);
-        if (quotePayload.rows.length && isTradingDayPayloadFresh(quoteSession, quotePayload)) {
-          response.status(200).json(withMarketSession(quotePayload, quoteSession, "stale-radar-cache-quote-view-fallback", requestedLimit));
-          return;
-        }
-      } catch (error) {
-        primaryError = [primaryError, error?.message || String(error)].filter(Boolean).join(" | ");
-      }
-      const stalePayload = staleTradingDayPayload(payload, session, primaryError || "trading_day_radar_cache_stale");
-      response.status(503).json(withMarketSession(stalePayload, session, stalePayload.reason, requestedLimit));
+      const stalePayload = {
+        ...payload,
+        ok: false,
+        status: payload.status === "ok" ? "degraded" : payload.status || "degraded",
+        reason: primaryError || "trading_day_radar_cache_stale",
+        freshness: {
+          ...(payload.freshness || {}),
+          decision: "degraded",
+          reason: primaryError || "trading_day_radar_cache_stale",
+          checkedAt: new Date().toISOString(),
+          marketDataDate: session?.marketDataDate || "",
+          today: session?.today || "",
+        },
+      };
+      response.status(200).json(withMarketSession(stalePayload, session, stalePayload.reason, requestedLimit));
       return;
     }
     response.status(200).json(withMarketSession(payload, session, "", requestedLimit));
