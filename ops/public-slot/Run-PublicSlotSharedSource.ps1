@@ -1413,7 +1413,7 @@ function Write-QuoteHeartbeatStatus {
     $futoptStockTickers = [int](Get-PreviousPayloadValue -Key "futopt_stock_tickers" -Default 0)
     $futoptStockQuoteUniverse = [int](Get-PreviousPayloadValue -Key "futopt_stock_quote_universe" -Default 0)
 
-    $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); preopen=$(@($PreopenRows).Count)"
+    $message = "writer=quote-heartbeat; collector=$CollectorState; active_symbols=$SeededSymbols; blacklist_count=$BlacklistCount; eligible_quote_rows=$effectiveEligibleQuoteRows; eligible_quote_coverage=$effectiveQuoteCoverage; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); quotes=$quoteCount; quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($RestQuotePayload.attempted); rest_quote_rows=$($RestQuotePayload.quotes.Count); rest_quote_unsupported=$($RestQuotePayload.unsupported_symbols); preopen=$(@($PreopenRows).Count)"
 
     $heartbeatPayload = @{
       source_contract_version = $SourceContractVersion
@@ -1538,8 +1538,13 @@ function Write-QuoteHeartbeatStatus {
       top_movers_1m_universe_count = $effectiveEligibleSymbols
       synthetic_ratio = 0
       rest_quote_attempted = $RestQuotePayload.attempted
+      rest_quote_scanned_for_batch = if ($RestQuotePayload.scanned_for_batch) { $RestQuotePayload.scanned_for_batch } else { $RestQuotePayload.attempted }
       rest_quote_rows = $RestQuotePayload.quotes.Count
       rest_quote_fetched_symbols = $RestQuotePayload.fetched
+      rest_quote_unsupported_this_loop = if ($RestQuotePayload.unsupported) { $RestQuotePayload.unsupported } else { 0 }
+      rest_quote_unsupported_symbols = if ($RestQuotePayload.unsupported_symbols) { $RestQuotePayload.unsupported_symbols } else { 0 }
+      rest_quote_unsupported_trade_date = if ($RestQuotePayload.unsupported_trade_date) { $RestQuotePayload.unsupported_trade_date } else { (Get-Date).ToString("yyyy-MM-dd") }
+      unsupported_trade_date = if ($RestQuotePayload.unsupported_trade_date) { $RestQuotePayload.unsupported_trade_date } else { (Get-Date).ToString("yyyy-MM-dd") }
       rest_quote_batch_size = $RestQuoteBatchSize
       rest_quote_effective_batch_size = if ($RestQuotePayload.effective_batch_size) { $RestQuotePayload.effective_batch_size } else { $RestQuoteBatchSize }
       rest_quote_every_seconds = $RestQuoteEverySeconds
@@ -1904,7 +1909,14 @@ function Invoke-FugleStockQuote {
     $uri = "https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/$Symbol"
     return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 12 -ErrorAction Stop
   } catch {
+    $statusCode = $null
+    try {
+      if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+        $statusCode = [int]$_.Exception.Response.StatusCode
+      }
+    } catch {}
     Write-Log "WARN rest_quote $Symbol failed: $($_.Exception.Message)"
+    if ($statusCode -eq 404 -or $_.Exception.Message -match '\b404\b|Not Found') { $script:RestQuoteUnsupportedSymbol = $true }
     if ($_.Exception.Message -match '429|Too Many') { $script:RestQuoteRateLimited = $true }
     return $null
   }
@@ -1984,14 +1996,23 @@ function Merge-QuoteObjectsByCode {
 function Invoke-FugleStockQuoteBatch {
   param([string[]]$Symbols, [string]$ApiKey, [bool]$Force = $false)
   $state = Read-JsonFile -Path $RestQuoteStateFile -Default ([pscustomobject]@{ cursor = 0; last_run_at = $null })
+  $todayKey = (Get-Date).ToString("yyyy-MM-dd")
+  $unsupported = New-Object 'System.Collections.Generic.HashSet[string]'
+  if ([string]$state.unsupported_trade_date -eq $todayKey) {
+    foreach ($item in @($state.unsupported_symbols)) {
+      $symbol = ([string]$item).Trim()
+      if (-not [string]::IsNullOrWhiteSpace($symbol)) { [void]$unsupported.Add($symbol) }
+    }
+  }
   $script:RestQuoteRateLimited = $false
+  $script:RestQuoteUnsupportedSymbol = $false
   $lastRun = $null
   try { if ($state.last_run_at) { $lastRun = [datetimeoffset]::Parse([string]$state.last_run_at).LocalDateTime } } catch {}
   if (-not $Force -and $null -ne $lastRun -and ((Get-Date) - $lastRun).TotalSeconds -lt $RestQuoteEverySeconds) {
-    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
+    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false; unsupported = 0; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey }
   }
   if ($Symbols.Count -eq 0 -or [string]::IsNullOrWhiteSpace($ApiKey)) {
-    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $false; rate_limited = $false }
+    return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $false; rate_limited = $false; unsupported = 0; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey }
   }
 
   $cursor = [int]($state.cursor)
@@ -2000,14 +2021,23 @@ function Invoke-FugleStockQuoteBatch {
   $effectiveDelayMilliseconds = Get-EffectiveRestQuoteDelayMilliseconds
   $openingBoostActive = Test-OpeningBoostWindow
   $batch = New-Object System.Collections.Generic.List[string]
-  for ($i = 0; $i -lt [math]::Min($effectiveBatchSize, $Symbols.Count); $i++) {
-    $batch.Add([string]$Symbols[($cursor + $i) % $Symbols.Count])
+  $scannedForBatch = 0
+  while ($batch.Count -lt [math]::Min($effectiveBatchSize, $Symbols.Count) -and $scannedForBatch -lt $Symbols.Count) {
+    $candidate = [string]$Symbols[($cursor + $scannedForBatch) % $Symbols.Count]
+    $scannedForBatch += 1
+    if ($unsupported.Contains($candidate)) { continue }
+    $batch.Add($candidate)
   }
 
   $quotes = New-Object System.Collections.Generic.List[object]
+  $unsupportedThisLoop = New-Object System.Collections.Generic.List[string]
   $fetched = 0
   foreach ($symbol in $batch) {
+    $script:RestQuoteUnsupportedSymbol = $false
     $quote = Invoke-FugleStockQuote -Symbol $symbol -ApiKey $ApiKey
+    if ($script:RestQuoteUnsupportedSymbol) {
+      if ($unsupported.Add($symbol)) { $unsupportedThisLoop.Add($symbol) }
+    }
     $converted = Convert-FugleStockQuoteToWsLikeQuote -Quote $quote
     if ($null -ne $converted) {
       $fetched += 1
@@ -2022,13 +2052,20 @@ function Invoke-FugleStockQuoteBatch {
     }
   }
 
-  $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $Symbols.Count
+  $nextCursor = ($cursor + [math]::Max(1, $scannedForBatch)) % $Symbols.Count
+  $unsupportedArray = @($unsupported | Sort-Object)
   Write-JsonFile -Path $RestQuoteStateFile -Value ([ordered]@{
     cursor = $nextCursor
     last_run_at = (Get-Date).ToString("o")
     last_attempted = $batch.Count
+    scanned_for_batch = $scannedForBatch
     last_fetched_symbols = $fetched
     last_rows = $quotes.Count
+    last_unsupported_count = $unsupportedThisLoop.Count
+    last_unsupported_symbols = $unsupportedThisLoop.ToArray()
+    unsupported_symbol_count = $unsupported.Count
+    unsupported_symbols = $unsupportedArray
+    unsupported_trade_date = $todayKey
     universe = $Symbols.Count
     delay_milliseconds = $effectiveDelayMilliseconds
     configured_batch_size = $RestQuoteBatchSize
@@ -2037,7 +2074,7 @@ function Invoke-FugleStockQuoteBatch {
     opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
     rate_limited = [bool]$script:RestQuoteRateLimited
   })
-  return @{ quotes = $quotes.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:RestQuoteRateLimited; opening_boost_active = [bool]$openingBoostActive; effective_batch_size = $effectiveBatchSize; effective_delay_milliseconds = $effectiveDelayMilliseconds }
+  return @{ quotes = $quotes.ToArray(); attempted = $batch.Count; scanned_for_batch = $scannedForBatch; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:RestQuoteRateLimited; unsupported = $unsupportedThisLoop.Count; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey; opening_boost_active = [bool]$openingBoostActive; effective_batch_size = $effectiveBatchSize; effective_delay_milliseconds = $effectiveDelayMilliseconds }
 }
 
 function Test-ProcessAlive {
@@ -3484,8 +3521,13 @@ do {
       quote_age_seconds = $quoteAgeSeconds
       quote_cache_file_age_seconds = $age
       rest_quote_attempted = $restQuotePayload.attempted
+      rest_quote_scanned_for_batch = if ($restQuotePayload.scanned_for_batch) { $restQuotePayload.scanned_for_batch } else { $restQuotePayload.attempted }
       rest_quote_rows = $restQuotePayload.quotes.Count
       rest_quote_fetched_symbols = $restQuotePayload.fetched
+      rest_quote_unsupported_this_loop = if ($restQuotePayload.unsupported) { $restQuotePayload.unsupported } else { 0 }
+      rest_quote_unsupported_symbols = if ($restQuotePayload.unsupported_symbols) { $restQuotePayload.unsupported_symbols } else { 0 }
+      rest_quote_unsupported_trade_date = if ($restQuotePayload.unsupported_trade_date) { $restQuotePayload.unsupported_trade_date } else { (Get-Date).ToString("yyyy-MM-dd") }
+      unsupported_trade_date = if ($restQuotePayload.unsupported_trade_date) { $restQuotePayload.unsupported_trade_date } else { (Get-Date).ToString("yyyy-MM-dd") }
       rest_quote_batch_size = $RestQuoteBatchSize
       rest_quote_effective_batch_size = if ($restQuotePayload.effective_batch_size) { $restQuotePayload.effective_batch_size } else { $RestQuoteBatchSize }
       rest_quote_every_seconds = $RestQuoteEverySeconds

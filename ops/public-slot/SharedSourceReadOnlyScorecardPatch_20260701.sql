@@ -154,7 +154,11 @@ select
   lower(coalesce(payload ->> 'finmindRecoverySkipped', payload #>> '{websocket_status,finmindRecoverySkipped}', 'false')) = 'true' as finmind_recovery_skipped,
   coalesce(payload ->> 'finmindRecoveryError', payload #>> '{websocket_status,finmindRecoveryError}') as finmind_recovery_error,
   coalesce(payload ->> 'finmindRecoveryCooldownUntil', payload #>> '{websocket_status,finmindRecoveryCooldownUntil}') as finmind_recovery_cooldown_until,
-  coalesce(payload ->> 'finmindRecoveryLastError', payload #>> '{websocket_status,finmindRecoveryLastError}') as finmind_recovery_last_error
+  coalesce(payload ->> 'finmindRecoveryLastError', payload #>> '{websocket_status,finmindRecoveryLastError}') as finmind_recovery_last_error,
+  coalesce(nullif(payload ->> 'rest_quote_scanned_for_batch', '')::integer, 0) as rest_quote_scanned_for_batch,
+  coalesce(nullif(payload ->> 'rest_quote_unsupported_this_loop', '')::integer, 0) as rest_quote_unsupported_this_loop,
+  coalesce(nullif(payload ->> 'rest_quote_unsupported_symbols', '')::integer, 0) as rest_quote_unsupported_symbols,
+  coalesce(payload ->> 'unsupported_trade_date', payload ->> 'rest_quote_unsupported_trade_date') as unsupported_trade_date
 from parsed;
 
 comment on view public.v_fuman_shared_source_readonly_scorecard is
