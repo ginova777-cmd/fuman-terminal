@@ -915,6 +915,18 @@ for (const marker of [
   "progressive quote fill",
   "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
   "FugleCollectorFinMindRecoveryEnabled",
+  "PrioritySymbolsFile",
+  "fugle-ws-priority-symbols.json",
+  "Get-StrategyPrioritySymbols",
+  "Get-ThreeDayOpenHighFadeSymbols",
+  "Get-DynamicAmplitudeBullSymbols",
+  "Get-DynamicVolumeSurgeSymbols",
+  "strategy_priority_symbols",
+  "three_day_open_high_fade_symbols",
+  "dynamic_amplitude_bull_symbols",
+  "dynamic_volume_surge_symbols",
+  "collector_adaptive_rpm",
+  "collector_priority_symbols",
   "Add-FreshQuoteReadthrough",
   "Get-FreshPublicSlotQuoteRows",
   "fresh_quote_readthrough_rows",
@@ -956,6 +968,11 @@ for (const marker of [
   "finmindRecoveryFetched",
   "effectiveCollectorConfig",
   "openingBoostActive",
+  "PRIORITY_SYMBOLS_FILE",
+  "readPrioritySymbols",
+  "selectStaleFirstBatch(symbols, batchSize, unsupported, prioritySymbols",
+  "adaptiveRpm",
+  "priorityThreeDayOpenHighFadeSymbols",
   "REQUEST_TIMEOUT_MS",
   "REQUEST_RETRIES",
 ]) {
@@ -970,6 +987,11 @@ for (const marker of [
   "finmindRecoveryFetched",
   "effectiveCollectorConfig",
   "openingBoostActive",
+  "PRIORITY_SYMBOLS_FILE",
+  "readPrioritySymbols",
+  "selectStaleFirstBatch(symbols, batchSize, unsupported, prioritySymbols",
+  "adaptiveRpm",
+  "priorityThreeDayOpenHighFadeSymbols",
   "REQUEST_TIMEOUT_MS",
   "REQUEST_RETRIES",
 ]) {
@@ -1057,6 +1079,18 @@ for (const marker of [
   "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
   "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
   "FugleCollectorFinMindRecoveryEnabled",
+  "PrioritySymbolsFile",
+  "fugle-ws-priority-symbols.json",
+  "Get-StrategyPrioritySymbols",
+  "Get-ThreeDayOpenHighFadeSymbols",
+  "Get-DynamicAmplitudeBullSymbols",
+  "Get-DynamicVolumeSurgeSymbols",
+  "strategy_priority_symbols",
+  "three_day_open_high_fade_symbols",
+  "dynamic_amplitude_bull_symbols",
+  "dynamic_volume_surge_symbols",
+  "collector_adaptive_rpm",
+  "collector_priority_symbols",
   "Add-FreshQuoteReadthrough",
   "Get-FreshPublicSlotQuoteRows",
   "WriterOwnerComputer",
@@ -1088,7 +1122,7 @@ for (const [name, text] of [
   ["Start-PublicSlotSharedSource.cmd", publicSlotSharedSourceStarter],
   ["Start-Strategy2ReadinessSource.cmd", strategy2ReadinessSourceStarter],
 ]) {
-  for (const marker of ["-RestQuoteBatchSize 240", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
+  for (const marker of ["-RestQuoteBatchSize 240", "-RestQuoteDelayMilliseconds 40", "-RestQuoteOpeningBoostBatchSize 180", "-RestQuoteOpeningBoostDelayMilliseconds 80", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
     if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
   }
 }
@@ -1119,6 +1153,12 @@ for (const marker of [
   "finmind_recovery_cooldown_until",
   "rest_quote_unsupported_symbols",
   "rest_quote_unsupported_this_loop",
+  "strategy_priority_symbols",
+  "three_day_open_high_fade_symbols",
+  "dynamic_amplitude_bull_symbols",
+  "dynamic_volume_surge_symbols",
+  "collector_priority_symbols",
+  "collector_adaptive_rpm",
   "websocket_status",
   "readonly_verdict",
   "grant select",
@@ -1141,6 +1181,9 @@ for (const marker of [
   "rest_quote_rate_limited_while_coverage_low",
   "fresh_quote_readthrough_not_running",
   "rest_quote_effective_batch_zero",
+  "strategyPrioritySymbols",
+  "dynamicMotherPoolSymbols",
+  "collectorAdaptiveRpm",
 ]) {
   if (!sharedSourceReadonlyVerifier.includes(marker)) issues.push(`Test-PublicSlotSharedSourceReadOnly.ps1 missing read-only verifier marker ${marker}`);
 }

@@ -35,6 +35,14 @@ const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_C
 const OPENING_BOOST_CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY || 2)));
 const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS || 80));
 const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_TARGET_COVERAGE || 0.95)));
+const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
+const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
+const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
+const PRIORITY_SYMBOLS_FILE = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-priority-symbols.json");
+const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 180));
+const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 30));
+const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 360));
+const ADAPTIVE_429_COOLDOWN_MS = Math.max(10000, Number(process.env.FUGLE_COLLECTOR_429_COOLDOWN_MS || 60000));
 
 let cursor = 0;
 let lastMessageAt = "";
@@ -147,6 +155,82 @@ function countFreshCachedQuotes(symbols) {
   return count;
 }
 
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, number));
+}
+
+function readRateState() {
+  const state = readJson(RATE_STATE_FILE, {});
+  return {
+    allowedRpm: clampNumber(state.allowedRpm || ADAPTIVE_INITIAL_RPM, ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM),
+    stableTicks: Math.max(0, Number(state.stableTicks || 0)),
+    last429At: state.last429At || "",
+    cooldownUntil: state.cooldownUntil || "",
+    updatedAt: state.updatedAt || "",
+  };
+}
+
+function writeRateState(state) {
+  writeJson(RATE_STATE_FILE, {
+    allowedRpm: clampNumber(state.allowedRpm, ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM),
+    stableTicks: Math.max(0, Number(state.stableTicks || 0)),
+    last429At: state.last429At || "",
+    cooldownUntil: state.cooldownUntil || "",
+    updatedAt: nowIso(),
+  });
+}
+
+function adaptiveDelayMs(baseDelayMs, concurrency, allowedRpm) {
+  const rpm = clampNumber(allowedRpm, ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM);
+  const delay = Math.ceil((60000 * Math.max(1, concurrency)) / rpm);
+  return Math.max(baseDelayMs, delay);
+}
+
+function applyRateSuccess(state, fetched) {
+  const next = { ...state };
+  if (fetched > 0) next.stableTicks += 1;
+  if (next.stableTicks >= 3) {
+    next.allowedRpm = clampNumber(Math.ceil(next.allowedRpm * 1.08 + 5), ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM);
+    next.stableTicks = 0;
+  }
+  next.cooldownUntil = "";
+  writeRateState(next);
+  return next;
+}
+
+function applyRateLimited(state) {
+  const next = {
+    ...state,
+    allowedRpm: clampNumber(Math.floor(state.allowedRpm * 0.55), ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM),
+    stableTicks: 0,
+    last429At: nowIso(),
+    cooldownUntil: new Date(Date.now() + ADAPTIVE_429_COOLDOWN_MS).toISOString(),
+  };
+  writeRateState(next);
+  return next;
+}
+
+function readUnsupportedState() {
+  const today = currentTaipeiDate();
+  const state = readJson(UNSUPPORTED_STATE_FILE, {});
+  const symbols = state.tradeDate === today && Array.isArray(state.symbols) ? state.symbols : [];
+  return {
+    tradeDate: today,
+    symbols: new Set(symbols.map(normalizeCode).filter((code) => /^\d{4}$/.test(code))),
+  };
+}
+
+function writeUnsupportedState(state) {
+  writeJson(UNSUPPORTED_STATE_FILE, {
+    tradeDate: state.tradeDate || currentTaipeiDate(),
+    count: state.symbols.size,
+    symbols: [...state.symbols].sort(),
+    updatedAt: nowIso(),
+  });
+}
+
 function freshCachedCodeSet(symbols) {
   const symbolSet = new Set(symbols);
   const payload = readJson(FUGLE_WS_QUOTES_FILE, {});
@@ -159,6 +243,51 @@ function freshCachedCodeSet(symbols) {
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) fresh.add(code);
   }
   return fresh;
+}
+
+function readPrioritySymbols(symbols) {
+  const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const universe = new Set(symbols);
+  const seen = new Set();
+  const ordered = [];
+  const counts = {
+    strategy1: 0,
+    strategy3: 0,
+    strategy4: 0,
+    threeDayOpenHighFade: 0,
+    dynamic: 0,
+    hot: 0,
+    symbols: 0,
+  };
+  const addMany = (key, values) => {
+    const list = Array.isArray(values) ? values : [];
+    let count = 0;
+    for (const value of list) {
+      const code = normalizeCode(value?.symbol || value?.code || value);
+      if (!/^\d{4}$/.test(code) || !universe.has(code)) continue;
+      count += 1;
+      if (!seen.has(code)) {
+        seen.add(code);
+        ordered.push(code);
+      }
+    }
+    counts[key] = count;
+  };
+
+  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols);
+  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols);
+  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols);
+  addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols);
+  addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols);
+  addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols);
+  addMany("symbols", payload.symbols);
+
+  return {
+    symbols: ordered,
+    counts,
+    updatedAt: payload.updatedAt || "",
+    source: payload.source || "",
+  };
 }
 
 function currentTaipeiDate() {
@@ -181,6 +310,57 @@ function effectiveCollectorConfig(symbols) {
     batchSize: openingBoostActive ? Math.min(symbols.length, Math.max(BATCH_SIZE, OPENING_BOOST_BATCH_SIZE)) : BATCH_SIZE,
     concurrency: openingBoostActive ? OPENING_BOOST_CONCURRENCY : CONCURRENCY,
     delayMs: openingBoostActive ? Math.max(PER_SYMBOL_DELAY_MS, OPENING_BOOST_DELAY_MS) : PER_SYMBOL_DELAY_MS,
+  };
+}
+
+function selectStaleFirstBatch(symbols, batchSize, unsupported, prioritySymbols = []) {
+  const fresh = freshCachedCodeSet(symbols);
+  const universe = new Set(symbols);
+  const prioritySet = new Set(prioritySymbols.filter((code) => universe.has(code) && !unsupported.has(code)));
+  const priorityList = prioritySymbols.filter((code, index, array) => prioritySet.has(code) && array.indexOf(code) === index);
+  const batch = [];
+  const batchSet = new Set();
+  const limit = Math.min(batchSize, symbols.length);
+  const addCandidate = (code) => {
+    if (batch.length >= limit || unsupported.has(code) || batchSet.has(code)) return false;
+    batch.push(code);
+    batchSet.add(code);
+    return true;
+  };
+  let priorityAttempted = 0;
+  for (const code of priorityList) {
+    if (!fresh.has(code) && addCandidate(code)) priorityAttempted += 1;
+  }
+  let scanned = 0;
+  while (batch.length < limit && scanned < symbols.length) {
+    const code = symbols[(cursor + scanned) % symbols.length];
+    scanned += 1;
+    if (prioritySet.has(code) || unsupported.has(code)) continue;
+    if (fresh.has(code)) continue;
+    addCandidate(code);
+  }
+  scanned = 0;
+  for (const code of priorityList) {
+    if (fresh.has(code) && addCandidate(code)) priorityAttempted += 1;
+  }
+  while (batch.length < limit && scanned < symbols.length) {
+    const code = symbols[(cursor + scanned) % symbols.length];
+    scanned += 1;
+    if (prioritySet.has(code) || unsupported.has(code)) continue;
+    addCandidate(code);
+  }
+  let priorityFreshCount = 0;
+  for (const code of priorityList) {
+    if (fresh.has(code)) priorityFreshCount += 1;
+  }
+  return {
+    batch,
+    scanned,
+    freshCount: fresh.size,
+    unsupportedCount: unsupported.size,
+    prioritySymbols: priorityList.length,
+    priorityAttempted,
+    priorityFreshCount,
   };
 }
 
@@ -387,13 +567,20 @@ async function fetchQuote(code, apiKey) {
       });
       if (response.status === 429) {
         last429At = nowIso();
-        cooldownUntil = Date.now() + 60000;
-        throw new Error("429 Too Many Requests");
+        cooldownUntil = Date.now() + ADAPTIVE_429_COOLDOWN_MS;
+        const error = new Error("429 Too Many Requests");
+        error.status = 429;
+        throw error;
       }
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        const error = new Error(`${response.status} ${response.statusText}`);
+        error.status = response.status;
+        throw error;
+      }
       return response.json();
     } catch (error) {
       lastError = error?.name === "AbortError" ? new Error(`timeout ${REQUEST_TIMEOUT_MS}ms`) : error;
+      if (Number(lastError?.status) === 429 || Number(lastError?.status) === 404) break;
       const retryable = /timeout|aborted|429|5\d\d|ECONNRESET|ETIMEDOUT/i.test(String(lastError?.message || lastError || ""));
       if (attempt >= REQUEST_RETRIES || !retryable) break;
       await new Promise((resolve) => setTimeout(resolve, REQUEST_RETRY_BACKOFF_MS * (attempt + 1)));
@@ -417,6 +604,11 @@ async function tick() {
     return;
   }
   const beforeFugle = effectiveCollectorConfig(symbols);
+  const rateState = readRateState();
+  const rateCooldownUntil = Date.parse(rateState.cooldownUntil || "");
+  if (Number.isFinite(rateCooldownUntil) && Date.now() < rateCooldownUntil) {
+    cooldownUntil = Math.max(cooldownUntil || 0, rateCooldownUntil);
+  }
   const shouldUseFinMind = beforeFugle.openingBoostActive || Date.now() < cooldownUntil;
   const finmindRecovery = shouldUseFinMind
     ? await fetchFinMindRecoveryQuotes(symbols, finmindToken)
@@ -439,12 +631,16 @@ async function tick() {
 
   if (cursor < 0 || cursor >= symbols.length) cursor = 0;
   const effective = effectiveCollectorConfig(symbols);
-  const batch = [];
-  for (let i = 0; i < Math.min(effective.batchSize, symbols.length); i += 1) {
-    batch.push(symbols[(cursor + i) % symbols.length]);
-  }
+  const unsupportedState = readUnsupportedState();
+  const priority = readPrioritySymbols(symbols);
+  const selected = selectStaleFirstBatch(symbols, effective.batchSize, unsupportedState.symbols, priority.symbols);
+  const batch = selected.batch;
+  const currentRateState = readRateState();
+  const pacingDelayMs = adaptiveDelayMs(effective.delayMs, effective.concurrency, currentRateState.allowedRpm);
 
   const quotes = [];
+  let rateLimited = false;
+  let unsupportedThisLoop = 0;
   for (let offset = 0; offset < batch.length; offset += effective.concurrency) {
     const chunk = batch.slice(offset, offset + effective.concurrency);
     const results = await Promise.all(chunk.map(async (code) => {
@@ -452,9 +648,16 @@ async function tick() {
         const payload = await fetchQuote(code, apiKey);
         return normalizeQuote(payload, code);
       } catch (error) {
-        if (String(error?.message || "").includes("429")) {
+        if (Number(error?.status) === 404 || String(error?.message || "").includes("404")) {
+          if (!unsupportedState.symbols.has(code)) {
+            unsupportedState.symbols.add(code);
+            unsupportedThisLoop += 1;
+          }
+        }
+        if (Number(error?.status) === 429 || String(error?.message || "").includes("429")) {
           last429At = nowIso();
-          cooldownUntil = Date.now() + 60000;
+          cooldownUntil = Date.now() + ADAPTIVE_429_COOLDOWN_MS;
+          rateLimited = true;
         }
         return null;
       }
@@ -463,13 +666,15 @@ async function tick() {
       if (quote) quotes.push(quote);
     }
     if (cooldownUntil && Date.now() < cooldownUntil) break;
-    if (effective.delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, effective.delayMs));
+    if (pacingDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, pacingDelayMs));
     }
   }
-  cursor = (cursor + Math.max(1, batch.length)) % symbols.length;
+  cursor = (cursor + Math.max(1, selected.scanned || batch.length)) % symbols.length;
   if (quotes.length) lastMessageAt = nowIso();
   const count = mergeQuotes(quotes);
+  writeUnsupportedState(unsupportedState);
+  const nextRateState = rateLimited ? applyRateLimited(currentRateState) : applyRateSuccess(currentRateState, quotes.length);
   writeStatus({
     subscribed: symbols.length,
     pending: Math.max(0, symbols.length - count),
@@ -482,12 +687,32 @@ async function tick() {
     finmindRecoveryError: finmindRecovery.error,
     finmindRecoveryCooldownUntil: finmindRecovery.cooldownUntil || (finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : ""),
     attempted: batch.length,
+    scanned: selected.scanned,
+    staleFirstFreshCount: selected.freshCount,
+    prioritySymbols: selected.prioritySymbols,
+    priorityAttempted: selected.priorityAttempted,
+    priorityFreshCount: selected.priorityFreshCount,
+    prioritySource: priority.source,
+    priorityFileUpdatedAt: priority.updatedAt,
+    priorityStrategy1Symbols: priority.counts.strategy1,
+    priorityStrategy3Symbols: priority.counts.strategy3,
+    priorityStrategy4Symbols: priority.counts.strategy4,
+    priorityThreeDayOpenHighFadeSymbols: priority.counts.threeDayOpenHighFade,
+    priorityDynamicSymbols: priority.counts.dynamic,
+    priorityHotSymbols: priority.counts.hot,
+    unsupportedSymbols: unsupportedState.symbols.size,
+    unsupportedThisLoop,
+    adaptiveRpm: nextRateState.allowedRpm,
+    adaptiveDelayMs: pacingDelayMs,
+    adaptiveStableTicks: nextRateState.stableTicks,
+    adaptiveRateLimited: rateLimited,
+    adaptiveCooldownUntil: nextRateState.cooldownUntil || "",
     openingBoostActive: effective.openingBoostActive,
     openingBoostFreshCount: effective.freshCount,
     openingBoostCoverage: Number(effective.coverage.toFixed(4)),
     batchSize: effective.batchSize,
     concurrency: effective.concurrency,
-    perSymbolDelayMs: effective.delayMs,
+    perSymbolDelayMs: pacingDelayMs,
     cursor,
   });
 }

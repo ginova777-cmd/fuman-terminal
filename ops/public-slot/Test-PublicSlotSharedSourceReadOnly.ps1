@@ -113,6 +113,18 @@ $restEffectiveBatch = [int](Convert-ToNumber $row.rest_quote_effective_batch_siz
 $readthroughRows = [int](Convert-ToNumber $row.fresh_quote_readthrough_rows 0)
 $activeSymbols = [int](Convert-ToNumber $row.active_symbols 0)
 $quotes = [int](Convert-ToNumber $row.quotes 0)
+$strategyPrioritySymbols = [int](Convert-ToNumber $row.strategy_priority_symbols 0)
+$threeDayOpenHighFadeSymbols = [int](Convert-ToNumber $row.three_day_open_high_fade_symbols 0)
+$openingPrioritySymbols = [int](Convert-ToNumber $row.opening_priority_symbols 0)
+$dynamicAmplitudeBullSymbols = [int](Convert-ToNumber $row.dynamic_amplitude_bull_symbols 0)
+$dynamicVolumeSurgeSymbols = [int](Convert-ToNumber $row.dynamic_volume_surge_symbols 0)
+$dynamicMotherPoolSymbols = [int](Convert-ToNumber $row.dynamic_mother_pool_symbols 0)
+$collectorPrioritySymbols = [int](Convert-ToNumber $row.collector_priority_symbols 0)
+$collectorPriorityAttempted = [int](Convert-ToNumber $row.collector_priority_attempted 0)
+$collectorPriorityFreshCount = [int](Convert-ToNumber $row.collector_priority_fresh_count 0)
+$collectorAdaptiveRpm = [int](Convert-ToNumber $row.collector_adaptive_rpm 0)
+$collectorAdaptiveDelayMs = [int](Convert-ToNumber $row.collector_adaptive_delay_ms 0)
+$collectorAdaptiveRateLimited = Convert-ToBool $row.collector_adaptive_rate_limited
 $inOpeningBoostWindow = Test-InTimeWindow -Start $OpeningBoostStart -End $OpeningBoostEnd
 
 if ($sourceAge -gt $MaxSourceAgeSeconds) {
@@ -123,6 +135,9 @@ if ($freshCoverage -lt $MinFreshQuoteCoverage120) {
 }
 if ($freshCoverage -lt $MinFreshQuoteCoverage120 -and $restQuoteRateLimited) {
   $issues.Add(@{ issue = "rest_quote_rate_limited_while_coverage_low"; detail = @{ coverage = $freshCoverage; restQuoteRateLimited = $restQuoteRateLimited } })
+}
+if ($freshCoverage -lt $MinFreshQuoteCoverage120 -and $collectorAdaptiveRateLimited) {
+  $issues.Add(@{ issue = "collector_adaptive_rate_limited_while_coverage_low"; detail = @{ coverage = $freshCoverage; adaptiveRpm = $collectorAdaptiveRpm; adaptiveDelayMs = $collectorAdaptiveDelayMs } })
 }
 if ($freshQuotes -lt $MinFreshQuoteCount120) {
   $issues.Add(@{ issue = "fresh_quote_count_low"; detail = @{ freshQuotes120s = $freshQuotes; min = $MinFreshQuoteCount120 } })
@@ -158,6 +173,9 @@ if ($inOpeningBoostWindow -and $freshCoverage -lt $MinFreshQuoteCoverage120) {
   if ($readthroughRows -le 0) {
     $issues.Add(@{ issue = "fresh_quote_readthrough_not_running"; detail = @{ freshQuoteReadthroughRows = $readthroughRows } })
   }
+  if ($collectorPrioritySymbols -le 0) {
+    $warnings.Add(@{ warning = "collector_priority_pool_not_visible"; detail = @{ collectorPrioritySymbols = $collectorPrioritySymbols; strategyPrioritySymbols = $strategyPrioritySymbols; openingPrioritySymbols = $openingPrioritySymbols } })
+  }
 }
 
 $ok = ($issues.Count -eq 0)
@@ -192,6 +210,21 @@ $result = @{
     restQuoteRateLimited = $restQuoteRateLimited
     restQuoteEffectiveBatchSize = $restEffectiveBatch
     freshQuoteReadthroughRows = $readthroughRows
+    strategyPrioritySymbols = $strategyPrioritySymbols
+    threeDayOpenHighFadeSymbols = $threeDayOpenHighFadeSymbols
+    openingPrioritySymbols = $openingPrioritySymbols
+    dynamicAmplitudeBullSymbols = $dynamicAmplitudeBullSymbols
+    dynamicVolumeSurgeSymbols = $dynamicVolumeSurgeSymbols
+    dynamicMotherPoolSymbols = $dynamicMotherPoolSymbols
+    priorityPolicy = $row.priority_policy
+    collectorPrioritySymbols = $collectorPrioritySymbols
+    collectorPriorityAttempted = $collectorPriorityAttempted
+    collectorPriorityFreshCount = $collectorPriorityFreshCount
+    collectorPrioritySource = $row.collector_priority_source
+    collectorPriorityFileUpdatedAt = $row.collector_priority_file_updated_at
+    collectorAdaptiveRpm = $collectorAdaptiveRpm
+    collectorAdaptiveDelayMs = $collectorAdaptiveDelayMs
+    collectorAdaptiveRateLimited = $collectorAdaptiveRateLimited
     writerComputer = $row.writer_computer
     writerOwnerComputer = $row.writer_owner_computer
   }

@@ -34,13 +34,13 @@ function Write-DefaultRuntimeConfig {
     loopSeconds = 10
     stopAt = "14:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 120
+    restQuoteBatchSize = 40
     restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 40
+    restQuoteDelayMilliseconds = 600
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 180
-    restQuoteOpeningBoostDelayMilliseconds = 80
+    restQuoteOpeningBoostBatchSize = 60
+    restQuoteOpeningBoostDelayMilliseconds = 600
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 120
     fugleCollectorConcurrency = 2
@@ -106,6 +106,18 @@ function Test-RepoRuntimeConfigSupport {
     "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
     "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
     "FugleCollectorFinMindRecoveryEnabled",
+    "PrioritySymbolsFile",
+    "fugle-ws-priority-symbols.json",
+    "Get-StrategyPrioritySymbols",
+    "Get-ThreeDayOpenHighFadeSymbols",
+    "Get-DynamicAmplitudeBullSymbols",
+    "Get-DynamicVolumeSurgeSymbols",
+    "strategy_priority_symbols",
+    "three_day_open_high_fade_symbols",
+    "dynamic_amplitude_bull_symbols",
+    "dynamic_volume_surge_symbols",
+    "collector_adaptive_rpm",
+    "collector_priority_symbols",
     "Add-FreshQuoteReadthrough",
     "Get-FreshPublicSlotQuoteRows",
     "Get-ActiveCommonStockSymbols",
@@ -217,13 +229,13 @@ function Test-RuntimeConfig {
     loopSeconds = 10
     stopAt = "14:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 120
+    restQuoteBatchSize = 40
     restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 40
+    restQuoteDelayMilliseconds = 600
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 180
-    restQuoteOpeningBoostDelayMilliseconds = 80
+    restQuoteOpeningBoostBatchSize = 60
+    restQuoteOpeningBoostDelayMilliseconds = 600
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 120
     fugleCollectorConcurrency = 2

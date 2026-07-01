@@ -20,13 +20,13 @@ param(
   [int]$QuoteDerivedOpeningBackfillMinutes = 6,
   [int]$Intraday1mFreshTargetSeconds = 60,
   [int]$Intraday1mFreshHardSeconds = 120,
-  [int]$RestQuoteBatchSize = 120,
+  [int]$RestQuoteBatchSize = 40,
   [int]$RestQuoteEverySeconds = 10,
-  [int]$RestQuoteDelayMilliseconds = 40,
+  [int]$RestQuoteDelayMilliseconds = 600,
   [string]$OpeningBoostStart = "08:45",
   [string]$OpeningBoostEnd = "13:30",
-  [int]$RestQuoteOpeningBoostBatchSize = 180,
-  [int]$RestQuoteOpeningBoostDelayMilliseconds = 80,
+  [int]$RestQuoteOpeningBoostBatchSize = 60,
+  [int]$RestQuoteOpeningBoostDelayMilliseconds = 600,
   [int]$FugleCollectorOpeningBoostBatchSize = 240,
   [int]$FugleCollectorOpeningBoostConcurrency = 2,
   [int]$FugleCollectorOpeningBoostDelayMilliseconds = 80,
@@ -72,6 +72,7 @@ $StateFile = Join-Path $LogDir "public-slot-minute-state.json"
 $Direct1mStateFile = Join-Path $LogDir "public-slot-direct-1m-state.json"
 $Direct1mPrewarmStateFile = Join-Path $LogDir "public-slot-direct-1m-prewarm-state.json"
 $RestQuoteStateFile = Join-Path $LogDir "public-slot-rest-quote-state.json"
+$PrioritySymbolsFile = Join-Path $RuntimeDir "cache\intraday\fugle-ws-priority-symbols.json"
 $FutoptQuoteStateFile = Join-Path $LogDir "public-slot-futopt-quote-state.json"
 $FutoptTickersCacheFile = Join-Path $LogDir "public-slot-futopt-tickers-cache.json"
 $BlacklistCacheFile = Join-Path $LogDir "fugle-api-blacklist-symbols-cache.txt"
@@ -92,6 +93,12 @@ $script:ApiUniverseStats = @{
   daytrade_hot_symbols = 0
   priority_strong_symbols = 0
   priority_symbols = 0
+  strategy_priority_symbols = 0
+  three_day_open_high_fade_symbols = 0
+  opening_priority_symbols = 0
+  dynamic_amplitude_bull_symbols = 0
+  dynamic_volume_surge_symbols = 0
+  dynamic_mother_pool_symbols = 0
   eligible_quote_rows = 0
   eligible_quote_coverage = 0
   mother_pool_source = ""
@@ -104,6 +111,14 @@ $script:ApiUniverseStats = @{
 $script:FreshQuoteReadthroughRows = 0
 $script:FreshQuoteReadthroughMergedRows = 0
 $script:FreshQuoteReadthroughReason = ""
+$script:StrategyPrioritySymbols = $null
+$script:StrategyPrioritySymbolsAt = [datetime]::MinValue
+$script:ThreeDayOpenHighFadeSymbols = $null
+$script:ThreeDayOpenHighFadeSymbolsAt = [datetime]::MinValue
+$script:DailyBullAlignedSymbols = $null
+$script:DailyBullAlignedSymbolsAt = [datetime]::MinValue
+$script:AvgVolume5Map = $null
+$script:AvgVolume5MapAt = [datetime]::MinValue
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
@@ -1130,6 +1145,335 @@ function Filter-SymbolsByQuoteLiquidity {
   return $filtered
 }
 
+function Add-PrioritySymbol {
+  param(
+    [System.Collections.Generic.List[string]]$List,
+    [System.Collections.Generic.HashSet[string]]$Seen,
+    [object]$Value,
+    [System.Collections.Generic.HashSet[string]]$UniverseSet = $null
+  )
+  $digits = [string]$Value -replace "\D", ""
+  if ($digits.Length -lt 4) { return }
+  $symbol = $digits.Substring(0, 4)
+  if ($symbol -notmatch '^\d{4}$' -or $symbol.StartsWith("00")) { return }
+  if ($null -ne $UniverseSet -and -not $UniverseSet.Contains($symbol)) { return }
+  if ($Seen.Add($symbol)) { $List.Add($symbol) }
+}
+
+function Get-UniqueSymbols {
+  param([object[]]$Values, [System.Collections.Generic.HashSet[string]]$UniverseSet = $null)
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+  $list = New-Object System.Collections.Generic.List[string]
+  foreach ($value in @($Values)) {
+    Add-PrioritySymbol -List $list -Seen $seen -Value $value -UniverseSet $UniverseSet
+  }
+  return $list.ToArray()
+}
+
+function Get-StrategyResultSymbols {
+  param([string]$Table, [string]$Strategy, [System.Collections.Generic.HashSet[string]]$UniverseSet)
+  $symbols = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($query in @(
+    "$Table`?select=code,symbol,strategy&strategy=eq.$Strategy",
+    "$Table`?select=code,symbol"
+  )) {
+    try {
+      $rows = @(Invoke-PublicSlotRestGetAll -PathAndQuery $query)
+      foreach ($row in $rows) {
+        Add-PrioritySymbol -List $symbols -Seen $seen -Value $row.code -UniverseSet $UniverseSet
+        Add-PrioritySymbol -List $symbols -Seen $seen -Value $row.symbol -UniverseSet $UniverseSet
+        if ($symbols.Count -ge 2000) { break }
+      }
+      if ($symbols.Count -gt 0) { break }
+    } catch {
+      Write-Log "WARN strategy priority read failed table=$Table strategy=$Strategy`: $($_.Exception.Message)"
+    }
+  }
+  return $symbols.ToArray()
+}
+
+function Get-StrategyPrioritySymbols {
+  param([string[]]$UniverseSymbols)
+  $now = Get-Date
+  if ($null -ne $script:StrategyPrioritySymbols -and (($now - $script:StrategyPrioritySymbolsAt).TotalMinutes -lt 2)) {
+    return $script:StrategyPrioritySymbols
+  }
+
+  $universeSet = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($symbol in @($UniverseSymbols)) {
+    if ([string]$symbol -match '^\d{4}$') { [void]$universeSet.Add([string]$symbol) }
+  }
+  $payload = [ordered]@{
+    strategy1 = @(Get-StrategyResultSymbols -Table "strategy1_open_buy_results" -Strategy "strategy1" -UniverseSet $universeSet)
+    strategy3 = @(Get-StrategyResultSymbols -Table "strategy3_scan_results" -Strategy "strategy3" -UniverseSet $universeSet)
+    strategy4 = @(Get-StrategyResultSymbols -Table "strategy4_scan_results" -Strategy "strategy4" -UniverseSet $universeSet)
+  }
+  $combined = @(Get-UniqueSymbols -Values (@($payload.strategy1) + @($payload.strategy3) + @($payload.strategy4)) -UniverseSet $universeSet)
+  $payload["symbols"] = $combined
+  $script:StrategyPrioritySymbols = $payload
+  $script:StrategyPrioritySymbolsAt = $now
+  return $payload
+}
+
+function Get-ThreeDayOpenHighFadeSymbols {
+  param([string[]]$UniverseSymbols)
+  $now = Get-Date
+  if ($null -ne $script:ThreeDayOpenHighFadeSymbols -and (($now - $script:ThreeDayOpenHighFadeSymbolsAt).TotalMinutes -lt 10)) {
+    return $script:ThreeDayOpenHighFadeSymbols
+  }
+
+  $universeSet = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($symbol in @($UniverseSymbols)) {
+    if ([string]$symbol -match '^\d{4}$') { [void]$universeSet.Add([string]$symbol) }
+  }
+  $qualified = New-Object System.Collections.Generic.List[string]
+  try {
+    $rows = @(Invoke-PublicSlotRestGetAll -PathAndQuery "fugle_daily_ohlcv?select=symbol,trade_date,open,close&order=symbol.asc,trade_date.desc")
+    $bySymbol = @{}
+    foreach ($row in $rows) {
+      $symbol = [string]$row.symbol
+      if ($symbol -notmatch '^\d{4}$' -or -not $universeSet.Contains($symbol)) { continue }
+      if (-not $bySymbol.ContainsKey($symbol)) { $bySymbol[$symbol] = New-Object System.Collections.ArrayList }
+      if ($bySymbol[$symbol].Count -ge 4) { continue }
+      [void]$bySymbol[$symbol].Add($row)
+    }
+    foreach ($symbol in $bySymbol.Keys) {
+      $items = @($bySymbol[$symbol])
+      if ($items.Count -lt 4) { continue }
+      $ok = $true
+      for ($i = 0; $i -lt 3; $i++) {
+        $todayOpen = Get-Number $items[$i].open
+        $todayClose = Get-Number $items[$i].close
+        $prevClose = Get-Number $items[$i + 1].close
+        if ($todayOpen -le 0 -or $todayClose -le 0 -or $prevClose -le 0 -or $todayOpen -le $prevClose -or $todayClose -ge $todayOpen) {
+          $ok = $false
+          break
+        }
+      }
+      if ($ok) { $qualified.Add([string]$symbol) }
+    }
+  } catch {
+    Write-Log "WARN three-day open-high-fade priority read failed: $($_.Exception.Message)"
+  }
+
+  $script:ThreeDayOpenHighFadeSymbols = $qualified.ToArray()
+  $script:ThreeDayOpenHighFadeSymbolsAt = Get-Date
+  return $script:ThreeDayOpenHighFadeSymbols
+}
+
+function Get-DailyBullAlignedSymbolSet {
+  if ($null -ne $script:DailyBullAlignedSymbols -and ((Get-Date) - $script:DailyBullAlignedSymbolsAt).TotalMinutes -lt 10) {
+    return $script:DailyBullAlignedSymbols
+  }
+
+  $bull = New-Object System.Collections.Generic.HashSet[string]
+  try {
+    $rows = @(Invoke-PublicSlotRestGetAll -PathAndQuery "fugle_daily_ohlcv?select=symbol,trade_date,close&order=symbol.asc,trade_date.desc")
+    $bySymbol = @{}
+    foreach ($row in $rows) {
+      $symbol = [string]$row.symbol
+      if ($symbol -notmatch '^\d{4}$') { continue }
+      if (-not $bySymbol.ContainsKey($symbol)) { $bySymbol[$symbol] = New-Object System.Collections.ArrayList }
+      if ($bySymbol[$symbol].Count -ge 25) { continue }
+      $close = Get-Number $row.close
+      if ($close -gt 0) { [void]$bySymbol[$symbol].Add([double]$close) }
+    }
+    foreach ($symbol in $bySymbol.Keys) {
+      $closes = @($bySymbol[$symbol])
+      if ($closes.Count -lt 20) { continue }
+      $ma5 = (($closes | Select-Object -First 5) | Measure-Object -Average).Average
+      $ma10 = (($closes | Select-Object -First 10) | Measure-Object -Average).Average
+      $ma20 = (($closes | Select-Object -First 20) | Measure-Object -Average).Average
+      $latest = [double]$closes[0]
+      if ($ma5 -gt 0 -and $ma10 -gt 0 -and $ma20 -gt 0 -and $ma5 -gt $ma10 -and $ma10 -gt $ma20 -and $latest -ge ($ma5 * 0.98)) {
+        [void]$bull.Add([string]$symbol)
+      }
+    }
+  } catch {
+    Write-Log "WARN daily MA bull alignment read failed: $($_.Exception.Message)"
+  }
+  $script:DailyBullAlignedSymbols = $bull
+  $script:DailyBullAlignedSymbolsAt = Get-Date
+  return $bull
+}
+
+function Get-AvgVolume5Map {
+  if ($null -ne $script:AvgVolume5Map -and ((Get-Date) - $script:AvgVolume5MapAt).TotalMinutes -lt 5) {
+    return $script:AvgVolume5Map
+  }
+
+  $map = @{}
+  try {
+    $rows = @(Invoke-PublicSlotRestGetAll -PathAndQuery "fugle_daily_volume_avg?select=symbol,avg5_volume,avg_volume5,volume&order=symbol.asc")
+    foreach ($row in $rows) {
+      $symbol = [string]$row.symbol
+      if ($symbol -notmatch '^\d{4}$') { continue }
+      $avg5 = Get-Number $row.avg5_volume
+      if ($avg5 -le 0) { $avg5 = Get-Number $row.avg_volume5 }
+      if ($avg5 -le 0) { $avg5 = Get-Number $row.volume }
+      if ($avg5 -gt 0) { $map[$symbol] = [double]$avg5 }
+    }
+  } catch {
+    Write-Log "WARN avg volume 5 map read failed: $($_.Exception.Message)"
+  }
+  $script:AvgVolume5Map = $map
+  $script:AvgVolume5MapAt = Get-Date
+  return $map
+}
+
+function Get-DynamicAmplitudeBullSymbols {
+  param([object[]]$QuoteRows, [System.Collections.Generic.HashSet[string]]$UniverseSet, [int]$Limit = 200)
+  $bull = Get-DailyBullAlignedSymbolSet
+  $rows = @($QuoteRows | Where-Object {
+    $symbol = [string]$_.symbol
+    if ($symbol -notmatch '^\d{4}$' -or ($null -ne $UniverseSet -and -not $UniverseSet.Contains($symbol))) { return $false }
+    if (-not $bull.Contains($symbol)) { return $false }
+    $price = Get-Number $_.price
+    $open = Get-Number $_.open_price
+    $changePercent = [math]::Abs((Get-Number $_.change_percent))
+    $amplitude = $changePercent
+    if ($open -gt 0 -and $price -gt 0) {
+      $amplitude = [math]::Max($amplitude, [math]::Abs((($price - $open) / $open) * 100))
+    }
+    $cumulative = Get-Number $_.cumulative_bid_ask_volume
+    if ($cumulative -le 0) { $cumulative = Get-Number $_.total_volume }
+    return ($amplitude -ge 2 -and $cumulative -ge 2000)
+  } | Sort-Object `
+    @{ Expression = {
+      $price = Get-Number $_.price
+      $open = Get-Number $_.open_price
+      if ($open -gt 0 -and $price -gt 0) { [math]::Abs((($price - $open) / $open) * 100) } else { [math]::Abs((Get-Number $_.change_percent)) }
+    }; Descending = $true }, `
+    @{ Expression = {
+      $cumulative = Get-Number $_.cumulative_bid_ask_volume
+      if ($cumulative -le 0) { $cumulative = Get-Number $_.total_volume }
+      $cumulative
+    }; Descending = $true } |
+    Select-Object -First $Limit)
+  return @(Get-UniqueSymbols -Values (@($rows | ForEach-Object { $_.symbol })) -UniverseSet $UniverseSet)
+}
+
+function Get-DynamicVolumeSurgeSymbols {
+  param([object[]]$QuoteRows, [System.Collections.Generic.HashSet[string]]$UniverseSet, [int]$Limit = 100)
+  $avgMap = Get-AvgVolume5Map
+  $rows = @($QuoteRows | Where-Object {
+    $symbol = [string]$_.symbol
+    if ($symbol -notmatch '^\d{4}$' -or ($null -ne $UniverseSet -and -not $UniverseSet.Contains($symbol))) { return $false }
+    if (-not $avgMap.ContainsKey($symbol)) { return $false }
+    $todayVolume = Get-Number $_.total_volume
+    $avg5 = [double]$avgMap[$symbol]
+    return ($todayVolume -ge 10000 -and $avg5 -gt 0 -and $todayVolume -ge ($avg5 * 2))
+  } | Sort-Object @{ Expression = { Get-Number $_.total_volume }; Descending = $true } | Select-Object -First $Limit)
+  return @(Get-UniqueSymbols -Values (@($rows | ForEach-Object { $_.symbol })) -UniverseSet $UniverseSet)
+}
+
+function Get-PrioritySymbolGroups {
+  param([string[]]$Symbols, [object[]]$QuoteRows)
+
+  $base = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
+  $universeSet = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($symbol in $base) { [void]$universeSet.Add([string]$symbol) }
+  $strategy = Get-StrategyPrioritySymbols -UniverseSymbols $base
+  $threeDayOpenHighFade = @(Get-ThreeDayOpenHighFadeSymbols -UniverseSymbols $base)
+  $dynamicAmplitudeBull = @(Get-DynamicAmplitudeBullSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
+  $dynamicVolumeSurge = @(Get-DynamicVolumeSurgeSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
+  $hot = @(Get-DaytradeHotQuoteSymbols -QuoteRows $QuoteRows)
+  $strong = @(Get-StrongQuoteSymbols -QuoteRows $QuoteRows)
+
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+  $ordered = New-Object System.Collections.Generic.List[string]
+  foreach ($group in @(
+    @($strategy.strategy1),
+    @($strategy.strategy3),
+    @($strategy.strategy4),
+    @($threeDayOpenHighFade),
+    @($dynamicAmplitudeBull),
+    @($dynamicVolumeSurge),
+    @($hot),
+    @($strong),
+    @($base)
+  )) {
+    foreach ($symbol in @($group)) {
+      Add-PrioritySymbol -List $ordered -Seen $seen -Value $symbol -UniverseSet $universeSet
+    }
+  }
+
+  $script:ApiUniverseStats.daytrade_hot_symbols = $hot.Count
+  $script:ApiUniverseStats.priority_strong_symbols = $strong.Count
+  $script:ApiUniverseStats.strategy_priority_symbols = @($strategy.symbols).Count
+  $script:ApiUniverseStats.three_day_open_high_fade_symbols = $threeDayOpenHighFade.Count
+  $script:ApiUniverseStats.opening_priority_symbols = @(Get-UniqueSymbols -Values (@($strategy.symbols) + @($threeDayOpenHighFade)) -UniverseSet $universeSet).Count
+  $script:ApiUniverseStats.dynamic_amplitude_bull_symbols = $dynamicAmplitudeBull.Count
+  $script:ApiUniverseStats.dynamic_volume_surge_symbols = $dynamicVolumeSurge.Count
+  $script:ApiUniverseStats.dynamic_mother_pool_symbols = @(Get-UniqueSymbols -Values (@($dynamicAmplitudeBull) + @($dynamicVolumeSurge)) -UniverseSet $universeSet).Count
+  $script:ApiUniverseStats.priority_symbols = $ordered.Count
+
+  return [ordered]@{
+    strategy1 = @($strategy.strategy1)
+    strategy3 = @($strategy.strategy3)
+    strategy4 = @($strategy.strategy4)
+    threeDayOpenHighFade = @($threeDayOpenHighFade)
+    dynamicAmplitudeBull = @($dynamicAmplitudeBull)
+    dynamicVolumeSurge = @($dynamicVolumeSurge)
+    daytradeHot = @($hot)
+    priorityStrong = @($strong)
+    symbols = $ordered.ToArray()
+  }
+}
+
+function Write-WebSocketPrioritySymbols {
+  param([string[]]$Symbols, [object[]]$QuoteRows, [string]$Reason)
+  try {
+    $groups = Get-PrioritySymbolGroups -Symbols $Symbols -QuoteRows $QuoteRows
+    Write-JsonFile -Path $PrioritySymbolsFile -Value ([ordered]@{
+      updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
+      source = "public-slot-shared-source-priority-pool"
+      reason = $Reason
+      policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      strategy1 = @($groups.strategy1)
+      strategy3 = @($groups.strategy3)
+      strategy4 = @($groups.strategy4)
+      threeDayOpenHighFade = @($groups.threeDayOpenHighFade)
+      dynamic = @($groups.dynamicAmplitudeBull) + @($groups.dynamicVolumeSurge)
+      dynamicAmplitudeBull = @($groups.dynamicAmplitudeBull)
+      dynamicVolumeSurge = @($groups.dynamicVolumeSurge)
+      daytradeHotSymbols = @($groups.daytradeHot)
+      priorityStrongSymbols = @($groups.priorityStrong)
+      symbols = @($groups.symbols)
+      counts = [ordered]@{
+        strategy1 = @($groups.strategy1).Count
+        strategy3 = @($groups.strategy3).Count
+        strategy4 = @($groups.strategy4).Count
+        strategyPriority = $script:ApiUniverseStats.strategy_priority_symbols
+        threeDayOpenHighFade = $script:ApiUniverseStats.three_day_open_high_fade_symbols
+        openingPriority = $script:ApiUniverseStats.opening_priority_symbols
+        dynamicAmplitudeBull = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
+        dynamicVolumeSurge = $script:ApiUniverseStats.dynamic_volume_surge_symbols
+        dynamicMotherPool = $script:ApiUniverseStats.dynamic_mother_pool_symbols
+        daytradeHot = @($groups.daytradeHot).Count
+        priorityStrong = @($groups.priorityStrong).Count
+        total = @($groups.symbols).Count
+      }
+    })
+    return $groups
+  } catch {
+    Write-Log "WARN unable to write websocket priority symbols reason=$Reason`: $($_.Exception.Message)"
+    $base = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
+    return [ordered]@{
+      strategy1 = @()
+      strategy3 = @()
+      strategy4 = @()
+      threeDayOpenHighFade = @()
+      dynamicAmplitudeBull = @()
+      dynamicVolumeSurge = @()
+      daytradeHot = @()
+      priorityStrong = @()
+      symbols = @($base)
+    }
+  }
+}
+
 function Get-StrongQuoteSymbols {
   param([object[]]$QuoteRows, [int]$Limit = 120)
 
@@ -1184,36 +1528,8 @@ function Get-DaytradeHotQuoteSymbols {
 function Order-SymbolsForPriority {
   param([string[]]$Symbols, [object[]]$QuoteRows)
 
-  $base = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
-  $baseSet = New-Object System.Collections.Generic.HashSet[string]
-  foreach ($symbol in $base) { [void]$baseSet.Add([string]$symbol) }
-
-  $seen = New-Object System.Collections.Generic.HashSet[string]
-  $ordered = New-Object System.Collections.Generic.List[string]
-  $hot = @(Get-DaytradeHotQuoteSymbols -QuoteRows $QuoteRows)
-  $hotAdded = 0
-  foreach ($symbol in $hot) {
-    if ($seen.Add([string]$symbol)) {
-      $ordered.Add([string]$symbol)
-      $hotAdded += 1
-    }
-  }
-  $strong = @(Get-StrongQuoteSymbols -QuoteRows $QuoteRows)
-  $strongAdded = 0
-  foreach ($symbol in $strong) {
-    if ($seen.Add([string]$symbol)) {
-      $ordered.Add([string]$symbol)
-      $strongAdded += 1
-    }
-  }
-  foreach ($symbol in $base) {
-    if ($seen.Add([string]$symbol)) { $ordered.Add([string]$symbol) }
-  }
-
-  $script:ApiUniverseStats.daytrade_hot_symbols = $hotAdded
-  $script:ApiUniverseStats.priority_strong_symbols = $strongAdded
-  $script:ApiUniverseStats.priority_symbols = $ordered.Count
-  return $ordered.ToArray()
+  $groups = Get-PrioritySymbolGroups -Symbols $Symbols -QuoteRows $QuoteRows
+  return @($groups.symbols)
 }
 
 function Get-EligibleQuoteCoverage {
@@ -1446,6 +1762,19 @@ function Write-QuoteHeartbeatStatus {
       daytrade_hot_symbols = $script:ApiUniverseStats.daytrade_hot_symbols
       priority_symbols = $script:ApiUniverseStats.priority_symbols
       priority_strong_symbols = $script:ApiUniverseStats.priority_strong_symbols
+      strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
+      opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
+      dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
+      dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
+      dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
+      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      collector_priority_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "prioritySymbols" -Default 0)
+      collector_priority_attempted = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityAttempted" -Default 0)
+      collector_priority_fresh_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityFreshCount" -Default 0)
+      collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
+      collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
+      collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
       quotes = $quoteCount
       quote_count = $quoteCount
       fresh_quote_readthrough_rows = [int]$script:FreshQuoteReadthroughRows
@@ -3184,7 +3513,8 @@ do {
     [void](Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-rest-quote" -Session $session -ShouldWritePreopenRows $earlyShouldWritePreopenRows)
     $warmupSymbols = @(Get-WarmupSymbols)
     $preQuoteRows = @(Convert-QuotesToRows -Quotes $quotes -Payload $payload)
-    $priorityQuoteSymbols = @(Order-SymbolsForPriority -Symbols $warmupSymbols -QuoteRows $preQuoteRows)
+    $priorityGroups = Write-WebSocketPrioritySymbols -Symbols $warmupSymbols -QuoteRows $preQuoteRows -Reason "before-rest-quote"
+    $priorityQuoteSymbols = @($priorityGroups.symbols)
     $restQuotePayload = @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false }
     $quoteFullCoverageFloor = [math]::Max(500, [int][math]::Ceiling([double]$seeded * 0.95))
     $quoteFreshEnoughForRegular = ($quotes.Count -ge $quoteFullCoverageFloor -and $age -le $StaleSeconds)
@@ -3206,7 +3536,8 @@ do {
       $blacklistCountForHeartbeat = if ($null -ne $script:SymbolBlacklist) { $script:SymbolBlacklist.Count } else { 0 }
       Write-QuoteHeartbeatStatus -SourceName $StatusSourceName -QuoteRows $quoteRows -PreopenRows $preopenRows -EligibleSymbols $warmupSymbols -SeededSymbols $seeded -BlacklistCount $blacklistCountForHeartbeat -CollectorState $collectorState -Session $session -RestQuotePayload $restQuotePayload -FallbackAgeSeconds $age -QuotesFile $quotesFile -WebSocketStatus $wsStatus
     }
-    $priorityWarmupSymbols = @(Order-SymbolsForPriority -Symbols $warmupSymbols -QuoteRows $quoteRows)
+    $priorityGroups = Write-WebSocketPrioritySymbols -Symbols $warmupSymbols -QuoteRows $quoteRows -Reason "after-rest-quote"
+    $priorityWarmupSymbols = @($priorityGroups.symbols)
     [void](Filter-SymbolsByQuoteLiquidity -Symbols $priorityWarmupSymbols -QuoteRows $quoteRows)
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "before-quote-derived-1m" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $quoteRows = @(Add-FreshQuoteReadthrough -QuoteRows $quoteRows -Reason "before-quote-derived-1m")
@@ -3391,6 +3722,19 @@ do {
       daytrade_hot_symbols = $script:ApiUniverseStats.daytrade_hot_symbols
       priority_symbols = $script:ApiUniverseStats.priority_symbols
       priority_strong_symbols = $script:ApiUniverseStats.priority_strong_symbols
+      strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
+      opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
+      dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
+      dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
+      dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
+      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      collector_priority_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "prioritySymbols" -Default 0)
+      collector_priority_attempted = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityAttempted" -Default 0)
+      collector_priority_fresh_count = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityFreshCount" -Default 0)
+      collector_adaptive_rpm = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRpm" -Default 0)
+      collector_adaptive_delay_ms = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveDelayMs" -Default 0)
+      collector_adaptive_rate_limited = [bool](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRateLimited" -Default $false)
       eligible_quote_rows = $script:ApiUniverseStats.eligible_quote_rows
       eligible_quote_coverage = $script:ApiUniverseStats.eligible_quote_coverage
       source_core_ok = [bool]$sourceCoreOk

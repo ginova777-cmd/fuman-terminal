@@ -176,6 +176,18 @@ function staticChecks() {
     "progressive quote fill",
     "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
     "FugleCollectorFinMindRecoveryEnabled",
+    "PrioritySymbolsFile",
+    "fugle-ws-priority-symbols.json",
+    "Get-StrategyPrioritySymbols",
+    "Get-ThreeDayOpenHighFadeSymbols",
+    "Get-DynamicAmplitudeBullSymbols",
+    "Get-DynamicVolumeSurgeSymbols",
+    "strategy_priority_symbols",
+    "three_day_open_high_fade_symbols",
+    "dynamic_amplitude_bull_symbols",
+    "dynamic_volume_surge_symbols",
+    "collector_adaptive_rpm",
+    "collector_priority_symbols",
     "Add-FreshQuoteReadthrough",
     "Get-FreshPublicSlotQuoteRows",
     "fresh_quote_readthrough_rows",
@@ -219,7 +231,7 @@ function staticChecks() {
     ["Start-PublicSlotSharedSource.cmd", read("ops/public-slot/Start-PublicSlotSharedSource.cmd")],
     ["Start-Strategy2ReadinessSource.cmd", read("ops/public-slot/Start-Strategy2ReadinessSource.cmd")],
   ]) {
-    for (const marker of ["-RestQuoteBatchSize 240", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
+    for (const marker of ["-RestQuoteBatchSize 240", "-RestQuoteDelayMilliseconds 40", "-RestQuoteOpeningBoostBatchSize 180", "-RestQuoteOpeningBoostDelayMilliseconds 80", "-FugleCollectorBatchSize 320", "-FugleCollectorConcurrency 4", "-FugleCollectorRequestDelayMilliseconds 20"]) {
       if (text.includes(marker)) issues.push(`${name} must not pass old high-rate public-slot quote setting ${marker}`);
     }
   }
@@ -249,6 +261,12 @@ function staticChecks() {
     "finmind_recovery_cooldown_until",
     "rest_quote_unsupported_symbols",
     "rest_quote_unsupported_this_loop",
+    "strategy_priority_symbols",
+    "three_day_open_high_fade_symbols",
+    "dynamic_amplitude_bull_symbols",
+    "dynamic_volume_surge_symbols",
+    "collector_priority_symbols",
+    "collector_adaptive_rpm",
     "websocket_status",
     "readonly_verdict",
     "grant select",
@@ -267,6 +285,9 @@ function staticChecks() {
     "rest_quote_rate_limited_while_coverage_low",
     "fresh_quote_readthrough_not_running",
     "rest_quote_effective_batch_zero",
+    "strategyPrioritySymbols",
+    "dynamicMotherPoolSymbols",
+    "collectorAdaptiveRpm",
   ]);
 
   requireIncludes("scripts/fugle-websocket-collector.js", [
@@ -278,6 +299,11 @@ function staticChecks() {
     "finmindRecoveryFetched",
     "effectiveCollectorConfig",
     "openingBoostActive",
+    "PRIORITY_SYMBOLS_FILE",
+    "readPrioritySymbols",
+    "selectStaleFirstBatch(symbols, batchSize, unsupported, prioritySymbols",
+    "adaptiveRpm",
+    "priorityThreeDayOpenHighFadeSymbols",
     "REQUEST_TIMEOUT_MS",
     "REQUEST_RETRIES",
   ]);
@@ -291,6 +317,11 @@ function staticChecks() {
     "finmindRecoveryFetched",
     "effectiveCollectorConfig",
     "openingBoostActive",
+    "PRIORITY_SYMBOLS_FILE",
+    "readPrioritySymbols",
+    "selectStaleFirstBatch(symbols, batchSize, unsupported, prioritySymbols",
+    "adaptiveRpm",
+    "priorityThreeDayOpenHighFadeSymbols",
     "REQUEST_TIMEOUT_MS",
     "REQUEST_RETRIES",
   ]);

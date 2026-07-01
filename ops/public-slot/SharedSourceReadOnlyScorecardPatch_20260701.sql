@@ -158,7 +158,22 @@ select
   coalesce(nullif(payload ->> 'rest_quote_scanned_for_batch', '')::integer, 0) as rest_quote_scanned_for_batch,
   coalesce(nullif(payload ->> 'rest_quote_unsupported_this_loop', '')::integer, 0) as rest_quote_unsupported_this_loop,
   coalesce(nullif(payload ->> 'rest_quote_unsupported_symbols', '')::integer, 0) as rest_quote_unsupported_symbols,
-  coalesce(payload ->> 'unsupported_trade_date', payload ->> 'rest_quote_unsupported_trade_date') as unsupported_trade_date
+  coalesce(payload ->> 'unsupported_trade_date', payload ->> 'rest_quote_unsupported_trade_date') as unsupported_trade_date,
+  coalesce(nullif(payload ->> 'strategy_priority_symbols', '')::integer, 0) as strategy_priority_symbols,
+  coalesce(nullif(payload ->> 'three_day_open_high_fade_symbols', '')::integer, 0) as three_day_open_high_fade_symbols,
+  coalesce(nullif(payload ->> 'opening_priority_symbols', '')::integer, 0) as opening_priority_symbols,
+  coalesce(nullif(payload ->> 'dynamic_amplitude_bull_symbols', '')::integer, 0) as dynamic_amplitude_bull_symbols,
+  coalesce(nullif(payload ->> 'dynamic_volume_surge_symbols', '')::integer, 0) as dynamic_volume_surge_symbols,
+  coalesce(nullif(payload ->> 'dynamic_mother_pool_symbols', '')::integer, 0) as dynamic_mother_pool_symbols,
+  payload ->> 'priority_policy' as priority_policy,
+  coalesce(nullif(payload ->> 'collector_priority_symbols', '')::integer, nullif(payload #>> '{websocket_status,prioritySymbols}', '')::integer, 0) as collector_priority_symbols,
+  coalesce(nullif(payload ->> 'collector_priority_attempted', '')::integer, nullif(payload #>> '{websocket_status,priorityAttempted}', '')::integer, 0) as collector_priority_attempted,
+  coalesce(nullif(payload ->> 'collector_priority_fresh_count', '')::integer, nullif(payload #>> '{websocket_status,priorityFreshCount}', '')::integer, 0) as collector_priority_fresh_count,
+  coalesce(nullif(payload ->> 'collector_adaptive_rpm', '')::integer, nullif(payload #>> '{websocket_status,adaptiveRpm}', '')::integer, 0) as collector_adaptive_rpm,
+  coalesce(nullif(payload ->> 'collector_adaptive_delay_ms', '')::integer, nullif(payload #>> '{websocket_status,adaptiveDelayMs}', '')::integer, 0) as collector_adaptive_delay_ms,
+  lower(coalesce(payload ->> 'collector_adaptive_rate_limited', payload #>> '{websocket_status,adaptiveRateLimited}', 'false')) = 'true' as collector_adaptive_rate_limited,
+  coalesce(payload #>> '{websocket_status,prioritySource}', '') as collector_priority_source,
+  coalesce(payload #>> '{websocket_status,priorityFileUpdatedAt}', '') as collector_priority_file_updated_at
 from parsed;
 
 comment on view public.v_fuman_shared_source_readonly_scorecard is
