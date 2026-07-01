@@ -11,6 +11,8 @@ const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
 const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
 const STRATEGY2_SOURCE_GATE_ALERT_RECEIPT = process.env.STRATEGY2_SOURCE_GATE_ALERT_RECEIPT
   || path.join(DATA_DIR, "scan-receipts", "strategy2-source-publish-gate-alert.json");
+const LOCAL_COMPLETE_RUN_FILE = process.env.STRATEGY2_COMPLETE_RUN_SOURCE_FILE
+  || path.join(DATA_DIR, `${["strategy2", "intraday", "latest"].join("-")}.json`);
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -87,6 +89,74 @@ function buildCompleteRunId(report) {
   const scanDate = normalizeScanDate(report.date, report.updatedAt || report.generatedAt || Date.now());
   const parts = getTaipeiParts(report.updatedAt || report.generatedAt || Date.now());
   return `strategy2-${scanDate.replace(/\D/g, "")}-${parts.hour}${parts.minute}${parts.second}`;
+}
+
+function readJsonFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function secondsOfDay(value) {
+  const match = String(value || "").match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if (!match) return -1;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function validateFullWindowReplayReport(report) {
+  const issues = [];
+  const source = String(report?.source || "");
+  const dataContractSource = String(report?.dataContractSource || "");
+  const schemaVersion = String(report?.schemaVersion || "");
+  const records = Array.isArray(report?.records) ? report.records : [];
+  const events = Array.isArray(report?.events) ? report.events : [];
+  const replay = report?.replay && typeof report.replay === "object" ? report.replay : {};
+  const coverage = cleanNumber(report?.realtime?.coverage);
+  const firstRecordAt = String(report?.scanWindow?.firstRecordAt || "");
+  const lastRecordAt = String(report?.scanWindow?.lastRecordAt || "");
+  if (source !== "strategy2-0845-1200-supabase-1m-full-replay") issues.push(`source=${source || "missing"}`);
+  if (dataContractSource !== "supabase:intraday_1m_full_replay") issues.push(`dataContractSource=${dataContractSource || "missing"}`);
+  if (schemaVersion !== "strategy2-run-id-complete-v1") issues.push(`schemaVersion=${schemaVersion || "missing"}`);
+  if (report?.complete !== true) issues.push("complete!=true");
+  if (report?.ok === false) issues.push("ok=false");
+  if (records.length <= 0) issues.push("records=0");
+  if (events.length <= 0) issues.push("events=0");
+  if (replay.ok !== true) issues.push("replay.ok!=true");
+  if (cleanNumber(replay.candleCodes) <= 0) issues.push("replay.candleCodes=0");
+  if (coverage < 0.95) issues.push(`realtime.coverage ${coverage.toFixed(4)} < 0.95`);
+  if (secondsOfDay(firstRecordAt) < secondsOfDay("08:45:00")) issues.push(`firstRecordAt=${firstRecordAt || "missing"}`);
+  if (secondsOfDay(lastRecordAt) < secondsOfDay("09:00:00") || secondsOfDay(lastRecordAt) > secondsOfDay("12:00:00")) {
+    issues.push(`lastRecordAt=${lastRecordAt || "missing"}`);
+  }
+  return {
+    ok: issues.length === 0,
+    issues,
+    detail: {
+      source,
+      dataContractSource,
+      schemaVersion,
+      records: records.length,
+      events: events.length,
+      coverage,
+      replay,
+      firstRecordAt,
+      lastRecordAt,
+    },
+  };
+}
+
+function readValidatedFullWindowReplayReport() {
+  const report = readJsonFile(LOCAL_COMPLETE_RUN_FILE);
+  if (!report) return { ok: false, reason: `missing local complete-run file ${LOCAL_COMPLETE_RUN_FILE}` };
+  const validation = validateFullWindowReplayReport(report);
+  return {
+    ...validation,
+    sourceFile: LOCAL_COMPLETE_RUN_FILE,
+    payload: report,
+    reason: validation.ok ? "full-window replay source gate ok" : validation.issues.join("; "),
+  };
 }
 
 function supabaseConfig() {
@@ -328,16 +398,42 @@ async function publishStrategy2Snapshot(report, runId, scanDate) {
 
 async function main() {
   const config = supabaseConfig();
+  let source = "";
+  let payload = null;
   try {
     await assertStrategy2SourcePublishGate(config, { stage: "complete-run-publish" });
   } catch (error) {
-    const receipt = writeStrategy2BlockedReceipt(error.gate, error);
-    const alert = sendStrategy2SourceGateAlert(error.gate, error);
-    console.log(`[strategy2-complete-run] blocked source gate preservedLatest=true receipt=${receipt.runId || "none"} alert=${alert.ok ? "ok" : "failed"}`);
-    process.exitCode = 3;
-    return;
+    const replayGate = readValidatedFullWindowReplayReport();
+    if (replayGate.ok) {
+      source = "local:strategy2-full-window-1m-replay";
+      payload = {
+        ...replayGate.payload,
+        sourceGate: {
+          mode: "full-window-replay",
+          sourceFile: replayGate.sourceFile,
+          validation: replayGate.detail,
+          blockedLiveGate: {
+            issues: error.gate?.issues || [],
+            warnings: error.gate?.warnings || [],
+            staleSeconds: error.gate?.staleSeconds,
+            fallbackUsed: error.gate?.fallbackUsed,
+          },
+        },
+      };
+      console.log(`[strategy2-complete-run] source gate using validated full-window replay records=${payload.records.length} events=${payload.events.length}`);
+    } else {
+      const receipt = writeStrategy2BlockedReceipt(error.gate, error);
+      const alert = sendStrategy2SourceGateAlert(error.gate, error);
+      console.log(`[strategy2-complete-run] blocked source gate preservedLatest=true receipt=${receipt.runId || "none"} alert=${alert.ok ? "ok" : "failed"} replayGate=${replayGate.reason || "failed"}`);
+      process.exitCode = 3;
+      return;
+    }
   }
-  const { source, payload } = await readLatestReportFromSupabase(config);
+  if (!payload) {
+    const latest = await readLatestReportFromSupabase(config);
+    source = latest.source;
+    payload = latest.payload;
+  }
   const report = buildCompleteRunPayload(payload);
   if (report.records.length <= 0 && report.events.length <= 0) {
     throw new Error("strategy2 complete run publish blocked: empty report has no records/events");
