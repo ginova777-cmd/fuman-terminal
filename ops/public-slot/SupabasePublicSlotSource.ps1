@@ -141,6 +141,56 @@ function ConvertTo-PublicSlotPayloadHashtable {
   return $out
 }
 
+function Get-PublicSlotPayloadValue {
+  param([object]$Payload, [string]$Key, [object]$Default = $null)
+  if ($null -eq $Payload) { return $Default }
+  if ($Payload -is [string] -and -not [string]::IsNullOrWhiteSpace($Payload)) {
+    try { $Payload = $Payload | ConvertFrom-Json -Depth 80 } catch {}
+  }
+  if ($Payload -is [System.Collections.IDictionary] -and $Payload.Contains($Key)) {
+    return $Payload[$Key]
+  }
+  $prop = $Payload.PSObject.Properties[$Key]
+  if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
+  return $Default
+}
+
+function Test-PublicSlotPreserveFreshQuoteStatus {
+  param(
+    [string]$SourceName,
+    [string]$Status,
+    [hashtable]$Payload
+  )
+
+  if ($SourceName -ne "fugle_shared_source") { return $false }
+  $newFreshQuotes = [int](Get-PublicSlotPayloadValue -Payload $Payload -Key "fresh_quotes_120s" -Default 0)
+  $newFreshCoverage = [double](Get-PublicSlotPayloadValue -Payload $Payload -Key "fresh_quote_coverage_120s" -Default 0)
+  $newScannerCanRun = [bool](Get-PublicSlotPayloadValue -Payload $Payload -Key "scanner_can_run_quote_only" -Default $false)
+  if ($Status -eq "ok" -or ($newFreshQuotes -ge 1500 -and $newFreshCoverage -ge 0.9 -and $newScannerCanRun)) {
+    return $false
+  }
+
+  try {
+    $headers = Get-PublicSlotWriteHeaders
+    $uri = "$script:SupabaseUrl/rest/v1/source_status`?source_name=eq.$SourceName&select=updated_at,status,payload&limit=1"
+    $rows = @(Invoke-RestMethod -Uri $uri -Method Get -Headers $headers -TimeoutSec 10 -ErrorAction Stop)
+    if ($rows.Count -le 0) { return $false }
+    $previous = $rows[0]
+    $previousAgeSeconds = 999999
+    try {
+      $previousAgeSeconds = [int]([datetimeoffset]::UtcNow - [datetimeoffset]::Parse([string]$previous.updated_at).ToUniversalTime()).TotalSeconds
+    } catch {}
+    if ($previousAgeSeconds -gt 120) { return $false }
+    $previousPayload = $previous.payload
+    $previousFreshQuotes = [int](Get-PublicSlotPayloadValue -Payload $previousPayload -Key "fresh_quotes_120s" -Default 0)
+    $previousFreshCoverage = [double](Get-PublicSlotPayloadValue -Payload $previousPayload -Key "fresh_quote_coverage_120s" -Default 0)
+    $previousScannerCanRun = [bool](Get-PublicSlotPayloadValue -Payload $previousPayload -Key "scanner_can_run_quote_only" -Default $false)
+    return ($previousFreshQuotes -ge 1500 -and $previousFreshCoverage -ge 0.9 -and $previousScannerCanRun)
+  } catch {
+    return $false
+  }
+}
+
 function Write-PublicSlotSourceStatus {
   param(
     [Parameter(Mandatory = $true)][string]$SourceName,
@@ -164,6 +214,10 @@ function Write-PublicSlotSourceStatus {
   }
   if ($Status -eq "ok") { $row.last_success_at = $now }
   if ($Status -eq "error") { $row.last_error_at = $now }
+
+  if (Test-PublicSlotPreserveFreshQuoteStatus -SourceName $SourceName -Status $Status -Payload $Payload) {
+    return
+  }
 
   Invoke-PublicSlotUpsert -Table "source_status" -OnConflict "source_name" -Rows @($row)
 }

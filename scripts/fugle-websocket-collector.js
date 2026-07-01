@@ -15,6 +15,10 @@ const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
+const FINMIND_TOKEN_FILES = [
+  path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt"),
+  "C:/fuman-terminal/secrets/finmind-api-token.txt",
+];
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 320));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 20));
@@ -23,9 +27,8 @@ const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TT
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
-const TWSE_MIS_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_TWSE_MIS_ENABLED || "1"));
-const TWSE_MIS_BATCH_SIZE = Math.max(1, Math.min(120, Number(process.env.FUGLE_COLLECTOR_TWSE_MIS_BATCH_SIZE || 80)));
-const TWSE_MIS_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_TWSE_MIS_TIMEOUT_MS || 12000));
+const FINMIND_RECOVERY_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "1"));
+const FINMIND_RECOVERY_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_TIMEOUT_MS || 30000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
 const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "12:00";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 2000));
@@ -84,8 +87,10 @@ function writeStatus(extra = {}) {
     quoteTtlMs: QUOTE_TTL_MS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     requestRetries: REQUEST_RETRIES,
-    twseMisEnabled: TWSE_MIS_ENABLED,
-    twseMisBatchSize: TWSE_MIS_BATCH_SIZE,
+    primarySource: "fugle",
+    fallbackSource: "finmind",
+    finmindRecoveryEnabled: FINMIND_RECOVERY_ENABLED,
+    finmindRecoveryTimeoutMs: FINMIND_RECOVERY_TIMEOUT_MS,
     openingBoostStart: OPENING_BOOST_START,
     openingBoostEnd: OPENING_BOOST_END,
     openingBoostBatchSize: OPENING_BOOST_BATCH_SIZE,
@@ -136,6 +141,29 @@ function countFreshCachedQuotes(symbols) {
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) count += 1;
   }
   return count;
+}
+
+function freshCachedCodeSet(symbols) {
+  const symbolSet = new Set(symbols);
+  const payload = readJson(FUGLE_WS_QUOTES_FILE, {});
+  const rows = Array.isArray(payload?.quotes) ? payload.quotes : [];
+  const cutoff = Date.now() - QUOTE_TTL_MS;
+  const fresh = new Set();
+  for (const row of rows) {
+    const code = normalizeCode(row?.code);
+    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
+    if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) fresh.add(code);
+  }
+  return fresh;
+}
+
+function currentTaipeiDate() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function effectiveCollectorConfig(symbols) {
@@ -221,90 +249,85 @@ function normalizeQuote(payload, requestedCode) {
   };
 }
 
-function firstPositive(...values) {
-  for (const value of values) {
-    const parts = String(value ?? "").split("_");
-    for (const part of parts) {
-      const number = cleanNumber(part);
-      if (number > 0) return number;
-    }
-  }
-  return 0;
-}
-
-function normalizeTwseMisQuote(item) {
-  const code = normalizeCode(item?.c);
+function normalizeFinMindQuote(row, today) {
+  const code = normalizeCode(row?.stock_id);
   if (!/^\d{4}$/.test(code)) return null;
-  const prevClose = cleanNumber(item?.y);
-  const close = firstPositive(item?.z, item?.pz, item?.b, item?.a, item?.h, item?.l, item?.o, item?.y);
-  if (!close || !prevClose) return null;
+  const quoteDate = String(row?.date || row?.datetime || row?.date_time || "").slice(0, 10);
+  if (today && quoteDate && quoteDate !== today) return null;
+  const close = cleanNumber(row?.close ?? row?.last_price ?? row?.lastPrice ?? row?.price);
+  if (!close) return null;
+  const change = cleanNumber(row?.change_price ?? row?.change ?? row?.spread);
+  const changeRate = cleanNumber(row?.change_rate ?? row?.change_percent);
+  const prevClose = close && change
+    ? close - change
+    : close && changeRate
+      ? close / (1 + changeRate / 100)
+      : close;
+  if (!prevClose) return null;
   const now = nowIso();
-  const bidPrice = firstPositive(item?.b);
-  const askPrice = firstPositive(item?.a);
-  const bidSize = firstPositive(item?.g);
-  const askSize = firstPositive(item?.f);
-  const change = close - prevClose;
   return {
     code,
-    name: item?.n || code,
+    name: row?.stock_name || row?.name || code,
     close,
-    closeSource: "twse-mis",
-    change,
-    percent: prevClose ? (change / prevClose) * 100 : 0,
-    open: cleanNumber(item?.o),
-    high: firstPositive(item?.h, item?.z, item?.pz, item?.o, item?.y),
-    low: firstPositive(item?.l, item?.z, item?.pz, item?.o, item?.y),
+    closeSource: "finmind",
+    change: change || close - prevClose,
+    percent: changeRate || (prevClose ? ((close - prevClose) / prevClose) * 100 : 0),
+    open: cleanNumber(row?.open),
+    high: cleanNumber(row?.high || close),
+    low: cleanNumber(row?.low || close),
     prevClose,
-    tradeVolume: firstPositive(item?.v, item?.tv),
-    tradeValue: cleanNumber(item?.tlong),
-    bidPrice,
-    bidSize,
-    askPrice,
-    askSize,
-    market: item?.ex || "",
-    time: item?.t || item?.ot || now,
-    quoteTime: item?.t || item?.ot || now,
+    tradeVolume: volumeToLots(row?.total_volume ?? row?.volume),
+    tradeValue: cleanNumber(row?.total_amount || row?.amount),
+    bidPrice: cleanNumber(row?.buy_price),
+    bidSize: volumeToLots(row?.buy_volume),
+    askPrice: cleanNumber(row?.sell_price),
+    askSize: volumeToLots(row?.sell_volume),
+    market: row?.type || row?.market || "",
+    time: row?.date || row?.datetime || row?.date_time || now,
+    quoteTime: row?.date || row?.datetime || row?.date_time || now,
     quoteSeenAt: now,
     updatedAt: now,
-    quoteSource: "twse-mis",
-    realtimeFallback: "twse-mis",
+    quoteSource: "finmind",
+    realtimeFallback: "finmind",
     recoveredFromRealtimeFallback: true,
   };
 }
 
-async function fetchTwseMisChunk(codes) {
-  const channels = codes.flatMap((code) => [`tse_${code}.tw`, `otc_${code}.tw`]);
+async function fetchFinMindRecoveryQuotes(symbols, token) {
+  if (!FINMIND_RECOVERY_ENABLED) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "" };
+  if (!token) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "missing FinMind token" };
+  const normalized = [...new Set((symbols || []).map(normalizeCode).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
+  const fresh = freshCachedCodeSet(normalized);
+  const missing = new Set(normalized.filter((code) => !fresh.has(code)));
+  if (!missing.size) return { quotes: [], requested: 0, recovered: 0, skipped: true, error: "" };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TWSE_MIS_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), FINMIND_RECOVERY_TIMEOUT_MS);
   try {
-    const response = await fetch(`https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(channels.join("|"))}&json=1&delay=0&_=${Date.now()}`, {
+    const url = new URL("https://api.finmindtrade.com/api/v4/taiwan_stock_tick_snapshot");
+    const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; FumanPublicSlotTwseMisRecovery/1.0)",
-        "Referer": "https://mis.twse.com.tw/",
+        "Authorization": `Bearer ${token}`,
+        "User-Agent": "FumanPublicSlotFinMindRecovery/1.0",
+        "Referer": "https://finmindtrade.com/",
         "Accept": "application/json,text/plain,*/*",
       },
     });
-    if (!response.ok) throw new Error(`twse-mis HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`FinMind snapshot HTTP ${response.status}`);
     const payload = await response.json();
-    return (payload?.msgArray || []).map(normalizeTwseMisQuote).filter(Boolean);
+    if (payload?.status && Number(payload.status) >= 400) throw new Error(`FinMind snapshot status ${payload.status}: ${payload.msg || ""}`);
+    const today = currentTaipeiDate();
+    const quotes = [];
+    for (const row of Array.isArray(payload?.data) ? payload.data : []) {
+      const quote = normalizeFinMindQuote(row, today);
+      if (quote && missing.has(quote.code)) quotes.push(quote);
+    }
+    return { quotes, requested: missing.size, recovered: quotes.length, skipped: false, error: "" };
+  } catch (error) {
+    return { quotes: [], requested: missing.size, recovered: 0, skipped: false, error: error?.message || String(error) };
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function fetchTwseMisQuotes(symbols) {
-  if (!TWSE_MIS_ENABLED) return [];
-  const normalized = [...new Set((symbols || []).map(normalizeCode).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
-  const byCode = new Map();
-  for (let index = 0; index < normalized.length; index += TWSE_MIS_BATCH_SIZE) {
-    const chunk = normalized.slice(index, index + TWSE_MIS_BATCH_SIZE);
-    try {
-      const quotes = await fetchTwseMisChunk(chunk);
-      for (const quote of quotes) byCode.set(quote.code, quote);
-    } catch {}
-  }
-  return [...byCode.values()];
 }
 
 async function fetchQuote(code, apiKey) {
@@ -343,6 +366,7 @@ async function fetchQuote(code, apiKey) {
 
 async function tick() {
   const apiKey = readSecret(API_KEY_FILES);
+  const finmindToken = readSecret(FINMIND_TOKEN_FILES);
   const symbols = readSymbols();
   if (!apiKey) {
     writeStatus({ ok: false, subscribed: symbols.length, error: "fugle api key missing" });
@@ -352,11 +376,23 @@ async function tick() {
     writeStatus({ ok: false, subscribed: 0, error: "symbols missing" });
     return;
   }
-  const twseMisQuotes = await fetchTwseMisQuotes(symbols);
-  const twseMisMergedCount = twseMisQuotes.length ? mergeQuotes(twseMisQuotes) : 0;
+  const beforeFugle = effectiveCollectorConfig(symbols);
+  const shouldUseFinMind = beforeFugle.openingBoostActive || Date.now() < cooldownUntil;
+  const finmindRecovery = shouldUseFinMind
+    ? await fetchFinMindRecoveryQuotes(symbols, finmindToken)
+    : { quotes: [], requested: 0, recovered: 0, skipped: true, error: "" };
+  const finmindMergedCount = finmindRecovery.quotes.length ? mergeQuotes(finmindRecovery.quotes) : 0;
   if (Date.now() < cooldownUntil) {
     const existing = readJson(FUGLE_WS_QUOTES_FILE, {});
-    writeStatus({ subscribed: symbols.length, quotes: twseMisMergedCount || existing.count || 0, cooldown: true, twseMisFetched: twseMisQuotes.length });
+    writeStatus({
+      subscribed: symbols.length,
+      quotes: finmindMergedCount || existing.count || 0,
+      cooldown: true,
+      finmindRecoveryRequested: finmindRecovery.requested,
+      finmindRecoveryFetched: finmindRecovery.recovered,
+      finmindRecoverySkipped: finmindRecovery.skipped,
+      finmindRecoveryError: finmindRecovery.error,
+    });
     return;
   }
 
@@ -399,7 +435,10 @@ async function tick() {
     quotes: count,
     fetched: quotes.length,
     fugleFetched: quotes.length,
-    twseMisFetched: twseMisQuotes.length,
+    finmindRecoveryRequested: finmindRecovery.requested,
+    finmindRecoveryFetched: finmindRecovery.recovered,
+    finmindRecoverySkipped: finmindRecovery.skipped,
+    finmindRecoveryError: finmindRecovery.error,
     attempted: batch.length,
     openingBoostActive: effective.openingBoostActive,
     openingBoostFreshCount: effective.freshCount,

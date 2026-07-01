@@ -146,7 +146,13 @@ select
     then 'quote_coverage_low'
     else 'degraded'
   end as readonly_verdict,
-  payload
+  payload,
+  payload ->> 'primarySource' as collector_primary_source,
+  payload ->> 'fallbackSource' as collector_fallback_source,
+  coalesce(nullif(payload ->> 'finmindRecoveryRequested', '')::integer, 0) as finmind_recovery_requested,
+  coalesce(nullif(payload ->> 'finmindRecoveryFetched', '')::integer, 0) as finmind_recovery_fetched,
+  lower(coalesce(payload ->> 'finmindRecoverySkipped', 'false')) = 'true' as finmind_recovery_skipped,
+  payload ->> 'finmindRecoveryError' as finmind_recovery_error
 from parsed;
 
 comment on view public.v_fuman_shared_source_readonly_scorecard is
