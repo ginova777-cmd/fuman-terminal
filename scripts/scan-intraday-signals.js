@@ -54,8 +54,8 @@ const REALTIME_RESCUE_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_REA
 const MIN_ENTRY_SOURCE_COVERAGE = Number(process.env.STRATEGY2_MIN_ENTRY_SOURCE_COVERAGE || 0.5);
 const STRATEGY2_SCAN_START_MINUTES = Number(process.env.STRATEGY2_SCAN_START_MINUTES || (8 * 60 + 45));
 const STRATEGY2_ENTRY_START_MINUTES = Number(process.env.STRATEGY2_ENTRY_START_MINUTES || (8 * 60 + 45));
-const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (12 * 60));
-const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (12 * 60));
+const STRATEGY2_ENTRY_END_MINUTES = Number(process.env.STRATEGY2_ENTRY_END_MINUTES || (13 * 60 + 30));
+const STRATEGY2_SCAN_END_MINUTES = Number(process.env.STRATEGY2_SCAN_END_MINUTES || (13 * 60 + 30));
 const STRATEGY2_FORCE_SCAN = process.env.STRATEGY2_FORCE_SCAN === "1";
 const STRATEGY2_OPEN_RUSH_END_MINUTES = Number(process.env.STRATEGY2_OPEN_RUSH_END_MINUTES || 9 * 60 + 10);
 const STRATEGY2_EARLY_ATTACK_START_MINUTES = Number(process.env.STRATEGY2_EARLY_ATTACK_START_MINUTES || 9 * 60 + 30);
@@ -566,7 +566,7 @@ function mergeStrategy2LiveLedgerRows(existingRows, incomingRows, key) {
     const normalized = {
       ...row,
       date: key,
-      liveWindow: "08:45-12:00",
+      liveWindow: "08:45-13:30",
       liveLedgerSource: source,
     };
     const rowKey = strategy2LiveLedgerRecordKey(normalized);
@@ -596,7 +596,7 @@ function buildStrategy2LiveLedgerReport(report, key) {
   return {
     ...existing,
     ...report,
-    source: report.source || "strategy2-0845-1200-live-patrol",
+    source: report.source || "strategy2-0845-1330-live-patrol",
     cacheSource: report.cacheSource || "strategy2-live-ledger",
     records: mergedRecords,
     events: mergedEvents,
@@ -606,10 +606,10 @@ function buildStrategy2LiveLedgerReport(report, key) {
     totalCount: mergedRecords.length,
     scanned: mergedRecords.length,
     total: mergedRecords.length,
-    historyContract: "strategy2-live-ledger-0845-1200-v2",
+    historyContract: "strategy2-live-ledger-0845-1330-v2",
     historyWindow: {
       start: "08:45",
-      end: "12:00",
+      end: "13:30",
       timezone: "Asia/Taipei",
       source: "scanner-append-only-live-ledger",
       uniqueRecordTimes: times.length,
@@ -619,7 +619,7 @@ function buildStrategy2LiveLedgerReport(report, key) {
     scanWindow: {
       ...(report.scanWindow || {}),
       start: "08:45:00",
-      end: "12:00:00",
+      end: "13:30:00",
       timezone: "Asia/Taipei",
       mode: "live-detection-ledger",
       uniqueRecordTimes: times.length,
@@ -637,8 +637,8 @@ function writeStrategy2HistorySnapshot(report, key, options = {}) {
     ...report,
     records: [],
     events: [],
-    historyContract: "strategy2-live-ledger-0845-1200-v2",
-    historyWindow: { start: "08:45", end: "12:00", timezone: "Asia/Taipei", source: "scanner-append-only-live-ledger" },
+    historyContract: "strategy2-live-ledger-0845-1330-v2",
+    historyWindow: { start: "08:45", end: "13:30", timezone: "Asia/Taipei", source: "scanner-append-only-live-ledger" },
   };
   writeJson(strategy2HistoryFile, payload);
   return payload;

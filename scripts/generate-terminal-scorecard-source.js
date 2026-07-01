@@ -751,7 +751,7 @@ async function main() {
       realtimeRadarWindow: "09:00-13:30",
       strategy1EntryTime: "21:30",
       strategy1Settlement: "前一日21:30顯示，當日收盤後結算",
-      strategy2Window: "09:00-12:00",
+      strategy2Window: "09:00-13:30",
       strategy3EntryTime: "13:00",
       strategy3HighPrice: "隔天高點",
       followupPositiveGrowthDays: 7,

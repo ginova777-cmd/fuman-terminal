@@ -177,23 +177,23 @@ if (fumanScheduleRegistry) {
     if (triggers.length !== 1 || triggers[0] !== "09:00") {
       issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 expectedTriggers must be exactly 09:00");
     }
-    if (!String(strategy2LineStart0900.description || "").includes("09:00-12:00")) {
-      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 description must say 09:00-12:00");
+    if (!String(strategy2LineStart0900.description || "").includes("09:00-13:30")) {
+      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Start 0900 description must say 09:00-13:30");
     }
   }
-  const strategy2LineStop1200 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Stop 1200");
-  if (!strategy2LineStop1200) {
-    issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE stop as Fuman Strategy2 LINE Stop 1200");
+  const strategy2LineStop1330 = tasks.find((task) => task?.taskName === "\\Fuman Strategy2 LINE Stop 1330");
+  if (!strategy2LineStop1330) {
+    issues.push("scripts/fuman-schedule-registry.json must name Strategy2 LINE stop as Fuman Strategy2 LINE Stop 1330");
   } else {
-    if (strategy2LineStop1200.time !== "12:00") {
-      issues.push(`scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1200 time must be 12:00; current=${strategy2LineStop1200.time || "(missing)"}`);
+    if (strategy2LineStop1330.time !== "13:30") {
+      issues.push(`scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1330 time must be 13:30; current=${strategy2LineStop1330.time || "(missing)"}`);
     }
-    if (!String(strategy2LineStop1200.description || "").includes("12:00")) {
-      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1200 description must say 12:00");
+    if (!String(strategy2LineStop1330.description || "").includes("13:30")) {
+      issues.push("scripts/fuman-schedule-registry.json Strategy2 LINE Stop 1330 description must say 13:30");
     }
   }
-  if (tasks.some((task) => /Strategy2 LINE Stop 1330/.test(String(task?.taskName || task?.displayName || "")))) {
-    issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1330; Strategy2 runs 09:00-12:00");
+  if (tasks.some((task) => /Strategy2 LINE Stop 1200/.test(String(task?.taskName || task?.displayName || "")))) {
+    issues.push("scripts/fuman-schedule-registry.json must not use legacy Strategy2 LINE Stop 1200; Strategy2 runs 09:00-13:30");
   }
   const freshnessFull2010 = tasks.find((task) => task?.taskName === "\\Fuman Freshness Gate Full 2010");
   if (!freshnessFull2010) {
@@ -219,8 +219,8 @@ if (fumanScheduleRegistry) {
   if (!retiredTasks.includes("Fuman Deploy Worktree Clean Monitor 5m")) {
     issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire deploy worktree clean monitor");
   }
-  if (!retiredTasks.includes("Fuman Strategy2 LINE Stop 1330")) {
-    issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire Fuman Strategy2 LINE Stop 1330");
+  if (!retiredTasks.includes("Fuman Strategy2 LINE Stop 1200")) {
+    issues.push("scripts/fuman-schedule-registry.json policy.retiredTasks must retire Fuman Strategy2 LINE Stop 1200");
   }
   const forbiddenFullTriggers = policy.forbiddenTriggers && policy.forbiddenTriggers["Fuman Freshness Gate Full 2010"];
   if (!Array.isArray(forbiddenFullTriggers) || !forbiddenFullTriggers.includes("06:10")) {
@@ -228,11 +228,11 @@ if (fumanScheduleRegistry) {
   }
 }
 const fumanScheduleFullText = read("check-fuman-schedule-full.ps1");
-if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1200") || !fumanScheduleFullText.includes("09:00 後每 3 秒巡邏到 12:00")) {
-  issues.push("check-fuman-schedule-full.ps1 must describe Strategy2 as 09:00-12:00 and name LINE stop as 1200");
+if (!fumanScheduleFullText.includes("Fuman Strategy2 LINE Stop 1330") || !fumanScheduleFullText.includes("09:00 後每 3 秒巡邏到 13:30")) {
+  issues.push("check-fuman-schedule-full.ps1 must describe Strategy2 as 09:00-13:30 and name LINE stop as 1330");
 }
-if (/Fuman Strategy2 LINE Stop 1330|策略2 當沖雷達[\s\S]{0,120}13:30/.test(fumanScheduleFullText)) {
-  issues.push("check-fuman-schedule-full.ps1 must not describe Strategy2 as stopping at 13:30");
+if (/Fuman Strategy2 LINE Stop 1200|策略2 當沖雷達[\s\S]{0,120}12:00/.test(fumanScheduleFullText)) {
+  issues.push("check-fuman-schedule-full.ps1 must not describe Strategy2 as stopping at 12:00");
 }
 if (packageJson.engines?.node !== EXPECTED_NODE_VERSION) {
   issues.push(`package.json engines.node must be ${EXPECTED_NODE_VERSION}; current=${packageJson.engines?.node || "(missing)"}`);
@@ -2017,7 +2017,7 @@ for (const marker of [
   "STRATEGY2_ENTRY_END_MINUTES",
   "STRATEGY2_SCAN_END_MINUTES",
   "525",
-  "720",
+  "810",
 ]) {
   if (!gate.includes(marker)) issues.push(`run-live-freshness-gate.ps1 missing strategy2 governance marker ${marker}`);
 }
@@ -2743,8 +2743,8 @@ if (!fs.existsSync(path.join(ROOT, "STRATEGY2-FRESHNESS-GOVERNANCE.md"))) {
     "afterhours_stopped_ok",
     "STRATEGY2_SCAN_START_MINUTES = 525",
     "STRATEGY2_ENTRY_START_MINUTES = 525",
-    "STRATEGY2_ENTRY_END_MINUTES = 720",
-    "STRATEGY2_SCAN_END_MINUTES = 720",
+    "STRATEGY2_ENTRY_END_MINUTES = 810",
+    "STRATEGY2_SCAN_END_MINUTES = 810",
     "npm run verify:publish-gate",
   ]) {
     if (!strategy2Governance.includes(marker)) issues.push(`STRATEGY2-FRESHNESS-GOVERNANCE.md missing ${marker}`);

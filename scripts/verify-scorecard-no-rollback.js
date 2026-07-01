@@ -190,7 +190,7 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, Boolean(latestDate), `${source}-latest-date`, `${source} latestDate exists`, { latestDate });
   addCheck(checks, missingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all 9 strategies`, { byStrategy, missingStrategies });
   addCheck(checks, requiredFieldMissing.length === 0, `${source}-required-fields`, `${source} required fields must be filled`, { missingCount: requiredFieldMissing.length, samples: requiredFieldMissing.slice(0, 20) });
-  addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-window`, `${source} strategy2 rows must stay within 09:00-12:00`, { strategy2OutOfWindow });
+  addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-window`, `${source} strategy2 rows must stay within 09:00-13:30`, { strategy2OutOfWindow });
   addCheck(checks, strategy3Rows.length > 0 && strategy3BadEntry.length === 0, `${source}-strategy3-entry`, `${source} strategy3 rows must use 13:00 entry`, { strategy3Rows: strategy3Rows.length, strategy3BadEntry });
   addCheck(checks, strategy3BadSource.length === 0, `${source}-strategy3-source-date`, `${source} strategy3 must use previous trading-day source marker`, { strategy3BadSource });
   addCheck(checks, cbBad.length === 0, `${source}-cb-stock-price`, `${source} CB rows must keep detected stockPrice-based calculable entry`, { cbBad });

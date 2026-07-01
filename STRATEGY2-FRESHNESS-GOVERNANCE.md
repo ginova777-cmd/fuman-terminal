@@ -19,7 +19,7 @@
 
 - `source_status.payload.intraday_1m_ok`、`ready_ge_35_symbols`、`ready_ge_80_symbols` 是 1 分 K 供給健康依據。
 - `v_strategy2_detection_health` 是策略2專用健康檢查入口。
-- `v_strategy2_entry_events_today` 是 08:45-12:00 live 偵測歷史逐筆資料入口。
+- `v_strategy2_entry_events_today` 是 08:45-13:30 live 偵測歷史逐筆資料入口。
 - `strategy2_latest` 必須跟上最新 shared source；若 source 已恢復但 latest 落後，應刷新策略2 run。
 - 盤後 shared source `stopped` 不可被誤判成盤中 1 分 K 壞掉；盤後狀態應是 `afterhours_stopped_ok`。
 - ready cache 必須刷新全股票池：`refresh_strategy2_intraday_ready_cache` 需一路跑到 `next_offset=0`，不能用固定 12 頁或部分 processed 數量當成功；page size 可用 25-100 避免 DB timeout，但必須跑完整 offset；若 `processed < total_expected` 或 `next_offset != 0`，只能警告/阻擋 ready，不可發布成 100% coverage。
@@ -43,7 +43,7 @@
 
 - `STRATEGY2_SCAN_START_MINUTES = 525`
 - `STRATEGY2_ENTRY_START_MINUTES = 525`
-- `STRATEGY2_ENTRY_END_MINUTES = 720`
-- `STRATEGY2_SCAN_END_MINUTES = 720`
+- `STRATEGY2_ENTRY_END_MINUTES = 810`
+- `STRATEGY2_SCAN_END_MINUTES = 810`
 
-策略2是 08:45-12:00 live 偵測策略；終端歷史紀錄必須保留整段 live ledger，不能只保留 09:15 或只保留最新 complete run 摘要。策略2是否可交易，要看 Supabase shared source 與策略2 latest 是否一致，不看舊 static JSON freshness gate。
+策略2是 08:45-13:30 live 偵測策略；終端歷史紀錄必須保留整段 live ledger，不能只保留 09:15 或只保留最新 complete run 摘要。策略2是否可交易，要看 Supabase shared source 與策略2 latest 是否一致，不看舊 static JSON freshness gate。

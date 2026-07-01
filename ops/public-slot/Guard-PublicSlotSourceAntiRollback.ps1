@@ -38,7 +38,7 @@ function Write-DefaultRuntimeConfig {
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 40
     openingBoostStart = "08:45"
-    openingBoostEnd = "12:00"
+    openingBoostEnd = "13:30"
     restQuoteOpeningBoostBatchSize = 180
     restQuoteOpeningBoostDelayMilliseconds = 80
     fugleCollectorLoopMilliseconds = 1000
@@ -221,7 +221,7 @@ function Test-RuntimeConfig {
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 40
     openingBoostStart = "08:45"
-    openingBoostEnd = "12:00"
+    openingBoostEnd = "13:30"
     restQuoteOpeningBoostBatchSize = 180
     restQuoteOpeningBoostDelayMilliseconds = 80
     fugleCollectorLoopMilliseconds = 1000

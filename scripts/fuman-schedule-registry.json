@@ -29,7 +29,7 @@
       "Fuman Strategy1 Futopt Preopen Verify 0850",
       "Fuman Strategy2 Intraday Scan",
       "Fuman Strategy2 LINE Start 0900",
-      "Fuman Strategy2 LINE Stop 1200",
+      "Fuman Strategy2 LINE Stop 1330",
       "Fuman Strategy2 Readiness Source 0800",
       "Fuman Strategy2 Supabase Coverage 0800",
       "Fuman Strategy3 Battle Verify 1305",
@@ -58,7 +58,7 @@
       "Fuman Strategy3 Battle Verify 1335",
       "Fuman Strategy3 Complete Scan 1318",
       "Fuman Strategy3 Refresh Snapshot 1308",
-      "Fuman Strategy2 LINE Stop 1330",
+      "Fuman Strategy2 LINE Stop 1200",
       "Fuman Terminal API Health",
       "Fuman 即時雷達健檢 0910"
     ],
@@ -100,7 +100,7 @@
         267009,
         267014
       ],
-      "Fuman Strategy2 LINE Stop 1200": [
+      "Fuman Strategy2 LINE Stop 1330": [
         0,
         267011
       ],
@@ -320,14 +320,14 @@
     {
       "taskName": "\\Fuman Strategy2 Intraday Scan",
       "displayName": "Fuman Strategy2 Intraday Scan",
-      "description": "Strategy2 intraday scanner; operational window is 08:45-12:00.",
+      "description": "Strategy2 intraday scanner; operational window is 08:45-13:30.",
       "time": "08:00",
       "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Strategy2 LINE Start 0900",
       "displayName": "Fuman Strategy2 LINE Start 0900",
-      "description": "Strategy2 LINE patrol start; trigger must be 09:00 for the 09:00-12:00 official live window.",
+      "description": "Strategy2 LINE patrol start; trigger must be 09:00 for the 09:00-13:30 official live window.",
       "time": "09:00",
       "expectedState": "Ready",
       "expectedTriggers": [
@@ -335,13 +335,13 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy2 LINE Stop 1200",
-      "displayName": "Fuman Strategy2 LINE Stop 1200",
-      "description": "Strategy2 LINE patrol stop at 12:00.",
-      "time": "12:00",
+      "taskName": "\\Fuman Strategy2 LINE Stop 1330",
+      "displayName": "Fuman Strategy2 LINE Stop 1330",
+      "description": "Strategy2 LINE patrol stop at 13:30.",
+      "time": "13:30",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "12:00"
+        "13:30"
       ]
     },
     {

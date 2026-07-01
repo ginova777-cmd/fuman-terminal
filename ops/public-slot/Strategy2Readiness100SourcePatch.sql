@@ -774,7 +774,7 @@ begin
   )
   select
     v_checked_at,
-    '09:00_12:00_intraday_1m',
+    '09:00_13:30_intraday_1m',
     symbol,
     name,
     null,
@@ -881,7 +881,7 @@ begin
     v_reasons := array_append(v_reasons, format('08:55 preopen_hot %s/%s ready', v_preopen_hot_ready, v_preopen_hot_expected));
   end if;
   if v_intraday_expected <= 0 or v_intraday_ready <> v_intraday_expected then
-    v_reasons := array_append(v_reasons, format('08:45-12:00 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
+    v_reasons := array_append(v_reasons, format('08:45-13:30 intraday_1m %s/%s ready', v_intraday_ready, v_intraday_expected));
   end if;
   if v_latest.run_id is null
      or v_latest.complete is not true
@@ -893,7 +893,7 @@ begin
       checked_at, gate, symbol, name, future_symbol, missing_reason, details
     ) values (
       v_checked_at,
-      '09:00_12:00_execution',
+      '09:00_13:30_execution',
       coalesce(v_latest.run_id, ''),
       'latest_complete_run',
       null,

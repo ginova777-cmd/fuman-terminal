@@ -187,7 +187,7 @@ function verifyPayload(checks, payload, source = "payload") {
   addCheck(checks, latestRows.length > 0, `${source}-latest-rows`, `${source} has rows for latestDate`, { latestDate, latestRows: latestRows.length });
   addCheck(checks, missingStrategies.length === 0, `${source}-expected-strategies`, `${source} latestDate includes all scorecard strategy groups`, { strategies, missingStrategies });
   addCheck(checks, cleanNumber(latestStats.byStrategy["策略2成績單"]?.rows) > 0, `${source}-strategy2`, `${source} includes 策略2成績單 rows`, latestStats.byStrategy["策略2成績單"] || {});
-  addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-display-window`, `${source} 策略2 scorecard rows are limited to 09:00-12:00`, { strategy2Rows: strategy2Rows.length, strategy2OutOfWindow });
+  addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-display-window`, `${source} 策略2 scorecard rows are limited to 09:00-13:30`, { strategy2Rows: strategy2Rows.length, strategy2OutOfWindow });
   addCheck(checks, cleanNumber(latestStats.byStrategy["策略3隔日沖成績單"]?.rows) > 0, `${source}-strategy3`, `${source} includes 策略3隔日沖成績單 rows`, latestStats.byStrategy["策略3隔日沖成績單"] || {});
   addCheck(checks, strategy3WrongEntryTime.length === 0, `${source}-strategy3-entry-time`, `${source} 策略3 full-scan entry_time is 13:00`, { strategy3Rows: strategy3Rows.length, strategy3WrongEntryTime });
   addCheck(checks, strategy3BadSourceDate.length === 0, `${source}-strategy3-source-date`, `${source} 策略3 scorecard uses the previous trading-day scan as source_date`, { latestDate, strategy3Rows: strategy3Rows.length, strategy3BadSourceDate });

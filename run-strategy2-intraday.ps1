@@ -10,8 +10,8 @@ $env:FUMAN_STATE_DIR = "C:\fuman-runtime\state"
 $env:INTRADAY_PATROL_INTERVAL_MS = "3000"
 $env:STRATEGY2_SCAN_START_MINUTES = "525"
 $env:STRATEGY2_ENTRY_START_MINUTES = "525"
-$env:STRATEGY2_ENTRY_END_MINUTES = "720"
-$env:STRATEGY2_SCAN_END_MINUTES = "720"
+$env:STRATEGY2_ENTRY_END_MINUTES = "810"
+$env:STRATEGY2_SCAN_END_MINUTES = "810"
 $env:STRATEGY2_PUBLISH_INTERVAL_MS = "0"
 $env:STRATEGY2_RETAIN_LAST_GOOD_ON_SOURCE_UNHEALTHY_SECONDS = "14400"
 $env:STRATEGY2_REALTIME_FUGLE_ONLY = "0"
@@ -111,7 +111,7 @@ if ($exitCode -ne 0) {
   exit $exitCode
 }
 
-# Strategy2 is an intraday fast-path ledger: 08:45-12:00 Asia/Taipei, every 3 seconds.
+# Strategy2 is an intraday fast-path ledger: 08:45-13:30 Asia/Taipei, every 3 seconds.
 # Each scan writes runtime/latest JSON and a Supabase complete run for frontend polling.
 # Do not redirect to cache sync, freshness:gate, deploy, bump, or GitHub push during runtime refreshes.
 "Strategy2 intraday cache written; fast-path sync-after-output skipped." >> $log

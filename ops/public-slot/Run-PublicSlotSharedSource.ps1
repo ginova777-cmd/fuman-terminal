@@ -24,7 +24,7 @@ param(
   [int]$RestQuoteEverySeconds = 10,
   [int]$RestQuoteDelayMilliseconds = 40,
   [string]$OpeningBoostStart = "08:45",
-  [string]$OpeningBoostEnd = "12:00",
+  [string]$OpeningBoostEnd = "13:30",
   [int]$RestQuoteOpeningBoostBatchSize = 180,
   [int]$RestQuoteOpeningBoostDelayMilliseconds = 80,
   [int]$FugleCollectorOpeningBoostBatchSize = 240,

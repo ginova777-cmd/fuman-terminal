@@ -15,7 +15,7 @@ const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
 const OUT_FILE = process.env.STRATEGY2_FULL_REPLAY_OUT || path.join(DATA_DIR, "strategy2-intraday-latest.json");
 const TRADE_DATE = process.env.STRATEGY2_REPLAY_DATE || "";
 const START_TIME = process.env.STRATEGY2_REPLAY_START || "08:45:00";
-const END_TIME = process.env.STRATEGY2_REPLAY_END || "12:00:00";
+const END_TIME = process.env.STRATEGY2_REPLAY_END || "13:30:00";
 const MAX_CODES = Math.max(1, Number(process.env.STRATEGY2_FULL_REPLAY_MAX_CODES || 1200));
 const CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_FULL_REPLAY_CONCURRENCY || 10));
 const BARS_PER_SYMBOL = Number(process.env.STRATEGY2_FULL_REPLAY_BARS || 360);
@@ -266,7 +266,7 @@ function recordFromMotherPool(stock) {
     amplitudePercent: pct,
     prevClosePercent: stock.prevClosePercent,
     limitUp: stock.limitUp,
-    reason: `08:45-12:00 母池逐筆偵測：幅度 ${pct.toFixed(2)}%，量 ${Math.round(volume).toLocaleString("zh-TW")} 張。`,
+    reason: `08:45-13:30 母池逐筆偵測：幅度 ${pct.toFixed(2)}%，量 ${Math.round(volume).toLocaleString("zh-TW")} 張。`,
     signalId: `strategy2_mother_pool_${timeBucket}`,
     strategyIds: ["strategy2_mother_pool"],
     strategyTags: ["母池觀察"],

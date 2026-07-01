@@ -11,7 +11,7 @@ param(
   [int]$MinFutoptMapped = 1,
   [int]$MinFutoptThisLoop = 1,
   [string]$OpeningBoostStart = "08:45",
-  [string]$OpeningBoostEnd = "12:00",
+  [string]$OpeningBoostEnd = "13:30",
   [switch]$JsonOnly
 )
 

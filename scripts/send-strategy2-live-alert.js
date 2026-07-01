@@ -10,7 +10,7 @@ const STRATEGY2_REPORT_FILE = dataPath("strategy2-intraday-latest.json");
 const LIVE_ALERT_STATE_FILE = statePath("strategy2-live-alert-state.json");
 const LIVE_LIMIT = Math.max(1, Number(process.env.STRATEGY2_LIVE_LIMIT || 3));
 const STRATEGY2_LIVE_MIN_PERCENT = Number(process.env.STRATEGY2_LIVE_MIN_PERCENT || 2);
-const STRATEGY2_LIVE_STOP_AT = String(process.env.STRATEGY2_LIVE_STOP_AT || "12:00:00").trim();
+const STRATEGY2_LIVE_STOP_AT = String(process.env.STRATEGY2_LIVE_STOP_AT || "13:30:00").trim();
 const STRATEGY2_LIVE_DISABLE_ENHANCEMENTS = process.env.STRATEGY2_LIVE_DISABLE_ENHANCEMENTS !== "0";
 const ENHANCEMENT_COOLDOWN_MS = Math.max(0, Number(process.env.STRATEGY2_ENHANCEMENT_COOLDOWN_MS || 5 * 60 * 1000));
 const ENHANCEMENT_BREAKOUT_PERCENT_DELTA = Number(process.env.STRATEGY2_ENHANCEMENT_BREAKOUT_PERCENT_DELTA || 1);
@@ -101,7 +101,7 @@ function ma35SourceLabel(source) {
 function isWithinStrategy2NotificationWindow(timeText) {
   const value = String(timeText || "");
   const start = String(process.env.STRATEGY2_LIVE_STARTED_AT || "08:45:00").trim();
-  const stop = STRATEGY2_LIVE_STOP_AT || "12:00:00";
+  const stop = STRATEGY2_LIVE_STOP_AT || "13:30:00";
   return (!start || value >= start) && (!stop || value <= stop);
 }
 

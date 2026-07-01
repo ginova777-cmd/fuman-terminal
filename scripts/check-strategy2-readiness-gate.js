@@ -170,15 +170,15 @@ async function checkOnce() {
       suggestedScannerBehavior: "preserve_latest_complete_run; collect fugle_preopen_snapshot_history through 08:55",
     }),
     stage({
-      key: "09:00_12:00_intraday_1m",
-      label: "09:00-12:00 intraday 1m",
+      key: "09:00_13:30_intraday_1m",
+      label: "09:00-13:30 intraday 1m",
       ready: cleanNumber(status.intraday_1m_ready_count),
       expected: cleanNumber(status.detection_expected_count),
       reason: "偵測母池未全數達成 ready_ge_35",
       suggestedScannerBehavior: "preserve_latest_complete_run; keep 1m collector covering full universe until ready_ge_35=100%",
     }),
     stage({
-      key: "09:00_12:00_execution",
+      key: "09:00_13:30_execution",
       label: "latest complete run execution",
       ready: cleanNumber(status.latest_execution_scanned),
       expected: cleanNumber(status.latest_execution_expected),
@@ -191,7 +191,7 @@ async function checkOnce() {
   const payload = {
     ok: ready,
     source: "strategy2-readiness-gate",
-    gate: "strategy2-0845-futopt+0855-preopen-hot+0900-1200-detection",
+    gate: "strategy2-0845-futopt+0855-preopen-hot+0900-1330-detection",
     checkedAt: checkedAt.toISOString(),
     checkedAtTaipei: taipeiTimestamp(checkedAt),
     status: status.status || (ready ? "ready" : "not_ready"),

@@ -30,7 +30,7 @@ const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTO
 const FINMIND_RECOVERY_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "1"));
 const FINMIND_RECOVERY_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_TIMEOUT_MS || 30000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
-const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "12:00";
+const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "13:30";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 240));
 const OPENING_BOOST_CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_CONCURRENCY || 2)));
 const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS || 80));
@@ -129,7 +129,7 @@ function taipeiMinutesNow() {
 function inOpeningBoostWindow() {
   const now = taipeiMinutesNow();
   const start = minutesFromHHmm(OPENING_BOOST_START, 8 * 60 + 45);
-  const end = minutesFromHHmm(OPENING_BOOST_END, 12 * 60);
+  const end = minutesFromHHmm(OPENING_BOOST_END, 13 * 60 + 30);
   return now >= start && now <= end;
 }
 
