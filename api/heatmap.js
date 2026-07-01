@@ -2821,8 +2821,33 @@ async function fetchSupabasePagedRows(table, select, order, maxRows = 3000, page
   return rows;
 }
 
+function newestTimestampValue(values) {
+  let best = "";
+  let bestMs = 0;
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (!text) continue;
+    const ms = Date.parse(text);
+    if (Number.isFinite(ms) && ms > bestMs) {
+      best = text;
+      bestMs = ms;
+    } else if (!best) {
+      best = text;
+    }
+  }
+  return best;
+}
+
 function supabaseHeatmapObservedAt(row) {
-  return row?.updated_at || row?.last_trade_time || row?.payload?.updated_at || row?.payload?.quote_updated_at || "";
+  return newestTimestampValue([
+    row?.last_trade_time,
+    row?.payload?.last_trade_time,
+    row?.payload?.lastTradeTime,
+    row?.payload?.quote_time,
+    row?.payload?.quote_updated_at,
+    row?.payload?.updated_at,
+    row?.updated_at,
+  ]);
 }
 
 function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = taipeiClock()) {
