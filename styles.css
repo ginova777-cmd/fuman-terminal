@@ -13,6 +13,261 @@
   --orange: #ff7a45;
 }
 
+/* strategy2-entry-card-20260701 */
+@media (min-width: 901px) {
+  body.public-terminal #strategy-view.intraday-only .intraday-main-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-zones,
+  body.public-terminal #strategy-view.intraday-only .intraday-side-panel {
+    display: none !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-panel {
+    border: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-tabs {
+    margin-bottom: 10px !important;
+    border: 1px solid rgba(72, 82, 105, 0.46) !important;
+    border-radius: 8px !important;
+    background: #080b10 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table {
+    display: block !important;
+    border: 0 !important;
+    border-collapse: separate !important;
+    background: transparent !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table thead {
+    display: none !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tbody {
+    display: grid !important;
+    gap: 8px !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) {
+    display: grid !important;
+    grid-template-columns: 150px minmax(78px, 0.48fr) minmax(120px, 0.7fr) minmax(90px, 0.52fr) minmax(90px, 0.52fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: 58px repeat(5, minmax(42px, auto));
+    min-height: 214px;
+    border: 1px solid rgba(67, 77, 98, 0.72) !important;
+    border-radius: 8px !important;
+    background: #05070b !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 14px 32px rgba(0, 0, 0, 0.22);
+    overflow: hidden !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table td {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(76, 87, 108, 0.42) !important;
+    background: #0b0f16 !important;
+    color: #e7edf8 !important;
+    padding: 0 14px !important;
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table td::before {
+    flex: 0 0 74px;
+    color: #ffbd4f;
+    content: "";
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1 / 7;
+    flex-direction: column;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 18px !important;
+    border-right: 1px solid rgba(74, 83, 102, 0.76) !important;
+    border-bottom: 0 !important;
+    background: linear-gradient(180deg, #10151d 0%, #0c1118 100%) !important;
+    color: #ffbd38 !important;
+    padding: 22px 18px !important;
+    font-size: 24px !important;
+    font-weight: 950 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(1)::before {
+    flex: none;
+    color: #f6f8ff;
+    content: "偵測時間";
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(1)::after {
+    width: 100%;
+    margin-top: auto;
+    color: #8793aa;
+    content: "訊號觸發";
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: center !important;
+    border-bottom-color: rgba(73, 83, 105, 0.54) !important;
+    background: #05070b !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(2)::before,
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(3)::before {
+    display: none;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table .code {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 54px !important;
+    border: 1px solid rgba(255, 190, 88, 0.32) !important;
+    border-radius: 2px !important;
+    background: linear-gradient(180deg, #ffb548, #f06a24) !important;
+    color: #160b04 !important;
+    padding: 3px 5px !important;
+    font-size: 22px !important;
+    font-weight: 950 !important;
+    line-height: 1 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(3) {
+    grid-column: 3;
+    grid-row: 1;
+    border-bottom-color: rgba(73, 83, 105, 0.54) !important;
+    background: #05070b !important;
+    color: #e9edf7 !important;
+    font-size: 18px !important;
+    font-weight: 950 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(4) {
+    grid-column: 4;
+    grid-row: 1;
+    justify-content: center !important;
+    border-bottom-color: rgba(73, 83, 105, 0.54) !important;
+    background: #05070b !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(4)::before {
+    display: none;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-state {
+    border: 1px solid rgba(255, 98, 98, 0.5) !important;
+    border-radius: 999px !important;
+    background: rgba(146, 34, 48, 0.42) !important;
+    color: #ffd7d7 !important;
+    padding: 7px 16px !important;
+    font-weight: 950 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(5) {
+    grid-column: 2 / 5;
+    grid-row: 2;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(5)::before {
+    content: "現況";
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(6) {
+    grid-column: 5 / 8;
+    grid-row: 2;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(6)::before {
+    content: "關鍵價";
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(7) {
+    grid-column: 5;
+    grid-row: 1;
+    justify-content: center !important;
+    border-bottom-color: rgba(73, 83, 105, 0.54) !important;
+    background: #05070b !important;
+    color: #ffd166 !important;
+    font-size: 15px !important;
+    font-weight: 950 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(7)::before {
+    display: none;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(8) {
+    grid-column: 2 / 8;
+    grid-row: 4;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(8)::before {
+    content: "盤力";
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(9) {
+    grid-column: 2 / 8;
+    grid-row: 5;
+    border: 1px solid rgba(255, 72, 92, 0.34) !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    background: rgba(34, 10, 16, 0.62) !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(9)::before {
+    content: "風控";
+    color: #ff6b86;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(10) {
+    grid-column: 2 / 8;
+    grid-row: 6;
+    border-bottom: 0 !important;
+    background: rgba(8, 39, 24, 0.66) !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-table tr:has(td:nth-child(10)) td:nth-child(10)::before {
+    content: "觀察";
+    color: #43d986;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-badges {
+    justify-content: flex-start !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-badges b {
+    border: 1px solid rgba(255, 194, 84, 0.2) !important;
+    border-radius: 8px !important;
+    background: rgba(255, 194, 84, 0.1) !important;
+    color: #ffcf75 !important;
+    padding: 5px 9px !important;
+    font-weight: 900 !important;
+  }
+
+  body.public-terminal #strategy-view.intraday-only .intraday-entry b,
+  body.public-terminal #strategy-view.intraday-only .intraday-entry small {
+    display: inline !important;
+    white-space: normal !important;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

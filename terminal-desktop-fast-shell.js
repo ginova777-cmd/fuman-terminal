@@ -5368,6 +5368,46 @@
     if (!rows.length) {
       return `<div class="strategy2-empty">${isEntryTable ? "目前沒有即時進場 / 預備進場訊號" : "目前沒有今日歷史紀錄"}</div>`;
     }
+    if (isEntryTable) {
+      return `
+        <div class="strategy2-entry-cards">
+          ${rows.map((row) => {
+            const tone = strategy2Tone(row);
+            const note = strategy2NoteLabel(row, tone, false);
+            const code = row?.code || "--";
+            const title = row?.title || row?.name || code;
+            const price = strategy2PriceLabel(row);
+            const pct = row?.pct || "--";
+            const score = row?.score || "--";
+            const time = strategy2TimeLabel(row);
+            const state = tone === "entry" ? "真正進場" : "預備進場";
+            return `
+              <article class="strategy2-entry-card strategy2-card-${escapeHtml(tone)}">
+                <aside class="strategy2-card-time">
+                  <small>偵測時間</small>
+                  <strong>${escapeHtml(time)}</strong>
+                  <em>${escapeHtml(state)}</em>
+                </aside>
+                <div class="strategy2-card-code">${escapeHtml(code)}</div>
+                <div class="strategy2-card-name">
+                  <strong>${escapeHtml(title)}</strong>
+                  <span>${escapeHtml(code)}</span>
+                </div>
+                <div class="strategy2-card-metric price"><small>現價</small><strong>${escapeHtml(price)}</strong></div>
+                <div class="strategy2-card-metric score"><small>分數</small><strong>${escapeHtml(score)}</strong></div>
+                <div class="strategy2-card-metric change hot"><small>漲幅</small><strong>${escapeHtml(pct)}</strong></div>
+                <div class="strategy2-card-line now"><b>現況</b><span>現價 ${escapeHtml(price)}｜${escapeHtml(state)}｜分數 ${escapeHtml(score)}</span></div>
+                <div class="strategy2-card-line key"><b>關鍵價</b><span>觀察 ${escapeHtml(price)} 附近；站穩再追，跌破觸發價先降碼。</span></div>
+                <div class="strategy2-card-line watch"><b>觀察</b><span>${escapeHtml(note)}</span></div>
+                <div class="strategy2-card-line power"><b>盤力</b><span>短線量價偏強；等待 1 分 K 延續與成交量確認。</span></div>
+                <div class="strategy2-card-line risk"><b>風控</b><span>入場後以觸發 K 低點與風險線防守，未升級前不重倉。</span></div>
+                <div class="strategy2-card-line action"><b>操作</b><span>假突破後重新站回日盤力回溫才做；若全天盤力偏弱，短打處理。</span></div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
     const body = rows.map((row, index) => {
       const tone = isEntryTable ? strategy2Tone(row) : "history";
       const note = strategy2NoteLabel(row, tone, !isEntryTable);
@@ -6643,7 +6683,7 @@
       }
       .strategy2-entry-panel {
         flex: 0 0 auto;
-        max-height: 236px;
+        max-height: none;
         border-color: rgba(250, 204, 21, 0.36);
         background:
           linear-gradient(90deg, rgba(250, 204, 21, 0.08), rgba(30, 64, 175, 0.12)),
@@ -6757,6 +6797,355 @@
         margin-top: 2px;
         color: #83a1d5;
         font-size: 12px;
+      }
+      .strategy2-entry-cards {
+        display: grid;
+        gap: 8px;
+        padding: 8px;
+        background: #05070b;
+      }
+      .strategy2-entry-card {
+        display: grid;
+        grid-template-columns: 150px 78px minmax(110px, 0.44fr) minmax(112px, 0.5fr) minmax(86px, 0.38fr) minmax(92px, 0.4fr);
+        grid-template-rows: 58px minmax(44px, auto) minmax(44px, auto) minmax(44px, auto) minmax(44px, auto) minmax(44px, auto);
+        min-height: 282px;
+        border: 1px solid rgba(73, 83, 104, 0.78);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #05070b;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.035), 0 14px 34px rgba(0,0,0,0.24);
+      }
+      .strategy2-card-time {
+        grid-column: 1;
+        grid-row: 1 / 7;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 18px;
+        border-right: 1px solid rgba(74, 83, 102, 0.80);
+        background: linear-gradient(180deg, #10151d 0%, #0c1118 100%);
+        padding: 22px 18px;
+      }
+      .strategy2-card-time small {
+        color: #f6f8ff;
+        font: 950 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-card-time strong {
+        color: #ffbd38;
+        font: 950 24px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-card-time em {
+        margin-top: auto;
+        color: #8793aa;
+        font: 850 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-style: normal;
+      }
+      .strategy2-card-code {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: center;
+        justify-self: center;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 54px;
+        min-height: 31px;
+        border: 1px solid rgba(255, 190, 88, 0.32);
+        border-radius: 2px;
+        background: linear-gradient(180deg, #ffb548, #f06a24);
+        color: #160b04;
+        padding: 0 5px;
+        font: 950 22px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-card-name,
+      .strategy2-card-metric,
+      .strategy2-card-line {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid rgba(73, 83, 104, 0.50);
+        background: #0b0f16;
+        color: #e7edf8;
+        padding: 0 14px;
+        font: 850 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-card-name {
+        grid-column: 3;
+        grid-row: 1;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+      }
+      .strategy2-card-name strong {
+        color: #e9edf7;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+      .strategy2-card-name span {
+        color: #8fa4c7;
+        font-size: 12px;
+      }
+      .strategy2-card-metric {
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+      }
+      .strategy2-card-metric.price { grid-column: 4; grid-row: 1; }
+      .strategy2-card-metric.score { grid-column: 5; grid-row: 1; }
+      .strategy2-card-metric.change { grid-column: 6; grid-row: 1; }
+      .strategy2-card-metric small {
+        color: #ffbd4f;
+        font-weight: 950;
+      }
+      .strategy2-card-metric strong {
+        color: #dbeafe;
+        font: 950 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-card-metric.hot strong {
+        color: #ffd166;
+      }
+      .strategy2-card-line b {
+        flex: 0 0 74px;
+        color: #ffbd4f;
+        font-weight: 950;
+      }
+      .strategy2-card-line span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .strategy2-card-line.now { grid-column: 2 / 4; grid-row: 2; }
+      .strategy2-card-line.key { grid-column: 4 / 7; grid-row: 2; }
+      .strategy2-card-line.watch { grid-column: 2 / 7; grid-row: 3; }
+      .strategy2-card-line.power { grid-column: 2 / 7; grid-row: 4; }
+      .strategy2-card-line.risk {
+        grid-column: 2 / 7;
+        grid-row: 5;
+        border-top: 1px solid rgba(255, 72, 92, 0.34);
+        border-bottom: 1px solid rgba(255, 72, 92, 0.34);
+        background: rgba(34, 10, 16, 0.62);
+        color: #ffdbe1;
+      }
+      .strategy2-card-line.risk b {
+        color: #ff6b86;
+      }
+      .strategy2-card-line.action {
+        grid-column: 2 / 7;
+        grid-row: 6;
+        border-bottom: 0;
+        background: rgba(8, 39, 24, 0.66);
+        color: #cceedd;
+      }
+      .strategy2-card-line.action b {
+        color: #43d986;
+      }
+      .strategy2-entry-panel .strategy2-battle-scroll {
+        max-height: none;
+      }
+      .strategy2-top-table {
+        display: block;
+        border-collapse: separate;
+        border-spacing: 0;
+        padding: 8px;
+        background: #05070b;
+      }
+      .strategy2-top-table thead {
+        display: none;
+      }
+      .strategy2-top-table tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .strategy2-top-table .strategy2-battle-row {
+        display: grid;
+        grid-template-columns: 150px 78px minmax(110px, 0.42fr) minmax(112px, 0.5fr) minmax(86px, 0.38fr) minmax(92px, 0.4fr);
+        grid-template-rows: 58px minmax(56px, auto) minmax(56px, auto) minmax(56px, auto);
+        min-height: 228px;
+        border: 1px solid rgba(73, 83, 104, 0.78);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #05070b;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.035), 0 14px 34px rgba(0,0,0,0.24);
+      }
+      .strategy2-top-table .strategy2-battle-row td {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 10px;
+        border: 0;
+        border-bottom: 1px solid rgba(73, 83, 104, 0.50);
+        background: #0b0f16;
+        color: #e7edf8;
+        padding: 0 14px;
+        white-space: normal;
+      }
+      .strategy2-top-table .strategy2-battle-row td::before {
+        flex: 0 0 74px;
+        color: #ffbd4f;
+        font: 950 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-top-table .strategy2-col-rank {
+        grid-column: 1;
+        grid-row: 1 / 5;
+        width: auto;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 18px;
+        border-right: 1px solid rgba(74, 83, 102, 0.80);
+        border-bottom: 0;
+        background: linear-gradient(180deg, #10151d 0%, #0c1118 100%);
+        color: #ffbd38 !important;
+        padding: 22px 18px;
+        font: 950 24px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-top-table .strategy2-col-rank::before {
+        flex: none;
+        content: "偵測時間";
+        color: #f6f8ff;
+        font: 950 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-top-table .strategy2-col-rank::after {
+        width: 100%;
+        margin-top: auto;
+        color: #8793aa;
+        content: "訊號觸發";
+        font: 850 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-top-table .strategy2-col-time {
+        grid-column: 2;
+        grid-row: 1;
+        width: auto;
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+        color: #160b04;
+        font-size: 0;
+      }
+      .strategy2-top-table .strategy2-col-time::before {
+        display: none;
+      }
+      .strategy2-top-table .strategy2-col-time {
+        color: #160b04;
+      }
+      .strategy2-top-table .strategy2-col-time:not(:empty) {
+        border: 1px solid rgba(255, 190, 88, 0.32);
+        border-radius: 2px;
+        align-self: center;
+        justify-self: center;
+        min-width: 54px;
+        min-height: 31px;
+        background: linear-gradient(180deg, #ffb548, #f06a24);
+        font: 950 22px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .strategy2-top-table .strategy2-col-symbol {
+        grid-column: 3;
+        grid-row: 1;
+        width: auto;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+      }
+      .strategy2-top-table .strategy2-col-symbol::before {
+        display: none;
+      }
+      .strategy2-top-table .strategy2-col-symbol strong {
+        color: #e9edf7;
+        font: 950 18px/1.1 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-top-table .strategy2-col-symbol span {
+        color: #8fa4c7;
+        font-size: 12px;
+      }
+      .strategy2-top-table .strategy2-col-price {
+        grid-column: 4;
+        grid-row: 1;
+        width: auto;
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+        color: #ffd166;
+        font: 950 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        text-align: left;
+      }
+      .strategy2-top-table .strategy2-col-price::before {
+        flex: none;
+        content: "現價";
+        color: #ffbd4f;
+      }
+      .strategy2-top-table .strategy2-col-score {
+        grid-column: 5;
+        grid-row: 1;
+        width: auto;
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+        color: #dbeafe;
+        text-align: left;
+      }
+      .strategy2-top-table .strategy2-col-score::before {
+        flex: none;
+        content: "分數";
+      }
+      .strategy2-top-table .strategy2-col-change {
+        grid-column: 6;
+        grid-row: 1;
+        width: auto;
+        justify-content: center;
+        border-bottom-color: rgba(73, 83, 105, 0.56);
+        background: #05070b;
+        color: #ffd166 !important;
+        text-align: left;
+      }
+      .strategy2-top-table .strategy2-col-change::before {
+        flex: none;
+        content: "漲幅";
+      }
+      .strategy2-top-table .strategy2-col-note {
+        grid-column: 2 / 7;
+        grid-row: 2;
+        width: auto;
+      }
+      .strategy2-top-table .strategy2-col-note::before {
+        content: "觀察";
+      }
+      .strategy2-top-table .strategy2-col-note span {
+        display: inline;
+        max-width: none;
+        min-height: 0;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        background: transparent;
+        color: inherit;
+      }
+      .strategy2-top-table .strategy2-battle-row::after {
+        grid-column: 2 / 7;
+        grid-row: 4;
+        display: flex;
+        align-items: center;
+        border-top: 1px solid rgba(47, 146, 92, 0.34);
+        background: rgba(8, 39, 24, 0.66);
+        color: #cceedd;
+        content: "操作：假突破後重新站回日盤力回溫，若全天盤力偏弱，請用短打與入場K低點防守。";
+        padding: 0 14px;
+        font: 850 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .strategy2-top-table .strategy2-battle-row::before {
+        grid-column: 2 / 7;
+        grid-row: 3;
+        display: flex;
+        align-items: center;
+        border-top: 1px solid rgba(255, 72, 92, 0.34);
+        border-bottom: 1px solid rgba(255, 72, 92, 0.34);
+        background: rgba(34, 10, 16, 0.62);
+        color: #ffdbe1;
+        content: "風控：風險線觀察，入場後跌破觸發價請降碼或退場。";
+        padding: 0 14px;
+        font: 850 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       .strategy2-empty {
         display: grid;
