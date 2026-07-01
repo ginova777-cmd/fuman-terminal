@@ -559,6 +559,9 @@ if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
   if (!/freshness:gate:fast/.test(legacyGuard) || !/npm run \$gateScript/.test(legacyGuard)) {
     issues.push("legacy-entrypoint-guard.ps1 must redirect legacy data scripts to npm run freshness:gate:fast by default");
   }
+  if (!/run-realtime-radar\.ps1/.test(legacyGuard)) {
+    issues.push("legacy-entrypoint-guard.ps1 must allow run-realtime-radar.ps1 to execute the realtime radar patrol");
+  }
 }
 
 const cacheSync = read("run-cache-sync.ps1");

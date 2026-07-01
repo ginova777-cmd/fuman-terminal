@@ -14,6 +14,7 @@ $directScanLabels = @(
   "run-strategy1-preopen-common.ps1",
   "run-open-buy-sync-retry.ps1",
   "run-strategy2-intraday.ps1",
+  "run-realtime-radar.ps1",
   "run-strategy5.ps1",
   "run-institution.ps1",
   "run-warrant-flow.ps1"
