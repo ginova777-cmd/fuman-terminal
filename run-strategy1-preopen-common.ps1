@@ -278,6 +278,9 @@ try {
 
   if ($gate.Status -ne "ready") {
     $warnings += "controlled health=$($gate.Status): $($gate.Reason)"
+    if ($Mode -eq "Final") {
+      throw "strategy1 preopen final health not ready: $($gate.Reason)"
+    }
   }
 
   Write-PreopenReceipt "complete" 0 $healthStatus $healthReason $refreshResult $iterations $warnings
