@@ -46,7 +46,7 @@ function Write-DefaultRuntimeConfig {
     fugleCollectorConcurrency = 2
     fugleCollectorRequestDelayMilliseconds = 80
     fugleCollectorQuoteTtlMilliseconds = 120000
-    fugleCollectorOpeningBoostBatchSize = 240
+    fugleCollectorOpeningBoostBatchSize = 120
     fugleCollectorOpeningBoostConcurrency = 2
     fugleCollectorOpeningBoostDelayMilliseconds = 80
     fugleCollectorFinMindRecoveryEnabled = $true
@@ -241,7 +241,7 @@ function Test-RuntimeConfig {
     fugleCollectorConcurrency = 2
     fugleCollectorRequestDelayMilliseconds = 80
     fugleCollectorQuoteTtlMilliseconds = 120000
-    fugleCollectorOpeningBoostBatchSize = 240
+    fugleCollectorOpeningBoostBatchSize = 120
     fugleCollectorOpeningBoostConcurrency = 2
     fugleCollectorOpeningBoostDelayMilliseconds = 80
     fugleCollectorFinMindRecoveryEnabled = $true

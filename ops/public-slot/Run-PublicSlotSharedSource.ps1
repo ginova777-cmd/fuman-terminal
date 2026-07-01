@@ -27,7 +27,7 @@ param(
   [string]$OpeningBoostEnd = "13:30",
   [int]$RestQuoteOpeningBoostBatchSize = 60,
   [int]$RestQuoteOpeningBoostDelayMilliseconds = 600,
-  [int]$FugleCollectorOpeningBoostBatchSize = 240,
+  [int]$FugleCollectorOpeningBoostBatchSize = 120,
   [int]$FugleCollectorOpeningBoostConcurrency = 2,
   [int]$FugleCollectorOpeningBoostDelayMilliseconds = 80,
   [bool]$FugleCollectorFinMindRecoveryEnabled = $true,
