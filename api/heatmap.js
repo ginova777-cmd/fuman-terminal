@@ -2864,8 +2864,6 @@ function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = 
   const quoteDate = compactDateKeyFromValue(observedAt);
   if (!quoteDate) return "missing_date";
   if (quoteDate !== today) return "not_today";
-  const ageSeconds = secondsSinceValue(observedAt);
-  if (isHeatmapDetectWindow(clock) && ageSeconds != null && ageSeconds > HEATMAP_QUOTE_MAX_AGE_SECONDS) return "stale";
   return "";
 }
 
@@ -2941,13 +2939,20 @@ async function fetchSupabaseHeatmapQuotes(clock = taipeiClock()) {
 
     const latestUpdatedAt = latestMs ? new Date(latestMs).toISOString() : "";
     const latestAgeSeconds = latestMs ? Math.max(0, Math.floor((Date.now() - latestMs) / 1000)) : null;
-    const issue = quoteMap.size >= HEATMAP_QUOTE_MIN_ROWS ? "" : `fresh_rows_${quoteMap.size}_below_${HEATMAP_QUOTE_MIN_ROWS}`;
+    const latestTooOld = isHeatmapDetectWindow(clock)
+      && latestAgeSeconds != null
+      && latestAgeSeconds > HEATMAP_QUOTE_MAX_AGE_SECONDS;
+    const issue = quoteMap.size < HEATMAP_QUOTE_MIN_ROWS
+      ? `fresh_rows_${quoteMap.size}_below_${HEATMAP_QUOTE_MIN_ROWS}`
+      : latestTooOld
+        ? `latest_quote_age_${latestAgeSeconds}_above_${HEATMAP_QUOTE_MAX_AGE_SECONDS}`
+        : "";
     return {
       quoteMap,
       sourceInfo: {
         source,
         table: HEATMAP_QUOTE_TABLE,
-        ok: quoteMap.size >= HEATMAP_QUOTE_MIN_ROWS,
+        ok: !issue,
         issue,
         rows: quoteMap.size,
         rawRows: Array.isArray(rows) ? rows.length : 0,
