@@ -310,6 +310,20 @@ function buildPayload(rows, run, options = {}) {
   const outputVolumeMatches = options.canvas ? volumeMatches.slice(0, options.limit || 80) : volumeMatches;
   const outputSingleSignals = options.canvas ? singleSignals.slice(0, options.limit || 80) : singleSignals;
   const runId = String(run?.run_id || rows[0]?.run_id || "");
+  const qualityStatus = String(run?.quality_status || rows[0]?.quality_status || "complete");
+  const runReady = Boolean(runId && run?.complete === true && qualityStatus === "complete" && rows.length > 0);
+  const sourceCoverage = {
+    ok: runReady,
+    ready: runReady,
+    status: runReady ? "ready" : "degraded",
+    reason: runReady ? "warrant_flow_complete_run_ready" : "warrant_flow_complete_run_not_ready",
+    tradeDate: scanDate,
+    usedDate,
+    sourceDate,
+    rowCount: rows.length,
+    resultCount: cleanNumber(run?.result_count || rows.length),
+    checkedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),
+  };
   return {
     ok: true,
     source: "supabase:warrant_flow_scan_results",
@@ -318,12 +332,29 @@ function buildPayload(rows, run, options = {}) {
     runId,
     updatedAt: String(run?.finished_at || rows[0]?.updated_at || new Date().toISOString()),
     usedDate,
-    tradeDate: compactDateKey(run?.payload?.tradeDate || scanDate),
+    tradeDate: scanDate,
     sourceDate,
     complete: true,
-    qualityStatus: String(run?.quality_status || rows[0]?.quality_status || "complete"),
+    qualityStatus,
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || ""),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "warrant-flow-cache"),
+    sourceCoverage,
+    fallbackUsed: false,
+    fallbackAllowed: true,
+    fallbackScope: [],
+    fallbackDetails: [],
+    writeBudget: {
+      ok: runReady,
+      status: runReady ? "allow" : "blocked",
+      allowLatestWrite: runReady,
+      allowCompleteRunWrite: runReady,
+      preservePreviousCompleteRun: !runReady,
+      reason: runReady ? "warrant flow latest complete run is publishable" : "warrant flow must preserve previous complete run",
+    },
+    retentionOk: runReady,
+    publishAllowed: runReady,
+    degradedBlocksLatest: !runReady,
+    preservePreviousGood: !runReady,
     count: matches.length,
     returnedCount: outputMatches.length,
     matchesTotal: matches.length,

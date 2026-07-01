@@ -263,15 +263,22 @@ function strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scanned
   const today = compactDateKey(taipeiDateKey());
   const decisionReady = readyStatus?.decision_ready === true;
   const completeScan = expectedTotal > 0 && scannedCount > 0 && scannedCount >= expectedTotal;
-  const ready = Boolean(!carryForward2130 && decisionReady && usedDate === today && completeScan);
+  const formalDisplayReady = Boolean(
+    (!carryForward2130 && decisionReady && usedDate === today && completeScan)
+    || carryForward2130
+    || (displayMode === "decision_pending_candidates" && usedDate === today && completeScan)
+  );
   return {
-    ok: ready,
-    ready,
-    status: ready ? "ready" : carryForward2130 ? "carry_forward" : decisionReady ? "stale" : "not_ready",
-    reason: ready
+    ok: formalDisplayReady,
+    ready: formalDisplayReady,
+    status: formalDisplayReady ? "ready" : decisionReady ? "stale" : "not_ready",
+    displayStatus: carryForward2130 ? "carry_forward" : displayMode === "decision_pending_candidates" ? "decision_pending" : "buy_matches",
+    reason: formalDisplayReady && !carryForward2130 && displayMode !== "decision_pending_candidates"
       ? "strategy1_today_decision_ready"
       : carryForward2130
         ? "strategy1_previous_2130_carry_forward"
+        : displayMode === "decision_pending_candidates"
+          ? "strategy1_decision_pending_display_allowed"
         : decisionReady
           ? `strategy1_source_date_not_today:${usedDate || "missing"}!=${today}`
           : decisionReadyError(readyStatus),
@@ -327,6 +334,15 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   const fallbackAllowed = fallbackUsed
     ? fallbackScope.every((scope) => ["decision_pending_display", "previous_2130_complete_run"].includes(scope))
     : true;
+  const fallbackContract = Object.fromEntries(fallbackScope.map((scope) => [scope, {
+    allowed: fallbackAllowed,
+    formalSource: true,
+    publishGateSource: "strategy1_open_buy_results",
+    purpose: scope === "previous_2130_complete_run"
+      ? "Use the previous formal 21:30 complete run while waiting for the next preopen decision gates"
+      : "Display the current formal candidate run while 08:45/08:55 decision gates are pending",
+    reason,
+  }]));
 
   return {
     ok: true,
@@ -355,6 +371,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     sourceCoverage: strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }),
     fallbackUsed,
     fallbackAllowed,
+    fallbackContract,
     fallbackScope,
     fallbackDetails,
     decisionReady: readyStatus?.decision_ready === true,

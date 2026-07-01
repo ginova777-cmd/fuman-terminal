@@ -186,7 +186,7 @@ function buildStrategy4GateContract(rows, run, matches) {
   const gateIssues = Array.isArray(gate?.issues) ? gate.issues : [];
   const gateWarnings = Array.isArray(gate?.warnings) ? gate.warnings : [];
   const dailyVolumeFreshness = supabaseCoverage?.coverageRatio ?? (supabaseCoverage?.qualityStatus === "complete" ? 1 : null);
-  const sourceCoverage = gate?.sourceCoverage || {
+  const sourceCoverageBase = gate?.sourceCoverage || {
     fresh_quote_coverage_120s: null,
     today_1m_symbols: null,
     ready_ge_35: null,
@@ -198,6 +198,13 @@ function buildStrategy4GateContract(rows, run, matches) {
   };
   const publishAllowed = retentionOk && gateIssues.length === 0 && gate?.publishAllowed !== false;
   const status = gate?.status || (publishAllowed ? "ready" : qualityStatus === "complete" ? "ready" : "degraded");
+  const sourceCoverage = {
+    ...sourceCoverageBase,
+    ok: publishAllowed,
+    ready: publishAllowed,
+    status: publishAllowed ? "ready" : status || "degraded",
+    reason: publishAllowed ? "strategy4_source_publish_gate_ready" : gateIssues.join("; ") || "strategy4_source_publish_gate_blocked",
+  };
   const writeBudget = gate?.writePolicy || {
     allowLatestWrite: publishAllowed,
     allowCompleteRunWrite: publishAllowed,

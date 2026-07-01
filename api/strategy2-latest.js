@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
-const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { readStrategy2SourceGate } = require("../lib/strategy2-source-publish-gate");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
@@ -492,8 +492,43 @@ function attachStrategy2SelfCheck(payload, options = {}) {
   if (!qualityStatus) issues.push("quality_status_missing");
   if (failClosed) warnings.push("strategy2_fail_closed_not_fresh_live");
   const status = options.status || (payload?.ok === false ? "blocked" : failClosed ? "degraded" : sourceOk && !issues.length ? "ready" : cacheSource.includes("runtime") || cacheSource.includes("snapshot") ? "degraded" : issues.length ? "degraded" : "ready");
-  return {
+  const snapshotAudit = auditRunTimeSourceSnapshot(payload);
+  const existingSnapshotFields = runTimeSourceSnapshotResponseFields(payload);
+  const snapshotFields = snapshotAudit.ok
+    ? existingSnapshotFields
+    : buildRunTimeSourceSnapshotFields({
+      strategy: "strategy2",
+      runId: payload?.runId || payload?.transport?.runId || "",
+      payload,
+      capturedAt: payload?.updatedAt || payload?.generatedAt || payload?.transport?.fetchedAt || new Date().toISOString(),
+      startedAt: payload?.startedAt || "",
+      finishedAt: payload?.finishedAt || payload?.updatedAt || payload?.generatedAt || "",
+      sourceStatus: payload?.sourceGate || payload?.sourceCoverage || payload?.resourceReadiness || { status, ok: status === "ready" },
+      quoteCoverage: payload?.sourceCoverage || {},
+      intraday1mReadiness: payload?.sourceCoverage || {},
+      maReadiness: payload?.sourceCoverage || {},
+      preopenFutoptDailyReadiness: payload?.resourceReadiness || payload?.sourceCoverage || {},
+      expectedTotal: payload?.total || payload?.totalCount || payload?.expectedTotal,
+      scannedCount: payload?.scanned || payload?.scannedCount,
+      resultCount: payload?.count || payload?.matchCount || payload?.entryCount,
+      readbackCount: payload?.count || payload?.rows?.length,
+      publishAllowed: payload?.publishAllowed !== false && !failClosed,
+      degradedBlocksLatest: payload?.publishAllowed === false || failClosed,
+      preservePreviousGood: payload?.publishAllowed === false || failClosed,
+      writeBudget: payload?.writeBudget || null,
+      retentionOk: payload?.retentionOk ?? true,
+      qualityStatus: payload?.qualityStatus || status,
+      fallbackUsed: payload?.fallbackUsed === true,
+      fallbackScope: Array.isArray(payload?.fallbackScope) ? payload.fallbackScope : [],
+      fallbackAllowed: payload?.fallbackAllowed ?? true,
+      fallbackDetails: Array.isArray(payload?.fallbackDetails) ? payload.fallbackDetails : [],
+    });
+  const evidencedPayload = {
     ...payload,
+    ...snapshotFields,
+  };
+  return {
+    ...evidencedPayload,
     selfCheck: {
       strategy: "strategy2",
       contract: "api-self-check-v1",
@@ -577,8 +612,17 @@ function compactStrategy2Payload(payload, options) {
     qualityStatus: payload?.qualityStatus || "complete",
     sourceCoverage: payload?.sourceCoverage || null,
     fallbackUsed: payload?.fallbackUsed === true,
+    fallbackAllowed: payload?.fallbackAllowed !== false,
     fallbackScope: Array.isArray(payload?.fallbackScope) ? payload.fallbackScope : [],
     fallbackDetails: Array.isArray(payload?.fallbackDetails) ? payload.fallbackDetails : [],
+    sourceGate: payload?.sourceGate || null,
+    resourceReadiness: payload?.resourceReadiness || null,
+    writeBudget: payload?.writeBudget || null,
+    retentionOk: payload?.retentionOk ?? true,
+    publishAllowed: payload?.publishAllowed !== false,
+    publishBlocked: payload?.publishBlocked === true,
+    publishBlockedReason: payload?.publishBlockedReason || "",
+    ...runTimeSourceSnapshotResponseFields(payload),
     scanWindow: payload?.scanWindow || null,
     marketSession: payload?.marketSession || null,
     count: rows.length,

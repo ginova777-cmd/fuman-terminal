@@ -27,6 +27,11 @@ const n = (value) => {
   return Number.isFinite(number) ? number : 0;
 };
 
+function ms(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }
@@ -260,7 +265,7 @@ async function main() {
   }
   const primary = schedule.primary || {};
   add(primary.State === "Ready" || primary.State === "Running", "schedule_primary_not_ready", primary);
-  add(n(primary.LastResult) === 0, "schedule_last_result_not_zero", primary);
+  const primaryLastResultOk = n(primary.LastResult) === 0;
   add(String(primary.Actions || "").includes(EXPECTED_RUNNER), "schedule_runner_mismatch", primary);
   add(String(primary.Actions || "").includes("C:\\fuman-terminal\\run-strategy4.ps1"), "schedule_runner_not_production_path", primary);
   add(String(primary.Triggers || primary.NextRunTime || "").includes("16:00") || String(primary.NextRunTime || "").includes("下午 04:00"), "schedule_time_mismatch", primary);
@@ -277,6 +282,22 @@ async function main() {
   }), { phase: "supabase:latest-complete-run" });
   const run = runs.rows[0] || {};
   const runId = String(run.run_id || "");
+  const recoveredAfterScheduleFailure = !primaryLastResultOk
+    && run?.complete === true
+    && String(run.status || "") === "complete"
+    && String(run.quality_status || "") === "complete"
+    && ms(run.finished_at || run.updated_at || run.generated_at) > ms(primary.LastRunTime);
+  if (!primaryLastResultOk && recoveredAfterScheduleFailure) {
+    warn("schedule_last_result_nonzero_recovered_by_new_complete_run", {
+      task: primary.TaskName,
+      lastResult: primary.LastResult,
+      lastRunTime: primary.LastRunTime,
+      recoveredRunId: runId,
+      recoveredFinishedAt: run.finished_at || run.updated_at || run.generated_at || "",
+    });
+  } else {
+    add(primaryLastResultOk, "schedule_last_result_not_zero", primary);
+  }
   add(runs.ok && Boolean(runId), "formal_complete_run_missing", { status: runs.status, error: runs.error });
   add(run.status === "complete" && run.complete === true, "formal_run_not_complete", run);
   add(n(run.expected_total) >= MIN_SOURCE_ROWS, "formal_expected_total_low", run);

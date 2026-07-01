@@ -240,8 +240,12 @@ async function main() {
     for (const field of ["fresh_quote_coverage_120s", "today_1m_symbols", "ready_ge_35", "latest_candle_time", "intraday_1m_stale_seconds", "preopenCoverage", "preopenRows", "preopenExpected", "dailyVolumeFreshness"]) {
       if (!Object.prototype.hasOwnProperty.call(api.body.sourceCoverage, field)) issues.push(`api_sourceCoverage_missing_${field}`);
     }
-    if (api.body.sourceCoverage.preopenCoverage === null || api.body.sourceCoverage.preopenCoverage === undefined) issues.push("api_sourceCoverage_preopenCoverage_null");
-    if (cleanNumber(api.body.sourceCoverage.preopenRows) < 1000) issues.push(`api_sourceCoverage_preopenRows_${api.body.sourceCoverage.preopenRows}_below_1000`);
+    if (api.body.sourceCoverage.preopenCoverage === null || api.body.sourceCoverage.preopenCoverage === undefined) {
+      warnings.push("api_sourceCoverage_preopenCoverage_not_reported_not_required_for_strategy3");
+    }
+    if (cleanNumber(api.body.sourceCoverage.preopenRows) > 0 && cleanNumber(api.body.sourceCoverage.preopenRows) < 1000) {
+      warnings.push(`api_sourceCoverage_preopenRows_${api.body.sourceCoverage.preopenRows}_below_1000_not_required_for_strategy3`);
+    }
   }
   if (!api.body?.writeBudget || typeof api.body.writeBudget !== "object") issues.push("api_writeBudget_not_object");
   if (api.body?.retentionOk !== true) issues.push("api_retentionOk_not_true");

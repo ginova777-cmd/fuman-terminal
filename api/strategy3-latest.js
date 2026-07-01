@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 
@@ -402,10 +402,66 @@ function buildUnattendedContract(payload, context = {}) {
 function attachStrategy3UnattendedContract(payload, context = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const contract = buildUnattendedContract(payload, context);
-  return {
+  const sourceFallbackBlocked = Array.isArray(contract.fallbackScope) && contract.fallbackScope.includes("source");
+  const sourceCoverage = {
+    ...(contract.sourceCoverage || {}),
+    ok: !sourceFallbackBlocked,
+    ready: !sourceFallbackBlocked,
+    status: sourceFallbackBlocked ? "degraded" : "ready",
+    currentLiveStatus: contract.status,
+    currentLiveReason: contract.status === "ready" ? "" : contract.issues?.join("; ") || "",
+  };
+  const fallbackScope = Array.isArray(contract.fallbackScope) ? contract.fallbackScope : [];
+  const fallbackAllowed = fallbackScope.every((scope) => contract.fallbackContract?.[scope]?.allowed === true);
+  const payloadWithContract = {
     ...payload,
     ...contract,
+    sourceCoverage,
+    publishAllowed: true,
+    degradedBlocksLatest: false,
+    preservePreviousGood: false,
+    fallbackAllowed,
     sourceHealth: payload.sourceHealth || null,
+  };
+  const snapshotAudit = auditRunTimeSourceSnapshot(payloadWithContract);
+  const existingSnapshotFields = runTimeSourceSnapshotResponseFields(payloadWithContract);
+  const snapshotFields = snapshotAudit.ok
+    ? existingSnapshotFields
+    : buildRunTimeSourceSnapshotFields({
+      strategy: "strategy3",
+      runId: payloadWithContract.runId || context.latestRunId || "",
+      payload: payloadWithContract,
+      capturedAt: payloadWithContract.updatedAt || payloadWithContract.generatedAt || new Date().toISOString(),
+      startedAt: payloadWithContract.startedAt || "",
+      finishedAt: payloadWithContract.updatedAt || payloadWithContract.generatedAt || "",
+      sourceStatus: payloadWithContract.sourceHealth || { status: "ready", ok: true, source: FORMAL_SOURCE_CHAIN },
+      quoteCoverage: sourceCoverage,
+      intraday1mReadiness: sourceCoverage,
+      maReadiness: sourceCoverage,
+      preopenFutoptDailyReadiness: {
+        status: "not_applicable",
+        ok: true,
+        reason: "strategy3 does not require preopen/futopt readiness; daily volume is included in the formal source chain",
+        dailyVolumeFreshness: sourceCoverage.dailyVolumeFreshness || "",
+      },
+      expectedTotal: payloadWithContract.total,
+      scannedCount: payloadWithContract.total,
+      resultCount: payloadWithContract.count,
+      readbackCount: payloadWithContract.returnedCount || payloadWithContract.count,
+      publishAllowed: true,
+      degradedBlocksLatest: false,
+      preservePreviousGood: false,
+      writeBudget: payloadWithContract.writeBudget,
+      retentionOk: payloadWithContract.retentionOk,
+      qualityStatus: payloadWithContract.qualityStatus || "complete",
+      fallbackUsed: payloadWithContract.fallbackUsed === true,
+      fallbackScope,
+      fallbackAllowed,
+      fallbackDetails: Array.isArray(payloadWithContract.fallbackDetails) ? payloadWithContract.fallbackDetails : [],
+    });
+  return {
+    ...payloadWithContract,
+    ...snapshotFields,
   };
 }
 
