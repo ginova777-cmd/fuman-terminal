@@ -5,6 +5,10 @@ const {
   buildAndWriteDesktopRouteSnapshot,
   buildDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-builder");
+const {
+  repairRealtimeRadarSnapshotEndpoints,
+  summarizeEndpointPayload,
+} = require("../lib/realtime-radar-snapshot-repair");
 
 function bearerToken(request) {
   const header = String(request.headers?.authorization || "");
@@ -73,11 +77,30 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
+      const endpoints = {
+        ...(snapshot.payload.endpoints || {}),
+      };
+      const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
+        timeoutMs: 6500,
+        via: "api/desktop-route-snapshot",
+      });
+      const summary = {
+        ...(snapshot.payload.summary || {}),
+      };
+      for (const endpoint of Object.keys(summary)) {
+        if (!endpoints[endpoint]) delete summary[endpoint];
+      }
+      for (const [endpoint, payload] of Object.entries(endpoints)) {
+        summary[endpoint] = summarizeEndpointPayload(payload);
+      }
       response.status(200).json({
         ok: snapshot.payload.ok !== false,
         ...snapshot.payload,
+        endpoints,
+        summary,
         cacheSource: "supabase:desktop_route_snapshot",
         snapshotHit: true,
+        snapshotRepairs: realtimeRadarRepairs,
       });
       return;
     }

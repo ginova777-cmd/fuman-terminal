@@ -16,6 +16,7 @@ const warrantFlowLatest = require("./warrant-flow-latest");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
+const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
@@ -334,6 +335,11 @@ module.exports = async function handler(request, response) {
       response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       await repairStrategy1WaitingSnapshot(request, endpoints);
+      const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
+        timeoutMs: 5500,
+        via: "api/terminal-fast-bundle",
+        shapePayload: (payload) => shapeTopPayload(request, payload),
+      });
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -344,6 +350,7 @@ module.exports = async function handler(request, response) {
         partial: Boolean(snapshot.payload.partial),
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
         snapshotHit: true,
+        snapshotRepairs: realtimeRadarRepairs,
       };
       if (request.method === "HEAD") {
         response.status(200).end("");
