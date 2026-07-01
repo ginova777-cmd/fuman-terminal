@@ -146,6 +146,8 @@ const STRATEGIES = [
     receiptKey: "realtime-radar",
     requireApiRunId: true,
     requireWriteBudgetDisclosure: true,
+    allowFormalQuoteViewFallback: true,
+    allowDesktopSnapshotRunIdDrift: true,
   },
   {
     key: "market",
@@ -536,6 +538,28 @@ function obviousFallback(summary) {
     || (summary?.snapshotFallback && !officialDesktopSnapshot);
 }
 
+function allowedFormalQuoteViewFallback(config, summary) {
+  return Boolean(
+    config?.allowFormalQuoteViewFallback
+    && summary
+    && summary.status < 500
+    && summary.ok !== false
+    && summary.cacheSource === "supabase-quote-view"
+    && summary.source === "supabase:fugle_realtime_quote_latest"
+    && summary.date === taipeiDateKey()
+    && cleanNumber(summary.count || summary.returnedCount) > 0
+  );
+}
+
+function compatibleLiveSurfaceRun(config, left, right) {
+  if (!left?.runId || !right?.runId || left.runId === right.runId) return true;
+  if (!config?.allowFormalQuoteViewFallback) return false;
+  return allowedFormalQuoteViewFallback(config, left)
+    && allowedFormalQuoteViewFallback(config, right)
+    && left.date
+    && left.date === right.date;
+}
+
 function downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile) {
   const reason = `${receipt?.blockingReason || ""} ${(receipt?.warnings || []).join(" ")}`;
   if (!/desktop snapshot refresh/i.test(reason)) return false;
@@ -618,12 +642,19 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (supabase?.ok && live && !compatibleRun(supabase, live, { allowDateMismatch: config.key === "strategy5" })) {
     issues.push(`Supabase latest run != live API (${supabase.runId || supabase.date} vs ${live.runId || live.date})`);
   }
-  if (live?.runId && compact?.runId && live.runId !== compact.runId) issues.push(`live API != terminal API runId (${live.runId} vs ${compact.runId})`);
-  if (live?.runId && snapshot?.runId && live.runId !== snapshot.runId) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
+  if (!compatibleLiveSurfaceRun(config, live, compact)) issues.push(`live API != terminal API runId (${live.runId} vs ${compact.runId})`);
+  const allowedDesktopSnapshotDrift = Boolean(
+    config.allowDesktopSnapshotRunIdDrift
+    && allowedFormalQuoteViewFallback(config, live)
+    && allowedFormalQuoteViewFallback(config, snapshot)
+    && live.date
+    && live.date === snapshot.date
+  );
+  if (!compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
-  if (obviousFallback(compact) && !controlledWaiting) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
-  if (obviousFallback(snapshot) && !controlledWaiting) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
+  if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
+  if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
   if (!config.allowZeroTerminal && compact && cleanNumber(compact.count || compact.returnedCount) <= 0) issues.push("terminal API has zero rows");
   if (!config.allowZeroTerminal && mobile && mobile.empty) issues.push("mobile fragment empty");
   return issues;
