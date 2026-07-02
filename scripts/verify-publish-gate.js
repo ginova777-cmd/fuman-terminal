@@ -667,6 +667,9 @@ if (!fs.existsSync(path.join(ROOT, "legacy-entrypoint-guard.ps1"))) {
   if (!/run-realtime-radar\.ps1/.test(legacyGuard)) {
     issues.push("legacy-entrypoint-guard.ps1 must allow run-realtime-radar.ps1 to execute the realtime radar patrol");
   }
+  if (!/run-realtime-radar-watchdog\.ps1/.test(legacyGuard)) {
+    issues.push("legacy-entrypoint-guard.ps1 must allow run-realtime-radar-watchdog.ps1 to execute the realtime radar watchdog");
+  }
 }
 
 const cacheSync = read("run-cache-sync.ps1");
@@ -719,6 +722,8 @@ const runInstitution = read("run-institution.ps1");
 const runWarrantFlow = read("run-warrant-flow.ps1");
 const runCbDetect = read("run-cb-detect.ps1");
 const runRealtimeRadar = read("run-realtime-radar.ps1");
+const runRealtimeRadarWatchdog = read("run-realtime-radar-watchdog.ps1");
+const realtimeRadarWatchdogInstaller = read("scripts/install-realtime-radar-watchdog-task.ps1");
 const runChipSourceSync = read("run-chip-source-sync.ps1");
 const productionHealthMonitor = read("scripts/monitor-production-health.js");
 const productionHealthMonitorRunner = read("run-production-health-monitor.ps1");
@@ -1926,6 +1931,36 @@ if (!/REALTIME_RADAR_NOTIFY\s*=\s*"0"/.test(runRealtimeRadar)) {
   issues.push("run-realtime-radar.ps1 must disable realtime radar Telegram source alerts with REALTIME_RADAR_NOTIFY=0");
 }
 for (const marker of [
+  "/api/realtime-radar-latest?full=1",
+  "Cache-Control",
+  "no-cache",
+  "send-workflow-alert.js",
+  "realtime-radar-watchdog-alert.json",
+  "realtime-radar-watchdog-status.json",
+  "schtasks /Run /TN $TaskName",
+  "09:00",
+  "09:05",
+  "13:30",
+  "-1073741510",
+  "0xC000013A",
+  "STATUS_CONTROL_C_EXIT",
+  "task_not_running_during_session",
+]) {
+  if (!runRealtimeRadarWatchdog.includes(marker)) issues.push(`run-realtime-radar-watchdog.ps1 missing self-heal watchdog marker ${marker}`);
+}
+if (/realtime-radar-latest\.json|run-cache-sync\.ps1/.test(runRealtimeRadarWatchdog)) {
+  issues.push("run-realtime-radar-watchdog.ps1 must not use local realtime-radar JSON or cache sync as a freshness fallback");
+}
+for (const marker of [
+  "Fuman 即時雷達 Watchdog",
+  "Register-ScheduledTask",
+  "-RepetitionInterval",
+  "run-realtime-radar-watchdog.ps1",
+  "09:00-13:30",
+]) {
+  if (!realtimeRadarWatchdogInstaller.includes(marker)) issues.push(`install-realtime-radar-watchdog-task.ps1 missing scheduled watchdog marker ${marker}`);
+}
+for (const marker of [
   "REALTIME_RADAR_PATROL_INTERVAL_MS = \"3000\"",
   "REALTIME_RADAR_SKIP_SYNC_AFTER_OUTPUT = \"1\"",
   "REALTIME_RADAR_USE_LOCAL_API = \"1\"",
@@ -2213,6 +2248,8 @@ for (const marker of [
   "ops/run-api-unattended-patrol.ps1",
   "ops/install-api-unattended-patrol-task.ps1",
   "run-realtime-radar.ps1",
+  "run-realtime-radar-watchdog.ps1",
+  "scripts/install-realtime-radar-watchdog-task.ps1",
 ]) {
   if (!sourceSync.includes(marker)) issues.push(`sync-main-deploy-source.js missing release/monitor sync marker ${marker}`);
   if (!sourceSyncVerifier.includes(marker)) issues.push(`verify-source-sync.js missing release/monitor compare marker ${marker}`);
@@ -3026,6 +3063,7 @@ for (const legacyScript of [
   "run-strategy2-intraday.ps1",
   "run-strategy5.ps1",
   "run-realtime-radar.ps1",
+  "run-realtime-radar-watchdog.ps1",
   "run-market-overview.ps1",
   "run-flow-watchdog.ps1",
 ]) {
