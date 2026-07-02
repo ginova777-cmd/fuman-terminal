@@ -61,13 +61,13 @@ function Write-DefaultRuntimeConfig {
     direct1mEverySeconds = 20
     direct1mIntradayTimeoutSeconds = 6
     direct1mHistoricalTimeoutSeconds = 8
-    direct1mBatchTimeBudgetSeconds = 20
+    direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
-    direct1mPrewarmTimeBudgetSeconds = 45
+    direct1mPrewarmTimeBudgetSeconds = 10
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
@@ -77,7 +77,7 @@ function Write-DefaultRuntimeConfig {
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
     futoptQuoteTimeoutSeconds = 5
-    futoptQuoteTimeBudgetSeconds = 45
+    futoptQuoteTimeBudgetSeconds = 15
     futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
