@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const ROOT = path.resolve(__dirname, "..");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
@@ -8,6 +8,14 @@ const SNAPSHOT_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--
   || process.env.FUMAN_SCORECARD_SNAPSHOT_FILE
   || path.join(ROOT, "data", "scorecard-latest.json"));
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
+const MIN_ROWS = Number(process.env.FUMAN_SCORECARD_MIN_ROWS || "450") || 0;
+const MIN_ROW_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_ROW_RATIO || "0.8") || 0;
+
+function argValue(name, fallback = "") {
+  const prefix = `${name}=`;
+  const found = process.argv.find((arg) => arg.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
+}
 
 function cleanText(value) {
   return String(value ?? "").trim();
@@ -17,8 +25,20 @@ function compactDate(value) {
   return cleanText(value).replace(/\D/g, "").slice(0, 8);
 }
 
+function compareDateKey(a, b) {
+  return compactDate(a).localeCompare(compactDate(b));
+}
+
 function compactTimestamp(value) {
   return cleanText(value).replace(/\D/g, "").slice(0, 14);
+}
+
+function latestDate(payload) {
+  return cleanText(payload?.latestDate || payload?.summary?.latestDate || "");
+}
+
+function rowCount(payload) {
+  return Array.isArray(payload?.records) ? payload.records.length : 0;
 }
 
 function rowSource(row = {}, fallback = "") {
@@ -79,7 +99,31 @@ function readPayload() {
 
 async function main() {
   const payload = readPayload();
-  const tradeDate = String(payload.latestDate || payload.summary?.latestDate || "").replace(/\D/g, "").slice(0, 8);
+  const payloadLatestDate = latestDate(payload);
+  const expectedDate = cleanText(argValue("--expected-date", process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
+  const tradeDate = compactDate(payloadLatestDate);
+  if (!tradeDate) {
+    throw new Error("refusing to publish scorecard_latest without latestDate");
+  }
+  if (expectedDate && compactDate(expectedDate) !== tradeDate) {
+    throw new Error(`refusing to publish scorecard_latest latestDate=${payloadLatestDate}; expectedDate=${expectedDate}`);
+  }
+  const records = rowCount(payload);
+  if (records < MIN_ROWS) {
+    throw new Error(`refusing to publish scorecard_latest rows=${records}; minRows=${MIN_ROWS}`);
+  }
+  const current = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 30000 }).catch(() => null);
+  const currentLatestDate = latestDate(current?.payload);
+  const currentRows = rowCount(current?.payload);
+  if (currentLatestDate && compareDateKey(payloadLatestDate, currentLatestDate) < 0) {
+    throw new Error(`refusing to roll back scorecard_latest from ${currentLatestDate} to ${payloadLatestDate}`);
+  }
+  if (currentLatestDate && compactDate(payloadLatestDate) === compactDate(currentLatestDate) && currentRows > 0) {
+    const minRowsFromCurrent = Math.floor(currentRows * MIN_ROW_RATIO);
+    if (records < minRowsFromCurrent) {
+      throw new Error(`refusing to shrink scorecard_latest rows=${records}; currentRows=${currentRows}; minRowsFromCurrent=${minRowsFromCurrent}`);
+    }
+  }
   const result = await upsertSnapshot(SNAPSHOT_KEY, payload, {
     tradeDate,
     source: "scorecard_latest",
@@ -95,7 +139,9 @@ async function main() {
     key: SNAPSHOT_KEY,
     tradeDate: result.tradeDate,
     rows: payload.records.length,
-    latestDate: payload.latestDate || payload.summary?.latestDate || "",
+    latestDate: payloadLatestDate,
+    previousLatestDate: currentLatestDate,
+    previousRows: currentRows,
     cacheSource: payload.cacheSource,
   }, null, 2));
 }

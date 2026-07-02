@@ -10,6 +10,7 @@ const OUT_FILE = path.join(ROOT, "data", "scorecard-latest.json");
 const DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_DAYS || "30"));
 const RECORD_LIMIT = Math.max(1000, Number(process.env.FUMAN_SCORECARD_RECORD_LIMIT || String(DAYS * 800)));
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
+const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 
 function argValue(name, fallback = "") {
   const prefix = `--${name}=`;
@@ -34,6 +35,16 @@ function dateDaysAgo(days) {
 
 function compactDate(value) {
   return cleanText(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function dateOnly(value) {
+  const text = cleanText(value);
+  if (!text) return "";
+  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return text.slice(0, 10);
 }
 
 function scorecardRunId(latestDate) {
@@ -150,6 +161,8 @@ function summarize(records, dailyRows, latestDate) {
 
 async function main() {
   const outFile = argValue("out", OUT_FILE);
+  const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
+  const expectedDate = dateOnly(argValue("expected-date", process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
   const since = dateDaysAgo(DAYS);
   const selectRecords = [
     "record_id",
@@ -183,15 +196,30 @@ async function main() {
   ].join(",");
   const records = (await supabaseGet(
     "trade_records",
-    `select=${selectRecords}&record_date=gte.${since}&order=record_date.desc,strategy.asc,ticker.asc&limit=${RECORD_LIMIT}`,
+    [
+      `select=${selectRecords}`,
+      exportSource ? `source=eq.${encodeURIComponent(exportSource)}` : "",
+      `record_date=gte.${since}`,
+      "order=record_date.desc,strategy.asc,ticker.asc",
+      `limit=${RECORD_LIMIT}`,
+    ].filter(Boolean).join("&"),
   )).map(normalizeRecord).filter((row) => row.record_date && row.ticker);
   const dailyRows = (await supabaseGet(
     "strategy_daily_summary",
-    `select=${selectDaily}&summary_date=gte.${since}&order=summary_date.desc,strategy.asc&limit=1000`,
+    [
+      `select=${selectDaily}`,
+      exportSource ? `source=eq.${encodeURIComponent(exportSource)}` : "",
+      `summary_date=gte.${since}`,
+      "order=summary_date.desc,strategy.asc",
+      "limit=1000",
+    ].filter(Boolean).join("&"),
   )).map(normalizeDaily).filter((row) => row.strategy);
   const latestDate = records.map((row) => row.record_date).sort().at(-1) || "";
   if (!latestDate) throw new Error("scorecard Supabase source has no trade_records latestDate");
   if (!records.length) throw new Error("scorecard Supabase source returned 0 trade_records");
+  if (expectedDate && latestDate !== expectedDate) {
+    throw new Error(`scorecard export latestDate=${latestDate} does not match expectedDate=${expectedDate}`);
+  }
 
   const payload = {
     ok: true,
@@ -201,7 +229,12 @@ async function main() {
     runId: scorecardRunId(latestDate),
     source: "supabase-scorecard-source",
     cacheSource: "supabase-snapshot",
-    exportSource: "supabase:trade_records+strategy_daily_summary",
+    exportSource,
+    sourceQuery: {
+      source: exportSource,
+      since,
+      expectedDate,
+    },
     updatedAt: new Date().toISOString(),
     latestDate,
     days: DAYS,
@@ -219,6 +252,7 @@ async function main() {
     recordLimit: RECORD_LIMIT,
     cacheSource: payload.cacheSource,
     exportSource: payload.exportSource,
+    expectedDate,
   }, null, 2));
 }
 

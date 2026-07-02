@@ -12,10 +12,20 @@ function Write-Step($Message) {
   Write-Host ("[scorecard-daily] {0}" -f $Message)
 }
 
-function Invoke-Step($FilePath, $ArgumentList) {
-  & $FilePath @ArgumentList
-  if ($LASTEXITCODE -ne 0) {
-    throw ("command failed with exit code {0}: {1} {2}" -f $LASTEXITCODE, $FilePath, ($ArgumentList -join " "))
+function Invoke-Step($FilePath, $ArgumentList, [int]$Attempts = 1, [int]$DelaySeconds = 15) {
+  $attemptLimit = [Math]::Max(1, $Attempts)
+  for ($attempt = 1; $attempt -le $attemptLimit; $attempt++) {
+    & $FilePath @ArgumentList
+    $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    if ($exitCode -eq 0) {
+      return
+    }
+    if ($attempt -lt $attemptLimit) {
+      Write-Step ("retry {0}/{1} after exit {2}: {3} {4}" -f ($attempt + 1), $attemptLimit, $exitCode, $FilePath, ($ArgumentList -join " "))
+      Start-Sleep -Seconds $DelaySeconds
+      continue
+    }
+    throw ("command failed with exit code {0}: {1} {2}" -f $exitCode, $FilePath, ($ArgumentList -join " "))
   }
 }
 
@@ -142,17 +152,29 @@ if (-not $allowPreviousForRun -and $sourceLatestDate -ne $ExpectedDate) {
 }
 
 Write-Step "backfill Supabase scorecard source tables"
-Invoke-Step "node" @(
+Invoke-Step -FilePath "node" -ArgumentList @(
   "--use-system-ca",
   "scripts\scorecard-source-supabase-ops.js",
   "backfill",
   "--source-file=$sourceFile"
-)
+) -Attempts 3 -DelaySeconds 20
 
 Write-Step "read Supabase scorecard source health"
-& node --use-system-ca "scripts\scorecard-source-supabase-ops.js" "health" | Out-File -LiteralPath $healthFile -Encoding utf8
-if ($LASTEXITCODE -ne 0) {
-  throw "scorecard source health failed with exit code $LASTEXITCODE"
+$healthOk = $false
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+  & node --use-system-ca "scripts\scorecard-source-supabase-ops.js" "health" | Out-File -LiteralPath $healthFile -Encoding utf8
+  $healthExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+  if ($healthExitCode -eq 0) {
+    $healthOk = $true
+    break
+  }
+  if ($attempt -lt 3) {
+    Write-Step ("retry health {0}/3 after exit {1}" -f ($attempt + 1), $healthExitCode)
+    Start-Sleep -Seconds 20
+  }
+}
+if (-not $healthOk) {
+  throw "scorecard source health failed after retries"
 }
 
 $healthPayload = Read-JsonSummary $healthFile "health"
@@ -174,11 +196,11 @@ if (-not $allowPreviousForRun -and $latestRecordDate -ne $ExpectedDate) {
 }
 
 Write-Step "export Supabase scorecard source snapshot json"
-Invoke-Step "node" @(
+Invoke-Step -FilePath "node" -ArgumentList @(
   "--use-system-ca",
   "scripts\export-scorecard-supabase-source.js",
   "--out=$snapshotFile"
-)
+) -Attempts 3 -DelaySeconds 20
 
 Write-Step "verify scorecard no-rollback candidate snapshot"
 Invoke-Step "node" @(
@@ -198,11 +220,11 @@ Invoke-Step "node" @(
 )
 
 Write-Step "publish scorecard_latest Supabase snapshot"
-Invoke-Step "node" @(
+Invoke-Step -FilePath "node" -ArgumentList @(
   "--use-system-ca",
   "scripts\publish-scorecard-snapshot.js",
   "--file=$snapshotFile"
-)
+) -Attempts 3 -DelaySeconds 20
 
 Write-Step "verify scorecard snapshot"
 $verifyArgs = @("--use-system-ca", "scripts\verify-scorecard-snapshot.js")
