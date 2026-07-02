@@ -200,6 +200,19 @@ function phaseNow() {
   return "after_daytrade_window";
 }
 
+function quoteFetchAllowedForPhase(phase) {
+  return [
+    "preopen_prepare_0830_0844",
+    "opening_boost_0845_0859",
+    "opening_detection_0900_0934",
+    "regular_daytrade_0935_1330",
+  ].includes(phase);
+}
+
+function quoteFreshnessTime(quote) {
+  return quote?.updated_at || quote?.last_trade_time || quote?.quote_seen_at || "";
+}
+
 function ageSeconds(value, fallback = 999999) {
   const ts = Date.parse(String(value || ""));
   if (!Number.isFinite(ts)) return fallback;
@@ -398,7 +411,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,quote_seen_at,updated_at,price,total_volume,trade_value&order=symbol.asc",
+      "select=symbol,quote_seen_at,updated_at,last_trade_time,price,total_volume,trade_value&order=symbol.asc",
       { service: true },
     );
     return new Map(rows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
@@ -620,7 +633,7 @@ function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state) {
   const activeSet = new Set(active);
   const priority = priorityRows.map((row) => row.symbol).filter((symbol) => activeSet.has(symbol));
   const priorityOnly = futureSeconds(state.priorityOnlyUntil) > 0 || futureSeconds(state.cooldownUntil) > 0;
-  const stale = (symbol, maxAge = WINDOW_SECONDS) => ageSeconds(quoteMap.get(symbol)?.quote_seen_at || quoteMap.get(symbol)?.updated_at) > maxAge;
+  const stale = (symbol, maxAge = WINDOW_SECONDS) => ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))) > maxAge;
   const selected = [];
   const selectedSet = new Set();
   const add = (symbol) => {
@@ -685,12 +698,12 @@ function normalizeQuote(payload, symbol) {
   const previousClose = numberValue(payload?.previousClose || payload?.referencePrice);
   const changePercent = numberValue(payload?.changePercent, previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : 0);
   const quoteSeenAt = nowIso();
-  const quoteTime = payload?.lastUpdated || payload?.lastTrade?.time || quoteSeenAt;
+  const quoteTime = payload?.lastUpdated || payload?.lastTrade?.time || null;
   return {
     symbol: code,
     name: payload?.name || code,
     market: payload?.market || payload?.exchange || "",
-    updated_at: quoteTime,
+    updated_at: quoteTime || quoteSeenAt,
     quote_seen_at: quoteSeenAt,
     price,
     open_price: numberValue(payload?.openPrice),
@@ -721,7 +734,7 @@ function toLots(value) {
 }
 
 async function fetchQuoteBatch(symbols) {
-  if (!FETCH_ENABLED || !symbols.length) return { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [] };
+  if (!FETCH_ENABLED || !symbols.length) return { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: FETCH_ENABLED ? "empty_batch" : "fetch_disabled" };
   if (!FUGLE_API_KEY) throw new Error("missing Fugle API key for daytrade writer fetch");
   const rows = [];
   const errors = [];
@@ -771,13 +784,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const priorityAges = [];
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
-    const quoteAge = ageSeconds(quote?.quote_seen_at || quote?.updated_at);
+    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
     if (quote) quoteAges.push(quoteAge);
     if (quoteAge <= WINDOW_SECONDS) freshFull.push(symbol);
   }
   for (const symbol of prioritySet) {
     const quote = quoteMap.get(symbol);
-    const quoteAge = ageSeconds(quote?.quote_seen_at || quote?.updated_at);
+    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
     if (quote) priorityAges.push(quoteAge);
     if (quoteAge <= WINDOW_SECONDS) freshPriority.push(symbol);
   }
@@ -863,7 +876,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 
   const payload = {
     source_name: SOURCE_NAME,
-    writer_version: "daytrade-source-writer-20260702-02",
+    writer_version: "daytrade-source-writer-20260702-03",
     daytrade_gate_grade: gateGrade,
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
@@ -911,6 +924,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     phase,
     apply_mode: APPLY,
     fetch_enabled: FETCH_ENABLED,
+    quote_fetch_allowed_for_phase: quoteFetchAllowedForPhase(phase),
+    quote_freshness_basis: "market_updated_at",
+    fetch_disabled_reason: fetchResult.disabledReason || "",
     fetched_this_loop: fetchResult.fetched,
     attempted_this_loop: fetchResult.attempted,
   };
@@ -1000,6 +1016,8 @@ async function syncDailyVolumeMirror(dailyVolumeMap, priorityRows) {
 
 async function tick() {
   const state = readWriterState();
+  const phase = phaseNow();
+  const fetchAllowedForPhase = quoteFetchAllowedForPhase(phase);
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap);
@@ -1013,10 +1031,12 @@ async function tick() {
   }
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
-  const selected = cooldownActive
+  const selected = cooldownActive || !fetchAllowedForPhase
     ? { symbols: [], priorityOnly: true }
     : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state);
-  const fetchResult = await fetchQuoteBatch(selected.symbols);
+  const fetchResult = fetchAllowedForPhase
+    ? await fetchQuoteBatch(selected.symbols)
+    : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
   if (fetchResult.rows.length) await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
 
   let nextState = { ...state };
