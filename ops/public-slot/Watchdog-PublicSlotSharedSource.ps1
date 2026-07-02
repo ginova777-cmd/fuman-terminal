@@ -4,14 +4,15 @@ param(
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$SourceName = "fugle_shared_source",
   [int]$MaxSourceAgeSeconds = 300,
-  [double]$MinQuoteCoverage120 = 0.85,
-  [int]$MinFreshQuoteCount120 = 1200,
-  [int]$MaxQuoteAgeSeconds = 60,
+  [double]$MinQuoteCoverage120 = 0.9,
+  [int]$MinFreshQuoteCount120 = 1500,
+  [int]$MaxQuoteAgeSeconds = 90,
   [int]$MaxIntraday1mStaleSeconds = 180,
   [double]$MinIntraday1mCoverage = 0.95,
   [double]$MinReadyGe35Coverage = 0.95,
   [string]$CoverageHardGateStart = "09:05",
-  [int]$WriterCatchupGraceSeconds = 600,
+  [int]$WriterCatchupGraceSeconds = 180,
+  [int]$RestartCooldownSeconds = 300,
   [string]$ActiveStart = "08:00",
   [string]$ActiveEnd = "14:10"
 )
@@ -27,6 +28,7 @@ $CollectorScript = Join-Path $FumanRoot "scripts\fugle-websocket-collector.js"
 $NodeExe = "C:\Program Files\nodejs\node.exe"
 $AlertReceiptDir = Join-Path $RuntimeDir "data\scan-receipts"
 $AlertReceiptFile = Join-Path $AlertReceiptDir "public-slot-shared-source-watchdog-alert.json"
+$RestartStateFile = Join-Path $LogDir "public-slot-watchdog-restart-state.json"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 New-Item -ItemType Directory -Force -Path $AlertReceiptDir | Out-Null
@@ -253,6 +255,44 @@ function Stop-SharedSourceProcesses {
   }
 }
 
+function Get-LastWatchdogRestartUtc {
+  try {
+    if (-not (Test-Path -LiteralPath $RestartStateFile)) { return $null }
+    $state = Get-Content -LiteralPath $RestartStateFile -Raw -ErrorAction Stop | ConvertFrom-Json
+    $raw = [string]$state.last_restart_at
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+    return ([datetime]::Parse($raw)).ToUniversalTime()
+  } catch {
+    return $null
+  }
+}
+
+function Test-WatchdogRestartCooldown {
+  param([string]$Reason)
+  if ($RestartCooldownSeconds -le 0) { return $true }
+  $lastRestart = Get-LastWatchdogRestartUtc
+  if ($null -eq $lastRestart) { return $true }
+  $elapsed = [int](((Get-Date).ToUniversalTime() - $lastRestart).TotalSeconds)
+  if ($elapsed -lt $RestartCooldownSeconds) {
+    Write-WatchdogLog "restart cooldown active elapsed=${elapsed}s cooldown=${RestartCooldownSeconds}s；略過重啟。reason=$Reason"
+    return $false
+  }
+  return $true
+}
+
+function Write-WatchdogRestartState {
+  param([string]$Reason)
+  try {
+    [ordered]@{
+      last_restart_at = (Get-Date).ToUniversalTime().ToString("o")
+      reason = $Reason
+      cooldown_seconds = $RestartCooldownSeconds
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $RestartStateFile -Encoding utf8
+  } catch {
+    Write-WatchdogLog "WARN unable to write restart cooldown state: $($_.Exception.Message)"
+  }
+}
+
 function Get-NewestSharedSourceAgeSeconds {
   param([object[]]$Processes)
   try {
@@ -420,6 +460,9 @@ function Restart-FugleQuoteCollector {
 function Start-SharedSourceTask {
   param([string]$Reason, [switch]$Restart, [switch]$Alert)
   Write-WatchdogLog "需要重啟 shared source：$Reason"
+  if ($Restart -and -not (Test-WatchdogRestartCooldown -Reason $Reason)) {
+    return
+  }
   if ($Alert) {
     Invoke-PublicSlotWatchdogAlert -Reason $Reason -Restart:$Restart
   }
@@ -435,6 +478,7 @@ function Start-SharedSourceTask {
     schtasks /Run /TN $TaskName | Out-String | ForEach-Object {
       if (-not [string]::IsNullOrWhiteSpace($_)) { Write-WatchdogLog $_.Trim() }
     }
+    if ($Restart) { Write-WatchdogRestartState -Reason $Reason }
   } catch {
     Write-WatchdogLog "啟動排程失敗：$($_.Exception.Message)"
   }
