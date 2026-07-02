@@ -51,6 +51,10 @@ function Write-DefaultRuntimeConfig {
     fugleCollectorBatchSize = 40
     fugleCollectorConcurrency = 1
     fugleCollectorRequestDelayMilliseconds = 75
+    fugleCollectorAdaptiveInitialRpm = 800
+    fugleCollectorAdaptiveMinRpm = 120
+    fugleCollectorAdaptiveMaxRpm = 900
+    fugleCollector429CooldownMilliseconds = 60000
     fugleCollectorQuoteTtlMilliseconds = 120000
     fugleCollectorOpeningBoostBatchSize = 40
     fugleCollectorOpeningBoostConcurrency = 1
@@ -113,6 +117,10 @@ function Test-RepoRuntimeConfigSupport {
     "Intraday1mFreshHardSeconds",
     "FugleCollectorBatchSize",
     "FUGLE_COLLECTOR_CONCURRENCY",
+    "FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM",
+    "FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM",
+    "FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM",
+    "FUGLE_COLLECTOR_429_COOLDOWN_MS",
     "FUGLE_COLLECTOR_QUOTE_TTL_MS",
     "OpeningBoostStart",
     "OpeningBoostEnd",
@@ -223,6 +231,10 @@ function Test-RuntimeConfig {
     "fugleCollectorBatchSize",
     "fugleCollectorConcurrency",
     "fugleCollectorRequestDelayMilliseconds",
+    "fugleCollectorAdaptiveInitialRpm",
+    "fugleCollectorAdaptiveMinRpm",
+    "fugleCollectorAdaptiveMaxRpm",
+    "fugleCollector429CooldownMilliseconds",
     "fugleCollectorQuoteTtlMilliseconds",
     "fugleCollectorOpeningBoostBatchSize",
     "fugleCollectorOpeningBoostConcurrency",
@@ -281,6 +293,10 @@ function Test-RuntimeConfig {
     fugleCollectorBatchSize = 40
     fugleCollectorConcurrency = 1
     fugleCollectorRequestDelayMilliseconds = 75
+    fugleCollectorAdaptiveInitialRpm = 800
+    fugleCollectorAdaptiveMinRpm = 120
+    fugleCollectorAdaptiveMaxRpm = 900
+    fugleCollector429CooldownMilliseconds = 60000
     fugleCollectorQuoteTtlMilliseconds = 120000
     fugleCollectorOpeningBoostBatchSize = 40
     fugleCollectorOpeningBoostConcurrency = 1

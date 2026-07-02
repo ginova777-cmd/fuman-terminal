@@ -49,6 +49,10 @@ param(
   [int]$FugleCollectorBatchSize = 40,
   [int]$FugleCollectorConcurrency = 1,
   [int]$FugleCollectorRequestDelayMilliseconds = 75,
+  [int]$FugleCollectorAdaptiveInitialRpm = 800,
+  [int]$FugleCollectorAdaptiveMinRpm = 120,
+  [int]$FugleCollectorAdaptiveMaxRpm = 900,
+  [int]$FugleCollector429CooldownMilliseconds = 60000,
   [int]$FugleCollectorQuoteTtlMilliseconds = 120000,
   [int]$MinAvgVolume5Lots = 0,
   [int]$MinCumulativeBidAskLots = 3000,
@@ -218,7 +222,7 @@ function Set-RuntimeOverride {
     [string]$VariableName,
     [string[]]$ConfigNames,
     [string]$EnvName,
-    [ValidateSet("int", "bool", "string")][string]$Type = "int"
+    [ValidateSet("int", "bool", "string", "double")][string]$Type = "int"
   )
   $value = Get-ObjectPropertyValue -Object $Config -Names $ConfigNames
   $envValue = if (-not [string]::IsNullOrWhiteSpace($EnvName)) { [Environment]::GetEnvironmentVariable($EnvName) } else { $null }
@@ -236,6 +240,10 @@ function Set-RuntimeOverride {
     }
     "string" {
       Set-Variable -Name $VariableName -Value ([string]$value) -Scope Script
+      break
+    }
+    "double" {
+      Set-Variable -Name $VariableName -Value ([double]$value) -Scope Script
       break
     }
     default {
@@ -256,7 +264,7 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteBatchTimeBudgetSeconds" -ConfigNames @("restQuoteBatchTimeBudgetSeconds", "RestQuoteBatchTimeBudgetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BATCH_TIME_BUDGET_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteRateLimitCooldownSeconds" -ConfigNames @("restQuoteRateLimitCooldownSeconds", "RestQuoteRateLimitCooldownSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_RATE_LIMIT_COOLDOWN_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteBypassMinFreshQuotes" -ConfigNames @("restQuoteBypassMinFreshQuotes", "RestQuoteBypassMinFreshQuotes") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BYPASS_MIN_FRESH_QUOTES"
-  Set-RuntimeOverride -Config $config -VariableName "RestQuoteBypassCoverageRatio" -ConfigNames @("restQuoteBypassCoverageRatio", "RestQuoteBypassCoverageRatio") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BYPASS_COVERAGE_RATIO"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteBypassCoverageRatio" -ConfigNames @("restQuoteBypassCoverageRatio", "RestQuoteBypassCoverageRatio") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BYPASS_COVERAGE_RATIO" -Type "double"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteBypassMaxAgeSeconds" -ConfigNames @("restQuoteBypassMaxAgeSeconds", "RestQuoteBypassMaxAgeSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BYPASS_MAX_AGE_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "OpeningBoostStart" -ConfigNames @("openingBoostStart", "OpeningBoostStart") -EnvName "FUMAN_PUBLIC_SLOT_OPENING_BOOST_START" -Type "string"
   Set-RuntimeOverride -Config $config -VariableName "OpeningBoostEnd" -ConfigNames @("openingBoostEnd", "OpeningBoostEnd") -EnvName "FUMAN_PUBLIC_SLOT_OPENING_BOOST_END" -Type "string"
@@ -271,6 +279,10 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorBatchSize" -ConfigNames @("fugleCollectorBatchSize", "FugleCollectorBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorConcurrency" -ConfigNames @("fugleCollectorConcurrency", "FugleCollectorConcurrency") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_CONCURRENCY"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorRequestDelayMilliseconds" -ConfigNames @("fugleCollectorRequestDelayMilliseconds", "FugleCollectorRequestDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_REQUEST_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorAdaptiveInitialRpm" -ConfigNames @("fugleCollectorAdaptiveInitialRpm", "FugleCollectorAdaptiveInitialRpm") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorAdaptiveMinRpm" -ConfigNames @("fugleCollectorAdaptiveMinRpm", "FugleCollectorAdaptiveMinRpm") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorAdaptiveMaxRpm" -ConfigNames @("fugleCollectorAdaptiveMaxRpm", "FugleCollectorAdaptiveMaxRpm") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollector429CooldownMilliseconds" -ConfigNames @("fugleCollector429CooldownMilliseconds", "FugleCollector429CooldownMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_429_COOLDOWN_MS"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorQuoteTtlMilliseconds" -ConfigNames @("fugleCollectorQuoteTtlMilliseconds", "FugleCollectorQuoteTtlMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_QUOTE_TTL_MS"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mBatchSize" -ConfigNames @("direct1mBatchSize", "Direct1mBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mEverySeconds" -ConfigNames @("direct1mEverySeconds", "Direct1mEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_EVERY_SECONDS"
@@ -3027,6 +3039,10 @@ function Start-FugleWebSocketCollector {
   $psi.Environment["FUGLE_COLLECTOR_BATCH_SIZE"] = [string]$FugleCollectorBatchSize
   $psi.Environment["FUGLE_COLLECTOR_CONCURRENCY"] = [string]$FugleCollectorConcurrency
   $psi.Environment["FUGLE_COLLECTOR_REQUEST_DELAY_MS"] = [string]$FugleCollectorRequestDelayMilliseconds
+  $psi.Environment["FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM"] = [string]$FugleCollectorAdaptiveInitialRpm
+  $psi.Environment["FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM"] = [string]$FugleCollectorAdaptiveMinRpm
+  $psi.Environment["FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM"] = [string]$FugleCollectorAdaptiveMaxRpm
+  $psi.Environment["FUGLE_COLLECTOR_429_COOLDOWN_MS"] = [string]$FugleCollector429CooldownMilliseconds
   $psi.Environment["FUGLE_COLLECTOR_QUOTE_TTL_MS"] = [string]$FugleCollectorQuoteTtlMilliseconds
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_START"] = $OpeningBoostStart
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_END"] = $OpeningBoostEnd
