@@ -105,6 +105,9 @@
   const marketJsonCache = new Map();
   const marketJsonInflight = new Map();
   const MARKET_JSON_CACHE_TTL_MS = 18000;
+  const MARKET_HEATMAP_FETCH_TIMEOUT_MS = 12000;
+  const MARKET_RADAR_FETCH_TIMEOUT_MS = 12000;
+  const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 18000;
   let marketAiRenderSignature = "";
   let marketAiRenderTimer = 0;
   let marketAiRenderRequest = null;
@@ -4346,7 +4349,7 @@
 
   function primeMarketColdPayloads(force = false, reason = "boot") {
     const tasks = [
-      fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800).then((payload) => {
+      fetchMarketJson(marketHeatmapContractPath(), 36, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS).then((payload) => {
         if (payload?.sectors?.length) {
           marketSnapshotFirstPayload = { ...payload, snapshotFirst: !isMarketHeatmapLiveWindow(), firstPaint: true };
           paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload);
@@ -4356,10 +4359,10 @@
     ];
     if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
       tasks.push(
-        fetchMarketJson("/api/realtime-radar-latest?full=1", 1200, force, 4200).then((payload) => {
+        fetchMarketJson("/api/realtime-radar-latest?full=1", 1200, force, MARKET_RADAR_FETCH_TIMEOUT_MS).then((payload) => {
           rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
         }),
-        fetchMarketJson("/api/market-ai-live", 20, force, 5200).then((payload) => {
+        fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS).then((payload) => {
           if (payload && typeof payload === "object") marketAiBundlePayload = payload;
         }),
       );
@@ -4537,7 +4540,7 @@
       settled += 1;
       if (settled >= 4) marketDesktopAiLoading = false;
     };
-    fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
+    fetchMarketJson(marketHeatmapContractPath(), 36, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
       .then((payload) => {
         if (payload?.sectors?.length) {
           marketSnapshotFirstPayload = {
@@ -4550,14 +4553,14 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/market-ai-live", 40, force, 5200)
+    fetchMarketJson("/api/market-ai-live", 40, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
       .then((payload) => {
         state.ai = payload || {};
         if (hasMarketAiPayload(state.ai)) marketAiBundlePayload = state.ai;
         paint(false, 70);
       })
       .finally(done);
-    fetchMarketJson("/api/heatmap", 60, force, 6500)
+    fetchMarketJson("/api/heatmap", 60, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = { ...(payload || {}), firstPaint: false };
@@ -4565,7 +4568,7 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, 5200)
+    fetchMarketJson("/api/realtime-radar-latest", 20, force, MARKET_RADAR_FETCH_TIMEOUT_MS)
       .then((payload) => {
         state.radar = payload || {};
         if (!hasMarketAiPayload(state.ai)) paint(false, 180);
@@ -4953,7 +4956,7 @@
         done();
         return;
       }
-      fetchMarketJson(marketHeatmapContractPath(), 36, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
+      fetchMarketJson(marketHeatmapContractPath(), 36, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
         .then((payload) => {
           if (payload?.sectors?.length) {
             state.heatmap = {
@@ -4970,7 +4973,7 @@
     window.setTimeout(fetchHeatmap, (!force && !paintedFromMemory) ? 140 : 0);
     if (!force) {
       window.setTimeout(() => {
-        fetchMarketJson(marketHeatmapContractPath(), 60, false, isMarketHeatmapLiveWindow() ? 6500 : 2600).then((payload) => {
+        fetchMarketJson(marketHeatmapContractPath(), 60, false, MARKET_HEATMAP_FETCH_TIMEOUT_MS).then((payload) => {
           if (payload?.sectors?.length && isMarketViewActive()) {
             marketSnapshotFirstPayload = { ...payload, snapshotFirst: !isMarketHeatmapLiveWindow(), firstPaint: false };
             paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload, state.market || {});
@@ -5428,7 +5431,7 @@
         renderIfChanged(true);
       })
       .finally(done);
-    fetchMarketJson(marketHeatmapContractPath(), 60, force, isMarketHeatmapLiveWindow() ? 6500 : 1800)
+    fetchMarketJson(marketHeatmapContractPath(), 60, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = {
@@ -5440,7 +5443,7 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/heatmap", 60, force, 6500)
+    fetchMarketJson("/api/heatmap", 60, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
       .then((payload) => {
         if (payload?.sectors?.length) {
           state.heatmap = payload || {};
@@ -5450,13 +5453,13 @@
       })
       .finally(done);
     if (aiMode) {
-      fetchMarketJson("/api/realtime-radar-latest", 20, force, 4200)
+      fetchMarketJson("/api/realtime-radar-latest", 20, force, MARKET_RADAR_FETCH_TIMEOUT_MS)
         .then((payload) => {
           state.radar = payload || {};
           renderIfChanged(true);
         })
         .finally(done);
-      fetchMarketJson("/api/market-ai-live", 20, force, 5200)
+      fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
         .then((payload) => {
           state.ai = payload || {};
           renderIfChanged(true);
