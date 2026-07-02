@@ -23,6 +23,52 @@
     transform: translateY(-1px);
     border-color: rgba(96, 165, 250, 0.65);
   }
+  .fuman-display-switcher {
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+    right: 42px !important;
+    z-index: 10002 !important;
+  }
+  .fuman-display-switcher .fuman-theme-toggle {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+  }
+  .fuman-display-menu {
+    position: absolute !important;
+    top: 54px !important;
+    right: 0 !important;
+    display: grid !important;
+    gap: 4px !important;
+    min-width: 112px !important;
+    padding: 6px !important;
+    border: 1px solid rgba(148, 163, 184, 0.34) !important;
+    border-radius: 10px !important;
+    background: rgba(15, 23, 42, 0.94) !important;
+    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32) !important;
+    backdrop-filter: blur(12px);
+  }
+  .fuman-display-menu[hidden] {
+    display: none !important;
+  }
+  .fuman-display-menu a {
+    min-height: 34px !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    color: #e5eefc !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    text-decoration: none !important;
+    white-space: nowrap !important;
+  }
+  .fuman-display-menu a:hover,
+  .fuman-display-menu a:focus-visible {
+    background: rgba(96, 165, 250, 0.18) !important;
+    outline: none !important;
+  }
   body.fuman-light-theme {
     background: #f4f7fb !important;
     color: #172033 !important;
@@ -32,6 +78,14 @@
     color: #facc15;
     border-color: rgba(203, 213, 225, 0.95);
     box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+  }
+  body.fuman-light-theme .fuman-display-menu {
+    background: rgba(255, 255, 255, 0.96) !important;
+    border-color: rgba(203, 213, 225, 0.95) !important;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14) !important;
+  }
+  body.fuman-light-theme .fuman-display-menu a {
+    color: #172033 !important;
   }
   body.fuman-light-theme .sidebar,
   body.fuman-light-theme aside,
@@ -1854,11 +1908,18 @@
     display: none !important;
   }
   @media (max-width: 720px) {
+    .fuman-display-switcher {
+      top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+      right: 12px !important;
+    }
     .fuman-theme-toggle {
       top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
       right: 12px !important;
       width: 42px;
       height: 42px;
+    }
+    .fuman-display-menu {
+      top: 50px !important;
     }
     .market-ai-summary,
     .market-ai-advice,

@@ -42,7 +42,11 @@ requireRewrite(vercel, "/mobile", "/api/mobile-page");
 requireRewrite(vercel, "/mobile.html", "/api/mobile-page");
 
 const mobile = read("mobile.html");
-rejectText(mobile, 'href="/?desktop=1"', "mobile.html must not show desktop terminal escape link");
+requireText(mobile, 'data-display-switch', "mobile.html must expose the display switcher beside the moon button");
+requireText(mobile, 'href="/api/mobile-page"', "mobile.html display switcher must link to mobile version");
+requireText(mobile, 'href="/?desktop=1"', "mobile.html display switcher must link to desktop version");
+requireText(mobile, ">手機版</a>", "mobile.html display switcher must label the mobile option");
+requireText(mobile, ">電腦版</a>", "mobile.html display switcher must label the desktop option");
 rejectText(mobile, ">終端</a>", "mobile.html must not show desktop terminal button");
 
 if (issues.length) {

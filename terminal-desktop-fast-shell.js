@@ -6586,21 +6586,43 @@
     const run = () => {
       if (!document.body) return;
       const themeKey = window.FUMAN_RUNTIME_CONFIG?.themeKey || "fuman-terminal-theme";
+      let switcher = document.querySelector("#fuman-display-switcher");
+      if (!switcher) {
+        switcher = document.createElement("div");
+        switcher.id = "fuman-display-switcher";
+        switcher.className = "fuman-display-switcher";
+        document.body.appendChild(switcher);
+      }
       let button = document.querySelector("#fuman-theme-toggle");
       if (!button) {
         button = document.createElement("button");
         button.id = "fuman-theme-toggle";
         button.className = "fuman-theme-toggle";
         button.type = "button";
-        document.body.appendChild(button);
       }
+      if (button.parentElement !== switcher) switcher.appendChild(button);
+      let menu = document.querySelector("#fuman-display-menu");
+      if (!menu) {
+        menu = document.createElement("div");
+        menu.id = "fuman-display-menu";
+        menu.className = "fuman-display-menu";
+        menu.hidden = true;
+        menu.setAttribute("role", "menu");
+        menu.innerHTML = '<a href="/api/mobile-page" role="menuitem">手機版</a><a href="/?desktop=1" role="menuitem">電腦版</a>';
+      }
+      if (menu.parentElement !== switcher) switcher.appendChild(menu);
+      const setMenuOpen = (open) => {
+        menu.hidden = !open;
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+      };
       const applyTheme = (theme) => {
         const light = theme === "light";
         document.body.classList.toggle("fuman-light-theme", light);
         document.documentElement.dataset.fumanTheme = light ? "light" : "dark";
         button.textContent = light ? "☀" : "☾";
-        button.title = light ? "切換月亮模式" : "切換陽光模式";
+        button.title = light ? "切換月亮模式，開啟版本選單" : "切換陽光模式，開啟版本選單";
         button.setAttribute("aria-label", button.title);
+        button.setAttribute("aria-haspopup", "menu");
         button.dataset.fumanThemeToggleReady = "1";
         canvasPreRenderedRoutes.clear();
         canvasWorkerRowsVersion = -1;
@@ -6618,6 +6640,16 @@
           const next = document.body.classList.contains("fuman-light-theme") ? "dark" : "light";
           localStorage.setItem(themeKey, next);
           applyTheme(next);
+          setMenuOpen(true);
+        });
+      }
+      if (switcher.dataset.fumanDisplayMenuBound !== "1") {
+        switcher.dataset.fumanDisplayMenuBound = "1";
+        document.addEventListener("click", (event) => {
+          if (!switcher.contains(event.target)) setMenuOpen(false);
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") setMenuOpen(false);
         });
       }
     };
@@ -6728,6 +6760,69 @@
       .fuman-theme-toggle:hover {
         transform: translateY(-1px);
         border-color: rgba(249, 115, 22, 0.72) !important;
+      }
+      .fuman-display-switcher {
+        position: fixed !important;
+        top: calc(env(safe-area-inset-top, 0px) + 18px) !important;
+        right: 42px !important;
+        z-index: 100002 !important;
+      }
+      .fuman-display-switcher .fuman-theme-toggle {
+        position: static !important;
+        top: auto !important;
+        right: auto !important;
+      }
+      .fuman-display-menu {
+        position: absolute !important;
+        top: 54px !important;
+        right: 0 !important;
+        display: grid !important;
+        gap: 4px !important;
+        min-width: 112px !important;
+        padding: 6px !important;
+        border: 1px solid rgba(148, 163, 184, 0.34) !important;
+        border-radius: 10px !important;
+        background: rgba(15, 23, 42, 0.94) !important;
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.32) !important;
+        backdrop-filter: blur(12px);
+      }
+      .fuman-display-menu[hidden] {
+        display: none !important;
+      }
+      .fuman-display-menu a {
+        min-height: 34px !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 10px !important;
+        border-radius: 8px !important;
+        color: #e5eefc !important;
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        text-decoration: none !important;
+        white-space: nowrap !important;
+      }
+      .fuman-display-menu a:hover,
+      .fuman-display-menu a:focus-visible {
+        background: rgba(249, 115, 22, 0.2) !important;
+        outline: none !important;
+      }
+      body.fuman-light-theme .fuman-display-menu {
+        border-color: rgba(203, 213, 225, 0.95) !important;
+        background: rgba(255, 255, 255, 0.96) !important;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14) !important;
+      }
+      body.fuman-light-theme .fuman-display-menu a {
+        color: #172033 !important;
+      }
+      @media (max-width: 720px) {
+        .fuman-display-switcher {
+          top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+          right: 12px !important;
+        }
+        .fuman-display-menu {
+          top: 50px !important;
+        }
       }
       .desktop-route-shell {
         border: 1px solid rgba(255, 112, 55, 0.35);
