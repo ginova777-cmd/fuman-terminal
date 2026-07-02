@@ -86,6 +86,12 @@ function scorecardFreshnessRequirement(request, now = new Date()) {
   };
 }
 
+function strictSourceHealthRequired(request) {
+  const query = request.query || {};
+  return cleanText(query.strictSources || query.strict || "") === "1"
+    || process.env.FUMAN_SCORECARD_HEALTH_STRICT_SOURCES === "1";
+}
+
 function scorecardDateMatches(summary, payload, requirement) {
   if (!requirement.required) return true;
   const dates = [
@@ -292,7 +298,8 @@ module.exports = async function handler(request, response) {
   }
 
   const baseUrl = absoluteBaseUrl(request);
-  const sources = await sourceEndpointHealth(baseUrl);
+  const strictSources = strictSourceHealthRequired(request);
+  const sources = strictSources ? await sourceEndpointHealth(baseUrl) : {};
   const tradeRecords = await fetchSupabaseTable("trade_records");
   const dailySummary = await fetchSupabaseTable("strategy_daily_summary");
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 12000 }).catch((error) => ({ error }));
@@ -322,7 +329,7 @@ module.exports = async function handler(request, response) {
     pnlMultiplier: /PNL_MULTIPLIER\s*=\s*1000/.test(pageBody),
     symbolTheme: pageBody.includes("☀") && pageBody.includes("☾") && pageBody.includes("#facc15"),
   };
-  const sourceOk = Object.values(sources).every((item) => item.ok);
+  const sourceOk = strictSources ? Object.values(sources).every((item) => item.ok) : true;
   const snapshotOk = Boolean(snapshotPayload)
     && snapshotSummary.cacheSource === "supabase-snapshot"
     && snapshotSummary.rows > 0
@@ -344,12 +351,29 @@ module.exports = async function handler(request, response) {
     && scorecardSummary.cbBad === 0
     && scorecardSummary.strategyRules.ok;
   const pageOk = page.ok && Object.values(pageChecks).every(Boolean);
+  const directSourceOk = tradeRecords.ok && dailySummary.ok && sourceDatesOk;
+  const scorecardPageChainOk = snapshotOk && apiOk && snapshotDateOk && apiDateOk;
   const stages = {
-    sources: stage(sourceOk, { endpoints: sources }),
-    supabaseSource: stage(tradeRecords.ok && dailySummary.ok && sourceDatesOk, {
-      freshness: { ...freshnessRequirement, dateOk: sourceDatesOk },
+    sources: stage(sourceOk, strictSources ? {
+      required: true,
+      endpoints: sources,
+    } : {
+      required: false,
+      status: "not_required_for_scorecard_page",
+      note: "Use ?strictSources=1 to include live strategy endpoint patrol. Default /88 health is limited to scorecard snapshot/API/page freshness.",
+    }),
+    supabaseSource: stage(strictSources ? directSourceOk : scorecardPageChainOk, {
+      required: strictSources,
+      status: strictSources ? "strict_direct_table_check" : "covered_by_scorecard_latest_snapshot",
+      freshness: { ...freshnessRequirement, dateOk: strictSources ? sourceDatesOk : (snapshotDateOk && apiDateOk) },
       tradeRecords,
       dailySummary,
+      snapshotSource: {
+        exportSource: cleanText(snapshotPayload?.exportSource || snapshotPayload?.sourceFields?.exportSource),
+        sourceQuery: snapshotPayload?.sourceQuery || null,
+        runId: cleanText(snapshotPayload?.runId),
+        updatedAt: cleanText(snapshotPayload?.updatedAt),
+      },
     }),
     scorecardLatest: stage(snapshotOk, {
       key: snapshot?.key || SNAPSHOT_KEY,
