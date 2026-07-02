@@ -45,9 +45,6 @@ select
     'gateView', 'v_strategy3_source_gate'
   ) as payload;
 
-drop view if exists public.v_strategy3_quote_ready;
-drop view if exists public.v_strategy3_intraday_1m_status;
-
 create or replace view public.v_strategy3_intraday_1m_status as
 with config as (
   select
@@ -101,34 +98,37 @@ select
   symbol,
   symbol as code,
   market,
-  latest_candle_time,
-  (latest_candle_time at time zone 'Asia/Taipei')::text as latest_candle_time_taipei,
-  updated_at,
-  first_candle_time,
   today_candle_count,
   today_candle_count as rows_today,
-  warmup_candle_count,
-  continuous_candle_count,
-  candle_count,
+  0::integer as after_1300_candle_count,
+  first_candle_time,
+  latest_candle_time,
+  false::boolean as has_1300_candle,
+  false::boolean as has_after_1300_candle,
+  (today_candle_count >= 35) as ready_35,
+  (continuous_candle_count >= 35) as ready_ge_35,
+  (continuous_candle_count >= 80) as ready_80,
+  (continuous_candle_count >= 80) as ready_ge_80,
+  (continuous_candle_count >= 100) as ready_100,
+  (continuous_candle_count >= 120) as ready_120,
+  (continuous_candle_count >= 160) as ready_160,
   (today_candle_count > 0) as has_today_data,
+  updated_at,
   case
     when latest_candle_time is null then 999999
     else greatest(0, extract(epoch from (now() - latest_candle_time)))::integer
   end as latest_candle_age_seconds,
+  (latest_candle_time at time zone 'Asia/Taipei')::text as latest_candle_time_taipei,
+  warmup_candle_count,
+  continuous_candle_count,
+  candle_count,
   (continuous_candle_count >= 20) as ready_ge_20,
-  (continuous_candle_count >= 35) as ready_ge_35,
-  (continuous_candle_count >= 80) as ready_ge_80,
-  (continuous_candle_count >= 100) as ready_ge_100,
   (continuous_candle_count >= 200) as ready_ge_200,
+  (continuous_candle_count >= 100) as ready_ge_100,
   (continuous_candle_count >= 20) as ready_ma20_continuous,
   (continuous_candle_count >= 35) as ready_ma35_continuous,
   (continuous_candle_count >= 80) as ready_macd_continuous,
   (continuous_candle_count >= 35) as ma35_available,
-  (today_candle_count >= 35) as ready_35,
-  (continuous_candle_count >= 80) as ready_80,
-  (continuous_candle_count >= 100) as ready_100,
-  (continuous_candle_count >= 120) as ready_120,
-  (continuous_candle_count >= 160) as ready_160,
   (
     today_candle_count >= 35
     and continuous_candle_count >= 35
@@ -152,98 +152,6 @@ select
     else ''
   end as strategy3_intraday_fail_closed_reason
 from per_symbol;
-
-create or replace view public.v_strategy3_quote_ready as
-select
-  q.symbol,
-  q.symbol as code,
-  coalesce(u.name, q.name, q.symbol) as name,
-  coalesce(u.market, q.market) as market,
-  u.industry,
-  coalesce(q.last_price, q.close) as price,
-  coalesce(q.close, q.last_price) as close,
-  coalesce(q.prev_close, q.previous_close) as prev_close,
-  coalesce(q.previous_close, q.prev_close) as previous_close,
-  coalesce(q.change, coalesce(q.last_price, q.close) - coalesce(q.previous_close, q.prev_close)) as change,
-  q.change_percent,
-  coalesce(q.trade_volume_lots, q.trade_volume, q.total_volume) as trade_volume_lots,
-  coalesce(q.trade_volume_shares, q.trade_volume, q.total_volume) as trade_volume,
-  coalesce(q.trade_volume_shares, q.trade_volume, q.total_volume) as trade_volume_shares,
-  coalesce(q.total_volume, q.trade_volume_lots, q.trade_volume) as total_volume,
-  q.trade_value,
-  q.high,
-  q.low,
-  q.open,
-  null::numeric as limit_up_price,
-  null::numeric as limit_down_price,
-  q.updated_at,
-  q.last_trade_time,
-  coalesce(q.quote_source, 'fugle_latest') as quote_source,
-  coalesce(q.quote_time, q.last_trade_time, q.updated_at) as quote_time,
-  greatest(0, floor(extract(epoch from (now() - coalesce(q.quote_time, q.last_trade_time, q.updated_at)))))::integer as quote_age_seconds,
-  (coalesce(q.quote_time, q.last_trade_time, q.updated_at) >= now() - interval '120 seconds') as quote_fresh,
-  (coalesce(q.quote_time, q.last_trade_time, q.updated_at) >= now() - interval '120 seconds') as is_quote_fresh,
-  ((coalesce(q.quote_time, q.last_trade_time, q.updated_at) at time zone 'Asia/Taipei')::date = (now() at time zone 'Asia/Taipei')::date) as is_same_taipei_trade_day,
-  'shares'::text as volume_unit,
-  null::numeric as cumulative_bid_volume,
-  null::numeric as cumulative_ask_volume,
-  null::numeric as cumulative_bid_ask_volume,
-  null::numeric as avg_volume_5_lots,
-  null::numeric as avg_volume_20_lots,
-  null::numeric as avg_volume_5,
-  null::numeric as avg_volume_20,
-  null::numeric as avg_volume_5_shares,
-  null::numeric as avg_volume_20_shares,
-  null::integer as avg_volume_5_days,
-  null::integer as avg_volume_20_days,
-  null::numeric as volume_ratio_5,
-  rank() over (order by q.trade_value desc nulls last) as trade_value_rank,
-  rank() over (order by coalesce(q.total_volume, q.trade_volume_shares, q.trade_volume) desc nulls last) as total_volume_rank,
-  null::numeric as issued_shares,
-  null::numeric as turnover_rate,
-  s.today_candle_count,
-  s.rows_today,
-  s.latest_candle_time,
-  s.ready_35,
-  s.ready_ge_35,
-  s.ready_80,
-  s.ready_ge_80,
-  s.ready_100,
-  s.ready_120,
-  s.ready_160,
-  q.stock_type,
-  coalesce(u.is_active, true) as is_active,
-  coalesce(u.is_etf, false) as is_etf,
-  coalesce(u.is_warrant, false) as is_warrant,
-  coalesce(u.is_cb, false) as is_cb,
-  coalesce(u.is_blacklisted, false) as is_blacklisted,
-  coalesce(u.is_daytrade_unsuitable, false) as is_daytrade_unsuitable,
-  q.is_halted,
-  q.is_trial,
-  false as is_disposition,
-  false as is_attention,
-  false as is_full_delivery,
-  false as is_periodic_auction,
-  false as is_margin_suspended,
-  q.session,
-  jsonb_build_object(
-    'quote_source', coalesce(q.quote_source, 'fugle_latest'),
-    'formal_source', 'fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume',
-    'strategy3_intraday_gate_grade', s.strategy3_intraday_gate_grade
-  ) as payload
-from public.fugle_quotes_latest q
-left join public.stock_universe u
-  on u.symbol = q.symbol
-left join public.v_strategy3_intraday_1m_status s
-  on s.symbol = q.symbol
-where q.symbol ~ '^[0-9]{4}$'
-  and coalesce(q.stock_type, 'COMMONSTOCK') = 'COMMONSTOCK'
-  and coalesce(u.is_active, true) = true
-  and coalesce(u.is_etf, false) = false
-  and coalesce(u.is_warrant, false) = false
-  and coalesce(u.is_cb, false) = false
-  and coalesce(u.is_blacklisted, false) = false
-  and coalesce(u.is_daytrade_unsuitable, false) = false;
 
 create or replace view public.v_strategy3_source_gate as
 with profile as (
@@ -386,7 +294,6 @@ from calc;
 
 grant select on public.v_strategy3_source_speed_profile to anon, authenticated, service_role;
 grant select on public.v_strategy3_intraday_1m_status to anon, authenticated, service_role;
-grant select on public.v_strategy3_quote_ready to anon, authenticated, service_role;
 grant select on public.v_strategy3_source_gate to anon, authenticated, service_role;
 
 comment on view public.v_strategy3_intraday_1m_status is
