@@ -1313,7 +1313,7 @@ if (/stopAt\s*=\s*"12:05"/.test(publicSlotAntiRollbackGuard)) {
 if (/Set-Content\s+-LiteralPath\s+\$path|Repair-CmdEntrypoints|Repair-RunnerText|Repair-HelperText|Repair-RepoRuntimeConfigSupport|RunnerSnapshotPath|repo runner repaired|Copy-Item[\s\S]{0,160}-Destination\s+\$RunnerPath/.test(publicSlotAntiRollbackGuard)) {
   issues.push("Guard-PublicSlotSourceAntiRollback.ps1 must not rewrite tracked public-slot source files");
 }
-for (const marker of ["FutoptQuoteEverySeconds 20", "Direct1mEverySeconds 20", "Strategy2ReadyRefreshEnabled:$true"]) {
+for (const marker of ["FutoptQuoteEverySeconds 60", "Direct1mEverySeconds 60", "Strategy2ReadyRefreshEnabled:$true"]) {
   if (!publicSlotSharedSourceStarter.includes(marker)) issues.push(`Start-PublicSlotSharedSource.cmd missing merged Strategy2 readiness marker ${marker}`);
 }
 if (/-StopAt 12:05/.test(publicSlotSharedSourceStarter)) {
