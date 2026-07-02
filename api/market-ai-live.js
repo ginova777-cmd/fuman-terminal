@@ -120,6 +120,10 @@ function isMarketAiPostClose(clock = taipeiClock()) {
   return clock.seconds > AI_WINDOW_END_SECONDS;
 }
 
+function isWeekendClosedSession(session = {}) {
+  return session?.closed === true && session?.reason === "weekend";
+}
+
 function compactDate(value) {
   const text = String(value || "");
   const parsed = Date.parse(text);
@@ -969,7 +973,7 @@ module.exports = async function handler(request, response) {
   const mustDetectToday = requiresTodayDetection(clock, session);
   const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
 
-  if (cached && session.closed && !shouldRefresh(request)) {
+  if (cached && isWeekendClosedSession(session) && !shouldRefresh(request)) {
     const payload = normalizeNonTradingCachePayload(
       cachedResponsePayload(cached, breadth, clock, "non-trading-day-cache"),
       sessionForPayload
@@ -984,11 +988,11 @@ module.exports = async function handler(request, response) {
 
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
-    allowLatestFallback: !requireTodayLiveSource,
+    allowLatestFallback: !requireTodayLiveSource && !isMarketAiPostClose(clock),
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
-  if (snapshot?.payload && !mustDetectToday) {
+  if (snapshot?.payload && !mustDetectToday && !isMarketAiPostClose(clock)) {
     const payload = {
       ...snapshotResponsePayload(snapshot, breadth, clock),
       marketSession: sessionForPayload,
@@ -1001,7 +1005,9 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (cached && canServeCachedPayload(request, detectWindowActive, mustDetectToday)) {
+  const cachedTradeDate = payloadTradeDate(cached);
+  const cachedAllowed = !isMarketAiPostClose(clock) || isTodayDate(cachedTradeDate, clock);
+  if (cached && cachedAllowed && !isMarketAiPostClose(clock) && canServeCachedPayload(request, detectWindowActive, mustDetectToday)) {
     const payload = {
       ...cachedResponsePayload(
         cached,

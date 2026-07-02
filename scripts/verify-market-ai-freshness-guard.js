@@ -68,6 +68,10 @@ assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
 assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after the shared-source start until same-day data exists");
 assert(apiSource.includes("requiresTodayLiveSource") && apiSource.includes("allowLatestFallback: !requireTodayLiveSource"), "market-ai-live must not use latest snapshot fallback after today's shared-source window starts");
+assert(apiSource.includes("allowLatestFallback: !requireTodayLiveSource && !isMarketAiPostClose(clock)"), "market-ai-live must not use stale latest snapshot fallback after 13:30 post-close");
+assert(apiSource.includes("cachedAllowed") && apiSource.includes("isTodayDate(cachedTradeDate, clock)"), "market-ai-live must not serve stale local cache after 13:30 post-close");
+assert(apiSource.includes("snapshot?.payload && !mustDetectToday && !isMarketAiPostClose(clock)"), "market-ai-live must rebuild live bundle instead of returning market_ai_live snapshot after 13:30 post-close");
+assert(apiSource.includes("cached && cachedAllowed && !isMarketAiPostClose(clock)"), "market-ai-live must rebuild live bundle instead of returning local cache after 13:30 post-close");
 assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
 assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");
 assert(heatmapApiSource.includes("health.isHealthy !== false"), "heatmap memory cache must enforce health before serving");
