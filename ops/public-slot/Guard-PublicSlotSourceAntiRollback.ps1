@@ -54,7 +54,7 @@ function Write-DefaultRuntimeConfig {
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
-    direct1mPrewarmStart = "08:00"
+    direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
@@ -66,6 +66,7 @@ function Write-DefaultRuntimeConfig {
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
+    futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
     publicSlotUpsertBatchSize = 300
@@ -251,7 +252,7 @@ function Test-RuntimeConfig {
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
     direct1mPrewarmEnabled = $true
-    direct1mPrewarmStart = "08:00"
+    direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
@@ -263,6 +264,7 @@ function Test-RuntimeConfig {
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
+    futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
     publicSlotUpsertBatchSize = 300
