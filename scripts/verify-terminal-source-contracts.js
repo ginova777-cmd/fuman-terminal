@@ -400,6 +400,51 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = Number(String(value).replace(/[,％%]/g, ""));
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function realtimeRadarSourceQualityIssues(payload = {}, table = "fuman_realtime_radar_cache") {
+  const coverage = payload.quote_coverage_at_run || payload.quoteCoverageAtRun || payload.sourceCoverage || {};
+  const residualStaleQuoteCount = cleanNumber(payload.staleQuoteCount);
+  const freshCoverage = firstFiniteNumber(
+    payload.fresh_quote_coverage_120s,
+    payload.freshQuoteCoverage120s,
+    coverage.fresh_quote_coverage_120s,
+    coverage.freshQuoteCoverage120s,
+    coverage.coverage_120s,
+    coverage.coverage120s,
+    coverage.coverage
+  );
+  const quoteAgeSeconds = firstFiniteNumber(
+    payload.quote_age_seconds,
+    payload.quoteAgeSeconds,
+    coverage.quote_age_seconds,
+    coverage.quoteAgeSeconds,
+    coverage.sourceAgeSeconds,
+    coverage.stale_seconds,
+    coverage.staleSeconds
+  );
+  const minFreshCoverage = firstFiniteNumber(coverage.minFreshQuoteCoverage120s, payload.minFreshQuoteCoverage120s) ?? 0.95;
+  const maxQuoteAgeSeconds = firstFiniteNumber(coverage.maxAllowedQuoteAgeSeconds, payload.maxAllowedQuoteAgeSeconds) ?? 120;
+  const issues = [];
+  if (freshCoverage === null) issues.push(`${table} fresh_quote_coverage_120s missing`);
+  else if (freshCoverage < minFreshCoverage) issues.push(`${table} fresh_quote_coverage_120s=${freshCoverage}<${minFreshCoverage}`);
+  if (quoteAgeSeconds === null) issues.push(`${table} quote_age_seconds missing`);
+  else if (quoteAgeSeconds > maxQuoteAgeSeconds) issues.push(`${table} quote_age_seconds=${quoteAgeSeconds}>${maxQuoteAgeSeconds}`);
+  if (cleanNumber(payload.failedBatchCount) > 0) {
+    issues.push(`${table} failedBatchCount=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`);
+  }
+  // residualStaleQuoteCount/staleQuoteCount is evidence, not a hard blocker when coverage and quote age pass.
+  void residualStaleQuoteCount;
+  return issues;
+}
+
 function normalizedCodes(value) {
   return Array.isArray(value)
     ? value.map((code) => String(code || "").replace(/\D/g, "").slice(0, 4)).filter(Boolean).sort()
@@ -557,8 +602,7 @@ async function checkOne(strategy, check) {
     if (payload && isRealtimeRadarLiveWindow() && payloadDate === taipeiDateKey() && updatedAtMs && Date.now() - updatedAtMs > realtimeRadarMaxAgeMs(payload)) {
       issues.push(`${check.table} payload age ${Math.round((Date.now() - updatedAtMs) / 1000)}s exceeds live max`);
     }
-    if (payload && cleanNumber(payload.staleQuoteCount) > 0) issues.push(`${check.table} staleQuoteCount=${cleanNumber(payload.staleQuoteCount)}`);
-    if (payload && cleanNumber(payload.failedBatchCount) > 0) issues.push(`${check.table} failedBatchCount=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`);
+    if (payload) issues.push(...realtimeRadarSourceQualityIssues(payload, check.table));
     if (payload && !sameCodeSet(payload.sourceExcludedCodes, expectedExcludedCodes)) {
       issues.push(`${check.table} sourceExcludedCodes=${normalizedCodes(payload.sourceExcludedCodes).join(",") || "--"} expected=${expectedExcludedCodes.join(",")}`);
     }

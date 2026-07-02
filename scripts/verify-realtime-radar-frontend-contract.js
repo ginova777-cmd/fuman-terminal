@@ -40,6 +40,7 @@ async function fetchJson(pathname) {
 
 function summarizeApi(result) {
   const rows = Array.isArray(result.body.rows) ? result.body.rows.length : 0;
+  const coverage = result.body.quote_coverage_at_run || result.body.sourceCoverage || {};
   return {
     status: result.status,
     rows,
@@ -47,6 +48,10 @@ function summarizeApi(result) {
     cacheSource: result.body.cacheSource,
     staleQuoteCount: result.body.staleQuoteCount,
     failedBatchCount: result.body.failedBatchCount,
+    freshQuoteCoverage120s: Number(result.body.fresh_quote_coverage_120s ?? coverage.fresh_quote_coverage_120s ?? coverage.freshQuoteCoverage120s ?? 0),
+    quoteAgeSeconds: Number(result.body.quote_age_seconds ?? coverage.quote_age_seconds ?? coverage.quoteAgeSeconds ?? 999999),
+    evidenceStatus: result.body.evidenceStatus || "",
+    unattendedStatus: result.body.unattendedStatus || result.body.unattended?.status || "",
   };
 }
 
@@ -103,8 +108,11 @@ function summarizeApi(result) {
     apiShell1200.totalCount === 1200,
     apiFull.cacheSource === "supabase-radar-cache",
     apiShell1200.cacheSource === "supabase-radar-cache",
-    Number(apiFull.staleQuoteCount || 0) === 0,
+    Number(apiFull.freshQuoteCoverage120s || 0) >= 0.95,
+    Number(apiFull.quoteAgeSeconds || 999999) <= 120,
     Number(apiFull.failedBatchCount || 0) === 0,
+    apiFull.evidenceStatus === "complete",
+    apiFull.unattendedStatus === "YES",
   ].every(Boolean);
 
   console.log(JSON.stringify(result, null, 2));

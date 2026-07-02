@@ -56,6 +56,7 @@ const REALTIME_RADAR_SESSION_LIMIT = Math.max(120, Number(process.env.REALTIME_R
 const REALTIME_RADAR_WRITE_BUDGET_PER_SCAN = Math.max(1, Number(process.env.REALTIME_RADAR_WRITE_BUDGET_PER_SCAN || 3));
 const REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS = Math.max(60 * 1000, Number(process.env.REALTIME_RADAR_PRESERVE_GOOD_MAX_AGE_MS || 5 * 60 * 1000));
 const REALTIME_RADAR_FRESH_QUOTE_SECONDS = Math.max(1, Number(process.env.REALTIME_RADAR_FRESH_QUOTE_SECONDS || 120));
+const REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE = Math.min(1, Math.max(0, Number(process.env.REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE || 0.95)));
 const REALTIME_RADAR_RAW_KEEP_DAYS = Math.max(0, Number(process.env.REALTIME_RADAR_RAW_KEEP_DAYS || 0));
 const REQUIRED_RADAR_FIELDS = {
   identity: ["code", "name"],
@@ -207,11 +208,50 @@ function alertSignature(payload) {
   return `${payload.date || ""}|stale=${payload.staleQuoteCount || 0}:${staleCodes}|issues=${issues}|failed=${payload.failedBatchCount || 0}`;
 }
 
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = Number(String(value).replace(/[,+%]/g, "").trim());
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function payloadQuoteCoverage(payload = {}) {
+  return payload.quote_coverage_at_run || payload.quoteCoverageAtRun || payload.sourceCoverage || {};
+}
+
+function quoteCoverageMeetsRealtimeThresholds(quoteCoverage = {}) {
+  const freshQuoteCoverage120s = firstFiniteNumber(
+    quoteCoverage.fresh_quote_coverage_120s,
+    quoteCoverage.freshQuoteCoverage120s,
+    quoteCoverage.coverage_120s,
+    quoteCoverage.coverage120s,
+    quoteCoverage.coverage
+  );
+  const quoteAgeSeconds = firstFiniteNumber(
+    quoteCoverage.quote_age_seconds,
+    quoteCoverage.quoteAgeSeconds,
+    quoteCoverage.sourceAgeSeconds,
+    quoteCoverage.stale_seconds,
+    quoteCoverage.staleSeconds
+  );
+  const failedBatchCount = cleanNumber(quoteCoverage.failedBatchCount ?? quoteCoverage.failed_batch_count);
+  return Boolean(
+    freshQuoteCoverage120s !== null
+    && freshQuoteCoverage120s >= REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE
+    && (quoteAgeSeconds === null || quoteAgeSeconds <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
+    && failedBatchCount === 0
+  );
+}
+
 async function maybeSendRealtimeRadarAlert(payload) {
   const noAlert = noAlertReceipt();
   const staleDetails = payload.staleQuoteDetails || [];
   const issues = payload.externalSourceIssues || [];
-  const hasProblem = Number(payload.staleQuoteCount || 0) > 0 || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
+  const qualityBlocksLatest = payload?.run_quality_at_publish?.publishAllowed === false
+    || payload?.run_quality_at_publish?.degradedBlocksLatest === true;
+  const hasProblem = qualityBlocksLatest || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
   if (!hasProblem) return noAlert;
   if (process.env.REALTIME_RADAR_NOTIFY === "0") {
     return {
@@ -390,13 +430,15 @@ function radarPayloadUpdatedAtMs(payload = {}) {
 }
 
 function isGoodRealtimeRadarPayload(payload, tradeDate) {
+  const quoteCoverage = payloadQuoteCoverage(payload || {});
   return Boolean(
     payload
     && payload.date === tradeDate
     && Array.isArray(payload.rows)
     && payload.rows.length > 0
-    && cleanNumber(payload.staleQuoteCount) === 0
+    && quoteCoverageMeetsRealtimeThresholds(quoteCoverage)
     && cleanNumber(payload.failedBatchCount) === 0
+    && payload?.run_quality_at_publish?.publishAllowed !== false
   );
 }
 
@@ -428,8 +470,7 @@ async function publishRealtimeRadarPayload(payload, previousPayload, writeBudget
   refreshRealtimeRadarEvidence(payload);
   const qualityBlocksLatest = payload?.run_quality_at_publish?.publishAllowed === false
     || payload?.run_quality_at_publish?.degradedBlocksLatest === true;
-  const hasBlockingSourceIssue = cleanNumber(payload.staleQuoteCount) > 0
-    || cleanNumber(payload.failedBatchCount) > 0
+  const hasBlockingSourceIssue = cleanNumber(payload.failedBatchCount) > 0
     || qualityBlocksLatest;
   if (hasBlockingSourceIssue && canPreservePreviousGoodPayload(previousPayload, payload.date, Date.now())) {
     const reason = `preserved previous good latest; rejected run ${payload.runId || ""} stale=${cleanNumber(payload.staleQuoteCount)} failed=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`;
@@ -549,18 +590,19 @@ function buildQuoteCoverageAtRun({
   }).length;
   const maxQuoteAgeSeconds = quoteAges.length ? Math.max(...quoteAges) : null;
   const freshQuoteCoverage120s = activeSymbols ? freshQuotes / activeSymbols : 0;
-  const ready = Boolean(
+  const coverageReady = Boolean(
     activeSymbols > 0
-    && freshQuoteCoverage120s >= 0.95
+    && freshQuoteCoverage120s >= REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE
     && (maxQuoteAgeSeconds === null || maxQuoteAgeSeconds <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
-    && cleanNumber(failedBatchCount) === 0
-    && cleanNumber(staleQuoteCount) === 0
   );
+  const ready = Boolean(coverageReady && cleanNumber(failedBatchCount) === 0);
   return {
     status: ready ? "ready" : "degraded",
     ok: ready,
     ready,
-    reason: ready ? "fresh_quote_coverage_120s_ready" : "fresh_quote_coverage_120s_below_threshold_or_stale",
+    reason: ready
+      ? (cleanNumber(staleQuoteCount) > 0 ? "fresh_quote_coverage_120s_ready_with_residual_stale_disclosed" : "fresh_quote_coverage_120s_ready")
+      : "fresh_quote_coverage_120s_below_threshold_or_stale",
     fresh_quote_coverage_120s: Number(freshQuoteCoverage120s.toFixed(4)),
     freshQuoteCoverage120s: Number(freshQuoteCoverage120s.toFixed(4)),
     fresh_quotes: freshQuotes,
@@ -570,7 +612,9 @@ function buildQuoteCoverageAtRun({
     quote_age_seconds: maxQuoteAgeSeconds,
     quoteAgeSeconds: maxQuoteAgeSeconds,
     maxAllowedQuoteAgeSeconds: REALTIME_RADAR_FRESH_QUOTE_SECONDS,
+    minFreshQuoteCoverage120s: REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE,
     staleQuoteCount: cleanNumber(staleQuoteCount),
+    staleQuoteBlocking: cleanNumber(staleQuoteCount) > 0 && !coverageReady,
     failedBatchCount: cleanNumber(failedBatchCount),
     checkedAt: new Date().toISOString(),
   };
@@ -632,9 +676,9 @@ function refreshRealtimeRadarEvidence(payload, options = {}) {
   const writeBudget = options.writeBudget || payload.writeBudget || null;
   const fallbackUsed = payload.fallbackUsed === true;
   const budgetFinalStatus = String(writeBudget?.finalStatus || writeBudget?.status || "").toLowerCase();
+  const quoteCoverageReady = quoteCoverageMeetsRealtimeThresholds(quoteCoverage);
   const publishAllowed = Boolean(
-    quoteCoverage.ok !== false
-    && cleanNumber(payload.staleQuoteCount) === 0
+    quoteCoverageReady
     && cleanNumber(payload.failedBatchCount) === 0
     && cleanNumber(fieldCompleteness.blankTotal) === 0
     && fallbackUsed === false
@@ -653,6 +697,7 @@ function refreshRealtimeRadarEvidence(payload, options = {}) {
       status: publishAllowed ? "ready" : quoteCoverage.status || "degraded",
       ok: publishAllowed,
       ready: publishAllowed,
+      residualStaleQuoteCount: cleanNumber(payload.staleQuoteCount),
     },
     quoteCoverage,
     intraday1mReadiness: realtimeRadarNotRequired("realtime radar does not require intraday 1m"),

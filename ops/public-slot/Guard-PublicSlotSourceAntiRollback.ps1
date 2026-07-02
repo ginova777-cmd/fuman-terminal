@@ -31,19 +31,22 @@ function Read-Text {
 function Write-DefaultRuntimeConfig {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ConfigPath) | Out-Null
   [ordered]@{
-    loopSeconds = 10
+    loopSeconds = 3
     stopAt = "14:05"
     minAvgVolume5Lots = 0
     restQuoteBatchSize = 40
-    restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 600
+    restQuoteEverySeconds = 3
+    restQuoteDelayMilliseconds = 75
     restQuoteTimeoutSeconds = 4
-    restQuoteBatchTimeBudgetSeconds = 25
+    restQuoteBatchTimeBudgetSeconds = 8
     restQuoteRateLimitCooldownSeconds = 60
+    restQuoteBypassMinFreshQuotes = 1500
+    restQuoteBypassCoverageRatio = 0.9
+    restQuoteBypassMaxAgeSeconds = 90
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 60
-    restQuoteOpeningBoostDelayMilliseconds = 600
+    restQuoteOpeningBoostBatchSize = 40
+    restQuoteOpeningBoostDelayMilliseconds = 75
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 120
     fugleCollectorConcurrency = 2
@@ -116,6 +119,9 @@ function Test-RepoRuntimeConfigSupport {
     "RestQuoteOpeningBoostBatchSize",
     "RestQuoteBatchTimeBudgetSeconds",
     "RestQuoteRateLimitCooldownSeconds",
+    "RestQuoteBypassMinFreshQuotes",
+    "RestQuoteBypassCoverageRatio",
+    "RestQuoteBypassMaxAgeSeconds",
     "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
     "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
     "FugleCollectorFinMindRecoveryEnabled",
@@ -206,6 +212,9 @@ function Test-RuntimeConfig {
     "restQuoteTimeoutSeconds",
     "restQuoteBatchTimeBudgetSeconds",
     "restQuoteRateLimitCooldownSeconds",
+    "restQuoteBypassMinFreshQuotes",
+    "restQuoteBypassCoverageRatio",
+    "restQuoteBypassMaxAgeSeconds",
     "openingBoostStart",
     "openingBoostEnd",
     "restQuoteOpeningBoostBatchSize",
@@ -252,19 +261,22 @@ function Test-RuntimeConfig {
     if ($null -eq $config.PSObject.Properties[$name]) { $missing.Add("config:$name") }
   }
   $expected = [ordered]@{
-    loopSeconds = 10
+    loopSeconds = 3
     stopAt = "14:05"
     minAvgVolume5Lots = 0
     restQuoteBatchSize = 40
-    restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 600
+    restQuoteEverySeconds = 3
+    restQuoteDelayMilliseconds = 75
     restQuoteTimeoutSeconds = 4
-    restQuoteBatchTimeBudgetSeconds = 25
+    restQuoteBatchTimeBudgetSeconds = 8
     restQuoteRateLimitCooldownSeconds = 60
+    restQuoteBypassMinFreshQuotes = 1500
+    restQuoteBypassCoverageRatio = 0.9
+    restQuoteBypassMaxAgeSeconds = 90
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 60
-    restQuoteOpeningBoostDelayMilliseconds = 600
+    restQuoteOpeningBoostBatchSize = 40
+    restQuoteOpeningBoostDelayMilliseconds = 75
     fugleCollectorLoopMilliseconds = 1000
     fugleCollectorBatchSize = 120
     fugleCollectorConcurrency = 2
@@ -279,13 +291,13 @@ function Test-RuntimeConfig {
     direct1mEverySeconds = 20
     direct1mIntradayTimeoutSeconds = 6
     direct1mHistoricalTimeoutSeconds = 8
-    direct1mBatchTimeBudgetSeconds = 20
+    direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
-    direct1mPrewarmTimeBudgetSeconds = 45
+    direct1mPrewarmTimeBudgetSeconds = 10
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
@@ -295,7 +307,7 @@ function Test-RuntimeConfig {
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
     futoptQuoteTimeoutSeconds = 5
-    futoptQuoteTimeBudgetSeconds = 45
+    futoptQuoteTimeBudgetSeconds = 15
     futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
