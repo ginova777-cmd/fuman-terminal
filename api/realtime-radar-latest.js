@@ -396,6 +396,13 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     || sourceCoverage
     || {};
   const runQualityAtPublish = snapshotFields.run_quality_at_publish || normalizedPayload?.run_quality_at_publish || {};
+  const currentUnattendedOk = Boolean(
+    normalizedPayload?.ok !== false
+    && sourceCoverage?.ok !== false
+    && freshness.fresh
+    && freshness.sessionCompleteness?.complete !== false
+  );
+  const currentUnattendedStatus = currentUnattendedOk ? "YES" : "NO";
   const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields);
   const blankCounts = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts);
   const sampleMissingRows = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, []);
@@ -431,6 +438,14 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
     sourceCoverage,
+    unattendedStatus: currentUnattendedStatus,
+    unattended: {
+      ...(snapshotFields.unattended || normalizedPayload?.unattended || {}),
+      status: currentUnattendedStatus,
+      canRunUnattended: currentUnattendedOk,
+      evidenceStatus: snapshotFields.evidenceStatus || normalizedPayload?.evidenceStatus || "complete",
+      reason: currentUnattendedOk ? "realtime_radar_current_session_ready" : freshness.reason,
+    },
     quote_coverage_at_run: quoteCoverageAtRun,
     run_quality_at_publish: enrichedRunQualityAtPublish,
     fresh_quote_coverage_120s: firstDefined(normalizedPayload?.fresh_quote_coverage_120s, quoteCoverageAtRun.fresh_quote_coverage_120s, quoteCoverageAtRun.freshQuoteCoverage120s),
