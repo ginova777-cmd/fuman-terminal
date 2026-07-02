@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-07-01T19:30:00+08:00",
-  "policyVersion": 3,
+  "updatedAt": "2026-07-02T14:35:00+08:00",
+  "policyVersion": 4,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [
@@ -14,6 +14,7 @@
       "Fuman Daily Battle Verify 2155",
       "Fuman Freshness Gate Fast 0845-1645",
       "Fuman Freshness Gate Full 2010",
+      "Fuman Global Cost Janitor Scorecard 1555",
       "Fuman Institution Battle Verify 2110",
       "Fuman Open Buy Cache 2130",
       "Fuman Open Buy Preopen 0855",
@@ -39,6 +40,7 @@
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Local Freshness Verify 0830-2230",
+      "Fuman Vercel Cost Health Monitor 2115",
       "Fuman Warrant Battle Verify 2055",
       "Fuman 即時雷達",
       "Fuman 買賣超 Cache 2100",
@@ -98,6 +100,14 @@
         267009
       ],
       "Fuman Public Slot Shared Source Watchdog": [
+        0,
+        267009
+      ],
+      "Fuman Global Cost Janitor Scorecard 1555": [
+        0,
+        267009
+      ],
+      "Fuman Vercel Cost Health Monitor 2115": [
         0,
         267009
       ],
@@ -259,6 +269,16 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "20:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Global Cost Janitor Scorecard 1555",
+      "displayName": "Fuman Global Cost Janitor Scorecard 1555",
+      "description": "Read-only global cost janitor scorecard covering Supabase retention, local retired artifacts, Supabase/Vercel history cleanup, and Vercel cost guards.",
+      "time": "15:55",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "15:55"
       ]
     },
     {
@@ -441,6 +461,16 @@
       "description": "Local freshness verify/repair from 08:30 through 22:30.",
       "time": "08:30-22:30",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Vercel Cost Health Monitor 2115",
+      "displayName": "Fuman Vercel Cost Health Monitor 2115",
+      "description": "Daily Vercel cost/project/mirror read-only monitor with Gmail alert on critical failures.",
+      "time": "21:15",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "21:15"
+      ]
     },
     {
       "taskName": "\\Fuman Warrant Battle Verify 2055",
