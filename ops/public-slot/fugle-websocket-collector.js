@@ -142,6 +142,22 @@ function inOpeningBoostWindow() {
   return now >= start && now <= end;
 }
 
+function quoteFreshTimestampMs(row, payload = {}) {
+  const candidates = [
+    row?.quoteTime,
+    row?.time,
+    row?.updatedAt,
+    row?.quoteSeenAt,
+    payload?.updatedAt,
+  ];
+  for (const value of candidates) {
+    if (!value) continue;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return NaN;
+}
+
 function countFreshCachedQuotes(symbols) {
   const symbolSet = new Set(symbols);
   const payload = readJson(FUGLE_WS_QUOTES_FILE, {});
@@ -150,7 +166,7 @@ function countFreshCachedQuotes(symbols) {
   let count = 0;
   for (const row of rows) {
     const code = normalizeCode(row?.code);
-    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
+    const seen = quoteFreshTimestampMs(row, payload);
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) count += 1;
   }
   return count;
@@ -240,7 +256,7 @@ function freshCachedCodeSet(symbols) {
   const fresh = new Set();
   for (const row of rows) {
     const code = normalizeCode(row?.code);
-    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
+    const seen = quoteFreshTimestampMs(row, payload);
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) fresh.add(code);
   }
   return fresh;
@@ -394,7 +410,7 @@ function mergeQuotes(newQuotes) {
   const cutoff = Date.now() - QUOTE_TTL_MS;
   const byCode = new Map();
   for (const row of rows) {
-    const seen = Date.parse(row.quoteSeenAt || row.updatedAt || current.updatedAt || "");
+    const seen = quoteFreshTimestampMs(row, current);
     const code = normalizeCode(row.code);
     if (/^\d{4}$/.test(code) && Number.isFinite(seen) && seen >= cutoff) {
       byCode.set(code, row);

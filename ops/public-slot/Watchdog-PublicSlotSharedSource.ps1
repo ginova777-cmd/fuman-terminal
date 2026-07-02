@@ -415,12 +415,27 @@ function Get-CollectorCacheHealth {
     $ageSeconds = [int]([math]::Max(0, ([datetimeoffset]::UtcNow - $updatedAt).TotalSeconds))
     $quotes = [int]$status.quotes
     $pending = [int]$status.pending
+    $rateLimited = [bool]$status.adaptiveRateLimited
+    $cooldown = [bool]$status.cooldown
+    $cooldownUntilText = [string]$status.cooldownUntil
+    if ([string]::IsNullOrWhiteSpace($cooldownUntilText)) { $cooldownUntilText = [string]$status.adaptiveCooldownUntil }
+    $cooldownActive = ($rateLimited -or $cooldown)
+    if (-not [string]::IsNullOrWhiteSpace($cooldownUntilText)) {
+      try {
+        $cooldownUntil = [datetimeoffset]::Parse($cooldownUntilText).ToUniversalTime()
+        if ($cooldownUntil -gt [datetimeoffset]::UtcNow) { $cooldownActive = $true }
+      } catch {}
+    }
     $ok = ([bool]$status.ok -and (($quotes -ge $MinFreshQuoteCount120) -or (($quotes + $pending) -ge $MinFreshQuoteCount120)) -and $ageSeconds -le 90)
     return [pscustomobject]@{
       Ok = $ok
-      Reason = "collector_cache ok=$($status.ok) quotes=$quotes pending=$pending age=${ageSeconds}s pid=$($status.pid)"
+      Reason = "collector_cache ok=$($status.ok) quotes=$quotes pending=$pending age=${ageSeconds}s pid=$($status.pid) rate_limited=$rateLimited cooldown=$cooldown cooldown_until=$cooldownUntilText"
       Quotes = $quotes
       AgeSeconds = $ageSeconds
+      RateLimited = $rateLimited
+      Cooldown = $cooldown
+      CooldownActive = $cooldownActive
+      CooldownUntil = $cooldownUntilText
     }
   } catch {
     return [pscustomobject]@{
@@ -537,6 +552,10 @@ if ($isRunning -and -not $quoteHealth.Ok) {
   if ((Test-AfterHHmm $CoverageHardGateStart) -and ($quoteCoverageHardFailed -or $quoteAgeHardFailed) -and ($sourceAgeHardFailed -or $sourceQuoteAgeHardFailed -or $quoteAgeHardFailed)) {
     if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
       Write-WatchdogLog "quote health hard-stall candidate，但 writer 剛啟動 ${writerAgeSeconds}s 且 collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
+      exit 0
+    }
+    if ($collectorCache.CooldownActive -or $collectorCache.RateLimited) {
+      Write-WatchdogLog "quote health hard-stall candidate，但 collector rate_limited/cooldown active；不重啟 writer，等待 cooldown。$($collectorCache.Reason)"
       exit 0
     }
     Start-SharedSourceTask -Reason "quote health hard-stall after $CoverageHardGateStart；coverage_120s=$($quoteHealth.Coverage120) fresh_120s=$($quoteHealth.Fresh120) quote_age=$($quoteHealth.QuoteAgeSeconds)s source_age=$($health.AgeSeconds)s source_quote_age=$($health.QuoteAgeSeconds)s；process alive 不可遮蔽 Fugle live 寫入失速" -Restart -Alert
