@@ -262,7 +262,8 @@ async function maybeSendRealtimeRadarAlert(payload) {
   const issues = payload.externalSourceIssues || [];
   const qualityBlocksLatest = payload?.run_quality_at_publish?.publishAllowed === false
     || payload?.run_quality_at_publish?.degradedBlocksLatest === true;
-  const hasProblem = qualityBlocksLatest || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
+  const failedBatchProblem = Number(payload.failedBatchCount || 0) > 0;
+  const hasProblem = qualityBlocksLatest || failedBatchProblem;
   if (!hasProblem) return noAlert;
   const workflowAlertEnabled = process.env.REALTIME_RADAR_WORKFLOW_ALERT_NOTIFY === "1"
     || process.env.REALTIME_RADAR_GMAIL_NOTIFY === "1";
