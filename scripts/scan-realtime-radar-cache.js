@@ -192,12 +192,23 @@ function normalizeAlertReceipt(receipt = {}, fallback = {}) {
 
 function noAlertReceipt() {
   const latestReceipt = readJson(ALERT_RECEIPT_FILE, {});
-  return normalizeAlertReceipt(latestReceipt, {
+  const receipt = normalizeAlertReceipt({
+    ...latestReceipt,
+    kind: "smoke",
+    source: "realtime-radar-no-alert",
+  }, {
     kind: "smoke",
     channel: "smtp",
     receiptFile: ALERT_RECEIPT_FILE,
     requiredForRun: false,
   });
+  return {
+    ...receipt,
+    kind: "smoke",
+    requiredForRun: false,
+    skipped: false,
+    skipReason: "",
+  };
 }
 
 function alertSignature(payload) {
