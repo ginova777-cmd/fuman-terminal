@@ -805,8 +805,11 @@ const daytradeSourceSpeedProfile = read("ops/public-slot/DaytradeSourceSpeedProf
 const daytradeSourceSpeedConfig = read("ops/public-slot/daytrade-source-speed.config.example.json");
 const daytradeSourceSpeedScorecardSql = read("ops/public-slot/DaytradeSourceSpeedScorecard.sql");
 const daytradeSourceBootstrapSql = read("ops/public-slot/DaytradeSourceBootstrap.sql");
+const daytradeSourceDedicatedTablesSql = read("ops/public-slot/DaytradeSourceDedicatedTables.sql");
 const daytradeSourceReleaseOwnerRunbook = read("ops/public-slot/DaytradeSourceReleaseOwnerRunbook.md");
 const daytradeSourceSpeedVerifier = read("scripts/verify-daytrade-source-speed-readonly.js");
+const daytradeSourceWriter = read("scripts/run-daytrade-source-writer.js");
+const daytradeSourceWriterRunner = read("ops/public-slot/Run-DaytradeSourceWriter.ps1");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -1468,6 +1471,21 @@ if (/insert\s+into\s+public\.source_status|update\s+public\.source_status|delete
   issues.push("DaytradeSourceSpeedScorecard.sql must not write or overwrite source_status");
 }
 for (const marker of [
+  "public.fugle_daytrade_priority_symbols",
+  "public.fugle_daytrade_quotes_live",
+  "public.fugle_daytrade_intraday_1m",
+  "public.fugle_daytrade_daily_volume_avg",
+  "public.fugle_daytrade_futopt_quotes_live",
+  "public.v_fugle_daytrade_priority_readiness",
+  "public.v_fugle_daytrade_source_contract_health",
+  "enable row level security",
+  "to anon, authenticated",
+  "to service_role",
+  "notify pgrst, 'reload schema'",
+]) {
+  if (!daytradeSourceDedicatedTablesSql.includes(marker)) issues.push(`DaytradeSourceDedicatedTables.sql missing dedicated table marker ${marker}`);
+}
+for (const marker of [
   "fugle_daytrade_source",
   "public.fugle_daytrade_source_speed_scorecard",
   "insert into public.source_status",
@@ -1482,8 +1500,11 @@ for (const marker of [
 for (const marker of [
   "https://supabase.com/dashboard/project/cpmpfhbzutkiecccekfr/sql/new",
   "ops/public-slot/DaytradeSourceBootstrap.sql",
+  "ops/public-slot/DaytradeSourceDedicatedTables.sql",
   "gateGrade=D",
   "Dedicated writer",
+  "npm run verify:daytrade-source-writer",
+  "Default PowerShell mode is dry-run/no-fetch/once",
   "Do not deploy from a dirty or behind worktree",
   "Do not edit `C:\\fuman-terminal` as source",
   "Anything less is NO / PARTIAL",
@@ -1513,6 +1534,37 @@ for (const marker of [
 }
 if (/writeFile|appendFile|rmSync|unlinkSync|method:\s*["'](POST|PATCH|DELETE|PUT)["']|insert\s+into|update\s+public\.source_status|delete\s+from/i.test(daytradeSourceSpeedVerifier)) {
   issues.push("verify-daytrade-source-speed-readonly.js must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
+}
+for (const marker of [
+  "SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || \"fugle_daytrade_source\"",
+  "const APPLY = hasFlag(\"apply\")",
+  "const DRY_RUN = !APPLY",
+  "fugle_daytrade_priority_symbols",
+  "fugle_daytrade_quotes_live",
+  "fugle_daytrade_intraday_1m",
+  "fugle_daytrade_daily_volume_avg",
+  "fugle_daytrade_futopt_quotes_live",
+  "source_status",
+  "daytrade_gate_grade",
+  "priority_fresh_quote_coverage_120s",
+  "selected_symbols_fresh_ok",
+  "actual_quote_speed_per_sec",
+  "429 Too Many Requests",
+]) {
+  if (!daytradeSourceWriter.includes(marker)) issues.push(`run-daytrade-source-writer.js missing dedicated writer marker ${marker}`);
+}
+if (!/if \(DRY_RUN\) return \{ written: 0, skipped: true, dryRun: true \}/.test(daytradeSourceWriter)) {
+  issues.push("run-daytrade-source-writer.js must keep dry-run as no-write default");
+}
+for (const marker of [
+  "Run-DaytradeSourceWriter.ps1",
+  "--dry-run",
+  "--no-fetch",
+  "--once",
+  "--apply",
+  "--local-check",
+]) {
+  if (!daytradeSourceWriterRunner.includes(marker)) issues.push(`Run-DaytradeSourceWriter.ps1 missing safety marker ${marker}`);
 }
 if (!publicSlotSharedSourceRunner.includes("get_fugle_intraday_1m_coverage_stats")) {
   issues.push("Run-PublicSlotSharedSource.ps1 must prefer get_fugle_intraday_1m_coverage_stats before REST batch fallback");

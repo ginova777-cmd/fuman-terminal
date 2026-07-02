@@ -155,6 +155,25 @@ Dedicated speed evidence should be written to:
 public.fugle_daytrade_source_speed_scorecard
 ```
 
+Dedicated water tables:
+
+```text
+public.fugle_daytrade_priority_symbols
+public.fugle_daytrade_quotes_live
+public.fugle_daytrade_intraday_1m
+public.fugle_daytrade_daily_volume_avg
+public.fugle_daytrade_futopt_quotes_live
+public.v_fugle_daytrade_priority_readiness
+public.v_fugle_daytrade_source_latest_scorecard
+public.v_fugle_daytrade_source_contract_health
+```
+
+SQL draft:
+
+```text
+ops/public-slot/DaytradeSourceDedicatedTables.sql
+```
+
 Minimum scorecard fields:
 
 ```text
@@ -294,3 +313,12 @@ ops/public-slot/daytrade-source-speed.config.example.json
 ```
 
 It is intentionally disabled by default until release owner creates and proves the dedicated writer/runtime path.
+
+Writer draft:
+
+```text
+scripts/run-daytrade-source-writer.js
+ops/public-slot/Run-DaytradeSourceWriter.ps1
+```
+
+Default writer mode is dry-run/no-fetch/once. Release owner must explicitly run apply mode before it can write Supabase or call Fugle.

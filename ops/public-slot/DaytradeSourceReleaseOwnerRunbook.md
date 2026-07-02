@@ -30,6 +30,24 @@ Expected result:
 - Initial status is `stopped`.
 - This must not be interpreted as writer ready.
 
+Then apply the dedicated daytrade table contract:
+
+```text
+ops/public-slot/DaytradeSourceDedicatedTables.sql
+```
+
+Expected result:
+
+- `public.fugle_daytrade_priority_symbols` exists.
+- `public.fugle_daytrade_quotes_live` exists.
+- `public.fugle_daytrade_intraday_1m` exists.
+- `public.fugle_daytrade_daily_volume_avg` exists.
+- `public.fugle_daytrade_futopt_quotes_live` exists.
+- `public.v_fugle_daytrade_priority_readiness` exists.
+- `public.v_fugle_daytrade_source_contract_health` exists.
+- Anon/authenticated may read.
+- Only service role may write.
+
 ## Verify After SQL
 
 Run read-only verification:
@@ -58,7 +76,40 @@ Dedicated writer must write only:
 ```text
 source_status.source_name = fugle_daytrade_source
 fugle_daytrade_source_speed_scorecard
+fugle_daytrade_priority_symbols
+fugle_daytrade_quotes_live
+fugle_daytrade_intraday_1m
+fugle_daytrade_daily_volume_avg
+fugle_daytrade_futopt_quotes_live
 ```
+
+Writer code readiness check:
+
+```text
+npm run verify:daytrade-source-writer
+```
+
+Dry-run without Fugle fetch or Supabase writes:
+
+```text
+npm run daytrade-source:writer:dry-run
+```
+
+Approved release-owner apply mode only:
+
+```text
+npm run daytrade-source:writer
+```
+
+PowerShell wrapper:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Run-DaytradeSourceWriter.ps1 -LocalCheck
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Run-DaytradeSourceWriter.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Run-DaytradeSourceWriter.ps1 -Apply
+```
+
+Default PowerShell mode is dry-run/no-fetch/once. `-Apply` is required to write.
 
 Formal entry may only use priority-first gates:
 
