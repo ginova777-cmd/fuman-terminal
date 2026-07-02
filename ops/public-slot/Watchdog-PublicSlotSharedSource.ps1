@@ -11,6 +11,7 @@ param(
   [double]$MinIntraday1mCoverage = 0.95,
   [double]$MinReadyGe35Coverage = 0.95,
   [string]$CoverageHardGateStart = "09:05",
+  [int]$WriterCatchupGraceSeconds = 600,
   [string]$ActiveStart = "08:00",
   [string]$ActiveEnd = "14:10"
 )
@@ -252,6 +253,34 @@ function Stop-SharedSourceProcesses {
   }
 }
 
+function Get-NewestSharedSourceAgeSeconds {
+  param([object[]]$Processes)
+  try {
+    if ($Processes.Count -le 0) { return 999999 }
+    $newest = @($Processes | Sort-Object CreationDate -Descending | Select-Object -First 1)[0]
+    $created = $newest.CreationDate
+    if (-not ($created -is [datetime])) {
+      try {
+        $created = [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$newest.CreationDate)
+      } catch {
+        $created = [datetime]::Parse([string]$newest.CreationDate)
+      }
+    }
+    return [int]([math]::Max(0, ((Get-Date) - $created).TotalSeconds))
+  } catch {
+    return 999999
+  }
+}
+
+function Test-WriterCatchupGrace {
+  param(
+    [int]$WriterAgeSeconds,
+    [object]$CollectorCache,
+    [object]$QuoteHealth
+  )
+  return ($WriterAgeSeconds -lt $WriterCatchupGraceSeconds -and ($CollectorCache.Ok -or $QuoteHealth.Ok))
+}
+
 function Get-QuoteLiveHealth {
   param([string]$AnonKey)
   try {
@@ -426,8 +455,9 @@ $collectorProcesses = @(Get-CollectorProcesses)
 $collectorCache = Get-CollectorCacheHealth
 $health = Get-SourceStatusAgeSeconds -AnonKey $anonKey
 $quoteHealth = Get-QuoteLiveHealth -AnonKey $anonKey
+$writerAgeSeconds = Get-NewestSharedSourceAgeSeconds -Processes $sharedSourceProcesses
 
-Write-WatchdogLog "檢查結果：process_running=$isRunning；shared_source_count=$($sharedSourceProcesses.Count)；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
+Write-WatchdogLog "檢查結果：process_running=$isRunning；shared_source_count=$($sharedSourceProcesses.Count)；writer_age=${writerAgeSeconds}s；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
 
 if ($sharedSourceProcesses.Count -gt 1) {
   Write-WatchdogLog "偵測到多個 shared source writer，保留最新一個並停止其餘程序，避免 source_status 互相覆蓋。"
@@ -452,7 +482,15 @@ if ($collectorProcesses.Count -ne 1) {
 }
 
 if ($isRunning -and -not $quoteHealth.Ok) {
-  Write-WatchdogLog "quote health 尚未達標，但 shared source 與 collector 都在跑；不重啟 collector，讓漸進補滿機制追平。"
+  $quoteCoverageHardFailed = ($null -ne $quoteHealth.Coverage120 -and $quoteHealth.Coverage120 -lt $MinQuoteCoverage120 -and $null -ne $quoteHealth.Fresh120 -and $quoteHealth.Fresh120 -lt $MinFreshQuoteCount120)
+  $quoteAgeHardFailed = ($null -ne $quoteHealth.QuoteAgeSeconds -and $quoteHealth.QuoteAgeSeconds -gt ([math]::Max(120, $MaxQuoteAgeSeconds * 2)))
+  $sourceAgeHardFailed = ($null -ne $health.AgeSeconds -and $health.AgeSeconds -gt $MaxSourceAgeSeconds)
+  $sourceQuoteAgeHardFailed = ($null -ne $health.QuoteAgeSeconds -and $health.QuoteAgeSeconds -gt ([math]::Max(120, $MaxQuoteAgeSeconds * 2)))
+  if ((Test-AfterHHmm $CoverageHardGateStart) -and ($quoteCoverageHardFailed -or $quoteAgeHardFailed) -and ($sourceAgeHardFailed -or $sourceQuoteAgeHardFailed -or $quoteAgeHardFailed)) {
+    Start-SharedSourceTask -Reason "quote health hard-stall after $CoverageHardGateStart；coverage_120s=$($quoteHealth.Coverage120) fresh_120s=$($quoteHealth.Fresh120) quote_age=$($quoteHealth.QuoteAgeSeconds)s source_age=$($health.AgeSeconds)s source_quote_age=$($health.QuoteAgeSeconds)s；process alive 不可遮蔽 Fugle live 寫入失速" -Restart -Alert
+    exit 0
+  }
+  Write-WatchdogLog "quote health 尚未達標，但 shared source 與 collector 都在跑；尚未達 hard-stall 門檻，讓漸進補滿機制追平。"
   exit 0
 }
 
@@ -466,16 +504,28 @@ if (-not $quoteHealth.Ok -and $collectorCache.Ok) {
 }
 
 if ($health.Session -eq "regular" -and $null -ne $health.Intraday1mStaleSeconds -and $health.Intraday1mStaleSeconds -gt $MaxIntraday1mStaleSeconds) {
+  if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
+    Write-WatchdogLog "intraday_1m stale，但 writer 剛啟動 ${writerAgeSeconds}s 且 quote/collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
+    exit 0
+  }
   Start-SharedSourceTask -Reason "intraday_1m_stale_seconds 超過 $MaxIntraday1mStaleSeconds 秒，目前 $($health.Intraday1mStaleSeconds) 秒；quote/collector 健康不可遮蔽 1m writer 失速" -Restart -Alert
   exit 0
 }
 
 if ($health.Session -eq "regular" -and (Test-AfterHHmm $CoverageHardGateStart) -and $health.ActiveSymbols -ge 1000) {
   if ($health.Today1mCoverage -lt $MinIntraday1mCoverage) {
+    if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
+      Write-WatchdogLog "today_1m coverage 尚未達標，但 writer 剛啟動 ${writerAgeSeconds}s 且 quote/collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
+      exit 0
+    }
     Start-SharedSourceTask -Reason "today_1m_symbols coverage 低於 $MinIntraday1mCoverage，目前 $($health.Today1mSymbols)/$($health.ActiveSymbols)=$($health.Today1mCoverage)；觸發 shared source 自修復重啟" -Restart -Alert
     exit 0
   }
   if ($health.ReadyGe35Coverage -lt $MinReadyGe35Coverage) {
+    if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
+      Write-WatchdogLog "ready_ge35 coverage 尚未達標，但 writer 剛啟動 ${writerAgeSeconds}s 且 quote/collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
+      exit 0
+    }
     Start-SharedSourceTask -Reason "ready_ge35 coverage 低於 $MinReadyGe35Coverage，目前 $($health.ReadyGe35Symbols)/$($health.ActiveSymbols)=$($health.ReadyGe35Coverage)；觸發 shared source 自修復重啟" -Restart -Alert
     exit 0
   }
