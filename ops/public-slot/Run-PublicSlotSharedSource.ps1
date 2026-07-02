@@ -14,7 +14,7 @@ param(
   [int]$Direct1mHistoricalTimeoutSeconds = 8,
   [int]$Direct1mBatchTimeBudgetSeconds = 8,
   [bool]$Direct1mPrewarmEnabled = $true,
-  [string]$Direct1mPrewarmStart = "07:00",
+  [string]$Direct1mPrewarmStart = "06:00",
   [int]$Direct1mPrewarmSymbolCount = 300,
   [int]$Direct1mPrewarmBatchSize = 4,
   [int]$Direct1mPrewarmBars = 200,

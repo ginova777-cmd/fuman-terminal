@@ -71,7 +71,7 @@ function Write-DefaultRuntimeConfig {
     direct1mHistoricalTimeoutSeconds = 8
     direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
-    direct1mPrewarmStart = "07:00"
+    direct1mPrewarmStart = "06:00"
     direct1mPrewarmSymbolCount = 300
     direct1mPrewarmBatchSize = 4
     direct1mPrewarmBars = 200
@@ -327,7 +327,7 @@ function Test-RuntimeConfig {
     direct1mHistoricalTimeoutSeconds = 8
     direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
-    direct1mPrewarmStart = "07:00"
+    direct1mPrewarmStart = "06:00"
     direct1mPrewarmSymbolCount = 300
     direct1mPrewarmBatchSize = 4
     direct1mPrewarmBars = 200

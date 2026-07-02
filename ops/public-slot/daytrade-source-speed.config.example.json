@@ -1,0 +1,194 @@
+{
+  "enabled": false,
+  "sourceName": "fugle_daytrade_source",
+  "isolation": {
+    "sharedSourceFallbackAllowed": false,
+    "reuseSharedDisplayQuota": false,
+    "separateWriterRequired": true,
+    "separateQuotaOrKeyPreferred": true,
+    "allowedConsumers": ["daytrade", "strategy1", "strategy3"],
+    "blockedConsumers": ["ai", "heatmap", "terminal_display", "realtime_radar", "strategy2", "strategy4", "strategy5", "strategy6", "strategy7"]
+  },
+  "schedule": {
+    "warmupStart": "06:00",
+    "priorityPoolReadyBy": "08:30",
+    "stockFuturesMappedBy": "08:45",
+    "openingBoostStart": "08:45",
+    "openingBoostEnd": "09:05",
+    "regularEnd": "13:30"
+  },
+  "speedTargets": {
+    "freshQuoteWindowSeconds": 120,
+    "targetFreshQuotes": 1500,
+    "minFreshQuoteCoverage": 0.9,
+    "fullMarketFreshCoverageBlocksOpeningA": false,
+    "requiredSymbolsPerSecond": 12.5,
+    "assumedBatchSize": 40,
+    "maxBatchIntervalSeconds": 3.2,
+    "fullMarketTargetRoundSecondsMin": 120,
+    "fullMarketTargetRoundSecondsMax": 180,
+    "hardFresh120ForEveryFullMarketSymbol": false,
+    "maxQuoteAgeSeconds": 90,
+    "preferredQuoteAgeSeconds": 60,
+    "selectedSymbolMaxQuoteAgeSeconds": 60
+  },
+  "gateMode": {
+    "mode": "priority_first",
+    "formalEntrySource": "priority_pool",
+    "openingPriorityFirstStart": "08:45",
+    "openingPriorityFirstEnd": "09:10",
+    "fullMarketIsScorecardOnlyDuringOpening": true,
+    "missingGateModeGateGrade": "D"
+  },
+  "collector": {
+    "quoteBatchSize": 40,
+    "quoteConcurrency": 1,
+    "targetBatchIntervalSeconds": 3.2,
+    "priorityOnlyAfter429": true,
+    "cooldownStrategy": "exponential",
+    "cooldownInitialSeconds": 90,
+    "cooldownMaxSeconds": 900,
+    "fullMarketRetryStormAllowed": false,
+    "notNo429Guarantee": true
+  },
+  "priorityPool": {
+    "targetSymbolsMin": 300,
+    "targetSymbolsMax": 500,
+    "minFreshQuoteCoverageForA": 0.95,
+    "targetFreshQuoteCoverage": 1,
+    "selectedSymbolsFreshOkRequiredForA": true,
+    "quoteBatchSize": 40,
+    "batchIntervalSecondsMin": 2.5,
+    "batchIntervalSecondsMax": 3,
+    "readyBefore": "09:00",
+    "protectedAfter429": true
+  },
+  "fullMarketRolling": {
+    "approxSymbols": 1662,
+    "quoteBatchSize": 40,
+    "batchIntervalSecondsMin": 3,
+    "batchIntervalSecondsMax": 4,
+    "targetRoundSecondsMin": 120,
+    "targetRoundSecondsMax": 180,
+    "blocksOpeningA": false,
+    "pauseAfter429SecondsMin": 60,
+    "pauseAfter429SecondsMax": 180,
+    "blocksPriorityPool": false
+  },
+  "finmindFallback": {
+    "fallbackAllowedForNormalDaytrade": false,
+    "http403CooldownSeconds": 1800,
+    "retryWhileBanned": false
+  },
+  "rateLimitGate": {
+    "cooldownBlocksA": true,
+    "recent429BlocksASeconds": 90,
+    "after429Mode": "priority_only",
+    "pauseFullMarketAfter429SecondsMin": 60,
+    "pauseFullMarketAfter429SecondsMax": 180,
+    "quotaCompetingStagesMustBeReported": true
+  },
+  "scannerContract": {
+    "loopSeconds": 5,
+    "prefilterCount": 180,
+    "fastTrackCount": 40,
+    "deepScanCount": 60,
+    "barsPerSymbol": 80,
+    "formalEntryRequiresGateGrade": "A",
+    "sourceDegradedBehavior": "observation_only",
+    "fugleFallbackAllowed": false,
+    "bulkFallbackAllowed": false,
+    "writerStartupAllowed": false
+  },
+  "phases": [
+    {
+      "name": "warmup_0600_0829",
+      "expected": ["stock_tickers", "daily_volume_avg5", "historical_1m_200_bars", "preopen_history"],
+      "scannerAllowed": false
+    },
+    {
+      "name": "preopen_prepare_0830_0844",
+      "expected": ["preopen_snapshot", "priority_symbols", "daily_volume_ready", "ma20_ma35_warmup_ready"]
+    },
+    {
+      "name": "opening_boost_0845_0859",
+      "expected": ["opening_boost_active", "priority_pool_first", "priority_fresh_quote_coverage_120s>=0.95", "selected_symbols_fresh_ok", "scanner_can_run_opening"]
+    },
+    {
+      "name": "opening_detection_0900_0934",
+      "expected": ["quote_derived_1m_each_minute", "direct_1m_priority_hot_only", "backfill_low_priority", "intraday_1m_stale_seconds<=120"]
+    },
+    {
+      "name": "regular_daytrade_0935_1330",
+      "expected": ["fresh_quote_coverage_120s>=0.90", "intraday_1m_stale_seconds<=120", "ready_ma35_continuous>=1500", "daily_volume_ready"]
+    }
+  ],
+  "intraday1m": {
+    "mode": "priority_hot_only",
+    "maxStaleSeconds": 120,
+    "preferredMaxStaleSeconds": 60,
+    "blocksQuoteWriter": false
+  },
+  "futopt": {
+    "stockFutureMappingRequired": true,
+    "mappedBefore": "08:45"
+  },
+  "gateGrades": {
+    "A": "formal_daytrade_allowed",
+    "B": "observation_only",
+    "C": "display_only",
+    "D": "stop_new_signals"
+  },
+  "sourceStatusPayloadRequiredFields": {
+    "fields": [
+      "daytrade_gate_grade",
+      "daytrade_source_speed_ok",
+      "fresh_quote_window_seconds",
+      "fresh_quotes_120s",
+      "fresh_quote_coverage_120s",
+      "active_symbols",
+      "quote_age_seconds",
+      "required_quote_speed_per_sec",
+      "actual_quote_speed_per_sec",
+      "batch_size",
+      "batch_interval_seconds",
+      "priority_symbols",
+      "gate_mode",
+      "priority_gate_grade",
+      "full_market_gate_grade",
+      "selected_symbols_fresh_ok",
+      "priority_pool_symbols",
+      "priority_fresh_quotes_120s",
+      "priority_fresh_quote_coverage_120s",
+      "eligible_quote_rows",
+      "scanner_can_run_opening",
+      "scanner_can_run_quote_only",
+      "daily_volume_status",
+      "avg_volume5_eligible",
+      "ready_ma20_continuous",
+      "ready_ma35_continuous",
+      "intraday_1m_stale_seconds",
+      "today_1m_symbols",
+      "today_1m_rows",
+      "futopt_stock_mapped",
+      "rate_limit_status",
+      "last_429_at",
+      "last_429_age_seconds",
+      "cooldown_until",
+      "full_market_round_seconds",
+      "full_market_batch_interval_seconds",
+      "full_market_paused_until",
+      "finmind_cooldown_until",
+      "quota_competing_stages",
+      "self_heal_count",
+      "last_self_heal_at",
+      "last_self_heal_reason"
+    ],
+    "missingFieldGateGrade": "D"
+  },
+  "scorecard": {
+    "table": "fugle_daytrade_source_speed_scorecard",
+    "sqlDraft": "ops/public-slot/DaytradeSourceSpeedScorecard.sql",
+    "releaseOwnerApprovalRequiredToApply": true
+  }
+}

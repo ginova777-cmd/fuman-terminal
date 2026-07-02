@@ -39,7 +39,7 @@
   "direct1mIntradayTimeoutSeconds": 6,
   "direct1mHistoricalTimeoutSeconds": 8,
   "direct1mBatchTimeBudgetSeconds": 8,
-  "direct1mPrewarmStart": "07:00",
+  "direct1mPrewarmStart": "06:00",
   "direct1mPrewarmSymbolCount": 300,
   "direct1mPrewarmBatchSize": 4,
   "direct1mPrewarmBars": 200,

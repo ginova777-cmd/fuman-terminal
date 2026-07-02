@@ -306,15 +306,15 @@
     {
       "taskName": "\\Fuman Public Slot Shared Source 0800",
       "displayName": "Fuman Public Slot Shared Source 0800",
-      "description": "Public slot shared source.",
-      "time": "08:00",
+      "description": "Public slot shared source. Legacy task name remains 0800; actual trigger is 06:00 for stable premarket warmup.",
+      "time": "06:00",
       "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Public Slot Shared Source Watchdog",
       "displayName": "Fuman Public Slot Shared Source Watchdog",
       "description": "Public slot shared source watchdog.",
-      "time": "08:00",
+      "time": "06:00",
       "expectedState": "Ready"
     },
     {

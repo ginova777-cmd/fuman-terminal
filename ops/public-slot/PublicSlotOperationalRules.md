@@ -89,14 +89,14 @@ select public.cleanup_fugle_daily_volume(20);
 Recommended daily flow:
 
 ```text
-07:00 static prep only: stock_tickers, futopt_tickers, market_calendar
-08:00 start shared source warmup: quotes, preopen, futopt quotes, intraday 1m
+06:00 start shared source conservative warmup: quotes, stock_tickers, futopt_tickers, market_calendar, daily_volume / avg_volume5, intraday 1m prewarm
+08:00 verify shared source warmup is stable and priority symbols are non-zero
 08:30 verify quotes / preopen / intraday 1m are continuously writing
 08:45 seven-strategy viewer can start reading Supabase-first
 09:00 regular market opens
 ```
 
-Do not move realtime quote collection earlier just to reduce 09:00 pressure. The important part is making the 08:00-08:45 warmup stable, especially `fugle_intraday_1m` accumulation and `fugle_preopen_snapshot` writes.
+Do not use aggressive realtime quote speed before open just to make coverage look healthy. The important part is making the 06:00-08:45 warmup stable, especially terminal-priority pool construction, `fugle_intraday_1m` accumulation, `fugle_daily_volume` readiness, and `fugle_preopen_snapshot` writes.
 
 Strategy readers should use:
 

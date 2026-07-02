@@ -801,6 +801,12 @@ const strategy2ReadinessSql = [
 const intraday1mCoverageStatsRpcSql = read("ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql");
 const sharedSourceReadonlyScorecardSql = read("ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql");
 const sharedSourceReadonlyVerifier = read("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1");
+const daytradeSourceSpeedProfile = read("ops/public-slot/DaytradeSourceSpeedProfile.md");
+const daytradeSourceSpeedConfig = read("ops/public-slot/daytrade-source-speed.config.example.json");
+const daytradeSourceSpeedScorecardSql = read("ops/public-slot/DaytradeSourceSpeedScorecard.sql");
+const daytradeSourceBootstrapSql = read("ops/public-slot/DaytradeSourceBootstrap.sql");
+const daytradeSourceReleaseOwnerRunbook = read("ops/public-slot/DaytradeSourceReleaseOwnerRunbook.md");
+const daytradeSourceSpeedVerifier = read("scripts/verify-daytrade-source-speed-readonly.js");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -1385,6 +1391,128 @@ for (const marker of [
 }
 if (/Write-PublicSlot|Invoke-PublicSlotUpsert|Invoke-RestMethod[\s\S]{0,120}-Method\s+(Post|Patch|Delete)|Set-Content|Add-Content|Out-File/i.test(sharedSourceReadonlyVerifier)) {
   issues.push("Test-PublicSlotSharedSourceReadOnly.ps1 must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
+}
+for (const marker of [
+  "fugle_daytrade_source",
+  "Missing dedicated source | Grade `D`",
+  "Missing `daytrade_gate_grade` | Grade `D`",
+  "not a guarantee that Fugle will never return 429",
+  "Priority pool | 300-500 symbols",
+  "Full market rolling | about 1660 symbols",
+  "Opening A does not require full-market `fresh_quotes_120s >= 1500`",
+  "`priority_fresh_quote_coverage_120s` | >= 0.95",
+  "Only `status = ok` can ever reach formal entry",
+  "public.fugle_daytrade_source_speed_scorecard",
+  "ops/public-slot/DaytradeSourceBootstrap.sql",
+  "Never use `fugle_shared_source` to decide daytrade production readiness",
+]) {
+  if (!daytradeSourceSpeedProfile.includes(marker)) issues.push(`DaytradeSourceSpeedProfile.md missing dedicated daytrade contract marker ${marker}`);
+}
+for (const marker of [
+  "\"sourceName\": \"fugle_daytrade_source\"",
+  "\"sharedSourceFallbackAllowed\": false",
+  "\"reuseSharedDisplayQuota\": false",
+  "\"allowedConsumers\": [\"daytrade\", \"strategy1\", \"strategy3\"]",
+  "\"quoteBatchSize\": 40",
+  "\"quoteConcurrency\": 1",
+  "\"targetBatchIntervalSeconds\": 3.2",
+  "\"mode\": \"priority_first\"",
+  "\"fullMarketFreshCoverageBlocksOpeningA\": false",
+  "\"cooldownInitialSeconds\": 90",
+  "\"cooldownMaxSeconds\": 900",
+  "\"priorityOnlyAfter429\": true",
+  "\"targetSymbolsMin\": 300",
+  "\"targetSymbolsMax\": 500",
+  "\"minFreshQuoteCoverageForA\": 0.95",
+  "\"targetFreshQuoteCoverage\": 1",
+  "\"selectedSymbolsFreshOkRequiredForA\": true",
+  "\"blocksOpeningA\": false",
+  "\"recent429BlocksASeconds\": 90",
+  "\"http403CooldownSeconds\": 1800",
+  "\"retryWhileBanned\": false",
+  "\"missingFieldGateGrade\": \"D\"",
+]) {
+  if (!daytradeSourceSpeedConfig.includes(marker)) issues.push(`daytrade-source-speed.config.example.json missing dedicated speed marker ${marker}`);
+}
+for (const marker of [
+  "fugle_daytrade_source_speed_scorecard",
+  "gate_grade text not null check",
+  "gate_mode text not null default 'priority_first'",
+  "priority_gate_grade text not null default 'D'",
+  "full_market_gate_grade text not null default 'C'",
+  "fresh_quotes_120s",
+  "fresh_quote_coverage_120s",
+  "required_quote_speed_per_sec",
+  "actual_quote_speed_per_sec",
+  "priority_symbols",
+  "selected_symbols_fresh_ok",
+  "eligible_quote_rows",
+  "scanner_can_run_opening",
+  "scanner_can_run_quote_only",
+  "daily_volume_status",
+  "avg_volume5_eligible",
+  "ready_ma20_continuous",
+  "ready_ma35_continuous",
+  "intraday_1m_stale_seconds",
+  "today_1m_symbols",
+  "today_1m_rows",
+  "futopt_stock_mapped",
+  "rate_limit_status",
+  "last_429_age_seconds",
+  "quota_competing_stages",
+  "self_heal_count",
+]) {
+  if (!daytradeSourceSpeedScorecardSql.includes(marker)) issues.push(`DaytradeSourceSpeedScorecard.sql missing scorecard marker ${marker}`);
+}
+if (/insert\s+into\s+public\.source_status|update\s+public\.source_status|delete\s+from\s+public\.source_status|truncate\s+public\.source_status/i.test(daytradeSourceSpeedScorecardSql)) {
+  issues.push("DaytradeSourceSpeedScorecard.sql must not write or overwrite source_status");
+}
+for (const marker of [
+  "fugle_daytrade_source",
+  "public.fugle_daytrade_source_speed_scorecard",
+  "insert into public.source_status",
+  "'stopped'",
+  "'D'",
+  "'priority_first'",
+  "'production_unattended', 'NO'",
+  "on conflict (source_name) do update",
+]) {
+  if (!daytradeSourceBootstrapSql.includes(marker)) issues.push(`DaytradeSourceBootstrap.sql missing bootstrap marker ${marker}`);
+}
+for (const marker of [
+  "https://supabase.com/dashboard/project/cpmpfhbzutkiecccekfr/sql/new",
+  "ops/public-slot/DaytradeSourceBootstrap.sql",
+  "gateGrade=D",
+  "Dedicated writer",
+  "Do not deploy from a dirty or behind worktree",
+  "Do not edit `C:\\fuman-terminal` as source",
+  "Anything less is NO / PARTIAL",
+]) {
+  if (!daytradeSourceReleaseOwnerRunbook.includes(marker)) issues.push(`DaytradeSourceReleaseOwnerRunbook.md missing release owner marker ${marker}`);
+}
+for (const marker of [
+  "SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || \"fugle_daytrade_source\"",
+  "source_status_missing",
+  "daytrade_payload_required_fields_missing",
+  "daytrade_gate_grade_missing_or_invalid",
+  "daytrade_source_speed_ok_false",
+  "daytrade_gate_mode_not_priority_first",
+  "daytrade_full_market_fresh_quote_coverage_low_nonblocking",
+  "getWorstGateGrade",
+  "priority_pool_too_small_for_daytrade",
+  "priority_pool_fresh_coverage_low",
+  "selected_symbols_not_fresh_for_daytrade",
+  "daytrade_recent_429_blocks_a",
+  "daytrade_rate_limit_cooldown_active",
+  "full_market_batch_interval_too_aggressive",
+  "finmind_cooldown_until",
+  "quotaCompetingStages",
+  "today_1m_rows",
+]) {
+  if (!daytradeSourceSpeedVerifier.includes(marker)) issues.push(`verify-daytrade-source-speed-readonly.js missing dedicated verifier marker ${marker}`);
+}
+if (/writeFile|appendFile|rmSync|unlinkSync|method:\s*["'](POST|PATCH|DELETE|PUT)["']|insert\s+into|update\s+public\.source_status|delete\s+from/i.test(daytradeSourceSpeedVerifier)) {
+  issues.push("verify-daytrade-source-speed-readonly.js must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
 }
 if (!publicSlotSharedSourceRunner.includes("get_fugle_intraday_1m_coverage_stats")) {
   issues.push("Run-PublicSlotSharedSource.ps1 must prefer get_fugle_intraday_1m_coverage_stats before REST batch fallback");

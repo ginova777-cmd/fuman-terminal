@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "Fuman Public Slot Shared Source Watchdog",
-  [string]$StartTime = "08:00",
+  [string]$StartTime = "06:00",
   [string]$WatchdogEveryMinutes = "1",
   [int]$RepeatDurationDays = 3650
 )
@@ -43,7 +43,7 @@ Write-Host "建立 Supabase 公共槽 shared source 守護排程..."
 Write-Host "名稱：$TaskName"
 Write-Host "頻率：每 $WatchdogEveryMinutes 分鐘檢查一次"
 Write-Host "週期：$StartTime 起，持續 $RepeatDurationDays 天"
-Write-Host "作用：shared source 停掉或 Supabase 資料過舊時，自動重新啟動 08:00 shared source。"
+Write-Host "作用：shared source 停掉或 Supabase 資料過舊時，自動重新啟動 06:00 shared source。"
 Write-Host ""
 
 Register-ScheduledTask `

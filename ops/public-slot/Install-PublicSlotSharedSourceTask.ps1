@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "Fuman Public Slot Shared Source 0800",
-  [string]$StartTime = "08:00",
+  [string]$StartTime = "06:00",
   [string]$ProjectUrl = "https://cpmpfhbzutkiecccekfr.supabase.co",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$FumanRoot = "C:\fuman-terminal",

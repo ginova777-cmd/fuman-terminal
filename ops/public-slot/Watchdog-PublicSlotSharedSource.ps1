@@ -13,7 +13,7 @@ param(
   [string]$CoverageHardGateStart = "09:05",
   [int]$WriterCatchupGraceSeconds = 180,
   [int]$RestartCooldownSeconds = 300,
-  [string]$ActiveStart = "08:00",
+  [string]$ActiveStart = "06:00",
   [string]$ActiveEnd = "14:10"
 )
 
