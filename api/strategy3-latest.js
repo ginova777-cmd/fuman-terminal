@@ -247,6 +247,11 @@ function liveProbeIssues(probe) {
   const issues = [];
   const sourceStatus = String(probe?.sourceStatus?.status || "").toLowerCase();
   const scannerStatus = String(probe?.scannerHealth?.status || "").toLowerCase();
+  const gateGrade = String(probe?.strategy3SourceGate?.gate_grade || "").toUpperCase();
+  const gateStatus = String(probe?.strategy3SourceGate?.status || "").toLowerCase();
+  if (probe?.strategy3SourceGate && (gateGrade !== "A" || !["ok", "ready"].includes(gateStatus))) {
+    issues.push(`strategy3_source_gate=${gateGrade || "missing"}${probe.strategy3SourceGate.reason ? `: ${probe.strategy3SourceGate.reason}` : ""}`);
+  }
   if (sourceStatus && !["ok", "ready"].includes(sourceStatus)) {
     issues.push(`source_status=${sourceStatus}${probe?.sourceStatus?.message ? `: ${probe.sourceStatus.message}` : ""}`);
   }
@@ -518,7 +523,7 @@ function normalizeSourceHealth(value) {
 
 async function fetchStrategy3LiveHealthProbe() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-  const [scannerResult, sourceStatusResult] = await Promise.allSettled([
+  const [scannerResult, sourceStatusResult, sourceGateResult] = await Promise.allSettled([
     fetchRowsFrom("v_scanner_resource_health", [
       "select=strategy,status,latest_date,row_count,reason,suggested_scanner_behavior,updated_at",
       "strategy=eq.Strategy3",
@@ -529,13 +534,56 @@ async function fetchStrategy3LiveHealthProbe() {
       "source_name=eq.fugle_shared_source",
       "limit=1",
     ].join("&")),
+    fetchRowsFrom("v_strategy3_source_gate", [
+      "select=*",
+      "limit=1",
+    ].join("&")),
   ]);
   const issues = [];
   if (scannerResult.status === "rejected") issues.push(`v_scanner_resource_health read failed: ${scannerResult.reason?.message || scannerResult.reason}`);
   if (sourceStatusResult.status === "rejected") issues.push(`source_status read failed: ${sourceStatusResult.reason?.message || sourceStatusResult.reason}`);
+  if (sourceGateResult.status === "rejected") issues.push(`v_strategy3_source_gate read failed: ${sourceGateResult.reason?.message || sourceGateResult.reason}`);
+  const sharedSourceStatus = sourceStatusResult.status === "fulfilled" ? sourceStatusResult.value?.[0] || null : null;
+  const strategy3SourceGate = sourceGateResult.status === "fulfilled" ? sourceGateResult.value?.[0] || null : null;
+  if (sourceGateResult.status === "fulfilled" && !strategy3SourceGate) issues.push("v_strategy3_source_gate empty");
+  const gateGrade = String(strategy3SourceGate?.gate_grade || "").toUpperCase();
+  const gateStatus = String(strategy3SourceGate?.status || "").toLowerCase();
+  const sharedStatusText = String(sharedSourceStatus?.status || "").toLowerCase();
+  const sharedHardStopped = ["stopped", "error", "failed", "critical"].includes(sharedStatusText);
+  const gateOk = strategy3SourceGate && gateGrade === "A" && ["ok", "ready"].includes(gateStatus);
+  const mergedPayload = {
+    ...((sharedSourceStatus?.payload && typeof sharedSourceStatus.payload === "object") ? sharedSourceStatus.payload : {}),
+    ...(strategy3SourceGate ? {
+      strategy3_gate_grade: strategy3SourceGate.gate_grade || "",
+      strategy3_gate_status: strategy3SourceGate.status || "",
+      strategy3_gate_reason: strategy3SourceGate.reason || "",
+      fresh_quote_coverage_120s: strategy3SourceGate.fresh_quote_coverage_120s,
+      fresh_quotes: strategy3SourceGate.fresh_quotes_120s,
+      active_symbols: strategy3SourceGate.active_symbols,
+      quote_age_seconds: strategy3SourceGate.quote_age_seconds,
+      today_1m_symbols: strategy3SourceGate.today_1m_symbols,
+      ready_ge_35: strategy3SourceGate.session_ready_symbols ?? strategy3SourceGate.ready_ge_35,
+      ready_ma20_continuous: strategy3SourceGate.ready_ma20_continuous,
+      ready_ma35_continuous: strategy3SourceGate.ready_ma35_continuous,
+      latest_candle_time: strategy3SourceGate.latest_candle_time,
+      intraday_1m_stale_seconds: strategy3SourceGate.intraday_1m_stale_seconds,
+      daily_volume_freshness: strategy3SourceGate.daily_volume_latest_trade_date,
+    } : {}),
+  };
+  const sourceStatus = strategy3SourceGate
+    ? {
+        ...(sharedSourceStatus || { source_name: "fugle_shared_source", updated_at: strategy3SourceGate.checked_at || "", stale_seconds: null }),
+        shared_status: sharedSourceStatus?.status || "",
+        status: sharedHardStopped ? sharedSourceStatus.status : (gateOk ? "ok" : "degraded"),
+        message: gateOk ? "strategy3 canonical source gate A" : (strategy3SourceGate.reason || "strategy3 canonical source gate not A"),
+        payload: mergedPayload,
+      }
+    : sharedSourceStatus;
   return {
     scannerHealth: scannerResult.status === "fulfilled" ? scannerResult.value?.[0] || null : null,
-    sourceStatus: sourceStatusResult.status === "fulfilled" ? sourceStatusResult.value?.[0] || null : null,
+    sourceStatus,
+    sharedSourceStatus,
+    strategy3SourceGate,
     issues,
   };
 }

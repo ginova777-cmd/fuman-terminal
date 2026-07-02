@@ -44,6 +44,7 @@ const STRATEGY3_1M_READBACK_CONCURRENCY = Number(process.env.STRATEGY3_1M_READBA
 const STRATEGY3_REQUIRE_TURNOVER = process.env.STRATEGY3_REQUIRE_TURNOVER === "1";
 const STRATEGY3_REQUIRE_VOLUME_AVERAGE = process.env.STRATEGY3_REQUIRE_VOLUME_AVERAGE === "1";
 const STRATEGY3_USE_SUPABASE = process.env.STRATEGY3_USE_SUPABASE !== "0";
+const STRATEGY3_ALLOW_FORMAL_SOURCE_FALLBACK = process.env.STRATEGY3_ALLOW_FORMAL_SOURCE_FALLBACK === "1";
 const STRATEGY3_REQUIRE_INTRADAY_1M = process.env.STRATEGY3_REQUIRE_INTRADAY_1M !== "0";
 const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
 const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000);
@@ -347,6 +348,8 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
   const intradayCheck = checks.find((item) => item.source === "v_strategy3_intraday_1m_status") || {};
   const dailyVolumeCheck = checks.find((item) => item.source === "stock_daily_volume") || {};
   let row = null;
+  let gate = null;
+  let gateReadError = "";
   try {
     const result = await fetchSupabaseRest([
       "source_status?select=source_name,status,updated_at,stale_seconds,message,payload",
@@ -367,38 +370,62 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
       dailyVolumeFreshness: dailyVolumeCheck.latestDate || "",
     };
   }
+  try {
+    const result = await fetchSupabaseRest([
+      "v_strategy3_source_gate?select=*",
+      "limit=1",
+    ].join("&"));
+    gate = result.rows?.[0] || null;
+  } catch (error) {
+    gateReadError = error?.message || String(error);
+  }
   const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
   const statusText = String(row?.status || payload.status || "").toLowerCase();
-  const freshQuotes = firstFiniteNumber(payload.fresh_quotes, payload.fresh_quote_count_120s, payload.freshQuoteCount120s);
-  const activeSymbols = firstFiniteNumber(payload.active_symbols, payload.activeSymbols, payload.eligible_quote_rows, payload.quote_count);
+  const freshQuotes = firstFiniteNumber(gate?.fresh_quotes_120s, payload.fresh_quotes, payload.fresh_quote_count_120s, payload.freshQuoteCount120s);
+  const activeSymbols = firstFiniteNumber(gate?.active_symbols, payload.active_symbols, payload.activeSymbols, payload.eligible_quote_rows, payload.quote_count);
   const freshQuoteCoverage120s = firstFiniteNumber(
+    gate?.fresh_quote_coverage_120s,
     payload.fresh_quote_coverage_120s,
     payload.eligible_quote_coverage,
     payload.coverage_120s,
     payload.coverage120s,
     freshQuotes !== null && activeSymbols ? freshQuotes / activeSymbols : null
   );
-  const today1mSymbols = firstFiniteNumber(payload.today_1m_symbols, payload.intraday_1m_symbols_today, payload.today1mSymbols);
-  const readyGe35 = firstFiniteNumber(payload.ready_ge_35, payload.ready_ge_35_symbols, payload.readyGe35);
-  const readyMa20 = firstFiniteNumber(payload.ready_ma20_continuous, payload.ready_ma20_continuous_symbols, payload.readyMa20Continuous);
-  const readyMa35 = firstFiniteNumber(payload.ready_ma35_continuous, payload.ready_ma35_continuous_symbols, payload.readyMa35Continuous, readyGe35);
-  const staleSeconds = firstFiniteNumber(payload.intraday_1m_stale_seconds, payload.intraday1mStaleSeconds, payload.stale_seconds, row?.stale_seconds);
+  const today1mSymbols = firstFiniteNumber(gate?.today_1m_symbols, payload.today_1m_symbols, payload.intraday_1m_symbols_today, payload.today1mSymbols);
+  const readyGe35 = firstFiniteNumber(gate?.session_ready_symbols, gate?.ready_ge_35, payload.ready_ge_35, payload.ready_ge_35_symbols, payload.readyGe35);
+  const readyMa20 = firstFiniteNumber(gate?.ready_ma20_continuous, payload.ready_ma20_continuous, payload.ready_ma20_continuous_symbols, payload.readyMa20Continuous);
+  const readyMa35 = firstFiniteNumber(gate?.ready_ma35_continuous, payload.ready_ma35_continuous, payload.ready_ma35_continuous_symbols, payload.readyMa35Continuous, readyGe35);
+  const staleSeconds = firstFiniteNumber(gate?.intraday_1m_stale_seconds, payload.intraday_1m_stale_seconds, payload.intraday1mStaleSeconds, payload.stale_seconds, row?.stale_seconds);
   const preopenRows = firstFiniteNumber(payload.preopen_rows, payload.preopenRows, payload.preopen_symbols, payload.preopenSymbols);
   const preopenExpected = firstFiniteNumber(payload.preopen_expected_symbols, payload.preopenExpected, payload.eligible_quote_rows, activeSymbols);
   const preopenCoverage = firstFiniteNumber(payload.preopen_coverage, payload.preopen_hot_coverage, preopenRows !== null && preopenExpected ? preopenRows / preopenExpected : null);
   const latestCandleTime = String(
-    payload.latest_candle_time
+    gate?.latest_candle_time
+    || gate?.latest_candle_time_taipei
+    || payload.latest_candle_time
     || payload.latest_candle_time_taipei
     || payload.intraday_1m_latest_candle_time
     || ""
   );
-  const sourceOk = ["ready", "ok", "fresh", "complete"].includes(statusText);
+  const gateGrade = String(gate?.gate_grade || "").toUpperCase();
+  const gateStatus = String(gate?.status || "").toLowerCase();
+  const hardSourceStopped = ["stopped", "error", "failed", "critical"].includes(statusText);
+  const gateOk = gate ? gateGrade === "A" && ["ok", "ready"].includes(gateStatus) : false;
+  const sourceOk = gateOk && !hardSourceStopped;
+  const coverageStatus = sourceOk ? "ready" : (gateStatus && !["ok", "ready"].includes(gateStatus) ? gateStatus : "failed");
   return {
     source: STRATEGY3_FORMAL_SOURCE_CHAIN,
-    status: sourceOk ? "ready" : (statusText || "failed"),
+    status: coverageStatus,
     ok: sourceOk,
     ready: sourceOk,
-    reason: row?.message || payload.reason || "",
+    reason: sourceOk ? "strategy3 canonical source gate A"
+      : gateReadError ? `strategy3 source gate read failed: ${gateReadError}`
+        : gate ? (gate.reason || row?.message || payload.reason || `strategy3 gate ${gateGrade || "missing"}`)
+          : `strategy3 source gate missing; ${row?.message || payload.reason || ""}`.trim(),
+    gateGrade,
+    gateStatus,
+    strategy3SourceGate: gate,
+    gateReadError,
     source_status_updated_at: row?.updated_at || "",
     fresh_quote_coverage_120s: freshQuoteCoverage120s,
     freshQuoteCoverage120s,
@@ -406,8 +433,8 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
     freshQuotes,
     active_symbols: activeSymbols,
     activeSymbols,
-    quote_age_seconds: firstFiniteNumber(payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
-    quoteAgeSeconds: firstFiniteNumber(payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
+    quote_age_seconds: firstFiniteNumber(gate?.quote_age_seconds, payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
+    quoteAgeSeconds: firstFiniteNumber(gate?.quote_age_seconds, payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
     today_1m_symbols: today1mSymbols,
     today1mSymbols,
     ready_ge_35: readyGe35,
@@ -423,7 +450,7 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
     preopenRows,
     preopenExpected,
     preopenCoverage,
-    dailyVolumeFreshness: dailyVolumeCheck.latestDate || payload.daily_volume_freshness || payload.dailyVolumeFreshness || "",
+    dailyVolumeFreshness: gate?.daily_volume_latest_trade_date || dailyVolumeCheck.latestDate || payload.daily_volume_freshness || payload.dailyVolumeFreshness || "",
     quoteRows: cleanNumber(quoteCheck.rowCount),
     intradayStatusRows: cleanNumber(intradayCheck.rowCount),
     dailyVolumeRows: cleanNumber(dailyVolumeCheck.rowCount),
@@ -1522,10 +1549,16 @@ async function main() {
       volumeAverageMap = supabase.volumeAverageMap;
       sourceWarnings = supabase.warnings;
     } catch (error) {
+      if (!STRATEGY3_ALLOW_FORMAL_SOURCE_FALLBACK) {
+        throw new Error(`Strategy3 canonical Supabase source unavailable: ${error?.message || String(error)}`);
+      }
       sourceWarnings.push(`strategy3 supabase fallback: ${error?.message || String(error)}`);
     }
   }
   if (!stocks.length) {
+    if (!STRATEGY3_ALLOW_FORMAL_SOURCE_FALLBACK) {
+      throw new Error("Strategy3 canonical Supabase source returned zero rows; formal source fallback disabled");
+    }
     const [fallbackStocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
       fetchUniverse(),
       fetchIssuedShares(),

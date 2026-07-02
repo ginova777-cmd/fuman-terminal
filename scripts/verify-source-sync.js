@@ -164,6 +164,8 @@ const KEY_FILES = [
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
+  "ops/public-slot/Strategy3CanonicalSharedSource.sql",
+  "ops/public-slot/Strategy3CanonicalSourceHandoff_20260702.md",
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
   "ops/public-slot/SupabaseCostGovernanceAuditPatch_20260630.sql",
   "ops/public-slot/InstitutionRunIdCompleteGate.sql",
