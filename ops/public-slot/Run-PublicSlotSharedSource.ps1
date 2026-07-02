@@ -4157,6 +4157,10 @@ Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatch
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
+if (-not $Once -and (Get-Date) -ge $stopTime) {
+  Write-Log "Public slot shared source skipped because current time is after StopAt $StopAt."
+  exit 0
+}
 $lastStockTickerWriteAt = [datetime]::MinValue
 $lastMaintenanceAt = [datetime]::MinValue
 $lastStrategy2ReadinessRefreshAt = [datetime]::MinValue
