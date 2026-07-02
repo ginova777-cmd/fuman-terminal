@@ -22,6 +22,9 @@ const DEFAULT_RADAR_LIMIT = 120;
 const FULL_SESSION_RADAR_LIMIT = 1200;
 const MAX_RADAR_LIMIT = 1500;
 const MIN_TRADING_DAY_CACHE_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_API_MIN_CACHE_MAX_AGE_MS || 5 * 60 * 1000);
+const RADAR_SESSION_START_MINUTE = 9 * 60;
+const RADAR_SESSION_END_MINUTE = 13 * 60 + 30;
+const RADAR_SESSION_COMPLETE_MINUTE = 13 * 60 + 25;
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
@@ -105,6 +108,10 @@ function taipeiTimeLabel(date = new Date()) {
   return `${byType.hour || "00"}:${byType.minute || "00"}:${byType.second || "00"}`;
 }
 
+function taipeiShortTimeLabel(date = new Date()) {
+  return taipeiTimeLabel(date).slice(0, 5);
+}
+
 function compactDateKey(value) {
   const text = String(value || "");
   const parsed = Date.parse(text);
@@ -172,7 +179,11 @@ function taipeiMinuteOfDay(date = new Date()) {
 
 function isMarketDetectionWindow(date = new Date()) {
   const minutes = taipeiMinuteOfDay(date);
-  return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+  return minutes >= RADAR_SESSION_START_MINUTE && minutes <= RADAR_SESSION_END_MINUTE;
+}
+
+function isAfterMarketDetectionWindow(date = new Date()) {
+  return taipeiMinuteOfDay(date) > RADAR_SESSION_END_MINUTE;
 }
 
 function payloadUpdatedAtMs(payload) {
@@ -193,28 +204,72 @@ function payloadFreshnessMaxAgeMs(payload) {
   return Math.max(MIN_TRADING_DAY_CACHE_MAX_AGE_MS, writerBudgetMs);
 }
 
+function payloadSessionCompletenessSnapshot(marketSession, payload, nowMs = Date.now()) {
+  const now = new Date(nowMs);
+  const updatedAtMs = payloadUpdatedAtMs(payload);
+  const updatedAtDate = updatedAtMs ? new Date(updatedAtMs) : null;
+  const updatedAtMinute = updatedAtDate ? taipeiMinuteOfDay(updatedAtDate) : null;
+  const updatedAtDateKey = updatedAtDate ? taipeiDateKey(updatedAtDate) : "";
+  const requiresComplete = Boolean(
+    marketSession?.hasTodayMarketData
+    && isAfterMarketDetectionWindow(now)
+  );
+  const complete = !requiresComplete || Boolean(
+    updatedAtDate
+    && updatedAtDateKey === marketSession.today
+    && updatedAtMinute >= RADAR_SESSION_COMPLETE_MINUTE
+  );
+  const reason = complete
+    ? "realtime_radar_session_complete_or_not_required"
+    : `realtime_radar_session_incomplete: updatedAt ${updatedAtDate ? taipeiShortTimeLabel(updatedAtDate) : "missing"} before 13:25`;
+  return {
+    complete,
+    status: complete ? "complete" : "session_incomplete",
+    reason,
+    requiresComplete,
+    requiredUpdatedAtMinute: RADAR_SESSION_COMPLETE_MINUTE,
+    requiredUpdatedAtTime: "13:25",
+    sessionWindow: "09:00-13:30",
+    updatedAtMinute,
+    updatedAtTime: updatedAtDate ? taipeiShortTimeLabel(updatedAtDate) : "",
+    updatedAtDate: updatedAtDateKey,
+    checkedAt: new Date(nowMs).toISOString(),
+  };
+}
+
 function payloadFreshnessSnapshot(marketSession, payload, nowMs = Date.now()) {
   const ageMs = payloadFreshnessAgeMs(payload, nowMs);
   const maxAgeMs = payloadFreshnessMaxAgeMs(payload);
   const inDetectionWindow = isMarketDetectionWindow(new Date(nowMs));
+  const sessionCompleteness = payloadSessionCompletenessSnapshot(marketSession, payload, nowMs);
   const fresh = Boolean(
     marketSession?.hasTodayMarketData
+    && sessionCompleteness.complete
     && (!inDetectionWindow || (ageMs != null && ageMs <= maxAgeMs))
   );
+  const reason = fresh
+    ? "realtime_radar_payload_fresh"
+    : !sessionCompleteness.complete
+      ? sessionCompleteness.reason
+      : !marketSession?.hasTodayMarketData
+        ? "realtime_radar_source_date_not_today"
+        : "realtime_radar_payload_stale_or_empty";
   return {
     fresh,
+    reason,
     ageMs,
     ageSeconds: ageMs == null ? null : Math.round(ageMs / 1000),
     maxAgeMs,
     maxAgeSeconds: Math.round(maxAgeMs / 1000),
     updatedAtMs: payloadUpdatedAtMs(payload),
+    sessionCompleteness,
+    sessionStatus: sessionCompleteness.status,
     checkedAt: new Date(nowMs).toISOString(),
   };
 }
 
 function isTradingDayPayloadFresh(marketSession, payload) {
   if (!marketSession?.hasTodayMarketData) return false;
-  if (!isMarketDetectionWindow()) return true;
   return payloadFreshnessSnapshot(marketSession, payload).fresh;
 }
 
@@ -228,7 +283,7 @@ function radarSourceCoverage(payload, marketSession) {
     reason: ready
       ? "realtime_radar_today_quote_ready"
       : marketSession?.hasTodayMarketData
-        ? "realtime_radar_payload_stale_or_empty"
+        ? freshness.reason || "realtime_radar_payload_stale_or_empty"
         : `realtime_radar_source_date_not_today:${marketSession?.marketDataDate || "missing"}!=${marketSession?.today || taipeiDateKey()}`,
     tradeDate: marketSession?.marketDataDate || "",
     today: marketSession?.today || taipeiDateKey(),
@@ -391,13 +446,18 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     freshness: {
       ...(normalizedPayload?.freshness || {}),
       decision: normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale"),
+      reason: freshness.reason,
       updatedAt: normalizedPayload?.updatedAt || "",
       ageSeconds: freshness.ageSeconds,
       maxAgeSeconds: freshness.maxAgeSeconds,
+      sessionStatus: freshness.sessionStatus,
+      sessionCompleteness: freshness.sessionCompleteness,
       checkedAt: freshness.checkedAt,
       marketDataDate: marketSession?.marketDataDate || "",
       today: marketSession?.today || "",
     },
+    sessionStatus: freshness.sessionStatus,
+    sessionCompleteness: freshness.sessionCompleteness,
     fallbackUsed,
     fallbackScope,
     fallbackDetails,
@@ -597,6 +657,7 @@ function unavailablePayload(reason = "") {
 
 function staleTradingDayPayload(payload, marketSession, reason = "trading_day_radar_cache_stale") {
   const runId = radarPayloadRunId(payload);
+  const sessionCompleteness = payloadSessionCompletenessSnapshot(marketSession, payload);
   return {
     ok: false,
     runId,
@@ -636,6 +697,8 @@ function staleTradingDayPayload(payload, marketSession, reason = "trading_day_ra
     freshness: {
       decision: "stale",
       reason,
+      sessionStatus: sessionCompleteness.status,
+      sessionCompleteness,
       checkedAt: new Date().toISOString(),
       marketDataDate: marketSession?.marketDataDate || "",
       today: marketSession?.today || "",
@@ -732,16 +795,20 @@ module.exports = async function handler(request, response) {
       },
     };
     const session = buildMarketSession(tradingDay, payload);
-    if (!isTradingDayPayloadFresh(session, payload)) {
+    const freshness = payloadFreshnessSnapshot(session, payload);
+    if (!freshness.fresh) {
+      const staleReason = primaryError || freshness.reason || "trading_day_radar_cache_stale";
       const stalePayload = {
         ...payload,
         ok: false,
         status: payload.status === "ok" ? "degraded" : payload.status || "degraded",
-        reason: primaryError || "trading_day_radar_cache_stale",
+        reason: staleReason,
         freshness: {
           ...(payload.freshness || {}),
           decision: "degraded",
-          reason: primaryError || "trading_day_radar_cache_stale",
+          reason: staleReason,
+          sessionStatus: freshness.sessionStatus,
+          sessionCompleteness: freshness.sessionCompleteness,
           checkedAt: new Date().toISOString(),
           marketDataDate: session?.marketDataDate || "",
           today: session?.today || "",

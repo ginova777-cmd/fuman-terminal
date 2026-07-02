@@ -52,6 +52,8 @@ function summarizeApi(result) {
     quoteAgeSeconds: Number(result.body.quote_age_seconds ?? coverage.quote_age_seconds ?? coverage.quoteAgeSeconds ?? 999999),
     evidenceStatus: result.body.evidenceStatus || "",
     unattendedStatus: result.body.unattendedStatus || result.body.unattended?.status || "",
+    sessionStatus: result.body.sessionStatus || result.body.freshness?.sessionStatus || "",
+    sessionCompletenessStatus: result.body.sessionCompleteness?.status || result.body.freshness?.sessionCompleteness?.status || "",
   };
 }
 
@@ -90,6 +92,11 @@ function summarizeApi(result) {
       fastShell.includes('data-radar-dom-side="short"') &&
       !fastShell.includes('data-radar-dom-side="all"') &&
       fastShell.includes("09:00-13:30 流水帳逐筆記錄"),
+    fullLedgerNoPagination:
+      fastShell.includes("activeRows.map(radarDomSignalCard)") &&
+      !fastShell.includes("REALTIME_RADAR_DOM_PAGE_SIZE") &&
+      !fastShell.includes("data-radar-dom-page") &&
+      !fastShell.includes("pageRows.map(radarDomSignalCard)"),
     apiFull,
     apiShell1200,
   };
@@ -102,6 +109,7 @@ function summarizeApi(result) {
     result.healthBanner,
     result.stateGuard,
     result.longShortLedger,
+    result.fullLedgerNoPagination,
     apiFull.rows === 1200,
     apiFull.totalCount === 1200,
     apiShell1200.rows === 1200,
@@ -113,6 +121,8 @@ function summarizeApi(result) {
     Number(apiFull.failedBatchCount || 0) === 0,
     apiFull.evidenceStatus === "complete",
     apiFull.unattendedStatus === "YES",
+    apiFull.sessionStatus === "complete",
+    apiFull.sessionCompletenessStatus === "complete",
   ].every(Boolean);
 
   console.log(JSON.stringify(result, null, 2));
