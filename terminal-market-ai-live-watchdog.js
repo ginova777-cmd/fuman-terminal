@@ -60,6 +60,14 @@
     return panel;
   }
 
+  function hasPrimaryLiveRender(panel) {
+    if (!panel || panel.querySelector("[data-market-ai-live-watchdog]")) return false;
+    if (panel.dataset.marketAiRenderer === "desktop-fast-shell") return true;
+    const bodyText = text(panel);
+    if (loadingPattern.test(bodyText)) return false;
+    return /AI 今日重點|AI 判讀依據|熱門觀察股|趨勢廣度|盤中決策節奏/.test(bodyText);
+  }
+
   function stockRow(stock, index) {
     return `<article class="market-ai-stock-row">
       <div class="market-ai-rank">#${index + 1}</div>
@@ -171,6 +179,7 @@
     if (!panel) return;
     const bodyText = text(panel);
     const hasWatchdogDom = Boolean(panel.querySelector("[data-market-ai-live-watchdog]"));
+    if (hasPrimaryLiveRender(panel)) return;
     if (!force && !loadingPattern.test(bodyText) && hasWatchdogDom) return;
     if (!force && lastPayload && Date.now() - lastFetchedAt < 30000) {
       renderPayload(panel, lastPayload);

@@ -4589,7 +4589,7 @@
       const header = market.querySelector(".page-header");
       header?.insertAdjacentElement("afterend", tabs);
     }
-    let ai = market.querySelector("[data-market-api-ai]");
+    let ai = market.querySelector("[data-market-api-ai], #market-ai-panel");
     if (!ai) {
       ai = document.createElement("section");
       ai.className = "market-ai-panel";
@@ -4598,6 +4598,8 @@
       ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
       tabs.insertAdjacentElement("afterend", ai);
     }
+    ai.id = ai.id || "market-ai-panel";
+    ai.dataset.marketApiAi = ai.dataset.marketApiAi || "1";
     installMarketDesktopModeHandlers(tabs);
     market.classList.toggle("market-overview-mode", marketDesktopMode !== "ai");
     market.classList.toggle("market-ai-mode", marketDesktopMode === "ai");
@@ -4617,7 +4619,7 @@
 
   function syncMarketAiDesktopModeIfVisible() {
     const market = document.querySelector("#market-view");
-    const ai = market?.querySelector?.("[data-market-api-ai]");
+    const ai = market?.querySelector?.("[data-market-api-ai], #market-ai-panel");
     if (document.documentElement.dataset.fumanMarketDesktopMode && document.documentElement.dataset.fumanMarketDesktopMode !== "ai") return;
     const shouldSync = marketDesktopMode === "ai"
       || document.documentElement.dataset.fumanMarketDesktopMode === "ai"
@@ -5280,6 +5282,8 @@
       </article>
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
     panels.ai.classList.add("market-ai-visual-dashboard");
+    panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
+    panels.ai.dataset.marketApiAi = aiPayload?.source || aiPayload?.cacheSource || "desktop-fast-shell";
     panels.ai.innerHTML = `
         <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">

@@ -82,6 +82,8 @@
           ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
           tabs.insertAdjacentElement("afterend", ai);
         }
+        ai.id = ai.id || "market-ai-panel";
+        ai.dataset.marketApiAi = ai.dataset.marketApiAi || "1";
         if (!panel.querySelector(":scope > .metric-grid")) {
           const metric = document.createElement("section");
           metric.className = "metric-grid";
@@ -321,6 +323,7 @@
       const paintMarketAi = (panel, marketPayload = {}, heatPayload = {}) => {
         const ai = panel.querySelector("[data-market-api-ai], #market-ai-panel, .market-ai-panel");
         if (!ai) return;
+        if (ai.dataset.marketAiRenderer === "desktop-fast-shell") return;
         const sectors = list(heatPayload.sectors);
         const up = sectors.reduce((sum, sector) => sum + num(sector.up), 0);
         const down = sectors.reduce((sum, sector) => sum + num(sector.down), 0);
@@ -811,20 +814,23 @@
       header?.after(tabs);
     }
 
-    let aiPanel = $("#market-ai-panel");
+    let aiPanel = $("[data-market-api-ai], #market-ai-panel");
     if (!aiPanel) {
       aiPanel = document.createElement("section");
       aiPanel.id = "market-ai-panel";
       aiPanel.className = "market-ai-panel";
+      aiPanel.dataset.marketApiAi = "1";
       aiPanel.hidden = true;
       aiPanel.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
       tabs.after(aiPanel);
     }
+    aiPanel.id = aiPanel.id || "market-ai-panel";
+    aiPanel.dataset.marketApiAi = aiPanel.dataset.marketApiAi || "1";
   }
 
   function applyMarketMode(mode) {
     const next = mode === "ai" ? "ai" : "overview";
-    const aiPanel = $("#market-ai-panel");
+    const aiPanel = $("[data-market-api-ai], #market-ai-panel");
     marketPanel.classList.toggle("market-ai-mode", next === "ai");
     marketPanel.classList.toggle("market-overview-mode", next !== "ai");
     $$("#market-mode-tabs [data-market-mode]").forEach((button) => {
