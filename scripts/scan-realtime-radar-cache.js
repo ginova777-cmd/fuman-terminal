@@ -534,12 +534,12 @@ function buildQuoteCoverageAtRun({
     const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
     return Number.isFinite(age) && age <= REALTIME_RADAR_FRESH_QUOTE_SECONDS;
   }).length;
-  const quoteAgeSeconds = quoteAges.length ? Math.max(...quoteAges) : null;
+  const maxQuoteAgeSeconds = quoteAges.length ? Math.max(...quoteAges) : null;
   const freshQuoteCoverage120s = activeSymbols ? freshQuotes / activeSymbols : 0;
   const ready = Boolean(
     activeSymbols > 0
     && freshQuoteCoverage120s >= 0.95
-    && (quoteAgeSeconds === null || quoteAgeSeconds <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
+    && (maxQuoteAgeSeconds === null || maxQuoteAgeSeconds <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
     && cleanNumber(failedBatchCount) === 0
     && cleanNumber(staleQuoteCount) === 0
   );
@@ -554,8 +554,8 @@ function buildQuoteCoverageAtRun({
     freshQuotes,
     active_symbols: activeSymbols,
     activeSymbols,
-    quote_age_seconds: quoteAgeSeconds,
-    quoteAgeSeconds,
+    quote_age_seconds: maxQuoteAgeSeconds,
+    quoteAgeSeconds: maxQuoteAgeSeconds,
     maxAllowedQuoteAgeSeconds: REALTIME_RADAR_FRESH_QUOTE_SECONDS,
     staleQuoteCount: cleanNumber(staleQuoteCount),
     failedBatchCount: cleanNumber(failedBatchCount),
