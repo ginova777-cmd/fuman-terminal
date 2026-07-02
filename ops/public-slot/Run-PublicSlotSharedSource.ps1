@@ -11,7 +11,7 @@ param(
   [int]$Direct1mBatchSize = 8,
   [int]$Direct1mEverySeconds = 20,
   [bool]$Direct1mPrewarmEnabled = $true,
-  [string]$Direct1mPrewarmStart = "08:00",
+  [string]$Direct1mPrewarmStart = "07:00",
   [int]$Direct1mPrewarmSymbolCount = 2000,
   [int]$Direct1mPrewarmBatchSize = 80,
   [int]$Direct1mPrewarmBars = 200,
@@ -45,6 +45,7 @@ param(
   [int]$FutoptQuoteBatchSize = 120,
   [int]$FutoptQuoteEverySeconds = 20,
   [int]$FutoptQuoteDelayMilliseconds = 100,
+  [bool]$FutoptQuoteFullDetect = $true,
   [int]$FutoptTickersEverySeconds = 300,
   [int]$PublicSlotUpsertTimeoutSec = 45,
   [int]$PublicSlotUpsertBatchSize = 300,
@@ -98,6 +99,7 @@ $script:ApiUniverseStats = @{
   priority_strong_symbols = 0
   priority_symbols = 0
   strategy_priority_symbols = 0
+  terminal_priority_symbols = 0
   three_day_open_high_fade_symbols = 0
   opening_priority_symbols = 0
   dynamic_amplitude_bull_symbols = 0
@@ -117,6 +119,8 @@ $script:FreshQuoteReadthroughMergedRows = 0
 $script:FreshQuoteReadthroughReason = ""
 $script:StrategyPrioritySymbols = $null
 $script:StrategyPrioritySymbolsAt = [datetime]::MinValue
+$script:TerminalPrioritySymbols = $null
+$script:TerminalPrioritySymbolsAt = [datetime]::MinValue
 $script:ThreeDayOpenHighFadeSymbols = $null
 $script:ThreeDayOpenHighFadeSymbolsAt = [datetime]::MinValue
 $script:DailyBullAlignedSymbols = $null
@@ -166,12 +170,34 @@ function Get-ObjectPropertyValue {
   param([object]$Object, [string[]]$Names)
   if ($null -eq $Object) { return $null }
   foreach ($name in $Names) {
+    if ($Object -is [System.Collections.IDictionary] -and $Object.Contains($name)) {
+      $value = $Object[$name]
+      if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) { return $value }
+    }
     $property = $Object.PSObject.Properties[$name]
     if ($null -ne $property -and $null -ne $property.Value -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
       return $property.Value
     }
   }
   return $null
+}
+
+function Get-ObjectPathValue {
+  param([object]$Object, [string]$Path)
+  if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Path)) { return $null }
+  $current = $Object
+  foreach ($part in @($Path -split "\.")) {
+    if ($null -eq $current) { return $null }
+    if ($current -is [System.Collections.IDictionary]) {
+      if (-not $current.Contains($part)) { return $null }
+      $current = $current[$part]
+      continue
+    }
+    $property = $current.PSObject.Properties[$part]
+    if ($null -eq $property) { return $null }
+    $current = $property.Value
+  }
+  return $current
 }
 
 function Set-RuntimeOverride {
@@ -248,6 +274,7 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteBatchSize" -ConfigNames @("futoptQuoteBatchSize", "FutoptQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteEverySeconds" -ConfigNames @("futoptQuoteEverySeconds", "FutoptQuoteEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_EVERY_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteDelayMilliseconds" -ConfigNames @("futoptQuoteDelayMilliseconds", "FutoptQuoteDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteFullDetect" -ConfigNames @("futoptQuoteFullDetect", "FutoptQuoteFullDetect") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_FULL_DETECT" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "FutoptTickersEverySeconds" -ConfigNames @("futoptTickersEverySeconds", "FutoptTickersEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_TICKERS_EVERY_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertTimeoutSec" -ConfigNames @("publicSlotUpsertTimeoutSec", "upsertTimeoutSec", "PublicSlotUpsertTimeoutSec") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC"
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertBatchSize" -ConfigNames @("publicSlotUpsertBatchSize", "upsertBatchSize", "PublicSlotUpsertBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_BATCH_SIZE"
@@ -1249,6 +1276,76 @@ function Get-StrategyResultSymbols {
   return $symbols.ToArray()
 }
 
+function Add-TerminalRowSymbols {
+  param(
+    [System.Collections.Generic.List[string]]$List,
+    [System.Collections.Generic.HashSet[string]]$Seen,
+    [object]$Row,
+    [string[]]$Fields,
+    [System.Collections.Generic.HashSet[string]]$UniverseSet
+  )
+  if ($null -eq $Row) { return }
+  foreach ($field in @($Fields)) {
+    $value = Get-ObjectPathValue -Object $Row -Path $field
+    Add-PrioritySymbol -List $List -Seen $Seen -Value $value -UniverseSet $UniverseSet
+  }
+}
+
+function Get-TerminalTableSymbols {
+  param(
+    [string]$PathAndQuery,
+    [string[]]$Fields,
+    [System.Collections.Generic.HashSet[string]]$UniverseSet,
+    [string]$Label = ""
+  )
+  $symbols = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+  try {
+    $rows = @(Invoke-PublicSlotRestGetAll -PathAndQuery $PathAndQuery)
+    foreach ($row in $rows) {
+      Add-TerminalRowSymbols -List $symbols -Seen $seen -Row $row -Fields $Fields -UniverseSet $UniverseSet
+      if ($symbols.Count -ge 2000) { break }
+    }
+  } catch {
+    Write-Log "WARN terminal priority read failed label=$Label path=$PathAndQuery`: $($_.Exception.Message)"
+  }
+  return $symbols.ToArray()
+}
+
+function Get-TerminalPrioritySymbols {
+  param([string[]]$UniverseSymbols)
+  $now = Get-Date
+  if ($null -ne $script:TerminalPrioritySymbols -and (($now - $script:TerminalPrioritySymbolsAt).TotalMinutes -lt 2)) {
+    return $script:TerminalPrioritySymbols
+  }
+
+  $universeSet = New-Object System.Collections.Generic.HashSet[string]
+  foreach ($symbol in @($UniverseSymbols)) {
+    if ([string]$symbol -match '^\d{4}$') { [void]$universeSet.Add([string]$symbol) }
+  }
+
+  $payload = [ordered]@{
+    strategy1 = @(Get-TerminalTableSymbols -PathAndQuery "strategy1_open_buy_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy1")
+    strategy2 = @(Get-TerminalTableSymbols -PathAndQuery "strategy2_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy2")
+    strategy3 = @(Get-TerminalTableSymbols -PathAndQuery "strategy3_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy3")
+    strategy4 = @(Get-TerminalTableSymbols -PathAndQuery "strategy4_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy4")
+    strategy5 = @(Get-TerminalTableSymbols -PathAndQuery "strategy5_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy5")
+    institution = @(Get-TerminalTableSymbols -PathAndQuery "institution_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "institution")
+    warrant = @(Get-TerminalTableSymbols -PathAndQuery "warrant_flow_scan_results?select=underlying_code,underlying_name,payload" -Fields @("underlying_code", "payload.underlyingCode", "payload.underlyingSymbol") -UniverseSet $universeSet -Label "warrant")
+    cb = @(Get-TerminalTableSymbols -PathAndQuery "cb_detect_scan_results?select=symbol,payload" -Fields @("symbol", "payload.symbol", "payload.underlyingCode", "payload.underlyingSymbol") -UniverseSet $universeSet -Label "cb")
+    realtimeRadar = @(Get-TerminalTableSymbols -PathAndQuery "fuman_realtime_radar_cache?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "realtime-radar")
+  }
+  $combined = @(Get-UniqueSymbols -Values (
+    @($payload.strategy1) + @($payload.strategy2) + @($payload.strategy3) + @($payload.strategy4) +
+    @($payload.strategy5) + @($payload.institution) + @($payload.warrant) + @($payload.cb) +
+    @($payload.realtimeRadar)
+  ) -UniverseSet $universeSet)
+  $payload["symbols"] = $combined
+  $script:TerminalPrioritySymbols = $payload
+  $script:TerminalPrioritySymbolsAt = $now
+  return $payload
+}
+
 function Get-StrategyPrioritySymbols {
   param([string[]]$UniverseSymbols)
   $now = Get-Date
@@ -1260,12 +1357,20 @@ function Get-StrategyPrioritySymbols {
   foreach ($symbol in @($UniverseSymbols)) {
     if ([string]$symbol -match '^\d{4}$') { [void]$universeSet.Add([string]$symbol) }
   }
+  $terminal = Get-TerminalPrioritySymbols -UniverseSymbols $UniverseSymbols
   $payload = [ordered]@{
-    strategy1 = @(Get-StrategyResultSymbols -Table "strategy1_open_buy_results" -Strategy "strategy1" -UniverseSet $universeSet)
-    strategy3 = @(Get-StrategyResultSymbols -Table "strategy3_scan_results" -Strategy "strategy3" -UniverseSet $universeSet)
-    strategy4 = @(Get-StrategyResultSymbols -Table "strategy4_scan_results" -Strategy "strategy4" -UniverseSet $universeSet)
+    strategy1 = @($terminal.strategy1)
+    strategy2 = @($terminal.strategy2)
+    strategy3 = @($terminal.strategy3)
+    strategy4 = @($terminal.strategy4)
+    strategy5 = @($terminal.strategy5)
+    institution = @($terminal.institution)
+    warrant = @($terminal.warrant)
+    cb = @($terminal.cb)
+    realtimeRadar = @($terminal.realtimeRadar)
+    terminalSymbols = @($terminal.symbols)
   }
-  $combined = @(Get-UniqueSymbols -Values (@($payload.strategy1) + @($payload.strategy3) + @($payload.strategy4)) -UniverseSet $universeSet)
+  $combined = @(Get-UniqueSymbols -Values (@($terminal.symbols)) -UniverseSet $universeSet)
   $payload["symbols"] = $combined
   $script:StrategyPrioritySymbols = $payload
   $script:StrategyPrioritySymbolsAt = $now
@@ -1431,18 +1536,35 @@ function Get-PrioritySymbolGroups {
   $universeSet = New-Object System.Collections.Generic.HashSet[string]
   foreach ($symbol in $base) { [void]$universeSet.Add([string]$symbol) }
   $strategy = Get-StrategyPrioritySymbols -UniverseSymbols $base
+  $terminalPriority = @($strategy.terminalSymbols)
   $threeDayOpenHighFade = @(Get-ThreeDayOpenHighFadeSymbols -UniverseSymbols $base)
   $dynamicAmplitudeBull = @(Get-DynamicAmplitudeBullSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
   $dynamicVolumeSurge = @(Get-DynamicVolumeSurgeSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
   $hot = @(Get-DaytradeHotQuoteSymbols -QuoteRows $QuoteRows)
   $strong = @(Get-StrongQuoteSymbols -QuoteRows $QuoteRows)
+  $openingPrioritySymbols = @(Get-UniqueSymbols -Values (
+    @($terminalPriority) +
+    @($strategy.symbols) +
+    @($threeDayOpenHighFade) +
+    @($dynamicAmplitudeBull) +
+    @($dynamicVolumeSurge) +
+    @($hot) +
+    @($strong)
+  ) -UniverseSet $universeSet)
 
   $seen = New-Object System.Collections.Generic.HashSet[string]
   $ordered = New-Object System.Collections.Generic.List[string]
   foreach ($group in @(
+    @($terminalPriority),
     @($strategy.strategy1),
+    @($strategy.strategy2),
     @($strategy.strategy3),
     @($strategy.strategy4),
+    @($strategy.strategy5),
+    @($strategy.institution),
+    @($strategy.warrant),
+    @($strategy.cb),
+    @($strategy.realtimeRadar),
     @($threeDayOpenHighFade),
     @($dynamicAmplitudeBull),
     @($dynamicVolumeSurge),
@@ -1458,22 +1580,31 @@ function Get-PrioritySymbolGroups {
   $script:ApiUniverseStats.daytrade_hot_symbols = $hot.Count
   $script:ApiUniverseStats.priority_strong_symbols = $strong.Count
   $script:ApiUniverseStats.strategy_priority_symbols = @($strategy.symbols).Count
+  $script:ApiUniverseStats.terminal_priority_symbols = $terminalPriority.Count
   $script:ApiUniverseStats.three_day_open_high_fade_symbols = $threeDayOpenHighFade.Count
-  $script:ApiUniverseStats.opening_priority_symbols = @(Get-UniqueSymbols -Values (@($strategy.symbols) + @($threeDayOpenHighFade)) -UniverseSet $universeSet).Count
+  $script:ApiUniverseStats.opening_priority_symbols = $openingPrioritySymbols.Count
   $script:ApiUniverseStats.dynamic_amplitude_bull_symbols = $dynamicAmplitudeBull.Count
   $script:ApiUniverseStats.dynamic_volume_surge_symbols = $dynamicVolumeSurge.Count
   $script:ApiUniverseStats.dynamic_mother_pool_symbols = @(Get-UniqueSymbols -Values (@($dynamicAmplitudeBull) + @($dynamicVolumeSurge)) -UniverseSet $universeSet).Count
   $script:ApiUniverseStats.priority_symbols = $ordered.Count
 
   return [ordered]@{
+    terminalPrioritySymbols = @($terminalPriority)
     strategy1 = @($strategy.strategy1)
+    strategy2 = @($strategy.strategy2)
     strategy3 = @($strategy.strategy3)
     strategy4 = @($strategy.strategy4)
+    strategy5 = @($strategy.strategy5)
+    institution = @($strategy.institution)
+    warrant = @($strategy.warrant)
+    cb = @($strategy.cb)
+    realtimeRadar = @($strategy.realtimeRadar)
     threeDayOpenHighFade = @($threeDayOpenHighFade)
     dynamicAmplitudeBull = @($dynamicAmplitudeBull)
     dynamicVolumeSurge = @($dynamicVolumeSurge)
     daytradeHot = @($hot)
     priorityStrong = @($strong)
+    openingPrioritySymbols = @($openingPrioritySymbols)
     symbols = $ordered.ToArray()
   }
 }
@@ -1486,22 +1617,37 @@ function Write-WebSocketPrioritySymbols {
       updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
       source = "public-slot-shared-source-priority-pool"
       reason = $Reason
-      policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
+      terminalPrioritySymbols = @($groups.terminalPrioritySymbols)
       strategy1 = @($groups.strategy1)
+      strategy2 = @($groups.strategy2)
       strategy3 = @($groups.strategy3)
       strategy4 = @($groups.strategy4)
+      strategy5 = @($groups.strategy5)
+      institution = @($groups.institution)
+      warrant = @($groups.warrant)
+      cb = @($groups.cb)
+      realtimeRadar = @($groups.realtimeRadar)
       threeDayOpenHighFade = @($groups.threeDayOpenHighFade)
       dynamic = @($groups.dynamicAmplitudeBull) + @($groups.dynamicVolumeSurge)
       dynamicAmplitudeBull = @($groups.dynamicAmplitudeBull)
       dynamicVolumeSurge = @($groups.dynamicVolumeSurge)
       daytradeHotSymbols = @($groups.daytradeHot)
       priorityStrongSymbols = @($groups.priorityStrong)
+      openingPrioritySymbols = @($groups.openingPrioritySymbols)
       symbols = @($groups.symbols)
       counts = [ordered]@{
         strategy1 = @($groups.strategy1).Count
+        strategy2 = @($groups.strategy2).Count
         strategy3 = @($groups.strategy3).Count
         strategy4 = @($groups.strategy4).Count
+        strategy5 = @($groups.strategy5).Count
+        institution = @($groups.institution).Count
+        warrant = @($groups.warrant).Count
+        cb = @($groups.cb).Count
+        realtimeRadar = @($groups.realtimeRadar).Count
         strategyPriority = $script:ApiUniverseStats.strategy_priority_symbols
+        terminalPriority = $script:ApiUniverseStats.terminal_priority_symbols
         threeDayOpenHighFade = $script:ApiUniverseStats.three_day_open_high_fade_symbols
         openingPriority = $script:ApiUniverseStats.opening_priority_symbols
         dynamicAmplitudeBull = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
@@ -1516,10 +1662,28 @@ function Write-WebSocketPrioritySymbols {
   } catch {
     Write-Log "WARN unable to write websocket priority symbols reason=$Reason`: $($_.Exception.Message)"
     $base = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
+    $script:ApiUniverseStats.priority_symbols = $base.Count
+    $script:ApiUniverseStats.opening_priority_symbols = 0
+    $script:ApiUniverseStats.strategy_priority_symbols = 0
+    $script:ApiUniverseStats.terminal_priority_symbols = 0
+    $script:ApiUniverseStats.strategy1_priority_symbols = 0
+    $script:ApiUniverseStats.strategy3_priority_symbols = 0
+    $script:ApiUniverseStats.strategy4_priority_symbols = 0
+    $script:ApiUniverseStats.three_day_open_high_fade_symbols = 0
+    $script:ApiUniverseStats.dynamic_amplitude_bull_symbols = 0
+    $script:ApiUniverseStats.dynamic_volume_surge_symbols = 0
+    $script:ApiUniverseStats.daytrade_hot_symbols = 0
     return [ordered]@{
+      terminalPrioritySymbols = @()
       strategy1 = @()
+      strategy2 = @()
       strategy3 = @()
       strategy4 = @()
+      strategy5 = @()
+      institution = @()
+      warrant = @()
+      cb = @()
+      realtimeRadar = @()
       threeDayOpenHighFade = @()
       dynamicAmplitudeBull = @()
       dynamicVolumeSurge = @()
@@ -1742,16 +1906,28 @@ function Write-QuoteFastHeartbeatStatus {
       eligible_symbols = $effectiveEligibleSymbols
       blacklist_count = $BlacklistCount
       strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      terminal_priority_symbols = $script:ApiUniverseStats.terminal_priority_symbols
       three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
       opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
       dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
       dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
       dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
       priority_symbols = $script:ApiUniverseStats.priority_symbols
-      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      priority_policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
       collector_priority_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "prioritySymbols" -Default 0)
       collector_priority_attempted = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityAttempted" -Default 0)
       collector_priority_fresh_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityFreshCount" -Default 0)
+      collector_priority_terminal_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityTerminalSymbols" -Default 0)
+      collector_priority_opening_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityOpeningSymbols" -Default 0)
+      collector_priority_strategy1_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy1Symbols" -Default 0)
+      collector_priority_strategy2_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy2Symbols" -Default 0)
+      collector_priority_strategy3_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy3Symbols" -Default 0)
+      collector_priority_strategy4_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy4Symbols" -Default 0)
+      collector_priority_strategy5_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy5Symbols" -Default 0)
+      collector_priority_institution_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityInstitutionSymbols" -Default 0)
+      collector_priority_warrant_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityWarrantSymbols" -Default 0)
+      collector_priority_cb_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityCbSymbols" -Default 0)
+      collector_priority_realtime_radar_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityRealtimeRadarSymbols" -Default 0)
       collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
@@ -1794,9 +1970,10 @@ function Write-QuoteFastHeartbeatStatus {
       time_standard = "UTC"
       volume_unit = "lots"
     }
-    Write-PublicSlotSourceStatus -SourceName $SourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload $heartbeatPayload
-    Write-PublicSlotSourceCoverageSnapshot -SourceName $SourceName -Status $status -Message $message -Payload $heartbeatPayload
-    Write-Log "quote-fast-heartbeat $status $message"
+    $fastHeartbeatSourceName = "$SourceName`_quote_fast_heartbeat"
+    Write-PublicSlotSourceStatus -SourceName $fastHeartbeatSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload $heartbeatPayload
+    Write-PublicSlotSourceCoverageSnapshot -SourceName $fastHeartbeatSourceName -Status $status -Message $message -Payload $heartbeatPayload
+    Write-Log "quote-fast-heartbeat $status primary_source_status_preserved=true heartbeat_source=$fastHeartbeatSourceName $message"
   } catch {
     Write-Log "WARN quote fast heartbeat failed: $($_.Exception.Message)"
   }
@@ -1945,15 +2122,27 @@ function Write-QuoteHeartbeatStatus {
       priority_symbols = $script:ApiUniverseStats.priority_symbols
       priority_strong_symbols = $script:ApiUniverseStats.priority_strong_symbols
       strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      terminal_priority_symbols = $script:ApiUniverseStats.terminal_priority_symbols
       three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
       opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
       dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
       dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
       dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
-      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      priority_policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
       collector_priority_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "prioritySymbols" -Default 0)
       collector_priority_attempted = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityAttempted" -Default 0)
       collector_priority_fresh_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityFreshCount" -Default 0)
+      collector_priority_terminal_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityTerminalSymbols" -Default 0)
+      collector_priority_opening_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityOpeningSymbols" -Default 0)
+      collector_priority_strategy1_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy1Symbols" -Default 0)
+      collector_priority_strategy2_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy2Symbols" -Default 0)
+      collector_priority_strategy3_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy3Symbols" -Default 0)
+      collector_priority_strategy4_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy4Symbols" -Default 0)
+      collector_priority_strategy5_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityStrategy5Symbols" -Default 0)
+      collector_priority_institution_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityInstitutionSymbols" -Default 0)
+      collector_priority_warrant_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityWarrantSymbols" -Default 0)
+      collector_priority_cb_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityCbSymbols" -Default 0)
+      collector_priority_realtime_radar_symbols = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "priorityRealtimeRadarSymbols" -Default 0)
       collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
@@ -3225,7 +3414,9 @@ function Invoke-FugleFutoptQuoteBatch {
   $cursor = [int]($state.cursor)
   if ($cursor -lt 0 -or $cursor -ge $FutureSymbols.Count) { $cursor = 0 }
   $effectiveFutoptQuoteBatchSize = $FutoptQuoteBatchSize
-  if ((Get-PublicSlotSession) -eq "regular") {
+  if ($FutoptQuoteFullDetect) {
+    $effectiveFutoptQuoteBatchSize = $FutureSymbols.Count
+  } elseif ((Get-PublicSlotSession) -eq "regular") {
     $effectiveFutoptQuoteBatchSize = [math]::Min($effectiveFutoptQuoteBatchSize, 20)
   }
   $batch = New-Object System.Collections.Generic.List[string]
@@ -3256,9 +3447,20 @@ function Invoke-FugleFutoptQuoteBatch {
     last_fetched_symbols = $fetched
     last_rows = $rows.Count
     universe = $FutureSymbols.Count
+    full_detect = [bool]$FutoptQuoteFullDetect
+    full_detect_complete = [bool]($batch.Count -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
     rate_limited = [bool]$script:FutoptRateLimited
   })
-  return @{ rows = $rows.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:FutoptRateLimited }
+  return @{
+    rows = $rows.ToArray()
+    attempted = $batch.Count
+    fetched = $fetched
+    skipped = $false
+    rate_limited = [bool]$script:FutoptRateLimited
+    universe = $FutureSymbols.Count
+    full_detect = [bool]$FutoptQuoteFullDetect
+    full_detect_complete = [bool]($batch.Count -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
+  }
 }
 
 function Convert-StocksSlimToTickerRows {
@@ -3903,6 +4105,15 @@ do {
     Use-QuoteFlushResult -FlushResult (Sync-LatestQuoteCacheToPublicSlot -QuotesFile $quotesFile -Reason "after-futopt" -Session $session -ShouldWritePreopenRows $shouldWritePreopenRows) -QuoteRows ([ref]$quoteRows) -PreopenRows ([ref]$preopenRows)
     $stockFutureTickerCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" }).Count
     $stockFutureMappedCount = @($fugleFutoptTickerRows | Where-Object { $_.product -eq "STOCK_FUTURE" -and -not [string]::IsNullOrWhiteSpace([string]$_.underlying_symbol) }).Count
+    $futoptStockQuoteUniverse = $nearStockFutureSymbols.Count
+    $futoptStockQuoteAttempted = [int]$fugleFutoptQuotePayload.attempted
+    $futoptStockQuoteFetched = [int]$fugleFutoptQuotePayload.fetched
+    $futoptStockQuoteComplete = if ($FutoptQuoteFullDetect) {
+      ($futoptStockQuoteUniverse -eq 0 -or ($futoptStockQuoteAttempted -ge $futoptStockQuoteUniverse -and -not [bool]$fugleFutoptQuotePayload.rate_limited))
+    } else {
+      ($futoptStockQuoteFetched -gt 0)
+    }
+    $futoptStockQuoteCoverage = if ($futoptStockQuoteUniverse -gt 0) { [math]::Round($futoptStockQuoteFetched / [math]::Max(1, $futoptStockQuoteUniverse), 4) } else { 1 }
     $shouldWriteFutoptTickers = $false
     if ($combinedFutoptTickerRows.Count -gt 0) {
       $shouldWriteFutoptTickers = ($null -eq $fugleFutoptTickerPayload -or -not [bool]$fugleFutoptTickerPayload.public_slot_from_cache)
@@ -3970,7 +4181,7 @@ do {
     $eligibleQuoteFloor = if ($eligibleQuoteCoverage.eligible_symbols -ge 1000) { [int][math]::Ceiling([double]$eligibleQuoteCoverage.eligible_symbols * 0.9) } else { [math]::Min(400, [math]::Max(1, [int]([double]$eligibleQuoteCoverage.eligible_symbols * 0.8))) }
     $quotesOk = ($eligibleQuoteCoverage.eligible_quote_rows -ge $eligibleQuoteFloor -and $quoteAgeSeconds -le $StaleSeconds)
     $dailyVolumeOk = ($script:ApiUniverseStats.avg_volume5_eligible -gt 0)
-    $futoptOk = ($combinedFutoptQuoteRows.Count -gt 0)
+    $futoptOk = ($combinedFutoptQuoteRows.Count -gt 0 -and $futoptStockQuoteComplete)
     $preopenOk = ($preopenRows.Count -gt 0)
     $preopenHistoryOk = ($preopenRows.Count -gt 0)
     if ($session -eq "preopen") {
@@ -4007,7 +4218,7 @@ do {
     $latestCandleTimeTaipei = Convert-IsoUtcToTaipei -IsoTime $intradayStats.intraday_1m_latest_candle_time
     $dailyVolumeRowsWritten = ($minutePayload.dailyRows.Count + $direct1mDailyRows.Count + $intraday1mSelfHealSummary.daily_rows_written)
     $strategy2RunEvidence = Get-Strategy2LatestRunEvidence
-    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_self_heal_enabled=$Intraday1mSelfHealEnabled; intraday_1m_self_heal_triggered=$($intraday1mSelfHealSummary.triggered); intraday_1m_self_heal_reason=$($intraday1mSelfHealSummary.reason); intraday_1m_self_heal_rows=$($intraday1mSelfHealSummary.rows_written); intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$($nearStockFutureSymbols.Count); futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_low_rate_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count + $intraday1mSelfHealSummary.daily_rows_written); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
+    $message = "writer=running; collector=$collectorState; raw_symbols=$rawSymbols; active_symbols=$seeded; blacklist_count=$blacklistCount; avg_volume5_min=$MinAvgVolume5Lots; avg_volume5_eligible=$($script:ApiUniverseStats.avg_volume5_eligible); avg_volume5_filtered=$($script:ApiUniverseStats.avg_volume5_filtered); daytrade_hot_symbols=$($script:ApiUniverseStats.daytrade_hot_symbols); terminal_priority_symbols=$($script:ApiUniverseStats.terminal_priority_symbols); priority_symbols=$($script:ApiUniverseStats.priority_symbols); priority_strong_symbols=$($script:ApiUniverseStats.priority_strong_symbols); eligible_quote_rows=$($eligibleQuoteCoverage.eligible_quote_rows); eligible_quote_coverage=$($eligibleQuoteCoverage.eligible_quote_coverage); quote_coverage_ratio=$($eligibleQuoteCoverage.eligible_quote_coverage); source_core_ok=$sourceCoreOk; permission_ok=$permissionOk; quotes_ok=$quotesOk; intraday_1m_ok=$intraday1mOk; intraday_1m_fresh_ok=$intraday1mFreshOk; intraday_1m_fresh_target_seconds=$Intraday1mFreshTargetSeconds; intraday_1m_fresh_hard_seconds=$Intraday1mFreshHardSeconds; intraday_1m_self_heal_enabled=$Intraday1mSelfHealEnabled; intraday_1m_self_heal_triggered=$($intraday1mSelfHealSummary.triggered); intraday_1m_self_heal_reason=$($intraday1mSelfHealSummary.reason); intraday_1m_self_heal_rows=$($intraday1mSelfHealSummary.rows_written); intraday_1m_ma20_required=$intraday1mMa20Required; intraday_1m_ma35_required=$intraday1mMa35Required; daily_volume_ok=$dailyVolumeOk; scanner_block_reason=$scannerBlockReason; futopt_ok=$futoptOk; preopen_ok=$preopenOk; preopen_history_ok=$preopenHistoryOk; degraded_but_usable_for_intraday=$degradedButUsableForIntraday; today_candle_count=$($intradayStats.today_candle_count); warmup_candle_count=$($intradayStats.warmup_candle_count); continuous_candle_count=$($intradayStats.continuous_candle_count); ready_ma20_continuous=$($intradayStats.ready_ma20_continuous); ready_ma35_continuous=$($intradayStats.ready_ma35_continuous); ready_macd_continuous=$($intradayStats.ready_macd_continuous); ready_ge_80=$($intradayStats.ready_ge_80); ready_ge_200=$($intradayStats.ready_ge_200); cumulative_bid_ask_min=$MinCumulativeBidAskLots; quote_liquidity_eligible=$($script:ApiUniverseStats.quote_liquidity_eligible); quote_liquidity_filtered=$($script:ApiUniverseStats.quote_liquidity_filtered); quotes=$($quoteRows.Count); quote_age_seconds=$quoteAgeSeconds; last_quote_at=$lastQuoteAt; rest_quote_attempted=$($restQuotePayload.attempted); rest_quote_rows=$($restQuotePayload.quotes.Count); rest_quote_fetched_symbols=$($restQuotePayload.fetched); preopen=$($preopenRows.Count); preopen_history_attempted=$($preopenRows.Count); futopt=$($combinedFutoptQuoteRows.Count); futopt_tickers=$($combinedFutoptTickerRows.Count); futopt_txf_symbols=$($nearTxfFutureSymbols.Count); futopt_txf_quotes_this_loop=$($fugleTxfQuotePayload.rows.Count); futopt_stock_tickers=$stockFutureTickerCount; futopt_stock_mapped=$stockFutureMappedCount; futopt_stock_quote_universe=$futoptStockQuoteUniverse; futopt_stock_quote_attempted=$futoptStockQuoteAttempted; futopt_stock_quote_fetched=$futoptStockQuoteFetched; futopt_stock_quote_complete=$futoptStockQuoteComplete; futopt_stock_quote_coverage=$futoptStockQuoteCoverage; futopt_stock_quotes_this_loop=$($fugleFutoptQuotePayload.rows.Count); futopt_scope=TXF_and_full_stock_futures; intraday_1m_symbols_today=$($intradayStats.intraday_1m_symbols_today); intraday_1m_rows_today=$($intradayStats.intraday_1m_rows_today); intraday_1m_stale_seconds=$($intradayStats.intraday_1m_stale_seconds); latest_candle_time=$($intradayStats.intraday_1m_latest_candle_time); quote_derived_1m_candidates=$($minutePayload.candidateSymbols); quote_derived_1m_full_universe=$($minutePayload.fullUniverse); quote_derived_1m_rows=$($minutePayload.quoteDerivedRows); quote_derived_1m_current_rows=$($minutePayload.quoteDerivedCurrentRows); quote_derived_1m_opening_backfill_rows=$($minutePayload.openingBackfillRows); quote_derived_1m_opening_backfill_symbols=$($minutePayload.openingBackfillSymbols); quote_derived_1m_current_minute=$($minutePayload.currentMinute); daily_volume_rows=$($minutePayload.dailyRows.Count + $direct1mDailyRows.Count + $intraday1mSelfHealSummary.daily_rows_written); direct_1m_daily_rows=$($direct1mDailyRows.Count); daily_ohlcv_rows=$($direct1mOhlcvRows.Count); cumulative_bid_ask_rows=$cumulativeBidAskRows; direct_1m_prewarm_target=$($direct1mPrewarmPayload.target_symbols); direct_1m_prewarm_completed=$($direct1mPrewarmPayload.completed_symbols); direct_1m_prewarm_complete=$($direct1mPrewarmPayload.complete); direct_1m_prewarm_rows=$($direct1mPrewarmPayload.rows.Count); direct_1m_attempted=$($direct1mPayload.attempted); direct_1m_rows=$($direct1mRows.Count)"
     $sourceStatusPayload = @{
       source_contract_version = $SourceContractVersion
       writer_version = $WriterVersion
@@ -4042,15 +4253,27 @@ do {
       priority_symbols = $script:ApiUniverseStats.priority_symbols
       priority_strong_symbols = $script:ApiUniverseStats.priority_strong_symbols
       strategy_priority_symbols = $script:ApiUniverseStats.strategy_priority_symbols
+      terminal_priority_symbols = $script:ApiUniverseStats.terminal_priority_symbols
       three_day_open_high_fade_symbols = $script:ApiUniverseStats.three_day_open_high_fade_symbols
       opening_priority_symbols = $script:ApiUniverseStats.opening_priority_symbols
       dynamic_amplitude_bull_symbols = $script:ApiUniverseStats.dynamic_amplitude_bull_symbols
       dynamic_volume_surge_symbols = $script:ApiUniverseStats.dynamic_volume_surge_symbols
       dynamic_mother_pool_symbols = $script:ApiUniverseStats.dynamic_mother_pool_symbols
-      priority_policy = "09:00 strategy1+strategy3+strategy4 plus 3-day open-high-fade first; intraday amplitude>2 with daily MA bull and cumulative volume>2000; intraday volume>2x avg5 and total_volume>10000 top100"
+      priority_policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
       collector_priority_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "prioritySymbols" -Default 0)
       collector_priority_attempted = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityAttempted" -Default 0)
       collector_priority_fresh_count = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityFreshCount" -Default 0)
+      collector_priority_terminal_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityTerminalSymbols" -Default 0)
+      collector_priority_opening_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityOpeningSymbols" -Default 0)
+      collector_priority_strategy1_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityStrategy1Symbols" -Default 0)
+      collector_priority_strategy2_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityStrategy2Symbols" -Default 0)
+      collector_priority_strategy3_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityStrategy3Symbols" -Default 0)
+      collector_priority_strategy4_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityStrategy4Symbols" -Default 0)
+      collector_priority_strategy5_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityStrategy5Symbols" -Default 0)
+      collector_priority_institution_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityInstitutionSymbols" -Default 0)
+      collector_priority_warrant_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityWarrantSymbols" -Default 0)
+      collector_priority_cb_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityCbSymbols" -Default 0)
+      collector_priority_realtime_radar_symbols = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "priorityRealtimeRadarSymbols" -Default 0)
       collector_adaptive_rpm = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRateLimited" -Default $false)
@@ -4173,12 +4396,12 @@ do {
       futopt = $combinedFutoptQuoteRows.Count
       futopt_quotes = $combinedFutoptQuoteRows.Count
       futopt_tickers = $combinedFutoptTickerRows.Count
-      futopt_scope = "TXF_and_low_rate_stock_futures"
+      futopt_scope = "TXF_and_full_stock_futures"
       futopt_stock_futures_supported = ($stockFutureMappedCount -gt 0)
-      futopt_stock_futures_message = "Stock futures tickers are loaded from Fugle futopt; near-month stock futures quotes are filled by low-rate rotating batches to avoid 429."
+      futopt_stock_futures_message = "Stock futures tickers are loaded from Fugle futopt; full-detect mode attempts every near-month mapped stock future in each due run and fail-closes when coverage is incomplete or rate limited."
       futopt_stock_tickers = $stockFutureTickerCount
       futopt_stock_mapped = $stockFutureMappedCount
-      futopt_stock_quote_universe = $nearStockFutureSymbols.Count
+      futopt_stock_quote_universe = $futoptStockQuoteUniverse
       futopt_txf_symbols = $nearTxfFutureSymbols.Count
       futopt_txf_quote_attempted_this_loop = $fugleTxfQuotePayload.attempted
       futopt_txf_quote_fetched_this_loop = $fugleTxfQuotePayload.fetched
@@ -4189,9 +4412,12 @@ do {
       txf_ok = (($txfPayload.quotes.Count + $fugleTxfQuotePayload.rows.Count) -gt 0)
       futopt_txf_ok = (($txfPayload.quotes.Count + $fugleTxfQuotePayload.rows.Count) -gt 0)
       mapped_underlying_count = $stockFutureMappedCount
-      futopt_stock_quote_attempted_this_loop = $fugleFutoptQuotePayload.attempted
-      futopt_stock_quote_fetched_this_loop = $fugleFutoptQuotePayload.fetched
-      futopt_quote_batch_size = $FutoptQuoteBatchSize
+      futopt_stock_quote_attempted_this_loop = $futoptStockQuoteAttempted
+      futopt_stock_quote_fetched_this_loop = $futoptStockQuoteFetched
+      futopt_stock_quote_complete = [bool]$futoptStockQuoteComplete
+      futopt_stock_quote_coverage = $futoptStockQuoteCoverage
+      futopt_quote_full_detect = [bool]$FutoptQuoteFullDetect
+      futopt_quote_batch_size = if ($FutoptQuoteFullDetect) { $futoptStockQuoteUniverse } else { $FutoptQuoteBatchSize }
       futopt_quote_every_seconds = $FutoptQuoteEverySeconds
       futopt_tickers_every_seconds = $FutoptTickersEverySeconds
       futopt_quote_rate_limited = [bool]$fugleFutoptQuotePayload.rate_limited
@@ -4271,7 +4497,7 @@ do {
       universe_source = "filtered_stocks_slim_and_blacklist"
       daily_volume_retain_trade_days = $DailyVolumeRetainTradeDays
       preopen_stale_after_session = $true
-      futopt_scope_note = "TXF plus Fugle stock futures. Stock futures quotes rotate in small batches, so full quote coverage accumulates over multiple loops."
+      futopt_scope_note = "TXF plus all near-month mapped Fugle stock futures in full-detect mode; incomplete stock futures quote coverage is a blocker, not a pass."
     }
     Write-PublicSlotSourceStatus -SourceName $StatusSourceName -Status $status -Message $message -StaleSeconds $quoteAgeSeconds -Payload $sourceStatusPayload
     Write-PublicSlotSourceCoverageSnapshot -SourceName $StatusSourceName -Status $status -Message $message -Payload $sourceStatusPayload

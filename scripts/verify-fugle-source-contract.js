@@ -636,7 +636,7 @@ async function liveChecks() {
 
   if (sourceRegularSession) {
     try {
-      const readinessRows = await restGet(baseUrl, key, "v_strategy2_readiness_status?select=status,reason,detection_expected_count,intraday_1m_ready_count,intraday_1m_coverage,strategy2_ready_100,checked_at&limit=1");
+      const readinessRows = await restGet(baseUrl, key, "v_strategy2_readiness_status?select=status,reason,detection_expected_count,intraday_1m_ready_count,strategy2_ready_100,checked_at&limit=1");
       const row = readinessRows[0] || {};
       const expected = firstFiniteNumber(row.detection_expected_count);
       const ready = firstFiniteNumber(row.intraday_1m_ready_count);

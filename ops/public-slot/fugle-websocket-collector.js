@@ -29,6 +29,7 @@ const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_R
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
 const FINMIND_RECOVERY_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "1"));
 const FINMIND_RECOVERY_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_TIMEOUT_MS || 30000));
+const FINMIND_IP_BAN_COOLDOWN_MS = Math.max(600000, Number(process.env.FUGLE_COLLECTOR_FINMIND_IP_BAN_COOLDOWN_MS || 21600000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
 const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "13:30";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 120));
@@ -250,16 +251,26 @@ function readPrioritySymbols(symbols) {
   const universe = new Set(symbols);
   const seen = new Set();
   const ordered = [];
+  const prioritySeen = new Set();
+  const priorityOrdered = [];
   const counts = {
     strategy1: 0,
+    strategy2: 0,
     strategy3: 0,
     strategy4: 0,
+    strategy5: 0,
+    institution: 0,
+    warrant: 0,
+    cb: 0,
+    realtimeRadar: 0,
     threeDayOpenHighFade: 0,
     dynamic: 0,
     hot: 0,
+    terminalPriority: 0,
+    openingPriority: 0,
     symbols: 0,
   };
-  const addMany = (key, values) => {
+  const addMany = (key, values, options = {}) => {
     const list = Array.isArray(values) ? values : [];
     let count = 0;
     for (const value of list) {
@@ -270,20 +281,33 @@ function readPrioritySymbols(symbols) {
         seen.add(code);
         ordered.push(code);
       }
+      if (options.priority && !prioritySeen.has(code)) {
+        prioritySeen.add(code);
+        priorityOrdered.push(code);
+      }
     }
     counts[key] = count;
   };
 
-  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols);
-  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols);
-  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols);
-  addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols);
-  addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols);
-  addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols);
+  addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
+  addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
+  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, { priority: true });
+  addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, { priority: true });
+  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, { priority: true });
+  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, { priority: true });
+  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols, { priority: true });
+  addMany("institution", payload.institution || payload.institutionSymbols, { priority: true });
+  addMany("warrant", payload.warrant || payload.warrantSymbols, { priority: true });
+  addMany("cb", payload.cb || payload.cbSymbols, { priority: true });
+  addMany("realtimeRadar", payload.realtimeRadar || payload.realtimeRadarSymbols, { priority: true });
+  addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols, { priority: true });
+  addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols, { priority: true });
+  addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, { priority: true });
   addMany("symbols", payload.symbols);
 
   return {
-    symbols: ordered,
+    symbols: priorityOrdered.length ? priorityOrdered : ordered,
+    allSymbols: ordered,
     counts,
     updatedAt: payload.updatedAt || "",
     source: payload.source || "",
@@ -479,6 +503,11 @@ function normalizeFinMindQuote(row, today) {
 
 function applyFinMindCooldown(status, payload) {
   const retryAfterSeconds = Number(payload?.retry_after || payload?.retryAfter || 0);
+  const message = String(payload?.msg || payload?.message || payload?.error || "").toLowerCase();
+  if (status === 403 && message.includes("ban")) {
+    finmindCooldownUntil = Date.now() + FINMIND_IP_BAN_COOLDOWN_MS;
+    return;
+  }
   if ((status === 403 || status === 429 || retryAfterSeconds > 0) && retryAfterSeconds >= 0) {
     const floorSeconds = status === 403 || status === 429 ? 60 : 0;
     finmindCooldownUntil = Date.now() + Math.max(floorSeconds, retryAfterSeconds) * 1000;
@@ -627,9 +656,17 @@ async function tick() {
       priorityFreshCount: 0,
       prioritySource: cooldownPriority.source,
       priorityFileUpdatedAt: cooldownPriority.updatedAt,
+      priorityTerminalSymbols: cooldownPriority.counts.terminalPriority,
+      priorityOpeningSymbols: cooldownPriority.counts.openingPriority,
       priorityStrategy1Symbols: cooldownPriority.counts.strategy1,
+      priorityStrategy2Symbols: cooldownPriority.counts.strategy2,
       priorityStrategy3Symbols: cooldownPriority.counts.strategy3,
       priorityStrategy4Symbols: cooldownPriority.counts.strategy4,
+      priorityStrategy5Symbols: cooldownPriority.counts.strategy5,
+      priorityInstitutionSymbols: cooldownPriority.counts.institution,
+      priorityWarrantSymbols: cooldownPriority.counts.warrant,
+      priorityCbSymbols: cooldownPriority.counts.cb,
+      priorityRealtimeRadarSymbols: cooldownPriority.counts.realtimeRadar,
       priorityThreeDayOpenHighFadeSymbols: cooldownPriority.counts.threeDayOpenHighFade,
       priorityDynamicSymbols: cooldownPriority.counts.dynamic,
       priorityHotSymbols: cooldownPriority.counts.hot,
@@ -718,9 +755,17 @@ async function tick() {
     priorityFreshCount: selected.priorityFreshCount,
     prioritySource: priority.source,
     priorityFileUpdatedAt: priority.updatedAt,
+    priorityTerminalSymbols: priority.counts.terminalPriority,
+    priorityOpeningSymbols: priority.counts.openingPriority,
     priorityStrategy1Symbols: priority.counts.strategy1,
+    priorityStrategy2Symbols: priority.counts.strategy2,
     priorityStrategy3Symbols: priority.counts.strategy3,
     priorityStrategy4Symbols: priority.counts.strategy4,
+    priorityStrategy5Symbols: priority.counts.strategy5,
+    priorityInstitutionSymbols: priority.counts.institution,
+    priorityWarrantSymbols: priority.counts.warrant,
+    priorityCbSymbols: priority.counts.cb,
+    priorityRealtimeRadarSymbols: priority.counts.realtimeRadar,
     priorityThreeDayOpenHighFadeSymbols: priority.counts.threeDayOpenHighFade,
     priorityDynamicSymbols: priority.counts.dynamic,
     priorityHotSymbols: priority.counts.hot,
