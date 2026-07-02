@@ -22,6 +22,9 @@ const DEFAULT_RADAR_LIMIT = 120;
 const FULL_SESSION_RADAR_LIMIT = 1200;
 const MAX_RADAR_LIMIT = 1500;
 const MIN_TRADING_DAY_CACHE_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_API_MIN_CACHE_MAX_AGE_MS || 5 * 60 * 1000);
+const SESSION_END_MINUTES = 13 * 60 + 30;
+const SESSION_COMPLETE_GRACE_MINUTES = Number(process.env.REALTIME_RADAR_SESSION_COMPLETE_GRACE_MINUTES || 5);
+const SESSION_COMPLETE_MINUTES = SESSION_END_MINUTES - Math.max(0, SESSION_COMPLETE_GRACE_MINUTES);
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
@@ -170,6 +173,45 @@ function taipeiMinuteOfDay(date = new Date()) {
   return cleanNumber(byType.hour) * 60 + cleanNumber(byType.minute);
 }
 
+function taipeiMinuteLabelFromMinutes(minutes) {
+  const safe = Math.max(0, Math.min(23 * 60 + 59, Math.round(cleanNumber(minutes))));
+  const hour = String(Math.floor(safe / 60)).padStart(2, "0");
+  const minute = String(safe % 60).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+function payloadUpdatedAtTaipeiMinute(payload) {
+  const updatedAtMs = payloadUpdatedAtMs(payload);
+  if (!updatedAtMs) return null;
+  return taipeiMinuteOfDay(new Date(updatedAtMs));
+}
+
+function payloadSessionCompletenessSnapshot(marketSession, payload, nowMs = Date.now()) {
+  const nowMinutes = taipeiMinuteOfDay(new Date(nowMs));
+  const afterSession = Boolean(
+    marketSession?.hasTodayMarketData
+    && marketSession?.closed !== true
+    && nowMinutes > SESSION_END_MINUTES
+  );
+  const updatedAtMinutes = payloadUpdatedAtTaipeiMinute(payload);
+  const complete = !afterSession || (updatedAtMinutes != null && updatedAtMinutes >= SESSION_COMPLETE_MINUTES);
+  const expectedAfter = taipeiMinuteLabelFromMinutes(SESSION_COMPLETE_MINUTES);
+  const updatedAtLabel = updatedAtMinutes == null ? "" : taipeiMinuteLabelFromMinutes(updatedAtMinutes);
+  return {
+    ok: complete,
+    status: complete ? (afterSession ? "complete" : "in_session") : "session_incomplete",
+    reason: complete
+      ? (afterSession ? "realtime_radar_session_complete" : "realtime_radar_session_still_open")
+      : `realtime_radar_session_incomplete: updatedAt ${updatedAtLabel || "missing"} before ${expectedAfter}`,
+    afterSession,
+    sessionEnd: "13:30",
+    expectedUpdatedAtAfter: expectedAfter,
+    updatedAtMinute: updatedAtMinutes,
+    updatedAtLabel,
+    checkedAt: new Date(nowMs).toISOString(),
+  };
+}
+
 function isMarketDetectionWindow(date = new Date()) {
   const minutes = taipeiMinuteOfDay(date);
   return minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
@@ -214,8 +256,17 @@ function payloadFreshnessSnapshot(marketSession, payload, nowMs = Date.now()) {
 
 function isTradingDayPayloadFresh(marketSession, payload) {
   if (!marketSession?.hasTodayMarketData) return false;
+  if (!payloadSessionCompletenessSnapshot(marketSession, payload).ok) return false;
   if (!isMarketDetectionWindow()) return true;
   return payloadFreshnessSnapshot(marketSession, payload).fresh;
+}
+
+function tradingDayPayloadBlockReason(marketSession, payload) {
+  if (!marketSession?.hasTodayMarketData) return "trading_day_radar_cache_not_today";
+  const sessionCompleteness = payloadSessionCompletenessSnapshot(marketSession, payload);
+  if (!sessionCompleteness.ok) return sessionCompleteness.reason;
+  if (!isMarketDetectionWindow()) return "";
+  return payloadFreshnessSnapshot(marketSession, payload).fresh ? "" : "trading_day_radar_cache_stale";
 }
 
 function radarSourceCoverage(payload, marketSession) {
@@ -274,6 +325,8 @@ function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
 function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_RADAR_LIMIT) {
   const normalizedPayload = normalizeRadarRows(payload, limit);
   const freshness = payloadFreshnessSnapshot(marketSession, normalizedPayload);
+  const sessionCompleteness = payloadSessionCompletenessSnapshot(marketSession, normalizedPayload);
+  const sessionIncomplete = !sessionCompleteness.ok;
   const runId = radarPayloadRunId(normalizedPayload);
   const sourceCoverage = normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession);
   const fallbackUsed = normalizedPayload?.fallbackUsed === true
@@ -324,16 +377,16 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
       scannedCount: normalizedPayload?.totalCount || normalizedPayload?.count,
       resultCount: normalizedPayload?.count,
       readbackCount: normalizedPayload?.count,
-      publishAllowed: !fallbackUsed,
-      degradedBlocksLatest: fallbackUsed,
-      preservePreviousGood: fallbackUsed,
+      publishAllowed: !fallbackUsed && !sessionIncomplete,
+      degradedBlocksLatest: fallbackUsed || sessionIncomplete,
+      preservePreviousGood: fallbackUsed || sessionIncomplete,
       fallbackUsed,
       fallbackScope,
       fallbackAllowed: !fallbackUsed,
       fallbackDetails,
       writeBudget,
       retentionOk: true,
-      qualityStatus: freshness.fresh ? "ready" : "degraded",
+      qualityStatus: freshness.fresh && !sessionIncomplete ? "ready" : "degraded",
     });
   const quoteCoverageAtRun = snapshotFields.quote_coverage_at_run
     || normalizedPayload?.quote_coverage_at_run
@@ -349,6 +402,10 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
   const alertReceipt = firstDefined(normalizedPayload?.alertReceipt, runQualityAtPublish.alertReceipt);
   const enrichedRunQualityAtPublish = {
     ...runQualityAtPublish,
+    status: sessionIncomplete ? "session_incomplete" : (runQualityAtPublish.status || (freshness.fresh ? "ready" : "degraded")),
+    publishAllowed: sessionIncomplete ? false : runQualityAtPublish.publishAllowed,
+    degradedBlocksLatest: sessionIncomplete ? true : runQualityAtPublish.degradedBlocksLatest,
+    preservePreviousGood: sessionIncomplete ? true : runQualityAtPublish.preservePreviousGood,
     writeBudget,
     requiredFields,
     blankCounts,
@@ -356,6 +413,7 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     rawKeepDays,
     retentionOk,
     alertReceipt,
+    sessionCompleteness,
   };
   const runTimeSourceSnapshot = snapshotFields.runTimeSourceSnapshot
     ? {
@@ -372,12 +430,17 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
       run_time_source_snapshot: runTimeSourceSnapshot,
     } : {}),
     runId,
+    ok: sessionIncomplete ? false : normalizedPayload.ok,
+    status: sessionIncomplete ? "degraded" : normalizedPayload.status,
+    reason: reason || (sessionIncomplete ? sessionCompleteness.reason : normalizedPayload?.reason),
     tradeDate: marketSession?.marketDataDate || normalizedPayload?.tradeDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
     sourceCoverage,
     quote_coverage_at_run: quoteCoverageAtRun,
     run_quality_at_publish: enrichedRunQualityAtPublish,
+    sessionCompleteness,
+    session_completeness_at_run: sessionCompleteness,
     fresh_quote_coverage_120s: firstDefined(normalizedPayload?.fresh_quote_coverage_120s, quoteCoverageAtRun.fresh_quote_coverage_120s, quoteCoverageAtRun.freshQuoteCoverage120s),
     fresh_quotes: firstDefined(normalizedPayload?.fresh_quotes, quoteCoverageAtRun.fresh_quotes, quoteCoverageAtRun.freshQuotes),
     active_symbols: firstDefined(normalizedPayload?.active_symbols, quoteCoverageAtRun.active_symbols, quoteCoverageAtRun.activeSymbols),
@@ -390,7 +453,8 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     alertReceipt,
     freshness: {
       ...(normalizedPayload?.freshness || {}),
-      decision: normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale"),
+      decision: sessionIncomplete ? "degraded" : (normalizedPayload?.freshness?.decision || (freshness.fresh ? "fresh" : "stale")),
+      reason: sessionIncomplete ? sessionCompleteness.reason : normalizedPayload?.freshness?.reason,
       updatedAt: normalizedPayload?.updatedAt || "",
       ageSeconds: freshness.ageSeconds,
       maxAgeSeconds: freshness.maxAgeSeconds,
@@ -402,8 +466,13 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     fallbackScope,
     fallbackDetails,
     writeBudget,
-    reason: reason || normalizedPayload?.reason,
     marketSession,
+    evidenceStatus: sessionIncomplete ? "session_incomplete" : normalizedPayload.evidenceStatus,
+    sourceEvidenceStatus: sessionIncomplete ? "session_incomplete" : normalizedPayload.sourceEvidenceStatus,
+    unattendedStatus: sessionIncomplete ? "NO" : normalizedPayload.unattendedStatus,
+    unattended: sessionIncomplete
+      ? { status: "NO", evidenceStatus: "session_incomplete", reason: sessionCompleteness.reason }
+      : normalizedPayload.unattended,
     transport: {
       ...(normalizedPayload?.transport || {}),
       runId,
@@ -732,16 +801,17 @@ module.exports = async function handler(request, response) {
       },
     };
     const session = buildMarketSession(tradingDay, payload);
-    if (!isTradingDayPayloadFresh(session, payload)) {
+    const blockReason = tradingDayPayloadBlockReason(session, payload);
+    if (blockReason) {
       const stalePayload = {
         ...payload,
         ok: false,
         status: payload.status === "ok" ? "degraded" : payload.status || "degraded",
-        reason: primaryError || "trading_day_radar_cache_stale",
+        reason: primaryError || blockReason,
         freshness: {
           ...(payload.freshness || {}),
           decision: "degraded",
-          reason: primaryError || "trading_day_radar_cache_stale",
+          reason: primaryError || blockReason,
           checkedAt: new Date().toISOString(),
           marketDataDate: session?.marketDataDate || "",
           today: session?.today || "",

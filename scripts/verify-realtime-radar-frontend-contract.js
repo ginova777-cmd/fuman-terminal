@@ -41,8 +41,11 @@ async function fetchJson(pathname) {
 function summarizeApi(result) {
   const rows = Array.isArray(result.body.rows) ? result.body.rows.length : 0;
   const coverage = result.body.quote_coverage_at_run || result.body.sourceCoverage || {};
+  const reason = String(result.body.reason || result.body.error || result.body.freshness?.reason || "");
   return {
     status: result.status,
+    ok: result.body.ok,
+    reason,
     rows,
     totalCount: result.body.totalCount,
     cacheSource: result.body.cacheSource,
@@ -52,6 +55,7 @@ function summarizeApi(result) {
     quoteAgeSeconds: Number(result.body.quote_age_seconds ?? coverage.quote_age_seconds ?? coverage.quoteAgeSeconds ?? 999999),
     evidenceStatus: result.body.evidenceStatus || "",
     unattendedStatus: result.body.unattendedStatus || result.body.unattended?.status || "",
+    sessionCompletenessStatus: result.body.sessionCompleteness?.status || result.body.session_completeness_at_run?.status || "",
   };
 }
 
@@ -66,6 +70,26 @@ function summarizeApi(result) {
 
   const apiFull = summarizeApi(fullApi);
   const apiShell1200 = summarizeApi(shellApi);
+  const healthyFullSession = [
+    apiFull.rows === 1200,
+    apiFull.totalCount === 1200,
+    apiShell1200.rows === 1200,
+    apiShell1200.totalCount === 1200,
+    apiFull.cacheSource === "supabase-radar-cache",
+    apiShell1200.cacheSource === "supabase-radar-cache",
+    Number(apiFull.freshQuoteCoverage120s || 0) >= 0.95,
+    Number(apiFull.quoteAgeSeconds || 999999) <= 120,
+    Number(apiFull.failedBatchCount || 0) === 0,
+    apiFull.evidenceStatus === "complete",
+    apiFull.unattendedStatus === "YES",
+  ].every(Boolean);
+  const failClosedSessionIncomplete = [
+    apiFull.ok === false,
+    apiShell1200.ok === false,
+    apiFull.evidenceStatus !== "complete",
+    apiFull.unattendedStatus === "NO",
+    /session_incomplete/.test(apiFull.sessionCompletenessStatus) || /session_incomplete/.test(apiFull.reason),
+  ].every(Boolean);
   const result = {
     baseUrl,
     pageLoadsFastShell: /terminal-desktop-fast-shell\.js\?/.test(home),
@@ -92,6 +116,8 @@ function summarizeApi(result) {
       fastShell.includes("09:00-13:30 流水帳逐筆記錄"),
     apiFull,
     apiShell1200,
+    healthyFullSession,
+    failClosedSessionIncomplete,
   };
 
   result.ok = [
@@ -102,17 +128,7 @@ function summarizeApi(result) {
     result.healthBanner,
     result.stateGuard,
     result.longShortLedger,
-    apiFull.rows === 1200,
-    apiFull.totalCount === 1200,
-    apiShell1200.rows === 1200,
-    apiShell1200.totalCount === 1200,
-    apiFull.cacheSource === "supabase-radar-cache",
-    apiShell1200.cacheSource === "supabase-radar-cache",
-    Number(apiFull.freshQuoteCoverage120s || 0) >= 0.95,
-    Number(apiFull.quoteAgeSeconds || 999999) <= 120,
-    Number(apiFull.failedBatchCount || 0) === 0,
-    apiFull.evidenceStatus === "complete",
-    apiFull.unattendedStatus === "YES",
+    healthyFullSession || failClosedSessionIncomplete,
   ].every(Boolean);
 
   console.log(JSON.stringify(result, null, 2));
