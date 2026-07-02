@@ -1,7 +1,16 @@
+function hasDesktopFastShellAiPanel(panel = document.querySelector("#market-view .market-ai-panel,#market-view [data-market-api-ai],#market-ai-panel")) {
+  return Boolean(panel?.dataset?.marketAiRenderer === "desktop-fast-shell");
+}
+
+function isDesktopFastShellAiOwner(panel = document.querySelector("#market-view .market-ai-panel,#market-view [data-market-api-ai],#market-ai-panel")) {
+  return hasDesktopFastShellAiPanel(panel) || Boolean(document.querySelector("script[data-fuman-desktop-fast-shell]"));
+}
+
 function installMarketAiRuntimeLine() {
   const box = "display:flex;flex-wrap:wrap;gap:10px;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(127,166,255,.28);border-radius:8px;color:#b9c9e8;font-size:13px;font-weight:800";
   const run = () => {
     try {
+      if (isDesktopFastShellAiOwner()) return;
       const panel = document.querySelector("#market-view");
       const anchor = panel?.querySelector(".market-ai-summary,.market-ai-block");
       if (!anchor) return;
@@ -33,6 +42,7 @@ function installMarketAiPriorityRiskGuard() {
   ];
   const run = () => {
     try {
+      if (isDesktopFastShellAiOwner()) return;
       const block = [...document.querySelectorAll("#market-view .market-ai-block")]
         .find((node) => (node.querySelector("h3")?.textContent || "").includes("風險提醒"));
       const risk = block?.querySelector(".market-ai-risk");
@@ -57,7 +67,7 @@ function installMarketAiPriorityRiskGuard() {
 
 function installMarketAiLiveContractPanel() {
   if (window.__fumanMarketAiLiveContractPanel) return;
-  window.__fumanMarketAiLiveContractPanel = "20260630-03";
+  window.__fumanMarketAiLiveContractPanel = "20260702-single-renderer";
 
   const endpoint = "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
@@ -104,6 +114,7 @@ function installMarketAiLiveContractPanel() {
   function setLoadingPanel(reason = "loading") {
     const panel = aiPanel();
     if (!panel) return;
+    if (isDesktopFastShellAiOwner(panel)) return;
     suppressObserver = true;
     panel.dataset.marketApiAi = "loading-contract";
     panel.innerHTML = `<div class="empty-state">載入今日正式 AI 判讀/熱力圖資料中...<br><small>${esc(reason)}｜不顯示舊 panel cache。</small></div>`;
@@ -117,6 +128,7 @@ function installMarketAiLiveContractPanel() {
   function paint(payload) {
     const panel = aiPanel();
     if (!panel) return;
+    if (isDesktopFastShellAiOwner(panel)) return;
     if (panel.dataset.marketApiAi === "live-contract-watchdog" && panel.querySelector("[data-market-ai-live-watchdog]")) return;
     const dashboard = payload?.dashboard || {};
     const fresh = payload?.dataFreshness || {};
@@ -142,13 +154,16 @@ function installMarketAiLiveContractPanel() {
     if (loading || !active()) return;
     const panel = aiPanel();
     if (!panel) return;
+    if (isDesktopFastShellAiOwner(panel)) return;
+    if (!staleLegacyPanel(panel)) return;
     loading = true;
-    if (force || staleLegacyPanel(panel)) setLoadingPanel("正式水源同步中");
+    setLoadingPanel("正式水源同步中");
     try {
       const response = await fetch(`${endpoint}&t=${Date.now()}`, { cache: "no-store", headers: { "Cache-Control": "no-store" } });
       if (!response.ok) throw new Error(`market_ai_live_http_${response.status}`);
       paint(await response.json());
     } catch (error) {
+      if (isDesktopFastShellAiOwner(panel)) return;
       suppressObserver = true;
       panel.dataset.marketApiAi = "live-contract";
       panel.innerHTML = `<div class="empty-state">AI 判讀正式水源讀取失敗：${esc(error?.message || error)}。不使用舊 panel cache 當正常資料。</div>`;
@@ -161,6 +176,7 @@ function installMarketAiLiveContractPanel() {
   function guardStaleFirstPaint() {
     if (!active() || suppressObserver) return;
     const panel = aiPanel();
+    if (isDesktopFastShellAiOwner(panel)) return;
     if (!staleLegacyPanel(panel)) return;
     setLoadingPanel("攔截舊資料");
     run(true);
@@ -175,6 +191,8 @@ function installMarketAiLiveContractPanel() {
     if (!button) return;
     queueMicrotask(() => {
       if (active()) {
+        if (isDesktopFastShellAiOwner()) return;
+        if (!staleLegacyPanel()) return;
         setLoadingPanel("切換 AI 判讀");
         run(true);
       }
