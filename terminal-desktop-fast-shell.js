@@ -1182,6 +1182,11 @@
     const swingZone = compactText(merged.swingZone || merged.zone || merged.swing_zone || payload.swingZone || payload.zone || active.swingZone || "", 2).toUpperCase();
     const swingZoneLabel = compactText(merged.swingZoneLabel || merged.zoneLabel || merged.zone_label || payload.swingZoneLabel || payload.zoneLabel || active.swingZoneLabel || (swingZone ? `${swingZone}區` : ""), 16);
     const signals = normalizeSignalRows(merged.signals || merged.matches || merged.swingSignals || payload.signals || payload.matches || active.signals, route);
+    const strategy4Triangle = isStrategy4Route(route) && merged.triangleBreakout && typeof merged.triangleBreakout === "object"
+      ? merged.triangleBreakout
+      : null;
+    const strategy4TriangleLabel = strategy4Triangle ? compactText(strategy4Triangle.label || STRATEGY4_SIGNAL_LABELS.triangle_breakout || "三角收斂起漲", 28) : "";
+    const strategy4TriangleReason = strategy4Triangle ? compactText(strategy4Triangle.reason || "", 96) : "";
     const rawTags = [
       ...normalizeArray(merged.tags),
       ...normalizeArray(merged.signalTags),
@@ -1204,10 +1209,10 @@
       64
     );
     const strategy4MatchedLabels = isStrategy4Route(route)
-      ? signals.map((signal) => signal.label || signal.id || "").filter(Boolean).join("、")
+      ? [...signals.map((signal) => signal.label || signal.id || ""), strategy4TriangleLabel].filter(Boolean).join("、")
       : "";
     const strategy4MatchedReasons = isStrategy4Route(route)
-      ? signals.map((signal) => signal.reason).filter(Boolean).join("；")
+      ? [...signals.map((signal) => signal.reason), strategy4TriangleReason].filter(Boolean).join("；")
       : "";
     const aiStatus = compactText(merged.aiStatus || merged.ai_status || merged.overnightState || state || (cleanNumber(score) ? "通過" : ""), 16);
     const aiSummary = compactText(
@@ -1219,7 +1224,7 @@
       160
     );
     const triggerTags = isStrategy4Route(route)
-      ? signals.map((signal) => signal.label || signal.id || "").filter(Boolean).slice(0, 4)
+      ? [...signals.map((signal) => signal.label || signal.id || ""), strategy4TriangleLabel].filter(Boolean).slice(0, 4)
       : [
         cleanNumber(volumeRatio) ? "量能啟動" : "",
         cleanNumber(tradeValue) ? "高成交額" : "",
@@ -1291,7 +1296,7 @@
       ratioIncrease: pickFirstValue(merged.ratioIncrease, merged.ratio_increase),
       swingZone,
       swingZoneLabel,
-      triangleBreakout: merged.triangleBreakout && typeof merged.triangleBreakout === "object" ? merged.triangleBreakout : null,
+      triangleBreakout: strategy4Triangle,
       longShort: compactText(merged.longShort || merged.side || merged.direction || "多", 8),
       aiStatus,
       aiSummary,
@@ -1726,7 +1731,17 @@
     const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
     const filterRows = (activeChipFilter = chipFilter) => canvasState.rows.filter((row) => {
       if (zoneFilter && String(row.swingZone || "").toUpperCase() !== zoneFilter) return false;
-      const signalText = [row.subStrategyId, row.subStrategy, row.signalLine, ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason])].join(" ").toLowerCase();
+      const triangle = row?.triangleBreakout && typeof row.triangleBreakout === "object" ? row.triangleBreakout : null;
+      const signalText = [
+        row.subStrategyId,
+        row.subStrategy,
+        row.signalLine,
+        ...(row.signals || []).flatMap((signal) => [signal.id, signal.label, signal.reason]),
+        triangle ? "triangle_breakout" : "",
+        triangle?.label,
+        triangle?.status,
+        triangle?.reason,
+      ].join(" ").toLowerCase();
       if (signalFilter && !signalText.includes(signalFilter)) return false;
       if (activeChipFilter && !matchesChipTradeFilter(row, activeChipFilter)) return false;
       if (!query) return true;
@@ -3671,7 +3686,13 @@
   function strategy4SignalCounts(rows = []) {
     const map = new Map();
     (Array.isArray(rows) ? rows : []).forEach((row) => {
-      const signals = row?.signals?.length ? row.signals : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
+      const signals = row?.signals?.length ? [...row.signals] : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
+      if (row?.triangleBreakout && typeof row.triangleBreakout === "object") {
+        signals.push({
+          id: "triangle_breakout",
+          label: row.triangleBreakout.label || STRATEGY4_SIGNAL_LABELS.triangle_breakout || "三角收斂起漲",
+        });
+      }
       signals.forEach((signal) => {
         const key = compactText(signal.id || signal.label || "", 48);
         const label = compactText(strategy4SignalLabel(key) || signal.label || signal.id || "", 28);
