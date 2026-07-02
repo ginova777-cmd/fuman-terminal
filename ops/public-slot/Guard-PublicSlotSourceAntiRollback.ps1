@@ -55,6 +55,10 @@ function Write-DefaultRuntimeConfig {
     fugleCollectorAdaptiveMinRpm = 10
     fugleCollectorAdaptiveMaxRpm = 40
     fugleCollector429CooldownMilliseconds = 180000
+    fugleCollector429WindowMilliseconds = 900000
+    fugleCollector429Budget = 1
+    fugleCollector429MaxCooldownMilliseconds = 900000
+    fugleCollectorPriorityOnlyAfter429Milliseconds = 600000
     fugleCollectorQuoteTtlMilliseconds = 120000
     fugleCollectorOpeningBoostBatchSize = 20
     fugleCollectorOpeningBoostConcurrency = 1
@@ -121,6 +125,10 @@ function Test-RepoRuntimeConfigSupport {
     "FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM",
     "FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM",
     "FUGLE_COLLECTOR_429_COOLDOWN_MS",
+    "FUGLE_COLLECTOR_429_WINDOW_MS",
+    "FUGLE_COLLECTOR_429_BUDGET",
+    "FUGLE_COLLECTOR_429_MAX_COOLDOWN_MS",
+    "FUGLE_COLLECTOR_PRIORITY_ONLY_AFTER_429_MS",
     "FUGLE_COLLECTOR_QUOTE_TTL_MS",
     "OpeningBoostStart",
     "OpeningBoostEnd",
@@ -144,6 +152,8 @@ function Test-RepoRuntimeConfigSupport {
     "dynamic_amplitude_bull_symbols",
     "dynamic_volume_surge_symbols",
     "collector_adaptive_rpm",
+    "collector_adaptive_priority_only",
+    "collector_adaptive_429_window_count",
     "collector_priority_symbols",
     "Add-FreshQuoteReadthrough",
     "Get-FreshPublicSlotQuoteRows",
@@ -235,6 +245,10 @@ function Test-RuntimeConfig {
     "fugleCollectorAdaptiveMinRpm",
     "fugleCollectorAdaptiveMaxRpm",
     "fugleCollector429CooldownMilliseconds",
+    "fugleCollector429WindowMilliseconds",
+    "fugleCollector429Budget",
+    "fugleCollector429MaxCooldownMilliseconds",
+    "fugleCollectorPriorityOnlyAfter429Milliseconds",
     "fugleCollectorQuoteTtlMilliseconds",
     "fugleCollectorOpeningBoostBatchSize",
     "fugleCollectorOpeningBoostConcurrency",
@@ -297,6 +311,10 @@ function Test-RuntimeConfig {
     fugleCollectorAdaptiveMinRpm = 10
     fugleCollectorAdaptiveMaxRpm = 40
     fugleCollector429CooldownMilliseconds = 180000
+    fugleCollector429WindowMilliseconds = 900000
+    fugleCollector429Budget = 1
+    fugleCollector429MaxCooldownMilliseconds = 900000
+    fugleCollectorPriorityOnlyAfter429Milliseconds = 600000
     fugleCollectorQuoteTtlMilliseconds = 120000
     fugleCollectorOpeningBoostBatchSize = 20
     fugleCollectorOpeningBoostConcurrency = 1

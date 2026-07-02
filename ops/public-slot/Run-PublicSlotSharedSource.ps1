@@ -53,6 +53,10 @@ param(
   [int]$FugleCollectorAdaptiveMinRpm = 10,
   [int]$FugleCollectorAdaptiveMaxRpm = 40,
   [int]$FugleCollector429CooldownMilliseconds = 180000,
+  [int]$FugleCollector429WindowMilliseconds = 900000,
+  [int]$FugleCollector429Budget = 1,
+  [int]$FugleCollector429MaxCooldownMilliseconds = 900000,
+  [int]$FugleCollectorPriorityOnlyAfter429Milliseconds = 600000,
   [int]$FugleCollectorQuoteTtlMilliseconds = 120000,
   [int]$MinAvgVolume5Lots = 0,
   [int]$MinCumulativeBidAskLots = 3000,
@@ -283,6 +287,10 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorAdaptiveMinRpm" -ConfigNames @("fugleCollectorAdaptiveMinRpm", "FugleCollectorAdaptiveMinRpm") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorAdaptiveMaxRpm" -ConfigNames @("fugleCollectorAdaptiveMaxRpm", "FugleCollectorAdaptiveMaxRpm") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollector429CooldownMilliseconds" -ConfigNames @("fugleCollector429CooldownMilliseconds", "FugleCollector429CooldownMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_429_COOLDOWN_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollector429WindowMilliseconds" -ConfigNames @("fugleCollector429WindowMilliseconds", "FugleCollector429WindowMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_429_WINDOW_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollector429Budget" -ConfigNames @("fugleCollector429Budget", "FugleCollector429Budget") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_429_BUDGET"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollector429MaxCooldownMilliseconds" -ConfigNames @("fugleCollector429MaxCooldownMilliseconds", "FugleCollector429MaxCooldownMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_429_MAX_COOLDOWN_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FugleCollectorPriorityOnlyAfter429Milliseconds" -ConfigNames @("fugleCollectorPriorityOnlyAfter429Milliseconds", "FugleCollectorPriorityOnlyAfter429Milliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_PRIORITY_ONLY_AFTER_429_MS"
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorQuoteTtlMilliseconds" -ConfigNames @("fugleCollectorQuoteTtlMilliseconds", "FugleCollectorQuoteTtlMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_QUOTE_TTL_MS"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mBatchSize" -ConfigNames @("direct1mBatchSize", "Direct1mBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mEverySeconds" -ConfigNames @("direct1mEverySeconds", "Direct1mEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_EVERY_SECONDS"
@@ -1989,6 +1997,13 @@ function Write-QuoteFastHeartbeatStatus {
       collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
+      collector_adaptive_priority_only = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptivePriorityOnly" -Default $false)
+      collector_adaptive_priority_only_until = [string](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptivePriorityOnlyUntil" -Default "")
+      collector_adaptive_429_budget = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429Budget" -Default 0)
+      collector_adaptive_429_window_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429WindowCount" -Default 0)
+      collector_adaptive_429_budget_exceeded = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429BudgetExceeded" -Default $false)
+      collector_adaptive_consecutive_429_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveConsecutive429Count" -Default 0)
+      collector_adaptive_last_429_cooldown_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveLast429CooldownMs" -Default 0)
       quotes = $quoteCount
       quote_count = $quoteCount
       quote_age_seconds = $quoteAgeSeconds
@@ -2216,6 +2231,13 @@ function Write-QuoteHeartbeatStatus {
       collector_adaptive_rpm = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveRateLimited" -Default $false)
+      collector_adaptive_priority_only = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptivePriorityOnly" -Default $false)
+      collector_adaptive_priority_only_until = [string](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptivePriorityOnlyUntil" -Default "")
+      collector_adaptive_429_budget = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429Budget" -Default 0)
+      collector_adaptive_429_window_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429WindowCount" -Default 0)
+      collector_adaptive_429_budget_exceeded = [bool](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptive429BudgetExceeded" -Default $false)
+      collector_adaptive_consecutive_429_count = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveConsecutive429Count" -Default 0)
+      collector_adaptive_last_429_cooldown_ms = [int](Get-ObjectPayloadValue -Payload $WebSocketStatus -Key "adaptiveLast429CooldownMs" -Default 0)
       quotes = $quoteCount
       quote_count = $quoteCount
       fresh_quote_readthrough_rows = [int]$script:FreshQuoteReadthroughRows
@@ -3043,6 +3065,10 @@ function Start-FugleWebSocketCollector {
   $psi.Environment["FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM"] = [string]$FugleCollectorAdaptiveMinRpm
   $psi.Environment["FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM"] = [string]$FugleCollectorAdaptiveMaxRpm
   $psi.Environment["FUGLE_COLLECTOR_429_COOLDOWN_MS"] = [string]$FugleCollector429CooldownMilliseconds
+  $psi.Environment["FUGLE_COLLECTOR_429_WINDOW_MS"] = [string]$FugleCollector429WindowMilliseconds
+  $psi.Environment["FUGLE_COLLECTOR_429_BUDGET"] = [string]$FugleCollector429Budget
+  $psi.Environment["FUGLE_COLLECTOR_429_MAX_COOLDOWN_MS"] = [string]$FugleCollector429MaxCooldownMilliseconds
+  $psi.Environment["FUGLE_COLLECTOR_PRIORITY_ONLY_AFTER_429_MS"] = [string]$FugleCollectorPriorityOnlyAfter429Milliseconds
   $psi.Environment["FUGLE_COLLECTOR_QUOTE_TTL_MS"] = [string]$FugleCollectorQuoteTtlMilliseconds
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_START"] = $OpeningBoostStart
   $psi.Environment["FUGLE_COLLECTOR_OPENING_BOOST_END"] = $OpeningBoostEnd
@@ -4422,6 +4448,13 @@ do {
       collector_adaptive_rpm = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRpm" -Default 0)
       collector_adaptive_delay_ms = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveDelayMs" -Default 0)
       collector_adaptive_rate_limited = [bool](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveRateLimited" -Default $false)
+      collector_adaptive_priority_only = [bool](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptivePriorityOnly" -Default $false)
+      collector_adaptive_priority_only_until = [string](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptivePriorityOnlyUntil" -Default "")
+      collector_adaptive_429_budget = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptive429Budget" -Default 0)
+      collector_adaptive_429_window_count = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptive429WindowCount" -Default 0)
+      collector_adaptive_429_budget_exceeded = [bool](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptive429BudgetExceeded" -Default $false)
+      collector_adaptive_consecutive_429_count = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveConsecutive429Count" -Default 0)
+      collector_adaptive_last_429_cooldown_ms = [int](Get-PayloadFieldValue -Payload $wsStatus -Key "adaptiveLast429CooldownMs" -Default 0)
       eligible_quote_rows = $script:ApiUniverseStats.eligible_quote_rows
       eligible_quote_coverage = $script:ApiUniverseStats.eligible_quote_coverage
       source_core_ok = [bool]$sourceCoreOk
