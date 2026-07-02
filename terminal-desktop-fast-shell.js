@@ -755,7 +755,7 @@
         icon: "└",
         title: "策略4-波段",
         badge: "FMN://strategy.swing",
-        summary: "波段區間與訊號分層，切頁不等待資料整理完成。",
+        summary: "波段區間、三角收斂起漲與訊號分層，切頁不等待資料整理完成。",
       };
     }
     if (text.includes("策略5")) {
@@ -890,7 +890,7 @@
     buy_neckline: "買1",
     buy_pullback_break: "買2",
     saucer: "圓弧",
-    triangle_breakout: "三角起漲",
+    triangle_breakout: "三角收斂起漲",
     breakaway_gap: "突破缺口",
     runaway_gap: "逃逸缺口",
     v_fast: "V快殺",

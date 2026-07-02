@@ -1049,7 +1049,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   if (triangleBreakout.detected) signals.push({
     id: "triangle_breakout",
     title: "三角收斂後起漲",
-    short: "三角起漲",
+    short: "三角收斂起漲",
     icon: "△",
     reason: triangleBreakout.reason,
   });
