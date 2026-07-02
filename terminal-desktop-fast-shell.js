@@ -4494,6 +4494,10 @@
       const next = marketAiRenderRequest || request;
       marketAiRenderRequest = null;
       if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+      if (!hasMarketAiPayload(next.ai)) {
+        renderMarketApiAiLoading();
+        return;
+      }
       const signature = marketAiStableSignature(next.heatmap, next.radar, next.ai);
       const panel = document.querySelector("#market-view [data-market-api-ai]");
       if (!next.force && signature && signature === marketAiRenderSignature && panel?.dataset?.marketAiStableSignature === signature) return;
@@ -4502,6 +4506,16 @@
       const renderedPanel = document.querySelector("#market-view [data-market-api-ai]");
       if (renderedPanel && signature) renderedPanel.dataset.marketAiStableSignature = signature;
     }, Math.max(40, delay));
+  }
+
+  function renderMarketApiAiLoading() {
+    const panels = ensureMarketApiPanels();
+    if (!panels.ai) return;
+    if (panels.ai.dataset.marketApiAi === "live-api-bundle" && hasMarketAiPayload(marketAiBundlePayload)) return;
+    panels.ai.classList.add("market-ai-visual-dashboard");
+    panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
+    panels.ai.dataset.marketApiAi = "desktop-fast-shell-loading";
+    panels.ai.innerHTML = '<div class="empty-state">載入今日正式 AI 判讀資料中...</div>';
   }
 
   function hydrateMarketDesktopAiDirect(force = false) {
