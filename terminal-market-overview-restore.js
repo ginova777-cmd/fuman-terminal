@@ -318,7 +318,7 @@
         renderHeatmapCards(panel, heatPayload);
         const message = panel.querySelector("#terminal-message");
         if (message) message.textContent = "市場總覽已同步 Supabase/API，點熱力圖產業可看相關股票。";
-        paintMarketAi(panel, marketPayload, heatPayload);
+        // AI panel rendering is owned by terminal-desktop-fast-shell to avoid renderer swaps.
       };
       const paintMarketAi = (panel, marketPayload = {}, heatPayload = {}) => {
         const ai = panel.querySelector("[data-market-api-ai], #market-ai-panel, .market-ai-panel");
@@ -838,11 +838,6 @@
     });
     if (aiPanel) {
       aiPanel.hidden = next !== "ai";
-      if (next === "ai") {
-        try {
-          window.renderMarketAiPanel?.();
-        } catch (error) {}
-      }
     }
     const title = $("#market-view .page-header h1");
     if (title && !title.querySelector(".page-title-icon")) {
