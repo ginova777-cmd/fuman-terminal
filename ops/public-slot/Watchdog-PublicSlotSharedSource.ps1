@@ -15,7 +15,7 @@ param(
   [int]$WriterCatchupGraceSeconds = 180,
   [int]$RestartCooldownSeconds = 300,
   [string]$ActiveStart = "08:00",
-  [string]$ActiveEnd = "14:10"
+  [string]$ActiveEnd = "14:05"
 )
 
 $ErrorActionPreference = "Continue"
