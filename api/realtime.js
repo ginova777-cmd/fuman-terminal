@@ -66,6 +66,18 @@ function firstPositive(...values) {
   return 0;
 }
 
+function isoFromValue(value) {
+  if (!value) return "";
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    const ms = numeric > 1e14 ? Math.floor(numeric / 1000) : numeric > 1e11 ? numeric : numeric * 1000;
+    const date = new Date(ms);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
+}
+
 function parseQuote(item) {
   const code = String(item?.c || "").trim();
   if (!/^\d{4}$/.test(code)) return null;
@@ -100,6 +112,8 @@ function parseQuote(item) {
     tradeVolume: firstPositive(item.v, item.tv),
     market: item.ex || "",
     time: item.t || "",
+    quoteSeenAt: new Date().toISOString(),
+    sourceUpdatedAt: isoFromValue(item.tlong || item.d || ""),
     quoteSource: "twse-mis",
   };
 }
@@ -167,6 +181,7 @@ async function fetchFugleQuote(code, options = {}) {
   const prevClose = cleanNumber(payload.referencePrice || payload.previousClose || payload.prevClose || payload.previousPrice);
   if (!close || !prevClose) return null;
   const change = cleanNumber(payload.change) || (close - prevClose);
+  const sourceUpdatedAt = isoFromValue(payload.lastUpdated || payload.time || "");
   return {
     code: normalizeCode(payload.symbol || code),
     name: payload.name || String(code),
@@ -181,6 +196,9 @@ async function fetchFugleQuote(code, options = {}) {
     tradeVolume: cleanNumber(payload.total?.tradeVolume || payload.tradeVolume || payload.volume),
     market: payload.exchange || payload.market || "",
     time: toTaipeiTimeTextFromValue(payload.lastUpdated || payload.lastTradeTime || payload.time || ""),
+    quoteSeenAt: new Date().toISOString(),
+    sourceUpdatedAt,
+    lastTradeTime: isoFromValue(payload.lastTradeTime || payload.lastTrade?.time || ""),
     quoteSource: "fugle",
     realtimeFallback: "fugle",
   };
@@ -212,6 +230,7 @@ async function fetchFinMindSnapshotQuote(code, options = {}) {
   if (!close || !prevClose) return null;
   const percent = cleanNumber(row.change_percent ?? row.change_rate)
     || (prevClose ? ((close - prevClose) / prevClose) * 100 : 0);
+  const sourceUpdatedAt = isoFromValue(row.datetime || row.date || row.time || "");
   return {
     code: normalizeCode(row.stock_id || row.symbol || row.code || code),
     name: row.name || row.stock_name || String(code),
@@ -226,6 +245,8 @@ async function fetchFinMindSnapshotQuote(code, options = {}) {
     tradeVolume: cleanNumber(row.volume || row.Trading_Volume || row.trading_volume || row.total_volume),
     market: row.type || row.market || "",
     time: toTaipeiTimeTextFromValue(row.time || row.datetime || row.date || new Date().toISOString()),
+    quoteSeenAt: new Date().toISOString(),
+    sourceUpdatedAt,
     quoteSource: "finmind",
     realtimeFallback: "finmind",
   };
@@ -255,6 +276,7 @@ async function fetchYahooQuote(code) {
       const highs = (quote.high || []).map(cleanNumber).filter((value) => value > 0);
       const lows = (quote.low || []).map(cleanNumber).filter((value) => value > 0);
       const change = close - prevClose;
+      const sourceUpdatedAt = isoFromValue(timestamps[lastIndex]);
       return {
         code: String(code),
         name: String(code),
@@ -269,6 +291,8 @@ async function fetchYahooQuote(code) {
         tradeVolume: volumes.reduce((sum, value) => sum + cleanNumber(value), 0),
         market: suffix === "TWO" ? "otc" : "tse",
         time: toTaipeiTimeText(timestamps[lastIndex]),
+        quoteSeenAt: new Date().toISOString(),
+        sourceUpdatedAt,
         quoteSource: "yahoo-chart",
         realtimeFallback: "yahoo-chart",
       };

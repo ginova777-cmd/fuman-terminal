@@ -498,6 +498,19 @@ function quoteAgeSeconds(scanTimestamp, quoteTime) {
   return Math.abs(scanSeconds - quoteSeconds);
 }
 
+function quoteSnapshotAgeSeconds(scanTimestamp, stock) {
+  const timestamp = stock?.quoteSeenAt || stock?.sourceUpdatedAt || stock?.updatedAt || stock?.latestSeenAt || "";
+  const parsed = Date.parse(timestamp);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, Math.round((Date.now() - parsed) / 1000));
+  }
+  const explicitRaw = stock?.sourceAgeSeconds ?? stock?.snapshotAgeSeconds;
+  if (explicitRaw !== null && explicitRaw !== undefined && explicitRaw !== "") {
+    return Math.max(0, cleanNumber(explicitRaw));
+  }
+  return quoteAgeSeconds(scanTimestamp, stock?.quoteTime || stock?.time);
+}
+
 function isFutureQuoteTime(scanTimestamp, quoteTime, toleranceSeconds = 90) {
   const scanSeconds = secondsOfDay(scanTimestamp);
   const quoteSeconds = secondsOfDay(quoteTime);
@@ -517,7 +530,7 @@ function hasFreshLastTrade(stock, scanTimestamp) {
 function finiteQuoteAges(stocks = [], scanTimestamp = "") {
   return stocks
     .filter((stock) => hasFreshQuote(stock))
-    .map((stock) => quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time))
+    .map((stock) => quoteSnapshotAgeSeconds(scanTimestamp, stock))
     .filter((age) => Number.isFinite(age));
 }
 
@@ -531,7 +544,7 @@ function buildQuoteCoverageAtRun({
   const realtimeStocks = liveStocks.filter((stock) => hasFreshQuote(stock));
   const quoteAges = finiteQuoteAges(liveStocks, scanTimestamp);
   const freshQuotes = realtimeStocks.filter((stock) => {
-    const age = quoteAgeSeconds(scanTimestamp, stock.quoteTime || stock.time);
+    const age = quoteSnapshotAgeSeconds(scanTimestamp, stock);
     return Number.isFinite(age) && age <= REALTIME_RADAR_FRESH_QUOTE_SECONDS;
   }).length;
   const maxQuoteAgeSeconds = quoteAges.length ? Math.max(...quoteAges) : null;
@@ -988,10 +1001,13 @@ function applyRealtimeQuotes(stocks, quotes, scanTimestamp = "") {
   return stocks.map((stock) => {
     const quote = quotes.get(stock.code);
     if (!quote?.close) return stock;
+    const quoteSeenAt = quote.quoteSeenAt || new Date().toISOString();
     if (isFutureQuoteTime(scanTimestamp, quote.time)) {
       return {
         ...stock,
         quoteTime: quote.time || stock.quoteTime || stock.time || "",
+        quoteSeenAt,
+        sourceUpdatedAt: quote.sourceUpdatedAt || quote.updatedAt || stock.sourceUpdatedAt || "",
         quoteSource: quote.quoteSource || quote.realtimeFallback || "api/realtime",
         rejectedQuoteReason: "future_quote_time",
         isRealtime: false,
@@ -1005,6 +1021,9 @@ function applyRealtimeQuotes(stocks, quotes, scanTimestamp = "") {
       name: String(stock.name || quote.name || stock.code || quote.code || ""),
       close,
       quoteTime: quote.time || "",
+      quoteSeenAt,
+      sourceUpdatedAt: quote.sourceUpdatedAt || quote.updatedAt || stock.sourceUpdatedAt || "",
+      lastTradeTime: quote.lastTradeTime || stock.lastTradeTime || "",
       quoteSource: quote.quoteSource || quote.realtimeFallback || "api/realtime",
       tradeVolume: volume,
       value: volume && close ? volume * close * 1000 : cleanNumber(stock.value),
