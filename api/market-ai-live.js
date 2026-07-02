@@ -113,7 +113,11 @@ function isMarketAiDetectWindow(clock = taipeiClock()) {
 }
 
 function isMarketAiTodayRequiredWindow(clock = taipeiClock()) {
-  return clock.seconds >= AI_TODAY_REQUIRED_START_SECONDS;
+  return clock.seconds >= AI_TODAY_REQUIRED_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
+}
+
+function isMarketAiPostClose(clock = taipeiClock()) {
+  return clock.seconds > AI_WINDOW_END_SECONDS;
 }
 
 function compactDate(value) {
@@ -218,7 +222,9 @@ function isWeekend(clock) {
 function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
   const marketDataDate = newestMarketDataDate(breadth, marketSummary, stocksSlim, cached);
   const hasTodayMarketData = Boolean(marketDataDate && marketDataDate === clock.ymd);
-  const closed = isWeekend(clock);
+  const weekend = isWeekend(clock);
+  const postClose = isMarketAiPostClose(clock);
+  const closed = weekend || postClose;
   return {
     taipeiDate: clock.date,
     today: clock.ymd,
@@ -226,7 +232,13 @@ function marketSessionState(clock, breadth, marketSummary, stocksSlim, cached) {
     hasTodayMarketData,
     closed,
     stale: !hasTodayMarketData,
-    reason: isWeekend(clock) ? "weekend" : hasTodayMarketData ? "today-market-data" : "awaiting-today-market-data",
+    reason: weekend
+      ? "weekend"
+      : postClose
+        ? (hasTodayMarketData ? "post_close_today_market_data" : "post_close_awaiting_today_market_data")
+        : hasTodayMarketData
+          ? "today-market-data"
+          : "awaiting-today-market-data",
   };
 }
 
@@ -240,7 +252,7 @@ function requiresTodayDetection(clock, session) {
 
 function reconcileMarketSessionWithFreshness(session, dataFreshness, clock) {
   const base = { ...(session || {}) };
-  if (base.closed) return base;
+  if (base.closed && base.reason === "weekend") return base;
   const today = clock?.ymd || base.today || "";
   const hasLiveToday = Boolean(
     (dataFreshness?.heatmapUsable === true && dataFreshness?.heatmapTradeDate === today)
@@ -377,6 +389,11 @@ function optionalNumber(value) {
   if (value === undefined || value === null || value === "") return null;
   const number = Number(String(value).replace(/[,%]/g, "").trim());
   return Number.isFinite(number) ? number : null;
+}
+
+function retainedNonSourceEvidenceIssues(issues) {
+  if (!Array.isArray(issues)) return [];
+  return issues.filter((issue) => !/^(quote_coverage_at_run_|source_status_at_run_|intraday_1m_readiness_at_run_|ma_readiness_at_run_|preopen_futopt_daily_readiness_at_run_|run_quality_|run_time_source_snapshot_)/.test(String(issue || "")));
 }
 
 function buildHeatmapQuoteCoverage(payload = {}) {
@@ -863,9 +880,15 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
     || freshness.radarIsToday === true
     || heatmapRows >= 500
     || radarRows > 0;
+  const quoteFreshnessRequired = session?.requiresTodayLiveSource === true
+    || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
+  const quoteFreshnessReason = quoteFreshnessRequired
+    ? ""
+    : "post_close_quote_age_not_required";
   const sourceStatus = sourceIssues.length ? "degraded" : "ready";
   return attachRunTimeSourceEvidence({
     ...payload,
+    issues: retainedNonSourceEvidenceIssues(payload?.issues),
     fallbackUsed: false,
     fallbackScope: [],
     fallbackAllowed: false,
@@ -882,8 +905,11 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
         marketSession: session?.status || payload?.marketSession?.status || "",
       },
       quoteCoverage: {
-        status: heatmapQuoteCoverage.status || (quoteReady ? "ready" : "degraded"),
-        ok: heatmapQuoteCoverage.ok ?? quoteReady,
+        status: quoteFreshnessRequired ? (heatmapQuoteCoverage.status || (quoteReady ? "ready" : "degraded")) : "not_required",
+        ok: quoteFreshnessRequired ? (heatmapQuoteCoverage.ok ?? quoteReady) : true,
+        reason: quoteFreshnessReason,
+        required: quoteFreshnessRequired,
+        notRequired: !quoteFreshnessRequired,
         fresh_quote_coverage_120s: heatmapQuoteCoverage.fresh_quote_coverage_120s ?? heatmapQuoteCoverage.freshQuoteCoverage120s ?? null,
         freshQuoteCoverage120s: heatmapQuoteCoverage.freshQuoteCoverage120s ?? heatmapQuoteCoverage.fresh_quote_coverage_120s ?? null,
         fresh_quotes: heatmapQuoteCoverage.fresh_quotes ?? heatmapQuoteCoverage.freshQuotes ?? null,

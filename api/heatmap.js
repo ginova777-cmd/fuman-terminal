@@ -155,6 +155,11 @@ function boolValue(value) {
   return text === "true" || text === "1" || text === "yes";
 }
 
+function retainedNonSourceEvidenceIssues(issues) {
+  if (!Array.isArray(issues)) return [];
+  return issues.filter((issue) => !/^(quote_coverage_at_run_|source_status_at_run_|intraday_1m_readiness_at_run_|ma_readiness_at_run_|preopen_futopt_daily_readiness_at_run_|run_quality_|run_time_source_snapshot_)/.test(String(issue || "")));
+}
+
 function isHeatmapDetectWindow(clock = taipeiClock()) {
   return clock.seconds >= HEATMAP_WINDOW_START_SECONDS && clock.seconds <= HEATMAP_WINDOW_END_SECONDS;
 }
@@ -281,6 +286,10 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
   const realtimeCount = cleanNumber(payload?.realtimeStockCount || health.realtimeStockCount || sourceInfo.rows);
   const quoteCoverageRatio = stockCount ? Math.min(1, realtimeCount / stockCount) : null;
   const fallbackUsed = sourceInfo.fallbackUsed === true || payload?.fallbackUsed === true;
+  const quoteFreshnessRequired = isHeatmapDetectWindow(clock);
+  const quoteFreshnessReason = quoteFreshnessRequired
+    ? ""
+    : "post_close_quote_age_not_required";
   const fallbackDetails = fallbackUsed ? [{
     fallbackSource: sourceInfo.fallbackSource || "unknown",
     fallbackReason: sourceInfo.fallbackReason || sourceInfo.issue || reason || "formal_source_not_healthy",
@@ -290,6 +299,7 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
   const sourceReady = payload?.ok !== false && quoteReady && !fallbackUsed;
   return attachRunTimeSourceEvidence({
     ...payload,
+    issues: retainedNonSourceEvidenceIssues(payload?.issues),
     fallbackUsed,
     fallbackScope: fallbackUsed ? ["quote"] : [],
     fallbackAllowed: false,
@@ -305,8 +315,11 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
         source: sourceInfo.source || payload?.formalSource || payload?.source || "",
       },
       quoteCoverage: {
-        status: quoteReady ? "ready" : "degraded",
-        ok: quoteReady,
+        status: quoteFreshnessRequired ? (quoteReady ? "ready" : "degraded") : "not_required",
+        ok: quoteFreshnessRequired ? quoteReady : true,
+        reason: quoteFreshnessReason,
+        required: quoteFreshnessRequired,
+        notRequired: !quoteFreshnessRequired,
         rows: realtimeCount,
         expected: stockCount || null,
         fresh_quote_coverage_120s: quoteCoverageRatio,

@@ -146,6 +146,25 @@ const sharedSourceSession = marketSessionState(
 assert.strictEqual(requiresTodayLiveSource(sharedSourceStartClock, sharedSourceSession), true);
 assert.strictEqual(requiresTodayDetection(sharedSourceStartClock, sharedSourceSession), true);
 
+const postCloseClock = {
+  date: "2026-06-29",
+  ymd: "20260629",
+  time: "13:31:00",
+  seconds: 13 * 60 * 60 + 31 * 60,
+  weekday: "Mon",
+};
+const postCloseSession = marketSessionState(
+  postCloseClock,
+  null,
+  { marketDates: { twse: "20260629", tpex: "20260629" } },
+  { resolvedTradeDate: "20260629" },
+  null
+);
+assert.strictEqual(postCloseSession.closed, true);
+assert.strictEqual(postCloseSession.reason, "post_close_today_market_data");
+assert.strictEqual(requiresTodayLiveSource(postCloseClock, postCloseSession), false);
+assert.strictEqual(requiresTodayDetection(postCloseClock, postCloseSession), false);
+
 const weekendClock = {
   date: "2026-06-28",
   ymd: "20260628",
