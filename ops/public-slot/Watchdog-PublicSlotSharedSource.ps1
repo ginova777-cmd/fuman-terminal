@@ -278,7 +278,9 @@ function Test-WriterCatchupGrace {
     [object]$CollectorCache,
     [object]$QuoteHealth
   )
-  return ($WriterAgeSeconds -lt $WriterCatchupGraceSeconds -and ($CollectorCache.Ok -or $QuoteHealth.Ok))
+  $collectorHasEnoughQuotes = $false
+  try { $collectorHasEnoughQuotes = ([int]$CollectorCache.Quotes -ge $MinFreshQuoteCount120) } catch {}
+  return ($WriterAgeSeconds -lt $WriterCatchupGraceSeconds -and ($CollectorCache.Ok -or $collectorHasEnoughQuotes -or $QuoteHealth.Ok))
 }
 
 function Get-QuoteLiveHealth {
