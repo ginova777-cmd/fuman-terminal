@@ -110,13 +110,16 @@ function taipeiDateText() {
 function localDateText(value) {
   const text = cleanText(value);
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(text);
-  return match ? match[1] : "";
+  if (match) return match[1];
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(text);
+  if (slash) return `${slash[3]}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}`;
+  return "";
 }
 
 function isScorecardSelfVerification(schedule = {}) {
   return process.env.FUMAN_SCORECARD_RUNNING_TASK === "1"
     && /^running$/i.test(cleanText(schedule.status))
-    && /run-scorecard-daily-automation\.ps1/i.test(schedule.taskToRun || "")
+    && /run-scorecard-daily-automation(?:-wrapper)?\.ps1/i.test(schedule.taskToRun || "")
     && localDateText(schedule.lastRunTime) === taipeiDateText();
 }
 

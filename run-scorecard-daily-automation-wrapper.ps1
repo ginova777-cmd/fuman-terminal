@@ -100,7 +100,17 @@ try {
     $runnerArgs += "-NoLiveVerify"
   }
 
-  & powershell.exe @runnerArgs 2>&1 | Tee-Object -FilePath $script:LogFile -Append
+  $previousRunningTask = $env:FUMAN_SCORECARD_RUNNING_TASK
+  $env:FUMAN_SCORECARD_RUNNING_TASK = "1"
+  try {
+    & powershell.exe @runnerArgs 2>&1 | Tee-Object -FilePath $script:LogFile -Append
+  } finally {
+    if ($null -eq $previousRunningTask) {
+      Remove-Item Env:\FUMAN_SCORECARD_RUNNING_TASK -ErrorAction SilentlyContinue
+    } else {
+      $env:FUMAN_SCORECARD_RUNNING_TASK = $previousRunningTask
+    }
+  }
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
   if ($exitCode -ne 0) {
     throw "core runner failed with exit code $exitCode"

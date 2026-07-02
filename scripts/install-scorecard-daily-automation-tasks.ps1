@@ -22,7 +22,7 @@ function Resolve-PowerShell() {
 function New-FumanPrincipal() {
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
   if ($InteractiveFallback) {
-    return New-ScheduledTaskPrincipal -UserId $identity -LogonType InteractiveToken -RunLevel Highest
+    return New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
   }
   return New-ScheduledTaskPrincipal -UserId $identity -LogonType S4U -RunLevel Highest
 }
