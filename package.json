@@ -81,6 +81,7 @@
     "freshness:gate:fast": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-live-freshness-gate.ps1 -Fast",
     "freshness:local-repair": "npm run freshness:gate:fast",
     "strategy4:publish:fast": "node --use-system-ca scripts/publish-strategy4-fast.js",
+    "verify:strategy4-triangle-breakout": "node scripts/verify-strategy4-triangle-breakout.js",
     "sync:finmind:quotes": "node --use-system-ca scripts/sync-finmind-quotes-live.js",
     "sync:finmind:daily": "node --use-system-ca scripts/sync-finmind-daily-ohlcv.js",
     "sync:finmind:universe": "node --use-system-ca scripts/sync-finmind-stock-universe.js",

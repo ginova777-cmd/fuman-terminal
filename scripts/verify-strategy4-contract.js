@@ -44,6 +44,23 @@ function fail(message, payload) {
   throw new Error(message);
 }
 
+function hasTriangleChartLines(item) {
+  const triangle = item?.triangleBreakout;
+  const lines = triangle?.chartLines;
+  const upper = lines?.upperResistance?.points;
+  const lower = lines?.lowerSupport?.points;
+  const marker = lines?.breakoutMarker;
+  return triangle && typeof triangle === "object" &&
+    lines && typeof lines === "object" &&
+    Array.isArray(upper) &&
+    upper.length >= 3 &&
+    Array.isArray(lower) &&
+    lower.length >= 3 &&
+    marker &&
+    marker.date &&
+    Number.isFinite(Number(marker.price));
+}
+
 (async () => {
   if (codes.length < 3) fail("Strategy4 contract needs at least 3 seed codes");
   const payload = await callHandler();
@@ -60,7 +77,8 @@ function fail(message, payload) {
     !Array.isArray(item?.signals) ||
     !item.signals.length ||
     !item.priceSource ||
-    !item.reason
+    !item.reason ||
+    !hasTriangleChartLines(item)
   );
   if (malformed) fail(`Strategy4 malformed match payload for ${malformed.code || "unknown code"}`, payload);
   console.log(`Strategy4 contract OK: ${matches.length}/${codes.length} seed codes matched`);

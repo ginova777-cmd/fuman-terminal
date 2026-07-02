@@ -33,7 +33,7 @@ const TAB_CONFIG = {
     title: "策略4 波段",
     subtitle: "完整掃描 complete run",
     endpoint: "/api/strategy4-latest",
-    points: ["Supabase 價量來源", "完整掃描後更新", "runId 更新即刷新"],
+    points: ["Supabase 價量來源", "三角收斂起漲", "runId 更新即刷新"],
   },
   strategy5: {
     title: "策略5 綜合",
@@ -249,6 +249,48 @@ function numberText(value, digits = 2) {
   return num.toFixed(digits).replace(/\.00$/, "");
 }
 
+function numberValue(value) {
+  const number = Number(String(value ?? "").replace(/[,％%]/g, "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+function strategy4TriangleSvg(row) {
+  const triangle = row?.triangleBreakout;
+  const lines = triangle?.chartLines;
+  const upper = lines?.upperResistance?.points;
+  const lower = lines?.lowerSupport?.points;
+  const marker = lines?.breakoutMarker;
+  const signals = Array.isArray(row?.signals) ? row.signals : [];
+  const hasSignal = signals.some((signal) => signal?.id === "triangle_breakout");
+  if (!triangle?.detected && !hasSignal) return "";
+  if (!Array.isArray(upper) || upper.length < 2 || !Array.isArray(lower) || lower.length < 2) return "";
+  const prices = [
+    ...upper.map((point) => numberValue(point?.price)),
+    ...lower.map((point) => numberValue(point?.price)),
+    numberValue(marker?.price),
+  ].filter((value) => value > 0);
+  if (prices.length < 4) return "";
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const pad = Math.max((maxPrice - minPrice) * 0.16, maxPrice * 0.01, 1);
+  const yMin = minPrice - pad;
+  const yMax = maxPrice + pad;
+  const mapY = (price) => 52 - ((numberValue(price) - yMin) / Math.max(yMax - yMin, 1)) * 42;
+  const mapX = (points, index) => 10 + (150 * index) / Math.max(points.length - 1, 1);
+  const toPolyline = (points) => points.map((point, index) => `${mapX(points, index).toFixed(1)},${mapY(point?.price).toFixed(1)}`).join(" ");
+  const markerX = 160;
+  const markerY = mapY(marker?.price);
+  return `
+        <div class="mobile-triangle-chart" data-mobile-triangle-chart="1">
+          <svg viewBox="0 0 170 64" role="img" aria-label="三角收斂支撐壓力線">
+            <polyline points="${esc(toPolyline(upper))}" fill="none" stroke="#fb7185" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+            <polyline points="${esc(toPolyline(lower))}" fill="none" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="${esc(markerX.toFixed(1))}" cy="${esc(markerY.toFixed(1))}" r="3.8" fill="#f97316" stroke="#fed7aa" stroke-width="1.2" />
+          </svg>
+          <small>壓 ${esc(numberText(triangle.resistance))}｜支 ${esc(numberText(triangle.support))}｜突破 ${esc(numberText(triangle.breakoutPrice))}</small>
+        </div>`;
+}
+
 function rowHtml(row, index, tab = "") {
   const code = firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "--");
   const name = firstValue(row, ["name", "stock_name", "stockName", "underlyingName", "company"], "");
@@ -301,6 +343,7 @@ function rowHtml(row, index, tab = "") {
   const pct = firstValue(row, ["percent", "changePercent", "pct", "displayPercent", "risePct"], null);
   const reason = firstValue(row, ["reason", "summary", "description", "memo", "note", "why"], "");
   const line = `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
+  const triangleChart = tab === "strategy4" ? strategy4TriangleSvg(row) : "";
   return `
     <article class="mobile-terminal-row">
       <b>#${index + 1}</b>
@@ -308,6 +351,7 @@ function rowHtml(row, index, tab = "") {
         <h4>${esc(code)} ${esc(name)}</h4>
         <p>${esc(line)}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
+        ${triangleChart}
       </div>
       <div class="mobile-terminal-actions">
         <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>

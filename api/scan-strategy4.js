@@ -548,6 +548,203 @@ function highestHighAtOffset(rows, length, offset = 0) {
   return Math.max(...rows.slice(start, end).map((row) => row.high));
 }
 
+function roundNumber(value, digits = 4) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Number(number.toFixed(digits));
+}
+
+function regression(values) {
+  const nums = values.filter((value) => Number.isFinite(value));
+  if (nums.length < 2) return { slope: 0, intercept: nums[0] || 0 };
+  const n = nums.length;
+  const xMean = (n - 1) / 2;
+  const yMean = avg(nums);
+  let numerator = 0;
+  let denominator = 0;
+  nums.forEach((value, index) => {
+    const xDiff = index - xMean;
+    numerator += xDiff * (value - yMean);
+    denominator += xDiff * xDiff;
+  });
+  const slope = denominator ? numerator / denominator : 0;
+  return { slope, intercept: yMean - slope * xMean };
+}
+
+function rowHigh(rows) {
+  return Math.max(...rows.map((row) => row.high).filter(Number.isFinite));
+}
+
+function rowLow(rows) {
+  return Math.min(...rows.map((row) => row.low).filter(Number.isFinite));
+}
+
+function detectTriangleBreakout(rows) {
+  const cleanRows = rows.filter((row) =>
+    Number.isFinite(row?.high) &&
+    Number.isFinite(row?.low) &&
+    Number.isFinite(row?.close) &&
+    row.high > 0 &&
+    row.low > 0 &&
+    row.close > 0
+  );
+  const maxLookback = Number(process.env.STRATEGY4_TRIANGLE_LOOKBACK_BARS || 36);
+  const minLookback = Number(process.env.STRATEGY4_TRIANGLE_MIN_BARS || 22);
+  if (cleanRows.length < minLookback + 1) {
+    return {
+      detected: false,
+      status: "insufficient_history",
+      reason: `三角收斂偵測需要至少 ${minLookback + 1} 根日K。`,
+    };
+  }
+
+  const latest = cleanRows.at(-1);
+  const previous = cleanRows.at(-2);
+  const pattern = cleanRows.slice(-(Math.min(maxLookback, cleanRows.length - 1) + 1), -1);
+  if (pattern.length < minLookback) {
+    return {
+      detected: false,
+      status: "insufficient_pattern",
+      reason: `三角收斂樣本不足 ${pattern.length}/${minLookback}。`,
+    };
+  }
+
+  const third = Math.max(5, Math.floor(pattern.length / 3));
+  const firstThird = pattern.slice(0, third);
+  const lastThird = pattern.slice(-third);
+  const highs = pattern.map((row) => row.high);
+  const lows = pattern.map((row) => row.low);
+  const volumes = cleanRows.map((row) => row.volume || 0);
+  const highLine = regression(highs);
+  const lowLine = regression(lows);
+  const avgHigh = avg(highs);
+  const avgLow = avg(lows);
+  const projectedHigh = highLine.intercept + highLine.slope * pattern.length;
+  const projectedLow = lowLine.intercept + lowLine.slope * pattern.length;
+  const upperStart = highLine.intercept;
+  const upperEnd = highLine.intercept + highLine.slope * (pattern.length - 1);
+  const lowerStart = lowLine.intercept;
+  const lowerEnd = lowLine.intercept + lowLine.slope * (pattern.length - 1);
+  const firstPatternRow = pattern[0];
+  const lastPatternRow = pattern.at(-1);
+  const firstRange = rowHigh(firstThird) - rowLow(firstThird);
+  const lastRange = rowHigh(lastThird) - rowLow(lastThird);
+  const patternHigh = rowHigh(pattern);
+  const patternLow = rowLow(pattern);
+  const recentHigh = rowHigh(pattern.slice(-10));
+  const recentLow = rowLow(pattern.slice(-10));
+  const earlyHighAvg = avg(firstThird.map((row) => row.high));
+  const lateHighAvg = avg(lastThird.map((row) => row.high));
+  const earlyLowAvg = avg(firstThird.map((row) => row.low));
+  const lateLowAvg = avg(lastThird.map((row) => row.low));
+  const compressionRatio = firstRange > 0 ? lastRange / firstRange : 1;
+  const fullRangePct = patternLow > 0 ? ((patternHigh - patternLow) / patternLow) * 100 : 0;
+  const upperSlopePctPerBar = avgHigh > 0 ? (highLine.slope / avgHigh) * 100 : 0;
+  const lowerSlopePctPerBar = avgLow > 0 ? (lowLine.slope / avgLow) * 100 : 0;
+  const resistance = Math.max(projectedHigh, recentHigh);
+  const support = Math.min(projectedLow, recentLow);
+  const volumeMa20 = sma(volumes, 20);
+  const volumeMa10 = sma(volumes, 10);
+  const volumeRatio20 = volumeMa20 ? latest.volume / volumeMa20 : 0;
+  const volumeRatio10 = volumeMa10 ? latest.volume / volumeMa10 : 0;
+  const breakoutPct = resistance > 0 ? ((latest.close - resistance) / resistance) * 100 : 0;
+  const closeRange = latest.high - latest.low;
+  const closePosition = closeRange > 0 ? (latest.close - latest.low) / closeRange : 0.5;
+  const descendingHighs = lateHighAvg <= earlyHighAvg * 0.995 || upperSlopePctPerBar <= -0.035;
+  const ascendingLows = lateLowAvg >= earlyLowAvg * 1.005 || lowerSlopePctPerBar >= 0.035;
+  const rangeCompressed = compressionRatio <= 0.72 && fullRangePct <= 32;
+  const breakout = latest.close > resistance * 1.003 && latest.high > resistance * 1.002;
+  const volumeConfirm = volumeRatio20 >= 1.15 || volumeRatio10 >= 1.2;
+  const closeStrong = latest.close > latest.open && latest.close > (previous?.close || 0) && closePosition >= 0.55;
+  const converging = rangeCompressed && descendingHighs && ascendingLows;
+  const detected = Boolean(converging && breakout && volumeConfirm && closeStrong);
+  const score = Math.min(100, Math.round(
+    (rangeCompressed ? 24 : 0) +
+    (descendingHighs ? 18 : 0) +
+    (ascendingLows ? 18 : 0) +
+    (breakout ? 24 : 0) +
+    (volumeConfirm ? 10 : 0) +
+    (closeStrong ? 6 : 0)
+  ));
+  const chartRows = detected ? [...pattern, latest] : [];
+  const chartCandles = chartRows.map((row) => {
+    const open = Number.isFinite(row.open) && row.open > 0 ? row.open : row.close;
+    return {
+      date: row.date,
+      open: roundNumber(open, 2),
+      high: roundNumber(row.high, 2),
+      low: roundNumber(row.low, 2),
+      close: roundNumber(row.close, 2),
+      volume: Math.round(row.volume || 0),
+      up: row.close >= open,
+    };
+  });
+  const volumeMax = chartCandles.length ? Math.max(...chartCandles.map((row) => row.volume || 0)) : 0;
+
+  return {
+    detected,
+    status: detected ? "breakout" : (converging ? "setup" : "watch"),
+    label: "三角收斂起漲",
+    lookback: pattern.length,
+    compressionRatio: roundNumber(compressionRatio, 4),
+    fullRangePct: roundNumber(fullRangePct, 2),
+    upperSlopePctPerBar: roundNumber(upperSlopePctPerBar, 4),
+    lowerSlopePctPerBar: roundNumber(lowerSlopePctPerBar, 4),
+    resistance: roundNumber(resistance, 2),
+    support: roundNumber(support, 2),
+    projectedHigh: roundNumber(projectedHigh, 2),
+    projectedLow: roundNumber(projectedLow, 2),
+    chartLines: {
+      upperResistance: {
+        type: "resistance",
+        label: "三角上緣壓力線",
+        points: [
+          { date: firstPatternRow.date, price: roundNumber(upperStart, 2) },
+          { date: lastPatternRow.date, price: roundNumber(upperEnd, 2) },
+          { date: latest.date, price: roundNumber(projectedHigh, 2) },
+        ],
+      },
+      lowerSupport: {
+        type: "support",
+        label: "三角下緣支撐線",
+        points: [
+          { date: firstPatternRow.date, price: roundNumber(lowerStart, 2) },
+          { date: lastPatternRow.date, price: roundNumber(lowerEnd, 2) },
+          { date: latest.date, price: roundNumber(projectedLow, 2) },
+        ],
+      },
+      breakoutMarker: {
+        type: "breakout",
+        label: detected ? "突破三角收斂上緣" : "尚未有效突破",
+        date: latest.date,
+        price: roundNumber(latest.close, 2),
+        resistance: roundNumber(resistance, 2),
+        support: roundNumber(support, 2),
+      },
+    },
+    chartCandles,
+    volumeMax,
+    breakoutPrice: roundNumber(latest.close, 2),
+    breakoutPct: roundNumber(breakoutPct, 2),
+    volumeRatio20: roundNumber(volumeRatio20, 2),
+    volumeRatio10: roundNumber(volumeRatio10, 2),
+    closePosition: roundNumber(closePosition, 4),
+    score,
+    conditions: {
+      descendingHighs,
+      ascendingLows,
+      rangeCompressed,
+      converging,
+      breakout,
+      volumeConfirm,
+      closeStrong,
+    },
+    reason: detected
+      ? `三角收斂後起漲：${pattern.length}日高點壓低、低點墊高，區間壓縮至 ${(compressionRatio * 100).toFixed(0)}%，收盤突破上緣 ${roundNumber(resistance, 2)}，量比20日 ${roundNumber(volumeRatio20, 2)}。`
+      : `三角收斂觀察：壓縮 ${(compressionRatio * 100).toFixed(0)}%，突破幅度 ${roundNumber(breakoutPct, 2)}%，量比20日 ${roundNumber(volumeRatio20, 2)}。`,
+  };
+}
+
 function moneyFlowSeries(rows) {
   return rows.map((row) => {
     const range = row.high - row.low;
@@ -812,6 +1009,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const rightHighBreak = crossedOver(last.close, prev?.close, daily.highest10Prev) && prev?.close > daily.prevNeckline;
   const saucerBreakout = (necklineBreak || rightHighBreak) &&
     daily.volumeRatio >= 1.1 && isRed && daily.realBody;
+  const triangleBreakout = detectTriangleBreakout(daily.rows);
   const nState = detectNBase(daily.rows, daily.volMa20);
   const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
@@ -848,6 +1046,13 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   if (necklineBreak) signals.push({ id: "buy_neckline", short: "買1", icon: "買1", reason: `突破圓弧底頸線 ${daily.neckline.toFixed(2)}，對應沐滝買點1。` });
   if (rightHighBreak) signals.push({ id: "buy_pullback_break", short: "買2", icon: "買2", reason: "站回頸線後突破右側10日高點，對應沐滝買點2。" });
   if (saucerBreakout) signals.push({ id: "saucer", short: "圓弧", icon: "◜", reason: "突破40日整理頸線，量能放大，偏圓弧底突破。" });
+  if (triangleBreakout.detected) signals.push({
+    id: "triangle_breakout",
+    title: "三角收斂後起漲",
+    short: "三角起漲",
+    icon: "△",
+    reason: triangleBreakout.reason,
+  });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
   if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` });
@@ -960,6 +1165,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     (daily.macd.macd > daily.macd.signal ? 8 : 0) +
     (daily.wallet.strongBuy ? 8 : 0) +
     (daily.wallet.volumeCrossUp ? 6 : 0) +
+    (triangleBreakout.detected ? 10 : 0) +
     (daily.stage.tone === "low" ? 8 : daily.stage.tone === "mid" ? 5 : daily.stage.tone === "high" ? 2 : -8)
   ));
 
@@ -984,6 +1190,8 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     score,
     swingSignals: signals,
     signals,
+    triangleBreakout,
+    patternTags: triangleBreakout.detected ? ["triangle_breakout"] : [],
     wallet: {
       mf: Math.round(daily.wallet.mf),
       controlLine: Math.round(daily.wallet.controlLine),
@@ -1106,7 +1314,5 @@ module.exports = async function handler(request, response) {
   });
 };
 
-
-
-
-
+module.exports.scanStrategy4 = scanStrategy4;
+module.exports.detectTriangleBreakout = detectTriangleBreakout;

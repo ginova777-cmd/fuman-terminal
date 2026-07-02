@@ -890,6 +890,7 @@
     buy_neckline: "買1",
     buy_pullback_break: "買2",
     saucer: "圓弧",
+    triangle_breakout: "三角起漲",
     breakaway_gap: "突破缺口",
     runaway_gap: "逃逸缺口",
     v_fast: "V快殺",
@@ -904,6 +905,7 @@
   const STRATEGY4_SIGNAL_FILTER_ORDER = [
     "bull_attack",
     "n_base",
+    "triangle_breakout",
     "saucer",
     "three_inside",
     "golden_cross",
@@ -1289,6 +1291,7 @@
       ratioIncrease: pickFirstValue(merged.ratioIncrease, merged.ratio_increase),
       swingZone,
       swingZoneLabel,
+      triangleBreakout: merged.triangleBreakout && typeof merged.triangleBreakout === "object" ? merged.triangleBreakout : null,
       longShort: compactText(merged.longShort || merged.side || merged.direction || "多", 8),
       aiStatus,
       aiSummary,
@@ -2353,6 +2356,66 @@
     ctx.fillText(compactText(text, Math.max(2, Math.floor(width / 13))), x + 14, y + 1);
   }
 
+  function drawStrategy4TriangleMiniChart(ctx, row, x, y, width, height, colors) {
+    const triangle = row?.triangleBreakout;
+    const lines = triangle?.chartLines;
+    const upper = lines?.upperResistance?.points;
+    const lower = lines?.lowerSupport?.points;
+    const marker = lines?.breakoutMarker;
+    const hasSignal = Array.isArray(row?.signals) && row.signals.some((signal) => signal?.id === "triangle_breakout");
+    if (!triangle?.detected && !hasSignal) return false;
+    if (!Array.isArray(upper) || upper.length < 2 || !Array.isArray(lower) || lower.length < 2) return false;
+    const prices = [
+      ...upper.map((point) => cleanNumber(point?.price)),
+      ...lower.map((point) => cleanNumber(point?.price)),
+      cleanNumber(marker?.price),
+    ].filter((value) => Number.isFinite(value) && value > 0);
+    if (prices.length < 4) return false;
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const pad = Math.max((maxPrice - minPrice) * 0.16, maxPrice * 0.01, 1);
+    const yMin = minPrice - pad;
+    const yMax = maxPrice + pad;
+    const mapY = (price) => y + height - ((cleanNumber(price) - yMin) / Math.max(yMax - yMin, 1)) * height;
+    const mapX = (points, index) => x + (width * index) / Math.max(points.length - 1, 1);
+    const drawLine = (points, color) => {
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const px = mapX(points, index);
+        const py = mapY(point?.price);
+        if (index === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    };
+
+    ctx.save();
+    ctx.fillStyle = canvasThemeMode() === "light" ? "rgba(255,247,237,0.88)" : "rgba(15,23,42,0.76)";
+    roundRect(ctx, x - 6, y - 6, width + 12, height + 16, 8);
+    ctx.fill();
+    ctx.strokeStyle = colors.stroke;
+    ctx.lineWidth = 1;
+    roundRect(ctx, x - 5.5, y - 5.5, width + 11, height + 15, 8);
+    ctx.stroke();
+    drawLine(upper, "rgba(248,113,113,0.92)");
+    drawLine(lower, "rgba(34,197,94,0.92)");
+    if (marker?.price) {
+      const dotX = x + width;
+      const dotY = mapY(marker.price);
+      ctx.fillStyle = colors.accent;
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = colors.muted;
+    ctx.font = "800 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    ctx.fillText("支/壓線", x, y + height + 10);
+    ctx.restore();
+    return true;
+  }
+
   function fillCanvasMultiline(ctx, text, x, y, maxChars, lineHeight, maxLines) {
     const raw = compactText(text || "", maxChars * maxLines + 8);
     if (!raw) return;
@@ -2608,9 +2671,19 @@
         drawCanvasPill(ctx, tag, tagX, y - 24, tagWidth, colors, tagIndex ? "neutral" : "accent");
         tagX += tagWidth + 6;
       });
+      const triggerColumn = col("trigger");
+      const chartWidth = Math.min(142, Math.max(108, Math.floor(triggerColumn.width * 0.34)));
+      const chartHeight = Math.min(46, Math.max(34, rowHeight - 34));
+      const chartX = triggerColumn.x + triggerColumn.width - chartWidth - 10;
+      const chartY = y - 28;
+      const hasTriangleChart = isStrategy4Route(canvasState.route)
+        && drawStrategy4TriangleMiniChart(ctx, row, chartX, chartY, chartWidth, chartHeight, colors);
+      const reasonWidth = hasTriangleChart
+        ? Math.max(14, Math.floor((chartX - triggerColumn.x - 20) / 13))
+        : Math.max(14, Math.floor((triggerColumn.width - 12) / 13));
       ctx.fillStyle = colors.muted;
       ctx.font = "13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      fillCanvasMultiline(ctx, row.triggerReason || row.reason || row.line, col("trigger").x + 6, y + 10, Math.max(14, Math.floor((col("trigger").width - 12) / 13)), 18, 2);
+      fillCanvasMultiline(ctx, row.triggerReason || row.reason || row.line, triggerColumn.x + 6, y + 10, reasonWidth, 18, 2);
     });
 
   }
@@ -2634,6 +2707,99 @@
     }
   }
 
+  function strategy4TriangleDetailHtml(row) {
+    const triangle = row?.triangleBreakout;
+    const lines = triangle?.chartLines;
+    const upper = lines?.upperResistance?.points;
+    const lower = lines?.lowerSupport?.points;
+    const marker = lines?.breakoutMarker;
+    const candles = Array.isArray(triangle?.chartCandles)
+      ? triangle.chartCandles.filter((item) =>
+          item?.date &&
+          cleanNumber(item.high) > 0 &&
+          cleanNumber(item.low) > 0 &&
+          cleanNumber(item.close) > 0
+        )
+      : [];
+    const hasSignal = Array.isArray(row?.signals) && row.signals.some((signal) => signal?.id === "triangle_breakout");
+    if (!triangle?.detected && !hasSignal) return "";
+    if (!Array.isArray(upper) || upper.length < 2 || !Array.isArray(lower) || lower.length < 2) return "";
+    const prices = [
+      ...candles.flatMap((item) => [cleanNumber(item.high), cleanNumber(item.low), cleanNumber(item.open), cleanNumber(item.close)]),
+      ...upper.map((point) => cleanNumber(point?.price)),
+      ...lower.map((point) => cleanNumber(point?.price)),
+      cleanNumber(marker?.price),
+    ].filter((value) => Number.isFinite(value) && value > 0);
+    if (prices.length < 4) return "";
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const pad = Math.max((maxPrice - minPrice) * 0.16, maxPrice * 0.01, 1);
+    const yMin = minPrice - pad;
+    const yMax = maxPrice + pad;
+    const hasCandles = candles.length >= 8;
+    const chartLeft = 28;
+    const chartTop = 22;
+    const chartWidth = 424;
+    const chartHeight = hasCandles ? 106 : 118;
+    const volumeTop = 138;
+    const volumeHeight = 24;
+    const candleWidth = hasCandles ? Math.max(3, Math.min(9, (chartWidth / candles.length) * 0.58)) : 0;
+    const mapY = (price) => chartTop + chartHeight - ((cleanNumber(price) - yMin) / Math.max(yMax - yMin, 1)) * chartHeight;
+    const dateIndex = new Map(candles.map((item, index) => [String(item.date || ""), index]));
+    const mapDateX = (date, fallbackIndex, fallbackCount) => {
+      if (hasCandles && dateIndex.has(String(date || ""))) {
+        return chartLeft + (chartWidth * dateIndex.get(String(date || ""))) / Math.max(candles.length - 1, 1);
+      }
+      return chartLeft + (chartWidth * fallbackIndex) / Math.max(fallbackCount - 1, 1);
+    };
+    const toPolyline = (points) => points.map((point, index) => `${mapDateX(point?.date, index, points.length).toFixed(1)},${mapY(point?.price).toFixed(1)}`).join(" ");
+    const candleSvg = hasCandles ? candles.map((item, index) => {
+      const x = mapDateX(item.date, index, candles.length);
+      const openY = mapY(item.open);
+      const closeY = mapY(item.close);
+      const highY = mapY(item.high);
+      const lowY = mapY(item.low);
+      const bodyY = Math.min(openY, closeY);
+      const bodyH = Math.max(Math.abs(openY - closeY), 2);
+      const up = cleanNumber(item.close) >= cleanNumber(item.open);
+      return `
+          <line x1="${escapeHtml(x.toFixed(1))}" y1="${escapeHtml(highY.toFixed(1))}" x2="${escapeHtml(x.toFixed(1))}" y2="${escapeHtml(lowY.toFixed(1))}" class="${up ? "wick-up" : "wick-down"}" />
+          <rect x="${escapeHtml((x - candleWidth / 2).toFixed(1))}" y="${escapeHtml(bodyY.toFixed(1))}" width="${escapeHtml(candleWidth.toFixed(1))}" height="${escapeHtml(bodyH.toFixed(1))}" rx="1.8" class="${up ? "candle-up" : "candle-down"}" />
+        `;
+    }).join("") : "";
+    const volumeMax = Math.max(cleanNumber(triangle.volumeMax), ...candles.map((item) => cleanNumber(item.volume)), 1);
+    const volumeSvg = hasCandles ? candles.map((item, index) => {
+      const x = mapDateX(item.date, index, candles.length);
+      const barH = Math.max(2, (cleanNumber(item.volume) / volumeMax) * volumeHeight);
+      const up = cleanNumber(item.close) >= cleanNumber(item.open);
+      return `<rect x="${escapeHtml((x - candleWidth / 2).toFixed(1))}" y="${escapeHtml((volumeTop + volumeHeight - barH).toFixed(1))}" width="${escapeHtml(candleWidth.toFixed(1))}" height="${escapeHtml(barH.toFixed(1))}" rx="1.6" class="${up ? "volume-up" : "volume-down"}" />`;
+    }).join("") : "";
+    const markerX = hasCandles && marker?.date ? mapDateX(marker.date, candles.length - 1, candles.length) : chartLeft + chartWidth;
+    const markerY = mapY(marker?.price);
+    return `
+      <section class="desktop-triangle-chart" data-strategy4-triangle-chart="1">
+        <div class="desktop-triangle-chart-head">
+          <strong>三角收斂支撐 / 壓力線</strong>
+          <span>壓 ${escapeHtml(formatPriceValue(triangle.resistance) || triangle.resistance || "--")}｜支 ${escapeHtml(formatPriceValue(triangle.support) || triangle.support || "--")}｜突破 ${escapeHtml(formatPriceValue(triangle.breakoutPrice) || triangle.breakoutPrice || "--")}</span>
+        </div>
+        <svg viewBox="0 0 480 176" role="img" aria-label="三角收斂K棒支撐壓力線">
+          <line x1="28" y1="44" x2="452" y2="44" class="grid-line" />
+          <line x1="28" y1="78" x2="452" y2="78" class="grid-line" />
+          <line x1="28" y1="112" x2="452" y2="112" class="grid-line" />
+          <line x1="28" y1="150" x2="452" y2="150" class="axis" />
+          ${candleSvg}
+          <polyline points="${escapeHtml(toPolyline(upper))}" class="resistance" />
+          <polyline points="${escapeHtml(toPolyline(lower))}" class="support" />
+          <circle cx="${escapeHtml(markerX.toFixed(1))}" cy="${escapeHtml(markerY.toFixed(1))}" r="6" class="breakout" />
+          ${volumeSvg}
+          <text x="28" y="18" class="label">壓力線</text>
+          <text x="28" y="170" class="label support-label">量能 / 支撐</text>
+          <text x="374" y="${escapeHtml(String(Math.max(22, markerY - 10)))}" class="label breakout-label">突破</text>
+        </svg>
+      </section>
+    `;
+  }
+
   function showCanvasDetail(row, index) {
     const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
     if (!detail || !row) return;
@@ -2651,6 +2817,7 @@
         <h3>${escapeHtml(row.code || "--")} ${escapeHtml(row.title || "")}</h3>
         ${row.subStrategy ? `<div class="desktop-canvas-detail-substrategy">${escapeHtml(row.subStrategy)}</div>` : ""}
         <p>${escapeHtml(row.reason || row.line || "目前沒有更多說明。")}</p>
+        ${isStrategy4Route(canvasState.route) ? strategy4TriangleDetailHtml(row) : ""}
         ${signalChips ? `<div class="desktop-canvas-signal-list">${signalChips}</div>` : ""}
         <div class="desktop-canvas-detail-grid">
           ${isStrategy4Route(canvasState.route) ? `
@@ -7463,6 +7630,101 @@
         color: #ffb27b;
         background: rgba(255,112,55,0.12);
         font-weight: 900;
+      }
+      .desktop-triangle-chart {
+        margin-top: 14px;
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(15,23,42,0.58);
+      }
+      .desktop-triangle-chart-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .desktop-triangle-chart-head strong {
+        color: #f8fafc;
+        font-size: 14px;
+      }
+      .desktop-triangle-chart-head span {
+        color: #ffb27b;
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .desktop-triangle-chart svg {
+        display: block;
+        width: 100%;
+        height: 176px;
+        border-radius: 10px;
+        background:
+          linear-gradient(180deg, rgba(15,23,42,0.34), rgba(9,15,28,0.78)),
+          repeating-linear-gradient(0deg, rgba(148,163,184,0.10) 0 1px, transparent 1px 34px);
+      }
+      .desktop-triangle-chart .axis {
+        stroke: rgba(148,163,184,0.22);
+        stroke-width: 1;
+      }
+      .desktop-triangle-chart .grid-line {
+        stroke: rgba(148,163,184,0.11);
+        stroke-width: 1;
+      }
+      .desktop-triangle-chart .candle-up {
+        fill: #ef4444;
+        stroke: #fecaca;
+        stroke-width: 1;
+      }
+      .desktop-triangle-chart .candle-down {
+        fill: #22c55e;
+        stroke: #bbf7d0;
+        stroke-width: 1;
+      }
+      .desktop-triangle-chart .wick-up {
+        stroke: #fecaca;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      .desktop-triangle-chart .wick-down {
+        stroke: #bbf7d0;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      .desktop-triangle-chart .volume-up {
+        fill: rgba(239,68,68,0.42);
+      }
+      .desktop-triangle-chart .volume-down {
+        fill: rgba(34,197,94,0.36);
+      }
+      .desktop-triangle-chart .resistance {
+        fill: none;
+        stroke: #fb7185;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .desktop-triangle-chart .support {
+        fill: none;
+        stroke: #22c55e;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .desktop-triangle-chart .breakout {
+        fill: #f97316;
+        stroke: #fed7aa;
+        stroke-width: 2;
+      }
+      .desktop-triangle-chart .label {
+        fill: #cbd5e1;
+        font: 800 12px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .desktop-triangle-chart .support-label {
+        fill: #86efac;
+      }
+      .desktop-triangle-chart .breakout-label {
+        fill: #fdba74;
       }
       .desktop-canvas-signal-list {
         display: flex;

@@ -989,6 +989,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     const staleDates = [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8);
     sourceWarnings.push(`Filtered ${staleMatches.length} stale Strategy4 matches not on scan date ${expectedMatchDate}${staleDates.length ? `: ${staleDates.join(", ")}` : ""}`);
   }
+  const triangleBreakoutCount = matches.filter((item) => item?.triangleBreakout?.detected === true).length;
   return {
     ok: true,
     schemaVersion: STRATEGY4_CACHE_SCHEMA_VERSION,
@@ -1042,6 +1043,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     staleFilteredCount: staleMatches.length,
     staleFilteredDates: [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8),
     count: matches.length,
+    triangleBreakoutCount,
     matches,
   };
 }
@@ -1189,6 +1191,7 @@ function buildSupabaseRunRow(output, runId) {
         qualityStatus: String(output.qualityStatus || "").trim(),
       }),
       count: cleanNumber(output.count),
+      triangleBreakoutCount: cleanNumber(output.triangleBreakoutCount),
       total: cleanNumber(output.total),
       zones: output.zones || null,
       runMode: output.runMode || "",
