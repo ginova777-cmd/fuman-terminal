@@ -408,27 +408,118 @@ async function fetchExistingDaytradeQuotes() {
 }
 
 async function fetchIntradayStatus() {
+  const toMap = (rows, readinessSource) => {
+    const map = new Map(rows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
+    map.readinessSource = readinessSource;
+    return map;
+  };
+  const toAggregateMap = (row, readinessSource) => {
+    const map = toMap([], readinessSource);
+    const staleFromTime = ageSeconds(row.latest_candle_time_taipei || row.latest_candle_time || row.checked_at, 999999);
+    map.aggregate = {
+      readyMa20: numberValue(row.ready_ma20_continuous_symbols ?? row.ready_ma20_continuous ?? row.ready_ge_20_symbols),
+      readyMa35: numberValue(row.ready_ma35_continuous_symbols ?? row.ready_ma35_continuous ?? row.ready_ge_35_symbols ?? row.ready_ge_35),
+      todaySymbols: numberValue(row.today_1m_symbols ?? row.intraday_1m_symbols_today),
+      todayRows: numberValue(row.today_1m_rows),
+      staleSeconds: numberValue(row.intraday_1m_stale_seconds, staleFromTime),
+      checkedAt: row.checked_at || row.updated_at || "",
+    };
+    return map;
+  };
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
       "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous,latest_candle_age_seconds&order=symbol.asc",
       { service: true },
     );
-    return new Map(rows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
+    if (rows.length) return toMap(rows, "dedicated_daytrade_intraday_1m");
   } catch {
-    return new Map();
+    // Fall through to raw source readiness read-through.
+  }
+  try {
+    const rows = await supabaseGet(
+      "fugle_source_coverage",
+      "select=checked_at,active_symbols,today_1m_symbols,today_1m_rows,ready_ge_20_symbols,ready_ge_35_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,intraday_1m_status,intraday_1m_stale_seconds,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1",
+      { service: true },
+    );
+    if (rows[0]) return toAggregateMap(rows[0], "raw_supabase_source_coverage_aggregate_readthrough");
+  } catch {
+    // Fall through to source_status payload aggregate.
+  }
+  try {
+    const rows = await supabaseGet(
+      "source_status",
+      "select=updated_at,payload&source_name=eq.fugle_shared_source&limit=1",
+      { service: true },
+    );
+    const source = rows[0] || {};
+    if (source.payload) {
+      return toAggregateMap({ ...source.payload, updated_at: source.updated_at }, "raw_supabase_source_status_payload_readthrough");
+    }
+  } catch {
+    // Fall through to raw source status view.
+  }
+  try {
+    const rows = await supabaseGetPaged(
+      "v_fugle_intraday_1m_status",
+      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_ge_35,latest_candle_age_seconds&order=symbol.asc",
+      { service: true },
+    );
+    return toMap(rows, "raw_supabase_intraday_1m_status_readthrough");
+  } catch {
+    return toMap([], "missing_intraday_1m_status");
   }
 }
 
 async function fetchFutoptRows() {
   try {
-    return await supabaseGetPaged(
+    const rows = await supabaseGetPaged(
       "fugle_daytrade_futopt_quotes_live",
       "select=future_symbol,underlying_symbol,updated_at,total_volume&order=future_symbol.asc",
       { service: true },
     );
+    rows.readinessSource = "dedicated_daytrade_futopt_quotes_live";
+    rows.mappedCount = rows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
+    if (rows.length) return rows;
   } catch {
-    return [];
+    // Fall through to raw source readiness read-through.
+  }
+  try {
+    const rawRows = await supabaseGetPaged(
+      "v_stock_future_live_contract",
+      "select=*",
+      { service: true },
+    );
+    const rows = rawRows.map((row) => ({
+      future_symbol: row.future_symbol || row.source_symbol || "",
+      underlying_symbol: normalizeCode(row.underlying_symbol || row.symbol || row.source_symbol),
+      updated_at: row.updated_at || row.futopt_updated_at || "",
+      source_status: row.source_status || "",
+      payload: row,
+    }));
+    rows.readinessSource = "raw_supabase_stock_future_contract_readthrough";
+    rows.mappedCount = rows.filter((row) => normalizeCode(row.underlying_symbol)).length;
+    return rows;
+  } catch {
+    // Fall through to aggregate health read-through.
+  }
+  try {
+    const rows = await supabaseGet(
+      "v_strategy12_stock_future_contract_health",
+      "select=contract_rows,ready_rows,latest_futopt_updated_at,source_status,checked_at&limit=1",
+      { service: true },
+    );
+    const health = rows[0] || {};
+    const out = [];
+    out.readinessSource = "raw_supabase_strategy12_stock_future_contract_health";
+    out.mappedCount = Math.max(numberValue(health.ready_rows), numberValue(health.contract_rows));
+    out.health = health;
+    return out;
+  } catch {
+    const out = [];
+    out.readinessSource = "missing_futopt_readiness";
+    out.mappedCount = 0;
+    return out;
   }
 }
 
@@ -716,16 +807,24 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   let intraday1mStaleSeconds = 999999;
   for (const [symbol, row] of intradayMap.entries()) {
     if (!activeSet.has(symbol)) continue;
-    if (boolValue(row.ready_ma20_continuous)) readyMa20 += 1;
-    if (boolValue(row.ready_ma35_continuous)) readyMa35 += 1;
+    const continuousCount = numberValue(row.continuous_candle_count ?? row.candle_count);
+    if (boolValue(row.ready_ma20_continuous) || continuousCount >= 20) readyMa20 += 1;
+    if (boolValue(row.ready_ma35_continuous) || boolValue(row.ready_ge_35) || continuousCount >= 35) readyMa35 += 1;
     if (numberValue(row.today_candle_count) > 0) today1mSymbols += 1;
     today1mRows += numberValue(row.today_candle_count);
     intraday1mStaleSeconds = Math.min(intraday1mStaleSeconds, numberValue(row.latest_candle_age_seconds, 999999));
   }
+  if (intradayMap.aggregate) {
+    readyMa20 = Math.max(readyMa20, numberValue(intradayMap.aggregate.readyMa20));
+    readyMa35 = Math.max(readyMa35, numberValue(intradayMap.aggregate.readyMa35));
+    today1mSymbols = Math.max(today1mSymbols, numberValue(intradayMap.aggregate.todaySymbols));
+    today1mRows = Math.max(today1mRows, numberValue(intradayMap.aggregate.todayRows));
+    intraday1mStaleSeconds = Math.min(intraday1mStaleSeconds, numberValue(intradayMap.aggregate.staleSeconds, 999999));
+  }
 
-  const futoptMapped = futoptRows
-    .filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120)
-    .length;
+  const futoptMapped = Number.isFinite(Number(futoptRows.mappedCount))
+    ? Number(futoptRows.mappedCount)
+    : futoptRows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
   const cooldownRemaining = futureSeconds(state.cooldownUntil);
   const last429AgeSeconds = state.last429At ? ageSeconds(state.last429At) : 999999;
   const rateLimitStatus = cooldownRemaining > 0 ? "cooldown" : fetchResult.rateLimited ? "rate_limited" : "ok";
@@ -764,7 +863,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 
   const payload = {
     source_name: SOURCE_NAME,
-    writer_version: "daytrade-source-writer-20260702-01",
+    writer_version: "daytrade-source-writer-20260702-02",
     daytrade_gate_grade: gateGrade,
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
@@ -795,6 +894,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     today_1m_symbols: today1mSymbols,
     today_1m_rows: today1mRows,
     futopt_stock_mapped: futoptMapped,
+    intraday_1m_readiness_source: intradayMap.readinessSource || "unknown",
+    futopt_readiness_source: futoptRows.readinessSource || "unknown",
     rate_limit_status: rateLimitStatus,
     last_429_at: state.last429At || null,
     cooldown_until: state.cooldownUntil || null,
@@ -955,7 +1056,9 @@ async function tick() {
     dailyVolumeStatus: result.payload.daily_volume_status,
     readyMa20Continuous: result.payload.ready_ma20_continuous,
     readyMa35Continuous: result.payload.ready_ma35_continuous,
+    intraday1mReadinessSource: result.payload.intraday_1m_readiness_source,
     futoptStockMapped: result.payload.futopt_stock_mapped,
+    futoptReadinessSource: result.payload.futopt_readiness_source,
     rateLimitStatus: result.payload.rate_limit_status,
     attemptedThisLoop: fetchResult.attempted,
     fetchedThisLoop: fetchResult.fetched,
