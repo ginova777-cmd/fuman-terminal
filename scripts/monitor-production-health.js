@@ -5,6 +5,7 @@ const { spawnSync } = require("child_process");
 const {
   issue: terminalIssue,
   notifyIfNeeded,
+  shouldDetectToday,
   shouldRequireToday,
   taipeiClock,
 } = require("./monitor-terminal-api-health");
@@ -93,6 +94,14 @@ function endpointHasStrategy2(endpoints = {}) {
 function num(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
+}
+
+function liveContractIssueTarget(clock, issues, warnings) {
+  return shouldRequireToday(clock, false) ? issues : warnings;
+}
+
+function pushLiveContractIssue(clock, issues, warnings, message) {
+  liveContractIssueTarget(clock, issues, warnings).push(message);
 }
 
 function compactDate(value) {
@@ -254,16 +263,21 @@ async function main() {
   }
 
   const b = bundle.body || {};
-  if (bundle.status < 200 || bundle.status >= 300 || b.ok === false) issues.push(`terminal-fast-bundle unhealthy HTTP ${bundle.status}`);
-  if (b.snapshotHit !== true) issues.push("terminal-fast-bundle snapshotHit is not true");
-  if (b.snapshotFresh !== true) issues.push("terminal-fast-bundle snapshotFresh is not true");
-  if (b.partial !== false) issues.push("terminal-fast-bundle partial is not false");
-  if (Number(Object.keys(b.endpoints || {}).length) < 10) issues.push("terminal-fast-bundle endpoint count too low");
+  if (bundle.status < 200 || bundle.status >= 300 || b.ok === false) pushLiveContractIssue(clock, issues, warnings, `terminal-fast-bundle unhealthy HTTP ${bundle.status}`);
+  if (b.snapshotHit !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotHit is not true");
+  if (b.snapshotFresh !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotFresh is not true");
+  if (b.partial !== false) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle partial is not false");
+  if (Number(Object.keys(b.endpoints || {}).length) < 10) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle endpoint count too low");
   if (endpointHasStrategy2(b.endpoints || {})) issues.push("terminal-fast-bundle includes strategy2 cold endpoint");
 
   const h = health.body || {};
   if (health.status < 200 || health.status >= 300 || h.ok === false) {
-    issues.push(`production-health unhealthy HTTP ${health.status}: ${(h.issues || [h.error]).filter(Boolean).join("; ")}`);
+    const message = `production-health unhealthy HTTP ${health.status}: ${(h.issues || [h.error]).filter(Boolean).join("; ")}`;
+    if (health.status === 0) {
+      issues.push(message);
+    } else {
+      pushLiveContractIssue(clock, issues, warnings, message);
+    }
   }
   for (const item of heatmapLive.issues) issues.push(item);
   for (const item of heatmapLive.warnings || []) warnings.push(item);
@@ -287,6 +301,13 @@ async function main() {
     originHead: originSha,
     issues,
     warnings,
+    monitorWindow: {
+      taipeiDate: clock.ymd,
+      taipeiTime: clock.time,
+      detectToday: shouldDetectToday(clock, false),
+      alertCritical: shouldRequireToday(clock, false),
+      rule: "detect_today_from_0900_alert_critical_from_0905",
+    },
     notification,
     releaseManifest: {
       status: manifest.status,
