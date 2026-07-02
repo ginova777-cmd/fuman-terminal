@@ -126,30 +126,38 @@ $collectorAdaptiveRpm = [int](Convert-ToNumber $row.collector_adaptive_rpm 0)
 $collectorAdaptiveDelayMs = [int](Convert-ToNumber $row.collector_adaptive_delay_ms 0)
 $collectorAdaptiveRateLimited = Convert-ToBool $row.collector_adaptive_rate_limited
 $inOpeningBoostWindow = Test-InTimeWindow -Start $OpeningBoostStart -End $OpeningBoostEnd
+$strictQuoteWindow = $inOpeningBoostWindow
 
 if ($sourceAge -gt $MaxSourceAgeSeconds) {
-  $issues.Add(@{ issue = "source_status_stale"; detail = @{ ageSeconds = $sourceAge; max = $MaxSourceAgeSeconds } })
+  if ($strictQuoteWindow) {
+    $issues.Add(@{ issue = "source_status_stale"; detail = @{ ageSeconds = $sourceAge; max = $MaxSourceAgeSeconds } })
+  } else {
+    $warnings.Add(@{ warning = "source_status_stale_outside_quote_window"; detail = @{ ageSeconds = $sourceAge; max = $MaxSourceAgeSeconds; quoteWindow = "$OpeningBoostStart-$OpeningBoostEnd" } })
+  }
 }
-if ($freshCoverage -lt $MinFreshQuoteCoverage120) {
+if ($strictQuoteWindow -and $freshCoverage -lt $MinFreshQuoteCoverage120) {
   $issues.Add(@{ issue = "fresh_quote_coverage_low"; detail = @{ coverage = $freshCoverage; min = $MinFreshQuoteCoverage120; activeSymbols = $activeSymbols; quotes = $quotes } })
 }
-if ($freshCoverage -lt $MinFreshQuoteCoverage120 -and $restQuoteRateLimited) {
+if ($strictQuoteWindow -and $freshCoverage -lt $MinFreshQuoteCoverage120 -and $restQuoteRateLimited) {
   $issues.Add(@{ issue = "rest_quote_rate_limited_while_coverage_low"; detail = @{ coverage = $freshCoverage; restQuoteRateLimited = $restQuoteRateLimited } })
 }
-if ($freshCoverage -lt $MinFreshQuoteCoverage120 -and $collectorAdaptiveRateLimited) {
+if ($strictQuoteWindow -and $freshCoverage -lt $MinFreshQuoteCoverage120 -and $collectorAdaptiveRateLimited) {
   $issues.Add(@{ issue = "collector_adaptive_rate_limited_while_coverage_low"; detail = @{ coverage = $freshCoverage; adaptiveRpm = $collectorAdaptiveRpm; adaptiveDelayMs = $collectorAdaptiveDelayMs } })
 }
-if ($freshQuotes -lt $MinFreshQuoteCount120) {
+if ($strictQuoteWindow -and $freshQuotes -lt $MinFreshQuoteCount120) {
   $issues.Add(@{ issue = "fresh_quote_count_low"; detail = @{ freshQuotes120s = $freshQuotes; min = $MinFreshQuoteCount120 } })
 }
-if ($quoteAge -gt $MaxQuoteAgeSeconds) {
+if ($strictQuoteWindow -and $quoteAge -gt $MaxQuoteAgeSeconds) {
   $issues.Add(@{ issue = "quote_age_too_old"; detail = @{ ageSeconds = $quoteAge; max = $MaxQuoteAgeSeconds } })
 }
-if (-not $scannerQuoteOnly) {
+if ($strictQuoteWindow -and -not $scannerQuoteOnly) {
   $issues.Add(@{ issue = "scanner_can_run_quote_only_false"; detail = @{ scannerBlockReason = $row.scanner_block_reason } })
 }
-if (-not $scannerOpening) {
+if ($strictQuoteWindow -and -not $scannerOpening) {
   $issues.Add(@{ issue = "scanner_can_run_opening_false"; detail = @{ scannerBlockReason = $row.scanner_block_reason } })
+}
+if (-not $strictQuoteWindow -and $freshCoverage -lt $MinFreshQuoteCoverage120) {
+  $warnings.Add(@{ warning = "fresh_quote_coverage_low_outside_quote_window"; detail = @{ coverage = $freshCoverage; min = $MinFreshQuoteCoverage120; activeSymbols = $activeSymbols; quotes = $quotes; quoteWindow = "$OpeningBoostStart-$OpeningBoostEnd" } })
 }
 if ($intradayStale -gt $MaxIntraday1mStaleSeconds) {
   $issues.Add(@{ issue = "intraday_1m_stale"; detail = @{ staleSeconds = $intradayStale; max = $MaxIntraday1mStaleSeconds } })

@@ -11,6 +11,7 @@ param(
   [double]$MinIntraday1mCoverage = 0.95,
   [double]$MinReadyGe35Coverage = 0.95,
   [string]$CoverageHardGateStart = "09:05",
+  [string]$CoverageHardGateEnd = "13:30",
   [int]$WriterCatchupGraceSeconds = 180,
   [int]$RestartCooldownSeconds = 300,
   [string]$ActiveStart = "08:00",
@@ -110,6 +111,14 @@ function Test-AfterHHmm {
   $now = (Get-Date).TimeOfDay
   $gate = Convert-HHmmToTimeSpan $Value
   return ($now -ge $gate)
+}
+
+function Test-InHHmmWindow {
+  param([string]$Start, [string]$End)
+  $now = (Get-Date).TimeOfDay
+  $startTs = Convert-HHmmToTimeSpan $Start
+  $endTs = Convert-HHmmToTimeSpan $End
+  return ($now -ge $startTs -and $now -le $endTs)
 }
 
 function Read-TextSecret {
@@ -519,6 +528,7 @@ $collectorCache = Get-CollectorCacheHealth
 $health = Get-SourceStatusAgeSeconds -AnonKey $anonKey
 $quoteHealth = Get-QuoteLiveHealth -AnonKey $anonKey
 $writerAgeSeconds = Get-NewestSharedSourceAgeSeconds -Processes $sharedSourceProcesses
+$quoteCoverageHardGateActive = Test-InHHmmWindow -Start $CoverageHardGateStart -End $CoverageHardGateEnd
 
 Write-WatchdogLog "檢查結果：process_running=$isRunning；shared_source_count=$($sharedSourceProcesses.Count)；writer_age=${writerAgeSeconds}s；collector_count=$($collectorProcesses.Count)；$($collectorCache.Reason)；$($health.Reason)；$($quoteHealth.Reason)"
 
@@ -549,7 +559,7 @@ if ($isRunning -and -not $quoteHealth.Ok) {
   $quoteAgeHardFailed = ($null -ne $quoteHealth.QuoteAgeSeconds -and $quoteHealth.QuoteAgeSeconds -gt ([math]::Max(120, $MaxQuoteAgeSeconds * 2)))
   $sourceAgeHardFailed = ($null -ne $health.AgeSeconds -and $health.AgeSeconds -gt $MaxSourceAgeSeconds)
   $sourceQuoteAgeHardFailed = ($null -ne $health.QuoteAgeSeconds -and $health.QuoteAgeSeconds -gt ([math]::Max(120, $MaxQuoteAgeSeconds * 2)))
-  if ((Test-AfterHHmm $CoverageHardGateStart) -and ($quoteCoverageHardFailed -or $quoteAgeHardFailed) -and ($sourceAgeHardFailed -or $sourceQuoteAgeHardFailed -or $quoteAgeHardFailed)) {
+  if ($quoteCoverageHardGateActive -and ($quoteCoverageHardFailed -or $quoteAgeHardFailed) -and ($sourceAgeHardFailed -or $sourceQuoteAgeHardFailed -or $quoteAgeHardFailed)) {
     if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
       Write-WatchdogLog "quote health hard-stall candidate，但 writer 剛啟動 ${writerAgeSeconds}s 且 collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
       exit 0
@@ -559,6 +569,10 @@ if ($isRunning -and -not $quoteHealth.Ok) {
       exit 0
     }
     Start-SharedSourceTask -Reason "quote health hard-stall after $CoverageHardGateStart；coverage_120s=$($quoteHealth.Coverage120) fresh_120s=$($quoteHealth.Fresh120) quote_age=$($quoteHealth.QuoteAgeSeconds)s source_age=$($health.AgeSeconds)s source_quote_age=$($health.QuoteAgeSeconds)s；process alive 不可遮蔽 Fugle live 寫入失速" -Restart -Alert
+    exit 0
+  }
+  if (-not $quoteCoverageHardGateActive -and (Test-AfterHHmm $CoverageHardGateEnd)) {
+    Write-WatchdogLog "quote health 未達盤中門檻，但已過 hard gate 時段 $CoverageHardGateStart-$CoverageHardGateEnd；保留證據不重啟。$($quoteHealth.Reason)"
     exit 0
   }
   Write-WatchdogLog "quote health 尚未達標，但 shared source 與 collector 都在跑；尚未達 hard-stall 門檻，讓漸進補滿機制追平。"
