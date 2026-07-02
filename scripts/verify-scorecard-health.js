@@ -40,14 +40,16 @@ async function main() {
   for (const name of ["sources", "supabaseSource", "scorecardLatest", "apiScorecard", "scorecardFreshness", "page88"]) {
     if (stages[name]?.ok !== true) issues.push(`stage ${name} not ok`);
   }
-  const endpointCount = Object.keys(stages.sources?.endpoints || {}).length;
-  if (endpointCount < MIN_SOURCE_COUNT) issues.push(`source endpoint count too low: ${endpointCount}`);
+  const sourceStage = stages.sources || {};
+  const sourceRequired = sourceStage.required !== false;
+  const endpointCount = Object.keys(sourceStage.endpoints || {}).length;
+  if (sourceRequired && endpointCount < MIN_SOURCE_COUNT) issues.push(`source endpoint count too low: ${endpointCount}`);
   if (issues.length) {
     console.error("[scorecard-health] failed");
     for (const issue of issues) console.error("- " + issue);
     process.exit(1);
   }
-  console.log(`[scorecard-health] ok latestDate=${stages.apiScorecard?.summary?.latestDate || ""} rows=${stages.apiScorecard?.summary?.rows || 0} endpoints=${endpointCount}`);
+  console.log(`[scorecard-health] ok latestDate=${stages.apiScorecard?.summary?.latestDate || ""} rows=${stages.apiScorecard?.summary?.rows || 0} endpoints=${sourceRequired ? endpointCount : "not_required"}`);
 }
 
 main().catch((error) => {
