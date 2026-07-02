@@ -57,7 +57,7 @@
 
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="brand">
+        <div class="brand" role="button" tabindex="0" aria-label="重新整理頁面" title="重新整理頁面" data-page-refresh>
           <img class="brand-logo" src="assets/logo.webp" alt="輔滿 Logo">
           <div>
             <strong style="color:var(--fuman-brand-title,#ffe7b7)!important;-webkit-text-fill-color:var(--fuman-brand-title,#ffe7b7)!important;">輔滿 <b style="color:var(--fuman-brand-accent,#ff9b45)!important;-webkit-text-fill-color:var(--fuman-brand-accent,#ff9b45)!important;">FUMAn</b></strong>
@@ -569,6 +569,19 @@
       </main>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      (() => {
+        const brand = document.querySelector("[data-page-refresh]");
+        if (!brand) return;
+        const refresh = () => window.location.reload();
+        brand.addEventListener("click", refresh);
+        brand.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          refresh();
+        });
+      })();
+    </script>
     <script src="terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-14&single-ai-renderer=20260702"></script>
     <script src="terminal-hotfix.js?watchlist-bridge=20260628-06" data-fuman-terminal-hotfix="1"></script>
     <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260628-07" data-fuman-watchlist-shell="1"></script>
