@@ -10,11 +10,15 @@ param(
   [int]$DailyVolumeRetainTradeDays = 20,
   [int]$Direct1mBatchSize = 8,
   [int]$Direct1mEverySeconds = 20,
+  [int]$Direct1mIntradayTimeoutSeconds = 6,
+  [int]$Direct1mHistoricalTimeoutSeconds = 8,
+  [int]$Direct1mBatchTimeBudgetSeconds = 20,
   [bool]$Direct1mPrewarmEnabled = $true,
   [string]$Direct1mPrewarmStart = "07:00",
   [int]$Direct1mPrewarmSymbolCount = 2000,
   [int]$Direct1mPrewarmBatchSize = 80,
   [int]$Direct1mPrewarmBars = 200,
+  [int]$Direct1mPrewarmTimeBudgetSeconds = 45,
   [int]$QuoteDerived1mCandidateCount = 0,
   [int]$QuoteDerived1mMaxQuoteAgeSeconds = 120,
   [int]$QuoteDerivedOpeningBackfillMinutes = 6,
@@ -26,6 +30,9 @@ param(
   [int]$RestQuoteBatchSize = 40,
   [int]$RestQuoteEverySeconds = 10,
   [int]$RestQuoteDelayMilliseconds = 600,
+  [int]$RestQuoteTimeoutSeconds = 4,
+  [int]$RestQuoteBatchTimeBudgetSeconds = 25,
+  [int]$RestQuoteRateLimitCooldownSeconds = 60,
   [string]$OpeningBoostStart = "08:45",
   [string]$OpeningBoostEnd = "13:30",
   [int]$RestQuoteOpeningBoostBatchSize = 60,
@@ -45,6 +52,8 @@ param(
   [int]$FutoptQuoteBatchSize = 120,
   [int]$FutoptQuoteEverySeconds = 20,
   [int]$FutoptQuoteDelayMilliseconds = 100,
+  [int]$FutoptQuoteTimeoutSeconds = 5,
+  [int]$FutoptQuoteTimeBudgetSeconds = 45,
   [bool]$FutoptQuoteFullDetect = $true,
   [int]$FutoptTickersEverySeconds = 300,
   [int]$PublicSlotUpsertTimeoutSec = 45,
@@ -240,6 +249,9 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteBatchSize" -ConfigNames @("restQuoteBatchSize", "RestQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteEverySeconds" -ConfigNames @("restQuoteEverySeconds", "RestQuoteEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_EVERY_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteDelayMilliseconds" -ConfigNames @("restQuoteDelayMilliseconds", "RestQuoteDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteTimeoutSeconds" -ConfigNames @("restQuoteTimeoutSeconds", "RestQuoteTimeoutSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_TIMEOUT_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteBatchTimeBudgetSeconds" -ConfigNames @("restQuoteBatchTimeBudgetSeconds", "RestQuoteBatchTimeBudgetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_BATCH_TIME_BUDGET_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "RestQuoteRateLimitCooldownSeconds" -ConfigNames @("restQuoteRateLimitCooldownSeconds", "RestQuoteRateLimitCooldownSeconds") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_RATE_LIMIT_COOLDOWN_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "OpeningBoostStart" -ConfigNames @("openingBoostStart", "OpeningBoostStart") -EnvName "FUMAN_PUBLIC_SLOT_OPENING_BOOST_START" -Type "string"
   Set-RuntimeOverride -Config $config -VariableName "OpeningBoostEnd" -ConfigNames @("openingBoostEnd", "OpeningBoostEnd") -EnvName "FUMAN_PUBLIC_SLOT_OPENING_BOOST_END" -Type "string"
   Set-RuntimeOverride -Config $config -VariableName "RestQuoteOpeningBoostBatchSize" -ConfigNames @("restQuoteOpeningBoostBatchSize", "RestQuoteOpeningBoostBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_REST_QUOTE_OPENING_BOOST_BATCH_SIZE"
@@ -256,11 +268,15 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FugleCollectorQuoteTtlMilliseconds" -ConfigNames @("fugleCollectorQuoteTtlMilliseconds", "FugleCollectorQuoteTtlMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUGLE_COLLECTOR_QUOTE_TTL_MS"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mBatchSize" -ConfigNames @("direct1mBatchSize", "Direct1mBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mEverySeconds" -ConfigNames @("direct1mEverySeconds", "Direct1mEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_EVERY_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mIntradayTimeoutSeconds" -ConfigNames @("direct1mIntradayTimeoutSeconds", "Direct1mIntradayTimeoutSeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_INTRADAY_TIMEOUT_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mHistoricalTimeoutSeconds" -ConfigNames @("direct1mHistoricalTimeoutSeconds", "Direct1mHistoricalTimeoutSeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_HISTORICAL_TIMEOUT_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mBatchTimeBudgetSeconds" -ConfigNames @("direct1mBatchTimeBudgetSeconds", "Direct1mBatchTimeBudgetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_BATCH_TIME_BUDGET_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmEnabled" -ConfigNames @("direct1mPrewarmEnabled", "Direct1mPrewarmEnabled") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_ENABLED" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmStart" -ConfigNames @("direct1mPrewarmStart", "Direct1mPrewarmStart") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_START" -Type "string"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmSymbolCount" -ConfigNames @("direct1mPrewarmSymbolCount", "Direct1mPrewarmSymbolCount") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_SYMBOL_COUNT"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmBatchSize" -ConfigNames @("direct1mPrewarmBatchSize", "Direct1mPrewarmBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmBars" -ConfigNames @("direct1mPrewarmBars", "Direct1mPrewarmBars") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_BARS"
+  Set-RuntimeOverride -Config $config -VariableName "Direct1mPrewarmTimeBudgetSeconds" -ConfigNames @("direct1mPrewarmTimeBudgetSeconds", "Direct1mPrewarmTimeBudgetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_DIRECT_1M_PREWARM_TIME_BUDGET_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "QuoteDerived1mCandidateCount" -ConfigNames @("quoteDerived1mCandidateCount", "QuoteDerived1mCandidateCount") -EnvName "FUMAN_PUBLIC_SLOT_QUOTE_DERIVED_1M_CANDIDATE_COUNT"
   Set-RuntimeOverride -Config $config -VariableName "QuoteDerived1mMaxQuoteAgeSeconds" -ConfigNames @("quoteDerived1mMaxQuoteAgeSeconds", "QuoteDerived1mMaxQuoteAgeSeconds") -EnvName "FUMAN_PUBLIC_SLOT_QUOTE_DERIVED_1M_MAX_QUOTE_AGE_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "QuoteDerivedOpeningBackfillMinutes" -ConfigNames @("quoteDerivedOpeningBackfillMinutes", "QuoteDerivedOpeningBackfillMinutes") -EnvName "FUMAN_PUBLIC_SLOT_QUOTE_DERIVED_OPENING_BACKFILL_MINUTES"
@@ -274,6 +290,8 @@ function Apply-PublicSlotRuntimeConfig {
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteBatchSize" -ConfigNames @("futoptQuoteBatchSize", "FutoptQuoteBatchSize") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_BATCH_SIZE"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteEverySeconds" -ConfigNames @("futoptQuoteEverySeconds", "FutoptQuoteEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_EVERY_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteDelayMilliseconds" -ConfigNames @("futoptQuoteDelayMilliseconds", "FutoptQuoteDelayMilliseconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_DELAY_MS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteTimeoutSeconds" -ConfigNames @("futoptQuoteTimeoutSeconds", "FutoptQuoteTimeoutSeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_TIMEOUT_SECONDS"
+  Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteTimeBudgetSeconds" -ConfigNames @("futoptQuoteTimeBudgetSeconds", "FutoptQuoteTimeBudgetSeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_TIME_BUDGET_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "FutoptQuoteFullDetect" -ConfigNames @("futoptQuoteFullDetect", "FutoptQuoteFullDetect") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_QUOTE_FULL_DETECT" -Type "bool"
   Set-RuntimeOverride -Config $config -VariableName "FutoptTickersEverySeconds" -ConfigNames @("futoptTickersEverySeconds", "FutoptTickersEverySeconds") -EnvName "FUMAN_PUBLIC_SLOT_FUTOPT_TICKERS_EVERY_SECONDS"
   Set-RuntimeOverride -Config $config -VariableName "PublicSlotUpsertTimeoutSec" -ConfigNames @("publicSlotUpsertTimeoutSec", "upsertTimeoutSec", "PublicSlotUpsertTimeoutSec") -EnvName "FUMAN_PUBLIC_SLOT_UPSERT_TIMEOUT_SEC"
@@ -479,6 +497,16 @@ function Get-EffectiveRestQuoteDelayMilliseconds {
     return [int][math]::Max($RestQuoteDelayMilliseconds, $RestQuoteOpeningBoostDelayMilliseconds)
   }
   return [int]$RestQuoteDelayMilliseconds
+}
+
+function Get-DateTimeOffsetOrNull {
+  param([object]$Value)
+  try {
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
+    return [datetimeoffset]::Parse([string]$Value)
+  } catch {
+    return $null
+  }
 }
 
 function Get-SourcePartStatus {
@@ -1957,6 +1985,10 @@ function Write-QuoteFastHeartbeatStatus {
       rest_quote_effective_batch_size = if ($RestQuotePayload.effective_batch_size) { $RestQuotePayload.effective_batch_size } else { $RestQuoteBatchSize }
       rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
       rest_quote_effective_delay_milliseconds = if ($null -ne $RestQuotePayload.effective_delay_milliseconds) { $RestQuotePayload.effective_delay_milliseconds } else { $RestQuoteDelayMilliseconds }
+      rest_quote_timeout_seconds = $RestQuoteTimeoutSeconds
+      rest_quote_time_budget_seconds = $RestQuoteBatchTimeBudgetSeconds
+      rest_quote_rate_limit_cooldown_seconds = $RestQuoteRateLimitCooldownSeconds
+      rest_quote_cooldown_until = if ($RestQuotePayload.cooldown_until) { $RestQuotePayload.cooldown_until } else { "" }
       opening_boost_active = [bool](Test-OpeningBoostWindow)
       opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
       rest_quote_opening_boost_batch_size = $RestQuoteOpeningBoostBatchSize
@@ -2250,6 +2282,10 @@ function Write-QuoteHeartbeatStatus {
       rest_quote_every_seconds = $RestQuoteEverySeconds
       rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
       rest_quote_effective_delay_milliseconds = if ($null -ne $RestQuotePayload.effective_delay_milliseconds) { $RestQuotePayload.effective_delay_milliseconds } else { $RestQuoteDelayMilliseconds }
+      rest_quote_timeout_seconds = $RestQuoteTimeoutSeconds
+      rest_quote_time_budget_seconds = $RestQuoteBatchTimeBudgetSeconds
+      rest_quote_rate_limit_cooldown_seconds = $RestQuoteRateLimitCooldownSeconds
+      rest_quote_cooldown_until = if ($RestQuotePayload.cooldown_until) { $RestQuotePayload.cooldown_until } else { "" }
       opening_boost_active = [bool](Test-OpeningBoostWindow)
       opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
       rest_quote_opening_boost_batch_size = $RestQuoteOpeningBoostBatchSize
@@ -2335,7 +2371,7 @@ function Invoke-FugleHistoricalIntraday1m {
     $from = (Get-Date).AddDays(-8).ToString("yyyy-MM-dd")
     $to = (Get-Date).ToString("yyyy-MM-dd")
     $historyUri = "https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/$($Symbol)?timeframe=1&from=$from&to=$to&sort=asc"
-    $payload = Invoke-RestMethod -Uri $historyUri -Headers $headers -TimeoutSec 25 -ErrorAction Stop
+    $payload = Invoke-RestMethod -Uri $historyUri -Headers $headers -TimeoutSec ([math]::Max(3, $Direct1mHistoricalTimeoutSeconds)) -ErrorAction Stop
     if ($null -ne $payload) {
       $payload | Add-Member -NotePropertyName public_slot_source -NotePropertyValue "fugle-rest-historical-1m" -Force
     }
@@ -2362,7 +2398,7 @@ function Invoke-FugleIntraday1m {
   }
   $intradayUri = "https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/$($Symbol)?timeframe=1&sort=asc"
   try {
-    $payload = Invoke-RestMethod -Uri $intradayUri -Headers $headers -TimeoutSec 20 -ErrorAction Stop
+    $payload = Invoke-RestMethod -Uri $intradayUri -Headers $headers -TimeoutSec ([math]::Max(3, $Direct1mIntradayTimeoutSeconds)) -ErrorAction Stop
     if (@($payload.data).Count -gt 0) { return $payload }
   } catch {
     Write-Log "WARN direct_1m intraday $Symbol failed: $($_.Exception.Message)"
@@ -2497,8 +2533,15 @@ function Invoke-Direct1mStartupPrewarm {
   $batch = @($remaining | Select-Object -First $batchSize)
   $rows = New-Object System.Collections.Generic.List[object]
   $fetched = 0
+  $attempted = 0
+  $batchStarted = Get-Date
 
   foreach ($symbol in $batch) {
+    if (((Get-Date) - $batchStarted).TotalSeconds -ge $Direct1mPrewarmTimeBudgetSeconds) {
+      Write-Log "WARN direct_1m_prewarm time budget exceeded ${Direct1mPrewarmTimeBudgetSeconds}s; preserving progress."
+      break
+    }
+    $attempted += 1
     $payload = Invoke-FugleIntraday1m -Symbol $symbol -ApiKey $ApiKey -PreferHistorical
     if ($null -ne $payload) {
       $converted = @(Convert-FugleIntraday1mToRows -Symbol $symbol -Payload $payload -MaxRows $Direct1mPrewarmBars)
@@ -2525,18 +2568,19 @@ function Invoke-Direct1mStartupPrewarm {
     completed_symbols = $completedArray
     completed_count = $completedArray.Count
     remaining_count = $remainingCount
-    last_attempted = $batch.Count
+    last_attempted = $attempted
     last_fetched_symbols = $fetched
     last_rows = $rows.Count
     last_run_at = (Get-Date).ToString("o")
     complete = $complete
     rate_limited = [bool]$script:Direct1mRateLimited
+    time_budget_seconds = $Direct1mPrewarmTimeBudgetSeconds
   })
 
-  Write-Log "direct_1m_prewarm target=$($targetSymbols.Count) completed=$($completedArray.Count) remaining=$remainingCount attempted=$($batch.Count) fetched=$fetched rows=$($rows.Count) bars=$Direct1mPrewarmBars complete=$complete"
+  Write-Log "direct_1m_prewarm target=$($targetSymbols.Count) completed=$($completedArray.Count) remaining=$remainingCount attempted=$attempted fetched=$fetched rows=$($rows.Count) bars=$Direct1mPrewarmBars complete=$complete time_budget=${Direct1mPrewarmTimeBudgetSeconds}s"
   return @{
     rows = $rows.ToArray()
-    attempted = $batch.Count
+    attempted = $attempted
     fetched = $fetched
     skipped = $false
     complete = $complete
@@ -2572,7 +2616,14 @@ function Invoke-Direct1mWarmupBatch {
   }
   $rows = New-Object System.Collections.Generic.List[object]
   $fetched = 0
+  $attempted = 0
+  $batchStarted = Get-Date
   foreach ($symbol in $batch) {
+    if (((Get-Date) - $batchStarted).TotalSeconds -ge $Direct1mBatchTimeBudgetSeconds) {
+      Write-Log "WARN direct_1m time budget exceeded ${Direct1mBatchTimeBudgetSeconds}s; stopping current batch."
+      break
+    }
+    $attempted += 1
     $payload = Invoke-FugleIntraday1m -Symbol $symbol -ApiKey $ApiKey
     $converted = @()
     if ($null -ne $payload) { $converted = @(Convert-FugleIntraday1mToRows -Symbol $symbol -Payload $payload) }
@@ -2590,12 +2641,13 @@ function Invoke-Direct1mWarmupBatch {
   Write-JsonFile -Path $Direct1mStateFile -Value ([ordered]@{
     cursor = $nextCursor
     last_run_at = (Get-Date).ToString("o")
-    last_attempted = $batch.Count
+    last_attempted = $attempted
     last_fetched_symbols = $fetched
     last_rows = $rows.Count
     rate_limited = [bool]$script:Direct1mRateLimited
+    time_budget_seconds = $Direct1mBatchTimeBudgetSeconds
   })
-  return @{ rows = $rows.ToArray(); attempted = $batch.Count; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:Direct1mRateLimited }
+  return @{ rows = $rows.ToArray(); attempted = $attempted; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:Direct1mRateLimited }
 }
 
 function Invoke-FugleStockQuote {
@@ -2607,7 +2659,7 @@ function Invoke-FugleStockQuote {
   }
   try {
     $uri = "https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/$Symbol"
-    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 12 -ErrorAction Stop
+    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec ([math]::Max(2, $RestQuoteTimeoutSeconds)) -ErrorAction Stop
   } catch {
     $statusCode = $null
     try {
@@ -2708,6 +2760,23 @@ function Invoke-FugleStockQuoteBatch {
   $script:RestQuoteUnsupportedSymbol = $false
   $lastRun = $null
   try { if ($state.last_run_at) { $lastRun = [datetimeoffset]::Parse([string]$state.last_run_at).LocalDateTime } } catch {}
+  $cooldownUntil = Get-DateTimeOffsetOrNull -Value $state.rate_limit_cooldown_until
+  if (-not $Force -and $null -ne $cooldownUntil -and (Get-Date).ToUniversalTime() -lt $cooldownUntil.UtcDateTime) {
+    return @{
+      quotes = @()
+      attempted = 0
+      scanned_for_batch = 0
+      fetched = 0
+      skipped = $true
+      rate_limited = $true
+      unsupported = 0
+      unsupported_symbols = $unsupported.Count
+      unsupported_trade_date = $todayKey
+      cooldown_until = $cooldownUntil.ToString("o")
+      effective_batch_size = (Get-EffectiveRestQuoteBatchSize)
+      effective_delay_milliseconds = (Get-EffectiveRestQuoteDelayMilliseconds)
+    }
+  }
   if (-not $Force -and $null -ne $lastRun -and ((Get-Date) - $lastRun).TotalSeconds -lt $RestQuoteEverySeconds) {
     return @{ quotes = @(); attempted = 0; fetched = 0; skipped = $true; rate_limited = $false; unsupported = 0; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey }
   }
@@ -2732,8 +2801,15 @@ function Invoke-FugleStockQuoteBatch {
   $quotes = New-Object System.Collections.Generic.List[object]
   $unsupportedThisLoop = New-Object System.Collections.Generic.List[string]
   $fetched = 0
+  $attempted = 0
+  $batchStarted = Get-Date
   foreach ($symbol in $batch) {
+    if (((Get-Date) - $batchStarted).TotalSeconds -ge $RestQuoteBatchTimeBudgetSeconds) {
+      Write-Log "WARN rest_quote time budget exceeded ${RestQuoteBatchTimeBudgetSeconds}s; stopping current batch."
+      break
+    }
     $script:RestQuoteUnsupportedSymbol = $false
+    $attempted += 1
     $quote = Invoke-FugleStockQuote -Symbol $symbol -ApiKey $ApiKey
     if ($script:RestQuoteUnsupportedSymbol) {
       if ($unsupported.Add($symbol)) { $unsupportedThisLoop.Add($symbol) }
@@ -2754,10 +2830,14 @@ function Invoke-FugleStockQuoteBatch {
 
   $nextCursor = ($cursor + [math]::Max(1, $scannedForBatch)) % $Symbols.Count
   $unsupportedArray = @($unsupported | Sort-Object)
+  $rateLimitCooldownUntil = ""
+  if ($script:RestQuoteRateLimited) {
+    $rateLimitCooldownUntil = (Get-Date).ToUniversalTime().AddSeconds([math]::Max(10, $RestQuoteRateLimitCooldownSeconds)).ToString("o")
+  }
   Write-JsonFile -Path $RestQuoteStateFile -Value ([ordered]@{
     cursor = $nextCursor
     last_run_at = (Get-Date).ToString("o")
-    last_attempted = $batch.Count
+    last_attempted = $attempted
     scanned_for_batch = $scannedForBatch
     last_fetched_symbols = $fetched
     last_rows = $quotes.Count
@@ -2773,8 +2853,11 @@ function Invoke-FugleStockQuoteBatch {
     opening_boost_active = [bool]$openingBoostActive
     opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
     rate_limited = [bool]$script:RestQuoteRateLimited
+    rate_limit_cooldown_until = $rateLimitCooldownUntil
+    timeout_seconds = $RestQuoteTimeoutSeconds
+    time_budget_seconds = $RestQuoteBatchTimeBudgetSeconds
   })
-  return @{ quotes = $quotes.ToArray(); attempted = $batch.Count; scanned_for_batch = $scannedForBatch; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:RestQuoteRateLimited; unsupported = $unsupportedThisLoop.Count; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey; opening_boost_active = [bool]$openingBoostActive; effective_batch_size = $effectiveBatchSize; effective_delay_milliseconds = $effectiveDelayMilliseconds }
+  return @{ quotes = $quotes.ToArray(); attempted = $attempted; scanned_for_batch = $scannedForBatch; fetched = $fetched; skipped = $false; rate_limited = [bool]$script:RestQuoteRateLimited; unsupported = $unsupportedThisLoop.Count; unsupported_symbols = $unsupported.Count; unsupported_trade_date = $todayKey; opening_boost_active = [bool]$openingBoostActive; effective_batch_size = $effectiveBatchSize; effective_delay_milliseconds = $effectiveDelayMilliseconds; cooldown_until = $rateLimitCooldownUntil; timeout_seconds = $RestQuoteTimeoutSeconds; time_budget_seconds = $RestQuoteBatchTimeBudgetSeconds }
 }
 
 function Test-ProcessAlive {
@@ -3313,7 +3396,7 @@ function Invoke-FugleFutoptQuote {
   }
   try {
     $uri = "https://api.fugle.tw/marketdata/v1.0/futopt/intraday/quote/$FutureSymbol"
-    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 12 -ErrorAction Stop
+    return Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec ([math]::Max(2, $FutoptQuoteTimeoutSeconds)) -ErrorAction Stop
   } catch {
     Write-Log "WARN fugle futopt quote $FutureSymbol failed: $($_.Exception.Message)"
     if ($_.Exception.Message -match '429|Too Many') { $script:FutoptRateLimited = $true }
@@ -3337,7 +3420,12 @@ function Invoke-FugleTxfQuoteRows {
   $script:FutoptRateLimited = $false
   $attempted = 0
   $fetched = 0
+  $batchStarted = Get-Date
   foreach ($futureSymbol in @($FutureSymbols | Select-Object -Unique)) {
+    if (((Get-Date) - $batchStarted).TotalSeconds -ge $FutoptQuoteTimeBudgetSeconds) {
+      Write-Log "WARN fugle TXF quote time budget exceeded ${FutoptQuoteTimeBudgetSeconds}s; preserving previous TXF row."
+      break
+    }
     $attempted += 1
     $quote = Invoke-FugleFutoptQuote -FutureSymbol $futureSymbol -ApiKey $ApiKey
     $row = Convert-FugleFutoptQuoteToRow -Quote $quote -TickerBySymbol $tickerBySymbol
@@ -3426,7 +3514,14 @@ function Invoke-FugleFutoptQuoteBatch {
 
   $rows = New-Object System.Collections.Generic.List[object]
   $fetched = 0
+  $attempted = 0
+  $batchStarted = Get-Date
   foreach ($futureSymbol in $batch) {
+    if (((Get-Date) - $batchStarted).TotalSeconds -ge $FutoptQuoteTimeBudgetSeconds) {
+      Write-Log "WARN futopt quote time budget exceeded ${FutoptQuoteTimeBudgetSeconds}s; stopping current batch."
+      break
+    }
+    $attempted += 1
     $quote = Invoke-FugleFutoptQuote -FutureSymbol $futureSymbol -ApiKey $ApiKey
     $row = Convert-FugleFutoptQuoteToRow -Quote $quote -TickerBySymbol $tickerBySymbol
     if ($null -ne $row) {
@@ -3439,27 +3534,31 @@ function Invoke-FugleFutoptQuoteBatch {
     }
     Start-Sleep -Milliseconds ([math]::Max(40, [math]::Min(100, $FutoptQuoteDelayMilliseconds)))
   }
-  $nextCursor = ($cursor + [math]::Max(1, $batch.Count)) % $FutureSymbols.Count
+  $nextCursor = ($cursor + [math]::Max(1, $attempted)) % $FutureSymbols.Count
   Write-JsonFile -Path $FutoptQuoteStateFile -Value ([ordered]@{
     cursor = $nextCursor
     last_run_at = (Get-Date).ToString("o")
-    last_attempted = $batch.Count
+    last_attempted = $attempted
     last_fetched_symbols = $fetched
     last_rows = $rows.Count
     universe = $FutureSymbols.Count
     full_detect = [bool]$FutoptQuoteFullDetect
-    full_detect_complete = [bool]($batch.Count -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
+    full_detect_complete = [bool]($attempted -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
     rate_limited = [bool]$script:FutoptRateLimited
+    timeout_seconds = $FutoptQuoteTimeoutSeconds
+    time_budget_seconds = $FutoptQuoteTimeBudgetSeconds
   })
   return @{
     rows = $rows.ToArray()
-    attempted = $batch.Count
+    attempted = $attempted
     fetched = $fetched
     skipped = $false
     rate_limited = [bool]$script:FutoptRateLimited
     universe = $FutureSymbols.Count
     full_detect = [bool]$FutoptQuoteFullDetect
-    full_detect_complete = [bool]($batch.Count -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
+    full_detect_complete = [bool]($attempted -ge $FutureSymbols.Count -and -not $script:FutoptRateLimited)
+    timeout_seconds = $FutoptQuoteTimeoutSeconds
+    time_budget_seconds = $FutoptQuoteTimeBudgetSeconds
   }
 }
 
@@ -3986,7 +4085,7 @@ Initialize-SupabasePublicSlotSource -Url $ProjectUrl -ServiceRoleKey $serviceRol
 $fugleApiKey = Get-FugleApiKey
 $script:SymbolBlacklist = Read-SymbolBlacklist
 Write-Log "Public slot shared source started. Supabase=$ProjectUrl Runtime=$RuntimeDir"
-Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms collectorPrimary=fugle collectorFallback=finmind collectorFinMindRecoveryEnabled=$FugleCollectorFinMindRecoveryEnabled collectorFinMindRecoveryTimeout=${FugleCollectorFinMindRecoveryTimeoutMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s intradaySelfHealEnabled=$Intraday1mSelfHealEnabled intradaySelfHealStale=${Intraday1mSelfHealStaleSeconds}s intradaySelfHealCooldown=${Intraday1mSelfHealCooldownSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
+Write-Log "Runtime config file=$RuntimeConfigFile restQuoteBatch=$RestQuoteBatchSize restQuoteEvery=${RestQuoteEverySeconds}s restQuoteDelay=${RestQuoteDelayMilliseconds}ms restQuoteTimeout=${RestQuoteTimeoutSeconds}s restQuoteBudget=${RestQuoteBatchTimeBudgetSeconds}s restQuoteCooldown=${RestQuoteRateLimitCooldownSeconds}s openingBoost=$OpeningBoostStart-$OpeningBoostEnd restOpeningBoostBatch=$RestQuoteOpeningBoostBatchSize restOpeningBoostDelay=${RestQuoteOpeningBoostDelayMilliseconds}ms collectorLoop=${FugleCollectorLoopMilliseconds}ms collectorBatch=$FugleCollectorBatchSize collectorConcurrency=$FugleCollectorConcurrency collectorDelay=${FugleCollectorRequestDelayMilliseconds}ms collectorTtl=${FugleCollectorQuoteTtlMilliseconds}ms collectorOpeningBoostBatch=$FugleCollectorOpeningBoostBatchSize collectorOpeningBoostConcurrency=$FugleCollectorOpeningBoostConcurrency collectorOpeningBoostDelay=${FugleCollectorOpeningBoostDelayMilliseconds}ms collectorPrimary=fugle collectorFallback=finmind collectorFinMindRecoveryEnabled=$FugleCollectorFinMindRecoveryEnabled collectorFinMindRecoveryTimeout=${FugleCollectorFinMindRecoveryTimeoutMilliseconds}ms direct1mBatch=$Direct1mBatchSize direct1mEvery=${Direct1mEverySeconds}s direct1mTimeout=${Direct1mIntradayTimeoutSeconds}s direct1mHistoricalTimeout=${Direct1mHistoricalTimeoutSeconds}s direct1mBudget=${Direct1mBatchTimeBudgetSeconds}s direct1mPrewarmEnabled=$Direct1mPrewarmEnabled direct1mPrewarmStart=$Direct1mPrewarmStart direct1mPrewarmSymbols=$Direct1mPrewarmSymbolCount direct1mPrewarmBatch=$Direct1mPrewarmBatchSize direct1mPrewarmBars=$Direct1mPrewarmBars direct1mPrewarmBudget=${Direct1mPrewarmTimeBudgetSeconds}s quoteDerivedCandidateLimit=$QuoteDerived1mCandidateCount quoteDerivedMaxAge=${QuoteDerived1mMaxQuoteAgeSeconds}s openingBackfillMinutes=$QuoteDerivedOpeningBackfillMinutes intradayFreshTarget=${Intraday1mFreshTargetSeconds}s intradayFreshHard=${Intraday1mFreshHardSeconds}s intradaySelfHealEnabled=$Intraday1mSelfHealEnabled intradaySelfHealStale=${Intraday1mSelfHealStaleSeconds}s intradaySelfHealCooldown=${Intraday1mSelfHealCooldownSeconds}s futoptBatch=$FutoptQuoteBatchSize futoptEvery=${FutoptQuoteEverySeconds}s futoptDelay=${FutoptQuoteDelayMilliseconds}ms futoptTimeout=${FutoptQuoteTimeoutSeconds}s futoptBudget=${FutoptQuoteTimeBudgetSeconds}s futoptFullDetect=$FutoptQuoteFullDetect upsertTimeout=${PublicSlotUpsertTimeoutSec}s upsertBatch=$PublicSlotUpsertBatchSize writePreopen=$WritePreopenRows writePreopenMode=$WritePreopenRowsMode strategy2ReadyRefreshEnabled=$Strategy2ReadyRefreshEnabled strategy2ReadyPageSize=$Strategy2ReadyPageSize strategy2ReadyEffectivePageSize=$(Get-Strategy2ReadyEffectivePageSize) strategy2ReadyMaxPages=$Strategy2ReadyMaxPages strategy2ReadyRefreshEvery=${Strategy2ReadyRefreshEverySeconds}s minAvgVolume5Lots=$MinAvgVolume5Lots writerOwnerComputer=$WriterOwnerComputer currentComputer=$env:COMPUTERNAME"
 Write-Log "API blacklist symbols loaded: $($script:SymbolBlacklist.Count)"
 
 $stopTime = Get-StopTimeToday -HHmm $StopAt
@@ -4419,6 +4518,8 @@ do {
       futopt_quote_full_detect = [bool]$FutoptQuoteFullDetect
       futopt_quote_batch_size = if ($FutoptQuoteFullDetect) { $futoptStockQuoteUniverse } else { $FutoptQuoteBatchSize }
       futopt_quote_every_seconds = $FutoptQuoteEverySeconds
+      futopt_quote_timeout_seconds = $FutoptQuoteTimeoutSeconds
+      futopt_quote_time_budget_seconds = $FutoptQuoteTimeBudgetSeconds
       futopt_tickers_every_seconds = $FutoptTickersEverySeconds
       futopt_quote_rate_limited = [bool]$fugleFutoptQuotePayload.rate_limited
       last_quote_at = $lastQuoteAt
@@ -4440,6 +4541,10 @@ do {
       rest_quote_delay_milliseconds = $RestQuoteDelayMilliseconds
       rest_quote_effective_delay_milliseconds = if ($null -ne $restQuotePayload.effective_delay_milliseconds) { $restQuotePayload.effective_delay_milliseconds } else { $RestQuoteDelayMilliseconds }
       rest_quote_rate_limited = [bool]$restQuotePayload.rate_limited
+      rest_quote_timeout_seconds = $RestQuoteTimeoutSeconds
+      rest_quote_time_budget_seconds = $RestQuoteBatchTimeBudgetSeconds
+      rest_quote_rate_limit_cooldown_seconds = $RestQuoteRateLimitCooldownSeconds
+      rest_quote_cooldown_until = if ($restQuotePayload.cooldown_until) { $restQuotePayload.cooldown_until } else { "" }
       opening_boost_active = [bool](Test-OpeningBoostWindow)
       opening_boost_window = "$OpeningBoostStart-$OpeningBoostEnd"
       rest_quote_opening_boost_batch_size = $RestQuoteOpeningBoostBatchSize
@@ -4481,6 +4586,10 @@ do {
       direct_1m_prewarm_rows = $direct1mPrewarmPayload.rows.Count
       direct_1m_prewarm_complete = [bool]$direct1mPrewarmPayload.complete
       direct_1m_prewarm_rate_limited = [bool]$direct1mPrewarmPayload.rate_limited
+      direct_1m_prewarm_time_budget_seconds = $Direct1mPrewarmTimeBudgetSeconds
+      direct_1m_intraday_timeout_seconds = $Direct1mIntradayTimeoutSeconds
+      direct_1m_historical_timeout_seconds = $Direct1mHistoricalTimeoutSeconds
+      direct_1m_batch_time_budget_seconds = $Direct1mBatchTimeBudgetSeconds
       direct_1m_attempted = $direct1mPayload.attempted
       direct_1m_fetched_symbols = $direct1mPayload.fetched
       direct_1m_rows = $direct1mRows.Count

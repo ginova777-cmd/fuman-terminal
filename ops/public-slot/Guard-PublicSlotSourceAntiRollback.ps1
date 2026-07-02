@@ -37,6 +37,9 @@ function Write-DefaultRuntimeConfig {
     restQuoteBatchSize = 40
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 600
+    restQuoteTimeoutSeconds = 4
+    restQuoteBatchTimeBudgetSeconds = 25
+    restQuoteRateLimitCooldownSeconds = 60
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
     restQuoteOpeningBoostBatchSize = 60
@@ -53,11 +56,15 @@ function Write-DefaultRuntimeConfig {
     fugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
+    direct1mIntradayTimeoutSeconds = 6
+    direct1mHistoricalTimeoutSeconds = 8
+    direct1mBatchTimeBudgetSeconds = 20
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
+    direct1mPrewarmTimeBudgetSeconds = 45
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
@@ -66,6 +73,8 @@ function Write-DefaultRuntimeConfig {
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
+    futoptQuoteTimeoutSeconds = 5
+    futoptQuoteTimeBudgetSeconds = 45
     futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
@@ -105,6 +114,8 @@ function Test-RepoRuntimeConfigSupport {
     "OpeningBoostStart",
     "OpeningBoostEnd",
     "RestQuoteOpeningBoostBatchSize",
+    "RestQuoteBatchTimeBudgetSeconds",
+    "RestQuoteRateLimitCooldownSeconds",
     "FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE",
     "FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED",
     "FugleCollectorFinMindRecoveryEnabled",
@@ -133,6 +144,9 @@ function Test-RepoRuntimeConfigSupport {
     "volume_strategy_usable",
     "zero_volume_hold",
     "quoteFreshEnoughForRegular",
+    "rest_quote_time_budget_seconds",
+    "direct_1m_batch_time_budget_seconds",
+    "futopt_quote_time_budget_seconds",
     "sourceCoreOk",
     "WriterOwnerComputer",
     "FUMAN_PUBLIC_SLOT_WRITER_OWNER_COMPUTER",
@@ -189,6 +203,9 @@ function Test-RuntimeConfig {
     "restQuoteBatchSize",
     "restQuoteEverySeconds",
     "restQuoteDelayMilliseconds",
+    "restQuoteTimeoutSeconds",
+    "restQuoteBatchTimeBudgetSeconds",
+    "restQuoteRateLimitCooldownSeconds",
     "openingBoostStart",
     "openingBoostEnd",
     "restQuoteOpeningBoostBatchSize",
@@ -205,11 +222,15 @@ function Test-RuntimeConfig {
     "fugleCollectorFinMindRecoveryTimeoutMilliseconds",
     "direct1mBatchSize",
     "direct1mEverySeconds",
+    "direct1mIntradayTimeoutSeconds",
+    "direct1mHistoricalTimeoutSeconds",
+    "direct1mBatchTimeBudgetSeconds",
     "direct1mPrewarmEnabled",
     "direct1mPrewarmStart",
     "direct1mPrewarmSymbolCount",
     "direct1mPrewarmBatchSize",
     "direct1mPrewarmBars",
+    "direct1mPrewarmTimeBudgetSeconds",
     "quoteDerived1mCandidateCount",
     "quoteDerived1mMaxQuoteAgeSeconds",
     "quoteDerivedOpeningBackfillMinutes",
@@ -218,6 +239,8 @@ function Test-RuntimeConfig {
     "futoptQuoteBatchSize",
     "futoptQuoteEverySeconds",
     "futoptQuoteDelayMilliseconds",
+    "futoptQuoteTimeoutSeconds",
+    "futoptQuoteTimeBudgetSeconds",
     "publicSlotUpsertTimeoutSec",
     "publicSlotUpsertBatchSize",
     "writePreopenRowsMode",
@@ -235,6 +258,9 @@ function Test-RuntimeConfig {
     restQuoteBatchSize = 40
     restQuoteEverySeconds = 10
     restQuoteDelayMilliseconds = 600
+    restQuoteTimeoutSeconds = 4
+    restQuoteBatchTimeBudgetSeconds = 25
+    restQuoteRateLimitCooldownSeconds = 60
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
     restQuoteOpeningBoostBatchSize = 60
@@ -251,11 +277,15 @@ function Test-RuntimeConfig {
     fugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000
     direct1mBatchSize = 8
     direct1mEverySeconds = 20
+    direct1mIntradayTimeoutSeconds = 6
+    direct1mHistoricalTimeoutSeconds = 8
+    direct1mBatchTimeBudgetSeconds = 20
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
     direct1mPrewarmSymbolCount = 2000
     direct1mPrewarmBatchSize = 80
     direct1mPrewarmBars = 200
+    direct1mPrewarmTimeBudgetSeconds = 45
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
@@ -264,6 +294,8 @@ function Test-RuntimeConfig {
     futoptQuoteBatchSize = 120
     futoptQuoteEverySeconds = 20
     futoptQuoteDelayMilliseconds = 100
+    futoptQuoteTimeoutSeconds = 5
+    futoptQuoteTimeBudgetSeconds = 45
     futoptQuoteFullDetect = $true
     futoptTickersEverySeconds = 300
     publicSlotUpsertTimeoutSec = 45
