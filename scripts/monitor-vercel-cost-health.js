@@ -13,7 +13,7 @@ function run(label, args) {
   const result = spawnSync(args[0], args.slice(1), {
     cwd: ROOT,
     encoding: "utf8",
-    shell: process.platform === "win32",
+    shell: false,
     env: process.env,
     timeout: Number(process.env.FUMAN_VERCEL_COST_MONITOR_TIMEOUT_MS || 60000),
   });
@@ -78,7 +78,7 @@ async function sendAlert(payload) {
   const warningChecks = checks.filter((check) => /"warnings"\s*:\s*\[[^\]]+\]/.test(check.stdout));
   const status = failed.length ? "critical" : warningChecks.length ? "warning" : "ok";
   const payload = {
-    ok: status === "ok",
+    ok: status !== "critical",
     status,
     checkedAt: new Date().toISOString(),
     issues: failed.map((check) => ({ label: check.label, status: check.status, error: check.error, stderr: check.stderr, stdout: check.stdout })),

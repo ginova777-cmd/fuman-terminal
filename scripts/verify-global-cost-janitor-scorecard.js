@@ -57,7 +57,7 @@ function run(args, options = {}) {
   const result = spawnSync(args[0], args.slice(1), {
     cwd: options.cwd || ROOT,
     encoding: "utf8",
-    shell: process.platform === "win32",
+    shell: false,
     timeout: options.timeout || 120000,
     env: process.env,
   });
