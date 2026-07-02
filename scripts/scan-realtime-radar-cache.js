@@ -264,7 +264,9 @@ async function maybeSendRealtimeRadarAlert(payload) {
     || payload?.run_quality_at_publish?.degradedBlocksLatest === true;
   const hasProblem = qualityBlocksLatest || Number(payload.failedBatchCount || 0) > 0 || issues.length > 0;
   if (!hasProblem) return noAlert;
-  if (process.env.REALTIME_RADAR_NOTIFY === "0") {
+  const workflowAlertEnabled = process.env.REALTIME_RADAR_WORKFLOW_ALERT_NOTIFY === "1"
+    || process.env.REALTIME_RADAR_GMAIL_NOTIFY === "1";
+  if (process.env.REALTIME_RADAR_NOTIFY === "0" && !workflowAlertEnabled) {
     return {
       ...noAlert,
       kind: "failure",
