@@ -3,6 +3,7 @@ const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase
 const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
+const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const SOURCE_ENDPOINTS = [
   ["strategy1", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=120"],
   ["strategy2", "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240"],
@@ -33,6 +34,67 @@ function cleanText(value) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
+}
+
+function normalizedDate(value) {
+  const text = cleanText(value);
+  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return "";
+}
+
+function taipeiParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    weekday: "short",
+    hour12: false,
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+}
+
+function scorecardFreshnessRequirement(request, now = new Date()) {
+  const parts = taipeiParts(now);
+  const hour = Number(parts.hour || 0);
+  const minute = Number(parts.minute || 0);
+  const taipeiMinute = hour * 60 + minute;
+  const cutoffMinute = Math.max(0, Number(process.env.FUMAN_SCORECARD_HEALTH_REQUIRED_AFTER_MINUTE || (14 * 60 + 5)));
+  const weekday = cleanText(parts.weekday).toLowerCase();
+  const weekend = weekday.startsWith("sat") || weekday.startsWith("sun");
+  const query = request.query || {};
+  const allowStale = cleanText(query.allowStale || query.allowPrevious || "") === "1"
+    || process.env.FUMAN_SCORECARD_HEALTH_ALLOW_STALE === "1";
+  const expectedDate = `${parts.year}-${parts.month}-${parts.day}`;
+  const afterCutoff = taipeiMinute >= cutoffMinute;
+  const required = !allowStale && !weekend && afterCutoff;
+  return {
+    required,
+    expectedDate,
+    taipeiTime: `${parts.hour}:${parts.minute}:${parts.second}`,
+    taipeiMinute,
+    cutoffMinute,
+    weekend,
+    allowStale,
+    reason: required ? "weekday_after_1405_requires_today_scorecard" : "not_required",
+  };
+}
+
+function scorecardDateMatches(summary, payload, requirement) {
+  if (!requirement.required) return true;
+  const dates = [
+    summary?.latestDate,
+    payload?.latestDate,
+    payload?.marketDate,
+    payload?.snapshot?.tradeDate,
+  ].map(normalizedDate).filter(Boolean);
+  return dates.includes(requirement.expectedDate);
 }
 
 function absoluteBaseUrl(request) {
@@ -171,7 +233,7 @@ async function fetchSupabaseTable(table) {
   const key = serverSupabaseKey();
   if (!url || !key) return { ok: false, reason: "missing_supabase_credentials", rows: 0 };
   const dateColumn = table === "strategy_daily_summary" ? "summary_date" : "record_date";
-  const endpoint = `${url}/rest/v1/${table}?select=${dateColumn},updated_at,source&order=${dateColumn}.desc&limit=5`;
+  const endpoint = `${url}/rest/v1/${table}?select=${dateColumn},updated_at,source&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&order=${dateColumn}.desc&limit=5`;
   const startedAt = Date.now();
   try {
     const response = await fetch(endpoint, {
@@ -186,6 +248,7 @@ async function fetchSupabaseTable(table) {
       rows: rows.length,
       latestDate: cleanText(rows[0]?.[dateColumn]),
       updatedAt: cleanText(rows[0]?.updated_at),
+      source: TERMINAL_SCORECARD_SOURCE,
       elapsedMs: Date.now() - startedAt,
     };
   } catch (error) {
@@ -237,6 +300,19 @@ module.exports = async function handler(request, response) {
   const snapshotSummary = summarizeScorecard(snapshotPayload || {});
   const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 15000);
   const scorecardSummary = summarizeScorecard(scorecardApi.json || {});
+  const freshnessRequirement = scorecardFreshnessRequirement(request);
+  const sourceDatesOk = !freshnessRequirement.required
+    || (
+      normalizedDate(tradeRecords.latestDate) === freshnessRequirement.expectedDate
+      && normalizedDate(dailySummary.latestDate) === freshnessRequirement.expectedDate
+    );
+  const snapshotDateOk = scorecardDateMatches(snapshotSummary, {
+    ...snapshotPayload,
+    snapshot: {
+      tradeDate: snapshot?.tradeDate || snapshotPayload?.snapshot?.tradeDate || "",
+    },
+  }, freshnessRequirement);
+  const apiDateOk = scorecardDateMatches(scorecardSummary, scorecardApi.json || {}, freshnessRequirement);
   const page = await fetchText(`${baseUrl}/88?health=${Date.now()}`, 15000);
   const pageBody = page.text || "";
   const pageChecks = {
@@ -250,6 +326,7 @@ module.exports = async function handler(request, response) {
   const snapshotOk = Boolean(snapshotPayload)
     && snapshotSummary.cacheSource === "supabase-snapshot"
     && snapshotSummary.rows > 0
+    && snapshotDateOk
     && snapshotSummary.missingStrategies.length === 0
     && snapshotSummary.missingRequiredFields === 0
     && snapshotSummary.strategy2OutOfWindow === 0
@@ -259,6 +336,7 @@ module.exports = async function handler(request, response) {
   const apiOk = scorecardApi.ok
     && scorecardSummary.cacheSource === "supabase-snapshot"
     && scorecardSummary.rows > 0
+    && apiDateOk
     && scorecardSummary.missingStrategies.length === 0
     && scorecardSummary.missingRequiredFields === 0
     && scorecardSummary.strategy2OutOfWindow === 0
@@ -268,14 +346,26 @@ module.exports = async function handler(request, response) {
   const pageOk = page.ok && Object.values(pageChecks).every(Boolean);
   const stages = {
     sources: stage(sourceOk, { endpoints: sources }),
-    supabaseSource: stage(tradeRecords.ok && dailySummary.ok, { tradeRecords, dailySummary }),
+    supabaseSource: stage(tradeRecords.ok && dailySummary.ok && sourceDatesOk, {
+      freshness: { ...freshnessRequirement, dateOk: sourceDatesOk },
+      tradeRecords,
+      dailySummary,
+    }),
     scorecardLatest: stage(snapshotOk, {
       key: snapshot?.key || SNAPSHOT_KEY,
       tradeDate: snapshot?.tradeDate || "",
       updatedAt: snapshot?.updatedAt || "",
+      freshness: { ...freshnessRequirement, dateOk: snapshotDateOk },
       summary: snapshotSummary,
     }),
-    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, summary: scorecardSummary }),
+    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, summary: scorecardSummary }),
+    scorecardFreshness: stage(snapshotDateOk && apiDateOk, {
+      ...freshnessRequirement,
+      snapshotLatestDate: snapshotSummary.latestDate,
+      apiLatestDate: scorecardSummary.latestDate,
+      snapshotDateOk,
+      apiDateOk,
+    }),
     page88: stage(pageOk, { status: page.status, elapsedMs: page.elapsedMs, checks: pageChecks }),
     scheduler: stage(true, { status: "not_applicable_on_vercel", note: "Windows Task Scheduler is verified by npm run verify:scorecard-no-rollback on the PC." }),
   };

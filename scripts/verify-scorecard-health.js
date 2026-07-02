@@ -37,7 +37,7 @@ async function main() {
   if (response.status < 200 || response.status >= 300) issues.push(`HTTP ${response.status}`);
   if (payload.ok !== true) issues.push(`ok=${payload.ok}`);
   const stages = payload.stages || {};
-  for (const name of ["sources", "supabaseSource", "scorecardLatest", "apiScorecard", "page88"]) {
+  for (const name of ["sources", "supabaseSource", "scorecardLatest", "apiScorecard", "scorecardFreshness", "page88"]) {
     if (stages[name]?.ok !== true) issues.push(`stage ${name} not ok`);
   }
   const endpointCount = Object.keys(stages.sources?.endpoints || {}).length;

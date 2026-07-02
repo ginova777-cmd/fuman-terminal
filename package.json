@@ -10,6 +10,8 @@
     "release": "node scripts/release.js",
     "snapshot:data": "node scripts/commit-data-snapshot.js",
     "scorecard:sync": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-daily-automation.ps1",
+    "scorecard:sync:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-daily-automation-wrapper.ps1",
+    "scorecard:tasks:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-scorecard-daily-automation-tasks.ps1",
     "scorecard:terminal-source": "node --use-system-ca scripts/generate-terminal-scorecard-source.js",
     "scorecard:export-source": "node --use-system-ca scripts/export-scorecard-supabase-source.js",
     "scorecard:source:ops": "node --use-system-ca scripts/scorecard-source-supabase-ops.js",

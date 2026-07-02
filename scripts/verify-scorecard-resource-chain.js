@@ -10,6 +10,7 @@ const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "scorecard-resource-chain");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
+const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const BASE_URL = (process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const CHECK_LIVE = !process.argv.includes("--no-live");
 const SCORECARD_ROOT = process.env.FUMAN_SCORECARD_ROOT || "C:\\Users\\ginov\\Documents\\Codex\\2026-06-22\\new-chat-7\\outputs\\backtest-scorecard";
@@ -194,12 +195,13 @@ async function fetchJson(pathname, timeoutMs = 30000) {
   return { ...response, json };
 }
 
-function queryScorecardTask() {
+function queryScorecardTask(taskName = "Fuman Scorecard Daily Automation 1400") {
   if (process.platform !== "win32") return { skipped: true, reason: "non_windows" };
+  const safeTaskName = String(taskName).replace(/'/g, "''");
   const command = [
-    "$task = Get-ScheduledTask -TaskName 'Fuman Scorecard Daily Automation 1400' -ErrorAction SilentlyContinue",
+    `$task = Get-ScheduledTask -TaskName '${safeTaskName}' -ErrorAction SilentlyContinue`,
     "if (-not $task) { exit 2 }",
-    "$info = Get-ScheduledTaskInfo -TaskName 'Fuman Scorecard Daily Automation 1400'",
+    `$info = Get-ScheduledTaskInfo -TaskName '${safeTaskName}'`,
     "$row = [pscustomobject]@{",
     "  TaskName = $task.TaskName",
     "  State = [string]$task.State",
@@ -323,8 +325,8 @@ async function main() {
   );
   addCheck(checks, details.runner.noGoogleSheet && details.runner.noStreamlit, "runner-no-retired-source", "scorecard runner does not use Google Sheet or Streamlit as production source", details.runner);
 
-  const upstreamRecords = await fetchSupabaseSourceRows("trade_records", "select=record_date,updated_at,source&order=record_date.desc&limit=5");
-  const upstreamSummary = await fetchSupabaseSourceRows("strategy_daily_summary", "select=summary_date,strategy,updated_at,source&order=summary_date.desc&limit=5");
+  const upstreamRecords = await fetchSupabaseSourceRows("trade_records", `select=record_date,updated_at,source&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&order=record_date.desc&limit=5`);
+  const upstreamSummary = await fetchSupabaseSourceRows("strategy_daily_summary", `select=summary_date,strategy,updated_at,source&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&order=summary_date.desc&limit=5`);
   details.supabaseUpstream = {
     expectedTables: ["trade_records", "strategy_daily_summary"],
     tradeRecords: upstreamRecords,
@@ -369,14 +371,19 @@ async function main() {
   addCheck(checks, details.supabaseSnapshot.missingRecordSources === 0 && details.supabaseSnapshot.missingDailySources === 0, "supabase-snapshot-source-fields", "Supabase scorecard rows have source fields", details.supabaseSnapshot);
 
   details.schedule = queryScorecardTask();
+  details.watchdogSchedule = queryScorecardTask("Fuman Scorecard Daily Watchdog 1410");
   details.schedule.isTaipeiWeekend = isTaipeiWeekend();
   details.schedule.selfVerificationInProgress = isScorecardSelfVerification(details.schedule);
   details.schedule.lastResultOk = String(details.schedule.lastResult || "").trim() === "0"
     || details.schedule.isTaipeiWeekend
     || details.schedule.selfVerificationInProgress;
   addCheck(checks, details.schedule.ok === true, "schedule-exists", "Windows task Fuman Scorecard Daily Automation 1400 exists", details.schedule);
-  addCheck(checks, /run-scorecard-daily-automation\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs run-scorecard-daily-automation.ps1", details.schedule);
+  addCheck(checks, /run-scorecard-daily-automation(?:-wrapper)?\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs the daily automation wrapper/core", details.schedule);
+  addCheck(checks, /C:\\fuman-terminal/i.test(details.schedule.startIn || ""), "schedule-start-in", "scorecard task Start In points at C:\\fuman-terminal", details.schedule);
   addCheck(checks, details.schedule.lastResultOk, "schedule-last-result-ok", "scorecard task Last Result=0 on trading days; in-progress self verification may use the current running task", details.schedule);
+  addCheck(checks, details.watchdogSchedule.ok === true, "watchdog-schedule-exists", "Windows task Fuman Scorecard Daily Watchdog 1410 exists", details.watchdogSchedule);
+  addCheck(checks, /run-scorecard-daily-watchdog\.ps1/i.test(details.watchdogSchedule.taskToRun || ""), "watchdog-schedule-runner", "scorecard watchdog task runs run-scorecard-daily-watchdog.ps1", details.watchdogSchedule);
+  addCheck(checks, /C:\\fuman-terminal/i.test(details.watchdogSchedule.startIn || ""), "watchdog-schedule-start-in", "scorecard watchdog task Start In points at C:\\fuman-terminal", details.watchdogSchedule);
 
   if (CHECK_LIVE) {
     const liveApi = await fetchJson("/api/scorecard", 35000);

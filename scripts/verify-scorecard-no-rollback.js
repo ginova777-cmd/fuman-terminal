@@ -266,12 +266,17 @@ function queryTask(taskName) {
 
 function verifySchedules(checks) {
   const daily = queryTask("Fuman Scorecard Daily Automation 1400");
+  const watchdog = queryTask("Fuman Scorecard Daily Watchdog 1410");
   const retired = queryTask("Fuman Scorecard Snapshot 1538");
   const autoRelease = queryTask("Fuman Auto Main Release 1615");
   addCheck(checks, Boolean(daily), "schedule-daily-exists", "Fuman Scorecard Daily Automation 1400 must exist", { daily });
   addCheck(checks, !/disabled/i.test(cleanText(daily?.State)), "schedule-daily-enabled", "Fuman Scorecard Daily Automation 1400 must stay enabled", { state: daily?.State });
-  addCheck(checks, /run-scorecard-daily-automation\.ps1/i.test(cleanText(daily?.TaskToRun)), "schedule-daily-runner", "scorecard daily task must run run-scorecard-daily-automation.ps1", { taskToRun: daily?.TaskToRun });
+  addCheck(checks, /run-scorecard-daily-automation(?:-wrapper)?\.ps1/i.test(cleanText(daily?.TaskToRun)), "schedule-daily-runner", "scorecard daily task must run the daily automation wrapper/core", { taskToRun: daily?.TaskToRun });
   addCheck(checks, /(?:T|\s|^)14:00/i.test(cleanText(daily?.TriggerStart) || cleanText(daily?.TriggerText)), "schedule-daily-1400", "scorecard daily task must trigger at 14:00 Asia/Taipei", { triggerStart: daily?.TriggerStart, triggerText: daily?.TriggerText });
+  addCheck(checks, Boolean(watchdog), "schedule-watchdog-exists", "Fuman Scorecard Daily Watchdog 1410 must exist", { watchdog });
+  addCheck(checks, !/disabled/i.test(cleanText(watchdog?.State)), "schedule-watchdog-enabled", "Fuman Scorecard Daily Watchdog 1410 must stay enabled", { state: watchdog?.State });
+  addCheck(checks, /run-scorecard-daily-watchdog\.ps1/i.test(cleanText(watchdog?.TaskToRun)), "schedule-watchdog-runner", "scorecard watchdog task must run run-scorecard-daily-watchdog.ps1", { taskToRun: watchdog?.TaskToRun });
+  addCheck(checks, /(?:T|\s|^)14:10/i.test(cleanText(watchdog?.TriggerStart) || cleanText(watchdog?.TriggerText)), "schedule-watchdog-1410", "scorecard watchdog task must trigger at 14:10 Asia/Taipei", { triggerStart: watchdog?.TriggerStart, triggerText: watchdog?.TriggerText });
   addCheck(checks, !retired || /disabled/i.test(cleanText(retired.State)), "schedule-retired-1538-disabled", "Fuman Scorecard Snapshot 1538 must not exist or must be disabled", { retired });
   addCheck(checks, !autoRelease || /disabled/i.test(cleanText(autoRelease.State)), "schedule-auto-release-disabled", "Fuman Auto Main Release 1615 must stay disabled", { autoRelease });
 }
