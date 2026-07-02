@@ -36,6 +36,7 @@ $env:NOTIFY_PUSH_RETRIES = "1"
 
 New-Item -ItemType Directory -Force -Path "C:\fuman-runtime\logs" | Out-Null
 $log = "C:\fuman-runtime\logs\realtime-radar-$(Get-Date -Format yyyyMMdd-HHmmss).log"
+$env:REALTIME_RADAR_LOG_PATH = $log
 function Add-LogLine($message) {
   Add-Content -LiteralPath $log -Value $message -Encoding utf8
 }

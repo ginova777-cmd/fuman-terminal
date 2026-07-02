@@ -8,6 +8,7 @@ const { buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-sna
 const ROOT = path.resolve(__dirname, "..");
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(ROOT, "data");
 const OUT_FILE = path.join(DATA_DIR, "realtime-radar-latest.json");
+const SCAN_RECEIPT_FILE = path.join(DATA_DIR, "scan-receipts", "realtime-radar.json");
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(ROOT, "state");
 const FAILED_QUEUE_FILE = path.join(STATE_DIR, "realtime-radar-failed-batches.json");
 const ALERT_STATUS_FILE = path.join(STATE_DIR, "realtime-radar-alert-status.json");
@@ -70,6 +71,52 @@ function writeJson(file, value) {
 }
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function writeRealtimeRadarScanReceipt(payload = {}) {
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const runQuality = payload.run_quality_at_publish || {};
+  const writeBudget = payload.writeBudget || {};
+  const nowIso = new Date().toISOString();
+  const publishBlocked = payload.publishBlocked === true || runQuality.publishAllowed === false;
+  writeJson(SCAN_RECEIPT_FILE, {
+    strategy: "realtime-radar",
+    label: "realtime radar cache",
+    tier: "production",
+    startedAt: payload.startedAt || payload.updatedAt || nowIso,
+    finishedAt: nowIso,
+    status: "complete",
+    exitCode: 0,
+    scanned: cleanNumber(payload.active_symbols ?? payload.totalCount ?? rows.length),
+    total: cleanNumber(payload.active_symbols ?? payload.totalCount ?? rows.length),
+    matches: rows.length,
+    complete: true,
+    qualityStatus: runQuality.qualityStatus || payload.qualityStatus || (publishBlocked ? "degraded" : "ready"),
+    fallback: payload.fallbackUsed === true,
+    runId: payload.runId || "",
+    tradeDate: compactDateKey(payload.date || payload.tradeDate || payload.scanDate),
+    payloadPath: OUT_FILE,
+    publishBlocked,
+    preservedLatest: payload.preservedLatest === true,
+    blockingReason: payload.preserveReason || "",
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+    writeBudget: {
+      finalStatus: writeBudget.finalStatus || writeBudget.status || "",
+      writesAttempted: cleanNumber(writeBudget.writesAttempted),
+      writesCompleted: cleanNumber(writeBudget.writesCompleted),
+      limit: cleanNumber(writeBudget.limit),
+      blocked: writeBudget.blocked === true,
+    },
+    sourceSnapshotCapturedAt: payload.source_snapshot_captured_at || payload.updatedAt || "",
+    evidenceStatus: payload.evidenceStatus || "",
+    unattendedStatus: payload.unattendedStatus || "",
+    freshQuoteCoverage120s: cleanNumber(payload.fresh_quote_coverage_120s),
+    quoteAgeSeconds: cleanNumber(payload.quote_age_seconds),
+    staleQuoteCount: cleanNumber(payload.staleQuoteCount),
+    failedBatchCount: cleanNumber(payload.failedBatchCount),
+    lastRejectedScan: payload.lastRejectedScan || null,
+    log: process.env.REALTIME_RADAR_LOG_PATH || "",
+  });
 }
 
 function compactDateKey(value) {
@@ -1503,6 +1550,7 @@ async function main() {
     writeBudget: payload.writeBudget || writeBudgetSnapshot(writeBudget, "open"),
   });
   payload = await publishRealtimeRadarPayload(payload, previousPayload, writeBudget);
+  writeRealtimeRadarScanReceipt(payload);
   console.log(`realtime radar ${timestamp}: rows ${payload.rows.length} status ${payload.status} ${staleQuoteLogText(payload.staleQuoteDetails, payload.staleQuoteCount)} lastTradeStale ${payload.lastTradeStaleCount || 0} failed ${realtime.failedBatches.length}/${realtime.totalBatches}`);
   writeFailedBatchQueue(deferredRetry ? deferredRetry.failedBatches || [] : realtime.failedBatches || []);
 }
