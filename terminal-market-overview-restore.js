@@ -89,7 +89,7 @@
           metric.innerHTML = [
             '<article class="metric-card"><span>↗ 加權指數</span><strong>--</strong><em>等待官方資料</em></article>',
             '<article class="metric-card"><span>↗ 櫃買指數</span><strong>--</strong><em>等待官方資料</em></article>',
-            '<article class="metric-card"><span>⇅ 台指期夜</span><strong>--</strong><em>等待期交所資料</em></article>',
+            '<article class="metric-card"><span>⇅ 台指期夜盤</span><strong>--</strong><em>等待期交所資料</em></article>',
             '<article class="metric-card"><span>☾ 台指次月</span><strong>--</strong><em>等待期交所資料</em></article>'
           ].join("");
           tabs.insertAdjacentElement("afterend", metric);
@@ -268,6 +268,10 @@
         const pct = safeText(item["漲跌百分比"] ?? item.pct ?? "0").replace(/[+%-]/g, "");
         return `${sign}${diff}（${sign}${pct}%）`;
       };
+      const indexValueText = (value) => {
+        const n = num(value);
+        return n ? n.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "--";
+      };
       const setCard = (card, label, value, sub, up) => {
         if (!card) return;
         const title = card.querySelector("span");
@@ -295,10 +299,10 @@
         const near = marketPayload.futuresNear || marketPayload.futures || null;
         const next = marketPayload.futuresNext || null;
         const cards = [...panel.querySelectorAll(".metric-grid .metric-card")];
-        setCard(cards[0], "↗ 加權指數", num(twse?.["收盤指數"]).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), deltaText(twse), !safeText(twse?.["漲跌"]).includes("-"));
-        setCard(cards[1], "↗ 櫃買指數", num(otc?.["收盤指數"]).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), deltaText(otc), !safeText(otc?.["漲跌"]).includes("-"));
-        setCard(cards[2], "⇅ 台指期夜", near?.price ? num(near.price).toLocaleString("zh-TW") : "--", near ? `${near.change || "--"}（${near.pct || "--"}）${near.basisLabel ? ` · ${near.basisLabel}` : ""}` : "等待期交所資料", !safeText(near?.change).includes("-"));
-        setCard(cards[3], "☾ 台指次月", next?.price ? num(next.price).toLocaleString("zh-TW") : "--", next ? `${next.change || "--"}（${next.pct || "--"}）${next.basisLabel ? ` · ${next.basisLabel}` : ""}` : "等待期交所資料", !safeText(next?.change).includes("-"));
+        setCard(cards[0], "↗ 加權指數", indexValueText(twse?.["收盤指數"]), deltaText(twse), twse ? !safeText(twse?.["漲跌"]).includes("-") : null);
+        setCard(cards[1], "↗ 櫃買指數", indexValueText(otc?.["收盤指數"]), deltaText(otc), otc ? !safeText(otc?.["漲跌"]).includes("-") : null);
+        setCard(cards[2], "⇅ 台指期夜盤", near?.price ? num(near.price).toLocaleString("zh-TW") : "--", near ? `${near.change || "--"}（${near.pct || "--"}）${near.basisLabel ? ` · ${near.basisLabel}` : ""}` : "等待期交所資料", near ? !safeText(near?.change).includes("-") : null);
+        setCard(cards[3], "☾ 台指次月", next?.price ? num(next.price).toLocaleString("zh-TW") : "--", next ? `${next.change || "--"}（${next.pct || "--"}）${next.basisLabel ? ` · ${next.basisLabel}` : ""}` : "等待期交所資料", next ? !safeText(next?.change).includes("-") : null);
         const rawSectors = list(heatPayload.sectors).slice(0, 80);
         if (!rawSectors.length) return;
         window.__fumanMarketHeatmapPayload = { heatPayload, rawSectors };
@@ -465,6 +469,11 @@
           </article>`;
         }).join("") : '<div class="empty-state">等待 AI 判讀資料。</div>';
         const bias = up >= down ? "多方壓制" : "空方壓制";
+        const biasToneClass = /多方|偏多|long|長/i.test(String(bias))
+          ? "market-ai-bullish"
+          : /空方|偏空|short|空/i.test(String(bias))
+            ? "market-ai-bearish"
+            : "market-ai-neutral";
         const confidence = Math.abs(upRatio - downRatio) >= 24 ? "中" : "低";
         const leadingStock = hotStocks[0] || {};
         const leadingName = leadingStock.code ? `${leadingStock.code} ${leadingStock.name || ""}` : "--";
@@ -481,7 +490,7 @@
         ];
         ai.innerHTML = `
           <section class="market-ai-panel market-ai-visual-dashboard">
-            <section class="market-ai-hero-board">
+            <section class="market-ai-hero-board ${biasToneClass}">
               <div class="market-ai-hero-copy">
                 <small>盤中決策節奏 · 資料 ${esc(dateLabel)}</small>
                 <strong>${bias}</strong>
@@ -496,7 +505,7 @@
               <div class="market-ai-hero-action"><small>操作建議</small><b>降低追價</b><span>盤面互抵偏高，先把強勢條件收緊，避免追高。</span></div>
             </section>
             <section class="market-ai-summary">
-              <article class="market-ai-card hero"><small>盤勢廣度</small><strong>${bias}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，樣本 ${sample.toLocaleString("zh-TW")}。</p></article>
+              <article class="market-ai-card hero ${biasToneClass}"><small>盤勢廣度</small><strong>${bias}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，樣本 ${sample.toLocaleString("zh-TW")}。</p></article>
               <article class="market-ai-card warning"><small>風險控管</small><strong>先控風險</strong><p>${esc(weak.slice(0, 2).map((s) => s.name || s.industry).join("、") || "弱勢族群")} 位於風險端。</p></article>
               <article class="market-ai-card"><small>優先觀察</small><strong>${esc(leadingName)}</strong><p>${esc(leadingStock.industry || strong[0]?.name || "--")} · 排名由族群強度與成交額排序。</p></article>
             </section>

@@ -4816,28 +4816,28 @@
       "↗ 加權指數",
       formatMarketIndexValue(twse?.["收盤指數"] || twseRow?.price),
       twse ? formatMarketDelta(twse) : formatMarketRowDelta(twseRow),
-      twse ? !String(twse?.["漲跌"] || "").includes("-") : !String(twseRow?.pct || twseRow?.score || "").includes("-")
+      twse ? !String(twse?.["漲跌"] || "").includes("-") : twseRow ? !String(twseRow?.pct || twseRow?.score || "").includes("-") : null
     );
     updateMarketMetricCard(
       cards[1],
       "↗ 櫃買指數",
       formatMarketIndexValue(otc?.["收盤指數"] || otcRow?.price),
       otc ? formatMarketDelta(otc) : formatMarketRowDelta(otcRow),
-      otc ? !String(otc?.["漲跌"] || "").includes("-") : !String(otcRow?.pct || otcRow?.score || "").includes("-")
+      otc ? !String(otc?.["漲跌"] || "").includes("-") : otcRow ? !String(otcRow?.pct || otcRow?.score || "").includes("-") : null
     );
     updateMarketMetricCard(
       cards[2],
-      "⇅ 台指期夜",
+      "⇅ 台指期夜盤",
       futuresNear?.price ? Number(futuresNear.price).toLocaleString("zh-TW") : txfRow?.price ? Number(txfRow.price).toLocaleString("zh-TW") : "--",
       futuresNear ? `${futuresNear.change || "--"}（${futuresNear.pct || "--"}）${futuresNear.basisLabel ? ` · ${futuresNear.basisLabel}` : ""}` : formatMarketRowDelta(txfRow),
-      futuresNear ? !String(futuresNear?.change || "").includes("-") : !String(txfRow?.pct || txfRow?.score || "").includes("-")
+      futuresNear ? !String(futuresNear?.change || "").includes("-") : txfRow ? !String(txfRow?.pct || txfRow?.score || "").includes("-") : null
     );
     updateMarketMetricCard(
       cards[3],
       "☾ 台指次月",
       futuresNext?.price ? Number(futuresNext.price).toLocaleString("zh-TW") : "--",
       futuresNext ? `${futuresNext.change || "--"}（${futuresNext.pct || "--"}）${futuresNext.basisLabel ? ` · ${futuresNext.basisLabel}` : ""}` : "等待期交所資料",
-      !String(futuresNext?.change || "").includes("-")
+      futuresNext ? !String(futuresNext?.change || "").includes("-") : null
     );
 
     const sectors = normalizeArray(heatmapPayload?.sectors);
@@ -5192,6 +5192,11 @@
     const weakNames = weak.map((item) => nameOf(item)).slice(0, 3).join("、") || "暫無明顯弱勢";
     const riskNames = groups.risk.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || weakNames;
     const biasTitle = /等待方向/.test(String(bias)) ? "等待方向" : up >= down ? "多方壓制" : "空方壓制";
+    const biasToneClass = /多方|偏多|long|長/i.test(String(biasTitle))
+      ? "market-ai-bullish"
+      : /空方|偏空|short|空/i.test(String(biasTitle))
+        ? "market-ai-bearish"
+        : "market-ai-neutral";
     const heroMetricsHtml = `
       <div class="market-ai-hero-metrics">
         <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
@@ -5255,7 +5260,7 @@
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.innerHTML = `
-        <section class="market-ai-hero-board">
+        <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
             <strong>${escapeHtml(biasTitle)}</strong>
@@ -5264,7 +5269,7 @@
           ${heroMetricsHtml}
         </section>
         <section class="market-ai-summary">
-          <article class="market-ai-card hero"><small>趨勢廣度</small><strong>${escapeHtml(biasTitle)}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
+          <article class="market-ai-card hero ${biasToneClass}"><small>趨勢廣度</small><strong>${escapeHtml(biasTitle)}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
           <article class="market-ai-card warning"><small>風險控管</small><strong>${groups.risk.length ? "先控風險" : "風險正常"}</strong><p>${escapeHtml(weakNames)} 需留意，風險高標的不放入第一優先追蹤。</p></article>
           <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(aiPayload?.priorityObservation?.title || (topStock ? `${topStock.code} ${topStock.name}` : "--"))}</strong><p>${escapeHtml(aiPayload?.priorityObservation?.text || (topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。"))}</p></article>
         </section>
@@ -8219,7 +8224,7 @@
           display: none !important;
         }
         #market-view.market-overview-mode.market-index-pending > .metric-grid {
-          display: none !important;
+          display: grid !important;
         }
         #market-view.market-overview-mode > .terminal-band,
         #market-view.market-overview-mode > .watch-section {
@@ -8316,6 +8321,18 @@
           overflow-anchor: none;
           contain: layout paint;
         }
+        #market-view .market-ai-hero-board.market-ai-bullish {
+          border-color: rgba(251, 113, 133, 0.58);
+          background:
+            radial-gradient(circle at 20% 20%, rgba(251, 113, 133, 0.22), transparent 34%),
+            linear-gradient(135deg, rgba(127, 29, 29, 0.72), rgba(8, 15, 26, 0.94));
+        }
+        #market-view .market-ai-hero-board.market-ai-bearish {
+          border-color: rgba(45, 212, 191, 0.56);
+          background:
+            radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.22), transparent 34%),
+            linear-gradient(135deg, rgba(6, 78, 59, 0.74), rgba(8, 15, 26, 0.94));
+        }
         #market-view .market-ai-hero-copy {
           align-self: center;
           min-width: 0;
@@ -8334,6 +8351,14 @@
           font-size: clamp(32px, 4vw, 48px);
           line-height: 1;
           letter-spacing: 0;
+        }
+        #market-view .market-ai-hero-board.market-ai-bullish .market-ai-hero-copy strong,
+        #market-view .market-ai-summary .market-ai-card.market-ai-bullish strong {
+          color: #fb7185 !important;
+        }
+        #market-view .market-ai-hero-board.market-ai-bearish .market-ai-hero-copy strong,
+        #market-view .market-ai-summary .market-ai-card.market-ai-bearish strong {
+          color: #2dd4bf !important;
         }
         #market-view .market-ai-hero-copy p {
           max-width: 860px;
