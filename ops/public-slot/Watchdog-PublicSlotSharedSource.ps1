@@ -487,6 +487,10 @@ if ($isRunning -and -not $quoteHealth.Ok) {
   $sourceAgeHardFailed = ($null -ne $health.AgeSeconds -and $health.AgeSeconds -gt $MaxSourceAgeSeconds)
   $sourceQuoteAgeHardFailed = ($null -ne $health.QuoteAgeSeconds -and $health.QuoteAgeSeconds -gt ([math]::Max(120, $MaxQuoteAgeSeconds * 2)))
   if ((Test-AfterHHmm $CoverageHardGateStart) -and ($quoteCoverageHardFailed -or $quoteAgeHardFailed) -and ($sourceAgeHardFailed -or $sourceQuoteAgeHardFailed -or $quoteAgeHardFailed)) {
+    if (Test-WriterCatchupGrace -WriterAgeSeconds $writerAgeSeconds -CollectorCache $collectorCache -QuoteHealth $quoteHealth) {
+      Write-WatchdogLog "quote health hard-stall candidate，但 writer 剛啟動 ${writerAgeSeconds}s 且 collector 有活資料；給 $WriterCatchupGraceSeconds 秒 catch-up grace，不重啟。"
+      exit 0
+    }
     Start-SharedSourceTask -Reason "quote health hard-stall after $CoverageHardGateStart；coverage_120s=$($quoteHealth.Coverage120) fresh_120s=$($quoteHealth.Fresh120) quote_age=$($quoteHealth.QuoteAgeSeconds)s source_age=$($health.AgeSeconds)s source_quote_age=$($health.QuoteAgeSeconds)s；process alive 不可遮蔽 Fugle live 寫入失速" -Restart -Alert
     exit 0
   }
