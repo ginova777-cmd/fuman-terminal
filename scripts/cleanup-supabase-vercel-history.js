@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const { spawnSync } = require("child_process");
 const { serviceRoleKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -243,6 +244,57 @@ function vercelProject() {
   };
 }
 
+function parseVercelJson(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(raw.slice(start, end + 1));
+    throw new Error(`Vercel API did not return JSON: ${raw.slice(0, 240)}`);
+  }
+}
+
+function quoteCmdArg(arg) {
+  const text = String(arg);
+  if (!/[&<>()@^|"\s]/.test(text)) return text;
+  return `"${text.replace(/"/g, '\\"')}"`;
+}
+
+function runVercelCli(args, timeout = 30000) {
+  const command = process.platform === "win32" ? "cmd.exe" : "vercel";
+  const commandArgs = process.platform === "win32"
+    ? ["/d", "/s", "/c", `vercel ${args.map(quoteCmdArg).join(" ")}`]
+    : args;
+  const result = spawnSync(command, commandArgs, {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout,
+    windowsHide: true,
+  });
+  return result;
+}
+
+function vercelListDeployments(projectName) {
+  const result = runVercelCli(["list", projectName, "--format=json"], 60000);
+  if (result.error) throw new Error(`vercel list ${projectName} failed: ${result.error.message}`);
+  if (result.status !== 0) {
+    throw new Error(`vercel list ${projectName} failed: ${(result.stderr || result.stdout || "").trim().slice(0, 500)}`);
+  }
+  return parseVercelJson(`${result.stdout || ""}\n${result.stderr || ""}`);
+}
+
+function vercelRemoveDeployment(ref) {
+  const result = runVercelCli(["remove", ref, "--safe", "--yes"], 60000);
+  if (result.error) throw new Error(`vercel remove ${ref} failed: ${result.error.message}`);
+  if (result.status !== 0) {
+    throw new Error(`vercel remove ${ref} failed: ${(result.stderr || result.stdout || "").trim().slice(0, 500)}`);
+  }
+  return { ok: true, stdout: String(result.stdout || "").trim(), stderr: String(result.stderr || "").trim() };
+}
+
 function vercelRequest(pathname, token, method = "GET") {
   return new Promise((resolve, reject) => {
     const endpoint = new URL(`https://api.vercel.com${pathname}`);
@@ -280,13 +332,20 @@ function vercelRequest(pathname, token, method = "GET") {
 async function cleanupVercelDeployments(args) {
   const token = process.env.VERCEL_TOKEN || process.env.FUMAN_VERCEL_TOKEN || "";
   const project = vercelProject();
-  if (!token || !project.projectId) {
-    return { ok: true, skipped: true, reason: !token ? "missing_vercel_token" : "missing_vercel_project_id" };
+  if (!project.projectId) {
+    return { ok: true, skipped: true, reason: "missing_vercel_project_id" };
   }
-  const query = new URLSearchParams({ projectId: project.projectId, limit: "100" });
-  if (project.orgId) query.set("teamId", project.orgId);
-  const payload = await vercelRequest(`/v6/deployments?${query.toString()}`, token);
-  const deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+  const authMode = token ? "token" : "vercel-cli";
+  let deployments = [];
+  if (token) {
+    const query = new URLSearchParams({ projectId: project.projectId, limit: "100" });
+    if (project.orgId) query.set("teamId", project.orgId);
+    const payload = await vercelRequest(`/v6/deployments?${query.toString()}`, token);
+    deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+  } else {
+    const payload = vercelListDeployments(project.projectName || "fuman-terminal");
+    deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
+  }
   const cutoffMs = Date.now() - args.vercelRetentionDays * 86400000;
   const byTarget = new Map();
   for (const item of deployments) {
@@ -303,7 +362,7 @@ async function cleanupVercelDeployments(args) {
   }
   const productionHost = "fuman-terminal.vercel.app";
   const candidates = deployments.filter((item) => {
-    const id = item.uid || item.id;
+    const id = item.uid || item.id || item.url;
     const aliases = Array.isArray(item.alias) ? item.alias : [];
     const createdAt = Number(item.createdAt || 0);
     return id
@@ -315,14 +374,18 @@ async function cleanupVercelDeployments(args) {
   });
   const deleted = [];
   for (const item of candidates) {
-    const id = item.uid || item.id;
-    if (args.apply) await vercelRequest(`/v13/deployments/${encodeURIComponent(id)}`, token, "DELETE");
+    const id = item.uid || item.id || item.url;
+    if (args.apply) {
+      if (token && (item.uid || item.id)) await vercelRequest(`/v13/deployments/${encodeURIComponent(item.uid || item.id)}`, token, "DELETE");
+      else vercelRemoveDeployment(id);
+    }
     deleted.push({ id, name: item.name || "", target: item.target || "", url: item.url || "", createdAt: item.createdAt || 0 });
   }
   return {
     ok: true,
     project,
     scannedDeployments: deployments.length,
+    authMode,
     retentionDays: args.vercelRetentionDays,
     keepPerTarget: args.vercelKeepPerTarget,
     candidateDeployments: candidates.length,
