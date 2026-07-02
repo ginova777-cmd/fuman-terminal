@@ -44,6 +44,13 @@ const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADA
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
 const ADAPTIVE_429_COOLDOWN_MS = Math.max(10000, Number(process.env.FUGLE_COLLECTOR_429_COOLDOWN_MS || 60000));
+const ADAPTIVE_429_WINDOW_MS = Math.max(60000, Number(process.env.FUGLE_COLLECTOR_429_WINDOW_MS || 900000));
+const ADAPTIVE_429_BUDGET = Math.max(1, Number(process.env.FUGLE_COLLECTOR_429_BUDGET || 1));
+const ADAPTIVE_429_MAX_COOLDOWN_MS = Math.max(ADAPTIVE_429_COOLDOWN_MS, Number(process.env.FUGLE_COLLECTOR_429_MAX_COOLDOWN_MS || 900000));
+const ADAPTIVE_PRIORITY_ONLY_AFTER_429_MS = Math.max(
+  ADAPTIVE_429_COOLDOWN_MS,
+  Number(process.env.FUGLE_COLLECTOR_PRIORITY_ONLY_AFTER_429_MS || 600000),
+);
 
 let cursor = 0;
 let lastMessageAt = "";
@@ -112,6 +119,11 @@ function writeStatus(extra = {}) {
     lastMessageAt,
     last429At,
     cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : "",
+    adaptive429Budget: ADAPTIVE_429_BUDGET,
+    adaptive429WindowMs: ADAPTIVE_429_WINDOW_MS,
+    adaptive429BaseCooldownMs: ADAPTIVE_429_COOLDOWN_MS,
+    adaptive429MaxCooldownMs: ADAPTIVE_429_MAX_COOLDOWN_MS,
+    adaptivePriorityOnlyAfter429Ms: ADAPTIVE_PRIORITY_ONLY_AFTER_429_MS,
     updatedAt: nowIso(),
     ...extra,
   });
@@ -142,22 +154,6 @@ function inOpeningBoostWindow() {
   return now >= start && now <= end;
 }
 
-function quoteFreshTimestampMs(row, payload = {}) {
-  const candidates = [
-    row?.quoteTime,
-    row?.time,
-    row?.updatedAt,
-    row?.quoteSeenAt,
-    payload?.updatedAt,
-  ];
-  for (const value of candidates) {
-    if (!value) continue;
-    const parsed = Date.parse(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return NaN;
-}
-
 function countFreshCachedQuotes(symbols) {
   const symbolSet = new Set(symbols);
   const payload = readJson(FUGLE_WS_QUOTES_FILE, {});
@@ -166,7 +162,7 @@ function countFreshCachedQuotes(symbols) {
   let count = 0;
   for (const row of rows) {
     const code = normalizeCode(row?.code);
-    const seen = quoteFreshTimestampMs(row, payload);
+    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) count += 1;
   }
   return count;
@@ -185,6 +181,12 @@ function readRateState() {
     stableTicks: Math.max(0, Number(state.stableTicks || 0)),
     last429At: state.last429At || "",
     cooldownUntil: state.cooldownUntil || "",
+    consecutive429Count: Math.max(0, Number(state.consecutive429Count || 0)),
+    windowStartedAt: state.windowStartedAt || "",
+    window429Count: Math.max(0, Number(state.window429Count || 0)),
+    last429BudgetExceeded: Boolean(state.last429BudgetExceeded),
+    last429CooldownMs: Math.max(0, Number(state.last429CooldownMs || 0)),
+    priorityOnlyUntil: state.priorityOnlyUntil || "",
     updatedAt: state.updatedAt || "",
   };
 }
@@ -195,6 +197,12 @@ function writeRateState(state) {
     stableTicks: Math.max(0, Number(state.stableTicks || 0)),
     last429At: state.last429At || "",
     cooldownUntil: state.cooldownUntil || "",
+    consecutive429Count: Math.max(0, Number(state.consecutive429Count || 0)),
+    windowStartedAt: state.windowStartedAt || "",
+    window429Count: Math.max(0, Number(state.window429Count || 0)),
+    last429BudgetExceeded: Boolean(state.last429BudgetExceeded),
+    last429CooldownMs: Math.max(0, Number(state.last429CooldownMs || 0)),
+    priorityOnlyUntil: state.priorityOnlyUntil || "",
     updatedAt: nowIso(),
   });
 }
@@ -210,7 +218,18 @@ function applyRateSuccess(state, fetched) {
   if (fetched > 0) next.stableTicks += 1;
   if (next.stableTicks >= 3) {
     next.allowedRpm = clampNumber(Math.ceil(next.allowedRpm * 1.08 + 5), ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM);
+    next.consecutive429Count = Math.max(0, Number(next.consecutive429Count || 0) - 1);
     next.stableTicks = 0;
+  }
+  const windowStarted = Date.parse(next.windowStartedAt || "");
+  if (Number.isFinite(windowStarted) && Date.now() - windowStarted > ADAPTIVE_429_WINDOW_MS) {
+    next.windowStartedAt = "";
+    next.window429Count = 0;
+    next.last429BudgetExceeded = false;
+  }
+  const priorityOnlyUntilMs = Date.parse(next.priorityOnlyUntil || "");
+  if (Number.isFinite(priorityOnlyUntilMs) && Date.now() >= priorityOnlyUntilMs) {
+    next.priorityOnlyUntil = "";
   }
   next.cooldownUntil = "";
   writeRateState(next);
@@ -218,12 +237,32 @@ function applyRateSuccess(state, fetched) {
 }
 
 function applyRateLimited(state) {
+  const now = Date.now();
+  const nowText = new Date(now).toISOString();
+  const windowStarted = Date.parse(state.windowStartedAt || "");
+  const windowExpired = !Number.isFinite(windowStarted) || now - windowStarted > ADAPTIVE_429_WINDOW_MS;
+  const windowStartedAt = windowExpired ? nowText : state.windowStartedAt;
+  const window429Count = (windowExpired ? 0 : Math.max(0, Number(state.window429Count || 0))) + 1;
+  const consecutive429Count = Math.max(0, Number(state.consecutive429Count || 0)) + 1;
+  const budgetExceeded = window429Count > ADAPTIVE_429_BUDGET;
+  const multiplier = budgetExceeded ? Math.pow(2, Math.min(consecutive429Count - 1, 6)) : 1;
+  const cooldownMs = Math.min(ADAPTIVE_429_MAX_COOLDOWN_MS, ADAPTIVE_429_COOLDOWN_MS * multiplier);
+  const priorityOnlyMs = Math.min(
+    ADAPTIVE_429_MAX_COOLDOWN_MS,
+    Math.max(cooldownMs, ADAPTIVE_PRIORITY_ONLY_AFTER_429_MS * multiplier),
+  );
   const next = {
     ...state,
     allowedRpm: clampNumber(Math.floor(state.allowedRpm * 0.55), ADAPTIVE_MIN_RPM, ADAPTIVE_MAX_RPM),
     stableTicks: 0,
-    last429At: nowIso(),
-    cooldownUntil: new Date(Date.now() + ADAPTIVE_429_COOLDOWN_MS).toISOString(),
+    last429At: nowText,
+    cooldownUntil: new Date(now + cooldownMs).toISOString(),
+    consecutive429Count,
+    windowStartedAt,
+    window429Count,
+    last429BudgetExceeded: budgetExceeded,
+    last429CooldownMs: cooldownMs,
+    priorityOnlyUntil: new Date(now + priorityOnlyMs).toISOString(),
   };
   writeRateState(next);
   return next;
@@ -256,7 +295,7 @@ function freshCachedCodeSet(symbols) {
   const fresh = new Set();
   for (const row of rows) {
     const code = normalizeCode(row?.code);
-    const seen = quoteFreshTimestampMs(row, payload);
+    const seen = Date.parse(row?.quoteSeenAt || row?.updatedAt || payload?.updatedAt || "");
     if (symbolSet.has(code) && Number.isFinite(seen) && seen >= cutoff) fresh.add(code);
   }
   return fresh;
@@ -410,7 +449,7 @@ function mergeQuotes(newQuotes) {
   const cutoff = Date.now() - QUOTE_TTL_MS;
   const byCode = new Map();
   for (const row of rows) {
-    const seen = quoteFreshTimestampMs(row, current);
+    const seen = Date.parse(row.quoteSeenAt || row.updatedAt || current.updatedAt || "");
     const code = normalizeCode(row.code);
     if (/^\d{4}$/.test(code) && Number.isFinite(seen) && seen >= cutoff) {
       byCode.set(code, row);
@@ -650,6 +689,7 @@ async function tick() {
   }
   const beforeFugle = effectiveCollectorConfig(symbols);
   const rateState = readRateState();
+  if (rateState.last429At) last429At = rateState.last429At;
   const rateCooldownUntil = Date.parse(rateState.cooldownUntil || "");
   if (Number.isFinite(rateCooldownUntil) && Date.now() < rateCooldownUntil) {
     cooldownUntil = Math.max(cooldownUntil || 0, rateCooldownUntil);
@@ -663,6 +703,8 @@ async function tick() {
     const existing = readJson(FUGLE_WS_QUOTES_FILE, {});
     const cooldownPriority = readPrioritySymbols(symbols);
     const cooldownDelayMs = adaptiveDelayMs(beforeFugle.delayMs, beforeFugle.concurrency, rateState.allowedRpm);
+    const priorityOnlyUntilMs = Date.parse(rateState.priorityOnlyUntil || "");
+    const priorityOnlyActive = Number.isFinite(priorityOnlyUntilMs) && Date.now() < priorityOnlyUntilMs;
     writeStatus({
       subscribed: symbols.length,
       quotes: finmindMergedCount || existing.count || 0,
@@ -691,6 +733,13 @@ async function tick() {
       adaptiveStableTicks: rateState.stableTicks,
       adaptiveRateLimited: true,
       adaptiveCooldownUntil: new Date(cooldownUntil).toISOString(),
+      adaptiveConsecutive429Count: rateState.consecutive429Count,
+      adaptive429WindowCount: rateState.window429Count,
+      adaptive429WindowStartedAt: rateState.windowStartedAt,
+      adaptive429BudgetExceeded: rateState.last429BudgetExceeded,
+      adaptiveLast429CooldownMs: rateState.last429CooldownMs,
+      adaptivePriorityOnly: priorityOnlyActive,
+      adaptivePriorityOnlyUntil: rateState.priorityOnlyUntil || "",
       openingBoostActive: beforeFugle.openingBoostActive,
       openingBoostFreshCount: beforeFugle.freshCount,
       openingBoostCoverage: Number(beforeFugle.coverage.toFixed(4)),
@@ -710,9 +759,28 @@ async function tick() {
   const effective = effectiveCollectorConfig(symbols);
   const unsupportedState = readUnsupportedState();
   const priority = readPrioritySymbols(symbols);
-  const selected = selectStaleFirstBatch(symbols, effective.batchSize, unsupportedState.symbols, priority.symbols);
-  const batch = selected.batch;
   const currentRateState = readRateState();
+  const priorityOnlyUntilMs = Date.parse(currentRateState.priorityOnlyUntil || "");
+  const priorityOnlyActive = Number.isFinite(priorityOnlyUntilMs) && Date.now() < priorityOnlyUntilMs;
+  const universeSet = new Set(symbols);
+  const priorityOnlySymbols = priority.symbols.filter((code) => universeSet.has(code) && !unsupportedState.symbols.has(code));
+  const priorityOnlyFallback = priorityOnlyActive && priorityOnlySymbols.length === 0;
+  const selectionSymbols = priorityOnlyActive ? priorityOnlySymbols : symbols;
+  const selectionBatchSize = priorityOnlyActive
+    ? Math.min(effective.batchSize, Math.max(0, priorityOnlySymbols.length))
+    : effective.batchSize;
+  const selected = priorityOnlyFallback
+    ? {
+        batch: [],
+        scanned: 0,
+        freshCount: freshCachedCodeSet(symbols).size,
+        unsupportedCount: unsupportedState.symbols.size,
+        prioritySymbols: priority.symbols.length,
+        priorityAttempted: 0,
+        priorityFreshCount: 0,
+      }
+    : selectStaleFirstBatch(selectionSymbols, selectionBatchSize, unsupportedState.symbols, priority.symbols);
+  const batch = selected.batch;
   const pacingDelayMs = adaptiveDelayMs(effective.delayMs, effective.concurrency, currentRateState.allowedRpm);
 
   const quotes = [];
@@ -747,11 +815,17 @@ async function tick() {
       await new Promise((resolve) => setTimeout(resolve, pacingDelayMs));
     }
   }
-  cursor = (cursor + Math.max(1, selected.scanned || batch.length)) % symbols.length;
+  const cursorModulo = Math.max(1, selectionSymbols.length || symbols.length);
+  cursor = (cursor + Math.max(1, selected.scanned || batch.length)) % cursorModulo;
   if (quotes.length) lastMessageAt = nowIso();
   const count = mergeQuotes(quotes);
   writeUnsupportedState(unsupportedState);
   const nextRateState = rateLimited ? applyRateLimited(currentRateState) : applyRateSuccess(currentRateState, quotes.length);
+  if (rateLimited) {
+    last429At = nextRateState.last429At || last429At;
+    const nextCooldownUntil = Date.parse(nextRateState.cooldownUntil || "");
+    if (Number.isFinite(nextCooldownUntil)) cooldownUntil = Math.max(cooldownUntil || 0, nextCooldownUntil);
+  }
   writeStatus({
     subscribed: symbols.length,
     pending: Math.max(0, symbols.length - count),
@@ -792,6 +866,16 @@ async function tick() {
     adaptiveStableTicks: nextRateState.stableTicks,
     adaptiveRateLimited: rateLimited,
     adaptiveCooldownUntil: nextRateState.cooldownUntil || "",
+    adaptiveConsecutive429Count: nextRateState.consecutive429Count,
+    adaptive429WindowCount: nextRateState.window429Count,
+    adaptive429WindowStartedAt: nextRateState.windowStartedAt,
+    adaptive429BudgetExceeded: nextRateState.last429BudgetExceeded,
+    adaptiveLast429CooldownMs: nextRateState.last429CooldownMs,
+    adaptivePriorityOnly: priorityOnlyActive || (Boolean(nextRateState.priorityOnlyUntil) && Date.parse(nextRateState.priorityOnlyUntil) > Date.now()),
+    adaptivePriorityOnlyUntil: nextRateState.priorityOnlyUntil || "",
+    adaptivePriorityOnlyFallback: priorityOnlyFallback,
+    adaptiveSelectionUniverse: priorityOnlyActive ? "priority_only" : "full_universe",
+    adaptiveSelectionUniverseSymbols: selectionSymbols.length,
     openingBoostActive: effective.openingBoostActive,
     openingBoostFreshCount: effective.freshCount,
     openingBoostCoverage: Number(effective.coverage.toFixed(4)),

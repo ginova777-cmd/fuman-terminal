@@ -31,12 +31,12 @@ function Read-Text {
 function Write-DefaultRuntimeConfig {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ConfigPath) | Out-Null
   [ordered]@{
-    loopSeconds = 3
+    loopSeconds = 10
     stopAt = "14:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 20
-    restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 1000
+    restQuoteBatchSize = 10
+    restQuoteEverySeconds = 20
+    restQuoteDelayMilliseconds = 2000
     restQuoteTimeoutSeconds = 4
     restQuoteBatchTimeBudgetSeconds = 10
     restQuoteRateLimitCooldownSeconds = 60
@@ -45,36 +45,44 @@ function Write-DefaultRuntimeConfig {
     restQuoteBypassMaxAgeSeconds = 90
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 20
-    restQuoteOpeningBoostDelayMilliseconds = 1000
+    restQuoteOpeningBoostBatchSize = 10
+    restQuoteOpeningBoostDelayMilliseconds = 2000
     fugleCollectorLoopMilliseconds = 1000
-    fugleCollectorBatchSize = 40
+    fugleCollectorBatchSize = 20
     fugleCollectorConcurrency = 1
-    fugleCollectorRequestDelayMilliseconds = 1000
+    fugleCollectorRequestDelayMilliseconds = 4000
+    fugleCollectorAdaptiveInitialRpm = 20
+    fugleCollectorAdaptiveMinRpm = 10
+    fugleCollectorAdaptiveMaxRpm = 40
+    fugleCollector429CooldownMilliseconds = 180000
+    fugleCollector429WindowMilliseconds = 900000
+    fugleCollector429Budget = 1
+    fugleCollector429MaxCooldownMilliseconds = 900000
+    fugleCollectorPriorityOnlyAfter429Milliseconds = 600000
     fugleCollectorQuoteTtlMilliseconds = 120000
-    fugleCollectorOpeningBoostBatchSize = 40
+    fugleCollectorOpeningBoostBatchSize = 20
     fugleCollectorOpeningBoostConcurrency = 1
-    fugleCollectorOpeningBoostDelayMilliseconds = 1000
+    fugleCollectorOpeningBoostDelayMilliseconds = 4000
     fugleCollectorFinMindRecoveryEnabled = $true
     fugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000
-    direct1mBatchSize = 8
-    direct1mEverySeconds = 20
+    direct1mBatchSize = 2
+    direct1mEverySeconds = 60
     direct1mIntradayTimeoutSeconds = 6
     direct1mHistoricalTimeoutSeconds = 8
-    direct1mBatchTimeBudgetSeconds = 20
+    direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
-    direct1mPrewarmSymbolCount = 2000
-    direct1mPrewarmBatchSize = 80
+    direct1mPrewarmSymbolCount = 300
+    direct1mPrewarmBatchSize = 4
     direct1mPrewarmBars = 200
-    direct1mPrewarmTimeBudgetSeconds = 45
+    direct1mPrewarmTimeBudgetSeconds = 8
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
     intraday1mFreshTargetSeconds = 60
     intraday1mFreshHardSeconds = 120
-    futoptQuoteBatchSize = 40
-    futoptQuoteEverySeconds = 45
+    futoptQuoteBatchSize = 20
+    futoptQuoteEverySeconds = 60
     futoptQuoteDelayMilliseconds = 500
     futoptQuoteTimeoutSeconds = 5
     futoptQuoteTimeBudgetSeconds = 10
@@ -113,6 +121,14 @@ function Test-RepoRuntimeConfigSupport {
     "Intraday1mFreshHardSeconds",
     "FugleCollectorBatchSize",
     "FUGLE_COLLECTOR_CONCURRENCY",
+    "FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM",
+    "FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM",
+    "FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM",
+    "FUGLE_COLLECTOR_429_COOLDOWN_MS",
+    "FUGLE_COLLECTOR_429_WINDOW_MS",
+    "FUGLE_COLLECTOR_429_BUDGET",
+    "FUGLE_COLLECTOR_429_MAX_COOLDOWN_MS",
+    "FUGLE_COLLECTOR_PRIORITY_ONLY_AFTER_429_MS",
     "FUGLE_COLLECTOR_QUOTE_TTL_MS",
     "OpeningBoostStart",
     "OpeningBoostEnd",
@@ -136,6 +152,8 @@ function Test-RepoRuntimeConfigSupport {
     "dynamic_amplitude_bull_symbols",
     "dynamic_volume_surge_symbols",
     "collector_adaptive_rpm",
+    "collector_adaptive_priority_only",
+    "collector_adaptive_429_window_count",
     "collector_priority_symbols",
     "Add-FreshQuoteReadthrough",
     "Get-FreshPublicSlotQuoteRows",
@@ -223,6 +241,14 @@ function Test-RuntimeConfig {
     "fugleCollectorBatchSize",
     "fugleCollectorConcurrency",
     "fugleCollectorRequestDelayMilliseconds",
+    "fugleCollectorAdaptiveInitialRpm",
+    "fugleCollectorAdaptiveMinRpm",
+    "fugleCollectorAdaptiveMaxRpm",
+    "fugleCollector429CooldownMilliseconds",
+    "fugleCollector429WindowMilliseconds",
+    "fugleCollector429Budget",
+    "fugleCollector429MaxCooldownMilliseconds",
+    "fugleCollectorPriorityOnlyAfter429Milliseconds",
     "fugleCollectorQuoteTtlMilliseconds",
     "fugleCollectorOpeningBoostBatchSize",
     "fugleCollectorOpeningBoostConcurrency",
@@ -261,12 +287,12 @@ function Test-RuntimeConfig {
     if ($null -eq $config.PSObject.Properties[$name]) { $missing.Add("config:$name") }
   }
   $expected = [ordered]@{
-    loopSeconds = 3
+    loopSeconds = 10
     stopAt = "14:05"
     minAvgVolume5Lots = 0
-    restQuoteBatchSize = 20
-    restQuoteEverySeconds = 10
-    restQuoteDelayMilliseconds = 1000
+    restQuoteBatchSize = 10
+    restQuoteEverySeconds = 20
+    restQuoteDelayMilliseconds = 2000
     restQuoteTimeoutSeconds = 4
     restQuoteBatchTimeBudgetSeconds = 10
     restQuoteRateLimitCooldownSeconds = 60
@@ -275,36 +301,44 @@ function Test-RuntimeConfig {
     restQuoteBypassMaxAgeSeconds = 90
     openingBoostStart = "08:45"
     openingBoostEnd = "13:30"
-    restQuoteOpeningBoostBatchSize = 20
-    restQuoteOpeningBoostDelayMilliseconds = 1000
+    restQuoteOpeningBoostBatchSize = 10
+    restQuoteOpeningBoostDelayMilliseconds = 2000
     fugleCollectorLoopMilliseconds = 1000
-    fugleCollectorBatchSize = 40
+    fugleCollectorBatchSize = 20
     fugleCollectorConcurrency = 1
-    fugleCollectorRequestDelayMilliseconds = 1000
+    fugleCollectorRequestDelayMilliseconds = 4000
+    fugleCollectorAdaptiveInitialRpm = 20
+    fugleCollectorAdaptiveMinRpm = 10
+    fugleCollectorAdaptiveMaxRpm = 40
+    fugleCollector429CooldownMilliseconds = 180000
+    fugleCollector429WindowMilliseconds = 900000
+    fugleCollector429Budget = 1
+    fugleCollector429MaxCooldownMilliseconds = 900000
+    fugleCollectorPriorityOnlyAfter429Milliseconds = 600000
     fugleCollectorQuoteTtlMilliseconds = 120000
-    fugleCollectorOpeningBoostBatchSize = 40
+    fugleCollectorOpeningBoostBatchSize = 20
     fugleCollectorOpeningBoostConcurrency = 1
-    fugleCollectorOpeningBoostDelayMilliseconds = 1000
+    fugleCollectorOpeningBoostDelayMilliseconds = 4000
     fugleCollectorFinMindRecoveryEnabled = $true
     fugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000
-    direct1mBatchSize = 8
-    direct1mEverySeconds = 20
+    direct1mBatchSize = 2
+    direct1mEverySeconds = 60
     direct1mIntradayTimeoutSeconds = 6
     direct1mHistoricalTimeoutSeconds = 8
     direct1mBatchTimeBudgetSeconds = 8
     direct1mPrewarmEnabled = $true
     direct1mPrewarmStart = "07:00"
-    direct1mPrewarmSymbolCount = 2000
-    direct1mPrewarmBatchSize = 80
+    direct1mPrewarmSymbolCount = 300
+    direct1mPrewarmBatchSize = 4
     direct1mPrewarmBars = 200
-    direct1mPrewarmTimeBudgetSeconds = 10
+    direct1mPrewarmTimeBudgetSeconds = 8
     quoteDerived1mCandidateCount = 0
     quoteDerived1mMaxQuoteAgeSeconds = 120
     quoteDerivedOpeningBackfillMinutes = 6
     intraday1mFreshTargetSeconds = 60
     intraday1mFreshHardSeconds = 120
-    futoptQuoteBatchSize = 40
-    futoptQuoteEverySeconds = 45
+    futoptQuoteBatchSize = 20
+    futoptQuoteEverySeconds = 60
     futoptQuoteDelayMilliseconds = 500
     futoptQuoteTimeoutSeconds = 5
     futoptQuoteTimeBudgetSeconds = 10

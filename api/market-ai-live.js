@@ -373,6 +373,52 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function optionalNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(String(value).replace(/[,%]/g, "").trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildHeatmapQuoteCoverage(payload = {}) {
+  const health = payload?.health || {};
+  const strict = payload?.strictQuoteContract || {};
+  const freshQuotes = optionalNumber(strict.rows ?? health.formalSourceRows ?? payload.realtimeStockCount ?? health.realtimeStockCount);
+  const activeSymbols = optionalNumber(health.stockCount ?? payload.stockCount ?? strict.rawRows ?? health.formalSourceRawRows);
+  const explicitCoverage = optionalNumber(
+    strict.fresh_quote_coverage_120s
+      ?? strict.freshQuoteCoverage120s
+      ?? health.fresh_quote_coverage_120s
+      ?? health.freshQuoteCoverage120s
+      ?? payload.fresh_quote_coverage_120s
+      ?? payload.freshQuoteCoverage120s
+  );
+  const freshQuoteCoverage120s = explicitCoverage !== null
+    ? explicitCoverage
+    : freshQuotes !== null && activeSymbols ? Math.min(1, freshQuotes / activeSymbols) : null;
+  const quoteAgeSeconds = optionalNumber(
+    strict.latestAgeSeconds
+      ?? health.formalSourceLatestAgeSeconds
+      ?? payload.quote_age_seconds
+      ?? payload.quoteAgeSeconds
+  );
+  const ok = (strict.ok ?? health.formalSourceOk ?? health.isHealthy) !== false;
+  return {
+    status: ok ? "ready" : "degraded",
+    ok,
+    fresh_quote_coverage_120s: freshQuoteCoverage120s,
+    freshQuoteCoverage120s: freshQuoteCoverage120s,
+    fresh_quotes: freshQuotes,
+    freshQuotes,
+    active_symbols: activeSymbols,
+    activeSymbols,
+    quote_age_seconds: quoteAgeSeconds,
+    quoteAgeSeconds,
+    latest_updated_at: strict.latestUpdatedAt || health.formalSourceLatestUpdatedAt || payload.updatedAt || "",
+    latestUpdatedAt: strict.latestUpdatedAt || health.formalSourceLatestUpdatedAt || payload.updatedAt || "",
+    formalSource: payload.formalSource || health.formalSource || strict.source || "",
+  };
+}
+
 function firstText(row, keys, fallback = "") {
   for (const key of keys) {
     const value = key.split(".").reduce((current, part) => current?.[part], row);
@@ -521,6 +567,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const baseIsToday = isTodayDate(baseTradeDate, clock);
   const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday);
   const heatmapUsable = heatmapIsToday && !heatmapIssue;
+  const heatmapQuoteCoverage = buildHeatmapQuoteCoverage(heatmapPayload || {});
   const sourceIssues = [
     heatmapIssue,
     radarTradeDate && !radarIsToday ? `即時雷達非今日資料：${radarTradeDate}` : "",
@@ -690,6 +737,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       baseIsToday,
       staleSources,
       sourceIssues,
+      heatmapQuoteCoverage,
       priorityStaleBlocked,
     },
     fieldCompleteness: {
@@ -772,6 +820,7 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
       resolvedTradeDate: heatmapPayload.resolvedTradeDate || heatmapPayload.tradeDate || "",
       stockCount: heatmapPayload.stockCount || heatmapPayload.health?.stockCount || 0,
       sectorCount: normalizeArray(heatmapPayload.sectors).length,
+      quoteCoverage: buildHeatmapQuoteCoverage(heatmapPayload),
     } : null,
     realtimeRadar: radarPayload || payload?.realtimeRadar || null,
     rows: insights.rows,
@@ -809,6 +858,7 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
   const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
   const heatmapRows = cleanNumber(dataSources.heatmapRows || payload?.heatmap?.stockCount || payload?.heatmap?.sectorCount);
   const radarRows = cleanNumber(dataSources.radarRows || count(payload?.realtimeRadar));
+  const heatmapQuoteCoverage = freshness.heatmapQuoteCoverage || payload?.heatmap?.quoteCoverage || {};
   const quoteReady = freshness.heatmapUsable === true
     || freshness.radarIsToday === true
     || heatmapRows >= 500
@@ -832,8 +882,18 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
         marketSession: session?.status || payload?.marketSession?.status || "",
       },
       quoteCoverage: {
-        status: quoteReady ? "ready" : "degraded",
-        ok: quoteReady,
+        status: heatmapQuoteCoverage.status || (quoteReady ? "ready" : "degraded"),
+        ok: heatmapQuoteCoverage.ok ?? quoteReady,
+        fresh_quote_coverage_120s: heatmapQuoteCoverage.fresh_quote_coverage_120s ?? heatmapQuoteCoverage.freshQuoteCoverage120s ?? null,
+        freshQuoteCoverage120s: heatmapQuoteCoverage.freshQuoteCoverage120s ?? heatmapQuoteCoverage.fresh_quote_coverage_120s ?? null,
+        fresh_quotes: heatmapQuoteCoverage.fresh_quotes ?? heatmapQuoteCoverage.freshQuotes ?? null,
+        freshQuotes: heatmapQuoteCoverage.freshQuotes ?? heatmapQuoteCoverage.fresh_quotes ?? null,
+        active_symbols: heatmapQuoteCoverage.active_symbols ?? heatmapQuoteCoverage.activeSymbols ?? null,
+        activeSymbols: heatmapQuoteCoverage.activeSymbols ?? heatmapQuoteCoverage.active_symbols ?? null,
+        quote_age_seconds: heatmapQuoteCoverage.quote_age_seconds ?? heatmapQuoteCoverage.quoteAgeSeconds ?? null,
+        quoteAgeSeconds: heatmapQuoteCoverage.quoteAgeSeconds ?? heatmapQuoteCoverage.quote_age_seconds ?? null,
+        latest_updated_at: heatmapQuoteCoverage.latest_updated_at || heatmapQuoteCoverage.latestUpdatedAt || "",
+        latestUpdatedAt: heatmapQuoteCoverage.latestUpdatedAt || heatmapQuoteCoverage.latest_updated_at || "",
         heatmapRows,
         radarRows,
         heatmapTradeDate: freshness.heatmapTradeDate || "",

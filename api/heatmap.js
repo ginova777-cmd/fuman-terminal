@@ -277,8 +277,9 @@ function buildHeatmapHealth(sectors, quoteMap, sourceInfo = {}) {
 function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason = "") {
   const sourceInfo = payload?.strictQuoteContract || {};
   const health = payload?.health || {};
-  const stockCount = cleanNumber(payload?.stockCount || health.stockCount);
+  const stockCount = cleanNumber(health.stockCount || payload?.stockCount);
   const realtimeCount = cleanNumber(payload?.realtimeStockCount || health.realtimeStockCount || sourceInfo.rows);
+  const quoteCoverageRatio = stockCount ? Math.min(1, realtimeCount / stockCount) : null;
   const fallbackUsed = sourceInfo.fallbackUsed === true || payload?.fallbackUsed === true;
   const fallbackDetails = fallbackUsed ? [{
     fallbackSource: sourceInfo.fallbackSource || "unknown",
@@ -308,7 +309,14 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
         ok: quoteReady,
         rows: realtimeCount,
         expected: stockCount || null,
-        fresh_quote_coverage_120s: stockCount ? realtimeCount / stockCount : null,
+        fresh_quote_coverage_120s: quoteCoverageRatio,
+        freshQuoteCoverage120s: quoteCoverageRatio,
+        fresh_quotes: realtimeCount || null,
+        freshQuotes: realtimeCount || null,
+        active_symbols: stockCount || null,
+        activeSymbols: stockCount || null,
+        quote_age_seconds: sourceInfo.latestAgeSeconds ?? health.formalSourceLatestAgeSeconds ?? null,
+        quoteAgeSeconds: sourceInfo.latestAgeSeconds ?? health.formalSourceLatestAgeSeconds ?? null,
         latestUpdatedAt: sourceInfo.latestUpdatedAt || health.formalSourceLatestUpdatedAt || "",
         latestAgeSeconds: sourceInfo.latestAgeSeconds ?? health.formalSourceLatestAgeSeconds ?? null,
       },
@@ -2928,6 +2936,12 @@ function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = 
   const quoteDate = compactDateKeyFromValue(observedAt);
   if (!quoteDate) return "missing_date";
   if (quoteDate !== today) return "not_today";
+  const observedMs = Date.parse(String(observedAt || ""));
+  if (
+    isHeatmapDetectWindow(clock)
+    && Number.isFinite(observedMs)
+    && Date.now() - observedMs > HEATMAP_QUOTE_MAX_AGE_SECONDS * 1000
+  ) return "stale";
   return "";
 }
 
