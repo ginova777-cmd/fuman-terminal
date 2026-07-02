@@ -258,6 +258,8 @@ function Stop-SharedSourceProcesses {
 function Get-LastWatchdogRestartUtc {
   try {
     if (-not (Test-Path -LiteralPath $RestartStateFile)) { return $null }
+    $fileTime = (Get-Item -LiteralPath $RestartStateFile -ErrorAction Stop).LastWriteTimeUtc
+    if ($null -ne $fileTime) { return $fileTime }
     $state = Get-Content -LiteralPath $RestartStateFile -Raw -ErrorAction Stop | ConvertFrom-Json
     $raw = [string]$state.last_restart_at
     if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
