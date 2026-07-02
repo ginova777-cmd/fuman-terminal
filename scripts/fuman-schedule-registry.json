@@ -1,6 +1,6 @@
 {
   "updatedAt": "2026-07-02T14:35:00+08:00",
-  "policyVersion": 4,
+  "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [

@@ -117,50 +117,33 @@ function taipeiNowIso() {
   }).format(new Date()).replace(" ", "T") + "+08:00";
 }
 
-function normalizeTaskName(name) {
-  const text = String(name || "").trim();
-  return text.startsWith("\\") ? text : `\\${text}`;
-}
-
-function parseCsvLine(line) {
-  const cells = [];
-  let cell = "";
-  let quoted = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (quoted && line[i + 1] === '"') {
-        cell += '"';
-        i += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (ch === "," && !quoted) {
-      cells.push(cell);
-      cell = "";
-    } else {
-      cell += ch;
-    }
-  }
-  cells.push(cell);
-  return cells;
-}
-
-function parseTasks(csv) {
-  const lines = String(csv || "").split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return [];
-  const headers = parseCsvLine(lines[0]);
-  return lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line);
-    const row = {};
-    headers.forEach((header, index) => { row[header] = cells[index] || ""; });
-    row.TaskName = normalizeTaskName(row.TaskName);
-    return row;
-  });
-}
-
 function checkTasks(issues, warnings) {
-  const result = run(["schtasks", "/Query", "/V", "/FO", "CSV"], { cwd: ROOT, timeout: 120000 });
+  const names = EXPECTED_TASKS.map((task) => task.name.replace(/^\\/, ""));
+  const psScript = [
+    `$names = @'`,
+    JSON.stringify(names),
+    `'@ | ConvertFrom-Json`,
+    `$rows = foreach ($name in $names) {`,
+    `  $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue`,
+    `  if ($null -eq $task) {`,
+    `    [pscustomobject]@{ TaskName = "\\$name"; Missing = $true }`,
+    `    continue`,
+    `  }`,
+    `  $info = Get-ScheduledTaskInfo -TaskName $name -ErrorAction SilentlyContinue`,
+    `  $actions = @($task.Actions | ForEach-Object { (([string]$_.Execute) + " " + ([string]$_.Arguments)).Trim() }) -join "; "`,
+    `  [pscustomobject]@{`,
+    `    TaskName = "\\$name"`,
+    `    Missing = $false`,
+    `    Status = [string]$task.State`,
+    `    LastResult = if ($null -ne $info) { [int]$info.LastTaskResult } else { $null }`,
+    `    LastRunTime = if ($null -ne $info) { [string]$info.LastRunTime } else { "" }`,
+    `    NextRunTime = if ($null -ne $info) { [string]$info.NextRunTime } else { "" }`,
+    `    TaskToRun = $actions`,
+    `  }`,
+    `}`,
+    `$rows | ConvertTo-Json -Depth 6 -Compress`,
+  ].join("\n");
+  const result = run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript], { cwd: ROOT, timeout: 120000 });
   const evidence = {
     ok: result.ok,
     status: result.status,
@@ -170,22 +153,23 @@ function checkTasks(issues, warnings) {
     issues.push({ issue: "schtasks_query_failed", detail: result.stderr || result.error || result.stdout });
     return evidence;
   }
-  const rows = parseTasks(result.stdout);
+  const parsed = parseJsonText(result.stdout);
+  const rows = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
   for (const expected of EXPECTED_TASKS) {
     const row = rows.find((item) => item.TaskName === expected.name);
-    if (!row) {
+    if (!row || row.Missing) {
       issues.push({ issue: "scheduled_task_missing", taskName: expected.name, purpose: expected.purpose });
       evidence.tasks[expected.name] = { missing: true };
       continue;
     }
-    const lastResult = Number(row["Last Result"]);
+    const lastResult = Number(row.LastResult);
     const allowed = expected.allowedResults.includes(lastResult);
     evidence.tasks[expected.name] = {
       status: row.Status,
       lastResult,
-      lastRunTime: row["Last Run Time"],
-      nextRunTime: row["Next Run Time"],
-      taskToRun: row["Task To Run"],
+      lastRunTime: row.LastRunTime,
+      nextRunTime: row.NextRunTime,
+      taskToRun: row.TaskToRun,
       purpose: expected.purpose,
     };
     if (!["Ready", "Running"].includes(row.Status)) {
