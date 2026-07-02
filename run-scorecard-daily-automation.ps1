@@ -126,7 +126,7 @@ $allowPreviousForRun = $AllowPreviousTradeDate -or (-not [bool]$tradingDayStatus
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
 
 $sourceFile = Join-Path $RuntimeRoot "data\scorecard-terminal-current.json"
-$snapshotFile = Join-Path $ProjectRoot "data\scorecard-latest.json"
+$snapshotFile = Join-Path $RuntimeRoot "data\scorecard-latest-candidate.json"
 $healthFile = Join-Path $RuntimeRoot "data\scorecard-source-health-latest.json"
 
 Set-Location -LiteralPath $ProjectRoot
