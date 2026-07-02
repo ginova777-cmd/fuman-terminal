@@ -562,7 +562,7 @@ function groupPayload(label, source, rows, note = "") {
   };
 }
 
-function heatmapSourceIssue(payload, heatmapIsToday) {
+function heatmapSourceIssue(payload, heatmapIsToday, session = {}, clock = taipeiClock()) {
   if (!payload || !Object.keys(payload).length) return "熱力圖水源無回應";
   const health = payload.health || {};
   const sectors = normalizeArray(payload.sectors);
@@ -573,6 +573,13 @@ function heatmapSourceIssue(payload, heatmapIsToday) {
   const noPrice = cleanNumber(health.noPrice);
   if (!heatmapIsToday) return "";
   if (health.isHealthy === false) {
+    const strictFreshnessRequired = session?.requiresTodayLiveSource === true || (session?.closed !== true && isMarketAiTodayRequiredWindow(clock));
+    const quoteAgeOnly = badDate === 0
+      && notRealtime === 0
+      && noPrice === 0
+      && stockCount > 0
+      && realtimeStockCount > 0;
+    if (!strictFreshnessRequired && quoteAgeOnly) return "";
     return `熱力圖即時報價水源不健康：realtime ${realtimeStockCount.toLocaleString("zh-TW")} / stock ${stockCount.toLocaleString("zh-TW")}，badDate ${badDate}，notRealtime ${notRealtime}，noPrice ${noPrice}，quoteTime ${health.quoteTime || "--"}`;
   }
   if (!sectors.length) return `熱力圖今天無族群資料：stock ${stockCount.toLocaleString("zh-TW")}，realtime ${realtimeStockCount.toLocaleString("zh-TW")}`;
@@ -586,7 +593,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const heatmapIsToday = isTodayDate(heatmapTradeDate, clock);
   const radarIsToday = isTodayDate(radarTradeDate, clock);
   const baseIsToday = isTodayDate(baseTradeDate, clock);
-  const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday);
+  const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday, session, clock);
   const heatmapUsable = heatmapIsToday && !heatmapIssue;
   const heatmapQuoteCoverage = buildHeatmapQuoteCoverage(heatmapPayload || {});
   const sourceIssues = [
