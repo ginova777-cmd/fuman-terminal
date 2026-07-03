@@ -105,7 +105,7 @@ const CONTRACTS = [
       ], { order: "updated_at.desc", requireToday: true, purpose: "formal Strategy3 quote source" }),
       sourceTable("v_strategy3_intraday_1m_status", [
         "symbol", "latest_candle_time", "today_candle_count",
-      ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
+      ], { requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
       retiredSourceTable(
         "v_strategy3_quote_ready",
         "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",

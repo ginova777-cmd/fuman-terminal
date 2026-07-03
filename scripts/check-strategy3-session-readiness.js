@@ -7,6 +7,8 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
 const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
 const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
+const PAGE_SIZE = Math.max(10, Math.min(Number(process.env.STRATEGY3_SESSION_READINESS_PAGE_SIZE || 50), 1000));
+const MAX_ROWS = Math.max(PAGE_SIZE, Number(process.env.STRATEGY3_SESSION_READINESS_MAX_ROWS || 6000));
 
 function readSecret(file) {
   try { return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", file), "utf8").trim(); } catch { return ""; }
@@ -92,6 +94,17 @@ async function getRows(route) {
   return Array.isArray(rows) ? rows : [];
 }
 
+async function getPagedRows(routeBase) {
+  const out = [];
+  const separator = routeBase.includes("?") ? "&" : "?";
+  for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
+    const page = await getRows(`${routeBase}${separator}limit=${PAGE_SIZE}&offset=${offset}`);
+    out.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
   let statusRefresh = null;
@@ -101,11 +114,9 @@ async function main() {
   } catch (error) {
     statusRefreshWarning = error?.message || String(error);
   }
-  const rows = await getRows([
+  const rows = await getPagedRows([
     "/rest/v1/v_strategy3_intraday_1m_status",
     "?select=symbol,latest_candle_time,today_candle_count,updated_at",
-    "&order=latest_candle_time.desc",
-    "&limit=5000",
   ].join(""));
   const latestCandleTime = rows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
   const sessionRows = rows.filter((row) => {

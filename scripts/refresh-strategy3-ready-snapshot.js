@@ -17,7 +17,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecret("supabase-service-role-key.txt")
   || readSecret("supabase-anon-key.txt");
 
-const PAGE_SIZE = Math.max(100, Math.min(Number(process.env.STRATEGY3_READY_SNAPSHOT_PAGE_SIZE || 1000), 1000));
+const PAGE_SIZE = Math.max(10, Math.min(Number(process.env.STRATEGY3_READY_SNAPSHOT_PAGE_SIZE || 50), 1000));
 const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
 const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
 const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
@@ -204,7 +204,6 @@ async function main() {
     }, { maxRows: 6000 }),
     fetchAllRows("v_strategy3_intraday_1m_status", {
       select: "symbol,code,latest_candle_time,today_candle_count,updated_at",
-      order: "latest_candle_time.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("stock_capital_latest", {
       select: "code,issued_shares,updated_at",
