@@ -21,6 +21,7 @@ const QUOTE_TABLE = process.env.FUMAN_REALTIME_QUOTE_TABLE || "fugle_realtime_qu
 const DEFAULT_RADAR_LIMIT = 120;
 const FULL_SESSION_RADAR_LIMIT = 1200;
 const MAX_RADAR_LIMIT = 1500;
+const SOURCE_EXCLUDED_CODES = ["1475", "1538", "2254", "2321", "2901", "5906", "7732", "8101", "8488"];
 const MIN_TRADING_DAY_CACHE_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_API_MIN_CACHE_MAX_AGE_MS || 5 * 60 * 1000);
 const RADAR_SESSION_START_MINUTE = 9 * 60;
 const RADAR_SESSION_END_MINUTE = 13 * 60 + 30;
@@ -511,7 +512,7 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
       const percent = cleanNumber(row.change_percent);
       const volume = cleanNumber(row.volume_lots);
       const value = cleanNumber(row.trade_value_twd);
-      if (!/^\d{4}$/.test(code) || !close) return null;
+      if (!/^\d{4}$/.test(code) || SOURCE_EXCLUDED_CODES.includes(code) || !close) return null;
       const side = percent < 0 ? "short" : "long";
       const quoteAt = Date.parse(row.quote_updated_at || row.last_trade_time || "") || now;
       const quoteIso = new Date(quoteAt).toISOString();
@@ -563,6 +564,7 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
     updatedAtMs: latestQuoteAt,
     staleAfterMs: 90000,
     count: normalized.length,
+    sourceExcludedCodes: SOURCE_EXCLUDED_CODES,
     freshness: {
       decision: normalized.length ? "quote-view-fallback" : "no_quote_rows",
       reason: normalized.length ? "radar cache unavailable/stale; using formal realtime quote view" : "formal realtime quote view returned no rows",
@@ -588,7 +590,12 @@ function quoteRowsToRadarPayload(rows = [], limit = DEFAULT_RADAR_LIMIT) {
 }
 
 async function fetchQuoteViewFallback(limit = DEFAULT_RADAR_LIMIT) {
-  const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at&order=trade_value_twd.desc.nullslast&limit=${clampLimit(limit)}`);
+  const today = isoDateKey(taipeiDateKey());
+  const start = encodeURIComponent(`${today}T00:00:00+08:00`);
+  const end = encodeURIComponent(`${today}T23:59:59+08:00`);
+  const select = encodeURIComponent("symbol,name,market,price,open_price,high_price,low_price,previous_close,change_percent,volume_lots,trade_value_twd,last_trade_time,quote_updated_at");
+  const readLimit = Math.min(1000, Math.max(clampLimit(limit) + SOURCE_EXCLUDED_CODES.length, 120));
+  const quoteRows = await fetchSupabaseJson(`${QUOTE_TABLE}?select=${select}&quote_updated_at=gte.${start}&quote_updated_at=lte.${end}&order=quote_updated_at.desc.nullslast&limit=${readLimit}`);
   return quoteRowsToRadarPayload(Array.isArray(quoteRows) ? quoteRows : [], limit);
 }
 
@@ -752,6 +759,19 @@ module.exports = async function handler(request, response) {
       const session = buildMarketSession(tradingDay, payload);
       response.status(503).json(withMarketSession(payload, session, "supabase_not_configured", requestedLimit));
       return;
+    }
+
+    if (tradingDay.isTradingDay && isAfterMarketDetectionWindow() && requestedLimit < FULL_SESSION_RADAR_LIMIT) {
+      try {
+        const quotePayload = await fetchQuoteViewFallback(requestedLimit);
+        if (quotePayload.rows.length) {
+          const session = buildMarketSession(tradingDay, quotePayload);
+          response.status(200).json(withMarketSession(quotePayload, session, "", requestedLimit));
+          return;
+        }
+      } catch (error) {
+        // Fall through to the authoritative radar cache path when the fast quote-view path is unavailable.
+      }
     }
 
     const radarCache = await fetchRadarCachePayload();
