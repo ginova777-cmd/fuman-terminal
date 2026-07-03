@@ -213,6 +213,7 @@ Terminal display must not go blank during incident mode. API/front-end behavior 
 Exit incident mode only after the release owner runs a single light probe successfully, then one guarded production monitor, then the needed strategy verifier one at a time:
 
 ```powershell
+npm run supabase:probe:light
 npm run supabase:incident:exit
 ```
 

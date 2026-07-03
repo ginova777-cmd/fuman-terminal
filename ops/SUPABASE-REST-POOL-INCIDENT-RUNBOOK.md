@@ -47,6 +47,7 @@ The terminal may keep serving previous good latest data with a stale/degraded ba
 
 ```powershell
 npm run supabase:incident:status
+npm run supabase:probe:light
 npm run supabase:incident:exit
 ```
 

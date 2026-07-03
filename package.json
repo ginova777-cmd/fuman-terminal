@@ -63,6 +63,7 @@
     "supabase:incident:exit": "node scripts/supabase-incident-guard.js exit",
     "supabase:incident:status": "node scripts/supabase-incident-guard.js status",
     "supabase:incident:check": "node scripts/supabase-incident-guard.js check",
+    "supabase:probe:light": "node --use-system-ca scripts/supabase-light-probe.js",
     "guard:production": "node --use-system-ca scripts/verify-production-guard.js",
     "guard:production:pre": "node --use-system-ca scripts/verify-production-guard.js --pre-deploy",
     "verify:live-version": "node --use-system-ca scripts/verify-live-version.js",
