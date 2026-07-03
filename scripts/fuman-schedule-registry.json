@@ -49,20 +49,28 @@
       "Fuman 權證走向 Cache 2030",
       "Fuman 權證走向 Watchdog 2050",
       "FumanTerminalProductionHealthMonitor",
+      "Fuman Daytrade Source Preflight 0830",
       "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Daytrade Source Gate 0700",
       "Fuman Daytrade Source Gate 0845",
       "Fuman Daytrade Source Gate 0900",
       "Fuman Daytrade Source Gate 0910",
       "Fuman Daytrade Source Gate 0935",
+      "Fuman Daytrade Source Final Verdict 0912",
+      "Fuman Fugle Daytrade Watchdog Every Minute",
+      "Fuman Scorecard Daily Watchdog 1410"
+    ],
+    "expectedDisabledTasks": [
+      "Fuman Daytrade Source Writer",
       "Fuman Fugle Daytrade 0830 Warm Start",
       "Fuman Fugle Daytrade 0845 Gate Check",
       "Fuman Fugle Daytrade 0900 Opening Check",
       "Fuman Fugle Daytrade 0910 Convergence Check",
-      "Fuman Fugle Daytrade Watchdog Every Minute",
-      "Fuman Scorecard Daily Watchdog 1410"
+      "Fuman Fugle Daytrade Dedicated Source 0845 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source 0900 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source 0910 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source Writer Watchdog Every Minute"
     ],
-    "expectedDisabledTasks": [],
     "retiredTasks": [
       "Fuman Auto Main Release 1615",
       "Fuman Daily Health Summary 1545",
@@ -168,6 +176,14 @@
       ],
       "Fuman Daytrade Source Gate 0935": [
         0
+      ],
+      "Fuman Daytrade Source Preflight 0830": [
+        0,
+        267011
+      ],
+      "Fuman Daytrade Source Final Verdict 0912": [
+        0,
+        267011
       ],
       "Fuman Scorecard Daily Watchdog 1410": [
         0,
