@@ -1023,10 +1023,25 @@ async function tick() {
   const quoteMap = await fetchExistingDaytradeQuotes();
   const intradayMap = await fetchIntradayStatus();
   const futoptRows = await fetchFutoptRows();
+  const nonFatalWriteErrors = [];
 
   if (priorityRows.length) {
-    await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol");
-    await syncDailyVolumeMirror(dailyVolumeMap, priorityRows);
+    try {
+      await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol");
+    } catch (error) {
+      nonFatalWriteErrors.push({
+        target: "fugle_daytrade_priority_pool",
+        message: error?.message || String(error),
+      });
+    }
+    try {
+      await syncDailyVolumeMirror(dailyVolumeMap, priorityRows);
+    } catch (error) {
+      nonFatalWriteErrors.push({
+        target: "fugle_daytrade_daily_volume_avg",
+        message: error?.message || String(error),
+      });
+    }
   }
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
@@ -1036,6 +1051,7 @@ async function tick() {
   const fetchResult = fetchAllowedForPhase
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
+  fetchResult.errors = [...(fetchResult.errors || []), ...nonFatalWriteErrors];
   if (fetchResult.rows.length) await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
 
   let nextState = { ...state };
