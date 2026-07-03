@@ -613,13 +613,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap) {
       name: row.name || row.symbol,
       market: row.market || "",
       priority_rank: index + 1,
-      priority_source: row.prioritySource || "unknown",
       priority_reason: row.priorityReason || "",
-      consumer_scope: ["daytrade", "strategy1", "strategy3"],
-      selected: true,
-      score: numberValue(row.score),
+      source: row.prioritySource || "unknown",
       updated_at: nowIso(),
       payload: {
+        score: numberValue(row.score),
+        selected: true,
+        consumerScope: ["daytrade", "strategy1", "strategy3"],
         runtimePrioritySource: seeds.source,
         runtimePriorityUpdatedAt: seeds.updatedAt,
         runtimePriorityCounts: seeds.counts,
@@ -1026,7 +1026,7 @@ async function tick() {
   const futoptRows = await fetchFutoptRows();
 
   if (priorityRows.length) {
-    await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "trade_date,symbol");
+    await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol");
     await syncDailyVolumeMirror(dailyVolumeMap, priorityRows);
   }
 
