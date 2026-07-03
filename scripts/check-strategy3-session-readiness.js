@@ -2,6 +2,11 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  fetchStrategy3Intraday1mReadiness,
+  fetchStrategy3Intraday1mStatus,
+  fetchStrategy3QuoteLatestReady,
+} = require("../lib/supabase-public-slot");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
@@ -107,6 +112,7 @@ async function getPagedRows(routeBase) {
 
 async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
+  const minIntraday1mCandidates = MIN_INTRADAY_1M_CANDIDATES;
   let statusRefresh = null;
   let statusRefreshWarning = "";
   try {
@@ -114,10 +120,90 @@ async function main() {
   } catch (error) {
     statusRefreshWarning = error?.message || String(error);
   }
-  const rows = await getPagedRows([
-    "/rest/v1/v_strategy3_intraday_1m_status",
-    "?select=symbol,latest_candle_time,today_candle_count,updated_at",
-  ].join(""));
+  let latest = null;
+  try {
+    latest = await fetchStrategy3QuoteLatestReady({ minQuotes: 500, timeout: 45000, latestTimeout: 45000, skipIntradayStatus: true });
+  } catch (error) {
+    console.log(JSON.stringify({
+      ok: true,
+      ready: false,
+      source: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
+      formalSourceChain: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
+      tradeDate,
+      latestQuoteRows: 0,
+      statusRows: 0,
+      sessionReadyCount: 0,
+      minIntraday1mCandidates,
+      minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
+      sessionLatestMinute: SESSION_LATEST_MINUTE,
+      status: "not_ready",
+      reason: "quote_unavailable",
+      quoteWarning: error?.message || String(error),
+      statusRefreshWarning,
+      statusRefresh,
+    }));
+    return;
+  }
+  let fastReadiness = null;
+  let fastReadinessWarning = "";
+  try {
+    fastReadiness = await fetchStrategy3Intraday1mReadiness(latest.quotes.map((quote) => quote.code || quote.symbol), {
+      tradeDate,
+      minCandles: MIN_INTRADAY_1M_CANDLES,
+      minSymbols: minIntraday1mCandidates,
+      timeout: 30000,
+    });
+  } catch (error) {
+    fastReadinessWarning = error?.message || String(error);
+  }
+  if (!fastReadiness?.ok && process.env.STRATEGY3_ALLOW_SLOW_STATUS_FALLBACK !== "1") {
+    console.log(JSON.stringify({
+      ok: true,
+      ready: false,
+      source: "get_strategy3_intraday_1m_readiness",
+      formalSourceChain: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
+      tradeDate,
+      latestQuoteRows: latest.quotes.length,
+      statusRows: 0,
+      sessionReadyCount: 0,
+      minIntraday1mCandidates,
+      minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
+      sessionLatestMinute: SESSION_LATEST_MINUTE,
+      status: "not_ready",
+      reason: "fast_readiness_unavailable",
+      statusRefreshWarning,
+      fastReadinessWarning,
+      statusRefresh,
+    }));
+    return;
+  }
+  if (fastReadiness?.ok) {
+    const ready = fastReadiness.status === "ready" && fastReadiness.readyGe35 >= minIntraday1mCandidates;
+    console.log(JSON.stringify({
+      ok: true,
+      ready,
+      source: fastReadiness.source,
+      formalSourceChain: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
+      tradeDate,
+      latestQuoteRows: latest.quotes.length,
+      statusRows: fastReadiness.requestedSymbols,
+      sessionReadyCount: fastReadiness.readyGe35,
+      today1mSymbols: fastReadiness.today1mSymbols,
+      today1mRows: fastReadiness.today1mRows,
+      minIntraday1mCandidates,
+      minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
+      sessionLatestMinute: SESSION_LATEST_MINUTE,
+      latestCandleTime: fastReadiness.latestCandleTime,
+      intraday1mStaleSeconds: fastReadiness.intraday1mStaleSeconds,
+      status: ready ? "ready" : "not_ready",
+      reason: ready ? "09:00-12:59 intraday status ready" : fastReadiness.reason || `sessionReadyCount ${fastReadiness.readyGe35} below ${minIntraday1mCandidates}`,
+      statusRefreshWarning,
+      statusRefresh,
+    }));
+    return;
+  }
+  const status = await fetchStrategy3Intraday1mStatus(latest.quotes.map((quote) => quote.code || quote.symbol));
+  const rows = Array.from(status.byCode.values());
   const latestCandleTime = rows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
   const sessionRows = rows.filter((row) => {
     const count = Number(row.today_candle_count || 0);
@@ -130,6 +216,8 @@ async function main() {
     ready,
     source: "v_strategy3_intraday_1m_status",
     tradeDate,
+    latestQuoteRows: latest.quotes.length,
+    statusRows: rows.length,
     sessionReadyCount: sessionRows.length,
     minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
     minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
@@ -138,6 +226,7 @@ async function main() {
     status: ready ? "ready" : "not_ready",
     reason: ready ? "09:00-12:59 intraday status ready" : `sessionReadyCount ${sessionRows.length} below ${MIN_INTRADAY_1M_CANDIDATES}`,
     statusRefreshWarning,
+    fastReadinessWarning,
     statusRefresh,
   }));
 }

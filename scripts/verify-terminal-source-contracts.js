@@ -108,7 +108,7 @@ const CONTRACTS = [
       ], { requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
       retiredSourceTable(
         "v_strategy3_quote_ready",
-        "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+        "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),

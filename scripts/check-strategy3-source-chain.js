@@ -1,4 +1,5 @@
 const {
+  fetchStrategy3Intraday1mReadiness,
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3LiveSideVolumeMap,
   fetchStrategy3QuoteLatestReady,
@@ -84,8 +85,50 @@ async function main() {
   const minIntraday1mCandidates = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
   const minIntraday1mCandles = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
   const tvLimit = Math.max(1, Number(process.env.STRATEGY3_DIAG_TV_LIMIT || 120));
-  const latest = await fetchStrategy3QuoteLatestReady({ minQuotes: 500, timeout: 20000 });
-  const status = await fetchStrategy3Intraday1mStatus(latest.quotes.map((quote) => quote.code));
+  let latest = null;
+  try {
+    latest = await fetchStrategy3QuoteLatestReady({ minQuotes: 500, timeout: 45000, latestTimeout: 45000, skipIntradayStatus: true });
+  } catch (error) {
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      ready: false,
+      source: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
+      fallbackUsed: false,
+      fallbackScope: [],
+      fallbackDetails: [],
+      issues: [`quote_unavailable=${error?.message || String(error)}`],
+      warnings: [],
+      latestQuoteRows: 0,
+      sessionReadyCount: 0,
+      minIntraday1mCandidates,
+      minIntraday1mCandles,
+      status: "not_ready",
+      reason: "quote_unavailable",
+      examples: [],
+    }, null, 2)}\n`);
+    return;
+  }
+  let fastReadiness = null;
+  let fastReadinessWarning = "";
+  try {
+    fastReadiness = await fetchStrategy3Intraday1mReadiness(latest.quotes.map((quote) => quote.code), {
+      minCandles: minIntraday1mCandles,
+      minSymbols: minIntraday1mCandidates,
+      timeout: 30000,
+    });
+  } catch (error) {
+    fastReadinessWarning = error?.message || String(error);
+  }
+  let status = { ok: false, byCode: new Map(), source: "v_strategy3_intraday_1m_status", error: "" };
+  if (fastReadiness?.ok || process.env.STRATEGY3_ALLOW_SLOW_STATUS_FALLBACK === "1") {
+    try {
+      status = await fetchStrategy3Intraday1mStatus(latest.quotes.map((quote) => quote.code));
+    } catch (error) {
+      status = { ok: false, byCode: new Map(), source: "v_strategy3_intraday_1m_status", error: error?.message || String(error) };
+    }
+  } else if (fastReadinessWarning) {
+    status = { ok: false, byCode: new Map(), source: "get_strategy3_intraday_1m_readiness", error: fastReadinessWarning };
+  }
   const side = await fetchStrategy3LiveSideVolumeMap(latest.quotes.map((quote) => quote.code)).catch(() => ({ byCode: new Map(), ok: false }));
   const blacklistCodes = loadChipTradeBlacklist();
   const merged = latest.quotes.map((quote) => {
@@ -110,6 +153,7 @@ async function main() {
   });
   const chipReady = merged.filter((quote) => !quote.chipExcluded);
   const sessionReady = chipReady.filter((quote) => cleanNumber(quote.intradayCandleCount) >= minIntraday1mCandles || quote.latestCandleTime);
+  const sessionReadyCount = fastReadiness?.ok ? cleanNumber(fastReadiness.readyGe35) : sessionReady.length;
   const fieldReady = sessionReady.filter((quote) => passesFieldGate(quote).ok);
   const ranked = rankCandidates(fieldReady).slice(0, tvLimit);
   let tvOk = 0;
@@ -167,8 +211,10 @@ async function main() {
   }
   const latestQuoteDate = latestDate(merged.map((quote) => quote.updatedAt || quote.quoteTimeRaw));
   const latestCandleDate = latestDate(merged.map((quote) => quote.latestCandleTime));
-  const ready = latest.ok && sessionReady.length >= minIntraday1mCandidates;
-  const issues = ready ? [] : [`latest quotes ok=${latest.ok}; session1m=${sessionReady.length}/${minIntraday1mCandidates}`];
+  const ready = latest.ok && sessionReadyCount >= minIntraday1mCandidates;
+  const issues = ready ? [] : [`latest quotes ok=${latest.ok}; session1m=${sessionReadyCount}/${minIntraday1mCandidates}`];
+  if (fastReadinessWarning) issues.push(`fast_readiness_unavailable=${fastReadinessWarning}`);
+  if (status.error) issues.push(`per_symbol_status_unavailable=${status.error}`);
   const warnings = fallbackUsed
     ? ["TV candle diagnostic fallback used; publish gate remains formal Supabase source-chain"]
     : [];
@@ -186,13 +232,13 @@ async function main() {
       retired: true,
       formal: false,
       source: "v_strategy3_quote_ready",
-      replacement: "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+      replacement: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
       reason: "Strategy3 formal gating no longer reads quote-ready view",
     },
     retiredDiagnostics: {
       v_strategy3_quote_ready: {
         status: "retired",
-        replacement: "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+        replacement: "fugle_quotes_latest+get_strategy3_intraday_1m_readiness+stock_daily_volume",
       },
     },
     latestQuoteRows: latest.quotes.length,
@@ -200,7 +246,11 @@ async function main() {
     chipExcludedCount: merged.length - chipReady.length,
     latestQuoteDate,
     latestCandleDate,
-    sessionReadyCount: sessionReady.length,
+    sessionReadyCount,
+    today1mSymbols: fastReadiness?.today1mSymbols ?? null,
+    today1mRows: fastReadiness?.today1mRows ?? null,
+    intradayReadinessSource: fastReadiness?.source || status.source || "",
+    intraday1mStaleSeconds: fastReadiness?.intraday1mStaleSeconds ?? null,
     minIntraday1mCandidates,
     minIntraday1mCandles,
     fieldGateReadyCount: fieldReady.length,
@@ -217,7 +267,7 @@ async function main() {
     status: ready ? "ready" : "not_ready",
     reason: ready
       ? `source ready; tvOk=${tvOk}/${ranked.length}`
-      : `latest quotes ok=${latest.ok}; session1m=${sessionReady.length}/${minIntraday1mCandidates}`,
+      : `latest quotes ok=${latest.ok}; session1m=${sessionReadyCount}/${minIntraday1mCandidates}`,
     examples,
   }, null, 2)}\n`);
 }

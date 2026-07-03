@@ -52,6 +52,12 @@ function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
 }
 
+function chunk(items = [], size = 50) {
+  const out = [];
+  for (let index = 0; index < items.length; index += size) out.push(items.slice(index, index + size));
+  return out;
+}
+
 function headers(extra = {}) {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   return {
@@ -97,6 +103,19 @@ async function fetchAllRows(table, params = {}, options = {}) {
     const rows = await fetchRows(table, { ...params, limit: PAGE_SIZE, offset }, options);
     out.push(...(Array.isArray(rows) ? rows : []));
     if (!Array.isArray(rows) || rows.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
+async function fetchStrategy3StatusRowsForCodes(codes = []) {
+  const normalized = [...new Set(codes.map(normalizeCode).filter((code) => /^\d{4}$/.test(code)))];
+  const out = [];
+  for (const group of chunk(normalized, Number(process.env.STRATEGY3_READY_SNAPSHOT_STATUS_GROUP_SIZE || 50))) {
+    const rows = await fetchAllRows("v_strategy3_intraday_1m_status", {
+      select: "symbol,code,latest_candle_time,today_candle_count,updated_at",
+      symbol: `in.(${group.join(",")})`,
+    }, { maxRows: group.length });
+    out.push(...rows);
   }
   return out;
 }
@@ -180,7 +199,7 @@ async function main() {
   const refreshedAt = new Date().toISOString();
 
   const statusRefresh = await rpc("refresh_strategy3_intraday_1m_status_latest", { p_trade_date: tradeDate });
-  const [quotes, statuses, capitals] = await Promise.all([
+  const [quotes, capitals] = await Promise.all([
     fetchAllRows("fugle_quotes_latest", {
       select: [
         "symbol",
@@ -202,18 +221,16 @@ async function main() {
       ].join(","),
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
-    fetchAllRows("v_strategy3_intraday_1m_status", {
-      select: "symbol,code,latest_candle_time,today_candle_count,updated_at",
-    }, { maxRows: 6000 }),
     fetchAllRows("stock_capital_latest", {
       select: "code,issued_shares,updated_at",
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
   ]);
+  const eligibleQuotes = quotes.filter(isEligibleQuote);
+  const statuses = await fetchStrategy3StatusRowsForCodes(eligibleQuotes.map((row) => row.symbol || row.code));
 
   const statusByCode = new Map(statuses.map((row) => [normalizeCode(row.symbol || row.code), row]));
   const capitalByCode = new Map(capitals.map((row) => [normalizeCode(row.code), row]));
-  const eligibleQuotes = quotes.filter(isEligibleQuote);
   const sessionReadyCount = eligibleQuotes.filter((row) => {
     const code = normalizeCode(row.symbol || row.code);
     return sessionReady(statusByCode.get(code));
