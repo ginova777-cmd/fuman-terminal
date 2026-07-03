@@ -1004,11 +1004,9 @@ function attachStrategy2PublishGate(payload, sourceGate) {
   const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
   const runSnapshotReady = strategy2RunSnapshotReady(payload);
   const publishAllowed = Boolean(
-    (
-      sourceGate?.publishAllowed === true && normalizedSourceCoverage.ready === true
-      || afterhoursHold && runSnapshotReady
-    )
-    && (payload.publishBlocked !== true || afterhoursHold && runSnapshotReady)
+    sourceGate?.publishAllowed === true
+    && normalizedSourceCoverage.ready === true
+    && payload.publishBlocked !== true
     && readinessCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
