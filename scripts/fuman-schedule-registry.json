@@ -60,17 +60,7 @@
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410"
     ],
-    "expectedDisabledTasks": [
-      "Fuman Daytrade Source Writer",
-      "Fuman Fugle Daytrade 0830 Warm Start",
-      "Fuman Fugle Daytrade 0845 Gate Check",
-      "Fuman Fugle Daytrade 0900 Opening Check",
-      "Fuman Fugle Daytrade 0910 Convergence Check",
-      "Fuman Fugle Daytrade Dedicated Source 0845 Evidence",
-      "Fuman Fugle Daytrade Dedicated Source 0900 Evidence",
-      "Fuman Fugle Daytrade Dedicated Source 0910 Evidence",
-      "Fuman Fugle Daytrade Dedicated Source Writer Watchdog Every Minute"
-    ],
+    "expectedDisabledTasks": [],
     "retiredTasks": [
       "Fuman Auto Main Release 1615",
       "Fuman Daily Health Summary 1545",
@@ -84,7 +74,16 @@
       "Fuman Strategy2 LINE Stop 1200",
       "Fuman Strategy2 Readiness Source 0800",
       "Fuman Terminal API Health",
-      "Fuman 即時雷達健檢 0910"
+      "Fuman 即時雷達健檢 0910",
+      "Fuman Daytrade Source Writer",
+      "Fuman Fugle Daytrade 0830 Warm Start",
+      "Fuman Fugle Daytrade 0845 Gate Check",
+      "Fuman Fugle Daytrade 0900 Opening Check",
+      "Fuman Fugle Daytrade 0910 Convergence Check",
+      "Fuman Fugle Daytrade Dedicated Source 0845 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source 0900 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source 0910 Evidence",
+      "Fuman Fugle Daytrade Dedicated Source Writer Watchdog Every Minute"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"
