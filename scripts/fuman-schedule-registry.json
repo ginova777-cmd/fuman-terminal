@@ -50,9 +50,11 @@
       "Fuman 權證走向 Watchdog 2050",
       "FumanTerminalProductionHealthMonitor",
       "Fuman Daytrade Source Writer 0600-1330",
+      "Fuman Daytrade Source Gate 0700",
       "Fuman Daytrade Source Gate 0845",
       "Fuman Daytrade Source Gate 0900",
       "Fuman Daytrade Source Gate 0910",
+      "Fuman Daytrade Source Gate 0935",
       "Fuman Fugle Daytrade 0830 Warm Start",
       "Fuman Fugle Daytrade 0845 Gate Check",
       "Fuman Fugle Daytrade 0900 Opening Check",
@@ -152,6 +154,9 @@
         0,
         267009
       ],
+      "Fuman Daytrade Source Gate 0700": [
+        0
+      ],
       "Fuman Daytrade Source Gate 0845": [
         0
       ],
@@ -159,6 +164,9 @@
         0
       ],
       "Fuman Daytrade Source Gate 0910": [
+        0
+      ],
+      "Fuman Daytrade Source Gate 0935": [
         0
       ],
       "Fuman Scorecard Daily Watchdog 1410": [
@@ -651,6 +659,16 @@
       ]
     },
     {
+      "taskName": "\\Fuman Daytrade Source Gate 0700",
+      "displayName": "Fuman Daytrade Source Gate 0700",
+      "description": "Read-only daytrade warm-start source gate checkpoint. Must not write strategy latest.",
+      "time": "07:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "07:00"
+      ]
+    },
+    {
       "taskName": "\\Fuman Daytrade Source Gate 0845",
       "displayName": "Fuman Daytrade Source Gate 0845",
       "description": "Read-only daytrade source gate checkpoint. Must not write strategy latest.",
@@ -678,6 +696,16 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "09:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Source Gate 0935",
+      "displayName": "Fuman Daytrade Source Gate 0935",
+      "description": "Read-only daytrade regular-session source gate checkpoint. Must not write strategy latest.",
+      "time": "09:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:35"
       ]
     },
     {
