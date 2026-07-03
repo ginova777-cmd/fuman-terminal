@@ -948,6 +948,7 @@ function sourceGateA(values) {
 }
 
 async function writeStatusAndScorecard(result) {
+  const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
   const sourceRow = {
     source_name: SOURCE_NAME,
     trade_date: taipeiDate(),
@@ -958,7 +959,6 @@ async function writeStatusAndScorecard(result) {
     payload: result.payload,
   };
   if (result.status === "ok") sourceRow.last_success_at = nowIso();
-  await supabaseUpsert("source_status", [sourceRow], "source_name");
 
   const scorecardRow = {
     trade_date: taipeiDate(),
@@ -992,7 +992,18 @@ async function writeStatusAndScorecard(result) {
     message: result.message,
     payload: result.payload,
   };
-  await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
+  try {
+    await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
+  } catch (error) {
+    nonFatalWriteErrors.push({
+      target: "fugle_daytrade_source_speed_scorecard",
+      message: error?.message || String(error),
+    });
+    result.payload.nonfatal_write_errors = nonFatalWriteErrors;
+    sourceRow.payload = result.payload;
+  }
+
+  await supabaseUpsert("source_status", [sourceRow], "source_name");
 }
 
 async function syncDailyVolumeMirror(dailyVolumeMap, priorityRows) {
@@ -1073,6 +1084,7 @@ async function tick() {
     fetchResult,
     state: nextState,
   });
+  result.payload.nonfatal_write_errors = fetchResult.errors || [];
   await writeStatusAndScorecard(result);
   return {
     ok: result.gateGrade === "A",
