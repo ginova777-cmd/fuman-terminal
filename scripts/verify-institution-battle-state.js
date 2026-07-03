@@ -197,7 +197,8 @@ function summarizeRun(row = {}) {
 async function fetchScannerHealth() {
   const result = await rest(buildPath("v_scanner_resource_health", {
     select: "strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at",
-    limit: 50,
+    strategy: "eq.Strategy5 / institution",
+    limit: 1,
   }));
   return result.rows.find((row) => String(row.strategy || "").toLowerCase() === "strategy5 / institution") || {};
 }
@@ -224,7 +225,9 @@ async function fetchLatestRunAndResults() {
 }
 
 function summarizeSourceHealth(institutionHealth = {}, chipHealthRows = [], chipLatestRows = [], chipLatestExactCount = 0) {
-  const latestTradeDate = normalizeDate(institutionHealth.latest_trade_date || chipLatestRows[0]?.trade_date || "");
+  const latestHealth = chipHealthRows.find((row) => String(row.source_name || "").toLowerCase() === "v_chip_flows_latest") || {};
+  const latestTradeDate = normalizeDate(institutionHealth.latest_trade_date || latestHealth.max_trade_date || chipLatestRows[0]?.trade_date || "");
+  const latestRows = cleanNumber(chipLatestExactCount) || cleanNumber(latestHealth.rows_on_max_date);
   return {
     latestTradeDate,
     latestAgeDays: dateAgeDays(latestTradeDate),
@@ -235,7 +238,7 @@ function summarizeSourceHealth(institutionHealth = {}, chipHealthRows = [], chip
     validAfterExclusionRows: cleanNumber(institutionHealth.valid_after_exclusion_rows),
     minRequiredRows: cleanNumber(institutionHealth.min_required_rows || MIN_SOURCE_ROWS),
     reason: institutionHealth.reason || "",
-    chipFlowsLatestExactCount: cleanNumber(chipLatestExactCount),
+    chipFlowsLatestExactCount: latestRows,
     chipHealthRows: chipHealthRows.map((row) => ({
       sourceName: row.source_name || "",
       tradeDate: row.trade_date || row.checked_trade_date || "",
@@ -320,7 +323,7 @@ async function main() {
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),
     safeRest(buildPath("v_institution_source_health", { select: "*", limit: 1 }), { timeoutMs: 15000 }),
     safeRest(buildPath("v_chip_flows_health", { select: "*", order: "source_name.asc", limit: 20 }), { timeoutMs: 15000 }),
-    safeRest(buildPath("v_chip_flows_latest", { select: "*", order: "trade_date.desc", limit: 2500 }), { count: true, timeoutMs: 20000 }),
+    safeRest(buildPath("v_chip_flows_latest", { select: "symbol,trade_date", limit: 1 }), { timeoutMs: 15000 }),
     fetchLatestRunAndResults(),
   ]);
 
