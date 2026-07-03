@@ -67,6 +67,24 @@ $receipt = [ordered]@{
 Write-JsonFile $receiptFile $receipt
 Write-JsonFile $datedReceiptFile $receipt
 
+$incidentGuard = Join-Path $ProjectRoot "scripts\supabase-incident-guard.js"
+if (Test-Path -LiteralPath $incidentGuard) {
+  $node = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (-not $node) {
+    $node = Get-Command node -ErrorAction Stop
+  }
+  & $node.Source $incidentGuard check "--class=scorecard" "--action=scorecard-daily-automation"
+  if ($LASTEXITCODE -ne 0) {
+    $receipt.status = "blocked"
+    $receipt.finishedAt = (Get-Date).ToString("o")
+    $receipt.exitCode = $LASTEXITCODE
+    $receipt.error = "supabase_rest_pool_incident_active"
+    Write-JsonFile $receiptFile $receipt
+    Write-JsonFile $datedReceiptFile $receipt
+    exit $LASTEXITCODE
+  }
+}
+
 try {
   Write-JsonFile $lockFile ([ordered]@{
     status = "running"

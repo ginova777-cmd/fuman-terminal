@@ -33,6 +33,24 @@ function run(label, args) {
   if (result.status !== 0) throw new Error(`${label} exited ${result.status || 1}`);
 }
 
+function assertSupabaseIncidentClear(action) {
+  const result = spawnSync(process.execPath, [
+    "scripts/supabase-incident-guard.js",
+    "check",
+    "--class=guard",
+    `--action=${action}`,
+  ], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+    windowsHide: true,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`Supabase incident guard blocked ${action}; wait for recovery or release-owner exit`);
+  }
+}
+
 function readJsonSafe(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -92,6 +110,7 @@ if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
 }
 
 try {
+  assertSupabaseIncidentClear("deploy-production-safe");
   acquireLock(releaseSha);
   run("verify-sync-hard-gate.js", [process.execPath, "scripts/verify-sync-hard-gate.js"]);
   run("verify-vercel-cost-guard.js", [process.execPath, "scripts/verify-vercel-cost-guard.js"]);

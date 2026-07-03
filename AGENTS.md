@@ -165,6 +165,57 @@ $env:FUMAN_RELEASE_SHA = git rev-parse HEAD
 
 The API unattended patrol is read-only with respect to Supabase, scanner cache, runtime source state, shared source, and Vercel deploys. It may write only its own scorecard/report/log files under `C:\fuman-runtime`.
 
+## Supabase REST / DB Pool Incident Mode
+
+When Supabase REST returns `522`, `retry_after`, `owner_action_required`, or direct DB pooler says it cannot check out a connection, treat it as a production source incident. Do not keep rerunning heavy verifiers to "see if it passed this time".
+
+First enter incident mode:
+
+```powershell
+npm run supabase:incident:enter -- --ttl-minutes=45 --reason="Supabase REST 522 / DB pool checkout timeout"
+```
+
+During active incident mode, these actions are forbidden unless the release owner explicitly clears the lock:
+
+- `guard:production`;
+- `monitor:production`;
+- `verify:production-api-freshness`;
+- `verify:api-unattended-scorecard`;
+- `snapshot:desktop`;
+- `scorecard:sync`;
+- battle verifiers across multiple strategies;
+- replay/backtest loops;
+- Supabase upsert/backfill/summary refresh jobs started by Codex.
+
+Before any heavy Supabase action, agents must run:
+
+```powershell
+npm run supabase:incident:check -- --class=guard --action=<action-name>
+```
+
+If it blocks, the agent must stop, preserve previous good latest, and report the blocked receipt under `C:\fuman-runtime\data\scan-receipts`. A blocked incident is not a strategy failure and must not be "fixed" by retry storms.
+
+Allowed while incident mode is active:
+
+- one release-owner light probe at a time;
+- UI display from already published good latest;
+- source writers that are already scheduled for market operation, if they use their own source contract and do not launch full verification fan-out;
+- writing blocked receipts and alerts.
+
+Terminal display must not go blank during incident mode. API/front-end behavior must be:
+
+- serve previous good latest when current Supabase read fails;
+- show stale/degraded/incident banner;
+- do not write empty results;
+- do not update latest pointers;
+- do not let each strategy fan out into its own heavy Supabase view calls on page load.
+
+Exit incident mode only after the release owner runs a single light probe successfully, then one guarded production monitor, then the needed strategy verifier one at a time:
+
+```powershell
+npm run supabase:incident:exit
+```
+
 Canonical command:
 
 ```powershell

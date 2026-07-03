@@ -30,6 +30,14 @@ $initDirs = @($logDir, $receiptDir, (Split-Path -Parent $lockFile))
 if ($syncReceiptDir) { $initDirs += $syncReceiptDir }
 New-Item -ItemType Directory -Force -Path $initDirs | Out-Null
 
+$incidentGuard = Join-Path $syncRoot "scripts\supabase-incident-guard.js"
+if (Test-Path -LiteralPath $incidentGuard) {
+  & $nodeExe $incidentGuard check "--class=snapshot" "--action=full-scan"
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
+
 function Write-ScanLog($message) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $message
   Write-Host $line

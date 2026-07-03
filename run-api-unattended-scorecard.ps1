@@ -49,6 +49,18 @@ $env:FUMAN_API_UNATTENDED_SCORECARD_FILE = $jsonOut
 $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdOut
 $env:FUMAN_RELEASE_SHA = $ReleaseSha
 
+$incidentGuard = Join-Path $repoRoot "scripts\supabase-incident-guard.js"
+if (Test-Path -LiteralPath $incidentGuard) {
+  $node = Get-Command node.exe -ErrorAction SilentlyContinue
+  if (-not $node) {
+    $node = Get-Command node -ErrorAction Stop
+  }
+  & $node.Source $incidentGuard check "--class=patrol" "--action=api-unattended-scorecard"
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
+
 $scriptArgs = @(
   "run",
   "verify:api-unattended-scorecard",
