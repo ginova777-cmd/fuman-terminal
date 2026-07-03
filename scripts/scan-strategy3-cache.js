@@ -530,6 +530,33 @@ function strategy3PublishAllowed(output, status = "complete") {
 function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const publishAllowed = strategy3PublishAllowed(output, status);
+  const sourceCoverage = output.sourceCoverage || {};
+  const intradayDrift = Array.isArray(output.sourceDriftHealth?.checks)
+    ? output.sourceDriftHealth.checks.find((item) => item?.source === "v_strategy3_intraday_1m_status")
+    : null;
+  const intradayDriftReady = intradayDrift?.status === "ready" && cleanNumber(intradayDrift.rowCount) >= cleanNumber(intradayDrift.minRequired || 1000);
+  const intradayExpected = intradayDriftReady ? cleanNumber(intradayDrift.minRequired || 1000) : cleanNumber(sourceCoverage.active_symbols || sourceCoverage.activeSymbols);
+  const latestCandleMinute = candleMinutes({ candleTime: sourceCoverage.latest_candle_time || sourceCoverage.latestCandleTime });
+  const staleSeconds = cleanNumber(sourceCoverage.intraday_1m_stale_seconds ?? sourceCoverage.intraday1mStaleSeconds);
+  const afterSessionFinalCandle = latestCandleMinute != null && latestCandleMinute >= STRATEGY3_SESSION_LATEST_MINUTE;
+  const intradayReadiness = {
+    ...sourceCoverage,
+    expected: intradayExpected,
+    expected_symbols: intradayExpected,
+    today_1m_symbols: intradayDriftReady
+      ? Math.max(cleanNumber(sourceCoverage.today_1m_symbols ?? sourceCoverage.today1mSymbols), cleanNumber(intradayDrift.rowCount))
+      : cleanNumber(sourceCoverage.today_1m_symbols ?? sourceCoverage.today1mSymbols),
+    ready_ge_35: cleanNumber(sourceCoverage.ready_ge_35 ?? sourceCoverage.readyGe35),
+    max_stale_seconds: afterSessionFinalCandle ? Math.max(staleSeconds, 120) : 120,
+    stalePolicy: afterSessionFinalCandle ? "after_session_final_candle" : "intraday_live",
+  };
+  const maReadiness = {
+    ...sourceCoverage,
+    expected: intradayExpected,
+    expected_symbols: intradayExpected,
+    ready_ma20_continuous: cleanNumber(sourceCoverage.ready_ma20_continuous ?? sourceCoverage.ready_ma20_continuous_symbols),
+    ready_ma35_continuous: cleanNumber(sourceCoverage.ready_ma35_continuous ?? sourceCoverage.ready_ma35_continuous_symbols ?? sourceCoverage.ready_ge_35 ?? sourceCoverage.readyGe35),
+  };
   return buildRunTimeSourceSnapshotFields({
     strategy: "strategy3",
     runId,
@@ -550,9 +577,9 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
       reason: output.sourceCoverage?.reason || (output.sourceHealth?.issues || []).join("; "),
       checkedAt: output.sourceCoverage?.source_status_updated_at || scanTime,
     },
-    quoteCoverage: output.sourceCoverage || {},
-    intraday1mReadiness: output.sourceCoverage || {},
-    maReadiness: output.sourceCoverage || {},
+    quoteCoverage: sourceCoverage,
+    intraday1mReadiness: intradayReadiness,
+    maReadiness,
     preopenFutoptDailyReadiness: {
       status: "ready",
       ok: true,

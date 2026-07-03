@@ -259,7 +259,74 @@ function notRequiredSourceEvidence(reason) {
   return { ok: true, status: "not_required", reason };
 }
 
-function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiState, expectedTotal, scannedCount, resultCount }) {
+const STRATEGY5_FIELD_COMPLETENESS_CONTRACT = "strategy5-field-completeness-20260703";
+const STRATEGY5_REQUIRED_FIELD_GROUPS = {
+  code: ["code"],
+  name: ["name"],
+  price: ["close", "price"],
+  changePercent: ["percent", "changePercent", "change_percent"],
+  volume: ["tradeVolume", "volume", "trade_volume"],
+  score: ["score"],
+  reason: ["reason", "activeMatch.reason", "matches.0.reason"],
+  signals: ["matches", "signals"],
+};
+
+function strategy5DeepValue(object, key) {
+  const parts = String(key || "").split(".").filter(Boolean);
+  let cursor = object;
+  for (const part of parts) {
+    if (Array.isArray(cursor) && /^\d+$/.test(part)) cursor = cursor[Number(part)];
+    else if (cursor && typeof cursor === "object") cursor = cursor[part];
+    else return undefined;
+  }
+  return cursor;
+}
+
+function strategy5HasFieldValue(row, fields) {
+  return fields.some((field) => {
+    const value = strategy5DeepValue(row, field);
+    if (value === null || value === undefined) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  });
+}
+
+function buildStrategy5FieldCompleteness(rows) {
+  const checkedRows = Array.isArray(rows) ? rows : [];
+  const blankCounts = Object.fromEntries(Object.keys(STRATEGY5_REQUIRED_FIELD_GROUPS).map((key) => [key, 0]));
+  const sampleMissingRows = [];
+  checkedRows.forEach((row, index) => {
+    const missingGroups = [];
+    for (const [group, fields] of Object.entries(STRATEGY5_REQUIRED_FIELD_GROUPS)) {
+      if (!strategy5HasFieldValue(row, fields)) {
+        blankCounts[group] += 1;
+        missingGroups.push(group);
+      }
+    }
+    if (missingGroups.length && sampleMissingRows.length < 5) {
+      sampleMissingRows.push({
+        index,
+        code: String(row?.code || "").trim(),
+        name: String(row?.name || "").trim(),
+        missingGroups,
+      });
+    }
+  });
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  const denominator = Math.max(1, checkedRows.length * Object.keys(STRATEGY5_REQUIRED_FIELD_GROUPS).length);
+  return {
+    contract: STRATEGY5_FIELD_COMPLETENESS_CONTRACT,
+    requiredFields: STRATEGY5_REQUIRED_FIELD_GROUPS,
+    rowsChecked: checkedRows.length,
+    blankCounts,
+    blankTotal,
+    blankRate: Number((blankTotal / denominator).toFixed(6)),
+    sampleMissingRows,
+  };
+}
+
+function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiState, expectedTotal, scannedCount, resultCount, fieldCompleteness = {} }) {
   const persisted = runTimeSourceSnapshotResponseFields(run?.payload || {});
   const persistedStatus = persisted.source_status_at_run && typeof persisted.source_status_at_run === "object"
     ? persisted.source_status_at_run
@@ -288,6 +355,14 @@ function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiStat
     readbackCount: cleanNumber(run?.readback_count),
     writeBudget: apiState.writeBudget,
     retentionOk: apiState.retention.ok,
+    fieldCompletenessContract: fieldCompleteness.contract || STRATEGY5_FIELD_COMPLETENESS_CONTRACT,
+    requiredFields: fieldCompleteness.requiredFields || STRATEGY5_REQUIRED_FIELD_GROUPS,
+    rowsChecked: cleanNumber(fieldCompleteness.rowsChecked),
+    blankCounts: fieldCompleteness.blankCounts || {},
+    blankTotal: cleanNumber(fieldCompleteness.blankTotal),
+    blankRate: cleanNumber(fieldCompleteness.blankRate),
+    sampleMissingRows: Array.isArray(fieldCompleteness.sampleMissingRows) ? fieldCompleteness.sampleMissingRows : [],
+    rawKeepDays: RAW_RETENTION_DAYS,
     qualityStatus: run?.quality_status || persistedQuality.qualityStatus || "",
   };
   const snapshot = {
@@ -413,12 +488,17 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
     writeBudget: {
       ok: writeBudgetOk,
       budgetName: "strategy5-daily-complete-run",
+      limit: WRITE_BUDGET_LIMIT_ROWS,
       limitRows: WRITE_BUDGET_LIMIT_ROWS,
+      used: estimatedRowsWritten,
       estimatedRowsWritten,
+      writesCompleted: estimatedRowsWritten,
       scannedCount: cleanNumber(scannedCount),
       resultCount: cleanNumber(resultCount),
       runRows: 1,
+      remaining: Math.max(0, WRITE_BUDGET_LIMIT_ROWS - estimatedRowsWritten),
       remainingRows: Math.max(0, WRITE_BUDGET_LIMIT_ROWS - estimatedRowsWritten),
+      finalStatus: writeBudgetOk ? "complete" : "blocked",
       overBudget: !writeBudgetOk,
       reason: writeBudgetOk ? "within_strategy5_write_budget" : "strategy5_write_budget_exceeded",
     },
@@ -591,6 +671,7 @@ function buildPayload(rows, run, options = {}) {
     scannedCount,
     returnedCount: matches.length,
   });
+  const fieldCompleteness = buildStrategy5FieldCompleteness(matches);
   const runTimeEvidence = strategy5RunTimeSourceEvidence({
     run,
     sourceHealth,
@@ -599,6 +680,7 @@ function buildPayload(rows, run, options = {}) {
     expectedTotal,
     scannedCount,
     resultCount,
+    fieldCompleteness,
   });
   return {
     ok: true,
@@ -623,6 +705,7 @@ function buildPayload(rows, run, options = {}) {
     writeBudget: apiState.writeBudget,
     retentionOk: apiState.retention.ok,
     retention: apiState.retention,
+    rawKeepDays: RAW_RETENTION_DAYS,
     marketSession: apiState.marketSession,
     unattended: apiState.unattended,
     schedule: run?.payload?.schedule || "daily complete scan",
