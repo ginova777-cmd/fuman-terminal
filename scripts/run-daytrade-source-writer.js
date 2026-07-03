@@ -341,6 +341,8 @@ function readWriterState() {
     selfHealCount: Math.max(0, Number(state.selfHealCount || 0)),
     lastSelfHealAt: state.lastSelfHealAt || "",
     lastSelfHealReason: state.lastSelfHealReason || "",
+    lastSelfHealAction: state.lastSelfHealAction || "",
+    intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
   };
 }
 
