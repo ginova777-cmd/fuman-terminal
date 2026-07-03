@@ -16,6 +16,7 @@ const RUNS_TABLE = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_b
 const RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 const READY_STATUS_VIEW = process.env.SUPABASE_STRATEGY1_READY_STATUS_VIEW || "v_strategy1_ready_status";
 const STRATEGY1_GATE = "complete-run-authoritative+decision-ready";
+const SUPABASE_READ_TIMEOUT_MS = Math.max(1000, Number(process.env.STRATEGY1_SUPABASE_READ_TIMEOUT_MS || 9000));
 
 function taipeiDateKey(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -93,20 +94,27 @@ function parseRequestOptions(request) {
 }
 
 async function fetchRowsFrom(table, query) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 180)}`.trim());
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUPABASE_READ_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 180)}`.trim());
+    }
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows : [];
+  } finally {
+    clearTimeout(timeout);
   }
-  const rows = await response.json();
-  return Array.isArray(rows) ? rows : [];
 }
 
 function normalizeDecision(payload = {}, row = {}) {
