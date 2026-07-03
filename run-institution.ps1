@@ -19,10 +19,11 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $log = Join-Path $logDir ("institution-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+$blockedReceiptPath = Join-Path $receiptDir "institution-blocked-latest.json"
 $scanStartedAt = (Get-Date).ToString("o")
 $script:institutionDiagnosticWarnings = New-Object System.Collections.Generic.List[string]
 
-function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
   $receipt = [ordered]@{
     strategy = "institution"
     label = "institution raw refresh"
@@ -37,14 +38,41 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
+    fallbackUsed = $false
     runId = $RunId
     payloadPath = "supabase:institution_scan_results"
+    publishAllowed = $Complete -and -not $PreservePreviousGood
+    latestOverwriteAllowed = $Complete -and -not $PreservePreviousGood
+    degradedBlocksLatest = [bool]$PreservePreviousGood
+    preservePreviousGood = [bool]$PreservePreviousGood
+    blockedReceiptPath = if ($PreservePreviousGood) { $blockedReceiptPath } else { "" }
     warnings = @($Warnings)
     diagnosticWarnings = @($script:institutionDiagnosticWarnings.ToArray())
     blockingReason = $BlockingReason
     log = $log
   }
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "institution.json") -Encoding utf8
+}
+
+function Write-InstitutionBlockedReceipt($Reason, $RunId = "", $Count = 0) {
+  [ordered]@{
+    strategy = "institution"
+    label = "institution blocked publish"
+    tier = "critical"
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    status = "blocked"
+    exitCode = 0
+    publishAllowed = $false
+    latestOverwriteAllowed = $false
+    degradedBlocksLatest = $true
+    preservePreviousGood = $true
+    preservedRunId = $RunId
+    preservedCount = $Count
+    reason = $Reason
+    payloadPath = "supabase:institution_scan_results"
+    log = $log
+  } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $blockedReceiptPath -Encoding utf8
 }
 
 function Invoke-NodeScan($scriptPath, $label) {
@@ -147,6 +175,8 @@ if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
   "Institution source gate blocked new publish; preserving latest complete run. $reason" >> $log
   $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
   Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $reason
+  Write-InstitutionBlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count)
+  Write-InstitutionReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
   Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution resource health blocked new publish; preserved latest complete run" -Detail @{ reason = $reason; log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
   exit 0
 }
@@ -159,6 +189,8 @@ if ($scanExit -ne 0) {
     try {
       $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
       Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "source coverage insufficient; preserved latest complete run"
+      Write-InstitutionBlockedReceipt "source coverage insufficient; preserved latest complete run" ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count)
+      Write-InstitutionReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("source coverage insufficient; preserved latest complete run") "source coverage insufficient; preserved latest complete run" $true
       Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution source coverage insufficient; preserved latest complete run" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
       "Institution deferred complete scan end; preserved runId=$($verifiedPayload.runId) count=$($verifiedPayload.count)" >> $log
       exit 0

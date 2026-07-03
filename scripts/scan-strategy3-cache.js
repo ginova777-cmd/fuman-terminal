@@ -116,7 +116,11 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     warnings.push(`volumeAverageCount ${volumeAverageMap.size} below ${MIN_VOLUME_AVERAGE_COUNT}; volume ratio is advisory for TV-only strategy3`);
   }
   if (STRATEGY3_REQUIRE_INTRADAY_1M && intradayReadyCount < minIntradayReadyCount) {
-    issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}`);
+    if (driftIntradayReady) {
+      warnings.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}; accepted by v_strategy3_intraday_1m_status rows=${cleanNumber(driftIntradayStatus?.rowCount)}`);
+    } else {
+      issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}`);
+    }
   }
   if (STRATEGY3_REQUIRE_INTRADAY_1M && latestCandleMinute != null && latestCandleMinute < STRATEGY3_SESSION_LATEST_MINUTE) {
     issues.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}`);
@@ -132,7 +136,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     stockUniverseCount: stocks.length,
     intraday1mReadyCount: intradayReadyCount,
     minIntraday1mCandidates: STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
-    minIntraday1mReadyCount,
+    minIntraday1mReadyCount: minIntradayReadyCount,
     minIntraday1mCoverage: STRATEGY3_MIN_INTRADAY_1M_COVERAGE,
     minIntraday1mCandles: STRATEGY3_MIN_INTRADAY_1M_CANDLES,
     latestCandleTime,
@@ -303,24 +307,32 @@ async function fetchSupabaseRest(pathname, options = {}) {
   }
 }
 
+async function fetchSupabaseCountAtLeast(pathname, minRequired, options = {}) {
+  const withCount = await fetchSupabaseRest(pathname, { ...options, count: true }).catch((error) => ({ error }));
+  if (!withCount.error) return cleanNumber(withCount.exactCount ?? withCount.rows?.length);
+  const separator = pathname.includes("?") ? "&" : "?";
+  const limitedPath = `${pathname}${separator}limit=${Math.max(1, cleanNumber(minRequired))}`;
+  const limited = await fetchSupabaseRest(limitedPath, { ...options, count: false });
+  return Math.max(cleanNumber(limited.rows?.length), limited.rows?.length || 0);
+}
 async function fetchStrategy3SourceDriftHealth() {
   const checks = [];
   const add = (item) => checks.push(item);
   try {
-    const result = await fetchSupabaseRest("strategy3_ready_snapshot?select=symbol&limit=1", { count: true });
-    add({ source: "strategy3_ready_snapshot", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS ? "ready" : "failed" });
+    const rowCount = await fetchSupabaseCountAtLeast("strategy3_ready_snapshot?select=symbol", STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS);
+    add({ source: "strategy3_ready_snapshot", rowCount, minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS ? "ready" : "failed" });
   } catch (error) {
     add({ source: "strategy3_ready_snapshot", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_SNAPSHOT_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
-    const result = await fetchSupabaseRest("fugle_quotes_latest?select=symbol&limit=1", { count: true });
-    add({ source: "fugle_quotes_latest", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_FUGLE_ROWS ? "ready" : "failed" });
+    const rowCount = await fetchSupabaseCountAtLeast("fugle_quotes_latest?select=symbol", STRATEGY3_DRIFT_MIN_FUGLE_ROWS);
+    add({ source: "fugle_quotes_latest", rowCount, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_FUGLE_ROWS ? "ready" : "failed" });
   } catch (error) {
     add({ source: "fugle_quotes_latest", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
-    const result = await fetchSupabaseRest("v_strategy3_intraday_1m_status?select=symbol&limit=1", { count: true });
-    add({ source: "v_strategy3_intraday_1m_status", rowCount: cleanNumber(result.exactCount), minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: cleanNumber(result.exactCount) >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
+    const rowCount = await fetchSupabaseCountAtLeast("v_strategy3_intraday_1m_status?select=symbol", STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, { timeoutMs: 30000 });
+    add({ source: "v_strategy3_intraday_1m_status", rowCount, minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
   } catch (error) {
     add({ source: "v_strategy3_intraday_1m_status", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: "failed", reason: error?.message || String(error) });
   }
@@ -1661,4 +1673,7 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
 

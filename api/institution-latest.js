@@ -15,6 +15,16 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const LATEST_RUN_VIEW = process.env.INSTITUTION_SUPABASE_LATEST_RUN_VIEW || "v_institution_latest_complete_run";
 const INSTITUTION_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
+const INSTITUTION_REQUIRED_FIELDS = [
+  "code",
+  "name",
+  "foreignNet",
+  "trustNet",
+  "dealerNet",
+  "totalNet",
+  "institutionTotalNet",
+];
+const INSTITUTION_RAW_KEEP_DAYS = Number(process.env.INSTITUTION_RAW_KEEP_DAYS || 14);
 
 function setDesktopSnapshotCache(response) {
   response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
@@ -160,6 +170,40 @@ function normalizeRow(row) {
   };
 }
 
+function hasFieldValue(row, field) {
+  const value = row?.[field];
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  return true;
+}
+
+function buildFieldCompleteness(rows) {
+  const checkedRows = Array.isArray(rows) ? rows : [];
+  const blankCounts = Object.fromEntries(INSTITUTION_REQUIRED_FIELDS.map((field) => [field, 0]));
+  for (const row of checkedRows) {
+    for (const field of INSTITUTION_REQUIRED_FIELDS) {
+      if (!hasFieldValue(row, field)) blankCounts[field] += 1;
+    }
+  }
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  const denominator = checkedRows.length * INSTITUTION_REQUIRED_FIELDS.length;
+  return {
+    requiredFields: INSTITUTION_REQUIRED_FIELDS,
+    rowsChecked: checkedRows.length,
+    blankCounts,
+    blankTotal,
+    blankRate: denominator > 0 ? Number((blankTotal / denominator).toFixed(6)) : 0,
+    sampleMissingRows: checkedRows
+      .map((row) => ({
+        code: String(row.code || ""),
+        missingFields: INSTITUTION_REQUIRED_FIELDS.filter((field) => !hasFieldValue(row, field)),
+      }))
+      .filter((row) => row.missingFields.length)
+      .slice(0, 10),
+  };
+}
+
 function normalizeSourceHealth(row = {}) {
   return {
     coverageStatus: String(row.coverage_status || row.coverageStatus || "").toLowerCase(),
@@ -198,6 +242,7 @@ function buildPayload(rows, run, options = {}) {
     .map(normalizeRow);
   const outputRows = options.smallPayload ? sorted.slice(0, options.limit || 80) : sorted;
   const data = Object.fromEntries(outputRows.map((row) => [row.code, row]).filter(([code]) => code));
+  const fieldCompleteness = buildFieldCompleteness(sorted);
   const scanDate = String(run?.scan_date || rows[0]?.scan_date || "").replace(/-/g, "");
   const expectedTotal = cleanNumber(run?.expected_total);
   const scannedCount = cleanNumber(run?.scanned_count);
@@ -247,11 +292,24 @@ function buildPayload(rows, run, options = {}) {
       status: sourceCoverageReady ? "allow" : "blocked",
       allowed: sourceCoverageReady,
       reason: sourceCoverageReady ? "institution source coverage ready" : "preserve previous complete run; source coverage degraded",
+      limit: 1,
+      used: sourceCoverageReady ? 1 : 0,
+      remaining: sourceCoverageReady ? 0 : 1,
+      finalStatus: sourceCoverageReady ? "allow" : "blocked",
+      scope: "institution_complete_run_publish",
     },
     retentionOk: true,
+    rawKeepDays: INSTITUTION_RAW_KEEP_DAYS,
+    ...fieldCompleteness,
+    fieldCompleteness,
     issues,
     warnings,
     publishAllowed: sourceCoverageReady,
+    latestOverwriteAllowed: sourceCoverageReady,
+    degradedBlocksLatest: !sourceCoverageReady,
+    preservePreviousGood: !sourceCoverageReady,
+    blockedReceipt: run?.payload?.blockedReceipt || null,
+    blockedReceiptPath: run?.payload?.blockedReceiptPath || "",
     canvas: Boolean(options.canvas),
     compact: Boolean(options.compact),
     data,

@@ -270,6 +270,16 @@ async function main() {
     usedDate: api.body?.usedDate || "",
     cacheSource: api.body?.cacheSource || api.body?.source || "",
     dataContractSource: api.body?.dataContractSource || "",
+    requiredFields: api.body?.requiredFields || null,
+    rowsChecked: cleanNumber(api.body?.rowsChecked),
+    blankCounts: api.body?.blankCounts || null,
+    blankRate: cleanNumber(api.body?.blankRate),
+    rawKeepDays: cleanNumber(api.body?.rawKeepDays),
+    writeBudget: api.body?.writeBudget || null,
+    latestOverwriteAllowed: api.body?.latestOverwriteAllowed,
+    degradedBlocksLatest: api.body?.degradedBlocksLatest,
+    preservePreviousGood: api.body?.preservePreviousGood,
+    blockedReceiptPath: api.body?.blockedReceiptPath || "",
     transport: api.body?.transport || null,
     error: api.body?.error || api.body?.detail || "",
   };
@@ -277,6 +287,34 @@ async function main() {
   pushIssue(issues, Boolean(details.api.runId), "institution_api_missing_run_id");
   pushIssue(issues, details.api.count >= MIN_RESULT_ROWS, "institution_api_count_below_min", { count: details.api.count, min: MIN_RESULT_ROWS });
   pushIssue(issues, details.api.returnedCount >= MIN_RESULT_ROWS, "institution_api_returned_count_empty", details.api);
+  pushIssue(issues, Array.isArray(details.api.requiredFields) && details.api.requiredFields.length >= 6, "institution_api_required_fields_missing", {
+    requiredFields: details.api.requiredFields,
+  });
+  pushIssue(issues, details.api.rowsChecked === details.api.count, "institution_api_rows_checked_mismatch", {
+    rowsChecked: details.api.rowsChecked,
+    count: details.api.count,
+  });
+  pushIssue(issues, details.api.blankCounts && Object.values(details.api.blankCounts).every((value) => cleanNumber(value) === 0), "institution_api_blank_counts_nonzero_or_missing", {
+    blankCounts: details.api.blankCounts,
+  });
+  pushIssue(issues, details.api.blankRate === 0, "institution_api_blank_rate_nonzero", {
+    blankRate: details.api.blankRate,
+  });
+  pushIssue(issues, details.api.rawKeepDays > 0, "institution_api_raw_keep_days_missing", {
+    rawKeepDays: details.api.rawKeepDays,
+  });
+  pushIssue(issues, details.api.writeBudget?.finalStatus === "allow", "institution_api_write_budget_final_status_missing", {
+    writeBudget: details.api.writeBudget,
+  });
+  pushIssue(issues, details.api.latestOverwriteAllowed === true, "institution_api_latest_overwrite_not_allowed_for_ready_run", {
+    latestOverwriteAllowed: details.api.latestOverwriteAllowed,
+  });
+  pushIssue(issues, details.api.degradedBlocksLatest === false, "institution_api_degraded_blocks_latest_bad_for_ready_run", {
+    degradedBlocksLatest: details.api.degradedBlocksLatest,
+  });
+  pushIssue(issues, details.api.preservePreviousGood === false, "institution_api_preserve_previous_good_bad_for_ready_run", {
+    preservePreviousGood: details.api.preservePreviousGood,
+  });
 
   const [scannerHealth, institutionHealthResult, chipHealthResult, chipLatestResult, latestRun] = await Promise.all([
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),

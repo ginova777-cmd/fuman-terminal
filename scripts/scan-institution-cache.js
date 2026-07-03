@@ -30,6 +30,16 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const INSTITUTION_RUNS_TABLE = process.env.INSTITUTION_SUPABASE_RUNS_TABLE || "institution_scan_runs";
 const INSTITUTION_RESULTS_TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const INSTITUTION_API_ONLY = true;
+const INSTITUTION_RAW_KEEP_DAYS = Number(process.env.INSTITUTION_RAW_KEEP_DAYS || 14);
+const INSTITUTION_REQUIRED_FIELDS = [
+  "code",
+  "name",
+  "foreignNet",
+  "trustNet",
+  "dealerNet",
+  "totalNet",
+  "institutionTotalNet",
+];
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -190,11 +200,46 @@ function buildInstitutionWriteBudget(publishAllowed, reason) {
   return {
     allowed: Boolean(publishAllowed),
     status: publishAllowed ? "allow" : "blocked",
+    finalStatus: publishAllowed ? "allow" : "blocked",
     limit: 1,
     used: publishAllowed ? 1 : 0,
     remaining: publishAllowed ? 0 : 1,
     scope: "institution_complete_run_publish",
     reason,
+  };
+}
+
+function hasFieldValue(row, field) {
+  const value = row?.[field];
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  return true;
+}
+
+function buildFieldCompleteness(rows) {
+  const checkedRows = Array.isArray(rows) ? rows : [];
+  const blankCounts = Object.fromEntries(INSTITUTION_REQUIRED_FIELDS.map((field) => [field, 0]));
+  for (const row of checkedRows) {
+    for (const field of INSTITUTION_REQUIRED_FIELDS) {
+      if (!hasFieldValue(row, field)) blankCounts[field] += 1;
+    }
+  }
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  const denominator = checkedRows.length * INSTITUTION_REQUIRED_FIELDS.length;
+  return {
+    requiredFields: INSTITUTION_REQUIRED_FIELDS,
+    rowsChecked: checkedRows.length,
+    blankCounts,
+    blankTotal,
+    blankRate: denominator > 0 ? Number((blankTotal / denominator).toFixed(6)) : 0,
+    sampleMissingRows: checkedRows
+      .map((row) => ({
+        code: String(row.code || ""),
+        missingFields: INSTITUTION_REQUIRED_FIELDS.filter((field) => !hasFieldValue(row, field)),
+      }))
+      .filter((row) => row.missingFields.length)
+      .slice(0, 10),
   };
 }
 
@@ -254,6 +299,7 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
   const fallbackUsed = Boolean(output.fallbackUsed);
   const fallbackScope = Array.isArray(output.fallbackScope) ? output.fallbackScope : [];
   const fallbackDetails = Array.isArray(output.fallbackDetails) ? output.fallbackDetails : [];
+  const fieldCompleteness = output.fieldCompleteness || buildFieldCompleteness(Object.values(output.data || {}));
   return {
     run_id: runId,
     strategy: "institution",
@@ -292,6 +338,14 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
         preservePreviousGood: !publishAllowed,
         writeBudget,
         retentionOk: true,
+        rawKeepDays: INSTITUTION_RAW_KEEP_DAYS,
+        requiredFields: fieldCompleteness.requiredFields,
+        rowsChecked: fieldCompleteness.rowsChecked,
+        blankCounts: fieldCompleteness.blankCounts,
+        blankTotal: fieldCompleteness.blankTotal,
+        blankRate: fieldCompleteness.blankRate,
+        sampleMissingRows: fieldCompleteness.sampleMissingRows,
+        alertReceipt: output.alertReceipt || null,
         fallbackUsed,
         fallbackScope,
         fallbackAllowed: fallbackUsed ? output.fallbackAllowed === true : true,
@@ -306,6 +360,15 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
       sourceStatusAtRun,
       writeBudget,
       retentionOk: true,
+      rawKeepDays: INSTITUTION_RAW_KEEP_DAYS,
+      requiredFields: fieldCompleteness.requiredFields,
+      rowsChecked: fieldCompleteness.rowsChecked,
+      blankCounts: fieldCompleteness.blankCounts,
+      blankTotal: fieldCompleteness.blankTotal,
+      blankRate: fieldCompleteness.blankRate,
+      sampleMissingRows: fieldCompleteness.sampleMissingRows,
+      fieldCompleteness,
+      alertReceipt: output.alertReceipt || null,
       fallbackUsed,
       fallbackScope,
       fallbackAllowed: fallbackUsed ? output.fallbackAllowed === true : true,
@@ -650,6 +713,14 @@ async function main() {
     count,
     data,
   };
+  output.fieldCompleteness = buildFieldCompleteness(Object.values(data));
+  output.requiredFields = output.fieldCompleteness.requiredFields;
+  output.rowsChecked = output.fieldCompleteness.rowsChecked;
+  output.blankCounts = output.fieldCompleteness.blankCounts;
+  output.blankTotal = output.fieldCompleteness.blankTotal;
+  output.blankRate = output.fieldCompleteness.blankRate;
+  output.sampleMissingRows = output.fieldCompleteness.sampleMissingRows;
+  output.rawKeepDays = INSTITUTION_RAW_KEEP_DAYS;
   output.runId = institutionRunIdFromOutput(output);
   output.complete = true;
   output.schemaVersion = output.schemaVersion || "institution-run-id-complete-v1";
