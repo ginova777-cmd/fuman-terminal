@@ -73,15 +73,22 @@ function isEmptySnapshotRestore(payload = {}) {
 function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
-    const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 60 : 2000)));
+    const query = request.query && typeof request.query === "object" ? request.query : {};
+    const param = (key) => {
+      const value = url.searchParams.get(key);
+      return value === null || value === "" ? query[key] : value;
+    };
+    const canvas = param("canvas") === "1" || param("compact") === "1";
+    const live = param("live") === "1" || param("verify") === "1";
+    const noSnapshot = live || param("noSnapshot") === "1" || param("snapshot") === "0";
+    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(param("limit")) || (canvas ? 60 : 2000)));
     const snapshotFriendly = canvas
-      || url.searchParams.get("snapshotBuild") === "1"
-      || url.searchParams.get("fastBundle") === "1"
-      || url.searchParams.get("shell") === "1";
-    return { canvas, limit, snapshotFriendly };
+      || param("snapshotBuild") === "1"
+      || param("fastBundle") === "1"
+      || param("shell") === "1";
+    return { canvas, live, noSnapshot, limit, snapshotFriendly };
   } catch {
-    return { canvas: false, limit: 2000, snapshotFriendly: false };
+    return { canvas: false, live: false, noSnapshot: false, limit: 2000, snapshotFriendly: false };
   }
 }
 
@@ -293,6 +300,33 @@ function strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scanned
   };
 }
 
+function strategy1RunQuality(run = {}, values = {}) {
+  const existing = run?.payload?.run_quality_at_publish && typeof run.payload.run_quality_at_publish === "object"
+    ? run.payload.run_quality_at_publish
+    : {};
+  const observationOnlyFallbackUsed = values.observationOnlyFallbackUsed === true;
+  const publishAllowed = !observationOnlyFallbackUsed && values.decisionReady === true;
+  return {
+    ...existing,
+    publishAllowed,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: true,
+    fallbackDetails: [],
+    observationOnlyFallbackUsed,
+    observationOnlyFallbackScope: values.observationOnlyFallbackScope || [],
+    fallbackFormalSignalAllowed: false,
+    formalEntryAllowed: publishAllowed,
+    preservePreviousGood: observationOnlyFallbackUsed,
+    degradedBlocksLatest: observationOnlyFallbackUsed,
+    resultCount: values.resultCount,
+    expectedTotal: values.expectedTotal,
+    scannedCount: values.scannedCount,
+    readbackCount: values.resultCount,
+    reason: observationOnlyFallbackUsed ? values.reason : existing.reason || "",
+  };
+}
+
 function buildPayload(rows, run, readyStatus, options = {}) {
   const carryForward2130 = Boolean(options.previous2130CarryForward || run.__previous2130CarryForward);
   const normalized = rows
@@ -321,28 +355,48 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   const reason = carryForward2130
     ? carryForwardReason(readyStatus, usedDate)
     : readyStatus?.decision_ready === true ? "decision-ready" : decisionReadyError(readyStatus);
-  const fallbackUsed = Boolean(carryForward2130 || (decisionPending && options.pendingCandidateDisplay));
-  const fallbackScope = carryForward2130 ? ["previous_2130_complete_run"] : fallbackUsed ? ["decision_pending_display"] : [];
-  const fallbackDetails = fallbackUsed
+  const observationOnlyFallbackUsed = Boolean(carryForward2130 || (decisionPending && options.pendingCandidateDisplay));
+  const observationOnlyFallbackScope = carryForward2130
+    ? ["previous_2130_complete_run_observation"]
+    : observationOnlyFallbackUsed ? ["decision_pending_display_observation"] : [];
+  const observationOnlyFallbackDetails = observationOnlyFallbackUsed
     ? [{
-      scope: fallbackScope.join("+"),
+      scope: observationOnlyFallbackScope.join("+"),
       reason,
       usedDate,
       today: compactDateKey(taipeiDateKey()),
+      allowed: true,
+      formalSource: false,
+      formalSignalAllowed: false,
+      purpose: carryForward2130
+        ? "Display the previous 21:30 complete run while the new decision gates are not ready"
+        : "Display current candidates while the 08:45/08:55 decision gates are pending",
     }]
     : [];
-  const fallbackAllowed = fallbackUsed
-    ? fallbackScope.every((scope) => ["decision_pending_display", "previous_2130_complete_run"].includes(scope))
-    : true;
-  const fallbackContract = Object.fromEntries(fallbackScope.map((scope) => [scope, {
-    allowed: fallbackAllowed,
-    formalSource: true,
+  const fallbackUsed = false;
+  const fallbackScope = [];
+  const fallbackDetails = [];
+  const fallbackAllowed = true;
+  const fallbackContract = Object.fromEntries(observationOnlyFallbackScope.map((scope) => [scope, {
+    allowed: true,
+    formalSource: false,
+    formalSignalAllowed: false,
     publishGateSource: "strategy1_open_buy_results",
-    purpose: scope === "previous_2130_complete_run"
-      ? "Use the previous formal 21:30 complete run while waiting for the next preopen decision gates"
-      : "Display the current formal candidate run while 08:45/08:55 decision gates are pending",
+    purpose: scope === "previous_2130_complete_run_observation"
+      ? "Observation/display only; do not create a new formal signal while waiting for current decision gates"
+      : "Observation/display only; do not create a formal signal while decision gates are pending",
     reason,
   }]));
+  const formalEntryAllowed = readyStatus?.decision_ready === true && !observationOnlyFallbackUsed;
+  const runQualityAtPublish = strategy1RunQuality(run, {
+    observationOnlyFallbackUsed,
+    observationOnlyFallbackScope,
+    decisionReady: readyStatus?.decision_ready === true,
+    resultCount,
+    expectedTotal,
+    scannedCount,
+    reason,
+  });
 
   return {
     ok: true,
@@ -368,12 +422,21 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     complete: true,
     canvas: Boolean(options.canvas),
     qualityStatus,
+    run_quality_at_publish: runQualityAtPublish,
     sourceCoverage: strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }),
     fallbackUsed,
     fallbackAllowed,
     fallbackContract,
     fallbackScope,
     fallbackDetails,
+    observationOnlyFallbackUsed,
+    observationOnlyFallbackScope,
+    observationOnlyFallbackDetails,
+    fallbackFormalSignalAllowed: false,
+    formalEntryAllowed,
+    displayAllowed: true,
+    preservePreviousGood: observationOnlyFallbackUsed,
+    degradedBlocksLatest: observationOnlyFallbackUsed,
     decisionReady: readyStatus?.decision_ready === true,
     decisionPending,
     displayMode,
@@ -406,6 +469,11 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       decision_ready: readyStatus?.decision_ready === true,
       decision_pending: decisionPending,
       previous_2130_carry_forward: carryForward2130,
+      observation_only_fallback_used: observationOnlyFallbackUsed,
+      fallback_formal_signal_allowed: false,
+      formal_entry_allowed: formalEntryAllowed,
+      preserve_previous_good: observationOnlyFallbackUsed,
+      degraded_blocks_latest: observationOnlyFallbackUsed,
       latest_run_source: RUNS_TABLE,
       ready_status_view: READY_STATUS_VIEW,
     },
@@ -420,6 +488,11 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       decisionPending,
       displayMode,
       previous2130CarryForward: carryForward2130,
+      observationOnlyFallbackUsed,
+      fallbackFormalSignalAllowed: false,
+      formalEntryAllowed,
+      preservePreviousGood: observationOnlyFallbackUsed,
+      degradedBlocksLatest: observationOnlyFallbackUsed,
       runId,
       via: "api/open-buy-latest",
       fetchedAt: new Date().toISOString(),
@@ -451,6 +524,14 @@ function missingPayload(error, detail = "") {
     fallbackUsed: false,
     fallbackScope: [],
     fallbackDetails: [],
+    observationOnlyFallbackUsed: false,
+    observationOnlyFallbackScope: [],
+    observationOnlyFallbackDetails: [],
+    fallbackFormalSignalAllowed: false,
+    formalEntryAllowed: false,
+    displayAllowed: false,
+    preservePreviousGood: true,
+    degradedBlocksLatest: true,
     decisionReady: false,
     lastError: detail || error,
     expectedTotal: 0,
@@ -526,6 +607,16 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
     gate,
     qualityStatus: previous2130CarryForward ? "previous_2130_carry_forward" : "decision_pending",
     reason: previous2130CarryForward ? carryForwardReason(readyStatus, payload.usedDate) : detail,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackDetails: [],
+    fallbackAllowed: true,
+    observationOnlyFallbackUsed: true,
+    fallbackFormalSignalAllowed: false,
+    formalEntryAllowed: false,
+    displayAllowed: true,
+    preservePreviousGood: true,
+    degradedBlocksLatest: true,
     decisionPending: true,
     lastError: detail,
     meta: {
@@ -533,10 +624,20 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
       gate,
       decision_pending_display: true,
       previous_2130_carry_forward: previous2130CarryForward,
+      observation_only_fallback_used: true,
+      fallback_formal_signal_allowed: false,
+      formal_entry_allowed: false,
+      preserve_previous_good: true,
+      degraded_blocks_latest: true,
     },
     transport: {
       ...(payload.transport || {}),
       gate,
+      observationOnlyFallbackUsed: true,
+      fallbackFormalSignalAllowed: false,
+      formalEntryAllowed: false,
+      preservePreviousGood: true,
+      degradedBlocksLatest: true,
     },
   };
 }
@@ -552,16 +653,17 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const cached = await readEndpointFromDesktopSnapshot(request, {
-    timeoutMs: 2500,
-    via: "api/open-buy-latest",
-  });
-  if (cached && !isEmptySnapshotRestore(cached)) {
-    response.status(200).json(cached);
-    return;
-  }
-
   const options = parseRequestOptions(request);
+  if (!options.noSnapshot) {
+    const cached = await readEndpointFromDesktopSnapshot(request, {
+      timeoutMs: 2500,
+      via: "api/open-buy-latest",
+    });
+    if (cached && !isEmptySnapshotRestore(cached)) {
+      response.status(200).json(cached);
+      return;
+    }
+  }
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       if (options.snapshotFriendly) {

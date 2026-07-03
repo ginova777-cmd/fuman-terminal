@@ -322,7 +322,7 @@ function buildUnattendedContract(payload, context = {}) {
   const tvFallbackDetails = tvDiagnosticFallbackDetails(rows);
   const tvDiagnosticFallbackUsed = tvFallbackDetails.length > 0;
   const sourceFallbackUsed = hasSourceFallback(sourceWarnings);
-  const fallbackUsed = sourceFallbackUsed || tvDiagnosticFallbackUsed;
+  const fallbackUsed = sourceFallbackUsed;
   const sourceUniverseCount = cleanNumber(sourceHealth.stockUniverseCount || scanCoverage.sourceUniverseCount || payload.total);
   const preopenRows = firstNumber(
     sourceStatusPayload.preopen_rows,
@@ -414,7 +414,6 @@ function buildUnattendedContract(payload, context = {}) {
     diagnosticFallbackDetails: tvFallbackDetails.slice(0, 20),
     fallbackScope: [
       sourceFallbackUsed ? "source" : "",
-      tvDiagnosticFallbackUsed ? "tv_candle_diagnostic" : "",
     ].filter(Boolean),
     fallbackDetails: [
       ...(sourceFallbackUsed ? [{
@@ -426,7 +425,6 @@ function buildUnattendedContract(payload, context = {}) {
         formalSource: true,
         purpose: "source fallback would block publish",
       }] : []),
-      ...tvFallbackDetails.slice(0, 20),
     ],
     fallbackContract: {
       tv_candle_diagnostic: {
