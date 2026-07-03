@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-02T15:20:00+08:00",
+  "updatedAt": "2026-07-03T17:35:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -48,7 +48,16 @@
       "Fuman 買賣超 Watchdog 2120",
       "Fuman 權證走向 Cache 2030",
       "Fuman 權證走向 Watchdog 2050",
-      "FumanTerminalProductionHealthMonitor"
+      "FumanTerminalProductionHealthMonitor",
+      "Fuman Daytrade Source Gate 0845",
+      "Fuman Daytrade Source Gate 0900",
+      "Fuman Daytrade Source Gate 0910",
+      "Fuman Fugle Daytrade 0830 Warm Start",
+      "Fuman Fugle Daytrade 0845 Gate Check",
+      "Fuman Fugle Daytrade 0900 Opening Check",
+      "Fuman Fugle Daytrade 0910 Convergence Check",
+      "Fuman Fugle Daytrade Watchdog Every Minute",
+      "Fuman Scorecard Daily Watchdog 1410"
     ],
     "expectedDisabledTasks": [],
     "retiredTasks": [
@@ -135,6 +144,19 @@
         267014
       ],
       "Fuman 即時雷達 Watchdog": [
+        0,
+        267009
+      ],
+      "Fuman Daytrade Source Gate 0845": [
+        0
+      ],
+      "Fuman Daytrade Source Gate 0900": [
+        0
+      ],
+      "Fuman Daytrade Source Gate 0910": [
+        0
+      ],
+      "Fuman Scorecard Daily Watchdog 1410": [
         0,
         267009
       ]
@@ -612,6 +634,96 @@
       "description": "Disabled: realtime radar health is covered by the main radar and monitor chain.",
       "time": "09:10",
       "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Daytrade Source Gate 0845",
+      "displayName": "Fuman Daytrade Source Gate 0845",
+      "description": "Read-only daytrade source gate checkpoint. Must not write strategy latest.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Source Gate 0900",
+      "displayName": "Fuman Daytrade Source Gate 0900",
+      "description": "Read-only daytrade opening source gate checkpoint. Must not write strategy latest.",
+      "time": "09:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Source Gate 0910",
+      "displayName": "Fuman Daytrade Source Gate 0910",
+      "description": "Read-only daytrade convergence source gate checkpoint. Must not write strategy latest.",
+      "time": "09:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade 0830 Warm Start",
+      "displayName": "Fuman Fugle Daytrade 0830 Warm Start",
+      "description": "Daytrade source warm-start gate. Failure is critical; do not mark OK unless Last Result is 0.",
+      "time": "07:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "07:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade 0845 Gate Check",
+      "displayName": "Fuman Fugle Daytrade 0845 Gate Check",
+      "description": "Daytrade 08:45 source readiness gate. Failure is critical; source not ready must preserve previous good.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade 0900 Opening Check",
+      "displayName": "Fuman Fugle Daytrade 0900 Opening Check",
+      "description": "Daytrade 09:00 opening source readiness gate. Failure is critical; source not ready must preserve previous good.",
+      "time": "09:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade 0910 Convergence Check",
+      "displayName": "Fuman Fugle Daytrade 0910 Convergence Check",
+      "description": "Daytrade 09:10 convergence source readiness gate. Failure is critical; source not ready must preserve previous good.",
+      "time": "09:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade Watchdog Every Minute",
+      "displayName": "Fuman Fugle Daytrade Watchdog Every Minute",
+      "description": "Daytrade source watchdog every minute during the opening window. Failure is critical.",
+      "time": "07:00-13:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "07:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard Daily Watchdog 1410",
+      "displayName": "Fuman Scorecard Daily Watchdog 1410",
+      "description": "Scorecard daily automation watchdog.",
+      "time": "14:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "14:10"
+      ]
     }
   ]
 }
