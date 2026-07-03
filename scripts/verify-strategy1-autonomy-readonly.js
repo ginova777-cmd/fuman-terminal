@@ -17,6 +17,7 @@ const TASKS = [
   "Fuman Open Buy Preopen 0855",
   "Fuman Strategy1 Candidate Verify 2135",
 ];
+const PRODUCTION_MIRROR_ROOT = /^C:\\fuman-terminal(?:\\|$)/i;
 
 function psQuote(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
@@ -73,7 +74,8 @@ function queryTask(taskName) {
     "$service = New-Object -ComObject 'Schedule.Service'",
     "$service.Connect()",
     `$task = $service.GetFolder('\\').GetTask(${psQuote(taskName)})`,
-    "[pscustomobject]@{ TaskName=[string]$task.Name; State=[int]$task.State; Enabled=[bool]$task.Enabled; LastResult=[int]$task.LastTaskResult } | ConvertTo-Json -Compress",
+    "$action = $task.Definition.Actions.Item(1)",
+    "[pscustomobject]@{ TaskName=[string]$task.Name; State=[int]$task.State; Enabled=[bool]$task.Enabled; LastResult=[int]$task.LastTaskResult; ActionPath=[string]$action.Path; Arguments=[string]$action.Arguments; WorkingDirectory=[string]$action.WorkingDirectory } | ConvertTo-Json -Compress",
   ].join("; ");
   const encoded = Buffer.from(ps, "utf16le").toString("base64");
   const child = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
@@ -98,6 +100,12 @@ function queryTask(taskName) {
   const scheduledState = enabled ? "Enabled" : "Disabled";
   const lastResult = Number(row.LastResult);
   const acceptableLastResult = lastResult === 0 || (state === 4 && lastResult === 267009);
+  const actionPath = String(row.ActionPath || "");
+  const argumentsText = String(row.Arguments || "");
+  const workingDirectory = String(row.WorkingDirectory || "");
+  const usesProductionMirror = PRODUCTION_MIRROR_ROOT.test(workingDirectory)
+    || /(?:^|["'\s])C:\\fuman-terminal(?:\\|["'\s]|$)/i.test(argumentsText)
+    || PRODUCTION_MIRROR_ROOT.test(actionPath);
   return {
     taskName,
     state,
@@ -105,7 +113,11 @@ function queryTask(taskName) {
     status,
     scheduledState,
     lastResult,
-    ok: (state === 3 || state === 4) && enabled && acceptableLastResult,
+    actionPath,
+    arguments: argumentsText,
+    workingDirectory,
+    usesProductionMirror,
+    ok: (state === 3 || state === 4) && enabled && acceptableLastResult && !usesProductionMirror,
   };
 }
 
@@ -215,6 +227,7 @@ async function main() {
   });
   for (const task of details.schedules) {
     if (!task.ok) issues.push(`schedule_not_ready_${task.taskName}`);
+    if (task.usesProductionMirror) issues.push(`schedule_points_to_production_mirror_${task.taskName}`);
   }
 
   let battleResult;
