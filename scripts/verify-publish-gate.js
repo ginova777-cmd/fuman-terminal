@@ -1720,8 +1720,8 @@ if (/\(sourceGate\?\.publishAllowed === true \|\| afterhoursHold\)|payload\.publ
 if (!/normalizedSourceCoverage\.ready === true/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must require normalized sourceCoverage.ready before publishAllowed");
 }
-if (!/strategy2RunSnapshotReady/.test(strategy2LatestApi) || !/afterhoursHold && runSnapshotReady/.test(strategy2LatestApi)) {
-  issues.push("api/strategy2-latest.js must allow afterhours hold only when run-time source snapshot is ready");
+if (/afterhoursHold && runSnapshotReady/.test(strategy2LatestApi) || !/sourceGate\?\.publishAllowed === true/.test(strategy2LatestApi)) {
+  issues.push("api/strategy2-latest.js must fail closed on sourceGate.publishAllowed and must not use afterhours hold to bypass source readiness");
 }
 for (const marker of ["STRATEGY2_SNAPSHOT_KEY", "readStrategy2SnapshotPayload", "snapshotFirst", "supabase:strategy2_latest_snapshot", "options.snapshot && !options.live"]) {
   if (!strategy2LatestApi.includes(marker)) issues.push(`api/strategy2-latest.js missing Strategy2 snapshot-first marker ${marker}`);
@@ -2849,7 +2849,8 @@ for (const marker of [
 }
 for (const marker of [
   "assertStrategy2SourcePublishGate",
-  "source_status fugle_shared_source",
+  "source_status ${STRATEGY2_SOURCE_STATUS_NAME}",
+  "fugle_daytrade_source",
   "fresh_quote_coverage_120s",
   "today_1m_symbols",
   "ready_ge_35",
