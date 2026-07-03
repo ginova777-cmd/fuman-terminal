@@ -22,6 +22,21 @@ const FULL_MARKET_MAX_ROUND_SECONDS = Number(process.env.DAYTRADE_FULL_MARKET_MA
 const MIN_FUTOPT_MAPPED = Number(process.env.DAYTRADE_MIN_FUTOPT_MAPPED || 1);
 const ASSUMED_BATCH_SIZE = Number(process.env.DAYTRADE_ASSUMED_BATCH_SIZE || 40);
 const JSON_ONLY = process.argv.includes("--json-only");
+const REPO_ROOT = path.join(__dirname, "..");
+const SOURCE_ISOLATION_FILES = [
+  "scripts/run-daytrade-source-writer.js",
+];
+const FORBIDDEN_DAYTRADE_SOURCE_MARKERS = [
+  "fugle_shared_source",
+  "raw_supabase_source_coverage_aggregate_readthrough",
+  "raw_supabase_source_status_payload_readthrough",
+  "raw_supabase_intraday_1m_status_readthrough",
+  "raw_supabase_stock_future_contract_readthrough",
+  "raw_supabase_strategy12_stock_future_contract_health",
+  "v_fugle_intraday_1m_status",
+  "v_stock_future_live_contract",
+  "v_strategy12_stock_future_contract_health",
+];
 
 const REQUIRED_PAYLOAD_FIELDS = [
   "daytrade_gate_grade",
@@ -168,6 +183,29 @@ function issue(code, severity, detail = {}) {
   return { code, severity, detail };
 }
 
+function auditSourceIsolation() {
+  const violations = [];
+  for (const relativePath of SOURCE_ISOLATION_FILES) {
+    const file = path.join(REPO_ROOT, relativePath);
+    let text = "";
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch (error) {
+      violations.push({ file: relativePath, marker: "file_unreadable", message: error.message });
+      continue;
+    }
+    for (const marker of FORBIDDEN_DAYTRADE_SOURCE_MARKERS) {
+      if (text.includes(marker)) violations.push({ file: relativePath, marker });
+    }
+  }
+  return {
+    ok: violations.length === 0,
+    checkedFiles: SOURCE_ISOLATION_FILES,
+    forbiddenMarkers: FORBIDDEN_DAYTRADE_SOURCE_MARKERS,
+    violations,
+  };
+}
+
 function buildMissingResult(phase) {
   return {
     ok: false,
@@ -235,6 +273,7 @@ async function main() {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const issues = [];
   const warnings = [];
+  const sourceIsolationAudit = auditSourceIsolation();
   const missingPayloadFields = REQUIRED_PAYLOAD_FIELDS.filter((field) => !Object.prototype.hasOwnProperty.call(payload, field));
 
   const sourceStatus = stringValue(row.status).toLowerCase();
@@ -349,6 +388,7 @@ async function main() {
   if (after0845 && fullMarketBatchIntervalSeconds > 0 && fullMarketBatchIntervalSeconds < 3.2) warnings.push(issue("full_market_batch_interval_too_aggressive", "warning", { fullMarketBatchIntervalSeconds, minRecommended: 3.2, note: "Do not let full market compete with priority pool during opening." }));
   if (after0845 && fullMarketRoundSeconds > FULL_MARKET_MAX_ROUND_SECONDS && fullMarketRoundSeconds < 999999) warnings.push(issue("full_market_round_slow_but_nonblocking", "warning", { fullMarketRoundSeconds, target: `<=${FULL_MARKET_MAX_ROUND_SECONDS}`, note: "This is acceptable only if priority pool remains ready." }));
   if (!dedicatedSourceFullMarketSpeedFeasible) warnings.push(issue("dedicated_daytrade_source_rpm_below_target_math", "warning", { collectorAdaptiveRpm, requiredRpmFor1500In120s: requiredRpm, gapRpm: collectorRpmGap, note: "Dedicated daytrade source must use its own quota/key/table or a strict priority pool; do not borrow the shared display source." }));
+  if (!sourceIsolationAudit.ok) issues.push(issue("daytrade_source_isolation_violation", "critical", sourceIsolationAudit));
 
   const aReady = sourceAge <= MAX_SOURCE_AGE_SECONDS
     && sourceStatus === "ok"
@@ -405,6 +445,7 @@ async function main() {
     mode: "read-only",
     report: "dedicated-daytrade-source-speed",
     sourceIsolation: "dedicated",
+    sourceIsolationAudit,
     scope: "dedicated daytrade source speed gate only; not shared display source YES and not production unattended YES",
     checkedAt: new Date().toISOString(),
     scannerContract: {
