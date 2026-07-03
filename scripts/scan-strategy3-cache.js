@@ -132,7 +132,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     stockUniverseCount: stocks.length,
     intraday1mReadyCount: intradayReadyCount,
     minIntraday1mCandidates: STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
-    minIntraday1mReadyCount,
+    minIntraday1mReadyCount: minIntradayReadyCount,
     minIntraday1mCoverage: STRATEGY3_MIN_INTRADAY_1M_COVERAGE,
     minIntraday1mCandles: STRATEGY3_MIN_INTRADAY_1M_CANDLES,
     latestCandleTime,
