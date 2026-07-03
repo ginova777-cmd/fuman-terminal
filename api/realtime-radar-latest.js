@@ -18,6 +18,8 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TABLE = process.env.FUMAN_REALTIME_RADAR_TABLE || "fuman_realtime_radar_cache";
 
 const QUOTE_TABLE = process.env.FUMAN_REALTIME_QUOTE_TABLE || "fugle_realtime_quote_latest";
+const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
+const ALERT_RECEIPT_FILE = path.join(STATE_DIR, "realtime-radar-alert-receipt.json");
 const DEFAULT_RADAR_LIMIT = 120;
 const FULL_SESSION_RADAR_LIMIT = 1200;
 const MAX_RADAR_LIMIT = 1500;
@@ -25,6 +27,19 @@ const MIN_TRADING_DAY_CACHE_MAX_AGE_MS = Number(process.env.REALTIME_RADAR_API_M
 const RADAR_SESSION_START_MINUTE = 9 * 60;
 const RADAR_SESSION_END_MINUTE = 13 * 60 + 30;
 const RADAR_SESSION_COMPLETE_MINUTE = 13 * 60 + 25;
+const REALTIME_RADAR_FRESH_QUOTE_SECONDS = Math.max(1, Number(process.env.REALTIME_RADAR_FRESH_QUOTE_SECONDS || 120));
+const REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE = Math.min(1, Math.max(0, Number(process.env.REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE || 0.95)));
+const REALTIME_RADAR_RAW_KEEP_DAYS = Math.max(0, Number(process.env.REALTIME_RADAR_RAW_KEEP_DAYS || 7));
+const REQUIRED_RADAR_FIELDS = {
+  identity: ["code", "symbol"],
+  name: ["name"],
+  price: ["price", "close", "lastPrice"],
+  percent: ["changePercent", "change_percent", "percent", "pct"],
+  volume: ["volume", "tradeVolume", "volumeLots", "tradeValue", "value"],
+  time: ["time", "quoteTime", "scanTime", "updatedAt", "generatedAt", "latestSeenAt"],
+  signal: ["reason", "signal", "signals", "state", "stateId", "score", "finalScore", "tags", "signalTags"],
+  lineage: ["runId", "source", "cacheSource", "updatedAt", "generatedAt"],
+};
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%]/g, ""));
@@ -66,6 +81,51 @@ function normalizeWriteBudgetEvidence(writeBudget = {}) {
     allowed: writeBudget.allowed ?? (writeBudget.blocked !== true && writesAttempted <= limit),
     used: cleanNumber(writeBudget.used ?? writesAttempted),
     remaining: Math.max(0, cleanNumber(writeBudget.remaining ?? (limit - writesAttempted))),
+  };
+}
+
+function readJson(file, fallback = {}) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function normalizeAlertReceipt(receipt = {}, fallback = {}) {
+  const source = String(receipt.source || fallback.source || "").toLowerCase();
+  const rawKind = String(receipt.kind || fallback.kind || "").toLowerCase();
+  const kind = /smoke/.test(source) || /smoke/.test(rawKind)
+    ? "smoke"
+    : /failure|failed|alert/.test(rawKind) || /runtime/.test(source)
+      ? "failure"
+      : rawKind || fallback.kind || "none";
+  return {
+    ok: receipt.ok === true,
+    kind,
+    channel: receipt.channel || fallback.channel || "",
+    deliveredAt: receipt.deliveredAt || (!receipt.dryRun && receipt.ok === true ? receipt.finishedAt : "") || "",
+    delivery_error: receipt.delivery_error || receipt.deliveryError || receipt.error || "",
+    dryRun: receipt.dryRun === true,
+    receiptFile: receipt.receiptFile || fallback.receiptFile || ALERT_RECEIPT_FILE,
+    requiredForRun: fallback.requiredForRun === true,
+    checkedAt: receipt.checkedAt || new Date().toISOString(),
+  };
+}
+
+function noAlertReceipt() {
+  const latestReceipt = readJson(ALERT_RECEIPT_FILE, {});
+  return {
+    ...normalizeAlertReceipt({
+      ...latestReceipt,
+      kind: "smoke",
+      source: "realtime-radar-no-alert",
+    }, {
+      kind: "smoke",
+      channel: "smtp",
+      receiptFile: ALERT_RECEIPT_FILE,
+      requiredForRun: false,
+    }),
+    kind: "smoke",
+    requiredForRun: false,
+    skipped: false,
+    skipReason: "",
   };
 }
 
@@ -295,6 +355,74 @@ function radarSourceCoverage(payload, marketSession) {
   };
 }
 
+function valueAtPath(object, pathName) {
+  return String(pathName || "").split(".").reduce((current, key) => (
+    current && typeof current === "object" ? current[key] : undefined
+  ), object);
+}
+
+function buildRadarFieldCompleteness(rows = []) {
+  const blankCounts = Object.fromEntries(Object.keys(REQUIRED_RADAR_FIELDS).map((group) => [group, 0]));
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missingGroups = [];
+    for (const [group, fields] of Object.entries(REQUIRED_RADAR_FIELDS)) {
+      if (!fields.some((field) => firstDefined(valueAtPath(row, field)))) {
+        blankCounts[group] += 1;
+        missingGroups.push(group);
+      }
+    }
+    if (missingGroups.length && sampleMissingRows.length < 10) {
+      sampleMissingRows.push({
+        index,
+        code: row?.code || row?.symbol || "",
+        name: row?.name || "",
+        missingGroups,
+      });
+    }
+  });
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  return {
+    requiredFields: REQUIRED_RADAR_FIELDS,
+    blankCounts,
+    blankTotal,
+    sampleMissingRows,
+  };
+}
+
+function quoteCoverageMeetsRealtimeThresholds(quoteCoverage = {}) {
+  const coverage = firstDefined(
+    quoteCoverage.fresh_quote_coverage_120s,
+    quoteCoverage.freshQuoteCoverage120s,
+    quoteCoverage.coverage_120s,
+    quoteCoverage.coverage120s,
+    quoteCoverage.coverage
+  );
+  const quoteAgeSeconds = firstDefined(
+    quoteCoverage.quote_age_seconds,
+    quoteCoverage.quoteAgeSeconds,
+    quoteCoverage.sourceAgeSeconds,
+    quoteCoverage.stale_seconds,
+    quoteCoverage.staleSeconds
+  );
+  const failedBatchCount = cleanNumber(quoteCoverage.failedBatchCount ?? quoteCoverage.failed_batch_count);
+  return Boolean(
+    coverage !== null
+    && cleanNumber(coverage) >= REALTIME_RADAR_MIN_FRESH_QUOTE_COVERAGE
+    && (quoteAgeSeconds === null || cleanNumber(quoteAgeSeconds) <= REALTIME_RADAR_FRESH_QUOTE_SECONDS)
+    && failedBatchCount === 0
+  );
+}
+
+function isCanonicalRadarCacheRead(payload, fallbackScope = []) {
+  const cacheSource = String(payload?.cacheSource || payload?.source || "").toLowerCase();
+  const mode = String(payload?.transport?.mode || "").toLowerCase();
+  const scope = Array.isArray(fallbackScope) ? fallbackScope.map((item) => String(item).toLowerCase()) : [];
+  return cacheSource.includes("supabase-radar-cache")
+    && (/^radar-cache-latest-(id|updated)$/.test(mode)
+      || (scope.length > 0 && scope.every((item) => /^radar-cache-latest-(id|updated)$/.test(item))));
+}
+
 function normalizeRadarRows(payload, limit = DEFAULT_RADAR_LIMIT) {
   if (!Array.isArray(payload?.rows)) return payload;
   const allRows = payload.rows.map((row) => {
@@ -331,12 +459,16 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
   const freshness = payloadFreshnessSnapshot(marketSession, normalizedPayload);
   const runId = radarPayloadRunId(normalizedPayload);
   const sourceCoverage = normalizedPayload?.sourceCoverage || radarSourceCoverage(normalizedPayload, marketSession);
-  const fallbackUsed = normalizedPayload?.fallbackUsed === true
+  const payloadFallbackScope = Array.isArray(normalizedPayload?.fallbackScope)
+    ? normalizedPayload.fallbackScope
+    : [];
+  const canonicalRadarCacheRead = isCanonicalRadarCacheRead(normalizedPayload, payloadFallbackScope);
+  const fallbackUsed = !canonicalRadarCacheRead && (normalizedPayload?.fallbackUsed === true
     || /fallback/i.test(String(reason || ""))
     || /fallback/i.test(String(normalizedPayload?.transport?.mode || ""))
-    || /fallback/i.test(String(normalizedPayload?.freshness?.decision || ""));
+    || /fallback/i.test(String(normalizedPayload?.freshness?.decision || "")));
   const fallbackScope = Array.isArray(normalizedPayload?.fallbackScope)
-    ? normalizedPayload.fallbackScope
+    ? (canonicalRadarCacheRead ? [] : normalizedPayload.fallbackScope)
     : fallbackUsed
       ? [normalizedPayload?.transport?.mode || normalizedPayload?.freshness?.decision || reason || "realtime_radar_fallback"]
       : [];
@@ -395,20 +527,30 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     || normalizedPayload?.quoteCoverageAtRun
     || sourceCoverage
     || {};
-  const runQualityAtPublish = snapshotFields.run_quality_at_publish || normalizedPayload?.run_quality_at_publish || {};
+  const quoteCoverageReady = quoteCoverageMeetsRealtimeThresholds(quoteCoverageAtRun);
+  const fieldCompleteness = buildRadarFieldCompleteness(Array.isArray(normalizedPayload?.rows) ? normalizedPayload.rows : []);
   const currentUnattendedOk = Boolean(
     normalizedPayload?.ok !== false
     && sourceCoverage?.ok !== false
     && freshness.fresh
     && freshness.sessionCompleteness?.complete !== false
+    && quoteCoverageReady
+    && fieldCompleteness.blankTotal === 0
+    && fallbackUsed === false
   );
   const currentUnattendedStatus = currentUnattendedOk ? "YES" : "NO";
-  const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields);
-  const blankCounts = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts);
-  const sampleMissingRows = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, []);
-  const rawKeepDays = firstDefined(normalizedPayload?.rawKeepDays, runQualityAtPublish.rawKeepDays);
-  const retentionOk = firstDefined(normalizedPayload?.retentionOk, runQualityAtPublish.retentionOk);
-  const alertReceipt = firstDefined(normalizedPayload?.alertReceipt, runQualityAtPublish.alertReceipt);
+  const runQualityAtPublish = snapshotFields.run_quality_at_publish || normalizedPayload?.run_quality_at_publish || {};
+  const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields, fieldCompleteness.requiredFields);
+  const blankCounts = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts, fieldCompleteness.blankCounts);
+  const sampleMissingRows = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, fieldCompleteness.sampleMissingRows);
+  const rawKeepDays = firstDefined(normalizedPayload?.rawKeepDays, runQualityAtPublish.rawKeepDays, REALTIME_RADAR_RAW_KEEP_DAYS);
+  const retentionOk = firstDefined(normalizedPayload?.retentionOk, runQualityAtPublish.retentionOk, true);
+  const alertReceipt = firstDefined(normalizedPayload?.alertReceipt, runQualityAtPublish.alertReceipt, noAlertReceipt());
+  const notAllowedReason = currentUnattendedOk
+    ? "realtime_radar_current_session_ready"
+    : !quoteCoverageReady
+      ? "realtime_radar_quote_coverage_or_age_not_ready"
+      : freshness.reason || "realtime_radar_source_degraded";
   const enrichedRunQualityAtPublish = {
     ...runQualityAtPublish,
     writeBudget,
@@ -418,12 +560,28 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     rawKeepDays,
     retentionOk,
     alertReceipt,
+    publishAllowed: currentUnattendedOk,
+    degradedBlocksLatest: !currentUnattendedOk,
+    preservePreviousGood: !currentUnattendedOk,
+    fallbackUsed,
+    fallbackScope,
+    fallbackAllowed: fallbackUsed === false,
+    fallbackDetails,
+    qualityStatus: currentUnattendedOk ? "ready" : "degraded",
+    reason: currentUnattendedOk ? "realtime_radar_publish_allowed" : notAllowedReason,
   };
   const runTimeSourceSnapshot = snapshotFields.runTimeSourceSnapshot
     ? {
       ...snapshotFields.runTimeSourceSnapshot,
       quote_coverage_at_run: quoteCoverageAtRun,
       run_quality_at_publish: enrichedRunQualityAtPublish,
+      source_status_at_run: {
+        ...(snapshotFields.runTimeSourceSnapshot.source_status_at_run || sourceCoverage || {}),
+        ok: currentUnattendedOk,
+        ready: currentUnattendedOk,
+        status: currentUnattendedOk ? "ready" : "degraded",
+        reason: currentUnattendedOk ? "realtime_radar_source_ready" : notAllowedReason,
+      },
     }
     : null;
   return {
@@ -438,13 +596,14 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     usedDate: marketSession?.marketDataDate || normalizedPayload?.usedDate || normalizedPayload?.date || "",
     sourceDate: marketSession?.marketDataDate || normalizedPayload?.sourceDate || normalizedPayload?.date || "",
     sourceCoverage,
+    source_status_at_run: runTimeSourceSnapshot?.source_status_at_run || snapshotFields.source_status_at_run || sourceCoverage,
     unattendedStatus: currentUnattendedStatus,
     unattended: {
       ...(snapshotFields.unattended || normalizedPayload?.unattended || {}),
       status: currentUnattendedStatus,
       canRunUnattended: currentUnattendedOk,
       evidenceStatus: snapshotFields.evidenceStatus || normalizedPayload?.evidenceStatus || "complete",
-      reason: currentUnattendedOk ? "realtime_radar_current_session_ready" : freshness.reason,
+      reason: currentUnattendedOk ? "realtime_radar_current_session_ready" : notAllowedReason,
     },
     quote_coverage_at_run: quoteCoverageAtRun,
     run_quality_at_publish: enrichedRunQualityAtPublish,

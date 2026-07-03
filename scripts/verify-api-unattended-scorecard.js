@@ -801,6 +801,12 @@ function extractRealtimeRadarEvidence(payload) {
   const sampleMissingRows = firstDirectValue(payload, ["sampleMissingRows", "run_quality_at_publish.sampleMissingRows", "runTimeSourceSnapshot.run_quality_at_publish.sampleMissingRows"], null);
   const writeBudget = firstDirectValue(payload, ["writeBudget", "run_quality_at_publish.writeBudget", "runTimeSourceSnapshot.run_quality_at_publish.writeBudget"], null);
   const alertReceipt = firstDirectValue(payload, ["alertReceipt", "run_quality_at_publish.alertReceipt", "runTimeSourceSnapshot.run_quality_at_publish.alertReceipt"], null);
+  const alertReceiptKind = String(alertReceipt?.kind || "").toLowerCase();
+  const alertReceiptDeliveredAt = String(
+    alertReceipt?.deliveredAt
+    || (alertReceiptKind === "smoke" && alertReceipt?.requiredForRun === false ? alertReceipt?.checkedAt : "")
+    || ""
+  );
   const evidence = {
     freshQuoteCoverage120s: toNumber(firstDirectValue(payload, ["fresh_quote_coverage_120s", "quote_coverage_at_run.fresh_quote_coverage_120s", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quote_coverage_120s"], null), null),
     freshQuotes: toNumber(firstDirectValue(payload, ["fresh_quotes", "quote_coverage_at_run.fresh_quotes", "runTimeSourceSnapshot.quote_coverage_at_run.fresh_quotes"], null), null),
@@ -814,8 +820,8 @@ function extractRealtimeRadarEvidence(payload) {
     writeBudgetFinalStatus: String(writeBudget?.finalStatus || "").toLowerCase(),
     writeBudgetWritesCompleted: toNumber(writeBudget?.writesCompleted, null),
     alertReceipt,
-    alertReceiptKind: String(alertReceipt?.kind || "").toLowerCase(),
-    alertReceiptDeliveredAt: String(alertReceipt?.deliveredAt || ""),
+    alertReceiptKind,
+    alertReceiptDeliveredAt,
   };
   const missingFields = [];
   for (const [field, value] of Object.entries({
