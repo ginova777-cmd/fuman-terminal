@@ -1026,7 +1026,7 @@ async function tick() {
   const futoptRows = await fetchFutoptRows();
 
   if (priorityRows.length) {
-    await supabaseUpsert("fugle_daytrade_priority_symbols", priorityRows, "trade_date,symbol");
+    await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "trade_date,symbol");
     await syncDailyVolumeMirror(dailyVolumeMap, priorityRows);
   }
 
