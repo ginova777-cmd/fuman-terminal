@@ -608,7 +608,6 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap) {
     .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
     .slice(0, MAX_PRIORITY_POOL_SYMBOLS)
     .map((row, index) => ({
-      trade_date: taipeiDate(),
       symbol: row.symbol,
       name: row.name || row.symbol,
       market: row.market || "",
