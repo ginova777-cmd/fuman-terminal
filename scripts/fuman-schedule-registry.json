@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-03T17:35:00+08:00",
+  "updatedAt": "2026-07-03T18:20:00+08:00",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -49,6 +49,7 @@
       "Fuman 權證走向 Cache 2030",
       "Fuman 權證走向 Watchdog 2050",
       "FumanTerminalProductionHealthMonitor",
+      "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Daytrade Source Gate 0845",
       "Fuman Daytrade Source Gate 0900",
       "Fuman Daytrade Source Gate 0910",
@@ -144,6 +145,10 @@
         267014
       ],
       "Fuman 即時雷達 Watchdog": [
+        0,
+        267009
+      ],
+      "Fuman Daytrade Source Writer 0600-1330": [
         0,
         267009
       ],
@@ -634,6 +639,16 @@
       "description": "Disabled: realtime radar health is covered by the main radar and monitor chain.",
       "time": "09:10",
       "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Daytrade Source Writer 0600-1330",
+      "displayName": "Fuman Daytrade Source Writer 0600-1330",
+      "description": "Dedicated daytrade source writer. Supplies priority-first Fugle quotes/readiness evidence; must not write strategy latest.",
+      "time": "06:00-13:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "06:00"
+      ]
     },
     {
       "taskName": "\\Fuman Daytrade Source Gate 0845",
