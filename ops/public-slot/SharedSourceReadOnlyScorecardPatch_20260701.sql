@@ -60,10 +60,12 @@ parsed as (
     payload ->> 'scanner_can_run_opening' as scanner_can_run_opening_text,
     payload ->> 'scanner_can_run_ma20' as scanner_can_run_ma20_text,
     payload ->> 'scanner_can_run_ma35' as scanner_can_run_ma35_text,
+    payload ->> 'scanner_can_run_full_intraday' as scanner_can_run_full_intraday_text,
     payload ->> 'intraday_1m_ok' as intraday_1m_ok_text,
     payload ->> 'intraday_1m_fresh_ok' as intraday_1m_fresh_ok_text,
     payload ->> 'daily_volume_ok' as daily_volume_ok_text,
     payload ->> 'permission_ok' as permission_ok_text,
+    coalesce(payload ->> 'futopt_status', payload ->> 'futopt_ok') as futopt_status,
     payload ->> 'futopt_ok' as futopt_ok_text,
     payload ->> 'quote_derived_1m_full_universe' as quote_derived_1m_full_universe_text
   from latest
@@ -84,6 +86,7 @@ select
   intraday_1m_status,
   daily_volume_status,
   preopen_status,
+  futopt_status,
   coalesce(nullif(payload ->> 'active_symbols', '')::integer, 0) as active_symbols,
   coalesce(nullif(payload ->> 'eligible_symbols', '')::integer, 0) as eligible_symbols,
   coalesce(nullif(payload ->> 'quotes', '')::integer, 0) as quotes,
@@ -131,6 +134,7 @@ select
   lower(coalesce(scanner_can_run_opening_text, 'false')) = 'true' as scanner_can_run_opening,
   lower(coalesce(scanner_can_run_ma20_text, 'false')) = 'true' as scanner_can_run_ma20,
   lower(coalesce(scanner_can_run_ma35_text, 'false')) = 'true' as scanner_can_run_ma35,
+  lower(coalesce(scanner_can_run_full_intraday_text, 'false')) = 'true' as scanner_can_run_full_intraday,
   lower(coalesce(intraday_1m_ok_text, 'false')) = 'true' as intraday_1m_ok,
   lower(coalesce(intraday_1m_fresh_ok_text, 'false')) = 'true' as intraday_1m_fresh_ok,
   lower(coalesce(daily_volume_ok_text, 'false')) = 'true' as daily_volume_ok,

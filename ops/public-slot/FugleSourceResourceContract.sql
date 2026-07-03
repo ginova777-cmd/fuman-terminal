@@ -1,6 +1,7 @@
 -- Fugle shared source resource contract.
 -- Run in Supabase SQL Editor before enabling production publish gates.
 -- Contract version: fugle-source-contract-20260629-01
+-- Unified gate companion view: public.v_fuman_shared_source_readonly_scorecard.
 
 create table if not exists public.source_status (
   source_name text primary key,
@@ -295,6 +296,7 @@ select
   s.payload ->> 'writer_version' as writer_version,
   s.payload ->> 'quote_status' as quote_status,
   s.payload ->> 'preopen_status' as preopen_status,
+  coalesce(s.payload ->> 'futopt_status', s.payload ->> 'futopt_ok') as futopt_status,
   s.payload ->> 'intraday_1m_status' as intraday_1m_status,
   s.payload ->> 'daily_volume_status' as daily_volume_status,
   coalesce((s.payload ->> 'quote_age_seconds')::integer, s.stale_seconds, 999999) as quote_age_seconds,

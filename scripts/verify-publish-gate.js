@@ -92,6 +92,14 @@ if (fugleSourceContractGuard.status !== 0) {
   issues.push(`verify-fugle-source-contract failed: ${(fugleSourceContractGuard.stderr || fugleSourceContractGuard.stdout || "").trim()}`);
 }
 
+const unifiedSourceGateGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-unified-source-gate-contract.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (unifiedSourceGateGuard.status !== 0) {
+  issues.push(`verify:unified-source-gate failed: ${(unifiedSourceGateGuard.stderr || unifiedSourceGateGuard.stdout || "").trim()}`);
+}
+
 const terminalModulesGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-modules-contract.js")], {
   cwd: ROOT,
   encoding: "utf8",
