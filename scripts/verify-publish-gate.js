@@ -2849,7 +2849,8 @@ for (const marker of [
 }
 for (const marker of [
   "assertStrategy2SourcePublishGate",
-  "source_status fugle_shared_source",
+  "v_fugle_daytrade_unattended_gate_status",
+  "sharedSourceFormalAllowed",
   "fresh_quote_coverage_120s",
   "today_1m_symbols",
   "ready_ge_35",

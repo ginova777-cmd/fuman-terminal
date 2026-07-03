@@ -1061,6 +1061,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
       latestRunId: sourceGate?.latestRunId || "",
       latestRunIdSource: sourceGate?.latestRunIdSource || "",
+      canonicalGateView: sourceGate?.canonicalGateView || "",
       fallbackUsed: sourceGate?.fallbackUsed === true,
       writeBudget,
       retentionOk,
@@ -1083,6 +1084,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     transport: {
       ...(payload.transport || {}),
       sourcePublishGate: "strategy2-source-publish-gate",
+      daytradeCanonicalGateView: sourceGate?.canonicalGateView || "",
       publishAllowed,
       publishBlocked,
       publishBlockedReason,
