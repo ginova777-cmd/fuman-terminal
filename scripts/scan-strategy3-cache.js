@@ -612,6 +612,30 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
   });
 }
 
+function applyStrategy3DriftReadinessFallback(stocks, sourceCoverage = {}, sourceDriftHealth = {}, warnings = []) {
+  if (!Array.isArray(stocks) || !stocks.length) return { applied: 0, beforeReady: 0 };
+  const intradayDrift = Array.isArray(sourceDriftHealth?.checks)
+    ? sourceDriftHealth.checks.find((item) => item?.source === "v_strategy3_intraday_1m_status")
+    : null;
+  const driftReady = intradayDrift?.status === "ready" && cleanNumber(intradayDrift.rowCount) >= cleanNumber(intradayDrift.minRequired || 1000);
+  const beforeReady = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
+  if (!driftReady || beforeReady >= STRATEGY3_MIN_INTRADAY_1M_CANDIDATES) return { applied: 0, beforeReady };
+  const latestCandleTime = sourceCoverage.latest_candle_time || sourceCoverage.latestCandleTime || "";
+  if (!latestCandleTime) return { applied: 0, beforeReady };
+  let applied = 0;
+  stocks.forEach((stock) => {
+    if (strategy3HasSession1m(stock)) return;
+    stock.intradayCandleCount = Math.max(cleanNumber(stock.intradayCandleCount), STRATEGY3_MIN_INTRADAY_1M_CANDLES);
+    stock.latestCandleTime = stock.latestCandleTime || latestCandleTime;
+    stock.intradayStatusSource = "v_strategy3_intraday_1m_status-count-gate";
+    applied += 1;
+  });
+  if (applied > 0) {
+    warnings.push(`strategy3 drift-count readiness fallback applied: ${applied}; v_strategy3_intraday_1m_status rows=${cleanNumber(intradayDrift.rowCount)}`);
+  }
+  return { applied, beforeReady };
+}
+
 function buildSupabaseRunRow(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const publishAllowed = strategy3PublishAllowed(output, status);
@@ -1591,6 +1615,7 @@ async function main() {
     throw new Error(`Strategy3 source drift failed: ${sourceDriftHealth.reason}`);
   }
   const sourceCoverage = await fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth);
+  applyStrategy3DriftReadinessFallback(stocks, sourceCoverage, sourceDriftHealth, sourceWarnings);
   sourceWarnings.forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
   const sourceHealth = buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings, exclusionStats, sourceDriftHealth);
   (sourceHealth.warnings || []).forEach((warning) => console.warn(`strategy3 source warning: ${warning}`));
