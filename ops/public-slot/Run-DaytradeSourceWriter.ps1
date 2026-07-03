@@ -24,6 +24,9 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stdout.log"
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
+$MutexName = "Global\FumanFugleDaytradeSourceWriter"
+$Mutex = New-Object System.Threading.Mutex($false, $MutexName)
+$MutexAcquired = $false
 
 function Write-WrapperLog {
   param([string]$Message)
@@ -85,12 +88,40 @@ if ($Fetch -and -not $Apply) {
 }
 
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once localCheck=$LocalCheck"
-& $node @args 1> $StdoutLog 2> $StderrLog
-$exitCode = $LASTEXITCODE
-if ($exitCode -ne 0) {
-  Write-FailureArtifact $exitCode "writer_exit_$exitCode"
-  Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"
-  exit $exitCode
+try {
+  $MutexAcquired = $Mutex.WaitOne(0)
+  if (-not $MutexAcquired) {
+    Write-WrapperLog "SKIP already_running stdout=$StdoutLog stderr=$StderrLog"
+    [ordered]@{
+      ok = $true
+      skipped = $true
+      reason = "writer_already_running"
+      source_name = "fugle_daytrade_source"
+      checked_at = [DateTimeOffset]::UtcNow.ToString("o")
+      trade_date = $TradeDate
+      run_id = $RunId
+      preserve_previous_good = $true
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $StdoutLog -Encoding utf8
+    exit 0
+  }
+
+  & $node @args 1> $StdoutLog 2> $StderrLog
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) {
+    Write-FailureArtifact $exitCode "writer_exit_$exitCode"
+    Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"
+    exit $exitCode
+  }
+  Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
+  exit 0
+} catch {
+  $message = $_.Exception.Message
+  Write-FailureArtifact 9003 "writer_wrapper_exception"
+  Write-WrapperLog "FAIL writer_wrapper_exception message=$message stdout=$StdoutLog stderr=$StderrLog"
+  exit 1
+} finally {
+  if ($MutexAcquired) {
+    try { $Mutex.ReleaseMutex() | Out-Null } catch {}
+  }
+  try { $Mutex.Dispose() } catch {}
 }
-Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
-exit 0
