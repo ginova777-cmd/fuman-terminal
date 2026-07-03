@@ -38,7 +38,7 @@ ops/public-slot/DaytradeSourceDedicatedTables.sql
 
 Expected result:
 
-- `public.fugle_daytrade_priority_symbols` exists.
+- `public.fugle_daytrade_priority_pool` exists.
 - `public.fugle_daytrade_quotes_live` exists.
 - `public.fugle_daytrade_intraday_1m` exists.
 - `public.fugle_daytrade_daily_volume_avg` exists.
@@ -76,7 +76,7 @@ Dedicated writer must write only:
 ```text
 source_status.source_name = fugle_daytrade_source
 fugle_daytrade_source_speed_scorecard
-fugle_daytrade_priority_symbols
+fugle_daytrade_priority_pool
 fugle_daytrade_quotes_live
 fugle_daytrade_intraday_1m
 fugle_daytrade_daily_volume_avg

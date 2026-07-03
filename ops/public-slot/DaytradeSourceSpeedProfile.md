@@ -158,7 +158,7 @@ public.fugle_daytrade_source_speed_scorecard
 Dedicated water tables:
 
 ```text
-public.fugle_daytrade_priority_symbols
+public.fugle_daytrade_priority_pool
 public.fugle_daytrade_quotes_live
 public.fugle_daytrade_intraday_1m
 public.fugle_daytrade_daily_volume_avg
