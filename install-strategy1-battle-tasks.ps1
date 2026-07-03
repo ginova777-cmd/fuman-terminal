@@ -1,6 +1,15 @@
+param(
+  [string]$SourceRoot = $PSScriptRoot
+)
+
 $ErrorActionPreference = "Stop"
-$root = "C:\fuman-terminal"
-$pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
+$root = (Resolve-Path -LiteralPath $SourceRoot).Path
+$mirrorRoot = "C:\fuman-terminal"
+if ($root.TrimEnd("\") -ieq $mirrorRoot.TrimEnd("\")) {
+  throw "Refusing to install Strategy1 battle tasks from production mirror: $mirrorRoot"
+}
+
+$pwsh = if (Test-Path -LiteralPath "C:\Program Files\PowerShell\7\pwsh.exe") { "C:\Program Files\PowerShell\7\pwsh.exe" } else { "powershell.exe" }
 
 function Register-FumanTask {
   param(
@@ -9,7 +18,11 @@ function Register-FumanTask {
     [Parameter(Mandatory=$true)][string]$Script
   )
 
-  $taskRun = ('"{0}" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $pwsh, $Script)
+  if (!(Test-Path -LiteralPath $Script)) {
+    throw "Missing Strategy1 task script: $Script"
+  }
+
+  $taskRun = ('"{0}" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "Set-Location -LiteralPath ''{1}''; & ''{2}''"' -f $pwsh, $root, $Script)
   schtasks /Create /TN $Name /SC DAILY /ST $Time /TR $taskRun /F | Out-Host
 }
 

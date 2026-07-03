@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-Set-Location -LiteralPath "C:\fuman-terminal"
+Set-Location -LiteralPath $PSScriptRoot
 
 $env:FUMAN_RUNTIME_DIR = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $logDir = Join-Path $env:FUMAN_RUNTIME_DIR "logs"
