@@ -29,3 +29,6 @@ function Register-FumanTask {
 Register-FumanTask -Name "Fuman Strategy1 Candidate Verify 2135" -Time "21:35" -Script "$root\run-strategy1-battle-verify.ps1"
 Register-FumanTask -Name "Fuman Strategy1 Futopt Preopen Verify 0850" -Time "08:50" -Script "$root\run-strategy1-battle-verify.ps1"
 Register-FumanTask -Name "Fuman Strategy1 Flame Gate Verify 0852" -Time "08:52" -Script "$root\run-strategy1-battle-verify.ps1"
+Register-FumanTask -Name "Fuman Open Buy Cache 2130" -Time "21:30" -Script "$root\run-open-buy.ps1"
+Register-FumanTask -Name "Fuman Open Buy Preopen Prepare 0845" -Time "08:45" -Script "$root\run-open-buy-preopen-prepare.ps1"
+Register-FumanTask -Name "Fuman Open Buy Preopen 0855" -Time "08:55" -Script "$root\run-open-buy-preopen.ps1"
