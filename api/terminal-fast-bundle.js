@@ -381,7 +381,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy5-latest", strategy5Latest, compactQuery(70), 2300],
     ["/api/latest-strategy?key=strategy2", latestStrategy, { key: "strategy2", compact: "1", shell: "1", limit: "80", live: "1" }, 3000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
-    ["/api/realtime-radar-latest", realtimeRadarLatest, { compact: "1", shell: "1", limit: "50" }, 2100],
+    ["/api/realtime-radar-latest", realtimeRadarLatest, compactQuery(60), 2100],
     ["/api/heatmap?snapshot=1", heatmap, { snapshot: "1", canvas: "1", compact: "1", shell: "1", limit: "60" }, 2100],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
     ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],

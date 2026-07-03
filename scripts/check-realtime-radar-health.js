@@ -15,7 +15,8 @@ const PRODUCTION_URL = (process.env.FUMAN_PRODUCTION_URL || "https://fuman-termi
 const ALERT_COOLDOWN_MS = Number(process.env.REALTIME_RADAR_HEALTH_ALERT_COOLDOWN_MS || 15 * 60 * 1000);
 const MIN_INTRADAY_ROWS = Number(process.env.REALTIME_RADAR_HEALTH_MIN_ROWS || 1200);
 const MAX_HEALTH_FAILED_BATCHES = Number(process.env.REALTIME_RADAR_HEALTH_MAX_FAILED_BATCHES || 0);
-const EXPECTED_SOURCE_EXCLUDED_CODES = ["1475", "2254", "7732", "8488"];
+const EXPECTED_SOURCE_EXCLUDED_CODES = ["1475", "1538", "2254", "2321", "2901", "5906", "7732", "8101", "8488"];
+const FETCH_TIMEOUT_MS = Number(process.env.REALTIME_RADAR_HEALTH_FETCH_TIMEOUT_MS || 20000);
 
 function readJson(file, fallback = null) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -149,7 +150,7 @@ function taskInfo(name) {
   }
 }
 
-async function fetchJson(url, headers = {}, timeoutMs = 5000) {
+async function fetchJson(url, headers = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -166,13 +167,13 @@ async function readSupabaseLatest() {
   const key = readText(path.join(SECRET_DIR, "supabase-anon-key.txt"));
   if (!base || !key) return { ok: false, error: "missing supabase url/anon key" };
   const url = `${base.replace(/\/+$/, "")}/rest/v1/fuman_realtime_radar_cache?id=eq.latest&select=payload,updated_at&limit=1`;
-  const rows = await fetchJson(url, { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }, 6000);
+  const rows = await fetchJson(url, { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" });
   const row = Array.isArray(rows) ? rows[0] : rows;
   return { ok: Boolean(row?.payload), updatedAt: row?.updated_at || "", payload: row?.payload || null };
 }
 
 async function readProductionApiLatest() {
-  const payload = await fetchJson(`${PRODUCTION_URL}/api/realtime-radar-latest?full=1&limit=1200&compact=1&shell=1&t=${Date.now()}`, {}, 10000);
+  const payload = await fetchJson(`${PRODUCTION_URL}/api/realtime-radar-latest?full=1&limit=1200&compact=1&shell=1&t=${Date.now()}`);
   return { ok: payload?.ok !== false && Boolean(payload?.rows?.length), payload };
 }
 

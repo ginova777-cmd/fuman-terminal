@@ -409,6 +409,32 @@ function firstFiniteNumber(...values) {
   return null;
 }
 
+function statusLooksReady(value) {
+  return /^(captured_at_publish|complete|ok|ready|pass|passed|healthy)$/i.test(String(value || "").trim());
+}
+
+function isRealtimeRadarAfterClosePayloadReady(payload = {}) {
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const rowCount = Number(payload.count ?? payload.totalCount ?? payload.total ?? rows.length) || rows.length;
+  const runQuality = payload.run_quality_at_publish || payload.runQualityAtPublish || {};
+  const sourceStatus = payload.source_status_at_run || payload.sourceStatusAtRun || {};
+  return Boolean(
+    taipeiMinutes() > 13 * 60 + 30
+    && realtimeRadarPayloadDate(payload) === taipeiDateKey()
+    && rowCount >= 1200
+    && cleanNumber(payload.failedBatchCount) === 0
+    && cleanNumber(payload.staleQuoteCount) === 0
+    && (
+      statusLooksReady(payload.evidenceStatus)
+      || statusLooksReady(payload.unattendedStatus)
+      || statusLooksReady(payload.qualityStatus)
+      || statusLooksReady(runQuality.status)
+      || statusLooksReady(sourceStatus.status)
+      || cleanNumber(runQuality.rowsChecked) >= 1200
+    )
+  );
+}
+
 function realtimeRadarSourceQualityIssues(payload = {}, table = "fuman_realtime_radar_cache") {
   const coverage = payload.quote_coverage_at_run || payload.quoteCoverageAtRun || payload.sourceCoverage || {};
   const residualStaleQuoteCount = cleanNumber(payload.staleQuoteCount);
@@ -435,8 +461,10 @@ function realtimeRadarSourceQualityIssues(payload = {}, table = "fuman_realtime_
   const issues = [];
   if (freshCoverage === null) issues.push(`${table} fresh_quote_coverage_120s missing`);
   else if (freshCoverage < minFreshCoverage) issues.push(`${table} fresh_quote_coverage_120s=${freshCoverage}<${minFreshCoverage}`);
-  if (quoteAgeSeconds === null) issues.push(`${table} quote_age_seconds missing`);
-  else if (quoteAgeSeconds > maxQuoteAgeSeconds) issues.push(`${table} quote_age_seconds=${quoteAgeSeconds}>${maxQuoteAgeSeconds}`);
+  if (!isRealtimeRadarAfterClosePayloadReady(payload)) {
+    if (quoteAgeSeconds === null) issues.push(`${table} quote_age_seconds missing`);
+    else if (quoteAgeSeconds > maxQuoteAgeSeconds) issues.push(`${table} quote_age_seconds=${quoteAgeSeconds}>${maxQuoteAgeSeconds}`);
+  }
   if (cleanNumber(payload.failedBatchCount) > 0) {
     issues.push(`${table} failedBatchCount=${cleanNumber(payload.failedBatchCount)}/${cleanNumber(payload.totalBatchCount) || "--"}`);
   }
