@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -221,6 +222,42 @@ function strategy2SourceGateIssues(sourceStatus) {
   return issues;
 }
 
+function parseJsonText(text) {
+  try { return JSON.parse(text); } catch {}
+  const match = String(text || "").match(/\{[\s\S]*\}$/);
+  if (!match) return null;
+  try { return JSON.parse(match[0]); } catch {}
+  return null;
+}
+
+function fetchStrategy3FormalSourceChain() {
+  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(__dirname, "check-strategy3-source-chain.js")], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8",
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 120000,
+  });
+  const payload = parseJsonText(child.stdout);
+  if (payload && typeof payload === "object") {
+    return {
+      ...payload,
+      childStatus: child.status ?? 1,
+      childSignal: child.signal || "",
+      childError: child.error?.message || "",
+    };
+  }
+  return {
+    ok: false,
+    ready: false,
+    status: "failed",
+    reason: child.stderr || child.stdout || child.error?.message || "strategy3 formal source chain unavailable",
+    childStatus: child.status ?? 1,
+    childSignal: child.signal || "",
+    childError: child.error?.message || "",
+  };
+}
+
 function normalizeStrategy(value) {
   const key = String(value || "").trim().toLowerCase();
   return STRATEGY_ALIASES.get(key) || value;
@@ -265,6 +302,7 @@ async function main() {
   let readinessWarning = "";
   let sourceStatus = null;
   let sourceGateIssues = [];
+  let strategy3SourceChain = null;
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
       readiness = await fetchStrategy2ReadinessStatus();
@@ -286,6 +324,12 @@ async function main() {
       if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
     }
   }
+  if (String(row.strategy || "").toLowerCase() === "strategy3") {
+    strategy3SourceChain = fetchStrategy3FormalSourceChain();
+    if (strategy3SourceChain.ready !== true && effectiveStatus === READY_STATUS) {
+      effectiveStatus = "not_ready";
+    }
+  }
   const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
   const blocked = !ok;
   const readinessReason = readiness && readiness.strategy2_ready_100 !== true
@@ -297,9 +341,15 @@ async function main() {
     ].join("; ")
     : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
-  const reason = [row.reason || "", readinessReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const strategy3SourceChainReason = strategy3SourceChain && strategy3SourceChain.ready !== true
+    ? `strategy3 formal source-chain: ${strategy3SourceChain.reason || strategy3SourceChain.issues?.join("; ") || "not_ready"}`
+    : "";
+  const reason = [row.reason || "", readinessReason, readinessWarning, sourceGateReason, strategy3SourceChainReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true);
-  const suggestedScannerBehavior = sourceGateIssues.length || readinessBlocked
+  const strategy3SourceBlocked = Boolean(strategy3SourceChain && strategy3SourceChain.ready !== true);
+  const suggestedScannerBehavior = strategy3SourceBlocked
+    ? "block Strategy3 scanner publish; preserve previous complete run; surface formal source-chain degraded reason"
+    : sourceGateIssues.length || readinessBlocked
     ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
     : row.suggested_scanner_behavior || "";
   const payload = {
@@ -320,6 +370,7 @@ async function main() {
     updatedAt: row.updated_at || "",
     readiness,
     sourceStatus,
+    strategy3SourceChain,
     sourceGate: {
       minFreshQuoteCoverage120s: STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S,
       intraday1mHardStaleSeconds: STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS,
