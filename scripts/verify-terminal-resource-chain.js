@@ -54,9 +54,8 @@ const STRATEGIES = [
   {
     key: "strategy2",
     label: "策略2 即時",
-    policy: "same-day live",
-    endpoint: "/api/latest-strategy?key=strategy2",
-    directEndpoint: "/api/strategy2-latest",
+    policy: "same-day live; formal gate is dedicated daytrade canonical gate only",
+    endpoint: "/api/strategy2-latest",
     mobileTab: "strategy2",
     receiptKey: "strategy2",
     runView: { table: "v_strategy2_latest_complete_run", strategy: "strategy2" },

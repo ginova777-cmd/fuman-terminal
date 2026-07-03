@@ -91,10 +91,9 @@ const STRATEGIES = [
     key: "strategy2",
     name: "Strategy2 intraday",
     endpoints: [
-      "/api/latest-strategy?key=strategy2&compact=1&limit=1200&live=1",
       "/api/strategy2-latest?compact=1&limit=1200&live=1",
     ],
-    sourceChain: ["v_strategy2_latest_complete_run", "strategy2_scan_results", "v_strategy2_readiness_status", "source_status"],
+    sourceChain: ["v_strategy2_latest_complete_run", "strategy2_scan_results", "v_strategy2_readiness_status", "v_fugle_daytrade_unattended_gate_status"],
     writerRunner: "run-strategy2-intraday.ps1 / scripts/scan-intraday-signals.js",
     latestView: "v_strategy2_latest_complete_run",
     runsTable: "strategy2_scan_runs",
