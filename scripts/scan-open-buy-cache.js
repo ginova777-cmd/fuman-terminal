@@ -69,6 +69,8 @@ function runSupabasePublishHardGate(stage = "strategy1-complete-publish") {
       FUMAN_ALERT_SOURCE: "scan-open-buy-cache.js",
       FUMAN_PUBLISH_GATE_STRATEGY: "strategy1",
       FUMAN_PUBLISH_STAGE: stage,
+      FUMAN_SUPABASE_FETCH_ATTEMPTS: process.env.FUMAN_SUPABASE_FETCH_ATTEMPTS || "6",
+      FUMAN_SUPABASE_FETCH_RETRY_DELAY_MS: process.env.FUMAN_SUPABASE_FETCH_RETRY_DELAY_MS || "2500",
     },
     timeout: 180000,
     windowsHide: true,
