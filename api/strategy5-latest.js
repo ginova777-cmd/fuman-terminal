@@ -89,6 +89,10 @@ function apiOnlyError(reason = "") {
       contractAllowed: false,
       officialSource: false,
     },
+    fallbackScope: [],
+    fallbackAllowed: true,
+    fallbackDetails: [],
+    fallbackContract: "strategy5-fallback-disallowed-for-publish",
     writeBudget: {
       ok: false,
       limitRows: WRITE_BUDGET_LIMIT_ROWS,
@@ -98,6 +102,15 @@ function apiOnlyError(reason = "") {
       reason: reason || "strategy5_api_only_unavailable",
     },
     retentionOk: false,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    requiredFields: STRATEGY5_REQUIRED_FIELD_GROUPS,
+    blankCounts: {},
+    sampleMissingRows: [],
+    blockedReason: reason || "strategy5_api_only_unavailable",
+    scanner_block_reason: reason || "strategy5_api_only_unavailable",
     retention: {
       ok: false,
       rawRetentionDays: RAW_RETENTION_DAYS,
@@ -158,6 +171,13 @@ async function fetchRowsWithCount(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function cleanNullableNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(String(value).replace(/[,+%]/g, ""));
+  return Number.isFinite(number) ? number : null;
 }
 
 function compactDateKey(value) {
@@ -282,11 +302,13 @@ function strategy5DeepValue(object, key) {
   return cursor;
 }
 
-function strategy5HasFieldValue(row, fields) {
+function strategy5HasFieldValue(row, fields, group = "") {
   return fields.some((field) => {
     const value = strategy5DeepValue(row, field);
     if (value === null || value === undefined) return false;
     if (Array.isArray(value)) return value.length > 0;
+    if (["price", "volume", "score"].includes(group)) return Number(value) > 0;
+    if (group === "changePercent") return !(typeof value === "string" && !value.trim()) && Number.isFinite(Number(value));
     if (typeof value === "string") return value.trim().length > 0;
     return true;
   });
@@ -299,7 +321,7 @@ function buildStrategy5FieldCompleteness(rows) {
   checkedRows.forEach((row, index) => {
     const missingGroups = [];
     for (const [group, fields] of Object.entries(STRATEGY5_REQUIRED_FIELD_GROUPS)) {
-      if (!strategy5HasFieldValue(row, fields)) {
+      if (!strategy5HasFieldValue(row, fields, group)) {
         blankCounts[group] += 1;
         missingGroups.push(group);
       }
@@ -349,6 +371,7 @@ function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiStat
     fallbackScope: Array.isArray(persistedQuality.fallbackScope) ? persistedQuality.fallbackScope : [],
     fallbackAllowed: false,
     fallbackDetails: Array.isArray(persistedQuality.fallbackDetails) ? persistedQuality.fallbackDetails : [],
+    fallbackContract: persistedQuality.fallbackContract || "strategy5-fallback-disallowed-for-publish",
     expectedTotal: cleanNumber(expectedTotal),
     scannedCount: cleanNumber(scannedCount),
     resultCount: cleanNumber(resultCount),
@@ -362,6 +385,8 @@ function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiStat
     blankTotal: cleanNumber(fieldCompleteness.blankTotal),
     blankRate: cleanNumber(fieldCompleteness.blankRate),
     sampleMissingRows: Array.isArray(fieldCompleteness.sampleMissingRows) ? fieldCompleteness.sampleMissingRows : [],
+    blockedReason: persistedQuality.blockedReason || persistedQuality.scanner_block_reason || (apiState.publishGate.publishAllowed ? "" : apiState.publishGate.reason),
+    scanner_block_reason: persistedQuality.scanner_block_reason || persistedQuality.blockedReason || (apiState.publishGate.publishAllowed ? "" : apiState.publishGate.reason),
     rawKeepDays: RAW_RETENTION_DAYS,
     qualityStatus: run?.quality_status || persistedQuality.qualityStatus || "",
   };
@@ -589,6 +614,7 @@ function normalizePayload(row) {
   const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
   const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : matches[0] || null;
   const sourceInst = payload.inst && typeof payload.inst === "object" ? payload.inst : {};
+  const percent = cleanNullableNumber(payload.percent ?? payload.changePercent ?? row.change_percent);
   const institutionTotalNet = cleanNumber(payload.institutionTotalNet ?? payload.institution_total_net ?? payload.totalNet ?? payload.total_net ?? sourceInst.total ?? row.institution_total_net ?? row.total_net);
   const foreignNet = cleanNumber(payload.foreignNet ?? payload.foreign_net ?? sourceInst.foreign ?? row.foreign_net);
   const trustNet = cleanNumber(payload.trustNet ?? payload.investmentTrustNet ?? payload.investment_trust_net ?? sourceInst.trust ?? row.trust_net);
@@ -605,10 +631,10 @@ function normalizePayload(row) {
     inst,
     matches,
     code: String(payload.code || row.code || "").trim(),
-    name: String(payload.name || row.name || row.code || "").trim(),
+    name: String(payload.name || row.name || "").trim(),
     close: cleanNumber(payload.close || payload.price || row.close || row.price),
     price: cleanNumber(payload.price || payload.close || row.price || row.close),
-    percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
+    percent,
     tradeVolume: cleanNumber(payload.tradeVolume || payload.volume || row.trade_volume || row.volume),
     volume: cleanNumber(payload.volume || payload.tradeVolume || row.volume || row.trade_volume),
     value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
@@ -635,11 +661,11 @@ function buildPayload(rows, run, options = {}) {
   const expectedTotal = cleanNumber(run?.expected_total);
   const scannedCount = cleanNumber(run?.scanned_count);
   const resultCount = cleanNumber(run?.result_count) || rows.length;
-  const matches = rows
+  const normalizedRows = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
-    .map(normalizePayload)
-    .filter((row) => row.matches.length);
+    .map(normalizePayload);
+  const matches = normalizedRows.filter((row) => row.matches.length);
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
   const chipSourceHealth = options.chipSourceHealth || null;
   const sourceDate = resolveStrategy5SourceDate(run, scanDate, chipSourceHealth);
@@ -671,7 +697,7 @@ function buildPayload(rows, run, options = {}) {
     scannedCount,
     returnedCount: matches.length,
   });
-  const fieldCompleteness = buildStrategy5FieldCompleteness(matches);
+  const fieldCompleteness = buildStrategy5FieldCompleteness(normalizedRows);
   const runTimeEvidence = strategy5RunTimeSourceEvidence({
     run,
     sourceHealth,
@@ -702,8 +728,21 @@ function buildPayload(rows, run, options = {}) {
     publishGate: apiState.publishGate,
     fallbackUsed: apiState.fallback.used,
     fallback: apiState.fallback,
+    fallbackScope: runTimeEvidence.run_quality_at_publish?.fallbackScope || [],
+    fallbackAllowed: runTimeEvidence.run_quality_at_publish?.fallbackAllowed === true,
+    fallbackDetails: runTimeEvidence.run_quality_at_publish?.fallbackDetails || [],
+    fallbackContract: runTimeEvidence.run_quality_at_publish?.fallbackContract || "strategy5-fallback-disallowed-for-publish",
     writeBudget: apiState.writeBudget,
     retentionOk: apiState.retention.ok,
+    evidenceStatus: apiState.unattended.status === "YES" ? "complete" : "insufficient",
+    unattendedStatus: apiState.unattended.status,
+    degradedBlocksLatest: apiState.publishGate.degradedBlocksLatest,
+    preservePreviousGood: true,
+    requiredFields: fieldCompleteness.requiredFields || STRATEGY5_REQUIRED_FIELD_GROUPS,
+    blankCounts: fieldCompleteness.blankCounts || {},
+    sampleMissingRows: fieldCompleteness.sampleMissingRows || [],
+    blockedReason: apiState.publishGate.publishAllowed ? "" : apiState.publishGate.reason,
+    scanner_block_reason: apiState.publishGate.publishAllowed ? "" : apiState.publishGate.reason,
     retention: apiState.retention,
     rawKeepDays: RAW_RETENTION_DAYS,
     marketSession: apiState.marketSession,
@@ -789,7 +828,7 @@ async function fetchLatestCompleteRows(limit = 2000) {
   return { rows: result.rows, run: { ...run, readback_count: readbackCount }, gate: COMPLETE_RUN_GATE };
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy5", endpoint: "api/strategy5-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -830,4 +869,12 @@ module.exports = async function handler(request, response) {
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
+}
+
+module.exports = handler;
+module.exports._test = {
+  buildPayload,
+  buildStrategy5ApiState,
+  buildStrategy5FieldCompleteness,
+  strategy5RunTimeSourceEvidence,
 };

@@ -135,6 +135,7 @@ function normalizeRow(row) {
   const jointStreak = cleanNumber(payload.jointStreak ?? payload.joint_streak);
   return {
     ...payload,
+    rank: cleanNumber(payload.rank || row.rank),
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
     close: cleanNumber(payload.close || row.close),
@@ -156,6 +157,9 @@ function normalizeRow(row) {
     total_net: total,
     institutionTotalNet: total,
     institution_total_net: total,
+    source: String(payload.source || row.source || row.data_contract_source || "").trim(),
+    dataContractSource: String(payload.dataContractSource || row.data_contract_source || payload.source || "").trim(),
+    data_contract_source: String(row.data_contract_source || payload.data_contract_source || payload.source || "").trim(),
     fiveDayAvgVolume,
     five_day_avg_volume: fiveDayAvgVolume,
     foreignTrustBuyVolumePct,
@@ -253,11 +257,26 @@ function buildPayload(rows, run, options = {}) {
   const sourceCoverage = {
     coverageStatus: sourceHealth.coverageStatus,
     latestTradeDate: sourceHealth.latestTradeDate,
+    usedDate: run?.payload?.usedDate || scanDate,
     institutionalRows: sourceHealth.institutionalRows,
     marginRows: sourceHealth.marginRows,
     unifiedRows: sourceHealth.unifiedRows,
     validAfterExclusionRows: sourceHealth.validAfterExclusionRows,
     minRequiredRows: sourceHealth.minRequiredRows,
+  };
+  const institutionSourceStatusAtRun = {
+    ok: sourceCoverageReady,
+    status: sourceCoverageReady ? "ready" : "degraded",
+    coverageStatus: sourceHealth.coverageStatus,
+    latestTradeDate: sourceHealth.latestTradeDate,
+    usedDate: run?.payload?.usedDate || scanDate,
+    institutionalRows: sourceHealth.institutionalRows,
+    validAfterExclusionRows: sourceHealth.validAfterExclusionRows,
+    minRequiredRows: sourceHealth.minRequiredRows,
+    sourceRows: sourceHealth.institutionalRows || sourceHealth.unifiedRows,
+    resultRows: resultCount,
+    sources: ["TWSE T86", "TPEx 3itrade"],
+    reason: sourceHealth.reason || "",
   };
   const issues = sourceCoverageReady ? [] : [{
     severity: "critical",
@@ -286,8 +305,12 @@ function buildPayload(rows, run, options = {}) {
     count: resultCount,
     returnedCount: outputRows.length,
     sourceCoverage,
+    institution_source_status_at_run: institutionSourceStatusAtRun,
+    chip_source_status_at_run: institutionSourceStatusAtRun,
     staleSeconds: secondsSince(sourceHealth.updatedAt || run?.finished_at || rows[0]?.updated_at),
     fallbackUsed: false,
+    evidenceStatus: sourceCoverageReady ? "complete" : "insufficient",
+    unattendedStatus: sourceCoverageReady ? "YES" : "NO",
     writeBudget: {
       status: sourceCoverageReady ? "allow" : "blocked",
       allowed: sourceCoverageReady,
@@ -391,7 +414,7 @@ async function fetchLatestCompleteRows() {
   return { rows, run };
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "institution", endpoint: "api/institution-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -431,4 +454,13 @@ module.exports = async function handler(request, response) {
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
+}
+
+module.exports = handler;
+module.exports._test = {
+  buildPayload,
+  normalizeRow,
+  normalizeSourceHealth,
+  buildFieldCompleteness,
+  apiOnlyError,
 };

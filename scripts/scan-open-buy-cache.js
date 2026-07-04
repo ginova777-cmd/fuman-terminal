@@ -12,6 +12,7 @@ const OUT_FILE = dataPath("open-buy-latest.json");
 const BACKUP_FILE = dataPath("open-buy-backup.json");
 const SCORECARD_SOURCE_FILE = dataPath("open-buy-scorecard-source.json");
 const SUPABASE_STATUS_FILE = statePath("open-buy-supabase-status.json");
+const BLOCKED_RECEIPT_FILE = statePath("strategy1-open-buy-blocked-receipt.json");
 const BATCH_SIZE = Number(process.env.OPEN_BUY_BATCH_SIZE || 48);
 const BATCHES_PER_RUN = Number(process.env.OPEN_BUY_BATCHES_PER_RUN || 5);
 const FULL_SCAN = process.env.FULL_SCAN === "1";
@@ -58,6 +59,46 @@ function writeSupabaseStatus(ok, details = {}) {
     checkedAt: new Date().toISOString(),
     ...details,
   });
+}
+
+function buildBlockedReceipt(reason, payload = {}, details = {}) {
+  return {
+    ok: false,
+    strategy: "strategy1",
+    receiptType: "blocked",
+    blockedAt: new Date().toISOString(),
+    blockedReason: String(reason || "strategy1_publish_blocked"),
+    scanner_block_reason: String(details.scanner_block_reason || reason || "strategy1_publish_blocked"),
+    runId: payload?.runId || "",
+    complete: payload?.complete === true,
+    scanStatus: payload?.scanStatus || "",
+    expectedTotal: cleanNumber(payload?.total),
+    scannedCount: Array.isArray(payload?.scannedCodes) ? payload.scannedCodes.length : cleanNumber(payload?.scannedThisRun),
+    resultCount: Array.isArray(payload?.rows) ? payload.rows.length : cleanNumber(payload?.resultCount || payload?.count),
+    preservePreviousGood: true,
+    degradedBlocksLatest: true,
+    latestWriteAttempted: false,
+    updatesLatestPointer: false,
+    writeBudget: {
+      ok: false,
+      limit: 0,
+      used: 0,
+      remaining: 0,
+      allowed: false,
+      finalStatus: "blocked-no-write",
+      reason: String(reason || "strategy1_publish_blocked"),
+    },
+    retentionOk: true,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    ...details,
+  };
+}
+
+function writeBlockedReceipt(reason, payload = {}, details = {}) {
+  const receipt = buildBlockedReceipt(reason, payload, details);
+  writeJson(BLOCKED_RECEIPT_FILE, receipt);
+  return receipt;
 }
 
 function runSupabasePublishHardGate(stage = "strategy1-complete-publish") {
@@ -181,6 +222,72 @@ function normalizeSignals(value) {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
 }
 
+const STRATEGY1_REQUIRED_BUSINESS_FIELDS = [
+  { key: "code", label: "股票代號", required: true },
+  { key: "name", label: "股票名稱", required: true },
+  { key: "decision", label: "策略判斷", required: true },
+  { key: "reason", label: "判讀理由", required: true },
+  { key: "score", label: "排序分數", required: true },
+  { key: "rank", label: "排序名次", required: true },
+];
+const STRATEGY1_REQUIRED_PUBLISH_FIELD_KEYS = [
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "run_quality_at_publish",
+  "writeBudget",
+  "retentionOk",
+  "fallbackUsed",
+  "futopt0845StageKey",
+  "futopt0845SecondaryCount",
+  "futopt0845StageStatus",
+];
+
+function fieldValue(row, key, index) {
+  if (key === "rank") return row.rank ?? index + 1;
+  return row?.[key] ?? row?.payload?.[key] ?? row?.strategy1Decision?.[key];
+}
+
+function isBusinessBlank(value, key) {
+  if (key === "score" || key === "rank") return !(Number(value) > 0);
+  if (value === null || value === undefined) return true;
+  return String(value).trim().length === 0;
+}
+
+function buildStrategy1BusinessFieldAudit(rows = []) {
+  const blankCounts = {
+    ...Object.fromEntries(STRATEGY1_REQUIRED_BUSINESS_FIELDS.map((field) => [field.key, 0])),
+    ...Object.fromEntries(STRATEGY1_REQUIRED_PUBLISH_FIELD_KEYS.map((key) => [key, 0])),
+  };
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = [];
+    for (const field of STRATEGY1_REQUIRED_BUSINESS_FIELDS) {
+      const value = fieldValue(row, field.key, index);
+      if (isBusinessBlank(value, field.key)) {
+        blankCounts[field.key] += 1;
+        missing.push(field.key);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 20) {
+      sampleMissingRows.push({
+        index,
+        code: String(row?.code || row?.payload?.code || "").trim(),
+        name: String(row?.name || row?.payload?.name || "").trim(),
+        missing,
+      });
+    }
+  });
+  return {
+    requiredFields: {
+      identity: ["code", "name"],
+      decision: ["decision", "reason"],
+      ranking: ["score", "rank"],
+    },
+    blankCounts,
+    sampleMissingRows,
+  };
+}
+
 function buildOpenBuyResultRows(output, runId) {
   const rows = Array.isArray(output.rows) && output.rows.length ? output.rows : (Array.isArray(output.matches) ? output.matches : []);
   const scanDate = scanDateFromOutput(output);
@@ -215,6 +322,7 @@ function buildOpenBuyResultRows(output, runId) {
 function buildOpenBuyRunRow(output, runId) {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const rows = Array.isArray(output.rows) ? output.rows : [];
+  const businessFieldAudit = buildStrategy1BusinessFieldAudit(rows);
   const buyCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BUY").length : cleanNumber(output.buyCount || output.count);
   const watchCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "WATCH").length : cleanNumber(output.watchCount);
   const blockCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BLOCK").length : cleanNumber(output.blockCount);
@@ -255,6 +363,9 @@ function buildOpenBuyRunRow(output, runId) {
         preservePreviousGood: output.complete !== true,
         qualityStatus: output.complete ? "complete" : "incomplete",
       }),
+      requiredFields: output.requiredFields || businessFieldAudit.requiredFields,
+      blankCounts: output.blankCounts || businessFieldAudit.blankCounts,
+      sampleMissingRows: output.sampleMissingRows || businessFieldAudit.sampleMissingRows,
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       completedChunks: cleanNumber(output.completedChunks),
@@ -322,6 +433,9 @@ async function upsertOpenBuyLatestToSupabase(payload) {
     return false;
   }
   if (payload.complete !== true) {
+    writeBlockedReceipt("incomplete_scan_not_eligible_for_latest", payload, {
+      scanner_block_reason: "incomplete scan is not eligible for run_id complete gate",
+    });
     writeSupabaseStatus(false, { skipped: true, reason: "incomplete scan is not eligible for run_id complete gate" });
     return false;
   }
@@ -637,6 +751,7 @@ async function main() {
     const rows = [...currentRows.values()]
       .sort((a, b) => (b.score || 0) - (a.score || 0) || String(a.code || "").localeCompare(String(b.code || "")))
       .slice(0, 2000);
+    const businessFieldAudit = buildStrategy1BusinessFieldAudit(rows);
     const quoteDate = universe.find((stock) => stock.quoteDate)?.quoteDate || String(matches[0]?.date || rows[0]?.date || scanStamp).replace(/\D/g, "");
     return {
       ok: true,
@@ -659,6 +774,9 @@ async function main() {
       buyCount: matches.length,
       watchCount: rows.filter((row) => String(row.decision || "").toUpperCase() === "WATCH").length,
       blockCount: rows.filter((row) => String(row.decision || "").toUpperCase() === "BLOCK").length,
+      requiredFields: businessFieldAudit.requiredFields,
+      blankCounts: businessFieldAudit.blankCounts,
+      sampleMissingRows: businessFieldAudit.sampleMissingRows,
       rows,
       matches,
     };
@@ -679,6 +797,9 @@ async function main() {
 
   async function publishCompleteOutput(output, { backupOnMatches = false } = {}) {
     if (output.complete !== true || output.scanStatus !== "complete") {
+      writeBlockedReceipt("non_complete_publish_blocked", output, {
+        scanner_block_reason: `status=${output.scanStatus} complete=${output.complete}`,
+      });
       await publishRunningStatus(output, "blocked non-complete publish to latest");
       throw new Error(`Refusing to publish non-complete open-buy output: status=${output.scanStatus} complete=${output.complete}`);
     }
@@ -750,6 +871,9 @@ async function main() {
 
   if (failedCodes.size || scanned.size !== codes.length || scannedThisRun !== codes.length) {
     const incompleteOutput = buildOutput(chunksToRun, false, "incomplete");
+    writeBlockedReceipt("full_scan_incomplete", incompleteOutput, {
+      scanner_block_reason: `scanned ${scanned.size}/${codes.length}, failed ${failedCodes.size}`,
+    });
     await publishRunningStatus(incompleteOutput, `incomplete failed=${failedCodes.size}`);
     throw new Error(`Open-buy full scan incomplete: scanned ${scanned.size}/${codes.length}, failed ${failedCodes.size}`);
   }
@@ -763,9 +887,20 @@ async function main() {
   console.log(`open-buy cache updated: full market scan scanned ${scannedThisRun}/${codes.length}, matches ${output.matches.length}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  STRATEGY1_REQUIRED_BUSINESS_FIELDS,
+  buildStrategy1BusinessFieldAudit,
+  buildBlockedReceipt,
+  buildOpenBuyRunRow,
+  buildOpenBuyResultRows,
+  openBuyRunIdFromOutput,
+};
 
 

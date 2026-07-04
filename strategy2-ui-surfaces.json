@@ -1,0 +1,34 @@
+[
+  {
+    "surfaceName": "mobile-fragment-tab-config",
+    "file": "api/mobile-fragment.js",
+    "businessPurpose": "mobile strategy2 tab must call the formal Strategy2 API payload, not static fixture data",
+    "requiredContains": [
+      "strategy2:",
+      "endpoint: \"/api/strategy2-latest\"",
+      "策略2 當沖"
+    ],
+    "verifierRule": "file contains strategy2 tab config and formal /api/strategy2-latest endpoint"
+  },
+  {
+    "surfaceName": "mobile-boot-tab-endpoint",
+    "file": "api/mobile-boot.js",
+    "businessPurpose": "mobile boot payload must keep Strategy2 bound to the formal latest endpoint",
+    "requiredContains": [
+      "strategy2: \"/api/strategy2-latest\"",
+      "FRAGMENT_TABS"
+    ],
+    "verifierRule": "file contains strategy2 endpoint in TAB_ENDPOINTS"
+  },
+  {
+    "surfaceName": "terminal-home-strategy2-handler",
+    "file": "api/terminal-home.js",
+    "businessPurpose": "desktop/home aggregation must require and call the formal Strategy2 API handler",
+    "requiredContains": [
+      "const strategy2Latest = require(\"./strategy2-latest\")",
+      "mobile.strategy2",
+      "\"strategy2-intraday-latest.json\""
+    ],
+    "verifierRule": "file requires strategy2-latest and exposes Strategy2 mobile/home payload"
+  }
+]

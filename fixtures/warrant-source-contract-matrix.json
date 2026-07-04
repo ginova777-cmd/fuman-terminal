@@ -1,0 +1,74 @@
+[
+  {
+    "sourceName": "權證 complete run",
+    "tableViewOrApi": "v_warrant_flow_latest_complete_run",
+    "purpose": "latest/readback",
+    "required": "必要",
+    "minimumThreshold": "complete=true 且 result_count>0",
+    "staleLimit": "必須最新 complete run",
+    "missingAction": "block publish"
+  },
+  {
+    "sourceName": "權證 scan results",
+    "tableViewOrApi": "warrant_flow_scan_results",
+    "purpose": "權證結果列",
+    "required": "必要",
+    "minimumThreshold": "result rows 與 run count match",
+    "staleLimit": "必須同 runId",
+    "missingAction": "preserve previous good"
+  },
+  {
+    "sourceName": "complete run health",
+    "tableViewOrApi": "v_warrant_latest_complete_run_health",
+    "purpose": "complete run 水源健康",
+    "required": "必要",
+    "minimumThreshold": "status/source_status=ready",
+    "staleLimit": "依 health view",
+    "missingAction": "block publish"
+  },
+  {
+    "sourceName": "scanner resource health",
+    "tableViewOrApi": "v_scanner_resource_health",
+    "purpose": "scanner source ready",
+    "required": "必要",
+    "minimumThreshold": "strategy=warrant 且 status=ready",
+    "staleLimit": "依 health view",
+    "missingAction": "block publish"
+  },
+  {
+    "sourceName": "權證 API latest",
+    "tableViewOrApi": "api/warrant-flow-latest.js",
+    "purpose": "前端 payload",
+    "required": "必要",
+    "minimumThreshold": "buildPayload contract valid",
+    "staleLimit": "不可 snapshot-friendly-empty 當 ready",
+    "missingAction": "display degraded"
+  },
+  {
+    "sourceName": "scanner payload",
+    "tableViewOrApi": "api/scan-warrant-flow.js",
+    "purpose": "掃描正式 shape",
+    "required": "必要",
+    "minimumThreshold": "matches/volume/single shape valid",
+    "staleLimit": "scan output 不可 degraded",
+    "missingAction": "block publish"
+  },
+  {
+    "sourceName": "writer run payload",
+    "tableViewOrApi": "scripts/scan-warrant-flow-cache.js",
+    "purpose": "run/result 寫入 shape",
+    "required": "必要",
+    "minimumThreshold": "run/result rows 可 readback",
+    "staleLimit": "mismatch 即 fail",
+    "missingAction": "write blocked receipt"
+  },
+  {
+    "sourceName": "receipt",
+    "tableViewOrApi": "run-warrant-flow.ps1",
+    "purpose": "blocked/degraded 證據",
+    "required": "必要",
+    "minimumThreshold": "receipt shape 完整",
+    "staleLimit": "blocked 時必須存在",
+    "missingAction": "write blocked receipt"
+  }
+]

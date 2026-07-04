@@ -78,6 +78,99 @@ function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
 }
 
+function cleanNullableNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && !value.trim()) return null;
+  const number = Number(String(value).replace(/[,+%]/g, "").trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+const STRATEGY5_REQUIRED_FIELD_GROUPS = {
+  code: ["code"],
+  name: ["name"],
+  price: ["close", "price"],
+  changePercent: ["percent", "changePercent", "change_percent"],
+  volume: ["tradeVolume", "volume", "trade_volume"],
+  score: ["score"],
+  reason: ["reason", "activeMatch.reason", "matches.0.reason"],
+  signals: ["matches", "signals"],
+};
+
+function deepValue(object, key) {
+  return String(key || "").split(".").filter(Boolean).reduce((cursor, part) => {
+    if (Array.isArray(cursor) && /^\d+$/.test(part)) return cursor[Number(part)];
+    return cursor && typeof cursor === "object" ? cursor[part] : undefined;
+  }, object);
+}
+
+function hasFieldValue(row, fields, group = "") {
+  return fields.some((field) => {
+    const value = deepValue(row, field);
+    if (value === null || value === undefined) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (["price", "volume", "score"].includes(group)) return Number(value) > 0;
+    if (group === "changePercent") return !(typeof value === "string" && !value.trim()) && Number.isFinite(Number(value));
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  });
+}
+
+function buildStrategy5FieldCompleteness(rows) {
+  const checkedRows = Array.isArray(rows) ? rows : [];
+  const blankCounts = Object.fromEntries(Object.keys(STRATEGY5_REQUIRED_FIELD_GROUPS).map((key) => [key, 0]));
+  const sampleMissingRows = [];
+  checkedRows.forEach((row, index) => {
+    const missingGroups = [];
+    for (const [group, fields] of Object.entries(STRATEGY5_REQUIRED_FIELD_GROUPS)) {
+      if (!hasFieldValue(row, fields, group)) {
+        blankCounts[group] += 1;
+        missingGroups.push(group);
+      }
+    }
+    if (missingGroups.length && sampleMissingRows.length < 5) {
+      sampleMissingRows.push({
+        index,
+        code: String(row?.code || "").trim(),
+        name: String(row?.name || "").trim(),
+        missingGroups,
+      });
+    }
+  });
+  const blankTotal = Object.values(blankCounts).reduce((sum, value) => sum + value, 0);
+  const denominator = Math.max(1, checkedRows.length * Object.keys(STRATEGY5_REQUIRED_FIELD_GROUPS).length);
+  return {
+    requiredFields: STRATEGY5_REQUIRED_FIELD_GROUPS,
+    rowsChecked: checkedRows.length,
+    blankCounts,
+    blankTotal,
+    blankRate: Number((blankTotal / denominator).toFixed(6)),
+    sampleMissingRows,
+  };
+}
+
+function buildWriteBudget(output, resultCount, finalStatus = "complete") {
+  const limit = Number(process.env.STRATEGY5_WRITE_BUDGET_LIMIT_ROWS || 3000);
+  const scannedCount = Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun);
+  const used = scannedCount + cleanNumber(resultCount) + 1;
+  return {
+    ok: used > 0 && used <= limit && finalStatus === "complete",
+    budgetName: "strategy5-daily-complete-run",
+    limit,
+    limitRows: limit,
+    used,
+    estimatedRowsWritten: used,
+    writesCompleted: finalStatus === "complete" ? used : 0,
+    scannedCount,
+    resultCount: cleanNumber(resultCount),
+    runRows: 1,
+    remaining: Math.max(0, limit - used),
+    remainingRows: Math.max(0, limit - used),
+    finalStatus,
+    overBudget: used > limit,
+    reason: used <= limit ? "within_strategy5_write_budget" : "strategy5_write_budget_exceeded",
+  };
+}
+
 function buildChipSourceStatusAtRun(sourceHealth = {}, dataFreshness = {}) {
   const coverageStatus = String(sourceHealth.coverageStatus || sourceHealth.coverage_status || dataFreshness.coverageStatus || "").toLowerCase();
   const latestTradeDate = sourceHealth.latestTradeDate || sourceHealth.latest_trade_date || dataFreshness.latestTradeDate || "";
@@ -134,7 +227,41 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const chipSourceStatusAtRun = buildChipSourceStatusAtRun(output.sourceHealth || {}, output.dataFreshness || {});
   const publishAllowed = complete && chipSourceStatusAtRun.ok;
+  const resultCount = complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0;
+  const fieldCompleteness = output.fieldCompleteness || buildStrategy5FieldCompleteness(output.matches || []);
+  const writeBudget = output.writeBudget || buildWriteBudget(output, resultCount, complete ? "complete" : status);
+  const blockedReason = publishAllowed
+    ? ""
+    : (chipSourceStatusAtRun.reason || chipSourceStatusAtRun.status || "strategy5_publish_blocked");
   const notRequired = (reason) => ({ ok: true, status: "not_required", reason });
+  const runtimeSourceFields = buildRunTimeSourceSnapshotFields({
+    strategy: "strategy5",
+    runId,
+    payload: output,
+    startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
+    finishedAt: scanTime,
+    expectedTotal: cleanNumber(output.total),
+    scannedCount: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
+    resultCount,
+    sourceStatus: chipSourceStatusAtRun,
+    quoteCoverage: notRequired("strategy5 chip source does not require intraday quote freshness"),
+    intraday1mReadiness: notRequired("strategy5 chip source does not require intraday 1m"),
+    maReadiness: notRequired("strategy5 chip source does not require MA readiness"),
+    preopenFutoptDailyReadiness: notRequired("strategy5 chip source does not require preopen/futopt/daily volume readiness"),
+    publishAllowed,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    writeBudget,
+    retentionOk: publishAllowed,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: false,
+    fallbackDetails: [],
+    fallbackContract: "strategy5-fallback-disallowed-for-publish",
+    blockedReason,
+    scannerBlockReason: blockedReason,
+    qualityStatus: complete ? "complete" : status,
+  });
   return {
     run_id: runId,
     strategy: "strategy5",
@@ -144,7 +271,7 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
     status,
     expected_total: cleanNumber(output.total),
     scanned_count: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
-    result_count: complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0,
+    result_count: resultCount,
     complete,
     quality_status: complete ? "complete" : status,
     source: String(output.source || "").trim(),
@@ -153,26 +280,52 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
     generated_at: String(output.updatedAt || new Date().toISOString()),
     updated_at: scanTime,
     payload: {
-      ...buildRunTimeSourceSnapshotFields({
-        strategy: "strategy5",
-        runId,
-        payload: output,
-        startedAt: String(output.startedAt || output.updatedAt || new Date().toISOString()),
-        finishedAt: scanTime,
-        expectedTotal: cleanNumber(output.total),
-        scannedCount: Array.isArray(output.scannedCodes) ? output.scannedCodes.length : cleanNumber(output.scannedThisRun),
-        resultCount: complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0,
-        sourceStatus: chipSourceStatusAtRun,
-        quoteCoverage: notRequired("strategy5 chip source does not require intraday quote freshness"),
-        intraday1mReadiness: notRequired("strategy5 chip source does not require intraday 1m"),
-        maReadiness: notRequired("strategy5 chip source does not require MA readiness"),
-        preopenFutoptDailyReadiness: notRequired("strategy5 chip source does not require preopen/futopt/daily volume readiness"),
-        publishAllowed,
-        degradedBlocksLatest: true,
-        preservePreviousGood: true,
-        qualityStatus: complete ? "complete" : status,
-      }),
+      ...runtimeSourceFields,
+      source_snapshot_captured_at: runtimeSourceFields.source_snapshot_captured_at,
+      source_status_at_run: runtimeSourceFields.source_status_at_run,
+      quote_coverage_at_run: runtimeSourceFields.quote_coverage_at_run,
+      intraday_1m_readiness_at_run: runtimeSourceFields.intraday_1m_readiness_at_run,
+      ma_readiness_at_run: runtimeSourceFields.ma_readiness_at_run,
+      preopen_futopt_daily_readiness_at_run: runtimeSourceFields.preopen_futopt_daily_readiness_at_run,
+      run_quality_at_publish: {
+        ...(runtimeSourceFields.run_quality_at_publish || {}),
+        fieldCompletenessContract: "strategy5-field-completeness-20260703",
+        requiredFields: fieldCompleteness.requiredFields,
+        rowsChecked: Array.isArray(output.matches) ? output.matches.length : 0,
+        blankCounts: fieldCompleteness.blankCounts,
+        blankTotal: fieldCompleteness.blankTotal,
+        blankRate: fieldCompleteness.blankRate,
+        sampleMissingRows: fieldCompleteness.sampleMissingRows,
+        writeBudget,
+        retentionOk: publishAllowed,
+        fallbackUsed: false,
+        fallbackScope: [],
+        fallbackAllowed: false,
+        fallbackDetails: [],
+        fallbackContract: "strategy5-fallback-disallowed-for-publish",
+        blockedReason,
+        scanner_block_reason: blockedReason,
+        evidenceStatus: publishAllowed ? "complete" : "insufficient",
+        unattendedStatus: publishAllowed ? "YES" : "NO",
+      },
       chip_source_status_at_run: chipSourceStatusAtRun,
+      fallbackUsed: false,
+      fallbackScope: [],
+      fallbackAllowed: false,
+      fallbackDetails: [],
+      fallbackContract: "strategy5-fallback-disallowed-for-publish",
+      degradedBlocksLatest: true,
+      preservePreviousGood: true,
+      writeBudget,
+      retentionOk: publishAllowed,
+      requiredFields: fieldCompleteness.requiredFields,
+      blankCounts: fieldCompleteness.blankCounts,
+      blankTotal: fieldCompleteness.blankTotal,
+      sampleMissingRows: fieldCompleteness.sampleMissingRows,
+      blockedReason,
+      scanner_block_reason: blockedReason,
+      evidenceStatus: publishAllowed ? "complete" : "insufficient",
+      unattendedStatus: publishAllowed ? "YES" : "NO",
       count: cleanNumber(output.count),
       total: cleanNumber(output.total),
       usedDate: output.usedDate || "",
@@ -193,10 +346,10 @@ function buildStrategy5ResultRows(output, runId) {
     strategy: "strategy5",
     scan_date: scanDate,
     code: normalizeCode(stock.code),
-    name: String(stock.name || stock.code || "").trim(),
+    name: String(stock.name || "").trim(),
     price: cleanNumber(stock.close || stock.price),
     close: cleanNumber(stock.close || stock.price),
-    change_percent: cleanNumber(stock.percent ?? stock.changePercent),
+    change_percent: cleanNullableNumber(stock.percent ?? stock.changePercent),
     volume: cleanNumber(stock.volume || stock.tradeVolume),
     trade_volume: cleanNumber(stock.tradeVolume || stock.volume),
     trade_value: cleanNumber(stock.value || stock.tradeValue),
@@ -269,6 +422,21 @@ async function publishStrategy5CompleteRunToSupabase(output) {
     return false;
   }
   const runId = strategy5RunIdFromOutput(output);
+  output.fieldCompleteness = buildStrategy5FieldCompleteness(output.matches || []);
+  output.writeBudget = buildWriteBudget(output, Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count), "complete");
+  output.retentionOk = false;
+  output.fallbackUsed = false;
+  output.fallbackScope = [];
+  output.fallbackAllowed = false;
+  output.fallbackDetails = [];
+  output.fallbackContract = "strategy5-fallback-disallowed-for-publish";
+  output.degradedBlocksLatest = true;
+  output.preservePreviousGood = true;
+  output.requiredFields = output.fieldCompleteness.requiredFields;
+  output.blankCounts = output.fieldCompleteness.blankCounts;
+  output.sampleMissingRows = output.fieldCompleteness.sampleMissingRows;
+  output.blockedReason = "";
+  output.scanner_block_reason = "";
   const runningRow = buildStrategy5RunRow(output, runId, "running");
   const resultRows = buildStrategy5ResultRows(output, runId);
   const completeRow = buildStrategy5RunRow({ ...output, runId }, runId, "complete");
@@ -297,6 +465,7 @@ async function publishStrategy5CompleteRunToSupabase(output) {
   output.schemaVersion = completeRow.schema_version;
   output.dataContractSource = completeRow.data_contract_source;
   output.resultReadbackCount = readbackCount;
+  output.retentionOk = true;
   console.log(`strategy5 supabase complete run readback ok: ${runId}, matches ${resultRows.length}`);
   return true;
 }
@@ -1371,10 +1540,19 @@ async function main() {
   console.log(`strategy5 cache updated: matches ${matches.length}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildStrategy5RunRow,
+  buildStrategy5ResultRows,
+  buildStrategy5FieldCompleteness,
+  buildWriteBudget,
+};
 
 
 

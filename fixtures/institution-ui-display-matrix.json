@@ -1,0 +1,51 @@
+{
+  "strategy": "institution",
+  "contract": "institution-ui-display-matrix-v1",
+  "surfaces": [
+    {
+      "uiSurface": "desktop-terminal-chip-trade",
+      "routeOrEndpoint": "aside.sidebar a[data-view=\"chip-trade\"] -> #chip-trade-view",
+      "rendererFile": "terminal-chip-flow.js",
+      "apiEndpointUsed": "/api/institution-latest",
+      "forbiddenStaticPaths": ["/data/institution-latest.json", "/data/institution.json"],
+      "displayedFields": ["code", "name", "price", "change", "percent", "tradeVolume", "fiveDayPctSum", "fiveDayAvgVolume", "foreign", "trust", "foreignStreak", "trustStreak", "jointStreak", "total"],
+      "requiredDisplayedFields": ["code", "name", "foreign", "trust", "total", "foreignStreak", "trustStreak", "jointStreak"],
+      "uiBlankHandling": "empty rows show waiting/blocked text instead of stale local cache",
+      "degradedDisplayRule": "formal API read failure displays error text and does not restore local cache",
+      "fallbackDisplayRule": "fallback/display-only payload may render as display only but must not update latest pointer",
+      "previousGoodDisplayRule": "previous good can remain visible only when receipt/payload preserves previous good",
+      "verifierCommand": "npm run verify:institution-ui-display",
+      "negativeTest": "renderer uses forbidden static institution JSON or lacks no-local-fallback marker"
+    },
+    {
+      "uiSurface": "mobile-api-fragment-chip",
+      "routeOrEndpoint": "/api/mobile-page -> data-fragment=\"chip\" -> /api/mobile-fragment?tab=chip",
+      "rendererFile": "api/mobile-fragment.js",
+      "apiEndpointUsed": "/api/institution-latest",
+      "forbiddenStaticPaths": ["/data/institution-latest.json", "/data/institution.json"],
+      "displayedFields": ["code", "name", "source", "score", "percent", "reason", "runId", "qualityStatus"],
+      "requiredDisplayedFields": ["code", "name", "runId"],
+      "uiBlankHandling": "empty rows show waiting latest complete run",
+      "degradedDisplayRule": "fragment returns 503 empty-state when API unavailable",
+      "fallbackDisplayRule": "mobile boot/fragment exposes API-only complete run and does not claim A from static data",
+      "previousGoodDisplayRule": "mobile display follows API payload; previous good must be asserted by payload verifier",
+      "verifierCommand": "npm run verify:institution-ui-display",
+      "negativeTest": "mobile chip route missing or chip endpoint not /api/institution-latest"
+    },
+    {
+      "uiSurface": "service-worker-cache-policy",
+      "routeOrEndpoint": "fuman-sw.js runtime cache",
+      "rendererFile": "fuman-sw.js",
+      "apiEndpointUsed": "/api/institution-latest",
+      "forbiddenStaticPaths": ["/data/institution-latest.json", "/data/institution.json"],
+      "displayedFields": ["api-cache-policy", "retired-static-data-policy"],
+      "requiredDisplayedFields": ["api-cache-policy", "retired-static-data-policy"],
+      "uiBlankHandling": "service worker must not satisfy institution display from retired static path",
+      "degradedDisplayRule": "runtime API failure bubbles to UI receipt/error path",
+      "fallbackDisplayRule": "no static institution fallback for latest API",
+      "previousGoodDisplayRule": "previous good protection is payload/receipt-controlled, not service-worker-forced",
+      "verifierCommand": "npm run verify:institution-ui-display",
+      "negativeTest": "SW does not list /api/institution-latest or fails to retire data/institution"
+    }
+  ]
+}

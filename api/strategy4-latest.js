@@ -19,6 +19,7 @@ const EXPECTED_UNIT = "lots";
 const EXPECTED_SOURCE = "supabase:strategy4_daily_ohlcv_view";
 const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
+const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
 const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, LEGACY_LOTS_SOURCE]);
 
 function apiOnlyError(error, detail = "") {
@@ -117,6 +118,8 @@ function normalizePayload(row) {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
+    market: String(payload.market || row.market || "").trim(),
+    rank: cleanNumber(payload.rank || row.rank),
     close: cleanNumber(payload.close || payload.price || row.price),
     price: cleanNumber(payload.price || payload.close || row.price),
     percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
@@ -131,6 +134,9 @@ function normalizePayload(row) {
     zone_label: swingZoneLabel,
     pattern: String(payload.pattern || payload.strategy || swingZoneLabel || swingZone).trim(),
     signals,
+    date: String(payload.date || payload.tradeDate || payload.usedDate || row.scan_date || "").trim(),
+    usedDate: String(payload.usedDate || payload.tradeDate || payload.date || row.scan_date || "").trim(),
+    priceSource: String(payload.priceSource || row.price_source || "").trim(),
     reason: String(payload.reason || row.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };
 }
@@ -178,6 +184,8 @@ function buildStrategy4GateContract(rows, run, matches) {
   const supabaseCoverage = runPayload.supabaseCoverage && typeof runPayload.supabaseCoverage === "object" ? runPayload.supabaseCoverage : {};
   const qualityStatus = String(run?.quality_status || rows[0]?.quality_status || "");
   const fallbackUsed = false;
+  const fallbackScope = Array.isArray(runPayload.fallbackScope) ? runPayload.fallbackScope : [];
+  const fallbackDetails = Array.isArray(runPayload.fallbackDetails) ? runPayload.fallbackDetails : [];
   const retentionOk = run?.complete === true
     && String(run?.status || "") === "complete"
     && qualityStatus === "complete"
@@ -197,6 +205,10 @@ function buildStrategy4GateContract(rows, run, matches) {
     supabaseCoverage,
   };
   const publishAllowed = retentionOk && gateIssues.length === 0 && gate?.publishAllowed !== false;
+  const blockedReason = publishAllowed ? "" : gateIssues
+    .map((item) => item.id || item.message || String(item))
+    .filter(Boolean)
+    .join("; ") || runPayload.blockedReason || runPayload.scanner_block_reason || "strategy4_latest_blocked";
   const status = gate?.status || (publishAllowed ? "ready" : qualityStatus === "complete" ? "ready" : "degraded");
   const sourceCoverage = {
     ...sourceCoverageBase,
@@ -221,6 +233,12 @@ function buildStrategy4GateContract(rows, run, matches) {
     staleSeconds: cleanNumber(gate?.staleSeconds ?? sourceCoverage?.intraday_1m_stale_seconds),
     latestRunId: String(run?.run_id || ""),
     fallbackUsed,
+    fallbackScope,
+    fallbackAllowed: false,
+    fallbackDetails,
+    fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
+    blockedReason,
+    scanner_block_reason: blockedReason,
     writeBudget,
     retentionOk,
     issues: gateIssues,
@@ -233,6 +251,7 @@ function buildStrategy4GateContract(rows, run, matches) {
 
 function buildPayload(rows, total, run = null, options = {}) {
   const first = rows[0] || {};
+  const runPayload = run?.payload && typeof run.payload === "object" ? run.payload : {};
   const matches = rows
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
@@ -260,8 +279,22 @@ function buildPayload(rows, total, run = null, options = {}) {
     complete: Boolean(first.complete),
     latestRunId: gateContract.latestRunId,
     fallbackUsed: gateContract.fallbackUsed,
+    fallbackScope: gateContract.fallbackScope,
+    fallbackAllowed: gateContract.fallbackAllowed,
+    fallbackDetails: gateContract.fallbackDetails,
+    fallbackContract: gateContract.fallbackContract,
+    blockedReason: gateContract.blockedReason,
+    scanner_block_reason: gateContract.scanner_block_reason,
     writeBudget: gateContract.writeBudget,
     retentionOk: gateContract.retentionOk,
+    requiredFields: Array.isArray(runPayload.requiredFields) ? runPayload.requiredFields : ["code", "name", "price", "volume", "runId"],
+    blankCounts: runPayload.blankCounts && typeof runPayload.blankCounts === "object" ? runPayload.blankCounts : {},
+    sampleMissingRows: Array.isArray(runPayload.sampleMissingRows) ? runPayload.sampleMissingRows : [],
+    latestWriteAttempted: runPayload.latestWriteAttempted === true,
+    latestPointerUpdated: runPayload.latestPointerUpdated === true,
+    blockedReceiptWritten: runPayload.blockedReceiptWritten === true,
+    previousGoodRunId: String(runPayload.previousGoodRunId || ""),
+    previousGoodPreserved: runPayload.previousGoodPreserved === true,
     sourceCoverage: gateContract.sourceCoverage,
     staleSeconds: gateContract.staleSeconds,
     issues: gateContract.issues,
@@ -361,7 +394,7 @@ async function fetchLatestCompleteRows(limit = 2000) {
   return { rows, run, gate: "run_id", runId: run.run_id };
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy4", endpoint: "api/strategy4-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -410,4 +443,9 @@ module.exports = async function handler(request, response) {
   } catch (error) {
     response.status(502).json(apiOnlyError("strategy4_api_only_failed", error?.message || String(error)));
   }
-};
+}
+
+module.exports = handler;
+module.exports.buildPayload = buildPayload;
+module.exports.buildStrategy4GateContract = buildStrategy4GateContract;
+module.exports.normalizePayload = normalizePayload;

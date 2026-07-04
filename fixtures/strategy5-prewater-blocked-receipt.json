@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "contract": "strategy5-preserve-previous-good-blocked-receipt-mock-v1",
+  "checkedAt": "2026-07-04T00:00:00.000Z",
+  "strategy": "strategy5",
+  "badSource": {
+    "runId": "strategy5-bad-source-mock",
+    "status": "blocked",
+    "reason": "mock_source_not_ready",
+    "sourceStatus": "critical",
+    "coverageStatus": "critical",
+    "expectedTotal": 93,
+    "scannedCount": 0,
+    "resultCount": 0
+  },
+  "gateDecision": {
+    "publishAllowed": false,
+    "latestOverwriteAllowed": false,
+    "degradedBlocksLatest": true,
+    "preservePreviousGood": true,
+    "emptyResultWriteAllowed": false,
+    "reason": "mock_source_not_ready"
+  },
+  "previousGood": {
+    "runId": "strategy5-previous-good-mock",
+    "count": 93,
+    "resultReadbackCount": 93
+  },
+  "writeAttempt": {
+    "attempted": true,
+    "blockedBeforeDatabaseWrite": true,
+    "wroteRows": 0
+  },
+  "after": {
+    "statusCode": 200,
+    "ok": true,
+    "runId": "strategy5-previous-good-mock",
+    "count": 93,
+    "resultReadbackCount": 93
+  },
+  "assertions": {
+    "latestPointerUnchanged": true,
+    "emptyResultNotWritten": true,
+    "previousGoodRunId": "strategy5-previous-good-mock",
+    "badSourceRunId": "strategy5-bad-source-mock"
+  },
+  "receiptFile": "mock-only-do-not-write-supabase.json"
+}

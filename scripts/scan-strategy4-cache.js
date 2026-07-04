@@ -27,6 +27,7 @@ const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIV
 const STRATEGY4_CACHE_SCHEMA_VERSION = "strategy4-cache-v3-unit-contract";
 const STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION = "strategy4-volume-avg5-v3-unit-contract";
 const STRATEGY4_VOLUME_UNIT = "lots";
+const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
 const STRATEGY4_DAILY_VIEW = process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume";
 const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const VOLUME_CACHE_UNIT = "lots-v2";
@@ -281,6 +282,102 @@ function normalizeCode(value) {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+const STRATEGY4_BUSINESS_FIELD_PATHS = [
+  ["runId", "runId"],
+  ["strategyName", "strategy"],
+  ["scanDate", "scanStamp"],
+  ["updatedAt", "updatedAt"],
+  ["code", "code"],
+  ["name", "name"],
+  ["market", "market"],
+  ["rank", "rank"],
+  ["price", "price"],
+  ["close", "close"],
+  ["changePercent", "percent"],
+  ["volume", "volume"],
+  ["tradeValue", "value"],
+  ["score", "score"],
+  ["swingZone", "swingZone"],
+  ["reason", "reason"],
+  ["signals", "signals"],
+  ["wallet.mf", "wallet.mf"],
+  ["wallet.syncScore", "wallet.syncScore"],
+  ["wallet.strongBuy", "wallet.strongBuy"],
+  ["mutakiV17.ma20", "mutakiV17.ma20"],
+  ["mutakiV17.rsi14", "mutakiV17.rsi14"],
+  ["mutakiV17.entryPrice", "mutakiV17.entryPrice"],
+  ["mutakiV17.stopPrice", "mutakiV17.stopPrice"],
+  ["mutakiV17.targetPrice", "mutakiV17.targetPrice"],
+  ["mutakiV17.riskReward", "mutakiV17.riskReward"],
+  ["priceSource", "priceSource"],
+];
+
+function valueAtPath(object, fieldPath) {
+  return String(fieldPath || "").split(".").reduce((current, key) => current?.[key], object);
+}
+
+function businessFieldBlank(value) {
+  return value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+}
+
+function buildStrategy4BusinessFieldAudit(output) {
+  const matches = normalizeArray(output.matches);
+  const blankCounts = Object.fromEntries(STRATEGY4_BUSINESS_FIELD_PATHS.map(([key]) => [key, 0]));
+  const sampleMissingRows = [];
+  matches.forEach((item, index) => {
+    const missing = [];
+    for (const [key, fieldPath] of STRATEGY4_BUSINESS_FIELD_PATHS) {
+      if (businessFieldBlank(valueAtPath(item, fieldPath))) {
+        blankCounts[key] += 1;
+        missing.push(key);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 20) {
+      sampleMissingRows.push({
+        index,
+        code: String(item?.code || ""),
+        name: String(item?.name || ""),
+        missing,
+      });
+    }
+  });
+  blankCounts.dataContractSource = businessFieldBlank(output.dataContractSource) ? 1 : 0;
+  blankCounts.fallbackContract = businessFieldBlank(output.fallbackContract || STRATEGY4_FALLBACK_CONTRACT) ? 1 : 0;
+  [
+    "usedDate",
+    "source_snapshot_captured_at",
+    "quoteAgeSeconds",
+    "status",
+    "source_status_at_run",
+    "run_quality_at_publish",
+    "publishAllowed",
+    "fallbackUsed",
+    "fallbackScope",
+    "fallbackDetails",
+    "evidenceStatus",
+    "unattendedStatus",
+    "writeBudget",
+    "retentionOk",
+    "blockedReason",
+    "scanner_block_reason",
+    "latestWriteAttempted",
+    "latestPointerUpdated",
+    "blockedReceiptWritten",
+    "previousGoodRunId",
+    "previousGoodPreserved",
+    "requiredFields",
+    "blankCounts",
+    "sampleMissingRows",
+  ].forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(blankCounts, key)) blankCounts[key] = 0;
+  });
+  return {
+    requiredFields: [...STRATEGY4_BUSINESS_FIELD_PATHS.map(([key]) => key), "dataContractSource", "fallbackContract"],
+    blankCounts,
+    sampleMissingRows,
+  };
 }
 
 function flagTrue(value) {
@@ -949,7 +1046,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
   const matches = allMatches
     .filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate)
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0));
+    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
+    .map((item, index) => ({ ...item, rank: index + 1 }));
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
@@ -997,6 +1095,11 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     source: baseComplete ? "github-actions" : "github-actions-partial",
     dataContractSource: strategy4VolumeCacheSource,
     priceSource: USE_MIS_QUOTES ? "official-daily-k-plus-mis" : "official-daily-k",
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: false,
+    fallbackDetails: [],
+    fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     scanStamp,
@@ -1150,6 +1253,25 @@ function buildSupabaseRunRow(output, runId) {
     && String(output.qualityStatus || "") === "complete"
     && output.prePublishSelfTest?.ok !== false
     && output.supabasePublishGate?.publishAllowed !== false;
+  const writeBudget = output.supabasePublishGate?.writePolicy || {
+    allowLatestWrite: publishAllowed,
+    allowCompleteRunWrite: publishAllowed,
+    preservePreviousCompleteRun: !publishAllowed,
+    reason: publishAllowed ? "Strategy4 scanner publish allowed" : "Strategy4 scanner blocked; preserve previous good",
+  };
+  const businessFieldAudit = buildStrategy4BusinessFieldAudit(output);
+  const requiredFields = Array.isArray(output.requiredFields) ? output.requiredFields : businessFieldAudit.requiredFields;
+  const blankCounts = {
+    ...businessFieldAudit.blankCounts,
+    ...(output.blankCounts && typeof output.blankCounts === "object" ? output.blankCounts : {}),
+  };
+  const sampleMissingRows = Array.isArray(output.sampleMissingRows) ? output.sampleMissingRows : businessFieldAudit.sampleMissingRows;
+  const scannerBlockReason = publishAllowed ? "" : [
+    output.supabasePublishGate?.issues?.map?.((item) => item.id || item.message || String(item)).join("; "),
+    output.prePublishSelfTest?.issues?.slice?.(0, 5).join("; "),
+    output.qualityStatus && String(output.qualityStatus) !== "complete" ? `qualityStatus=${output.qualityStatus}` : "",
+    output.complete !== true ? "complete=false" : "",
+  ].filter(Boolean).join("; ") || "strategy4_publish_blocked";
   return {
     run_id: runId,
     strategy: "strategy4",
@@ -1186,9 +1308,16 @@ function buildSupabaseRunRow(output, runId) {
         publishAllowed,
         degradedBlocksLatest: !publishAllowed,
         preservePreviousGood: !publishAllowed,
-        writeBudget: output.supabasePublishGate?.writePolicy || null,
+        writeBudget,
         retentionOk: output.complete === true,
         qualityStatus: String(output.qualityStatus || "").trim(),
+        fallbackUsed: false,
+        fallbackScope: [],
+        fallbackAllowed: false,
+        fallbackDetails: [],
+        fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
+        blockedReason: scannerBlockReason,
+        scannerBlockReason,
       }),
       count: cleanNumber(output.count),
       triangleBreakoutCount: cleanNumber(output.triangleBreakoutCount),
@@ -1212,6 +1341,29 @@ function buildSupabaseRunRow(output, runId) {
       selfTest: output.selfTest || null,
       prePublishSelfTest: output.prePublishSelfTest || null,
       publishedSelfTest: output.publishedSelfTest || null,
+      fallbackUsed: false,
+      fallbackScope: [],
+      fallbackAllowed: false,
+      fallbackDetails: [],
+      fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
+      degradedBlocksLatest: !publishAllowed,
+      preservePreviousGood: !publishAllowed,
+      writeBudget,
+      retentionOk: output.complete === true,
+      evidenceStatus: publishAllowed ? "complete" : "insufficient",
+      unattendedStatus: publishAllowed ? "YES" : "NO",
+      requiredFields,
+      blankCounts,
+      sampleMissingRows,
+      blockedReason: scannerBlockReason,
+      scanner_block_reason: scannerBlockReason,
+      publishAllowed,
+      latestWriteAttempted: publishAllowed,
+      latestPointerUpdated: publishAllowed,
+      emptyResult: cleanNumber(output.count) === 0,
+      blockedReceiptWritten: !publishAllowed,
+      previousGoodRunId: publishAllowed ? "" : String(output.previousGoodRunId || ""),
+      previousGoodPreserved: !publishAllowed,
     },
   };
 }
@@ -1764,10 +1916,19 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildOutput,
+  buildSupabaseRunRow,
+  buildSupabaseScanRows,
+  buildStrategy4PrePublishSelfTest,
+};
 
 
 

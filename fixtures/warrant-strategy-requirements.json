@@ -1,0 +1,67 @@
+{
+  "strategyName": "權證走向",
+  "strategyKey": "warrant-flow",
+  "purpose": "找出權證資金異動、標的強弱、爆量權證與單券異常。",
+  "publishDefinition": "只有在權證 source ready、scan complete、data contract valid、readback count match、fallback=false、必填業務欄位完整時，才可 publish latest。",
+  "whatItFinds": {
+    "pattern": "權證異動：標的認購資金集中、權證成交爆量、單券異常、標的強度與權證熱度同步轉強。",
+    "scanAllowedWhen": "盤後或權證資料源完成後掃描；正式 publish 必須等權證 scan source、run payload、result rows、readback 都完整。",
+    "scanBlockedWhen": "source timeout、Supabase 522、權證資料 degraded、data contract invalid、snapshot-friendly-empty 被誤當 ready、必要 source snapshot 缺失。",
+    "publishAllowedWhen": "source_status_at_run.ok=true、run_quality_at_publish.publishAllowed=true、writeBudget.allowLatestWrite=true、retentionOk=true、result readback count match、fallback=false。",
+    "preservePreviousGoodWhen": "source not ready、empty result 但 source 未 ready、fallback used、readback mismatch、data contract invalid、Supabase timeout/522、degraded run。"
+  },
+  "conditions": [
+    {"id":"C01","name":"權證 source snapshot 存在","purpose":"水源證據","fields":["source_snapshot_captured_at"],"source":"v_warrant_flow_latest_complete_run.payload","pass":"ISO timestamp 存在","fail":"缺失或空白","action":"block publish"},
+    {"id":"C02","name":"source status ready","purpose":"判斷可否 publish","fields":["source_status_at_run.status","source_status_at_run.ok"],"source":"run payload / API payload","pass":"ok=true 且 ready","fail":"timeout/degraded/blocked","action":"preserve previous good"},
+    {"id":"C03","name":"權證 run quality","purpose":"publish 品質","fields":["run_quality_at_publish.publishAllowed"],"source":"run payload","pass":"publishAllowed=true","fail":"false 或缺失","action":"block publish"},
+    {"id":"C04","name":"write budget","purpose":"latest 寫入權限","fields":["writeBudget.allowLatestWrite"],"source":"run payload","pass":"true","fail":"false 或缺失","action":"preserve previous good"},
+    {"id":"C05","name":"retention ok","purpose":"保留 previous good","fields":["retentionOk"],"source":"run payload","pass":"true","fail":"false 或缺失","action":"fail closed"},
+    {"id":"C06","name":"fallback disclosure","purpose":"fallback 揭露","fields":["fallbackUsed","fallbackScope","fallbackDetails","fallbackContract"],"source":"API/run/receipt","pass":"欄位完整","fail":"fallbackUsed 缺或 details 缺","action":"display degraded"},
+    {"id":"C07","name":"fallback 不可 formal YES","purpose":"防 fake YES","fields":["fallbackUsed","unattendedStatus"],"source":"API payload","pass":"fallbackUsed=false 才可 YES","fail":"fallbackUsed=true 且 YES","action":"fail closed"},
+    {"id":"C08","name":"readback count match","purpose":"防半寫入","fields":["expected_total","result rows count"],"source":"warrant_flow_scan_runs/results","pass":"count match","fail":"mismatch","action":"write blocked receipt"},
+    {"id":"C09","name":"data contract valid","purpose":"結構契約","fields":["dataContract.ok"],"source":"API/run payload","pass":"ok=true","fail":"false","action":"block publish"},
+    {"id":"C10","name":"empty result gate","purpose":"防空結果污染","fields":["count","rows","matches","source_status_at_run"],"source":"API payload","pass":"source ready + scan complete","fail":"source not ready + empty","action":"preserve previous good"},
+    {"id":"C11","name":"業務欄位完整","purpose":"防畫面錯判","fields":["blankCounts","sampleMissingRows"],"source":"API/scanner/writer payload","pass":"required blankCounts=0","fail":"任一必填空白","action":"block publish"},
+    {"id":"C12","name":"blocked reason 存在","purpose":"可追查阻擋原因","fields":["blockedReason","scanner_block_reason"],"source":"API/run payload","pass":"blocked 時非空","fail":"blocked 時缺失","action":"write blocked receipt"}
+  ],
+  "sources": [
+    {"name":"權證 complete run","tableOrApi":"v_warrant_flow_latest_complete_run","purpose":"latest/readback","required":"必要","minimum":"complete=true 且 result_count>0","staleLimit":"必須最新 complete run","missingAction":"block publish"},
+    {"name":"權證 scan results","tableOrApi":"warrant_flow_scan_results","purpose":"權證結果列","required":"必要","minimum":"result rows 與 run count match","staleLimit":"必須同 runId","missingAction":"preserve previous good"},
+    {"name":"complete run health","tableOrApi":"v_warrant_latest_complete_run_health","purpose":"complete run 水源健康","required":"必要","minimum":"status/source_status=ready","staleLimit":"依 health view","missingAction":"block publish"},
+    {"name":"scanner resource health","tableOrApi":"v_scanner_resource_health","purpose":"scanner source ready","required":"必要","minimum":"strategy=warrant 且 status=ready","staleLimit":"依 health view","missingAction":"block publish"},
+    {"name":"權證 API latest","tableOrApi":"api/warrant-flow-latest.js","purpose":"前端 payload","required":"必要","minimum":"buildPayload contract valid","staleLimit":"不可 snapshot-friendly-empty 當 ready","missingAction":"display degraded"},
+    {"name":"scanner payload","tableOrApi":"api/scan-warrant-flow.js","purpose":"掃描正式 shape","required":"必要","minimum":"matches/volume/single shape valid","staleLimit":"scan output 不可 degraded","missingAction":"block publish"},
+    {"name":"writer run payload","tableOrApi":"scripts/scan-warrant-flow-cache.js","purpose":"run/result 寫入 shape","required":"必要","minimum":"run/result rows 可 readback","staleLimit":"mismatch 即 fail","missingAction":"write blocked receipt"},
+    {"name":"receipt","tableOrApi":"run-warrant-flow.ps1","purpose":"blocked/degraded 證據","required":"必要","minimum":"receipt shape 完整","staleLimit":"blocked 時必須存在","missingAction":"write blocked receipt"}
+  ],
+  "decisionGates": [
+    {"name":"scan gate","payloadPath":"scannerOutput.ok","pass":"ok=true","block":"timeout/degraded","affectsScan":true,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"否","action":"fail closed"},
+    {"name":"source gate","payloadPath":"source_status_at_run","pass":"ready","block":"timeout/blocked/degraded","affectsScan":true,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"否","action":"preserve previous good"},
+    {"name":"publish gate","payloadPath":"run_quality_at_publish.publishAllowed","pass":"true","block":"false","affectsScan":false,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"否","action":"block publish"},
+    {"name":"readback gate","payloadPath":"result rows count","pass":"match","block":"mismatch","affectsScan":false,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"否","action":"write blocked receipt"},
+    {"name":"fallback gate","payloadPath":"fallbackUsed","pass":"false","block":"true","affectsScan":false,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"display-only","action":"display degraded"},
+    {"name":"UI display gate","payloadPath":"evidenceStatus","pass":"complete","block":"insufficient/NO","affectsScan":false,"affectsPublish":false,"affectsFormalEntry":true,"fallbackAllowed":"是","action":"display degraded"},
+    {"name":"alert gate","payloadPath":"unattendedStatus","pass":"YES only when formal complete","block":"fake YES","affectsScan":false,"affectsPublish":true,"affectsFormalEntry":true,"fallbackAllowed":"否","action":"fail closed"}
+  ],
+  "fallbackRules": [
+    {"name":"display-only fallback","fallbackScope":"display","purpose":"前端保留可讀畫面","allowed":true,"publish":false,"display":true,"disclose":true,"action":"display degraded"},
+    {"name":"diagnostic fallback","fallbackScope":"diagnostic","purpose":"說明 timeout/522/contract fail","allowed":true,"publish":false,"display":true,"disclose":true,"action":"write blocked receipt"},
+    {"name":"snapshot-friendly-empty","fallbackScope":"snapshot","purpose":"空快照友善顯示","allowed":true,"publish":false,"display":true,"disclose":true,"action":"preserve previous good"},
+    {"name":"formal source fallback","fallbackScope":"source","purpose":"替代正式 source","allowed":false,"publish":false,"display":true,"disclose":true,"action":"block publish"},
+    {"name":"previous good fallback","fallbackScope":"previous_good","purpose":"保留上一版","allowed":true,"publish":false,"display":true,"disclose":true,"action":"preserve previous good"}
+  ],
+  "emptyResultRules": {
+    "sourceReadyCompleteScanAllowed": true,
+    "sourceNotReadyAllowed": false,
+    "mayOverwriteLatest": false,
+    "requiresBlockedReceiptWhenSourceNotReady": true,
+    "preservePreviousGood": true
+  },
+  "liveReadiness": {
+    "defaultDoesNotHitSupabase": true,
+    "actualSourceReadCommand": "npm run verify:warrant-prewater-source-live",
+    "requiresExplicitLiveFlag": true,
+    "requiresReadOnlyAckEnv": "FUMAN_ALLOW_SUPABASE_READ=1",
+    "tablesRead": ["v_scanner_resource_health", "v_warrant_latest_complete_run_health", "v_warrant_flow_latest_complete_run", "warrant_flow_scan_results"]
+  }
+}

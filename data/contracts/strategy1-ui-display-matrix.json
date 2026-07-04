@@ -1,0 +1,62 @@
+[
+  {
+    "uiSurface": "desktop strategy renderer",
+    "routeOrEndpoint": "/terminal strategy/open_buy",
+    "rendererFile": "terminal-open-buy-view.js",
+    "apiEndpointUsed": "/api/open-buy-latest",
+    "forbiddenStaticPaths": ["data/open-buy-latest.json", "/data/open-buy-latest.json"],
+    "displayedFields": ["rows[].code", "rows[].name", "rows[].score", "rows[].reason", "stageCards[].key", "stageCards[].status", "stageCards[].count"],
+    "requiredDisplayedFields": ["code", "name", "score", "reason", "candidate_2130_futopt_0845"],
+    "uiBlankHandling": "empty table text only; formal payload blank required fields must be blocked before latest",
+    "degradedDisplayRule": "publishAllowed=false or evidenceStatus!=complete must not be rendered as formal unattended YES",
+    "fallbackDisplayRule": "fallback display-only is disclosure only and must not update latest pointer",
+    "previousGoodDisplayRule": "previous_2130_carry_forward may be displayed only with transport/meta disclosure",
+    "verifierCommand": "npm run verify:strategy1-ui-display",
+    "negativeTest": "strategy1_ui_negative_degraded_payload_blocks_latest"
+  },
+  {
+    "uiSurface": "desktop fast bundle",
+    "routeOrEndpoint": "/api/terminal-fast-bundle",
+    "rendererFile": "api/terminal-fast-bundle.js",
+    "apiEndpointUsed": "/api/open-buy-latest",
+    "forbiddenStaticPaths": ["data/open-buy-latest.json", "/data/open-buy-latest.json"],
+    "displayedFields": ["endpoints['/api/open-buy-latest'].runId", "endpoints['/api/open-buy-latest'].count", "transport.previous2130CarryForward"],
+    "requiredDisplayedFields": ["runId", "count", "source", "previous2130CarryForward"],
+    "uiBlankHandling": "empty waiting snapshot may trigger previous 21:30 repair; bad source remains blocked",
+    "degradedDisplayRule": "waiting/degraded payload cannot become normal complete result",
+    "fallbackDisplayRule": "snapshot-soft-fallback is marked as cacheSource and gate",
+    "previousGoodDisplayRule": "previous_2130_carry_forward preserved with fastBundleRepair marker",
+    "verifierCommand": "npm run verify:strategy1-ui-display",
+    "negativeTest": "strategy1_fast_bundle_no_static_latest"
+  },
+  {
+    "uiSurface": "mobile strategy1 fragment",
+    "routeOrEndpoint": "/api/mobile-fragment?tab=strategy1",
+    "rendererFile": "api/mobile-fragment.js",
+    "apiEndpointUsed": "/api/open-buy-latest",
+    "forbiddenStaticPaths": ["data/open-buy-latest.json", "/data/open-buy-latest.json"],
+    "displayedFields": ["data-run-id", "count", "updatedAt", "rows[].code", "rows[].name", "rows[].score", "rows[].reason"],
+    "requiredDisplayedFields": ["runId", "count", "updatedAt", "code", "name", "score", "reason"],
+    "uiBlankHandling": "empty complete run shows waiting state; source contract blocks latest before display",
+    "degradedDisplayRule": "source not ready fetches live endpoint; if still blocked it stays waiting/blocked",
+    "fallbackDisplayRule": "fallback display-only cannot be treated as complete formal entry",
+    "previousGoodDisplayRule": "previous_2130_carry_forward is explicitly excluded from empty waiting repair",
+    "verifierCommand": "npm run verify:strategy1-ui-display",
+    "negativeTest": "strategy1_mobile_no_static_latest"
+  },
+  {
+    "uiSurface": "runtime endpoint config",
+    "routeOrEndpoint": "window.FUMAN_RUNTIME_CONFIG.endpoints.openBuyCache",
+    "rendererFile": "terminal-runtime-config.js",
+    "apiEndpointUsed": "/api/open-buy-latest",
+    "forbiddenStaticPaths": ["data/open-buy-latest.json", "/data/open-buy-latest.json"],
+    "displayedFields": ["openBuyCache", "mobileAiLatest", "mobileAiLite", "mobileAiUltra"],
+    "requiredDisplayedFields": ["openBuyCache", "mobileAiLatest", "mobileAiLite", "mobileAiUltra"],
+    "uiBlankHandling": "runtime config must not point strategy1 to retired static latest JSON",
+    "degradedDisplayRule": "API-only config leaves degraded decisions to endpoint contract",
+    "fallbackDisplayRule": "no static fallback endpoint configured for strategy1 latest",
+    "previousGoodDisplayRule": "previous good is an API transport disclosure, not a static route",
+    "verifierCommand": "npm run verify:strategy1-ui-display",
+    "negativeTest": "strategy1_runtime_config_no_static_latest"
+  }
+]

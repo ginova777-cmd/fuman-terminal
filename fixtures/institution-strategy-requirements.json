@@ -1,0 +1,107 @@
+{
+  "strategy": "institution",
+  "contract": "institution-strategy-requirements-v1",
+  "strategyName": "買賣超 / Institution",
+  "strategyPurpose": "找出三大法人籌碼轉強、外資/投信/同買、連買與外資+投信佔量強的股票。",
+  "formalPublishDefinition": "chip / institutional authority ready、coverageStatus=ready、institutionalRows 與 validAfterExclusionRows 皆 >= 1500、result/readback complete、fallback 未污染 latest 時，才可 publish latest。",
+  "plainLanguage": {
+    "pattern": "籌碼轉強：外資買超、投信買超、外資+投信同買、連買日、法人合計買超、外資+投信買超佔近 5 日均量偏高。",
+    "scanAllowedWhen": "盤後 institutional / chip source 更新完成後；核心來源是 TWSE T86 / TPEx 3itrade 對應的 chip / institutional source。",
+    "scanBlockedWhen": "chip source timeout、coverageStatus 非 ready、institutionalRows < 1500、validAfterExclusionRows < 1500、latestTradeDate / usedDate 缺失、source status 缺欄、Supabase 522/timeout。",
+    "publishAllowedWhen": "source ready、scan complete、resultRows/readbackCount 合理、requiredFields 無缺、fallbackUsed=false 或 fallback 不影響 formal publish、writeBudget 允許。",
+    "preservePreviousGoodWhen": "source not ready、empty result 但 source 未 ready、fallback display-only、Supabase timeout/522、readback mismatch、blocked/degraded run。"
+  },
+  "allowedFailureActions": ["block scan", "block publish", "preserve previous good", "write blocked receipt", "display degraded", "fail closed"],
+  "conditions": [
+    { "conditionId": "C01", "conditionName": "chip authority ready", "purpose": "判斷買賣超核心來源能不能用", "requiredFields": ["institution_source_status_at_run", "chip_source_status_at_run"], "sourceTableOrView": "v_institution_source_health / v_chip_flows_latest", "passCriteria": "status=ready", "failCriteria": "missing / timeout / 522 / degraded", "failureActions": ["block scan", "block publish", "preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C02", "conditionName": "coverage ready", "purpose": "判斷覆蓋是否足夠", "requiredFields": ["coverageStatus"], "sourceTableOrView": "v_institution_source_health", "passCriteria": "coverageStatus=ready", "failCriteria": "coverageStatus!=ready", "failureActions": ["block publish", "preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C03", "conditionName": "institutionalRows threshold", "purpose": "確認原始法人筆數足夠", "requiredFields": ["institutionalRows"], "sourceTableOrView": "v_institution_source_health", "passCriteria": "institutionalRows >= 1500", "failCriteria": "institutionalRows < 1500", "failureActions": ["block publish", "preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C04", "conditionName": "validAfterExclusionRows threshold", "purpose": "確認排除 ETF/權證/CB 後仍足夠", "requiredFields": ["validAfterExclusionRows"], "sourceTableOrView": "scanner output / source health", "passCriteria": "validAfterExclusionRows >= 1500", "failCriteria": "validAfterExclusionRows < 1500", "failureActions": ["block publish", "preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C05", "conditionName": "trade date ready", "purpose": "確認資料日期可定位", "requiredFields": ["latestTradeDate", "usedDate"], "sourceTableOrView": "source health / scanner output", "passCriteria": "8 digit date exists", "failCriteria": "missing / mismatch without disclosure", "failureActions": ["block publish", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C06", "conditionName": "result complete", "purpose": "確認掃描結果完整", "requiredFields": ["resultRows", "resultCount", "scannedCount"], "sourceTableOrView": "scanner output / run payload", "passCriteria": "complete and count reasonable", "failCriteria": "incomplete / missing", "failureActions": ["block publish", "preserve previous good", "fail closed"] },
+    { "conditionId": "C07", "conditionName": "readback match", "purpose": "確認 writer 寫入後可讀回", "requiredFields": ["readbackCount", "resultCount"], "sourceTableOrView": "run payload / battle output", "passCriteria": "readbackCount == resultCount", "failCriteria": "mismatch / missing", "failureActions": ["block publish", "preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C08", "conditionName": "required fields complete", "purpose": "防止畫面/排序欄位缺失", "requiredFields": ["requiredFields", "blankCounts", "sampleMissingRows"], "sourceTableOrView": "run_quality_at_publish", "passCriteria": "required blankCounts=0", "failCriteria": "required 欄位空白", "failureActions": ["block publish", "preserve previous good", "display degraded", "fail closed"] },
+    { "conditionId": "C09", "conditionName": "fallback disclosure", "purpose": "防止 fallback 假裝正式", "requiredFields": ["fallbackUsed", "fallbackScope", "fallbackDetails", "fallbackContract"], "sourceTableOrView": "API / scanner / receipt", "passCriteria": "fallback 欄位完整", "failCriteria": "fallbackUsed=true but contract/details missing", "failureActions": ["block publish", "preserve previous good", "display degraded", "fail closed"] },
+    { "conditionId": "C10", "conditionName": "latest protection", "purpose": "防止污染 latest", "requiredFields": ["latestWriteAttempted", "latestPointerUpdated", "overwrotePreviousGood", "writeBudget.allowed"], "sourceTableOrView": "receipt / verifier", "passCriteria": "blocked 時皆 false 且 allowed=false", "failCriteria": "blocked/degraded 卻更新 latest", "failureActions": ["preserve previous good", "write blocked receipt", "fail closed"] },
+    { "conditionId": "C11", "conditionName": "UI display gate", "purpose": "確認前端走正式 API", "requiredFields": ["/api/institution-latest", "chip route", "mobile fragment"], "sourceTableOrView": "index.html / terminal-chip-flow.js / mobile-fragment.js / fuman-sw.js", "passCriteria": "desktop/mobile/API route exists and forbidden static renderer hits=[]", "failCriteria": "missing route or old static fallback", "failureActions": ["display degraded", "fail closed"] }
+  ],
+  "sources": [
+    { "sourceName": "chip / institutional health", "tableViewApi": "v_institution_source_health", "purpose": "核心水源健康", "necessity": "required", "minimumThreshold": "coverageStatus=ready", "staleLimit": "latestTradeDate/usedDate must exist", "missingDataAction": ["block scan", "block publish", "preserve previous good"] },
+    { "sourceName": "chip latest flows", "tableViewApi": "v_chip_flows_latest", "purpose": "foreign/trust/dealer/total", "necessity": "required", "minimumThreshold": "institutionalRows >=1500", "staleLimit": "no timeout / 522", "missingDataAction": ["block publish", "write blocked receipt"] },
+    { "sourceName": "TWSE T86", "tableViewApi": "official chip source", "purpose": "上市三大法人來源揭露", "necessity": "required", "minimumThreshold": "source label exists", "staleLimit": "valid post-market trade date", "missingDataAction": ["block publish"] },
+    { "sourceName": "TPEx 3itrade", "tableViewApi": "official chip source", "purpose": "上櫃三大法人來源揭露", "necessity": "required", "minimumThreshold": "source label exists", "staleLimit": "valid post-market trade date", "missingDataAction": ["block publish"] },
+    { "sourceName": "scanner result payload", "tableViewApi": "institution scanner output", "purpose": "resultRows / validAfterExclusionRows", "necessity": "required", "minimumThreshold": "validAfterExclusionRows >=1500", "staleLimit": "usedDate valid", "missingDataAction": ["preserve previous good"] },
+    { "sourceName": "latest API", "tableViewApi": "/api/institution-latest", "purpose": "UI/API 正式輸出", "necessity": "required", "minimumThreshold": "payload fields complete", "staleLimit": "no-store / formal payload", "missingDataAction": ["display degraded"] },
+    { "sourceName": "scan receipt", "tableViewApi": "C:\\fuman-runtime\\data\\scan-receipts\\institution.json", "purpose": "掃描證據", "necessity": "required", "minimumThreshold": "blocked/publish fields complete", "staleLimit": "checkedAt exists", "missingDataAction": ["write blocked receipt"] },
+    { "sourceName": "blocked receipt", "tableViewApi": "run-institution.ps1 receipt format", "purpose": "fail closed 證據", "necessity": "required", "minimumThreshold": "blockedReason/scanner_block_reason exists", "staleLimit": "checkedAt exists", "missingDataAction": ["preserve previous good"] },
+    { "sourceName": "mobile/frontend", "tableViewApi": "/api/mobile-fragment?tab=chip / terminal-chip-flow.js", "purpose": "手機/桌機顯示", "necessity": "required", "minimumThreshold": "uses /api/institution-latest", "staleLimit": "must not read old static JSON", "missingDataAction": ["display degraded"] },
+    { "sourceName": "quote", "tableViewApi": "strategyStocks / quote fields", "purpose": "close/percent/volume display helper", "necessity": "optional", "minimumThreshold": "display if present", "staleLimit": "not institution authority", "missingDataAction": ["display degraded"] },
+    { "sourceName": "intraday_1m", "tableViewApi": "not_required", "purpose": "本策略非當沖 1m 策略", "necessity": "optional", "minimumThreshold": "not_required", "staleLimit": "not_required", "missingDataAction": ["display degraded"] },
+    { "sourceName": "MA / 技術指標", "tableViewApi": "not_required", "purpose": "本策略非 MA 技術策略", "necessity": "optional", "minimumThreshold": "not_required", "staleLimit": "not_required", "missingDataAction": ["display degraded"] },
+    { "sourceName": "preopen", "tableViewApi": "not_required", "purpose": "本策略非撮合策略", "necessity": "optional", "minimumThreshold": "not_required", "staleLimit": "not_required", "missingDataAction": ["display degraded"] },
+    { "sourceName": "futopt/TXF", "tableViewApi": "not_required", "purpose": "本策略非期貨濾網策略", "necessity": "optional", "minimumThreshold": "not_required", "staleLimit": "not_required", "missingDataAction": ["display degraded"] },
+    { "sourceName": "warrant / CB", "tableViewApi": "not_required", "purpose": "本策略需排除，不作 authority", "necessity": "optional", "minimumThreshold": "not included in formal institution result", "staleLimit": "not_required", "missingDataAction": ["block publish"] }
+  ],
+  "outputFields": [
+    "code", "name", "close", "percent", "tradeVolume", "value", "foreign", "trust", "dealer", "total", "foreignNet", "trustNet", "dealerNet", "totalNet", "institutionTotalNet", "foreignTrustBuyVolumePct", "foreignStreak", "trustStreak", "jointStreak", "rank", "source", "dataContractSource", "runId", "usedDate", "coverageStatus", "institutionalRows", "validAfterExclusionRows", "fallbackUsed", "fallbackScope", "fallbackDetails", "fallbackContract", "evidenceStatus", "unattendedStatus", "source_snapshot_captured_at", "institution_source_status_at_run", "chip_source_status_at_run", "requiredFields", "blankCounts", "sampleMissingRows", "writeBudget", "blockedReason", "scanner_block_reason"
+  ],
+  "decisionGates": [
+    { "gateName": "scan gate", "payloadPath": "source_status_at_run / institution_source_status_at_run", "passState": "ready", "blockedState": "timeout/degraded/missing", "affectsScan": true, "affectsPublish": true, "affectsFormalEntry": true, "fallbackAllowed": false, "failureActions": ["block scan", "fail closed"] },
+    { "gateName": "source gate", "payloadPath": "coverageStatus, institutionalRows, validAfterExclusionRows", "passState": "ready, >=1500", "blockedState": "not_ready, <1500", "affectsScan": true, "affectsPublish": true, "affectsFormalEntry": true, "fallbackAllowed": false, "failureActions": ["block publish", "preserve previous good"] },
+    { "gateName": "publish gate", "payloadPath": "publishAllowed, writeBudget.allowed", "passState": "true", "blockedState": "false/missing", "affectsScan": false, "affectsPublish": true, "affectsFormalEntry": true, "fallbackAllowed": false, "failureActions": ["preserve previous good", "write blocked receipt"] },
+    { "gateName": "readback gate", "payloadPath": "readbackCount/resultCount", "passState": "match", "blockedState": "mismatch/missing", "affectsScan": false, "affectsPublish": true, "affectsFormalEntry": true, "fallbackAllowed": false, "failureActions": ["block publish", "preserve previous good"] },
+    { "gateName": "fallback gate", "payloadPath": "fallbackUsed/fallbackScope/fallbackContract", "passState": "false or fully disclosed display-only", "blockedState": "missing disclosure / formal fallback", "affectsScan": false, "affectsPublish": true, "affectsFormalEntry": true, "fallbackAllowed": "display-only", "failureActions": ["block publish", "display degraded"] },
+    { "gateName": "UI display gate", "payloadPath": "/api/institution-latest + chip route", "passState": "route exists, static forbidden hits=[]", "blockedState": "route missing/static fallback", "affectsScan": false, "affectsPublish": false, "affectsFormalEntry": false, "fallbackAllowed": "display-only", "failureActions": ["display degraded"] },
+    { "gateName": "alert gate", "payloadPath": "blocked receipt / frontend-error", "passState": "blocked reason present", "blockedState": "blocked reason missing", "affectsScan": false, "affectsPublish": true, "affectsFormalEntry": false, "fallbackAllowed": "diagnostic", "failureActions": ["write blocked receipt", "fail closed"] }
+  ],
+  "fallbackRules": [
+    { "fallbackName": "display-only previous good", "fallbackScope": "display-only", "purpose": "source not ready 時保留畫面", "allowed": true, "canPublish": false, "canDisplay": true, "mustDisclose": true, "failureActions": ["preserve previous good"] },
+    { "fallbackName": "diagnostic fallback", "fallbackScope": "diagnostic", "purpose": "incident/debug receipt", "allowed": true, "canPublish": false, "canDisplay": true, "mustDisclose": true, "failureActions": ["display degraded"] },
+    { "fallbackName": "formal source fallback", "fallbackScope": "formal-source", "purpose": "嘗試替代正式水源", "allowed": false, "canPublish": false, "canDisplay": false, "mustDisclose": true, "failureActions": ["block publish", "fail closed"] },
+    { "fallbackName": "static JSON fallback", "fallbackScope": "static-display", "purpose": "舊本機 JSON", "allowed": false, "canPublish": false, "canDisplay": false, "mustDisclose": true, "failureActions": ["display degraded", "fail closed"] },
+    { "fallbackName": "mobile snapshot fallback", "fallbackScope": "display-only", "purpose": "mobile fragment 暫存顯示", "allowed": true, "canPublish": false, "canDisplay": true, "mustDisclose": true, "failureActions": ["display degraded"] },
+    { "fallbackName": "fallbackUsed=true missing contract", "fallbackScope": "unknown", "purpose": "不完整 fallback", "allowed": false, "canPublish": false, "canDisplay": false, "mustDisclose": false, "failureActions": ["block publish", "fail closed"] }
+  ],
+  "emptyResultRules": {
+    "sourceReadyAndScanCompleteAllowed": true,
+    "sourceNotReadyAllowed": false,
+    "canOverwriteLatest": false,
+    "requiresBlockedReceiptWhenSourceNotReady": true,
+    "preservePreviousGoodWhenBlocked": true
+  },
+  "verifierTests": [
+    { "testName": "missing required field", "input": "missing-source-snapshot-captured-at", "expected": "FAIL", "mustPass": true },
+    { "testName": "blank fields", "input": "business blankCounts/sampleMissingRows", "expected": "FAIL/evidenceStatus=insufficient", "mustPass": true },
+    { "testName": "source not ready", "input": "institutionalRows <1500 publishAllowed=true", "expected": "FAIL/block latest", "mustPass": true },
+    { "testName": "source timeout / 522", "input": "supabase-522-evidence-complete", "expected": "FAIL/evidenceStatus not complete", "mustPass": true },
+    { "testName": "stale data", "input": "source matrix stale/threshold rule", "expected": "FAIL/block publish", "mustPass": true },
+    { "testName": "fallback display-only", "input": "fallback-display-only-updates-latest", "expected": "FAIL/no latest pointer update", "mustPass": true },
+    { "testName": "formal source fallback", "input": "fallbackUsed=true missing contract/details", "expected": "FAIL", "mustPass": true },
+    { "testName": "empty result", "input": "empty-result-updates-latest-pointer", "expected": "FAIL/no latest pollution", "mustPass": true },
+    { "testName": "readback mismatch", "input": "readbackCount/resultCount mismatch", "expected": "FAIL/block publish", "mustPass": true },
+    { "testName": "fake YES", "input": "validAfterExclusionRows <1500 unattendedStatus=YES", "expected": "FAIL", "mustPass": true },
+    { "testName": "latest pointer update error", "input": "latestPointerUpdated=true under blocked", "expected": "FAIL", "mustPass": true },
+    { "testName": "previous good not preserved", "input": "blocked-run-preservePreviousGood-false", "expected": "FAIL", "mustPass": true }
+  ],
+  "postWaterLiveRunbook": [
+    { "step": 1, "command": "npm run supabase:probe:light", "expected": "PASS" },
+    { "step": 2, "command": "npm run supabase:probe:light", "expected": "PASS after 5-10 minutes" },
+    { "step": 3, "command": "npm run supabase:incident:exit", "expected": "incident cleared" },
+    { "step": 4, "command": "npm run verify:chip-source", "expected": "chip source health readable and ready" },
+    { "step": 5, "command": "node --use-system-ca scripts/verify-institution-battle-state.js", "expected": "ok=true issues=[]" },
+    { "step": 6, "command": "npm run verify:institution-prewater-strict", "expected": "local strict PASS before live publish" },
+    { "step": 7, "command": "npm run guard:production", "expected": "PASS only after source health is ready" }
+  ],
+  "selfAssessment": {
+    "allStrategyConditionsListed": "YES",
+    "allSourcesListed": "YES",
+    "allOutputFieldsListed": "YES",
+    "allDecisionGatesListed": "YES",
+    "verifierReadsTheseTables": "YES",
+    "verifierUsesActualScannerApiWriter": "YES",
+    "missingRequiredFieldFails": "YES",
+    "sourceNotReadyBlocksLatest": "YES",
+    "emptyResultDoesNotPolluteLatest": "YES",
+    "displayOnlyFallbackDoesNotBecomeFormalYes": "YES"
+  }
+}

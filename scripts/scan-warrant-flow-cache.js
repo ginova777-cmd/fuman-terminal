@@ -17,6 +17,13 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.FUMAN_TERMINAL_SUPABASE_SERVICE_RO
 const WARRANT_FLOW_RUNS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RUNS_TABLE || "warrant_flow_scan_runs";
 const WARRANT_FLOW_RESULTS_TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_scan_results";
 const WARRANT_FLOW_API_ONLY = true;
+const WARRANT_FLOW_REQUIRED_FIELDS = ["warrantCode", "underlyingCode", "warrantName", "underlyingName", "finalScore"];
+const WARRANT_FLOW_BUSINESS_BLANK_KEYS = [
+  "underlyingCode", "underlyingName", "warrantCode", "warrantName", "finalScore", "score", "reason",
+  "actionLabel", "signalGrade", "stockRisk", "callValue", "putValue", "callPutRatio", "warrantHeatScore",
+  "stockSetupScore", "branchPowerScore", "branchStatus", "volumeMultiple", "thirtyMinuteVolume",
+  "floatingUnits", "quoteSource", "source_snapshot_captured_at", "fallbackUsed",
+];
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -56,6 +63,112 @@ function runHandler() {
 
 function cleanNumber(value) {
   return Number(String(value ?? "").replace(/[,+%]/g, "").trim()) || 0;
+}
+
+function nonBlank(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function rowHasAny(row, fields) {
+  return fields.some((field) => nonBlank(row?.[field]));
+}
+
+function buildWarrantFieldCompleteness(payload) {
+  const rows = [
+    ...(Array.isArray(payload?.matches) ? payload.matches : []),
+    ...(Array.isArray(payload?.volumeMatches) ? payload.volumeMatches : []),
+    ...(Array.isArray(payload?.singleSignals) ? payload.singleSignals : []),
+  ];
+  const blankCounts = Object.fromEntries(WARRANT_FLOW_BUSINESS_BLANK_KEYS.map((key) => [key, 0]));
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = [];
+    const checks = {
+      underlyingCode: /^\d{4}$/.test(String(row.underlyingCode || row.code || "")),
+      underlyingName: nonBlank(row.underlyingName || row.name),
+      warrantCode: rowHasAny(row, ["warrantCode"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => /^\d{5,6}$/.test(String(item.code || "")))),
+      warrantName: rowHasAny(row, ["warrantName"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.name))),
+      finalScore: cleanNumber(row.finalScore) > 0,
+      score: cleanNumber(row.score || row.finalScore) > 0,
+      reason: nonBlank(row.reason),
+      actionLabel: nonBlank(row.actionLabel) || nonBlank(row.reason),
+      signalGrade: /^[ABC]$/.test(String(row.signalGrade || "").trim()) || /^[ABC]/.test(String(row.reason || "").trim()),
+      stockRisk: nonBlank(row.stockRisk) || nonBlank(row.reason),
+      callValue: cleanNumber(row.callValue || row.value) > 0,
+      putValue: row.putValue !== undefined && cleanNumber(row.putValue) >= 0,
+      callPutRatio: cleanNumber(row.callPutRatio || row.volumeMultiple || row.warrantHeatScore || row.score) > 0,
+      warrantHeatScore: cleanNumber(row.warrantHeatScore || row.score || row.finalScore) > 0,
+      stockSetupScore: cleanNumber(row.stockSetupScore || row.score || row.finalScore) > 0,
+      branchPowerScore: row.branchPowerScore !== undefined ? cleanNumber(row.branchPowerScore) >= 0 : true,
+      branchStatus: nonBlank(row.branchStatus) || row.branchPowerScore === undefined,
+      volumeMultiple: row.volumeMultiple === undefined || cleanNumber(row.volumeMultiple) > 0,
+      thirtyMinuteVolume: row.thirtyMinuteVolume === undefined || cleanNumber(row.thirtyMinuteVolume) > 0,
+      floatingUnits: row.floatingUnits === undefined || cleanNumber(row.floatingUnits) > 0,
+      quoteSource: nonBlank(row.quoteSource) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.quoteSource))),
+    };
+    for (const [key, ok] of Object.entries(checks)) {
+      if (!ok) {
+        blankCounts[key] += 1;
+        missing.push(key);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 10) {
+      sampleMissingRows.push({
+        index,
+        code: String(row?.warrantCode || row?.code || row?.underlyingCode || "").trim(),
+        name: String(row?.warrantName || row?.name || row?.underlyingName || "").trim(),
+        missing,
+      });
+    }
+  });
+  if (!Object.prototype.hasOwnProperty.call(payload, "fallbackUsed")) blankCounts.fallbackUsed += 1;
+  return {
+    requiredFields: WARRANT_FLOW_REQUIRED_FIELDS,
+    blankCounts,
+    sampleMissingRows,
+  };
+}
+
+function buildWarrantPublishDisclosure(payload, { publishAllowed, blockedReason = "" } = {}) {
+  const fallbackUsed = payload?.fallbackUsed === true;
+  const fallbackScope = Array.isArray(payload?.fallbackScope) ? payload.fallbackScope : [];
+  const fallbackDetails = Array.isArray(payload?.fallbackDetails) ? payload.fallbackDetails : [];
+  const fallbackAllowed = payload?.fallbackAllowed !== undefined ? payload.fallbackAllowed === true : fallbackUsed === false;
+  const reason = publishAllowed ? "" : String(blockedReason || payload?.blockedReason || payload?.scanner_block_reason || "warrant_flow_latest_blocked");
+  const writeBudget = payload?.writeBudget && typeof payload.writeBudget === "object"
+    ? payload.writeBudget
+    : {
+        ok: publishAllowed === true,
+        status: publishAllowed === true ? "allow" : "blocked",
+        allowLatestWrite: publishAllowed === true,
+        allowCompleteRunWrite: publishAllowed === true,
+        preservePreviousCompleteRun: publishAllowed !== true,
+        reason: publishAllowed === true ? "warrant flow latest payload is publishable" : "warrant flow must preserve previous complete run",
+      };
+  return {
+    ...buildWarrantFieldCompleteness(payload),
+    fallbackUsed,
+    fallbackScope,
+    fallbackAllowed,
+    fallbackDetails,
+    fallbackContract: {
+      contract: "fallback-disclosure-v1",
+      disclosed: true,
+      allowedForLatest: fallbackUsed === false && publishAllowed === true,
+      fallbackAllowed,
+      fallbackScope,
+    },
+    degradedBlocksLatest: publishAllowed !== true,
+    preservePreviousGood: publishAllowed !== true,
+    writeBudget,
+    retentionOk: publishAllowed === true,
+    blockedReason: reason,
+    scanner_block_reason: reason,
+  };
 }
 
 function normalizeDateKey(value) {
@@ -122,21 +235,9 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const resultCount = cleanNumber(output.count) + cleanNumber(output.volumeCount) + cleanNumber(output.singleSignalCount);
   const publishAllowed = complete && resultCount > 0 && output.snapshotStale !== true;
-  const writeBudget = {
-    status: publishAllowed ? "allowed" : "blocked",
-    allowed: publishAllowed,
-    limit: Math.max(resultCount, 1),
-    used: publishAllowed ? resultCount : 0,
-    remaining: publishAllowed ? Math.max(Math.max(resultCount, 1) - resultCount, 0) : Math.max(resultCount, 1),
-    allowLatestWrite: publishAllowed,
-    allowCompleteRunWrite: publishAllowed,
-    preservePreviousCompleteRun: !publishAllowed,
-    reason: publishAllowed ? "warrant complete run within per-run write budget" : "warrant complete run not publishable",
-  };
-  const notRequired = (reason) => ({
-    ok: true,
-    status: "not_required",
-    reason,
+  const disclosure = buildWarrantPublishDisclosure(output, {
+    publishAllowed,
+    blockedReason: publishAllowed ? "" : "warrant_flow_publish_blocked",
   });
   return {
     run_id: runId,
@@ -165,32 +266,24 @@ function buildWarrantFlowRunRow(output, runId, status = "complete") {
         expectedTotal: resultCount,
         scannedCount: resultCount,
         resultCount: complete ? resultCount : 0,
-        readbackCount: complete ? resultCount : 0,
-        sourceStatus: {
-          ok: publishAllowed,
-          status: publishAllowed ? "ready" : "blocked",
-          reason: publishAllowed
-            ? "Supabase complete run and warrant_flow_scan_results readback are ready at publish"
-            : "warrant complete run is not publishable",
-          source: "supabase:warrant_flow_scan_runs+warrant_flow_scan_results",
-          runId,
-          expectedTotal: resultCount,
-          scannedCount: resultCount,
-          resultCount: complete ? resultCount : 0,
-          dataContractOk: output.dataContract?.ok !== false,
-          schemaVersion: output.schemaVersion || "warrant-flow-run-id-complete-v1",
-        },
-        quoteCoverage: notRequired("warrant-flow source does not require shared intraday quote coverage"),
-        intraday1mReadiness: notRequired("warrant-flow source does not require shared intraday 1m"),
-        maReadiness: notRequired("warrant-flow source does not require MA readiness"),
-        preopenFutoptDailyReadiness: notRequired("warrant-flow source does not require preopen/futopt/daily readiness"),
+        sourceStatus: output.sourceHealth || output.dataContract || {},
+        quoteCoverage: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday quote coverage" },
+        intraday1mReadiness: { status: "not_applicable", reason: "warrant-flow source does not require shared intraday 1m" },
+        maReadiness: { status: "not_applicable", reason: "warrant-flow source does not require MA readiness" },
+        preopenFutoptDailyReadiness: output.dataContract || {},
         publishAllowed,
         degradedBlocksLatest: !publishAllowed,
         preservePreviousGood: !publishAllowed,
-        writeBudget,
-        retentionOk: true,
         qualityStatus: complete ? "complete" : status,
       }),
+      ...disclosure,
+      publishAllowed,
+      writeBudget: disclosure.writeBudget,
+      retentionOk: disclosure.retentionOk,
+      degradedBlocksLatest: disclosure.degradedBlocksLatest,
+      preservePreviousGood: disclosure.preservePreviousGood,
+      blockedReason: disclosure.blockedReason,
+      scanner_block_reason: disclosure.scanner_block_reason,
       count: cleanNumber(output.count),
       volumeCount: cleanNumber(output.volumeCount),
       singleSignalCount: cleanNumber(output.singleSignalCount),
@@ -474,6 +567,10 @@ async function main() {
   output.complete = true;
   output.schemaVersion = output.schemaVersion || "warrant-flow-run-id-complete-v1";
   output.dataContractSource = output.dataContractSource || "warrant-flow-cache";
+  Object.assign(output, buildWarrantPublishDisclosure(output, {
+    publishAllowed: true,
+    blockedReason: "",
+  }));
 
   if (!matches.length) {
     console.error("warrant-flow scan returned 0 matches; keeping existing cache files unchanged");
@@ -500,7 +597,16 @@ async function main() {
   console.log(`warrant-flow cache updated: matches ${matches.length}, tradeDate ${newestTradeDate || "--"}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildWarrantFlowRunRow,
+  buildWarrantFlowResultRows,
+  buildWarrantPublishDisclosure,
+  warrantFlowRunIdFromOutput,
+};

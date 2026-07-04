@@ -179,12 +179,16 @@ function buildInstitutionSourceStatusAtRun(output, { sourceCount = 0, resultCoun
   return {
     ok: ready,
     status: ready ? "ready" : "degraded",
+    coverageStatus: ready ? "ready" : "degraded",
     reason: ready
       ? "institution official source rows, scan output rows, and trade date freshness passed at run time"
       : "institution official source coverage or freshness failed at run time",
     strategy: "institution",
+    latestTradeDate: output.usedDate || "",
     sourceRows: sourceCount,
     resultRows: resultCount,
+    institutionalRows: sourceCount,
+    validAfterExclusionRows: resultCount,
     minSourceRows: MIN_SOURCE_ROWS,
     minOutputRows: MIN_OUTPUT_ROWS,
     usedDate: output.usedDate || "",
@@ -318,6 +322,7 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
     generated_at: scanTime,
     updated_at: scanTime,
     payload: {
+      runId,
       ...buildRunTimeSourceSnapshotFields({
         strategy: "institution",
         runId,
@@ -356,8 +361,20 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
       readbackCount: cleanNumber(output.readbackCount),
       usedDate: output.usedDate || "",
       quoteUpdatedAt: output.quoteUpdatedAt || "",
+      sourceCoverage: {
+        coverageStatus: sourceStatusAtRun.coverageStatus,
+        latestTradeDate: sourceStatusAtRun.latestTradeDate,
+        usedDate: sourceStatusAtRun.usedDate,
+        institutionalRows: sourceStatusAtRun.institutionalRows,
+        validAfterExclusionRows: sourceStatusAtRun.validAfterExclusionRows,
+        sourceRows: sourceStatusAtRun.sourceRows,
+        resultRows: sourceStatusAtRun.resultRows,
+        sourceLabels: sourceStatusAtRun.sources,
+      },
       sourceHealth: output.sourceHealth || {},
       sourceStatusAtRun,
+      institution_source_status_at_run: sourceStatusAtRun,
+      chip_source_status_at_run: sourceStatusAtRun,
       writeBudget,
       retentionOk: true,
       rawKeepDays: INSTITUTION_RAW_KEEP_DAYS,
@@ -373,6 +390,8 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
       fallbackScope,
       fallbackAllowed: fallbackUsed ? output.fallbackAllowed === true : true,
       fallbackDetails,
+      evidenceStatus: publishAllowed ? "complete" : "insufficient",
+      unattendedStatus: publishAllowed ? "YES" : "NO",
     },
   };
 }
@@ -398,7 +417,7 @@ function buildInstitutionResultRows(output, runId) {
       total_net: cleanNumber(row.total),
       rank: index + 1,
       reason: "",
-      payload: row,
+      payload: { ...row, rank: index + 1, dataContractSource: output.dataContractSource || "institution-cache" },
       complete: true,
       quality_status: "complete",
       schema_version: output.schemaVersion || "institution-run-id-complete-v1",
@@ -755,8 +774,19 @@ async function main() {
   console.log(`institution cache updated: rows ${count}, usedDate ${output.usedDate || "--"}, stockRows ${stockRows}, misQuotes ${misQuotes.size}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildInstitutionRunRow,
+  buildInstitutionResultRows,
+  buildInstitutionSourceStatusAtRun,
+  buildInstitutionWriteBudget,
+  buildFieldCompleteness,
+  institutionRunIdFromOutput,
+};
 

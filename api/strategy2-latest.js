@@ -533,7 +533,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
     ...payload,
     ...snapshotFields,
   };
-  return {
+  return applyStrategy2HardAFailClosed({
     ...evidencedPayload,
     selfCheck: {
       strategy: "strategy2",
@@ -565,7 +565,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       issues,
       warnings,
     },
-  };
+  });
 }
 
 function readinessRatio(part = {}) {
@@ -578,6 +578,168 @@ function readinessPartReady(part = {}) {
   const expected = cleanNumber(part.expected);
   const ready = cleanNumber(part.ready ?? part.scanned);
   return expected > 0 && ready >= expected;
+}
+
+function statusText(value) {
+  return String(value || "").toLowerCase();
+}
+
+function strategy2FormalNotRequired(value) {
+  return statusText(value) === "not_required";
+}
+
+function strategy2StatusReady(value) {
+  return ["ready", "ok", "pass"].includes(statusText(value));
+}
+
+function strategy2NestedReady(object, key) {
+  const value = object?.[key];
+  if (!value || typeof value !== "object") return false;
+  if (strategy2StatusReady(value.status) || strategy2FormalNotRequired(value.status)) return true;
+  const expected = cleanNumber(value.expected);
+  const ready = cleanNumber(value.ready ?? value.scanned);
+  return expected > 0 && ready >= expected;
+}
+
+function strategy2HardAReadiness(payload = {}) {
+  const snapshot = auditRunTimeSourceSnapshot(payload).snapshot || {};
+  const source = snapshot.source_status_at_run || payload.source_status_at_run || payload.sourceGate || payload.sourceCoverage || {};
+  const quote = snapshot.quote_coverage_at_run || payload.quote_coverage_at_run || payload.sourceCoverage || {};
+  const intraday = snapshot.intraday_1m_readiness_at_run || payload.intraday_1m_readiness_at_run || payload.sourceCoverage || {};
+  const ma = snapshot.ma_readiness_at_run || payload.ma_readiness_at_run || payload.sourceCoverage || {};
+  const pre = snapshot.preopen_futopt_daily_readiness_at_run || payload.preopen_futopt_daily_readiness_at_run || {};
+  const issues = [];
+
+  if (!(source.ok === true && (strategy2StatusReady(source.status) || strategy2StatusReady(source.sourceStatus)))) {
+    issues.push("a_source_status_not_ready");
+  }
+
+  const quoteCoverage = cleanNumber(quote.fresh_quote_coverage_120s ?? quote.freshQuoteCoverage120s);
+  if (!(quoteCoverage >= 0.95)) issues.push("a_fresh_quote_coverage_120s_below_0_95");
+
+  const quoteAgeSeconds = cleanNumber(quote.quote_age_seconds ?? quote.quoteAgeSeconds, 999999);
+  if (quoteAgeSeconds > 90) issues.push("a_quote_age_seconds_above_90");
+
+  const intradayStaleSeconds = cleanNumber(intraday.intraday_1m_stale_seconds ?? intraday.stale_seconds ?? intraday.staleSeconds, 999999);
+  if (intradayStaleSeconds > 120) issues.push("a_intraday_1m_stale_seconds_above_120");
+
+  const expectedSymbols = Math.max(
+    cleanNumber(ma.expected_symbols),
+    cleanNumber(intraday.expected_symbols),
+    cleanNumber(quote.expected),
+    cleanNumber(quote.active_symbols)
+  );
+  const maThreshold = expectedSymbols > 0 ? Math.ceil(expectedSymbols * 0.95) : 300;
+  const ma20 = cleanNumber(ma.ready_ma20_continuous ?? ma.readyGe20 ?? ma.ready_ge_20);
+  const ma35 = cleanNumber(ma.ready_ma35_continuous ?? ma.readyGe35 ?? ma.ready_ge_35);
+  if (ma20 < maThreshold) issues.push(`a_ready_ma20_continuous_below_${maThreshold}`);
+  if (ma35 < maThreshold) issues.push(`a_ready_ma35_continuous_below_${maThreshold}`);
+
+  const dailyStatus = pre.daily_volume_status || pre.dailyVolume?.status;
+  if (!strategy2StatusReady(dailyStatus)) issues.push("a_daily_volume_status_not_ready");
+
+  const futoptStatus = pre.futopt_status || pre.futopt?.status;
+  if (!(strategy2StatusReady(futoptStatus) || strategy2FormalNotRequired(futoptStatus) || strategy2NestedReady(pre, "futopt"))) {
+    issues.push("a_futopt_status_not_ready_or_not_required");
+  }
+
+  const preopenStatus = pre.preopen_status || pre.preopenHot?.status;
+  if (!(strategy2StatusReady(preopenStatus) || strategy2FormalNotRequired(preopenStatus) || strategy2NestedReady(pre, "preopenHot"))) {
+    issues.push("a_preopen_checkpoint_not_ready_or_not_required");
+  }
+
+  if (payload.fallbackUsed === true) issues.push("a_fallback_used");
+  if (payload.count === 0 || payload.noTodayDetections === true) issues.push("a_empty_result");
+
+  return { ok: issues.length === 0, issues };
+}
+
+function applyStrategy2HardAFailClosed(payload = {}) {
+  const hardA = strategy2HardAReadiness(payload);
+  if (hardA.ok) return payload;
+  const reason = hardA.issues.join("; ") || payload.publishBlockedReason || "strategy2 hard A source gate blocked";
+  const priorIssues = Array.isArray(payload.issues) ? payload.issues : [];
+  const priorWarnings = Array.isArray(payload.warnings) ? payload.warnings : [];
+  const writeBudget = {
+    ...(payload.writeBudget || {}),
+    status: "blocked",
+    allowed: false,
+    latest: 0,
+    completeRun: 0,
+    reason,
+  };
+  const runQuality = {
+    ...(payload.run_quality_at_publish || {}),
+    publishAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    fallbackUsed: payload.fallbackUsed === true,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    fallbackAllowed: false,
+    fallbackDetails: Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : [],
+    blockedReason: reason,
+    scanner_block_reason: reason,
+    writeBudget,
+    retentionOk: payload.retentionOk !== false,
+    reason,
+  };
+  return {
+    ...payload,
+    ok: false,
+    status: "blocked",
+    qualityStatus: "degraded",
+    publishAllowed: false,
+    publishBlocked: true,
+    publishBlockedReason: reason,
+    blockedReason: reason,
+    scanner_block_reason: reason,
+    evidenceStatus: "insufficient",
+    sourceEvidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    unattended: {
+      ...(payload.unattended || {}),
+      status: "NO",
+      canRunUnattended: false,
+      evidenceStatus: "insufficient",
+      reason,
+    },
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    mustPreserveLatest: true,
+    blockedReceiptWritten: true,
+    latestWriteAttempted: false,
+    latestPointerUpdated: false,
+    writeBudget,
+    retentionOk: payload.retentionOk !== false,
+    run_quality_at_publish: runQuality,
+    runTimeSourceSnapshot: payload.runTimeSourceSnapshot ? {
+      ...payload.runTimeSourceSnapshot,
+      run_quality_at_publish: runQuality,
+    } : payload.runTimeSourceSnapshot,
+    sourceGate: {
+      ...(payload.sourceGate || {}),
+      ok: false,
+      publishAllowed: false,
+      hardA: false,
+      issues: [...new Set([...(Array.isArray(payload.sourceGate?.issues) ? payload.sourceGate.issues : []), ...hardA.issues])],
+    },
+    sourceCoverage: payload.sourceCoverage ? {
+      ...payload.sourceCoverage,
+      ok: false,
+      ready: false,
+      status: "blocked",
+      reason,
+    } : payload.sourceCoverage,
+    currentSourceGateCoverage: payload.currentSourceGateCoverage ? {
+      ...payload.currentSourceGateCoverage,
+      ok: false,
+      ready: false,
+      status: "blocked",
+      reason,
+    } : payload.currentSourceGateCoverage,
+    issues: [...new Set([...priorIssues, ...hardA.issues])],
+    warnings: [...new Set([...priorWarnings, "strategy2_hard_a_fail_closed"])],
+  };
 }
 
 function latestStrategy2RunTime(rows = []) {

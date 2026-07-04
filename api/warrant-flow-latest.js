@@ -3,7 +3,7 @@ const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
 const { sendJson } = require("./_http-cache");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
-const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { buildRunTimeSourceSnapshotFields, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 function readSecretText(file) {
@@ -19,6 +19,41 @@ const TABLE = process.env.WARRANT_FLOW_SUPABASE_RESULTS_TABLE || "warrant_flow_s
 const LATEST_RUN_VIEW = process.env.WARRANT_FLOW_SUPABASE_LATEST_RUN_VIEW || "v_warrant_flow_latest_complete_run";
 const TWSE_STATE_DIR = process.env.FUMAN_STATE_DIR || path.join("/tmp", "fuman-state");
 const REQUIRED_SCHEMA_VERSION = "warrant-flow-run-id-complete-v1";
+const WARRANT_FLOW_REQUIRED_FIELDS = ["warrantCode", "underlyingCode", "warrantName", "underlyingName", "finalScore"];
+const WARRANT_FLOW_BUSINESS_BLANK_KEYS = [
+  "underlyingCode", "underlyingName", "warrantCode", "warrantName", "finalScore", "score", "reason",
+  "actionLabel", "signalGrade", "stockRisk", "callValue", "putValue", "callPutRatio", "warrantHeatScore",
+  "stockSetupScore", "branchPowerScore", "branchStatus", "volumeMultiple", "thirtyMinuteVolume",
+  "floatingUnits", "quoteSource", "source_snapshot_captured_at", "fallbackUsed",
+];
+
+function buildBlockedRunTimeSourceFields(reason = "warrant_flow_latest_blocked") {
+  return buildRunTimeSourceSnapshotFields({
+    strategy: "warrant-flow",
+    sourceStatus: { status: "blocked", ok: false, reason },
+    quoteCoverage: { status: "unknown", ok: false, reason },
+    intraday1mReadiness: { status: "unknown", ok: false, reason },
+    maReadiness: { status: "unknown", ok: false, reason },
+    preopenFutoptDailyReadiness: { status: "blocked", ok: false, reason },
+    publishAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: true,
+    fallbackDetails: [],
+    writeBudget: {
+      ok: false,
+      status: "blocked",
+      allowLatestWrite: false,
+      allowCompleteRunWrite: false,
+      preservePreviousCompleteRun: true,
+      reason,
+    },
+    retentionOk: false,
+    qualityStatus: "blocked",
+  });
+}
 
 function taipeiTodayKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -86,6 +121,7 @@ function apiOnlyError(reason = "", tradingDay = null) {
     singleSignals: [],
     updatedAt: new Date().toISOString(),
     reason: closed ? "non-trading-day-cache-empty" : "warrant_flow_api_only_unavailable",
+    ...buildBlockedRunTimeSourceFields(reason || "warrant_flow_api_only_unavailable"),
     marketSession,
     transport: {
       source: "supabase",
@@ -107,7 +143,7 @@ function setDesktopSnapshotCache(response) {
 function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay = null, options = {}) {
   const marketSession = buildEmptyMarketSession(tradingDay);
   return {
-    ok: true,
+    ok: false,
     source: "supabase:warrant_flow_scan_results",
     cacheSource: "snapshot-friendly-empty",
     runId: "",
@@ -129,6 +165,7 @@ function emptySnapshotPayload(reason = "warrant_flow_snapshot_empty", tradingDay
     singleSignals: [],
     updatedAt: new Date().toISOString(),
     reason,
+    ...buildBlockedRunTimeSourceFields(reason),
     marketSession,
     dataContract: {
       ok: true,
@@ -168,6 +205,21 @@ async function fetchRowsFrom(table, query) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
+}
+
+function nonBlank(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function firstNonBlank(...values) {
+  for (const value of values) {
+    if (nonBlank(value)) return value;
+  }
+  return "";
 }
 
 function safeHost(value) {
@@ -249,6 +301,131 @@ function validateDataContract(payload) {
     volumeMatchesContractOk: invalidVolumeRows.length === 0 && volumeMatches.length > 0,
     checkedVolumeRows: volumeMatches.length,
     issues,
+  };
+}
+
+function warrantRowsForCompleteness(payload) {
+  return [
+    ...(Array.isArray(payload?.matches) ? payload.matches : []),
+    ...(Array.isArray(payload?.rows) ? payload.rows : []),
+    ...(Array.isArray(payload?.volumeMatches) ? payload.volumeMatches : []),
+    ...(Array.isArray(payload?.singleSignals) ? payload.singleSignals : []),
+  ].filter((row, index, rows) => row && typeof row === "object" && rows.indexOf(row) === index);
+}
+
+function rowHasAny(row, fields) {
+  return fields.some((field) => nonBlank(row?.[field]));
+}
+
+function buildWarrantFieldCompleteness(payload) {
+  const rows = warrantRowsForCompleteness(payload);
+  const blankCounts = Object.fromEntries(WARRANT_FLOW_BUSINESS_BLANK_KEYS.map((key) => [key, 0]));
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = [];
+    const checks = {
+      underlyingCode: /^\d{4}$/.test(String(row.underlyingCode || row.code || "")),
+      underlyingName: nonBlank(row.underlyingName || row.name),
+      warrantCode: rowHasAny(row, ["warrantCode"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => /^\d{5,6}$/.test(String(item.code || "")))),
+      warrantName: rowHasAny(row, ["warrantName"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.name))),
+      finalScore: cleanNumber(row.finalScore) > 0,
+      score: cleanNumber(row.score || row.finalScore) > 0,
+      reason: nonBlank(row.reason),
+      actionLabel: nonBlank(row.actionLabel) || nonBlank(row.reason),
+      signalGrade: /^[ABC]$/.test(String(row.signalGrade || "").trim()) || /^[ABC]/.test(String(row.reason || "").trim()),
+      stockRisk: nonBlank(row.stockRisk) || nonBlank(row.reason),
+      callValue: cleanNumber(row.callValue || row.value) > 0,
+      putValue: row.putValue !== undefined && cleanNumber(row.putValue) >= 0,
+      callPutRatio: cleanNumber(row.callPutRatio || row.volumeMultiple || row.warrantHeatScore || row.score) > 0,
+      warrantHeatScore: cleanNumber(row.warrantHeatScore || row.score || row.finalScore) > 0,
+      stockSetupScore: cleanNumber(row.stockSetupScore || row.score || row.finalScore) > 0,
+      branchPowerScore: row.branchPowerScore !== undefined ? cleanNumber(row.branchPowerScore) >= 0 : true,
+      branchStatus: nonBlank(row.branchStatus) || row.branchPowerScore === undefined,
+      volumeMultiple: row.volumeMultiple === undefined || cleanNumber(row.volumeMultiple) > 0,
+      thirtyMinuteVolume: row.thirtyMinuteVolume === undefined || cleanNumber(row.thirtyMinuteVolume) > 0,
+      floatingUnits: row.floatingUnits === undefined || cleanNumber(row.floatingUnits) > 0,
+      quoteSource: nonBlank(row.quoteSource) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.quoteSource))),
+    };
+    for (const [key, ok] of Object.entries(checks)) {
+      if (!ok) {
+        blankCounts[key] += 1;
+        missing.push(key);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 10) {
+      sampleMissingRows.push({
+        index,
+        code: String(row?.warrantCode || row?.code || row?.underlyingCode || "").trim(),
+        name: String(row?.warrantName || row?.name || row?.underlyingName || "").trim(),
+        missing,
+      });
+    }
+  });
+  if (!nonBlank(payload.source_snapshot_captured_at)) blankCounts.source_snapshot_captured_at += 1;
+  if (!Object.prototype.hasOwnProperty.call(payload, "fallbackUsed")) blankCounts.fallbackUsed += 1;
+  return {
+    requiredFields: WARRANT_FLOW_REQUIRED_FIELDS,
+    blankCounts,
+    sampleMissingRows,
+  };
+}
+
+function buildWarrantDisclosureFields(payload, options = {}) {
+  const runQuality = payload?.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const fallbackUsed = payload?.fallbackUsed === true || runQuality.fallbackUsed === true;
+  const fallbackScope = Array.isArray(payload?.fallbackScope)
+    ? payload.fallbackScope
+    : Array.isArray(runQuality.fallbackScope) ? runQuality.fallbackScope : [];
+  const fallbackDetails = Array.isArray(payload?.fallbackDetails)
+    ? payload.fallbackDetails
+    : Array.isArray(runQuality.fallbackDetails) ? runQuality.fallbackDetails : [];
+  const fallbackAllowed = payload?.fallbackAllowed !== undefined
+    ? payload.fallbackAllowed === true
+    : runQuality.fallbackAllowed !== undefined ? runQuality.fallbackAllowed === true : fallbackUsed === false;
+  const publishAllowed = payload?.publishAllowed === true || payload?.writeBudget?.allowLatestWrite === true || runQuality.publishAllowed === true;
+  const writeBudget = payload?.writeBudget && typeof payload.writeBudget === "object"
+    ? payload.writeBudget
+    : runQuality.writeBudget && typeof runQuality.writeBudget === "object"
+      ? runQuality.writeBudget
+      : {
+          ok: publishAllowed,
+          status: publishAllowed ? "allow" : "blocked",
+          allowLatestWrite: publishAllowed,
+          allowCompleteRunWrite: publishAllowed,
+          preservePreviousCompleteRun: !publishAllowed,
+          reason: publishAllowed ? "warrant flow latest payload is publishable" : "warrant flow must preserve previous complete run",
+        };
+  const retentionOk = payload?.retentionOk !== undefined ? payload.retentionOk === true : publishAllowed;
+  const blockReason = firstNonBlank(
+    payload?.blockedReason,
+    payload?.scanner_block_reason,
+    options.reason,
+    payload?.detail,
+    payload?.reason,
+    payload?.error,
+    publishAllowed ? "" : "warrant_flow_latest_blocked"
+  );
+  return {
+    ...buildWarrantFieldCompleteness(payload),
+    fallbackUsed,
+    fallbackScope,
+    fallbackAllowed,
+    fallbackDetails,
+    fallbackContract: {
+      contract: "fallback-disclosure-v1",
+      disclosed: true,
+      allowedForLatest: fallbackUsed === false && publishAllowed,
+      fallbackAllowed,
+      fallbackScope,
+    },
+    degradedBlocksLatest: payload?.degradedBlocksLatest !== undefined ? payload.degradedBlocksLatest === true : !publishAllowed,
+    preservePreviousGood: payload?.preservePreviousGood !== undefined ? payload.preservePreviousGood === true : !publishAllowed,
+    writeBudget,
+    retentionOk,
+    blockedReason: publishAllowed ? "" : String(blockReason || "warrant_flow_latest_blocked"),
+    scanner_block_reason: publishAllowed ? "" : String(blockReason || "warrant_flow_latest_blocked"),
   };
 }
 
@@ -549,8 +726,12 @@ function attachWarrantSelfCheck(payload, options = {}) {
   if (!dataContractOk) issues.push("data_contract_not_ok");
   if (payload?.snapshotStale === true) issues.push("desktop_snapshot_stale");
   const status = options.status || (payload?.ok === false ? "blocked" : payload?.snapshotStale === true ? "stale" : issues.length ? "degraded" : "ready");
+  const disclosureFields = buildWarrantDisclosureFields(payload, {
+    reason: options.reason || payload?.detail || payload?.reason || (issues.length ? issues.join(";") : ""),
+  });
   return {
     ...payload,
+    ...disclosureFields,
     selfCheck: {
       strategy: "warrant-flow",
       contract: "api-self-check-v1",
@@ -597,7 +778,7 @@ function withMarketSession(payload, marketSession) {
   });
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "warrant-flow", endpoint: "api/warrant-flow-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -704,4 +885,14 @@ module.exports = async function handler(request, response) {
     }
     response.status(503).json(attachWarrantSelfCheck(apiOnlyError(error?.message || String(error), tradingDay), { status: "blocked" }));
   }
+}
+
+module.exports = handler;
+module.exports._prewater = {
+  apiOnlyError,
+  attachWarrantSelfCheck,
+  buildPayload,
+  completeRunGateIssues,
+  emptySnapshotPayload,
+  validateDataContract,
 };

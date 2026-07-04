@@ -23,13 +23,60 @@ $blockedReceiptPath = Join-Path $receiptDir "institution-blocked-latest.json"
 $scanStartedAt = (Get-Date).ToString("o")
 $script:institutionDiagnosticWarnings = New-Object System.Collections.Generic.List[string]
 
+function New-InstitutionReceiptSourceStatus($Status, $Complete, $Matches, $BlockingReason = "") {
+  $publishAllowed = $Complete -and [string]::IsNullOrWhiteSpace($BlockingReason)
+  [ordered]@{
+    ok = [bool]$publishAllowed
+    status = if ($publishAllowed) { "ready" } else { "blocked" }
+    coverageStatus = if ($publishAllowed) { "ready" } else { "blocked" }
+    latestTradeDate = ""
+    usedDate = ""
+    institutionalRows = [int]$Matches
+    validAfterExclusionRows = [int]$Matches
+    sourceRows = [int]$Matches
+    resultRows = [int]$Matches
+    sources = @("TWSE T86", "TPEx 3itrade")
+    reason = $BlockingReason
+    receiptStatus = $Status
+  }
+}
+
+function New-InstitutionReceiptWriteBudget($Allowed, $Reason = "") {
+  [ordered]@{
+    allowed = [bool]$Allowed
+    status = if ($Allowed) { "allow" } else { "blocked" }
+    finalStatus = if ($Allowed) { "allow" } else { "blocked" }
+    limit = 1
+    used = if ($Allowed) { 1 } else { 0 }
+    remaining = if ($Allowed) { 0 } else { 1 }
+    scope = "institution_complete_run_publish"
+    reason = $Reason
+  }
+}
+
 function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
+  $publishAllowed = $Complete -and -not $PreservePreviousGood
+  $sourceStatusAtRun = New-InstitutionReceiptSourceStatus $Status $publishAllowed $Matches $BlockingReason
+  $writeBudget = New-InstitutionReceiptWriteBudget $publishAllowed $BlockingReason
+  $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
+  $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
   $receipt = [ordered]@{
     strategy = "institution"
     label = "institution raw refresh"
     tier = "critical"
     startedAt = $scanStartedAt
     finishedAt = (Get-Date).ToString("o")
+    source_snapshot_captured_at = $scanStartedAt
+    institution_source_status_at_run = $sourceStatusAtRun
+    chip_source_status_at_run = $sourceStatusAtRun
+    sourceCoverage = [ordered]@{
+      coverageStatus = $sourceStatusAtRun.coverageStatus
+      institutionalRows = $sourceStatusAtRun.institutionalRows
+      validAfterExclusionRows = $sourceStatusAtRun.validAfterExclusionRows
+      sourceRows = $sourceStatusAtRun.sourceRows
+      resultRows = $sourceStatusAtRun.resultRows
+      sourceLabels = @("TWSE T86", "TPEx 3itrade")
+    }
     status = $Status
     exitCode = $ExitCode
     scanned = 0
@@ -39,37 +86,121 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
     fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = "institution-fallback-disclosure-v1"
     runId = $RunId
     payloadPath = "supabase:institution_scan_results"
-    publishAllowed = $Complete -and -not $PreservePreviousGood
-    latestOverwriteAllowed = $Complete -and -not $PreservePreviousGood
+    publishAllowed = $publishAllowed
+    latestOverwriteAllowed = $publishAllowed
+    latestWriteAttempted = [bool]$publishAllowed
+    latestPointerUpdated = [bool]$publishAllowed
+    overwrotePreviousGood = $false
+    blockedReceiptWritten = [bool]$PreservePreviousGood
     degradedBlocksLatest = [bool]$PreservePreviousGood
     preservePreviousGood = [bool]$PreservePreviousGood
+    writeBudget = $writeBudget
+    retentionOk = $true
+    evidenceStatus = $evidenceStatus
+    unattendedStatus = $unattendedStatus
+    run_quality_at_publish = [ordered]@{
+      publishAllowed = $publishAllowed
+      fallbackUsed = $false
+      fallbackScope = @()
+      fallbackAllowed = $false
+      fallbackDetails = @()
+      fallbackContract = "institution-fallback-disclosure-v1"
+      resultCount = [int]$Matches
+      readbackCount = [int]$Matches
+      latestWriteAttempted = [bool]$publishAllowed
+      latestPointerUpdated = [bool]$publishAllowed
+      overwrotePreviousGood = $false
+      blockedReceiptWritten = [bool]$PreservePreviousGood
+      preservePreviousGood = [bool]$PreservePreviousGood
+      degradedBlocksLatest = [bool]$PreservePreviousGood
+      writeBudget = $writeBudget
+      evidenceStatus = $evidenceStatus
+      unattendedStatus = $unattendedStatus
+      blockedReason = $BlockingReason
+      scanner_block_reason = $BlockingReason
+    }
     blockedReceiptPath = if ($PreservePreviousGood) { $blockedReceiptPath } else { "" }
     warnings = @($Warnings)
     diagnosticWarnings = @($script:institutionDiagnosticWarnings.ToArray())
     blockingReason = $BlockingReason
+    blockedReason = $BlockingReason
+    scanner_block_reason = $BlockingReason
     log = $log
   }
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "institution.json") -Encoding utf8
 }
 
 function Write-InstitutionBlockedReceipt($Reason, $RunId = "", $Count = 0) {
+  $sourceStatusAtRun = New-InstitutionReceiptSourceStatus "blocked" $false 0 $Reason
+  $writeBudget = New-InstitutionReceiptWriteBudget $false $Reason
   [ordered]@{
     strategy = "institution"
     label = "institution blocked publish"
     tier = "critical"
     startedAt = $scanStartedAt
     finishedAt = (Get-Date).ToString("o")
+    source_snapshot_captured_at = $scanStartedAt
+    institution_source_status_at_run = $sourceStatusAtRun
+    chip_source_status_at_run = $sourceStatusAtRun
+    sourceCoverage = [ordered]@{
+      coverageStatus = "blocked"
+      institutionalRows = 0
+      validAfterExclusionRows = 0
+      sourceRows = 0
+      resultRows = 0
+      sourceLabels = @("TWSE T86", "TPEx 3itrade")
+    }
     status = "blocked"
     exitCode = 0
     publishAllowed = $false
     latestOverwriteAllowed = $false
+    latestWriteAttempted = $false
+    latestPointerUpdated = $false
+    overwrotePreviousGood = $false
+    blockedReceiptWritten = $true
     degradedBlocksLatest = $true
     preservePreviousGood = $true
+    writeBudget = $writeBudget
+    retentionOk = $true
+    evidenceStatus = "insufficient"
+    unattendedStatus = "NO"
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = "institution-fallback-disclosure-v1"
+    run_quality_at_publish = [ordered]@{
+      publishAllowed = $false
+      fallbackUsed = $false
+      fallbackScope = @()
+      fallbackAllowed = $false
+      fallbackDetails = @()
+      fallbackContract = "institution-fallback-disclosure-v1"
+      resultCount = 0
+      readbackCount = 0
+      latestWriteAttempted = $false
+      latestPointerUpdated = $false
+      overwrotePreviousGood = $false
+      blockedReceiptWritten = $true
+      preservePreviousGood = $true
+      degradedBlocksLatest = $true
+      writeBudget = $writeBudget
+      evidenceStatus = "insufficient"
+      unattendedStatus = "NO"
+      blockedReason = $Reason
+      scanner_block_reason = $Reason
+    }
     preservedRunId = $RunId
     preservedCount = $Count
     reason = $Reason
+    blockedReason = $Reason
+    scanner_block_reason = $Reason
     payloadPath = "supabase:institution_scan_results"
     log = $log
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $blockedReceiptPath -Encoding utf8

@@ -294,6 +294,10 @@ function strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scanned
 }
 
 function buildPayload(rows, run, readyStatus, options = {}) {
+  const runtimeSourceFields = runTimeSourceSnapshotResponseFields(run?.payload || {});
+  const runtimeRunQuality = runtimeSourceFields.run_quality_at_publish && typeof runtimeSourceFields.run_quality_at_publish === "object"
+    ? runtimeSourceFields.run_quality_at_publish
+    : {};
   const carryForward2130 = Boolean(options.previous2130CarryForward || run.__previous2130CarryForward);
   const normalized = rows
     .slice()
@@ -343,12 +347,46 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       : "Display the current formal candidate run while 08:45/08:55 decision gates are pending",
     reason,
   }]));
+  const stageCards = strategy1StageCards(resultCount, buyCount, readyStatus);
+  const futopt0845Stage = stageCards.find((card) => card.key === "candidate_2130_futopt_0845") || null;
+  const stageBlankCounts = {
+    ...(runtimeRunQuality.blankCounts || run?.payload?.blankCounts || {}),
+    futopt0845StageKey: futopt0845Stage?.key === "candidate_2130_futopt_0845" ? 0 : 1,
+    futopt0845SecondaryCount: Number.isFinite(Number(futopt0845Stage?.secondaryCount)) ? 0 : 1,
+    futopt0845StageStatus: String(futopt0845Stage?.status || "").trim() ? 0 : 1,
+  };
+  const stageSampleMissingRows = [
+    ...(Array.isArray(runtimeRunQuality.sampleMissingRows)
+      ? runtimeRunQuality.sampleMissingRows
+      : Array.isArray(run?.payload?.sampleMissingRows)
+        ? run.payload.sampleMissingRows
+        : []),
+  ];
+  const missingFutopt0845 = [];
+  if (stageBlankCounts.futopt0845StageKey > 0) missingFutopt0845.push("futopt0845StageKey");
+  if (stageBlankCounts.futopt0845SecondaryCount > 0) missingFutopt0845.push("futopt0845SecondaryCount");
+  if (stageBlankCounts.futopt0845StageStatus > 0) missingFutopt0845.push("futopt0845StageStatus");
+  if (missingFutopt0845.length) stageSampleMissingRows.push({ runId, stageKey: "candidate_2130_futopt_0845", missing: missingFutopt0845 });
 
   return {
     ok: true,
     source: "supabase:strategy1_open_buy_results",
     cacheSource: "supabase-api",
-    ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
+    ...runtimeSourceFields,
+    run_quality_at_publish: {
+      ...(runtimeSourceFields.run_quality_at_publish || {}),
+      blankCounts: stageBlankCounts,
+      sampleMissingRows: stageSampleMissingRows,
+    },
+    writeBudget: runtimeRunQuality.writeBudget || run?.payload?.writeBudget || null,
+    retentionOk: typeof runtimeRunQuality.retentionOk === "boolean"
+      ? runtimeRunQuality.retentionOk
+      : typeof run?.payload?.retentionOk === "boolean"
+        ? run.payload.retentionOk
+        : null,
+    requiredFields: runtimeRunQuality.requiredFields || run?.payload?.requiredFields || null,
+    blankCounts: stageBlankCounts,
+    sampleMissingRows: stageSampleMissingRows,
     gate: STRATEGY1_GATE,
     runId,
     updatedAt: String(run.finished_at || run.updated_at || rows[0]?.updated_at || new Date().toISOString()),
@@ -388,7 +426,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     buyCount,
     watchCount,
     blockCount,
-    stageCards: strategy1StageCards(resultCount, buyCount, readyStatus),
+    stageCards,
     rows: displayRows,
     matches: displayRows,
     buyMatches: matches,
@@ -429,6 +467,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
 
 function missingPayload(error, detail = "") {
   const today = compactDateKey(taipeiDateKey());
+  const blockedReason = detail || error;
   return {
     ok: false,
     error,
@@ -451,6 +490,27 @@ function missingPayload(error, detail = "") {
     fallbackUsed: false,
     fallbackScope: [],
     fallbackDetails: [],
+    fallbackAllowed: false,
+    fallbackContract: {},
+    blockedReason,
+    scanner_block_reason: blockedReason,
+    writeBudget: {
+      ok: false,
+      limit: 0,
+      used: 0,
+      remaining: 0,
+      allowed: false,
+      finalStatus: "blocked-no-write",
+      reason: blockedReason,
+    },
+    retentionOk: false,
+    requiredFields: {
+      identity: ["code", "name"],
+      decision: ["decision", "reason"],
+      ranking: ["score", "rank"],
+    },
+    blankCounts: { code: 0, name: 0, decision: 0, reason: 0, score: 0, rank: 0, futopt0845StageKey: 1, futopt0845SecondaryCount: 1, futopt0845StageStatus: 1 },
+    sampleMissingRows: [],
     decisionReady: false,
     lastError: detail || error,
     expectedTotal: 0,
@@ -541,7 +601,7 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
   };
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy1", endpoint: "api/open-buy-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -607,4 +667,11 @@ module.exports = async function handler(request, response) {
     }
     response.status(503).json(missingPayload("strategy1_complete_run_fetch_failed", error?.message || String(error)));
   }
+}
+
+module.exports = handler;
+module.exports.__contract = {
+  buildPayload,
+  missingPayload,
+  emptySnapshotPayload,
 };

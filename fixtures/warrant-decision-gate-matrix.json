@@ -1,0 +1,79 @@
+[
+  {
+    "name": "scan gate",
+    "payloadPath": "scannerOutput.ok",
+    "pass": "ok=true",
+    "block": "timeout/degraded",
+    "affectsScan": true,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "否",
+    "action": "fail closed"
+  },
+  {
+    "name": "source gate",
+    "payloadPath": "source_status_at_run",
+    "pass": "ready",
+    "block": "timeout/blocked/degraded",
+    "affectsScan": true,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "否",
+    "action": "preserve previous good"
+  },
+  {
+    "name": "publish gate",
+    "payloadPath": "run_quality_at_publish.publishAllowed",
+    "pass": "true",
+    "block": "false",
+    "affectsScan": false,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "否",
+    "action": "block publish"
+  },
+  {
+    "name": "readback gate",
+    "payloadPath": "result rows count",
+    "pass": "match",
+    "block": "mismatch",
+    "affectsScan": false,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "否",
+    "action": "write blocked receipt"
+  },
+  {
+    "name": "fallback gate",
+    "payloadPath": "fallbackUsed",
+    "pass": "false",
+    "block": "true",
+    "affectsScan": false,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "display-only",
+    "action": "display degraded"
+  },
+  {
+    "name": "UI display gate",
+    "payloadPath": "evidenceStatus",
+    "pass": "complete",
+    "block": "insufficient/NO",
+    "affectsScan": false,
+    "affectsPublish": false,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "是",
+    "action": "display degraded"
+  },
+  {
+    "name": "alert gate",
+    "payloadPath": "unattendedStatus",
+    "pass": "YES only when formal complete",
+    "block": "fake YES",
+    "affectsScan": false,
+    "affectsPublish": true,
+    "affectsFormalEntry": true,
+    "fallbackAllowed": "否",
+    "action": "fail closed"
+  }
+]

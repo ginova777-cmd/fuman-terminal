@@ -1,0 +1,208 @@
+{
+  "strategyName": "Strategy5 / institution chip composite",
+  "roundPolicy": {
+    "hitSupabase": false,
+    "writeSupabase": false,
+    "deploy": false,
+    "mayDeclareA": false
+  },
+  "requiredSources": {
+    "quote": {
+      "sourceName": "quote",
+      "tableViewRpc": "fugle_quotes_live / fugle_quotes_latest",
+      "requiredColumns": ["symbol", "trade_date", "close", "price", "volume", "updated_at"],
+      "freshnessThreshold": "NOT_REQUIRED for Strategy5 A unless used by downstream frontend/ranking display",
+      "coverageThreshold": "NOT_REQUIRED for Strategy5 core chip publish; required only if contract enables quote freshness",
+      "aGradeThreshold": "If required: coverage ready and no stale priority symbols",
+      "acceptableDegradedConditions": "Quote diagnostics unavailable while Strategy5 chip source remains ready and fallback is explicitly disclosed as not used for publish",
+      "unacceptableConditions": "Quote marked required but missing/stale, or fallback quote data used without disclosure"
+    },
+    "intraday_1m": {
+      "sourceName": "intraday_1m",
+      "tableViewRpc": "intraday_1m candles source / readiness view",
+      "requiredColumns": ["symbol", "ts", "open", "high", "low", "close", "volume", "updated_at"],
+      "freshnessThreshold": "NOT_REQUIRED for Strategy5 core chip publish",
+      "coverageThreshold": "NOT_REQUIRED unless MA readiness depends on intraday warmup",
+      "aGradeThreshold": "If required: latest candle inside allowed stale seconds and readiness >= threshold",
+      "acceptableDegradedConditions": "Marked NOT_REQUIRED with explicit readiness evidence",
+      "unacceptableConditions": "Required intraday source stale but unattendedStatus=YES"
+    },
+    "ma20_ma35": {
+      "sourceName": "MA20 / MA35",
+      "tableViewRpc": "daily MA/readiness source derived from quote/daily bars",
+      "requiredColumns": ["symbol", "trade_date", "ma20", "ma35", "close", "updated_at"],
+      "freshnessThreshold": "latest trading day or explicit NOT_REQUIRED",
+      "coverageThreshold": "If required: ready symbols >= strategy threshold",
+      "aGradeThreshold": "MA readiness PASS or NOT_REQUIRED evidence present",
+      "acceptableDegradedConditions": "MA not used by Strategy5 publish and captured as NOT_REQUIRED",
+      "unacceptableConditions": "MA required but insufficient and latest pointer updated"
+    },
+    "daily_volume": {
+      "sourceName": "daily volume",
+      "tableViewRpc": "daily quote/volume table or volume average view",
+      "requiredColumns": ["symbol", "trade_date", "volume", "avg_volume_5d", "updated_at"],
+      "freshnessThreshold": "latest trading day or explicit NOT_REQUIRED",
+      "coverageThreshold": "If required: all candidate symbols have usable volume",
+      "aGradeThreshold": "volume readiness PASS or NOT_REQUIRED evidence present",
+      "acceptableDegradedConditions": "Not used for core Strategy5 publish and disclosed",
+      "unacceptableConditions": "Volume required but blank counts hidden or latest overwritten"
+    },
+    "preopen": {
+      "sourceName": "preopen",
+      "tableViewRpc": "preopen snapshot source",
+      "requiredColumns": ["symbol", "trade_date", "snapshot_at", "price", "volume", "updated_at"],
+      "freshnessThreshold": "same trading day if preopen contract required; otherwise NOT_REQUIRED",
+      "coverageThreshold": "If required: snapshot coverage above strategy threshold",
+      "aGradeThreshold": "preopen readiness PASS or NOT_REQUIRED evidence present",
+      "acceptableDegradedConditions": "Preopen not required for Strategy5 post-close chip scan",
+      "unacceptableConditions": "Preopen required but stale/missing and unattendedStatus=YES"
+    },
+    "futopt_txf": {
+      "sourceName": "futopt / TXF",
+      "tableViewRpc": "futopt/TXF readiness view",
+      "requiredColumns": ["trade_date", "symbol", "price", "volume", "updated_at"],
+      "freshnessThreshold": "same trading day if required; otherwise NOT_REQUIRED",
+      "coverageThreshold": "If required: TXF/futopt readiness PASS",
+      "aGradeThreshold": "futopt/TXF PASS or NOT_REQUIRED evidence present",
+      "acceptableDegradedConditions": "Not part of Strategy5 chip publish and explicitly NOT_REQUIRED",
+      "unacceptableConditions": "Required TXF stale but latest published"
+    },
+    "chip_institutional": {
+      "sourceName": "chip / institutional",
+      "tableViewRpc": "v_institution_source_health, v_chip_flows_health, v_chip_flows_latest, v_strategy5_latest_complete_run, strategy5_scan_results",
+      "requiredColumns": ["symbol", "trade_date", "foreign_net", "investment_trust_net", "dealer_net", "institution_total_net", "source", "updated_at"],
+      "freshnessThreshold": "chip source age <= 3 days",
+      "coverageThreshold": "institutionalRows >= 1500 and validAfterExclusionRows >= 1500",
+      "aGradeThreshold": "coverageStatus=ready, sourceStatus=ready, complete run readable, result readback equals resultCount, field blankCounts all zero",
+      "acceptableDegradedConditions": "None for publish; degraded must block latest and preserve previous good",
+      "unacceptableConditions": "HTTP 522/timeout, missing latest run, zero result, incomplete scan, stale chip source, fallback used, readback mismatch"
+    },
+    "warrant": {
+      "sourceName": "warrant",
+      "tableViewRpc": "warrant_flow_scan_results / warrant latest API",
+      "requiredColumns": ["symbol", "trade_date", "score", "reason", "updated_at"],
+      "freshnessThreshold": "NOT_REQUIRED for Strategy5 core publish",
+      "coverageThreshold": "NOT_REQUIRED",
+      "aGradeThreshold": "NOT_REQUIRED evidence if included in global scorecard",
+      "acceptableDegradedConditions": "Warrant chain degraded without affecting Strategy5 publish",
+      "unacceptableConditions": "Global scorecard claims full unattended while warrant critical chain fails"
+    },
+    "cb": {
+      "sourceName": "CB",
+      "tableViewRpc": "cb_detect_cache / CB latest API",
+      "requiredColumns": ["symbol", "trade_date", "score", "reason", "updated_at"],
+      "freshnessThreshold": "NOT_REQUIRED for Strategy5 core publish",
+      "coverageThreshold": "NOT_REQUIRED",
+      "aGradeThreshold": "NOT_REQUIRED evidence if included in global scorecard",
+      "acceptableDegradedConditions": "CB degraded without affecting Strategy5 publish",
+      "unacceptableConditions": "Global scorecard claims full unattended while CB critical chain fails"
+    },
+    "scorecard": {
+      "sourceName": "scorecard",
+      "tableViewRpc": "scorecard source snapshot / scorecard no-rollback verifier",
+      "requiredColumns": ["runId", "marketDate", "latestDate", "qualityStatus", "records"],
+      "freshnessThreshold": "same expected scorecard date after due window",
+      "coverageThreshold": "all required strategies included",
+      "aGradeThreshold": "no rollback, all strategy records present, source markers valid",
+      "acceptableDegradedConditions": "Scorecard stale preserves previous complete run and emits blocker",
+      "unacceptableConditions": "candidate missing strategies, stale scorecard published as current, Strategy3 marker mismatch"
+    },
+    "mobile_frontend": {
+      "sourceName": "mobile / frontend",
+      "tableViewRpc": "terminal-fast-bundle, desktop_route_snapshot, mobile fragments",
+      "requiredColumns": ["endpoints", "summary", "updatedAt", "partial", "snapshotHit", "snapshotFresh"],
+      "freshnessThreshold": "snapshot fresh under frontend cache policy",
+      "coverageThreshold": "all required endpoints present unless explicitly soft-fallback",
+      "aGradeThreshold": "snapshotHit=true, snapshotFresh=true, partial=false, endpoint count complete",
+      "acceptableDegradedConditions": "Previous complete snapshot preserved when refresh is partial",
+      "unacceptableConditions": "partial or empty frontend bundle presented as full unattended"
+    }
+  },
+  "failClosedPolicy": {
+    "doNotWriteLatest": true,
+    "doNotWriteEmptyResult": true,
+    "doNotUpdateLatestPointer": true,
+    "preservePreviousGood": true,
+    "writeBlockedReceipt": true,
+    "displayBlockReason": true,
+    "requiredReceiptFields": ["blockedReason", "scanner_block_reason", "degradedBlocksLatest", "preservePreviousGood", "evidenceStatus", "unattendedStatus"]
+  },
+  "recoveryCommandsDoNotRunNow": [
+    {
+      "step": "Step 1: light source probe",
+      "command": "npm run supabase:probe:light",
+      "expectedPASS": "exit 0 twice, no HTTP 522/timeout, latency inside incident-exit threshold"
+    },
+    {
+      "step": "Step 2: source contract health",
+      "command": "npm run verify:source-contract-health -- --strategy=strategy5 --read-only",
+      "expectedPASS": "v_institution_source_health/v_chip_flows_health ready, required columns present"
+    },
+    {
+      "step": "Step 3: strategy source coverage",
+      "command": "node --use-system-ca scripts/verify-strategy5-battle-state.js --source-only",
+      "expectedPASS": "chip coverage ready, institutionalRows and validAfterExclusionRows >= 1500, source age <= 3d"
+    },
+    {
+      "step": "Step 4: readback / latest",
+      "command": "node --use-system-ca scripts/verify-strategy5-battle-state.js --readback-only",
+      "expectedPASS": "latest complete run readable, result readback equals resultCount, returned rows non-empty"
+    },
+    {
+      "step": "Step 5: replay / backtest",
+      "command": "npm run replay:strategy5 -- --read-only --date=<latest-trade-date>",
+      "expectedPASS": "replay produces non-empty candidates and does not write latest"
+    },
+    {
+      "step": "Step 6: A grade scorecard",
+      "command": "node --use-system-ca scripts/verify-api-unattended-scorecard.js --strategy=strategy5 --strict",
+      "expectedPASS": "all Strategy5 A gates pass, no global blocker used to claim overall YES"
+    }
+  ],
+  "refillPlanDoNotRunNow": {
+    "quoteCoverageLow": {
+      "refillMethod": "restore official quote writer and backfill missing priority symbols only",
+      "writer": "quote writer / Fugle collector",
+      "batchSize": "100-300 symbols per batch",
+      "rateLimit": "respect provider throttle; exponential backoff on 429/5xx",
+      "retry": "3 attempts with jitter, then blocked receipt",
+      "stopCondition": "coverage threshold met or provider errors persist",
+      "successCriteria": "required quote coverage ready and no stale priority symbols"
+    },
+    "intraday1mMissing": {
+      "refillMethod": "backfill latest 1m candles for strategy universe",
+      "recentBarsNeeded": "at least MA warmup window plus latest session bars",
+      "crossDayWarmup": true,
+      "maReadinessThreshold": "MA20/MA35 readiness PASS for required universe",
+      "successCriteria": "latest candle fresh and readiness view PASS"
+    },
+    "dailyVolumeMissing": {
+      "source": "official daily quote/volume source",
+      "table": "daily volume / volume average table",
+      "successCriteria": "volume and avg volume populated for all required candidate symbols"
+    },
+    "futoptTxfMissing": {
+      "source": "official futures/options/TXF source",
+      "tableView": "futopt/TXF readiness table/view",
+      "successCriteria": "same-day TXF/futopt readiness PASS or explicit NOT_REQUIRED for Strategy5"
+    },
+    "preopenMissing": {
+      "source": "official preopen snapshot source",
+      "snapshotRequirement": "same trading day snapshot with capturedAt and coverage evidence",
+      "successCriteria": "preopen PASS or explicit NOT_REQUIRED evidence for Strategy5"
+    }
+  },
+  "recoveryOrder": [
+    "npm run supabase:probe:light",
+    "wait 5-10 minutes and run npm run supabase:probe:light again",
+    "require two consecutive PASS results",
+    "npm run supabase:incident:exit",
+    "run cleanup robot",
+    "run source contract health",
+    "run refill if required",
+    "run replay water verification",
+    "run single-strategy A acceptance",
+    "move to next strategy",
+    "run global scorecard last"
+  ]
+}

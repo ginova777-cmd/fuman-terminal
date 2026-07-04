@@ -956,7 +956,31 @@ function buildVolumeMatches(items, keyword = "") {
     .slice(0, keyword ? 30 : 320);
 }
 
-module.exports = async function handler(request, response) {
+function buildScannerPayloadFromRows(rows, { keyword = "", updatedAt = new Date().toISOString() } = {}) {
+  const aggregated = aggregate(rows, keyword);
+  const matches = aggregated.slice(0, keyword ? 30 : 120);
+  const volumeMatches = buildVolumeMatches(aggregated, keyword);
+  const singleSignals = detectSingleWarrantSignals(rows, aggregated, keyword).slice(0, keyword ? 20 : 20);
+  return {
+    ok: true,
+    updatedAt,
+    query: keyword,
+    scanned: rows.length,
+    count: matches.length,
+    matches,
+    volumeCount: volumeMatches.length,
+    volumeMatches,
+    singleSignalCount: singleSignals.length,
+    singleSignals,
+    errors: [],
+    sources: [
+      "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
+      "dts.twse.com.tw/opendata/t187ap42_O.csv",
+    ],
+  };
+}
+
+async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -975,32 +999,20 @@ module.exports = async function handler(request, response) {
 
   try {
     const { rows, errors } = await fetchWarrants();
-    const aggregated = aggregate(rows, keyword);
-    const matches = aggregated.slice(0, keyword ? 30 : 120);
-    const volumeMatches = buildVolumeMatches(aggregated, keyword);
-    const singleSignals = detectSingleWarrantSignals(rows, aggregated, keyword).slice(0, keyword ? 20 : 20);
-    const payload = {
-      ok: true,
-      updatedAt: new Date().toISOString(),
-      query: keyword,
-      scanned: rows.length,
-      count: matches.length,
-      matches,
-      volumeCount: volumeMatches.length,
-      volumeMatches,
-      singleSignalCount: singleSignals.length,
-      singleSignals,
-      errors,
-      sources: [
-        "mopsfin.twse.com.tw/opendata/t187ap42_L.csv",
-        "dts.twse.com.tw/opendata/t187ap42_O.csv",
-      ],
-    };
+    const payload = { ...buildScannerPayloadFromRows(rows, { keyword }), errors };
     if (!keyword) cache = { ts: Date.now(), payload };
     response.setHeader("Cache-Control", keyword ? "s-maxage=60, stale-while-revalidate=120" : "s-maxage=300, stale-while-revalidate=900");
     response.status(200).json(payload);
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message, matches: [] });
   }
+}
+
+module.exports = handler;
+module.exports._prewater = {
+  aggregate,
+  buildScannerPayloadFromRows,
+  buildVolumeMatches,
+  detectSingleWarrantSignals,
 };
 
