@@ -494,11 +494,32 @@ function taipeiMinute(date = new Date()) {
   return Number(parts.hour) * 60 + Number(parts.minute);
 }
 
+function taipeiWeekday(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    weekday: "short",
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[parts.weekday] ?? null;
+}
+
+function isTaipeiWeekend(date = new Date()) {
+  const day = taipeiWeekday(date);
+  return day === 0 || day === 6;
+}
+
 function normalizeSha(value) {
   return String(value || "").trim().toLowerCase();
 }
 
 function strategyDueStatus(strategy, date = new Date()) {
+  if (PROFILE === "off-session" && isTaipeiWeekend(date)) {
+    return {
+      due: false,
+      verifierDue: false,
+      window: "weekend off-session",
+      reason: "not_due_non_trading_day_weekend",
+    };
+  }
   const minute = taipeiMinute(date);
   const between = (start, end) => minute >= start && minute <= end;
   const endOfEvidenceDay = 23 * 60 + 55;
