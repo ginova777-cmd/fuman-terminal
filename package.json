@@ -64,6 +64,7 @@
     "supabase:incident:status": "node scripts/supabase-incident-guard.js status",
     "supabase:incident:check": "node scripts/supabase-incident-guard.js check",
     "supabase:probe:light": "node --use-system-ca scripts/supabase-light-probe.js",
+    "verify:supabase-conservative-recovery": "node scripts/verify-supabase-conservative-recovery.js",
     "verify:strategy5-prewater": "node scripts/verify-strategy5-prewater-static-fields.js && node scripts/verify-strategy5-prewater-fixtures.js && node scripts/verify-strategy5-prewater-fixtures.js --sample-mutations && node scripts/verify-strategy5-prewater-fixtures.js --payload fixtures/strategy5-prewater-blocked-receipt.json --type receipt && node scripts/verify-strategy5-prewater-formal-payloads.js",
     "verify:strategy5-prewater:static": "node scripts/verify-strategy5-prewater-static-fields.js",
     "verify:strategy5-prewater:fixtures": "node scripts/verify-strategy5-prewater-fixtures.js",
