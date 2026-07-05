@@ -352,6 +352,13 @@ module.exports = async function handler(request, response) {
         via: "api/terminal-fast-bundle",
         shapePayload: (payload) => shapeTopPayload(request, payload),
       });
+      if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
+        endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
+          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
+          via: "api/terminal-fast-bundle:snapshot",
+          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+        });
+      }
       const payload = {
         ...snapshot.payload,
         endpoints,

@@ -162,6 +162,7 @@
     "verify:terminal-fields": "node --use-system-ca scripts/verify-terminal-field-completeness.js",
     "verify:strategy4-standard-gate": "node --use-system-ca scripts/verify-strategy4-standard-gate.js",
     "verify:strategy4-postscan-closure": "node --use-system-ca scripts/verify-strategy4-postscan-closure.js",
+    "verify:strategy4-current-bad-source-drill": "node --use-system-ca scripts/strategy4-current-bad-source-drill.js",
     "verify:strategy4-prewater-fixtures": "node scripts/verify-strategy4-prewater-fixture.js --fixture=all",
     "verify:strategy4-business-fields": "node scripts/verify-strategy4-business-fields.js",
     "verify:strategy4-actual-condition-fields": "node scripts/verify-strategy4-actual-condition-fields.js",

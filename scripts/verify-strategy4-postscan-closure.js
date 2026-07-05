@@ -94,7 +94,7 @@ function latestPreserveReceipt() {
   let files = [];
   try {
     files = fs.readdirSync(dir)
-      .filter((name) => /^strategy4-preserve-previous-good-.*\.json$/i.test(name))
+      .filter((name) => /^strategy4-bad-source-drill-.*\.json$/i.test(name) || /^strategy4-preserve-previous-good-.*\.json$/i.test(name))
       .map((name) => path.join(dir, name))
       .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   } catch {}
@@ -195,20 +195,21 @@ async function main() {
   const protection = receipt.protectionDecision && typeof receipt.protectionDecision === "object"
     ? receipt.protectionDecision
     : receipt;
-  const preserveOk = protection.preservedPreviousGood === true
-    && protection.blockedNewPublish === true
+  const blockedNewPublish = protection.blockedNewPublish === true || protection.publishAllowed === false || receipt.blockedDecision?.publishAllowed === false;
+  const preserveOk = (protection.preservedPreviousGood === true || protection.preservePreviousGood === true)
+    && blockedNewPublish
     && protection.latestPointerUpdatedByBadSource === false
     && protection.emptyResultOverwroteGoodRun === false;
   issue(checks, preserveOk, "strategy4_preserve_previous_good_receipt_valid", {
     file: preserve.file || "",
     badSourceRunId: receipt.badSourceRunId || "",
-    previousGoodRunId: receipt.previousGood?.runId || receipt.previousGoodRunId || "",
-    preservedPreviousGood: protection.preservedPreviousGood,
+    previousGoodRunId: receipt.previousGood?.runId || receipt.previousGoodRunId || receipt.previousGoodRunId || "",
+    preservedPreviousGood: protection.preservedPreviousGood ?? protection.preservePreviousGood,
     latestPointerUpdatedByBadSource: protection.latestPointerUpdatedByBadSource,
     emptyResultOverwroteGoodRun: protection.emptyResultOverwroteGoodRun,
-    evidenceScope: "historical_receipt",
+    evidenceScope: receipt.evidenceScope || "historical_receipt",
   });
-  issue(checks, !REQUIRE_LIVE_BLOCKED || receipt.evidenceScope === "current_live_blocked", "strategy4_current_live_bad_source_receipt_required", {
+  issue(checks, !REQUIRE_LIVE_BLOCKED || String(receipt.evidenceScope || "").startsWith("current_live_"), "strategy4_current_live_bad_source_receipt_required", {
     required: REQUIRE_LIVE_BLOCKED,
     actualEvidenceScope: receipt.evidenceScope || "historical_receipt_or_not_declared",
   });
@@ -237,9 +238,9 @@ async function main() {
       },
     },
     failClosedEvidence: {
-      latestPointerBadSourceBeforeAfter: REQUIRE_LIVE_BLOCKED ? "required_by_flag" : "not_run_current_round",
+      latestPointerBadSourceBeforeAfter: receipt.evidenceScope || (REQUIRE_LIVE_BLOCKED ? "required_by_flag" : "not_run_current_round"),
       preserveReceiptPath: preserve.file || "",
-      preserveReceiptScope: preserveOk ? "historical_receipt" : "missing_or_invalid",
+      preserveReceiptScope: preserveOk ? (receipt.evidenceScope || "historical_receipt") : "missing_or_invalid",
       preserveReceipt: receipt,
     },
     checks,
