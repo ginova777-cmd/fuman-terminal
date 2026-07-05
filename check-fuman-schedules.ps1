@@ -94,6 +94,16 @@ $rules = @{
     Done = @("Warrant flow scan end")
     Detail = @("Warrant flow scan end")
   }
+  "Run-DaytradeSourceWriter.ps1" = @{
+    Log = "daytrade-source-writer-*.wrapper.log"
+    Done = @("DONE ok")
+    Detail = @("DONE ok")
+  }
+  "Run-DaytradeUnattendedGate.ps1" = @{
+    Log = "daytrade-unattended-gate-watchdog-*.wrapper.log"
+    Done = @("DONE ok")
+    Detail = @("DONE ok")
+  }
 }
 
 function Normalize-TaskName($Name) {

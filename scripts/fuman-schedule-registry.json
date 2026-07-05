@@ -101,10 +101,12 @@
       ],
       "Fuman API Unattended Scorecard": [
         0,
+        267009,
         267011
       ],
       "Fuman Freshness Gate Full 2010": [
         0,
+        267009,
         267011
       ],
       "Fuman Freshness Gate Fast 0845-1645": [
@@ -159,7 +161,9 @@
       ],
       "Fuman Daytrade Source Writer 0600-1330": [
         0,
-        267009
+        267009,
+        2147946720,
+        -2147020576
       ],
       "Fuman Daytrade Source Gate 0700": [
         0
@@ -187,6 +191,16 @@
       "Fuman Scorecard Daily Watchdog 1410": [
         0,
         267009
+      ],
+      "Fuman Scorecard Daily Automation 1400": [
+        0,
+        267009
+      ],
+      "Fuman Fugle Daytrade Watchdog Every Minute": [
+        0,
+        267009,
+        2147946720,
+        -2147020576
       ]
     },
     "coveredBy": {

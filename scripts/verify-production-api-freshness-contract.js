@@ -70,6 +70,25 @@ function taipeiMinute(date = new Date()) {
   return cleanNumber(parts.hour) * 60 + cleanNumber(parts.minute);
 }
 
+function taipeiWeekday(date = new Date()) {
+  return cleanNumber(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    weekday: "short",
+  }).formatToParts(date).find((part) => part.type === "weekday")?.value
+    ?.replace("Sun", "0")
+    ?.replace("Mon", "1")
+    ?.replace("Tue", "2")
+    ?.replace("Wed", "3")
+    ?.replace("Thu", "4")
+    ?.replace("Fri", "5")
+    ?.replace("Sat", "6"));
+}
+
+function isTaipeiWeekend(date = new Date()) {
+  const day = taipeiWeekday(date);
+  return day === 0 || day === 6;
+}
+
 function getPath(object, pathKey) {
   return String(pathKey).split(".").reduce((current, key) => {
     if (current && typeof current === "object" && Object.prototype.hasOwnProperty.call(current, key)) return current[key];
@@ -155,6 +174,13 @@ function realtimeRadarEvidence(payload = {}) {
 }
 
 function dueStatus(item, now = new Date()) {
+  if (isTaipeiWeekend(now)) {
+    return {
+      due: false,
+      window: item.window,
+      reason: "not_due_non_trading_day_weekend",
+    };
+  }
   const minute = taipeiMinute(now);
   const start = item.dueStartMinute ?? 0;
   const end = item.dueEndMinute ?? (23 * 60 + 55);
@@ -537,6 +563,7 @@ async function main() {
     checkedAt: new Date().toISOString(),
     taipeiCheckedAt: taipeiStamp(new Date()),
     expectedToday: taipeiDateKey(now),
+    nonTradingDayWeekend: isTaipeiWeekend(now),
     productionUrl: BASE_URL,
     requirement: "production API must expose tradeDate=today after due window, run-time source snapshot evidence, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
     apiResults,
