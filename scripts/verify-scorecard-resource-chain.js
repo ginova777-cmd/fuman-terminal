@@ -17,6 +17,7 @@ const SCORECARD_ROOT = process.env.FUMAN_SCORECARD_ROOT || "C:\\Users\\ginov\\Do
 const DUCKDB_FILE = process.env.FUMAN_SCORECARD_DUCKDB || path.join(SCORECARD_ROOT, "scorecard.duckdb");
 const LOCAL_FILE = path.join(ROOT, "data", "scorecard-latest.json");
 const MAX_STALE_DAYS = Number(process.env.FUMAN_SCORECARD_MAX_STALE_DAYS || "2");
+const WEEKEND_MAX_STALE_DAYS = Number(process.env.FUMAN_SCORECARD_WEEKEND_MAX_STALE_DAYS || "4");
 const ALLOW_STALE = process.env.FUMAN_SCORECARD_ALLOW_STALE === "1";
 
 function readText(file) {
@@ -431,11 +432,17 @@ async function main() {
   ].filter(Boolean);
   const newestLatestDate = latestDates.sort().at(-1) || "";
   const sourceAgeDays = ageDaysFromToday(newestLatestDate);
+  const weekendAllowance = isTaipeiWeekend()
+    && Number.isFinite(sourceAgeDays)
+    && sourceAgeDays <= WEEKEND_MAX_STALE_DAYS;
   details.sourceFreshness = {
     latestDate: newestLatestDate,
     maxStaleDays: MAX_STALE_DAYS,
+    weekendMaxStaleDays: WEEKEND_MAX_STALE_DAYS,
     ageDays: sourceAgeDays,
     allowStale: ALLOW_STALE,
+    weekendAllowance,
+    isTaipeiWeekend: isTaipeiWeekend(),
     localLatestDate: details.localFallback.latestDate,
     supabaseLatestDate: details.supabaseSnapshot.latestDate,
     liveLatestDate: CHECK_LIVE ? details.liveApi?.latestDate || "" : "skipped",
@@ -445,9 +452,9 @@ async function main() {
   };
   addCheck(
     checks,
-    ALLOW_STALE || (Number.isFinite(sourceAgeDays) && sourceAgeDays <= MAX_STALE_DAYS),
+    ALLOW_STALE || weekendAllowance || (Number.isFinite(sourceAgeDays) && sourceAgeDays <= MAX_STALE_DAYS),
     "scorecard-source-freshness",
-    `scorecard source latestDate must be within ${MAX_STALE_DAYS} days unless FUMAN_SCORECARD_ALLOW_STALE=1`,
+    `scorecard source latestDate must be within ${MAX_STALE_DAYS} days on trading days; weekend complete snapshots may be within ${WEEKEND_MAX_STALE_DAYS} days`,
     details.sourceFreshness,
   );
 
