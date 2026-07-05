@@ -99,6 +99,7 @@ function selectPayloadDate(payload, requestedDate = "") {
   const records = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
   const allDaily = Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [];
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
+  const sourceReports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
   return {
     ...payload,
     latestDate: selectedDate || payload.latestDate || "",
@@ -106,6 +107,7 @@ function selectPayloadDate(payload, requestedDate = "") {
     historyLatestDate: dates[0] || payload.latestDate || "",
     historyDates: dates,
     records,
+    sourceReports,
     summary: summarize(records, daily, selectedDate || payload.latestDate || ""),
   };
 }

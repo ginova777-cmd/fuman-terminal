@@ -64,6 +64,9 @@ function normalizePayload(payload) {
     ? payload.records.map((row) => normalizeRecord(row, payload.exportSource || source))
     : [];
   const summary = payload.summary && typeof payload.summary === "object" ? { ...payload.summary } : {};
+  const sourceReports = Array.isArray(payload.sourceReports)
+    ? payload.sourceReports.map((row) => ({ ...row }))
+    : [];
   if (Array.isArray(summary.daily)) {
     summary.daily = summary.daily.map((row) => normalizeRecord(row, "回測摘要"));
   }
@@ -76,6 +79,7 @@ function normalizePayload(payload) {
     source,
     records,
     summary,
+    sourceReports,
     sourceFields: {
       source,
       cacheSource: cleanText(payload.cacheSource || "supabase-snapshot"),

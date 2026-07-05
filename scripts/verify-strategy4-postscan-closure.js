@@ -103,6 +103,18 @@ function latestPreserveReceipt() {
   return { file, receipt };
 }
 
+function latestScorecardSource() {
+  const candidates = [
+    path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json"),
+    path.join(process.cwd(), "data", "scorecard-latest.json"),
+  ];
+  for (const file of candidates) {
+    const payload = readJson(file);
+    if (payload && typeof payload === "object") return { file, payload };
+  }
+  return { file: "", payload: null };
+}
+
 function summarizeStrategy4(payload) {
   const runQuality = payload?.run_quality_at_publish || {};
   return {
@@ -189,6 +201,26 @@ async function main() {
     endpoint: "/api/strategy4-latest",
   });
   issue(checks, scorecard.ok && scorecard.payload?.ok !== false, "scorecard_api_http_ok", { status: scorecard.status, url: scorecard.url, runId: scorecard.payload?.runId || "" });
+  const scorecardSource = latestScorecardSource();
+  const scorecardSourceReports = Array.isArray(scorecard.payload?.sourceReports) && scorecard.payload.sourceReports.length
+    ? scorecard.payload.sourceReports
+    : Array.isArray(scorecardSource.payload?.sourceReports)
+      ? scorecardSource.payload.sourceReports
+      : [];
+  const scorecardStrategy4Row = scorecardSourceReports.find((row) => row?.key === "strategy4" || /策略4/.test(String(row?.strategy || ""))) || null;
+  const scorecardStrategy4RunId = String(scorecardStrategy4Row?.runId || "");
+  issue(checks, Boolean(scorecardStrategy4Row), "scorecard_88_strategy4_source_row_present", {
+    scorecardApiHasSourceReports: Array.isArray(scorecard.payload?.sourceReports),
+    fallbackSourceFile: scorecardSource.file || "",
+  });
+  issue(checks, scorecardStrategy4RunId === runId, "scorecard_88_strategy4_row_run_id_matches_strategy4_latest", {
+    expected: runId,
+    actual: scorecardStrategy4RunId,
+    sourcePath: Array.isArray(scorecard.payload?.sourceReports) && scorecard.payload.sourceReports.length
+      ? "/api/scorecard.sourceReports[key=strategy4].runId"
+      : `${scorecardSource.file || "missing"}.sourceReports[key=strategy4].runId`,
+    row: scorecardStrategy4Row,
+  });
 
   const preserve = latestPreserveReceipt();
   const receipt = preserve.receipt || {};
@@ -235,6 +267,10 @@ async function main() {
         pageStatus: page88.status,
         scorecardStatus: scorecard.status,
         scorecardRunId: scorecard.payload?.runId || "",
+        strategy4RowRunId: scorecardStrategy4RunId,
+        strategy4RowSource: Array.isArray(scorecard.payload?.sourceReports) && scorecard.payload.sourceReports.length
+          ? "/api/scorecard.sourceReports"
+          : scorecardSource.file || "",
       },
     },
     failClosedEvidence: {
