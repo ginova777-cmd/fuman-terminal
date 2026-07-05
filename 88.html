@@ -302,6 +302,7 @@
 
   <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status"></section>
+  <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status">策略4 latest run 讀取中...</section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
   <nav class="result-pills" id="resultPills" data-testid="scorecard-result-pills"></nav>
@@ -441,6 +442,28 @@ function sourceStatus(payload, latestDate) {
   ];
   if (reason) pieces.push(`reason=${reason}`);
   return { qualityStatus, text: pieces.join("｜") };
+}
+
+function strategy4LiveStatus(payload) {
+  const qualityStatus = String(payload?.qualityStatus || payload?.status || "unknown").trim() || "unknown";
+  const fallbackUsed = payload?.fallbackUsed === true;
+  const publishAllowed = payload?.publishAllowed !== false && payload?.run_quality_at_publish?.publishAllowed !== false;
+  const count = Number(payload?.resultCount ?? payload?.count ?? 0) || 0;
+  const readback = Number(payload?.readbackCount ?? count) || 0;
+  const runId = payload?.runId || payload?.latestRunId || "--";
+  const source = payload?.cacheSource || payload?.source || "--";
+  const pieces = [
+    `策略4 latest=${runId}`,
+    `quality=${qualityStatus}`,
+    `count=${count}`,
+    `readback=${readback}`,
+    `source=${source}`,
+    `fallback=${fallbackUsed ? "true" : "false"}`,
+    `publish=${publishAllowed ? "allowed" : "blocked"}`,
+  ];
+  const blockedReason = payload?.blockedReason || payload?.scanner_block_reason || "";
+  if (blockedReason && !publishAllowed) pieces.push(`reason=${blockedReason}`);
+  return { qualityStatus: publishAllowed && !fallbackUsed ? "complete" : "blocked", text: pieces.join("｜") };
 }
 
 function preferredTheme() {
@@ -595,6 +618,22 @@ async function load(date = "") {
   }
 }
 
+async function loadStrategy4Live() {
+  const node = byId("scorecardStrategy4Live");
+  if (!node) return;
+  try {
+    const response = await fetch(`/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&t=${Date.now()}`, { cache: "no-store" });
+    const live = await response.json();
+    if (!response.ok || live.ok === false) throw new Error(live.reason || live.error || `HTTP ${response.status}`);
+    const status = strategy4LiveStatus(live);
+    node.className = `status-line ${status.qualityStatus}`;
+    node.textContent = status.text;
+  } catch (error) {
+    node.className = "status-line blocked";
+    node.textContent = `策略4 latest=unavailable｜reason=${error.message || error}`;
+  }
+}
+
 byId("tabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-strategy]");
   if (!button) return;
@@ -620,6 +659,7 @@ byId("themeToggle").addEventListener("click", () => {
 byId("reload").addEventListener("click", load);
 applyTheme(preferredTheme());
 load();
+loadStrategy4Live();
 </script>
 </body>
 </html>
