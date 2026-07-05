@@ -70,5 +70,49 @@
     "minimumThreshold": "receipt shape 完整",
     "staleLimit": "blocked 時必須存在",
     "missingAction": "write blocked receipt"
+  },
+  {
+    "sourceName": "shared quote",
+    "tableViewOrApi": "quote_coverage_at_run / shared quote health payload",
+    "purpose": "Only fail-closed when a degraded quote state is explicitly present in the payload.",
+    "required": "不直接 required",
+    "minimumThreshold": "formal publish does not depend on shared quote coverage",
+    "staleLimit": "not a formal warrant-flow dependency",
+    "missingAction": "未證明；不因缺 shared quote 本身阻擋權證 formal publish",
+    "notRequiredReason": "權證 formal publish 不依賴 shared quote；正式 source 是 warrant_flow_scan_results / v_warrant_flow_latest_complete_run。",
+    "degradedPayloadRule": "若 payload 明確帶 degraded source/fallback 狀態，必須 block latest，避免壞水源被誤當正式證據。"
+  },
+  {
+    "sourceName": "intraday 1m",
+    "tableViewOrApi": "intraday_1m_readiness_at_run",
+    "purpose": "Only fail-closed when a degraded 1m state is explicitly present in the payload.",
+    "required": "不直接 required",
+    "minimumThreshold": "formal publish does not depend on intraday 1m readiness",
+    "staleLimit": "not a formal warrant-flow dependency",
+    "missingAction": "未證明；不因缺 1m 本身阻擋權證 formal publish",
+    "notRequiredReason": "權證 formal publish 不依賴 1m；正式 source 是 warrant_flow_scan_results / v_warrant_flow_latest_complete_run。",
+    "degradedPayloadRule": "若 payload 明確帶 degraded source/fallback 狀態，必須 block latest，避免壞水源被誤當正式證據。"
+  },
+  {
+    "sourceName": "MA readiness",
+    "tableViewOrApi": "ma_readiness_at_run",
+    "purpose": "Only fail-closed when a degraded MA state is explicitly present in the payload.",
+    "required": "不直接 required",
+    "minimumThreshold": "formal publish does not depend on shared MA readiness",
+    "staleLimit": "not a formal warrant-flow dependency",
+    "missingAction": "未證明；不因缺 MA 本身阻擋權證 formal publish",
+    "notRequiredReason": "權證 formal publish 不依賴 shared MA；正式 source 是 warrant_flow_scan_results / v_warrant_flow_latest_complete_run。",
+    "degradedPayloadRule": "若 payload 明確帶 degraded source/fallback 狀態，必須 block latest，避免壞水源被誤當正式證據。"
+  },
+  {
+    "sourceName": "futopt/TXF",
+    "tableViewOrApi": "preopen_futopt_daily_readiness_at_run.futopt",
+    "purpose": "Only fail-closed when a degraded futopt/TXF state is explicitly present in the payload.",
+    "required": "不直接 required",
+    "minimumThreshold": "formal publish does not depend on futopt/TXF",
+    "staleLimit": "not a formal warrant-flow dependency",
+    "missingAction": "未證明；不因缺 futopt/TXF 本身阻擋權證 formal publish",
+    "notRequiredReason": "權證 formal publish 不依賴 futopt/TXF；正式 source 是 warrant_flow_scan_results / v_warrant_flow_latest_complete_run。",
+    "degradedPayloadRule": "若 payload 明確帶 degraded source/fallback 狀態，必須 block latest，避免壞水源被誤當正式證據。"
   }
 ]

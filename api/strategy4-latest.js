@@ -21,6 +21,21 @@ const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
 const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
 const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, LEGACY_LOTS_SOURCE]);
+const STRATEGY4_REQUIRED_FIELDS = [
+  "code",
+  "name",
+  "market",
+  "rank",
+  "price",
+  "close",
+  "volume",
+  "score",
+  "reason",
+  "runId",
+  "updatedAt",
+  "qualityStatus",
+  "dataContractSource",
+];
 
 function apiOnlyError(error, detail = "") {
   return {
@@ -149,6 +164,62 @@ function countBy(values) {
   }, {});
 }
 
+function hasBusinessValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function auditStrategy4BusinessFields(matches, rows, run) {
+  const blankCounts = Object.fromEntries(STRATEGY4_REQUIRED_FIELDS.map((field) => [field, 0]));
+  const sampleMissingRows = [];
+  const runId = String(run?.run_id || rows[0]?.run_id || "");
+  const qualityStatus = String(run?.quality_status || rows[0]?.quality_status || "");
+  const dataContractSource = String(run?.data_contract_source || rows[0]?.data_contract_source || "");
+  matches.forEach((match, index) => {
+    const row = rows[index] || {};
+    const values = {
+      code: match.code,
+      name: match.name,
+      market: match.market,
+      rank: match.rank,
+      price: match.price,
+      close: match.close,
+      volume: match.volume,
+      score: match.score,
+      reason: match.reason,
+      runId,
+      updatedAt: row.updated_at || row.scan_time || row.generated_at || "",
+      qualityStatus,
+      dataContractSource,
+    };
+    const missing = [];
+    for (const field of STRATEGY4_REQUIRED_FIELDS) {
+      if (!hasBusinessValue(values[field])) {
+        blankCounts[field] += 1;
+        missing.push(field);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 10) {
+      sampleMissingRows.push({
+        index,
+        code: String(match.code || row.code || ""),
+        name: String(match.name || row.name || ""),
+        runId,
+        missing,
+      });
+    }
+  });
+  return {
+    requiredFields: STRATEGY4_REQUIRED_FIELDS,
+    blankCounts,
+    blankTotal: Object.values(blankCounts).reduce((sum, value) => sum + cleanNumber(value), 0),
+    sampleMissingRows,
+  };
+}
+
 function buildStrategy4SourceHealth(rows, run, matches) {
   const runPayload = run?.payload && typeof run.payload === "object" ? run.payload : {};
   const sourceWarnings = Array.isArray(runPayload.sourceWarnings) ? [...runPayload.sourceWarnings] : [];
@@ -263,6 +334,38 @@ function buildPayload(rows, total, run = null, options = {}) {
   }, { A: 0, B: 0, C: 0 });
   const scanDate = String(first.scan_date || "").replace(/-/g, "");
   const gateContract = buildStrategy4GateContract(rows, run, matches);
+  const fieldAudit = auditStrategy4BusinessFields(matches, rows, run);
+  const runQualityPayload = runPayload.run_quality_at_publish && typeof runPayload.run_quality_at_publish === "object"
+    ? runPayload.run_quality_at_publish
+    : {};
+  const resultCount = cleanNumber(run?.result_count) || matches.length;
+  const readbackCount = resultCount || matches.length;
+  const expectedTotal = cleanNumber(run?.expected_total);
+  const scannedCount = cleanNumber(run?.scanned_count);
+  const runQualityAtPublish = {
+    ...runQualityPayload,
+    runId: String(first.run_id || run?.run_id || ""),
+    status: gateContract.status,
+    qualityStatus: String(first.quality_status || run?.quality_status || ""),
+    expectedTotal,
+    scannedCount,
+    resultCount,
+    readbackCount,
+    publishAllowed: gateContract.publishAllowed,
+    fallbackUsed: gateContract.fallbackUsed,
+    fallbackScope: gateContract.fallbackScope,
+    fallbackAllowed: gateContract.fallbackAllowed,
+    fallbackDetails: gateContract.fallbackDetails,
+    fallbackContract: gateContract.fallbackContract,
+    degradedBlocksLatest: !gateContract.publishAllowed,
+    preservePreviousGood: gateContract.mustPreserveLatest,
+    writeBudget: gateContract.writeBudget,
+    retentionOk: gateContract.retentionOk,
+    requiredFields: fieldAudit.requiredFields,
+    blankCounts: fieldAudit.blankCounts,
+    blankTotal: fieldAudit.blankTotal,
+    sampleMissingRows: fieldAudit.sampleMissingRows,
+  };
   return {
     ok: true,
     status: gateContract.status,
@@ -287,9 +390,10 @@ function buildPayload(rows, total, run = null, options = {}) {
     scanner_block_reason: gateContract.scanner_block_reason,
     writeBudget: gateContract.writeBudget,
     retentionOk: gateContract.retentionOk,
-    requiredFields: Array.isArray(runPayload.requiredFields) ? runPayload.requiredFields : ["code", "name", "price", "volume", "runId"],
-    blankCounts: runPayload.blankCounts && typeof runPayload.blankCounts === "object" ? runPayload.blankCounts : {},
-    sampleMissingRows: Array.isArray(runPayload.sampleMissingRows) ? runPayload.sampleMissingRows : [],
+    run_quality_at_publish: runQualityAtPublish,
+    requiredFields: Array.isArray(runPayload.requiredFields) ? runPayload.requiredFields : fieldAudit.requiredFields,
+    blankCounts: runPayload.blankCounts && typeof runPayload.blankCounts === "object" ? runPayload.blankCounts : fieldAudit.blankCounts,
+    sampleMissingRows: Array.isArray(runPayload.sampleMissingRows) ? runPayload.sampleMissingRows : fieldAudit.sampleMissingRows,
     latestWriteAttempted: runPayload.latestWriteAttempted === true,
     latestPointerUpdated: runPayload.latestPointerUpdated === true,
     blockedReceiptWritten: runPayload.blockedReceiptWritten === true,
@@ -303,6 +407,10 @@ function buildPayload(rows, total, run = null, options = {}) {
     mustPreserveLatest: gateContract.mustPreserveLatest,
     canvas: Boolean(options.canvas),
     qualityStatus: String(first.quality_status || ""),
+    resultCount,
+    readbackCount,
+    expectedTotal,
+    scannedCount,
     count: matches.length,
     total: Math.max(matches.length, cleanNumber(total), 1500),
     zones,

@@ -147,6 +147,40 @@ function buildRawApiPayload({ scannerOutput = baseScannerOutput(), status = read
   return openBuyApi.__contract.buildPayload(rows, run, status, options);
 }
 
+function failClosedEvidence(payload = {}, reason = "blocked") {
+  return {
+    issue: reason,
+    rawOk: false,
+    latestWriteAttempted: false,
+    latestPointerUpdated: false,
+    emptyResultWritten: false,
+    preservePreviousGood: payload.preservePreviousGood === true,
+    blockedReceiptWritten: true,
+    blockedReason: payload.blockedReason || reason,
+    evidenceStatus: payload.evidenceStatus || "insufficient",
+    unattendedStatus: payload.unattendedStatus || "NO",
+    publishAllowed: payload.publishAllowed === true ? true : false,
+    degradedBlocksLatest: payload.degradedBlocksLatest === true,
+  };
+}
+
+function sourceBadPayload(overrides = {}) {
+  const raw = buildRawApiPayload();
+  const payload = {
+    ...raw,
+    ...overrides,
+    run_quality_at_publish: {
+      ...(raw.run_quality_at_publish || {}),
+      ...(overrides.run_quality_at_publish || {}),
+    },
+  };
+  return attachRunTimeSourceEvidence(payload, { strategy: "strategy1", endpoint: "api/open-buy-latest" });
+}
+
+function hasIssue(issues, expected) {
+  return (issues || []).some((issue) => issue === expected || String(issue).startsWith(`${expected}:`));
+}
+
 function verifyRawApiPayload(payload, label) {
   const issues = [];
   for (const field of [
@@ -458,8 +492,12 @@ function verifyFormalPayload(payload, label, { expectReady = true } = {}) {
     "blockedReason",
     "scanner_block_reason",
   ]) {
-    if (!(field in payload)) issues.push(`${field}_missing`);
+    if (!(field in payload)) {
+      issues.push(`${field}_missing`);
+      if (field === "blockedReason") issues.push("missing_blockedReason");
+    }
   }
+  if (!("evidenceStatus" in payload)) issues.push("missing_evidence_status");
   if (!payload.source_snapshot_captured_at) issues.push("source_snapshot_captured_at_blank");
   if (!hasCompleteWriteBudget(payload.writeBudget)) issues.push("writeBudget_incomplete");
   if (typeof payload.retentionOk !== "boolean") issues.push("retentionOk_missing_or_not_boolean");
@@ -469,11 +507,24 @@ function verifyFormalPayload(payload, label, { expectReady = true } = {}) {
   if (!expectReady && payload.unattendedStatus === "YES") issues.push("unattendedStatus_fake_yes");
   if (!expectReady && payload.publishAllowed === true) issues.push("source_bad_but_publishAllowed_true");
   if (!expectReady && payload.degradedBlocksLatest !== true) issues.push("source_bad_must_degrade_blocks_latest");
-  if (!expectReady && payload.preservePreviousGood !== true) issues.push("source_bad_must_preserve_previous_good");
+  if (!expectReady && payload.preservePreviousGood !== true) {
+    issues.push("source_bad_must_preserve_previous_good");
+    issues.push("preservePreviousGood_false_when_blocked");
+  }
 
   const formalReady = ready && issues.length === 0;
   const ok = expectReady ? formalReady : issues.length > 0;
-  return { label, ok, ready: formalReady, issues };
+  return {
+    label,
+    ok,
+    ready: formalReady,
+    rawOk: formalReady,
+    rawPublishAllowed: payload.publishAllowed === true,
+    verifierBlocksPublish: expectReady ? !formalReady : issues.length > 0,
+    publishBlocked: expectReady ? payload.publishAllowed !== true : issues.length > 0,
+    failClosedEvidence: !expectReady ? failClosedEvidence(payload, issues[0] || label) : undefined,
+    issues,
+  };
 }
 
 function verifyBlockedReceipt() {
@@ -524,9 +575,30 @@ function runNegativeMutations() {
       expected: "source_snapshot_captured_at_missing",
     },
     {
+      label: "formal_payload_missing_evidenceStatus_fails",
+      mutate(payload) { delete payload.evidenceStatus; },
+      expected: "missing_evidence_status",
+    },
+    {
       label: "formal_payload_missing_writeBudget_fails",
       mutate(payload) { delete payload.writeBudget; },
       expected: "writeBudget_missing",
+    },
+    {
+      label: "formal_payload_missing_blockedReason_fails",
+      payload: sourceBadPayload({
+        source_status_at_run: { status: "timeout", ok: false, required: true, error: "contract timeout" },
+      }),
+      mutate(payload) { delete payload.blockedReason; },
+      expected: "missing_blockedReason",
+    },
+    {
+      label: "formal_payload_preservePreviousGood_false_fails",
+      payload: sourceBadPayload({
+        source_status_at_run: { status: "timeout", ok: false, required: true, error: "contract timeout" },
+      }),
+      mutate(payload) { payload.preservePreviousGood = false; },
+      expected: "preservePreviousGood_false_when_blocked",
     },
     {
       label: "formal_payload_fake_yes_source_bad_fails",
@@ -563,10 +635,79 @@ function runNegativeMutations() {
     const result = verifyFormalPayload(payload, testCase.label, { expectReady: false });
     return {
       ...result,
-      ok: result.ok && result.issues.includes(testCase.expected),
+      ok: result.ok && hasIssue(result.issues, testCase.expected),
       expected: testCase.expected,
     };
   });
+}
+
+function verifySourceFixture(label, overrides, expectedIssue) {
+  const payload = sourceBadPayload(overrides);
+  const issues = Array.isArray(payload.sourceEvidenceIssues) ? payload.sourceEvidenceIssues : [];
+  const checkIssues = [];
+  if (!hasIssue(issues, expectedIssue)) checkIssues.push(`expected_issue_missing:${expectedIssue}`);
+  if (payload.evidenceStatus !== "insufficient") checkIssues.push(`evidenceStatus_not_insufficient:${payload.evidenceStatus}`);
+  if (payload.unattendedStatus !== "NO") checkIssues.push(`unattendedStatus_not_NO:${payload.unattendedStatus}`);
+  if (payload.publishAllowed !== false) checkIssues.push("publishAllowed_not_false");
+  if (payload.degradedBlocksLatest !== true) checkIssues.push("degradedBlocksLatest_not_true");
+  if (payload.preservePreviousGood !== true) checkIssues.push("preservePreviousGood_not_true");
+  if (payload.mustPreserveLatest !== true) checkIssues.push("mustPreserveLatest_not_true");
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  return {
+    label,
+    ok: checkIssues.length === 0,
+    expectedIssue,
+    actualIssues: issues,
+    rawOk: false,
+    failClosedEvidence: {
+      ...failClosedEvidence(payload, expectedIssue),
+      emptyResultWritten: rows.length === 0,
+      latestPointerUpdated: payload.mustPreserveLatest === true ? false : null,
+    },
+    issues: checkIssues,
+  };
+}
+
+function runSourceFixtures() {
+  return [
+    verifySourceFixture("strategy1_fixture_supabase_522_timeout_fail_closed", {
+      source_status_at_run: { status: "timeout", ok: false, required: true, error: "Supabase 522 source timeout" },
+    }, "source_status_at_run_status_timeout"),
+    verifySourceFixture("strategy1_fixture_quote_low_fail_closed", {
+      quote_coverage_at_run: {
+        status: "ready",
+        ok: true,
+        required: true,
+        fresh_quote_coverage_120s: 0.2,
+        quote_age_seconds: 30,
+        active_symbols: 100,
+        fresh_quotes: 20,
+      },
+    }, "quote_coverage_at_run_fresh_quote_coverage_120s_0.2_below_0.95"),
+    verifySourceFixture("strategy1_fixture_stale_1m_fail_closed", {
+      intraday_1m_readiness_at_run: {
+        status: "ready",
+        ok: true,
+        required: true,
+        expected: 100,
+        today_1m_symbols: 100,
+        ready_ge_35: 100,
+        latest_candle_time: "2026-07-04T01:00:00.000Z",
+        intraday_1m_stale_seconds: 999,
+        max_stale_seconds: 120,
+      },
+    }, "intraday_1m_readiness_at_run_stale_seconds_999_above_120"),
+    verifySourceFixture("strategy1_fixture_ma_insufficient_fail_closed", {
+      ma_readiness_at_run: {
+        status: "ready",
+        ok: true,
+        required: true,
+        expected: 100,
+        ready_ma20_continuous: 5,
+        ready_ma35_continuous: 0,
+      },
+    }, "ma_readiness_at_run_ready_ma20_continuous_5_below_95"),
+  ];
 }
 
 function main() {
@@ -588,6 +729,7 @@ function main() {
     verifyBlockedReceipt(),
     verifyStaticLatestGuards(),
     ...runNegativeMutations(),
+    ...runSourceFixtures(),
   ];
   const mode = process.argv.includes("--business-fields")
     ? "business-fields"

@@ -136,7 +136,7 @@ function queryTask(name) {
     "State=[string]$t.State;" +
     "Actions=($t.Actions|%{[string]$_.Execute+' '+[string]$_.Arguments}) -join ' | ';" +
     "Triggers=($t.Triggers|%{[string]$_.StartBoundary}) -join ' | ';" +
-    "LastResult=[int]$i.LastTaskResult;" +
+    "LastResult=[int64]$i.LastTaskResult;" +
     "LastRunTime=[string]$i.LastRunTime;" +
     "NextRunTime=[string]$i.NextRunTime" +
     "}|ConvertTo-Json -Compress";
@@ -147,7 +147,7 @@ function queryStrategy4Tasks() {
   const command = [
     "Get-ScheduledTask | ? { $_.TaskName -like '*Strategy4*' } | % {",
     "$i=Get-ScheduledTaskInfo -TaskName $_.TaskName -ErrorAction SilentlyContinue;",
-    "[pscustomobject]@{TaskName=$_.TaskName;State=[string]$_.State;Actions=($_.Actions|%{[string]$_.Execute+' '+[string]$_.Arguments}) -join ' | ';Triggers=($_.Triggers|%{[string]$_.StartBoundary}) -join ' | ';LastResult=[int]$i.LastTaskResult;NextRunTime=[string]$i.NextRunTime}",
+    "[pscustomobject]@{TaskName=$_.TaskName;State=[string]$_.State;Actions=($_.Actions|%{[string]$_.Execute+' '+[string]$_.Arguments}) -join ' | ';Triggers=($_.Triggers|%{[string]$_.StartBoundary}) -join ' | ';LastResult=[int64]$i.LastTaskResult;NextRunTime=[string]$i.NextRunTime}",
     "} | ConvertTo-Json -Compress",
   ].join("");
   const text = runPowerShell(command).trim();

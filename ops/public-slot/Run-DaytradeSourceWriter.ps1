@@ -105,8 +105,8 @@ try {
     exit 0
   }
 
-  & $node @args 1> $StdoutLog 2> $StderrLog
-  $exitCode = $LASTEXITCODE
+  $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog
+  $exitCode = $nodeProcess.ExitCode
   if ($exitCode -ne 0) {
     Write-FailureArtifact $exitCode "writer_exit_$exitCode"
     Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"

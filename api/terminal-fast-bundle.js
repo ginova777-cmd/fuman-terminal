@@ -220,8 +220,15 @@ async function repairStrategy1WaitingSnapshot(request, endpoints) {
   }
 }
 
+function isStrategy2SnapshotEndpoint(endpoint) {
+  const value = String(endpoint || "");
+  return value.startsWith("/api/latest-strategy?key=strategy2")
+    || value.startsWith("/api/latest-strategy") && /[?&]key=strategy2(?:&|$)/.test(value);
+}
+
 function isSoftSnapshotEndpoint(endpoint) {
-  return isStrategy1Endpoint(endpoint)
+  return isStrategy2SnapshotEndpoint(endpoint)
+    || isStrategy1Endpoint(endpoint)
     || String(endpoint || "").startsWith("/api/warrant-flow-latest")
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
@@ -234,34 +241,40 @@ function isOptionalLiveSnapshotEndpoint(endpoint) {
 function buildSoftSnapshotFallback(endpoint, result, via) {
   const isOpenBuy = String(endpoint || "").startsWith("/api/open-buy-latest");
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
+  const isStrategy2 = isStrategy2SnapshotEndpoint(endpoint);
+  const original = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const source = isOpenBuy
     ? "supabase:strategy1_open_buy_results"
     : isWarrant
       ? "supabase:warrant_flow_scan_results"
-      : "supabase:cb_detect_cache";
-  const reason = result?.payload?.detail
-    || result?.payload?.error
-    || result?.payload?.reason
-    || "snapshot-soft-fallback";
+      : isStrategy2
+        ? "supabase:strategy2_scan_results"
+        : "supabase:cb_detect_cache";
+  const reason = original.detail || original.error || original.reason || "snapshot-soft-fallback";
   return {
+    ...original,
     ok: true,
-    source,
+    source: original.source || source,
     cacheSource: "snapshot-soft-fallback",
-    complete: false,
-    qualityStatus: "waiting_snapshot",
-    runId: "",
-    usedDate: "",
-    tradeDate: "",
-    sourceDate: "",
-    count: 0,
-    returnedCount: 0,
-    rows: [],
-    matches: [],
-    volumeMatches: [],
-    singleSignals: [],
-    updatedAt: new Date().toISOString(),
+    complete: original.complete === true,
+    qualityStatus: original.qualityStatus || "waiting_snapshot",
+    runId: original.runId || original.transport?.runId || "",
+    usedDate: original.usedDate || original.date || "",
+    tradeDate: original.tradeDate || original.usedDate || original.date || "",
+    sourceDate: original.sourceDate || original.usedDate || original.date || "",
+    count: Number(original.count ?? original.matchCount ?? original.entryCount ?? 0) || 0,
+    returnedCount: Number(original.returnedCount ?? original.count ?? 0) || 0,
+    rows: Array.isArray(original.rows) ? original.rows : [],
+    records: Array.isArray(original.records) ? original.records : [],
+    events: Array.isArray(original.events) ? original.events : [],
+    matches: Array.isArray(original.matches) ? original.matches : [],
+    volumeMatches: Array.isArray(original.volumeMatches) ? original.volumeMatches : [],
+    singleSignals: Array.isArray(original.singleSignals) ? original.singleSignals : [],
+    updatedAt: original.updatedAt || new Date().toISOString(),
     reason,
+    displayOnlyFallback: true,
     transport: {
+      ...(original.transport || {}),
       source: "fast-bundle",
       gate: "snapshot-soft-fallback",
       endpoint,
@@ -271,7 +284,6 @@ function buildSoftSnapshotFallback(endpoint, result, via) {
     },
   };
 }
-
 function applySoftSnapshotFallbacks(results, endpoints, via) {
   for (const [endpoint, result] of Object.entries(results)) {
     if (endpoints[endpoint] || !isSoftSnapshotEndpoint(endpoint)) continue;

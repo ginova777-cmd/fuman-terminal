@@ -49,6 +49,17 @@ const scorecard = {
   canPublishLatestFromThisRun: false,
   latestPollutionRisk: "NO",
   preservePreviousGood: true,
+  highestBackfill: "pre-water engineering complete",
+  uiEvidenceLimitations: {
+    uiMatrixIsNotLiveDom: true,
+    proven: "verify:warrant-ui-display only proves fixtures/warrant-ui-display-matrix.json field coverage and degraded/fallback/evidence payload rules.",
+    notProven: "production UI live DOM is not proven; do not convert UI matrix verifier output into UI PASS production."
+  },
+  sourceContractPrecision: {
+    formalRequiredSources: ["warrant_flow_scan_results", "v_warrant_flow_latest_complete_run"],
+    notDirectFormalDependencies: ["shared quote", "intraday 1m", "MA readiness", "futopt/TXF"],
+    rule: "權證 formal publish 不依賴 shared quote/1m/MA/futopt；但若 payload 明確帶 degraded source/fallback 狀態，必須 block latest，避免壞水源被誤當正式證據。"
+  },
   commands: results,
   recoveryFirstCommand: "npm run supabase:probe:light",
   sourceLiveCommand: "FUMAN_ALLOW_SUPABASE_READ=1 npm run verify:warrant-prewater-source-live",

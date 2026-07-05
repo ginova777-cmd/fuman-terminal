@@ -51,6 +51,45 @@ npm run supabase:probe:light
 npm run supabase:incident:exit
 ```
 
+## Conservative Recovery After Supabase Restart
+
+When Supabase Support reports a crash caused by CPU spikes or exhausted EBS IO burst credits, do not immediately resume full production verification. Enter conservative recovery mode first.
+
+Required protection:
+
+- Keep the dedicated daytrade writer enabled, but throttle it to `quoteBatchSize=40`, `quoteConcurrency=1`, `targetBatchIntervalSeconds=5`, and opening boost no higher than `120 / concurrency=2`.
+- Keep shared source at the conservative runtime profile: REST quote `10 every 20s with 2000ms delay`, collector `20 / concurrency=1 / 4000ms delay`, direct 1m `2 every 60s`.
+- Disable all broad Supabase readers until the dedicated source reaches A: all-strategy scorecards, API unattended patrol, production monitor loops, freshness gate big packages, local freshness repair, battle verifiers, replay loops, snapshot/backfill jobs.
+- Allow only daytrade source writer, daytrade source gates, `supabase:probe:light`, and one source-specific read-only health probe at a time.
+
+Machine check:
+
+```powershell
+node scripts/verify-supabase-conservative-recovery.js
+```
+
+This writes:
+
+```text
+C:\fuman-runtime\reports\supabase-conservative-recovery-check.json
+```
+
+The report must show:
+
+```text
+ok=true
+status=ready_for_conservative_recovery
+heavyTasks all Disabled
+daytrade writer/gate tasks Ready
+```
+
+Do not re-enable heavy tasks until:
+
+1. `npm run supabase:probe:light` remains PASS.
+2. Dedicated daytrade source reaches A at the scheduled checkpoints.
+3. CPU and EBS IO balance stay stable during the writer window.
+4. Strategy verifiers have been reintroduced one at a time without 522 / pool timeout.
+
 ## Scorecard Language
 
 During incident mode, do not write "strategy logic failed" unless the strategy-specific source and verifier fail after Supabase is readable again.

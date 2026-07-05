@@ -456,6 +456,7 @@ function validatePayload(label, payload, matrix, options = {}) {
     }
   }
   if (formal && isBlank(payload.source_snapshot_captured_at)) issues.push(`${label}_missing_source_snapshot_captured_at`);
+  if (formal && isBlank(payload.evidenceStatus)) issues.push(`${label}_missing_evidenceStatus`);
   if (formal && isBlank(payload.writeBudget)) issues.push(`${label}_missing_writeBudget`);
   if (formal && (isBlank(payload.retentionOk) || typeof payload.retentionOk !== "boolean")) issues.push(`${label}_missing_or_bad_retentionOk`);
   if (formal && payload.degradedBlocksLatest === false && payload.source_status_at_run?.status === "degraded") issues.push(`${label}_degraded_not_blocking_latest`);
@@ -551,6 +552,9 @@ function mutationFailed(name, payload, matrix, mutate, expectedIssuePattern) {
   return {
     name,
     ok: result.ok === false && matched,
+    rawOk: result.ok,
+    publishAllowed: mutated.publishAllowed,
+    unattendedStatus: mutated.unattendedStatus,
     producedIssues: result.issues,
     expected: "verifier must reject this mutated formal payload",
   };
@@ -666,6 +670,21 @@ function runNegativeMutations(actualPayloads, matrix) {
     mutationFailed("missing_source_snapshot", base, matrix, (p) => {
       delete p.source_snapshot_captured_at;
     }, /source_snapshot_captured_at/),
+    mutationFailed("missing_evidenceStatus", base, matrix, (p) => {
+      delete p.evidenceStatus;
+      p.publishAllowed = false;
+      p.publishBlocked = true;
+      p.latestOverwriteAllowed = false;
+      p.unattendedStatus = "NO";
+      p.degradedBlocksLatest = true;
+      p.preservePreviousGood = true;
+      p.latestWriteAttempted = false;
+      p.latestPointerUpdated = false;
+      p.blockedReceiptWritten = true;
+      p.previousGoodPreserved = true;
+      p.blockedReason = "missing evidenceStatus";
+      p.scanner_block_reason = "missing evidenceStatus";
+    }, /missing_evidenceStatus|blank_evidenceStatus/),
     mutationFailed("blocked_latest_pointer_updated", base, matrix, (p) => {
       p.publishAllowed = false;
       p.publishBlocked = true;
