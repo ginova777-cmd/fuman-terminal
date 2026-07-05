@@ -135,13 +135,15 @@ async function main() {
     mobileFragment: withFresh("/api/mobile-fragment?tab=strategy4"),
     terminalFastBundle: withFresh("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1"),
     scorecard: withFresh("/api/scorecard"),
+    scorecardPage88: withFresh("/88.html"),
   };
 
-  const [latest, mobile, bundle, scorecard] = await Promise.all([
+  const [latest, mobile, bundle, scorecard, page88] = await Promise.all([
     fetchJson(endpoints.strategy4Latest, 45000).catch((error) => ({ ok: false, status: 0, url: endpoints.strategy4Latest, payload: { ok: false, error: error.message } })),
     fetchText(endpoints.mobileFragment, 30000).catch((error) => ({ ok: false, status: 0, url: endpoints.mobileFragment, text: "", error: error.message })),
     fetchJson(endpoints.terminalFastBundle, 45000).catch((error) => ({ ok: false, status: 0, url: endpoints.terminalFastBundle, payload: { ok: false, error: error.message } })),
     fetchJson(endpoints.scorecard, 45000).catch((error) => ({ ok: false, status: 0, url: endpoints.scorecard, payload: { ok: false, error: error.message } })),
+    fetchText(endpoints.scorecardPage88, 30000).catch((error) => ({ ok: false, status: 0, url: endpoints.scorecardPage88, text: "", error: error.message })),
   ]);
 
   const payload = latest.payload || {};
@@ -173,9 +175,16 @@ async function main() {
   issue(checks, bundleRunId === runId, "terminal_fast_bundle_run_id_matches_strategy4_latest", { expected: runId, actual: bundleRunId });
   issue(checks, bundleStrategy4?.fallbackUsed !== true, "terminal_fast_bundle_strategy4_no_fallback", { fallbackUsed: bundleStrategy4?.fallbackUsed, fallbackScope: bundleStrategy4?.fallbackScope });
 
-  const html88 = readText(path.join(process.cwd(), "88.html"));
-  issue(checks, html88.includes("/api/strategy4-latest") && html88.includes("scorecardStrategy4Live"), "scorecard_88_strategy4_live_hook_present", {
+  const localHtml88 = readText(path.join(process.cwd(), "88.html"));
+  const productionHtml88 = page88.text || "";
+  issue(checks, localHtml88.includes("/api/strategy4-latest") && localHtml88.includes("scorecardStrategy4Live"), "scorecard_88_local_strategy4_live_hook_present", {
     file: path.join(process.cwd(), "88.html"),
+    hook: "scorecardStrategy4Live",
+    endpoint: "/api/strategy4-latest",
+  });
+  issue(checks, page88.ok && productionHtml88.includes("/api/strategy4-latest") && productionHtml88.includes("scorecardStrategy4Live"), "scorecard_88_production_strategy4_live_hook_present", {
+    status: page88.status,
+    url: page88.url,
     hook: "scorecardStrategy4Live",
     endpoint: "/api/strategy4-latest",
   });
@@ -219,7 +228,13 @@ async function main() {
       productionApi: { status: latest.status, runId },
       mobile: { status: mobile.status, runId: mobileRunId },
       desktopFastBundle: { status: bundle.status, runId: bundleRunId },
-      scorecard88: { sourceFileHook: html88.includes("scorecardStrategy4Live"), scorecardStatus: scorecard.status, scorecardRunId: scorecard.payload?.runId || "" },
+      scorecard88: {
+        localSourceFileHook: localHtml88.includes("scorecardStrategy4Live"),
+        productionPageHook: productionHtml88.includes("scorecardStrategy4Live"),
+        pageStatus: page88.status,
+        scorecardStatus: scorecard.status,
+        scorecardRunId: scorecard.payload?.runId || "",
+      },
     },
     failClosedEvidence: {
       latestPointerBadSourceBeforeAfter: REQUIRE_LIVE_BLOCKED ? "required_by_flag" : "not_run_current_round",
