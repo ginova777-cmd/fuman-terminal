@@ -164,6 +164,11 @@ function downgradedWarning(issue, reason = "non_live_phase") {
   };
 }
 
+function isNonTradingDayBlock(issue) {
+  const text = `${issue?.message || ""} ${issue?.details?.status || ""}`.toLowerCase();
+  return /not_trading_day|market_closed|non-trading day|weekend/.test(text);
+}
+
 function sendAlert(payload, dryRun) {
   const text = [
     "Fuman publish source gate blocked.",
@@ -240,7 +245,7 @@ async function main() {
   for (const [strategy, gate] of Object.entries(scannerGates)) {
     const issue = issueFromGate(strategy, gate);
     if (!issue) continue;
-    if (strategy === "strategy2" && !hardGateRequired) warnings.push(downgradedWarning(issue));
+    if (!hardGateRequired && (strategy === "strategy2" || isNonTradingDayBlock(issue))) warnings.push(downgradedWarning(issue));
     else issues.push(issue);
   }
   if (simulateCritical) {
