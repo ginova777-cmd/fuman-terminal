@@ -73,6 +73,7 @@
     "verify:strategy5-prewater-formal-payloads": "node scripts/verify-strategy5-prewater-formal-payloads.js",
     "verify:strategy5-business-fields": "node scripts/verify-strategy5-business-fields.js",
     "verify:strategy5-formal-payloads": "node scripts/verify-strategy5-prewater-formal-payloads.js",
+    "verify:strategy5-live-bad-source-drill": "node --use-system-ca scripts/strategy5-live-bad-source-drill.js",
     "verify:strategy5-prewater-strict": "npm run verify:strategy5-prewater && npm run verify:strategy5-business-fields && npm run verify:strategy5-formal-payloads",
     "verify:institution-business-fields": "node scripts/verify-institution-business-fields.js",
     "verify:institution-strategy-requirements": "node scripts/verify-institution-strategy-requirements.js",

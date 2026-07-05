@@ -1491,6 +1491,8 @@ let strategy3UpdatedAt = 0;
 let strategy3CacheLoading = false;
 let strategy5Data = [];
 let strategy5UpdatedAt = 0;
+let strategy5ApiRunId = "";
+let strategy5ApiResultCount = 0;
 let strategy5CacheLoading = false;
 let strategyStocksPromise = null;
 const STRATEGY4_LOCAL_CACHE_KEY = "fuman_strategy4_scan_cache_v1";
@@ -2329,6 +2331,8 @@ async function loadStrategy5Cache(force = false) {
       payload = await fetchJson(`${endpoints.strategy5Backup}?t=${Date.now()}`, 10000);
     }
     strategy5Data = normalizeArray(payload?.matches);
+    strategy5ApiRunId = String(payload?.runId || payload?.transport?.runId || payload?.meta?.runId || "");
+    strategy5ApiResultCount = cleanNumber(payload?.resultCount || payload?.count || strategy5Data.length);
     const updatedAt = Date.parse(payload?.updatedAt || "");
     strategy5UpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
     renderStrategyScanner();
@@ -5552,14 +5556,16 @@ function renderStrategy5Dashboard(evaluated) {
   const scanText = strategy5UpdatedAt
     ? `06:00 / 21:00 完整掃｜${new Date(strategy5UpdatedAt).toLocaleDateString("zh-TW")}`
     : "06:00 / 21:00 完整掃結果讀取中";
+  const runText = strategy5ApiRunId ? `run ${strategy5ApiRunId}` : "run 讀取中";
+  const totalText = strategy5ApiResultCount || strategy5Data.length || list.length;
   strategyTable.innerHTML = `
-    <section class="strategy5-shell strategy5-clean">
+    <section class="strategy5-shell strategy5-clean" data-run-id="${escapeAttr(strategy5ApiRunId)}" data-result-count="${totalText}">
       <section class="strategy5-dashboard">
         <section class="strategy5-results">
           <div class="strategy5-results-head">
             <div>
               <h3>${titleWithSchedule("▰", "策略5-綜合策略", "strategy5")}</h3>
-              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${scanText}，結果固定到下一次掃描。</p>
+              <p>${descriptions[strategy5ActiveId] || "符合策略5條件的股票。"}｜${scanText}｜${runText}｜總數 ${totalText}，結果固定到下一次掃描。</p>
             </div>
           </div>
           ${rows}
