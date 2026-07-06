@@ -82,9 +82,16 @@ try {
   $snapshotScript = Join-Path $codeRepo "refresh-desktop-route-snapshot.ps1"
   if (Test-Path -LiteralPath $snapshotScript) {
     & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
-    if ($LASTEXITCODE -ne 0) {
-      "CB detect desktop snapshot refresh warning with exit code $LASTEXITCODE" >> $log
-      $warnings += "desktop snapshot refresh exit code $LASTEXITCODE"
+    $snapshotExitCode = $LASTEXITCODE
+    if ($snapshotExitCode -ne 0) {
+      "CB detect desktop snapshot refresh retry after exit code $snapshotExitCode" >> $log
+      Start-Sleep -Seconds 12
+      & $pwshExe -NoProfile -ExecutionPolicy Bypass -File $snapshotScript -Source "cb-detect" -LogPath $log
+      $snapshotExitCode = $LASTEXITCODE
+    }
+    if ($snapshotExitCode -ne 0) {
+      "CB detect desktop snapshot refresh warning with exit code $snapshotExitCode" >> $log
+      $warnings += "desktop snapshot refresh exit code $snapshotExitCode"
     }
   } else {
     "CB detect desktop snapshot refresh skipped; helper not found." >> $log
@@ -97,5 +104,4 @@ try {
 
 "CB detect API-only: cache sync, afterhours static status, and release/freshness gate are disabled; terminal reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
-$global:LASTEXITCODE = 0
 exit 0
