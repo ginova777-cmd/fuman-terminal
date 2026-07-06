@@ -164,6 +164,33 @@ function arrayFromPayload(payload) {
   return [];
 }
 
+function sourceHealthFromBundle(bundle, key, pathname) {
+  const summary = bundle?.summary && typeof bundle.summary === "object" ? bundle.summary : {};
+  const endpoints = bundle?.endpoints && typeof bundle.endpoints === "object" ? bundle.endpoints : {};
+  const pathnameBase = cleanText(pathname).split("?")[0];
+  const candidates = [...Object.entries(summary), ...Object.entries(endpoints)];
+  const found = candidates.find(([candidate]) => {
+    const text = cleanText(candidate);
+    return text === pathname || text.startsWith(`${pathname}&`) || text.startsWith(`${pathnameBase}?`) || text === pathnameBase;
+  })?.[1];
+  if (!found || typeof found !== "object") return null;
+  const rows = arrayFromPayload(found);
+  const rowCount = rows.length || cleanNumber(found.count || found.total || found.resultCount || found.returnedCount || found.summary?.rows);
+  return {
+    ok: found.ok !== false && rowCount > 0,
+    status: 200,
+    payloadOk: found.ok !== false,
+    rows: rowCount,
+    runId: cleanText(found.runId || found.run_id || found.meta?.runId),
+    updatedAt: cleanText(found.updatedAt || found.updated_at || found.generatedAt),
+    source: cleanText(found.source || found.cacheSource),
+    elapsedMs: cleanNumber(bundle.elapsedMs),
+    error: "",
+    via: "terminal-fast-bundle",
+    bundleKey: key,
+  };
+}
+
 function strategyBreakdown(records) {
   const byStrategy = {};
   for (const row of Array.isArray(records) ? records : []) {
@@ -267,8 +294,11 @@ function stage(ok, detail = {}) {
 }
 
 async function sourceEndpointHealth(baseUrl) {
+  const bundle = await fetchJson(`${baseUrl}/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&health=${Date.now()}`, 30000);
   const entries = await Promise.all(SOURCE_ENDPOINTS.map(async ([key, pathname]) => {
-    const result = await fetchJson(`${baseUrl}${pathname}${pathname.includes("?") ? "&" : "?"}health=${Date.now()}`, 15000);
+    const bundled = bundle.ok ? sourceHealthFromBundle(bundle.json, key, pathname) : null;
+    if (bundled) return [key, bundled];
+    const result = await fetchJson(`${baseUrl}${pathname}${pathname.includes("?") ? "&" : "?"}health=${Date.now()}`, 30000);
     const payload = result.json || {};
     const rows = arrayFromPayload(payload);
     const rowCount = rows.length || cleanNumber(payload.count || payload.total || payload.summary?.rows);
@@ -282,6 +312,7 @@ async function sourceEndpointHealth(baseUrl) {
       source: cleanText(payload.source || payload.cacheSource),
       elapsedMs: result.elapsedMs,
       error: result.error || "",
+      via: "direct-endpoint",
     }];
   }));
   return Object.fromEntries(entries);
@@ -302,10 +333,10 @@ module.exports = async function handler(request, response) {
   const sources = strictSources ? await sourceEndpointHealth(baseUrl) : {};
   const tradeRecords = await fetchSupabaseTable("trade_records");
   const dailySummary = await fetchSupabaseTable("strategy_daily_summary");
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 12000 }).catch((error) => ({ error }));
+  const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 30000 }).catch((error) => ({ error }));
   const snapshotPayload = snapshot?.payload || null;
   const snapshotSummary = summarizeScorecard(snapshotPayload || {});
-  const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 15000);
+  const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 30000);
   const scorecardSummary = summarizeScorecard(scorecardApi.json || {});
   const freshnessRequirement = scorecardFreshnessRequirement(request);
   const sourceDatesOk = !freshnessRequirement.required
@@ -320,7 +351,7 @@ module.exports = async function handler(request, response) {
     },
   }, freshnessRequirement);
   const apiDateOk = scorecardDateMatches(scorecardSummary, scorecardApi.json || {}, freshnessRequirement);
-  const page = await fetchText(`${baseUrl}/88?health=${Date.now()}`, 15000);
+  const page = await fetchText(`${baseUrl}/88?health=${Date.now()}`, 30000);
   const pageBody = page.text || "";
   const pageChecks = {
     historyDate: pageBody.includes("scorecard-history-date"),

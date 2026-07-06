@@ -10,6 +10,7 @@ const SNAPSHOT_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const MIN_ROWS = Number(process.env.FUMAN_SCORECARD_MIN_ROWS || "450") || 0;
 const MIN_ROW_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_ROW_RATIO || "0.8") || 0;
+const PUBLISH_TIMEOUT_MS = Math.max(30000, Number(process.env.FUMAN_SCORECARD_PUBLISH_TIMEOUT_MS || "30000") || 30000);
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -132,7 +133,7 @@ async function main() {
     tradeDate,
     source: "scorecard_latest",
     reason: "daily-scorecard-snapshot",
-    timeoutMs: 30000,
+    timeoutMs: PUBLISH_TIMEOUT_MS,
   });
   if (!result.ok) {
     console.error(JSON.stringify({ ok: false, publish: result }, null, 2));

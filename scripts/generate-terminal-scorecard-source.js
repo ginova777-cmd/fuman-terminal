@@ -377,6 +377,15 @@ function taipeiTime(value) {
   return `${get("hour")}:${get("minute")}:${get("second")}`;
 }
 
+function clampRealtimeRadarEntryTime(value) {
+  const text = taipeiTime(value);
+  const minutes = timeMinutes(text);
+  if (minutes === null) return "13:30";
+  if (minutes < 9 * 60) return "09:00";
+  if (minutes > 13 * 60 + 30) return "13:30";
+  return text;
+}
+
 function fallbackEntryTime(task, payload) {
   if (task.key === "strategy1") return "21:30";
   if (task.key === "strategy3") return "13:00";
@@ -389,6 +398,19 @@ function fallbackEntryTime(task, payload) {
 }
 
 function entryTimeOf(task, payload, row) {
+  if (task.key === "realtime-radar") {
+    return clampRealtimeRadarEntryTime(
+      row.entry_time
+        || row.entryTime
+        || row.time
+        || row.quoteTime
+        || row.latestSeenAt
+        || row.updatedAt
+        || payload.updatedAt
+        || payload.generatedAt
+        || payload.timestamp,
+    );
+  }
   if (["strategy1", "strategy3", "strategy5", "institution", "warrant"].includes(task.key)) {
     return fallbackEntryTime(task, payload);
   }
