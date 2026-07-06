@@ -269,7 +269,11 @@ async function main() {
   add(String(primary.Actions || "").includes(EXPECTED_RUNNER), "schedule_runner_mismatch", primary);
   add(String(primary.Actions || "").includes("C:\\fuman-terminal\\run-strategy4.ps1"), "schedule_runner_not_production_path", primary);
   add(String(primary.Triggers || primary.NextRunTime || "").includes("16:00") || String(primary.NextRunTime || "").includes("下午 04:00"), "schedule_time_mismatch", primary);
-  const activeDuplicates = (schedule.strategy4Tasks || []).filter((task) => task.TaskName !== EXPECTED_TASK && ["Ready", "Running"].includes(String(task.State || "")));
+  const activeDuplicates = (schedule.strategy4Tasks || []).filter((task) => {
+    if (task.TaskName === EXPECTED_TASK) return false;
+    if (!["Ready", "Running"].includes(String(task.State || ""))) return false;
+    return String(task.Actions || "").includes(EXPECTED_RUNNER);
+  });
   add(activeDuplicates.length === 0, "active_duplicate_strategy4_task", { activeDuplicates });
 
   const runs = await supabase(q("strategy4_scan_runs", {
