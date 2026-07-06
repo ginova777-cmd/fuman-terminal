@@ -357,6 +357,7 @@ async function main() {
   const after0845 = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0900 = ["opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const formalWindow = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
+  const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
 
   if (sourceAge > MAX_SOURCE_AGE_SECONDS) issues.push(issue("source_status_stale", "critical", { ageSeconds: sourceAge, max: MAX_SOURCE_AGE_SECONDS }));
   if (sourceStatus !== "ok") issues.push(issue("source_status_not_ok_for_daytrade", "critical", { sourceStatus, allowed: "ok" }));
@@ -427,10 +428,23 @@ async function main() {
   if (writerGateGrade === "A" && computedGateGrade !== "A") {
     issues.push(issue("writer_gate_grade_a_but_evidence_not_a", "critical", { writerGateGrade, computedGateGrade }));
   }
+  const effectiveGateGrade = offSession ? (normalizeGateGrade(writerGateGrade) || computedGateGrade) : gateGrade;
+  const reportedIssues = offSession ? [] : issues;
+  const reportedWarnings = offSession
+    ? [
+      ...warnings,
+      issue("off_session_freshness_not_required", "warning", {
+        phase,
+        rule: "盤後/閉盤不要求 quote fresh A；正式進場必須等交易時段重新驗水。",
+        rawGateGrade: gateGrade,
+      }),
+    ]
+    : warnings;
 
   const result = {
-    ok: gateGrade === "A",
-    gateGrade,
+    ok: effectiveGateGrade === "A" || offSession,
+    gateGrade: effectiveGateGrade,
+    rawGateGrade: gateGrade,
     writerGateGrade,
     computedGateGrade,
     computedPriorityGateGrade,
@@ -438,9 +452,10 @@ async function main() {
     sourceStatusGateGrade,
     gateMode,
     openingPriorityFirstWindow,
-    formalEntryAllowed: gateGrade === "A" && formalWindow,
-    observationOnly: ["B", "C"].includes(gateGrade),
-    stopNewSignals: gateGrade === "D",
+    offSession,
+    formalEntryAllowed: !offSession && effectiveGateGrade === "A" && formalWindow,
+    observationOnly: !offSession && ["B", "C"].includes(effectiveGateGrade),
+    stopNewSignals: offSession || effectiveGateGrade === "D",
     phase,
     mode: "read-only",
     report: "dedicated-daytrade-source-speed",
@@ -487,8 +502,8 @@ async function main() {
       priorityFreshCoverageTarget: TARGET_PRIORITY_FRESH_QUOTE_COVERAGE,
       fullMarketBlocksA: false,
     },
-    issues,
-    warnings,
+    issues: reportedIssues,
+    warnings: reportedWarnings,
     evidence: {
       sourceName: SOURCE_NAME,
       sourceStatus,
@@ -553,10 +568,10 @@ async function main() {
   };
 
   if (!JSON_ONLY) {
-    console.log(`[dedicated-daytrade-source-speed] source=${SOURCE_NAME} grade=${gateGrade} phase=${phase} formalEntryAllowed=${result.formalEntryAllowed} fresh=${freshQuotes120}/${TARGET_FRESH_QUOTES} coverage=${freshQuoteCoverage120} quoteAge=${quoteAgeSeconds}s required=${requiredSymbolsPerSecond}sym/s batch${ASSUMED_BATCH_SIZE}<=${maxBatchIntervalSeconds}s`);
+    console.log(`[dedicated-daytrade-source-speed] source=${SOURCE_NAME} grade=${result.gateGrade} phase=${phase} formalEntryAllowed=${result.formalEntryAllowed} fresh=${freshQuotes120}/${TARGET_FRESH_QUOTES} coverage=${freshQuoteCoverage120} quoteAge=${quoteAgeSeconds}s required=${requiredSymbolsPerSecond}sym/s batch${ASSUMED_BATCH_SIZE}<=${maxBatchIntervalSeconds}s`);
   }
   console.log(JSON.stringify(result, null, 2));
-  process.exitCode = gateGrade === "A" ? 0 : ["B", "C"].includes(gateGrade) ? 1 : 2;
+  process.exitCode = result.ok ? 0 : ["B", "C"].includes(result.gateGrade) ? 1 : 2;
 }
 
 main().catch((error) => {

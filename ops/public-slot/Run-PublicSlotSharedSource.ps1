@@ -43,7 +43,7 @@ param(
   [int]$FugleCollectorOpeningBoostBatchSize = 20,
   [int]$FugleCollectorOpeningBoostConcurrency = 1,
   [int]$FugleCollectorOpeningBoostDelayMilliseconds = 4000,
-  [bool]$FugleCollectorFinMindRecoveryEnabled = $true,
+  [bool]$FugleCollectorFinMindRecoveryEnabled = $false,
   [int]$FugleCollectorFinMindRecoveryTimeoutMilliseconds = 30000,
   [int]$FugleCollectorLoopMilliseconds = 1000,
   [int]$FugleCollectorBatchSize = 20,
@@ -1676,12 +1676,32 @@ function Write-WebSocketPrioritySymbols {
   param([string[]]$Symbols, [object[]]$QuoteRows, [string]$Reason)
   try {
     $groups = Get-PrioritySymbolGroups -Symbols $Symbols -QuoteRows $QuoteRows
+    $existingPriority = $null
+    try {
+      if (Test-Path -LiteralPath $PrioritySymbolsFile) {
+        $existingPriority = Get-Content -LiteralPath $PrioritySymbolsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+      }
+    } catch {}
+    $daytradePrioritySymbols = @($existingPriority.daytradePrioritySymbols + $existingPriority.daytradeSymbols + $existingPriority.daytrade) |
+      Where-Object { [string]$_ -match '^\d{4}$' } |
+      Select-Object -Unique
+    $terminalPrioritySymbols = @($daytradePrioritySymbols + @($groups.terminalPrioritySymbols)) |
+      Where-Object { [string]$_ -match '^\d{4}$' } |
+      Select-Object -Unique
+    $openingPrioritySymbols = @($daytradePrioritySymbols + @($groups.openingPrioritySymbols)) |
+      Where-Object { [string]$_ -match '^\d{4}$' } |
+      Select-Object -Unique
+    $allPrioritySymbols = @($daytradePrioritySymbols + @($groups.symbols)) |
+      Where-Object { [string]$_ -match '^\d{4}$' } |
+      Select-Object -Unique
     Write-JsonFile -Path $PrioritySymbolsFile -Value ([ordered]@{
       updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
       source = "public-slot-shared-source-priority-pool"
       reason = $Reason
       policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
-      terminalPrioritySymbols = @($groups.terminalPrioritySymbols)
+      daytradePrioritySymbols = @($daytradePrioritySymbols)
+      daytradePriorityCount = @($daytradePrioritySymbols).Count
+      terminalPrioritySymbols = @($terminalPrioritySymbols)
       strategy1 = @($groups.strategy1)
       strategy2 = @($groups.strategy2)
       strategy3 = @($groups.strategy3)
@@ -1697,9 +1717,10 @@ function Write-WebSocketPrioritySymbols {
       dynamicVolumeSurge = @($groups.dynamicVolumeSurge)
       daytradeHotSymbols = @($groups.daytradeHot)
       priorityStrongSymbols = @($groups.priorityStrong)
-      openingPrioritySymbols = @($groups.openingPrioritySymbols)
-      symbols = @($groups.symbols)
+      openingPrioritySymbols = @($openingPrioritySymbols)
+      symbols = @($allPrioritySymbols)
       counts = [ordered]@{
+        daytrade = @($daytradePrioritySymbols).Count
         strategy1 = @($groups.strategy1).Count
         strategy2 = @($groups.strategy2).Count
         strategy3 = @($groups.strategy3).Count
@@ -1718,7 +1739,7 @@ function Write-WebSocketPrioritySymbols {
         dynamicMotherPool = $script:ApiUniverseStats.dynamic_mother_pool_symbols
         daytradeHot = @($groups.daytradeHot).Count
         priorityStrong = @($groups.priorityStrong).Count
-        total = @($groups.symbols).Count
+        total = @($allPrioritySymbols).Count
       }
     })
     return $groups
@@ -3081,6 +3102,46 @@ function Start-FugleWebSocketCollector {
   return "started pid=$($process.Id)"
 }
 
+function Start-FugleFutoptWebSocketCollector {
+  if ($NoStartCollector) { return "disabled" }
+
+  $statusFile = Join-Path $RuntimeDir "state\fugle-futopt-websocket-status.json"
+  $status = Read-JsonFile -Path $statusFile -Default ([pscustomobject]@{})
+  if (Test-ProcessAlive $status.pid) {
+    $existingPid = [int]$status.pid
+    $existingProcess = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
+    if ($null -ne $existingProcess -and $existingProcess.StartTime.Date -lt (Get-Date).Date) {
+      try {
+        Stop-Process -Id $existingPid -Force -ErrorAction Stop
+        Write-Log "WARN restarted stale futopt websocket collector from previous day pid=$existingPid"
+      } catch {
+        Write-Log "WARN unable to stop stale futopt websocket collector pid=$existingPid`: $($_.Exception.Message)"
+        return "stale-futopt-collector-stop-failed pid=$existingPid"
+      }
+    } else {
+      return "already-running pid=$existingPid"
+    }
+  }
+
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  $collector = Join-Path $FumanRoot "scripts\fugle-futopt-websocket-collector.js"
+  if (-not (Test-Path -LiteralPath $nodeExe)) { return "node missing: $nodeExe" }
+  if (-not (Test-Path -LiteralPath $collector)) { return "futopt collector missing: $collector" }
+
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $nodeExe
+  $psi.Arguments = "`"$collector`""
+  $psi.WorkingDirectory = Split-Path -Parent $collector
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.Environment["FUMAN_RUNTIME_DIR"] = $RuntimeDir
+  $psi.Environment["FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "1800"
+  $psi.Environment["FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS"] = "500"
+  $psi.Environment["FUGLE_FUTOPT_STREAMING_CHANNELS"] = "trades,aggregates,candles"
+  $process = [System.Diagnostics.Process]::Start($psi)
+  return "started pid=$($process.Id)"
+}
+
 function Convert-QuotesToRows {
   param([object[]]$Quotes, [object]$Payload)
   $rows = New-Object System.Collections.Generic.List[object]
@@ -4172,11 +4233,14 @@ do {
     $script:SymbolBlacklist = Read-SymbolBlacklist
     $seeded = Initialize-WebSocketSymbols
     $collectorState = Start-FugleWebSocketCollector
+    $futoptCollectorState = Start-FugleFutoptWebSocketCollector
 
     $quotesFile = Join-Path $RuntimeDir "cache\intraday\fugle-ws-quotes.json"
     $wsStatusFile = Join-Path $RuntimeDir "state\fugle-websocket-status.json"
+    $futoptWsStatusFile = Join-Path $RuntimeDir "state\fugle-futopt-websocket-status.json"
     $payload = Read-JsonFile -Path $quotesFile -Default ([pscustomobject]@{})
     $wsStatus = Read-JsonFile -Path $wsStatusFile -Default ([pscustomobject]@{})
+    $futoptWsStatus = Read-JsonFile -Path $futoptWsStatusFile -Default ([pscustomobject]@{})
     $quotes = @($payload.quotes)
     $age = 999999
     if (Test-Path -LiteralPath $quotesFile) {
@@ -4642,6 +4706,8 @@ do {
       session = $session
       collector = $collectorState
       websocket_status = $wsStatus
+      futopt_collector = $futoptCollectorState
+      futopt_websocket_status = $futoptWsStatus
       quotes_file = $quotesFile
       preopen_count = $preopenRows.Count
       futopt_quote_count = $combinedFutoptQuoteRows.Count

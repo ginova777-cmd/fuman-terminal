@@ -2,10 +2,14 @@ const fs = require("fs");
 const path = require("path");
 
 const {
+  FUGLE_WS_CANDLES_FILE,
   FUGLE_WS_QUOTES_FILE,
   FUGLE_WS_STATUS_FILE,
   FUGLE_WS_SYMBOLS_FILE,
   cleanNumber,
+  normalizeFugleAggregate,
+  normalizeFugleCandle,
+  normalizeFugleTrade,
   readJson,
   writeJson,
 } = require("../lib/fugle-websocket-quotes");
@@ -20,6 +24,20 @@ const FINMIND_TOKEN_FILES = [
   "C:/fuman-terminal/secrets/finmind-api-token.txt",
 ];
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
+const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
+const STREAMING_URL = process.env.FUGLE_STREAMING_URL || "wss://api.fugle.tw/marketdata/v1.0/stock/streaming";
+const STREAMING_CHANNELS = [...new Set(String(process.env.FUGLE_STREAMING_CHANNELS || process.env.FUGLE_STREAMING_CHANNEL || "trades,aggregates,candles")
+  .split(",")
+  .map((channel) => channel.trim().toLowerCase())
+  .filter(Boolean))];
+if (!STREAMING_CHANNELS.length) STREAMING_CHANNELS.push("trades", "aggregates");
+const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
+const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 450));
+const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
+const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
+const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || 60000));
+const STREAMING_RECONNECT_MS = Math.max(3000, Number(process.env.FUGLE_STREAMING_RECONNECT_MS || 10000));
+const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
 const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 2)));
@@ -27,9 +45,10 @@ const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TT
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
-const FINMIND_RECOVERY_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "1"));
+const FINMIND_RECOVERY_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "0"));
 const FINMIND_RECOVERY_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_TIMEOUT_MS || 30000));
 const FINMIND_IP_BAN_COOLDOWN_MS = Math.max(600000, Number(process.env.FUGLE_COLLECTOR_FINMIND_IP_BAN_COOLDOWN_MS || 21600000));
+const FINMIND_QUOTA_COOLDOWN_MS = Math.max(FINMIND_IP_BAN_COOLDOWN_MS, Number(process.env.FUGLE_COLLECTOR_FINMIND_QUOTA_COOLDOWN_MS || 21600000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
 const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "13:30";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 120));
@@ -107,6 +126,11 @@ function writeStatus(extra = {}) {
     requestRetries: REQUEST_RETRIES,
     primarySource: "fugle",
     fallbackSource: "finmind",
+    finmindPolicy: "diagnostic_low_frequency_only_not_formal_publish",
+    finmindFormalPublishAllowed: false,
+    finmindFallbackBlocksLatest: true,
+    finmindFallbackPreservePreviousGood: true,
+    finmindStopRetryOn402403: true,
     finmindRecoveryEnabled: FINMIND_RECOVERY_ENABLED,
     finmindRecoveryTimeoutMs: FINMIND_RECOVERY_TIMEOUT_MS,
     finmindRecoveryCooldownUntil: finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : "",
@@ -127,6 +151,25 @@ function writeStatus(extra = {}) {
     updatedAt: nowIso(),
     ...extra,
   });
+}
+
+function getStreamingNotice(payload, text) {
+  const eventName = String(payload?.event || payload?.type || "").toLowerCase();
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  const notice = [
+    payload?.message,
+    payload?.error,
+    payload?.reason,
+    data.message,
+    data.error,
+    data.reason,
+  ].filter(Boolean).join(" ");
+  const noticeText = String(notice || "").trim();
+  if (noticeText) return { eventName, noticeText };
+  if (!payload && /forbidden|rate.?limit|subscribe.?limit|exceed/i.test(String(text || ""))) {
+    return { eventName: "raw", noticeText: String(text || "").slice(0, 600) };
+  }
+  return { eventName, noticeText: "" };
 }
 
 function minutesFromHHmm(value, fallback) {
@@ -321,6 +364,7 @@ function readPrioritySymbols(symbols) {
     threeDayOpenHighFade: 0,
     dynamic: 0,
     hot: 0,
+    daytrade: 0,
     terminalPriority: 0,
     openingPriority: 0,
     symbols: 0,
@@ -344,6 +388,7 @@ function readPrioritySymbols(symbols) {
     counts[key] = count;
   };
 
+  addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
   addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, { priority: true });
@@ -553,18 +598,28 @@ function normalizeFinMindQuote(row, today) {
     quoteSource: "finmind",
     realtimeFallback: "finmind",
     recoveredFromRealtimeFallback: true,
+    fallbackUsed: true,
+    fallbackScope: ["finmind_realtime_snapshot_recovery"],
+    fallbackAllowed: false,
+    fallbackDetails: [{ source: "finmind", rule: "diagnostic-only; never formal daytrade publish" }],
+    formalPublishEligible: false,
+    preservePreviousGood: true,
   };
 }
 
 function applyFinMindCooldown(status, payload) {
   const retryAfterSeconds = Number(payload?.retry_after || payload?.retryAfter || 0);
   const message = String(payload?.msg || payload?.message || payload?.error || "").toLowerCase();
+  if (status === 402) {
+    finmindCooldownUntil = Date.now() + FINMIND_QUOTA_COOLDOWN_MS;
+    return;
+  }
   if (status === 403 && message.includes("ban")) {
     finmindCooldownUntil = Date.now() + FINMIND_IP_BAN_COOLDOWN_MS;
     return;
   }
   if ((status === 403 || status === 429 || retryAfterSeconds > 0) && retryAfterSeconds >= 0) {
-    const floorSeconds = status === 403 || status === 429 ? 60 : 0;
+    const floorSeconds = status === 403 ? Math.ceil(FINMIND_IP_BAN_COOLDOWN_MS / 1000) : status === 429 ? 60 : 0;
     finmindCooldownUntil = Date.now() + Math.max(floorSeconds, retryAfterSeconds) * 1000;
   }
 }
@@ -886,6 +941,295 @@ async function tick() {
   });
 }
 
+function chunkArray(values, size) {
+  const out = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
+function selectStreamingSymbols() {
+  const allSymbols = readSymbols();
+  const priority = readPrioritySymbols(allSymbols);
+  const maxSymbolsBySubscriptionBudget = Math.max(1, Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, STREAMING_CHANNELS.length)));
+  const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, maxSymbolsBySubscriptionBudget);
+  const seen = new Set();
+  const ordered = [];
+  const add = (code) => {
+    const symbol = normalizeCode(code);
+    if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
+      seen.add(symbol);
+      ordered.push(symbol);
+    }
+  };
+  for (const code of priority.symbols) add(code);
+  for (const code of allSymbols) add(code);
+  return {
+    allSymbols,
+    priority,
+    selected: ordered.slice(0, symbolLimit),
+    requested: ordered.length,
+    symbolLimit,
+    totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+  };
+}
+
+function mergeStreamingQuotes(newQuotes) {
+  const current = readJson(FUGLE_WS_QUOTES_FILE, {});
+  const rows = Array.isArray(current.quotes) ? current.quotes : [];
+  const cutoff = Date.now() - QUOTE_TTL_MS;
+  const byCode = new Map();
+  for (const row of rows) {
+    const seen = Date.parse(row.quoteSeenAt || row.updatedAt || current.updatedAt || "");
+    const code = normalizeCode(row.code);
+    if (/^\d{4}$/.test(code) && Number.isFinite(seen) && seen >= cutoff) byCode.set(code, row);
+  }
+  for (const quote of newQuotes) byCode.set(quote.code, quote);
+  const quotes = [...byCode.values()].sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  writeJson(FUGLE_WS_QUOTES_FILE, {
+    source: "fugle-websocket-streaming",
+    channel: `websocket:${STREAMING_CHANNEL}`,
+    channels: STREAMING_CHANNELS,
+    updatedAt: nowIso(),
+    count: quotes.length,
+    quotes,
+  });
+  return quotes.length;
+}
+
+function mergeStreamingCandles(newCandles) {
+  const current = readJson(FUGLE_WS_CANDLES_FILE, {});
+  const rows = Array.isArray(current.candles) ? current.candles : [];
+  const cutoff = Date.now() - Math.max(QUOTE_TTL_MS, 10 * 60 * 1000);
+  const byKey = new Map();
+  for (const row of rows) {
+    const seen = Date.parse(row.candleSeenAt || row.updatedAt || current.updatedAt || "");
+    const code = normalizeCode(row.code || row.symbol);
+    const candleTime = row.candleTime || row.date || "";
+    if (/^\d{4}$/.test(code) && candleTime && Number.isFinite(seen) && seen >= cutoff) {
+      byKey.set(`${code}|${candleTime}`, row);
+    }
+  }
+  for (const candle of newCandles) byKey.set(`${candle.code}|${candle.candleTime}`, candle);
+  const candles = [...byKey.values()].sort((a, b) => {
+    const byCode = String(a.code || a.symbol).localeCompare(String(b.code || b.symbol));
+    if (byCode) return byCode;
+    return Date.parse(a.candleTime || "") - Date.parse(b.candleTime || "");
+  });
+  writeJson(FUGLE_WS_CANDLES_FILE, {
+    source: "fugle-websocket-streaming",
+    channel: "websocket:candles",
+    updatedAt: nowIso(),
+    count: candles.length,
+    candles,
+  });
+  return candles.length;
+}
+
+async function runStreamingCollector() {
+  const apiKey = readSecret(API_KEY_FILES);
+  if (!apiKey) {
+    writeStatus({
+      ok: false,
+      mode: "streaming",
+      channel: `websocket:${STREAMING_CHANNEL}`,
+      source: "fugle-websocket-streaming",
+      error: "fugle api key missing",
+      restDisabled: true,
+    });
+    return;
+  }
+
+  const runOnce = () => new Promise((resolve) => {
+    let selection = selectStreamingSymbols();
+    let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
+    let ws;
+    let openedAt = "";
+    let authenticated = false;
+    let messages = 0;
+    let quoteMessages = 0;
+    let candleMessages = 0;
+    const channelMessages = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
+    const channelQuotes = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
+    const channelCandles = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
+    let chunksSent = 0;
+    let cycles = 0;
+    let forbiddenChunks = 0;
+    let forbiddenSymbols = 0;
+    let lastForbiddenAt = "";
+    let lastForbiddenMessage = "";
+    let lastForbiddenEvent = "";
+    let lastForbiddenChannel = "";
+    let lastSubscribeCycleAt = "";
+    let lastSubscribeSignature = "";
+    let closed = false;
+    const writeStreamingStatus = (extra = {}) => {
+      const freshCount = countFreshCachedQuotes(selection.selected);
+      writeStatus({
+        mode: "streaming",
+        channel: `websocket:${STREAMING_CHANNEL}`,
+        primarySource: "fugle-websocket",
+        fallbackSource: "none",
+        restDisabled: true,
+        streamingUrl: STREAMING_URL,
+        streamingChannel: STREAMING_CHANNEL,
+        streamingChannels: STREAMING_CHANNELS,
+        streamingOpenedAt: openedAt,
+        websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
+        websocketAuthenticated: authenticated,
+        streamingMessages: messages,
+        streamingQuotes: quoteMessages,
+        streamingCandles: candleMessages,
+        streamingChannelMessages: channelMessages,
+        streamingChannelQuotes: channelQuotes,
+        streamingChannelCandles: channelCandles,
+        subscribed: selection.selected.length * STREAMING_CHANNELS.length,
+        subscribedSymbols: selection.selected.length,
+        subscribedChannels: STREAMING_CHANNELS.length,
+        pending: Math.max(0, selection.requested - selection.selected.length),
+        requestedSymbols: selection.requested,
+        allSymbols: selection.allSymbols.length,
+        prioritySymbols: selection.priority.symbols.length,
+        priorityFreshCount: freshCount,
+        prioritySource: selection.priority.source,
+        priorityFileUpdatedAt: selection.priority.updatedAt,
+        priorityDaytradeSymbols: selection.priority.counts.daytrade,
+        priorityTerminalSymbols: selection.priority.counts.terminalPriority,
+        priorityOpeningSymbols: selection.priority.counts.openingPriority,
+        priorityStrategy1Symbols: selection.priority.counts.strategy1,
+        priorityStrategy2Symbols: selection.priority.counts.strategy2,
+        priorityStrategy3Symbols: selection.priority.counts.strategy3,
+        priorityStrategy4Symbols: selection.priority.counts.strategy4,
+        priorityStrategy5Symbols: selection.priority.counts.strategy5,
+        priorityInstitutionSymbols: selection.priority.counts.institution,
+        priorityWarrantSymbols: selection.priority.counts.warrant,
+        priorityCbSymbols: selection.priority.counts.cb,
+        priorityRealtimeRadarSymbols: selection.priority.counts.realtimeRadar,
+        priorityThreeDayOpenHighFadeSymbols: selection.priority.counts.threeDayOpenHighFade,
+        priorityDynamicSymbols: selection.priority.counts.dynamic,
+        priorityHotSymbols: selection.priority.counts.hot,
+        subscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+        subscriptionSymbolLimit: selection.symbolLimit,
+        subscriptionLimitApplied: selection.requested > selection.selected.length || selection.selected.length * STREAMING_CHANNELS.length >= STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+        subscribeChunkSize: STREAMING_SUBSCRIBE_CHUNK_SIZE,
+        subscribeChunks: chunks.length * STREAMING_CHANNELS.length,
+        subscribeChunksSent: chunksSent,
+        subscribeCycles: cycles,
+        lastSubscribeCycleAt,
+        resubscribeEveryMs: STREAMING_RESUBSCRIBE_MS,
+        subscribeForbiddenChunks: forbiddenChunks,
+        subscribeForbiddenSymbols: forbiddenSymbols,
+        subscribeForbiddenLastAt: lastForbiddenAt,
+        subscribeForbiddenLastEvent: lastForbiddenEvent,
+        subscribeForbiddenLastChannel: lastForbiddenChannel,
+        subscribeForbiddenLastMessage: lastForbiddenMessage,
+        ...extra,
+      });
+    };
+    const subscribe = () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      selection = selectStreamingSymbols();
+      chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
+      const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selected.join(",")}`;
+      if (lastSubscribeSignature && signature === lastSubscribeSignature) {
+        writeStreamingStatus();
+        return;
+      }
+      if (lastSubscribeSignature && signature !== lastSubscribeSignature) {
+        ws.close(1000, "priority selection changed; reconnect before resubscribe");
+        return;
+      }
+      lastSubscribeSignature = signature;
+      cycles += 1;
+      lastSubscribeCycleAt = nowIso();
+      for (const channel of STREAMING_CHANNELS) {
+        for (const symbols of chunks) {
+          ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbols } }));
+          chunksSent += 1;
+        }
+      }
+      writeStreamingStatus();
+    };
+
+    try {
+      ws = new WebSocket(STREAMING_URL);
+      ws.addEventListener("open", () => {
+        openedAt = nowIso();
+        ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
+        setTimeout(subscribe, 800);
+        writeStreamingStatus();
+      });
+      ws.addEventListener("message", (event) => {
+        messages += 1;
+        let payload = null;
+        try { payload = JSON.parse(String(event.data || "")); } catch {}
+        const text = String(event.data || "");
+        if (/authenticated|auth/i.test(text)) authenticated = true;
+        const notice = getStreamingNotice(payload, text);
+        if (/forbidden|rate.?limit|subscribe.?limit|exceed/i.test(notice.noticeText)) {
+          forbiddenChunks += 1;
+          forbiddenSymbols += STREAMING_SUBSCRIBE_CHUNK_SIZE;
+          lastForbiddenAt = nowIso();
+          lastForbiddenMessage = notice.noticeText.slice(0, 600);
+          lastForbiddenEvent = notice.eventName.slice(0, 120);
+          lastForbiddenChannel = String(payload?.data?.channel || payload?.channel || "").slice(0, 80);
+        }
+        const data = payload?.data || payload || {};
+        const payloadChannel = String(data.channel || payload?.channel || "").toLowerCase();
+        const inferredChannel = payloadChannel
+          || (Object.prototype.hasOwnProperty.call(data, "serial") || Object.prototype.hasOwnProperty.call(data, "size") ? "trades" : "")
+          || (Object.prototype.hasOwnProperty.call(data, "open") && Object.prototype.hasOwnProperty.call(data, "close") && data.date ? "candles" : "")
+          || (data.total || data.bids || data.asks || Object.prototype.hasOwnProperty.call(data, "openPrice") ? "aggregates" : "")
+          || STREAMING_CHANNELS[0];
+        if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
+        if (inferredChannel === "candles") {
+          const candle = normalizeFugleCandle(payload);
+          if (candle) {
+            candleMessages += 1;
+            if (Object.prototype.hasOwnProperty.call(channelCandles, inferredChannel)) channelCandles[inferredChannel] += 1;
+            lastMessageAt = nowIso();
+            mergeStreamingCandles([candle]);
+          }
+          return;
+        }
+        const quote = inferredChannel === "trades"
+          ? normalizeFugleTrade(payload)
+          : normalizeFugleAggregate(payload);
+        if (quote) {
+          quoteMessages += 1;
+          if (Object.prototype.hasOwnProperty.call(channelQuotes, inferredChannel)) channelQuotes[inferredChannel] += 1;
+          lastMessageAt = nowIso();
+          mergeStreamingQuotes([quote]);
+        }
+      });
+      ws.addEventListener("error", (event) => {
+        writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
+      });
+      ws.addEventListener("close", () => {
+        closed = true;
+        writeStreamingStatus({ websocketConnected: false });
+        resolve();
+      });
+      const statusTimer = setInterval(() => {
+        if (closed) clearInterval(statusTimer);
+        else writeStreamingStatus();
+      }, STREAMING_STATUS_MS);
+      const subscribeTimer = setInterval(() => {
+        if (closed) clearInterval(subscribeTimer);
+        else subscribe();
+      }, STREAMING_RESUBSCRIBE_MS);
+    } catch (error) {
+      writeStreamingStatus({ ok: false, websocketError: error?.message || String(error) });
+      resolve();
+    }
+  });
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await runOnce();
+    await new Promise((resolve) => setTimeout(resolve, STREAMING_RECONNECT_MS));
+  }
+}
+
 async function main() {
   writeStatus({ subscribed: readSymbols().length, quotes: 0, starting: true });
   // eslint-disable-next-line no-constant-condition
@@ -899,4 +1243,17 @@ async function main() {
   }
 }
 
-main();
+if (COLLECTOR_MODE === "rest") {
+  main();
+} else {
+  runStreamingCollector().catch((error) => {
+    writeStatus({
+      ok: false,
+      mode: "streaming",
+      channel: `websocket:${STREAMING_CHANNEL}`,
+      restDisabled: true,
+      websocketError: error?.message || String(error),
+    });
+    process.exit(1);
+  });
+}

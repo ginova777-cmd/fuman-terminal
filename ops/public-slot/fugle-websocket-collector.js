@@ -27,9 +27,10 @@ const QUOTE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_COLLECTOR_QUOTE_TT
 const REQUEST_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_REQUEST_TIMEOUT_MS || 15000));
 const REQUEST_RETRIES = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_RETRIES || 2));
 const REQUEST_RETRY_BACKOFF_MS = Math.max(100, Number(process.env.FUGLE_COLLECTOR_RETRY_BACKOFF_MS || 500));
-const FINMIND_RECOVERY_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "1"));
+const FINMIND_RECOVERY_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_ENABLED || "0"));
 const FINMIND_RECOVERY_TIMEOUT_MS = Math.max(3000, Number(process.env.FUGLE_COLLECTOR_FINMIND_RECOVERY_TIMEOUT_MS || 30000));
 const FINMIND_IP_BAN_COOLDOWN_MS = Math.max(600000, Number(process.env.FUGLE_COLLECTOR_FINMIND_IP_BAN_COOLDOWN_MS || 21600000));
+const FINMIND_QUOTA_COOLDOWN_MS = Math.max(FINMIND_IP_BAN_COOLDOWN_MS, Number(process.env.FUGLE_COLLECTOR_FINMIND_QUOTA_COOLDOWN_MS || 21600000));
 const OPENING_BOOST_START = process.env.FUGLE_COLLECTOR_OPENING_BOOST_START || "08:45";
 const OPENING_BOOST_END = process.env.FUGLE_COLLECTOR_OPENING_BOOST_END || "13:30";
 const OPENING_BOOST_BATCH_SIZE = Math.max(BATCH_SIZE, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_BATCH_SIZE || 120));
@@ -107,6 +108,11 @@ function writeStatus(extra = {}) {
     requestRetries: REQUEST_RETRIES,
     primarySource: "fugle",
     fallbackSource: "finmind",
+    finmindPolicy: "diagnostic_low_frequency_only_not_formal_publish",
+    finmindFormalPublishAllowed: false,
+    finmindFallbackBlocksLatest: true,
+    finmindFallbackPreservePreviousGood: true,
+    finmindStopRetryOn402403: true,
     finmindRecoveryEnabled: FINMIND_RECOVERY_ENABLED,
     finmindRecoveryTimeoutMs: FINMIND_RECOVERY_TIMEOUT_MS,
     finmindRecoveryCooldownUntil: finmindCooldownUntil ? new Date(finmindCooldownUntil).toISOString() : "",
@@ -553,18 +559,28 @@ function normalizeFinMindQuote(row, today) {
     quoteSource: "finmind",
     realtimeFallback: "finmind",
     recoveredFromRealtimeFallback: true,
+    fallbackUsed: true,
+    fallbackScope: ["finmind_realtime_snapshot_recovery"],
+    fallbackAllowed: false,
+    fallbackDetails: [{ source: "finmind", rule: "diagnostic-only; never formal daytrade publish" }],
+    formalPublishEligible: false,
+    preservePreviousGood: true,
   };
 }
 
 function applyFinMindCooldown(status, payload) {
   const retryAfterSeconds = Number(payload?.retry_after || payload?.retryAfter || 0);
   const message = String(payload?.msg || payload?.message || payload?.error || "").toLowerCase();
+  if (status === 402) {
+    finmindCooldownUntil = Date.now() + FINMIND_QUOTA_COOLDOWN_MS;
+    return;
+  }
   if (status === 403 && message.includes("ban")) {
     finmindCooldownUntil = Date.now() + FINMIND_IP_BAN_COOLDOWN_MS;
     return;
   }
   if ((status === 403 || status === 429 || retryAfterSeconds > 0) && retryAfterSeconds >= 0) {
-    const floorSeconds = status === 403 || status === 429 ? 60 : 0;
+    const floorSeconds = status === 403 ? Math.ceil(FINMIND_IP_BAN_COOLDOWN_MS / 1000) : status === 429 ? 60 : 0;
     finmindCooldownUntil = Date.now() + Math.max(floorSeconds, retryAfterSeconds) * 1000;
   }
 }

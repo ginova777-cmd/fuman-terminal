@@ -1,6 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 const { runtimePath, cachePath, statePath, repoPath } = require("./runtime-paths");
+const {
+  FUGLE_WS_STATUS_FILE,
+  readFugleWebSocketCandles,
+  readFugleWebSocketQuotes,
+} = require("../lib/fugle-websocket-quotes");
+const {
+  readFugleFutoptWebSocketQuotes,
+} = require("../lib/fugle-futopt-websocket");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
@@ -15,6 +23,8 @@ const LOCAL_CHECK = hasFlag("local-check");
 const NO_FETCH = hasFlag("no-fetch") || envFlag("FUMAN_DAYTRADE_WRITER_NO_FETCH");
 const FETCH_ENABLED = !NO_FETCH && (APPLY || hasFlag("fetch") || envFlag("FUMAN_DAYTRADE_WRITER_FETCH"));
 const ONCE = hasFlag("once") || envFlag("FUMAN_DAYTRADE_WRITER_ONCE");
+const SUPABASE_READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ_TIMEOUT_MS || 8000));
+const SUPABASE_WRITE_TIMEOUT_MS = Math.max(5000, Number(process.env.DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS || 12000));
 
 const DEFAULT_CONFIG = {
   loopSeconds: 5,
@@ -71,6 +81,8 @@ const RECENT_429_BLOCK_SECONDS = positiveNumber(CONFIG.rateLimitGate?.recent429B
 const FULL_MARKET_PAUSE_MIN_SECONDS = positiveNumber(CONFIG.rateLimitGate?.pauseFullMarketAfter429SecondsMin, 60);
 const FULL_MARKET_PAUSE_MAX_SECONDS = positiveNumber(CONFIG.rateLimitGate?.pauseFullMarketAfter429SecondsMax, 180);
 const MAX_INTRADAY_1M_STALE_SECONDS = positiveNumber(CONFIG.intraday1m?.maxStaleSeconds, 120);
+const WEBSOCKET_CANDLE_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_WEBSOCKET_CANDLE_MAX_AGE_MS, 10 * 60 * 1000);
+const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_WEBSOCKET_MAX_AGE_MS, 5 * 60 * 1000);
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
 const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
@@ -193,6 +205,17 @@ function taipeiDate() {
   }).format(new Date());
 }
 
+function taipeiDateFrom(value) {
+  const parsed = Date.parse(String(value || ""));
+  if (!Number.isFinite(parsed)) return taipeiDate();
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(parsed));
+}
+
 function taipeiMinutes() {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Taipei",
@@ -265,7 +288,7 @@ async function supabaseGet(resource, query = "", options = {}) {
   const response = await fetch(url, {
     method: "GET",
     headers: headers(key),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${resource} HTTP ${response.status}: ${text.slice(0, 240)}`);
@@ -284,7 +307,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
         ...headers(key),
         Range: `${offset}-${offset + pageSize - 1}`,
       },
-      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`${resource} HTTP ${response.status}: ${text.slice(0, 240)}`);
@@ -311,7 +334,7 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
         Prefer: "resolution=merge-duplicates",
       },
       body: JSON.stringify(chunk),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(45000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -334,7 +357,7 @@ async function supabaseInsert(resource, rows, options = {}) {
       method: "POST",
       headers: headers(key),
       body: JSON.stringify(chunk),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(45000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
     });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -425,16 +448,67 @@ async function fetchDailyVolumeAvg() {
 }
 
 async function fetchExistingDaytradeQuotes() {
+  const quoteMap = new Map();
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
       "select=symbol,quote_seen_at,updated_at,last_trade_time,price,total_volume,trade_value&order=symbol.asc",
       { service: true },
     );
-    return new Map(rows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (symbol) quoteMap.set(symbol, row);
+    }
   } catch {
-    return new Map();
+    // Still evaluate the WebSocket cache so a transient Supabase quote read
+    // does not become a false zero-freshness gate.
   }
+  mergeWebSocketQuoteCache(quoteMap);
+  return quoteMap;
+}
+
+function mergeWebSocketQuoteCache(quoteMap) {
+  const cache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
+  for (const [code, row] of cache.quotes.entries()) {
+    const symbol = normalizeCode(code || row.code || row.symbol);
+    if (!symbol) continue;
+    if (isFinMindDiagnosticQuote(row)) continue;
+    const seenAt = row.quoteSeenAt || row.updatedAt || cache.payload?.updatedAt || nowIso();
+    quoteMap.set(symbol, {
+      symbol,
+      market: row.market || "",
+      quote_seen_at: seenAt,
+      updated_at: seenAt,
+      last_trade_time: row.lastTradeTime || row.quoteTime || row.time || seenAt,
+      price: numberValue(row.close ?? row.price),
+      total_volume: numberValue(row.tradeVolume ?? row.total_volume),
+      trade_value: numberValue(row.tradeValue ?? row.trade_value),
+      payload: {
+        ...(row.payload || {}),
+        source: "fugle-websocket-cache",
+        quoteSource: row.quoteSource || row.closeSource || "fugle-ws",
+        cacheUpdatedAt: cache.payload?.updatedAt || "",
+      },
+    });
+  }
+}
+
+function isFinMindDiagnosticQuote(row) {
+  const payload = row?.payload || {};
+  const markers = [
+    row?.quoteSource,
+    row?.closeSource,
+    row?.realtimeFallback,
+    payload.quoteSource,
+    payload.closeSource,
+    payload.realtimeFallback,
+    payload.source,
+  ].filter(Boolean).join("|").toLowerCase();
+  return markers.includes("finmind")
+    || row?.fallbackUsed === true
+    || row?.formalPublishEligible === false
+    || payload.fallbackUsed === true
+    || payload.formalPublishEligible === false;
 }
 
 async function fetchIntradayStatus() {
@@ -500,10 +574,18 @@ function readRuntimePrioritySeeds(activeSymbols) {
     counts[source] = accepted;
   };
 
+  addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, 120);
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
   addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, 90);
+  addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, 90);
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, 90);
+  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, 80);
+  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols, 80);
+  addMany("institution", payload.institution || payload.institutionSymbols, 75);
+  addMany("warrant", payload.warrant || payload.warrantSymbols, 70);
+  addMany("cb", payload.cb || payload.cbSymbols, 60);
+  addMany("realtime_radar", payload.realtimeRadar || payload.realtimeRadarSymbols, 75);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("symbols", payload.symbols, 10);
 
@@ -569,6 +651,99 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap) {
       },
     }));
   return rows;
+}
+
+function publishDaytradePrioritySymbols(priorityRows) {
+  const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const daytradePrioritySymbols = priorityRows
+    .map((row) => normalizeCode(row.symbol))
+    .filter((code) => /^\d{4}$/.test(code));
+  const prependUnique = (preferred, values) => {
+    const seen = new Set();
+    const out = [];
+    for (const value of [...preferred, ...(Array.isArray(values) ? values : [])]) {
+      const code = normalizeCode(value?.symbol || value?.code || value);
+      if (/^\d{4}$/.test(code) && !seen.has(code)) {
+        seen.add(code);
+        out.push(code);
+      }
+    }
+    return out;
+  };
+  writeJson(PRIORITY_SYMBOLS_FILE, {
+    ...existing,
+    updatedAt: nowIso(),
+    source: "daytrade-dedicated-priority-bridge",
+    daytradePrioritySymbols,
+    daytradePriorityCount: daytradePrioritySymbols.length,
+    terminalPrioritySymbols: prependUnique(daytradePrioritySymbols, existing.terminalPrioritySymbols || existing.terminalSymbols || existing.terminalPriority),
+    openingPrioritySymbols: prependUnique(daytradePrioritySymbols, existing.openingPrioritySymbols || existing.primaryPrioritySymbols),
+    symbols: prependUnique(daytradePrioritySymbols, existing.symbols),
+  });
+}
+
+function countPriorityValues(values, universe) {
+  if (!Array.isArray(values)) return 0;
+  const seen = new Set();
+  for (const value of values) {
+    const symbol = normalizeCode(value?.symbol || value?.code || value);
+    if (symbol && universe.has(symbol)) seen.add(symbol);
+  }
+  return seen.size;
+}
+
+function readRuntimePrioritySummary(activeSymbols) {
+  const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const universe = new Set(activeSymbols.map((row) => row.symbol));
+  const strategy1 = countPriorityValues(payload.strategy1 || payload.strategy1Symbols, universe);
+  const strategy2 = countPriorityValues(payload.strategy2 || payload.strategy2Symbols, universe);
+  const strategy3 = countPriorityValues(payload.strategy3 || payload.strategy3Symbols, universe);
+  const strategy4 = countPriorityValues(payload.strategy4 || payload.strategy4Symbols, universe);
+  const strategy5 = countPriorityValues(payload.strategy5 || payload.strategy5Symbols, universe);
+  const institution = countPriorityValues(payload.institution || payload.institutionSymbols, universe);
+  const warrant = countPriorityValues(payload.warrant || payload.warrantSymbols, universe);
+  const cb = countPriorityValues(payload.cb || payload.cbSymbols, universe);
+  const realtimeRadar = countPriorityValues(payload.realtimeRadar || payload.realtimeRadarSymbols, universe);
+  return {
+    source: payload.source || "",
+    updatedAt: payload.updatedAt || "",
+    daytrade: countPriorityValues(payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, universe),
+    terminal: countPriorityValues(payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, universe),
+    opening: countPriorityValues(payload.openingPrioritySymbols || payload.primaryPrioritySymbols, universe),
+    strategy1,
+    strategy2,
+    strategy3,
+    strategy4,
+    strategy5,
+    institution,
+    warrant,
+    cb,
+    realtimeRadar,
+    strategyPriority: strategy1 + strategy2 + strategy3 + strategy4 + strategy5 + institution + warrant + cb + realtimeRadar,
+    total: countPriorityValues(payload.symbols, universe),
+  };
+}
+
+function readWebSocketStatusSummary() {
+  const status = readJson(FUGLE_WS_STATUS_FILE, {});
+  return {
+    ok: status.ok !== false,
+    mode: status.mode || "",
+    channel: status.channel || "",
+    streamingChannel: status.streamingChannel || "",
+    streamingChannels: Array.isArray(status.streamingChannels) ? status.streamingChannels : [],
+    connected: Boolean(status.websocketConnected),
+    authenticated: Boolean(status.websocketAuthenticated),
+    subscribed: numberValue(status.subscribed),
+    subscribedSymbols: numberValue(status.subscribedSymbols),
+    subscribedChannels: numberValue(status.subscribedChannels),
+    streamingMessages: numberValue(status.streamingMessages),
+    streamingQuotes: numberValue(status.streamingQuotes),
+    priorityDaytradeSymbols: numberValue(status.priorityDaytradeSymbols),
+    priorityFileUpdatedAt: status.priorityFileUpdatedAt || "",
+    restDisabled: Boolean(status.restDisabled),
+    updatedAt: status.updatedAt || "",
+  };
 }
 
 function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state) {
@@ -715,6 +890,11 @@ async function fetchQuoteBatch(symbols) {
 
 function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, fetchResult, state }) {
   const phase = phaseNow();
+  const runtimePriority = readRuntimePrioritySummary(activeSymbols);
+  const webSocketStatus = readWebSocketStatusSummary();
+  const quoteTransport = webSocketStatus.mode === "streaming"
+    ? `websocket_${(webSocketStatus.streamingChannel || "streaming").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}`
+    : "rest_quote";
   const after0830 = ["preopen_prepare_0830_0844", "opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0845 = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0900 = ["opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
@@ -813,8 +993,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   });
   const fullMarketGateA = freshFull.length >= TARGET_FRESH_QUOTES && freshQuoteCoverage >= MIN_FRESH_QUOTE_COVERAGE;
   const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : freshFull.length > 0 ? "C" : "D";
-  const status = gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
-  const message = gateGrade === "A"
+  const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
+  const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
+  const message = offSession
+    ? `dedicated daytrade source stopped off-session; latest formal entry disabled; priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount}`
+    : gateGrade === "A"
     ? "dedicated daytrade source priority gate A"
     : `dedicated daytrade source ${gateGrade}; priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount} rate=${rateLimitStatus}`;
 
@@ -833,6 +1016,38 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     quote_age_seconds: priorityPoolSymbols ? priorityMaxAge : latestQuoteAge,
     required_quote_speed_per_sec: REQUIRED_SYMBOLS_PER_SECOND,
     actual_quote_speed_per_sec: actualQuoteSpeed,
+    quote_transport: quoteTransport,
+    websocket_status_ok: webSocketStatus.ok,
+    websocket_mode: webSocketStatus.mode,
+    websocket_channel: webSocketStatus.channel,
+    websocket_streaming_channel: webSocketStatus.streamingChannel,
+    websocket_streaming_channels: webSocketStatus.streamingChannels,
+    websocket_connected: webSocketStatus.connected,
+    websocket_authenticated: webSocketStatus.authenticated,
+    websocket_subscribed: webSocketStatus.subscribed,
+    websocket_subscribed_symbols: webSocketStatus.subscribedSymbols,
+    websocket_subscribed_channels: webSocketStatus.subscribedChannels,
+    websocket_streaming_messages: webSocketStatus.streamingMessages,
+    websocket_streaming_quotes: webSocketStatus.streamingQuotes,
+    websocket_rest_disabled: webSocketStatus.restDisabled,
+    websocket_priority_daytrade_symbols: webSocketStatus.priorityDaytradeSymbols,
+    websocket_priority_file_updated_at: webSocketStatus.priorityFileUpdatedAt,
+    websocket_status_updated_at: webSocketStatus.updatedAt,
+    runtime_priority_source: runtimePriority.source,
+    runtime_priority_updated_at: runtimePriority.updatedAt,
+    daytrade_priority_symbols: runtimePriority.daytrade,
+    terminal_priority_symbols: runtimePriority.terminal,
+    opening_priority_symbols: runtimePriority.opening,
+    strategy_priority_symbols: runtimePriority.strategyPriority,
+    strategy1_priority_symbols: runtimePriority.strategy1,
+    strategy2_priority_symbols: runtimePriority.strategy2,
+    strategy3_priority_symbols: runtimePriority.strategy3,
+    strategy4_priority_symbols: runtimePriority.strategy4,
+    strategy5_priority_symbols: runtimePriority.strategy5,
+    institution_priority_symbols: runtimePriority.institution,
+    warrant_priority_symbols: runtimePriority.warrant,
+    cb_priority_symbols: runtimePriority.cb,
+    realtime_radar_priority_symbols: runtimePriority.realtimeRadar,
     batch_size: BATCH_SIZE,
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
     priority_symbols: priorityPoolSymbols,
@@ -866,6 +1081,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     last_self_heal_at: state.lastSelfHealAt || null,
     last_self_heal_reason: state.lastSelfHealReason || "",
     phase,
+    off_session: offSession,
+    formal_entry_allowed: !offSession && gateGrade === "A",
+    latest_update_allowed: !offSession && gateGrade === "A",
+    preserve_previous_good: offSession || gateGrade !== "A",
     apply_mode: APPLY,
     fetch_enabled: FETCH_ENABLED,
     quote_fetch_allowed_for_phase: quoteFetchAllowedForPhase(phase),
@@ -969,6 +1188,79 @@ async function syncDailyVolumeMirror(dailyVolumeMap, priorityRows) {
   await supabaseUpsert("fugle_daytrade_daily_volume_avg", rows, "symbol");
 }
 
+async function syncWebSocketIntraday1mCandles(priorityRows) {
+  const prioritySymbols = new Set(priorityRows.map((row) => normalizeCode(row.symbol)).filter(Boolean));
+  const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_MAX_AGE_MS });
+  const rows = [];
+  for (const candle of cache.candles.values()) {
+    const symbol = normalizeCode(candle.symbol || candle.code);
+    if (!symbol || (prioritySymbols.size && !prioritySymbols.has(symbol))) continue;
+    const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
+    if (!candleTime || !numberValue(candle.close)) continue;
+    rows.push({
+      symbol,
+      market: candle.market || "",
+      candle_time: candleTime,
+      trade_date: candle.tradeDate || taipeiDateFrom(candleTime),
+      open: numberValue(candle.open),
+      high: numberValue(candle.high),
+      low: numberValue(candle.low),
+      close: numberValue(candle.close),
+      volume: numberValue(candle.volume),
+      source: "fugle_daytrade_writer:websocket_candles",
+      synthetic: false,
+      updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
+      payload: {
+        ...(candle.payload || {}),
+        cacheUpdatedAt: cache.payload?.updatedAt || "",
+        source: "fugle-websocket-candles-cache",
+      },
+    });
+  }
+  if (!rows.length) return { written: 0, skipped: true, cacheCount: cache.candles.size };
+  await supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time");
+  return { written: rows.length, skipped: false, cacheCount: cache.candles.size };
+}
+
+async function syncWebSocketFutoptQuotes() {
+  const cache = readFugleFutoptWebSocketQuotes({ maxAgeMs: FUTOPT_WEBSOCKET_MAX_AGE_MS });
+  const rows = [];
+  for (const quote of cache.quotes.values()) {
+    const futureSymbol = String(quote.future_symbol || "").trim().toUpperCase();
+    if (!futureSymbol) continue;
+    const price = numberValue(quote.last_price ?? quote.price);
+    if (!price) continue;
+    rows.push({
+      future_symbol: futureSymbol,
+      underlying_symbol: normalizeCode(quote.underlying_symbol) || (futureSymbol.startsWith("TXF") ? "TXF" : null),
+      underlying_name: quote.underlying_name || null,
+      updated_at: normalizeTimestamp(quote.quoteSeenAt || cache.payload?.updatedAt, nowIso()),
+      last_price: price,
+      open_price: numberValue(quote.open_price),
+      high_price: numberValue(quote.high_price || price),
+      low_price: numberValue(quote.low_price || price),
+      previous_close: numberValue(quote.previous_close),
+      change_percent: numberValue(quote.change_percent),
+      total_volume: numberValue(quote.total_volume ?? quote.volume),
+      product: quote.product || (futureSymbol.startsWith("TXF") ? "TXF" : "STOCK_FUTURE"),
+      session: quote.session || "",
+      source: "fugle_daytrade_writer:futopt_websocket",
+      payload: {
+        ...(quote.payload || {}),
+        product: quote.product || "",
+        session: quote.session || "",
+        underlying_name: quote.underlying_name || "",
+        marketUpdatedAt: quote.updated_at || "",
+        cacheUpdatedAt: cache.payload?.updatedAt || "",
+        source: "fugle-futopt-websocket-cache",
+      },
+    });
+  }
+  if (!rows.length) return { written: 0, skipped: true, cacheCount: cache.quotes.size };
+  await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol");
+  return { written: rows.length, skipped: false, cacheCount: cache.quotes.size };
+}
+
 async function tick() {
   const state = readWriterState();
   const phase = phaseNow();
@@ -977,11 +1269,19 @@ async function tick() {
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap);
   const quoteMap = await fetchExistingDaytradeQuotes();
-  const intradayMap = await fetchIntradayStatus();
-  const futoptRows = await fetchFutoptRows();
   const nonFatalWriteErrors = [];
+  let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
+  let websocketFutoptSync = { written: 0, skipped: true, cacheCount: 0 };
 
   if (priorityRows.length) {
+    try {
+      publishDaytradePrioritySymbols(priorityRows);
+    } catch (error) {
+      nonFatalWriteErrors.push({
+        target: "fugle-ws-priority-symbols.json",
+        message: error?.message || String(error),
+      });
+    }
     try {
       await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol");
     } catch (error) {
@@ -998,7 +1298,26 @@ async function tick() {
         message: error?.message || String(error),
       });
     }
+    try {
+      websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows);
+    } catch (error) {
+      nonFatalWriteErrors.push({
+        target: "fugle_daytrade_intraday_1m",
+        message: error?.message || String(error),
+      });
+    }
   }
+  try {
+    websocketFutoptSync = await syncWebSocketFutoptQuotes();
+  } catch (error) {
+    nonFatalWriteErrors.push({
+      target: "fugle_daytrade_futopt_quotes_live",
+      message: error?.message || String(error),
+    });
+  }
+
+  const intradayMap = await fetchIntradayStatus();
+  const futoptRows = await fetchFutoptRows();
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
   const selected = cooldownActive || !fetchAllowedForPhase
@@ -1030,15 +1349,24 @@ async function tick() {
     state: nextState,
   });
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
+  result.payload.websocket_candles_synced_rows = websocketCandleSync.written || 0;
+  result.payload.websocket_candles_cache_count = websocketCandleSync.cacheCount || 0;
+  result.payload.websocket_candles_sync_skipped = Boolean(websocketCandleSync.skipped);
+  result.payload.futopt_websocket_synced_rows = websocketFutoptSync.written || 0;
+  result.payload.futopt_websocket_cache_count = websocketFutoptSync.cacheCount || 0;
+  result.payload.futopt_websocket_sync_skipped = Boolean(websocketFutoptSync.skipped);
   await writeStatusAndScorecard(result);
+  const offSession = Boolean(result.payload.off_session);
   return {
-    ok: result.gateGrade === "A",
+    ok: result.gateGrade === "A" || offSession,
     mode: APPLY ? "apply" : "dry-run",
     fetchEnabled: FETCH_ENABLED,
     sourceName: SOURCE_NAME,
     phase: result.phase,
     gateGrade: result.gateGrade,
     status: result.status,
+    offSession,
+    formalEntryAllowed: Boolean(result.payload.formal_entry_allowed),
     priorityPoolSymbols: result.payload.priority_pool_symbols,
     priorityFreshQuoteCoverage120s: result.payload.priority_fresh_quote_coverage_120s,
     freshQuotes120s: result.payload.fresh_quotes_120s,

@@ -28,9 +28,9 @@
     "fullMarketTargetRoundSecondsMin": 120,
     "fullMarketTargetRoundSecondsMax": 180,
     "hardFresh120ForEveryFullMarketSymbol": false,
-    "maxQuoteAgeSeconds": 90,
+    "maxQuoteAgeSeconds": 120,
     "preferredQuoteAgeSeconds": 60,
-    "selectedSymbolMaxQuoteAgeSeconds": 60
+    "selectedSymbolMaxQuoteAgeSeconds": 90
   },
   "gateMode": {
     "mode": "priority_first",

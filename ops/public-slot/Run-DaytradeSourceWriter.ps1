@@ -4,6 +4,7 @@ param(
   [switch]$Apply,
   [switch]$Fetch,
   [switch]$Once,
+  [switch]$Continuous,
   [switch]$LocalCheck
 )
 
@@ -75,7 +76,7 @@ if ($LocalCheck) {
   $args += "--local-check"
 } elseif ($Apply) {
   $args += "--apply"
-  if ($Once) { $args += "--once" }
+  if ($Once -or -not $Continuous) { $args += "--once" }
 } else {
   $args += "--dry-run"
   $args += "--no-fetch"
@@ -84,10 +85,11 @@ if ($LocalCheck) {
 
 if ($Fetch -and -not $Apply) {
   $args = @("--use-system-ca", $WriterScript, "--dry-run", "--fetch")
-  if ($Once) { $args += "--once" }
+  if ($Once -or -not $Continuous) { $args += "--once" }
 }
 
-Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once localCheck=$LocalCheck"
+$EffectiveOnce = $args -contains "--once"
+Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
 try {
   $MutexAcquired = $Mutex.WaitOne(0)
   if (-not $MutexAcquired) {
