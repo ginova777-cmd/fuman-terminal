@@ -118,6 +118,19 @@ function Get-ReceiptWarnings($receipt) {
   return @($value)
 }
 
+function Test-PreservePreviousGoodWarningsOnly($warnings) {
+  $items = @($warnings)
+  if ($items.Count -eq 0) { return $false }
+  foreach ($item in $items) {
+    $text = [string]$item
+    if ($text -match "^resource health not_ready:" -or $text -match "^blockedReceipt=") {
+      continue
+    }
+    return $false
+  }
+  return $true
+}
+
 function Get-ReceiptBool($receipt, $name, $default = $false) {
   $value = Get-ReceiptValue $receipt $name $default
   return [bool]$value
@@ -186,7 +199,7 @@ function Get-FullScanStrictFailures($items) {
     if ($quality -in @("partial", "degraded", "incomplete")) {
       $failures.Add("${strategy}: qualityStatus=$quality") | Out-Null
     }
-    if (@($warnings).Count -gt 0) {
+    if (@($warnings).Count -gt 0 -and -not (Test-PreservePreviousGoodWarningsOnly $warnings)) {
       $failures.Add("${strategy}: warnings=$(@($warnings).Count)") | Out-Null
     }
   }
