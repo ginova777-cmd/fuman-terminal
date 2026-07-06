@@ -245,7 +245,7 @@ async function main() {
   for (const [strategy, gate] of Object.entries(scannerGates)) {
     const issue = issueFromGate(strategy, gate);
     if (!issue) continue;
-    if (!hardGateRequired && (strategy === "strategy2" || isNonTradingDayBlock(issue))) warnings.push(downgradedWarning(issue));
+    if (!hardGateRequired && (strategy === "strategy2" || strategy === "strategy3" || isNonTradingDayBlock(issue))) warnings.push(downgradedWarning(issue));
     else issues.push(issue);
   }
   if (simulateCritical) {
