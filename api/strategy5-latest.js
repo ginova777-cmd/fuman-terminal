@@ -587,7 +587,7 @@ function parseRequestOptions(request) {
       || url.searchParams.get("compact") === "1"
       || url.searchParams.get("shell") === "1";
     const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
+    const limit = Math.max(1, Math.min(canvas ? 140 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
     return { canvas, live, limit };
   } catch {
     return { canvas: false, live: false, limit: 2000 };
