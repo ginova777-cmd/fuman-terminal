@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $script)) {
   throw "Strategy4 postscan closure script missing: $script"
 }
 
-$taskRun = "`"$pwsh`" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`" -ProjectRoot `"$root`" -RuntimeRoot `"C:\fuman-runtime`" -ProductionUrl `"https://fuman-terminal.vercel.app`""
+$taskRun = "`"$pwsh`" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`""
 
 schtasks /Create /F /SC DAILY /ST $StartTime /TN $TaskName /TR $taskRun | Out-Host
 
