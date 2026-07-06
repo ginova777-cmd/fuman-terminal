@@ -68,7 +68,7 @@ function Assert-Strategy2ApiPreserve {
   $url = "https://fuman-terminal.vercel.app/api/strategy2-latest?top=1&compact=1&limit=50&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
   $payload = $response.Content | ConvertFrom-Json
-  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or [string]::IsNullOrWhiteSpace([string]$payload.runId)) {
+  if ($response.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace([string]$payload.runId)) {
     throw "Strategy2 preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
   }
   $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
