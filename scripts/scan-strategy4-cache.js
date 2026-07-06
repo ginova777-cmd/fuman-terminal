@@ -24,6 +24,7 @@ const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RAT
 const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT || 1500);
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIVE_BID_ASK_VOLUME || 3000);
+const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = process.env.STRATEGY4_REQUIRE_QUOTE_LIQUIDITY_PREFILTER === "1";
 const STRATEGY4_CACHE_SCHEMA_VERSION = "strategy4-cache-v3-unit-contract";
 const STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION = "strategy4-volume-avg5-v3-unit-contract";
 const STRATEGY4_VOLUME_UNIT = "lots";
@@ -703,6 +704,19 @@ async function fetchSupabaseQuoteLiquidityRows() {
 
 async function buildQuoteLiquidityPrefilter(stocks) {
   const rows = await fetchSupabaseQuoteLiquidityRows();
+  if (!REQUIRE_QUOTE_LIQUIDITY_PREFILTER) {
+    return {
+      enabled: false,
+      rule: "cumulativeBidAskVolume-gte",
+      minCumulativeBidAskVolume: MIN_CUMULATIVE_BID_ASK_VOLUME,
+      source: `supabase:${SUPABASE_QUOTE_VIEW}`,
+      reason: "disabled-for-after-close-daily-profile",
+      filtered: [],
+      cacheHit: 0,
+      cacheMiss: stocks.length,
+      quoteRows: rows.length,
+    };
+  }
   const byCode = new Map();
   rows.forEach((row) => {
     const code = normalizeCode(row.symbol || row.code);

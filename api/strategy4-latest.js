@@ -327,12 +327,21 @@ function buildPayload(rows, total, run = null, options = {}) {
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizePayload);
+  const runId = String(first.run_id || run?.run_id || "");
+  const updatedAt = String(first.scan_time || first.updated_at || first.generated_at || run?.finished_at || new Date().toISOString());
+  const scanDate = String(first.scan_date || "").replace(/-/g, "");
+  matches.forEach((match) => {
+    match.runId = match.runId || runId;
+    match.strategyName = match.strategyName || "Strategy4";
+    match.scanDate = match.scanDate || scanDate;
+    match.updatedAt = match.updatedAt || updatedAt;
+    match.price = cleanNumber(match.price || match.close);
+  });
   const zones = matches.reduce((acc, item) => {
     const zone = String(item.swingZone || item.zone || "").toUpperCase();
     if (zone === "A" || zone === "B" || zone === "C") acc[zone] += 1;
     return acc;
   }, { A: 0, B: 0, C: 0 });
-  const scanDate = String(first.scan_date || "").replace(/-/g, "");
   const gateContract = buildStrategy4GateContract(rows, run, matches);
   const fieldAudit = auditStrategy4BusinessFields(matches, rows, run);
   const runQualityPayload = runPayload.run_quality_at_publish && typeof runPayload.run_quality_at_publish === "object"
@@ -391,9 +400,9 @@ function buildPayload(rows, total, run = null, options = {}) {
     writeBudget: gateContract.writeBudget,
     retentionOk: gateContract.retentionOk,
     run_quality_at_publish: runQualityAtPublish,
-    requiredFields: Array.isArray(runPayload.requiredFields) ? runPayload.requiredFields : fieldAudit.requiredFields,
-    blankCounts: runPayload.blankCounts && typeof runPayload.blankCounts === "object" ? runPayload.blankCounts : fieldAudit.blankCounts,
-    sampleMissingRows: Array.isArray(runPayload.sampleMissingRows) ? runPayload.sampleMissingRows : fieldAudit.sampleMissingRows,
+    requiredFields: fieldAudit.requiredFields,
+    blankCounts: fieldAudit.blankCounts,
+    sampleMissingRows: fieldAudit.sampleMissingRows,
     latestWriteAttempted: runPayload.latestWriteAttempted === true,
     latestPointerUpdated: runPayload.latestPointerUpdated === true,
     blockedReceiptWritten: runPayload.blockedReceiptWritten === true,
