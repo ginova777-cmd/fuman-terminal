@@ -25,7 +25,7 @@ const FULL_ENDPOINTS = [
   ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&live=1&today=1", "strategy2-live"],
   ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60", "strategy3"],
   ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "strategy4"],
-  ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70", "strategy5"],
+  ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140", "strategy5"],
   ["/api/institution-latest?canvas=1&compact=1&shell=1&limit=60", "institution"],
   ["/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60", "cb"],
   ["/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60", "warrant"],

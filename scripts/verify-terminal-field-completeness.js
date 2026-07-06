@@ -67,7 +67,7 @@ const ROUTES = [
   {
     key: "strategy5",
     label: "策略5",
-    endpoint: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70&live=1",
+    endpoint: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1",
     groups: [
       ["代號", ["code", "symbol", "stockId", "stock_id"]],
       ["名稱", ["name", "stockName", "stock_name"]],
