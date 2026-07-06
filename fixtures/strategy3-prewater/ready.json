@@ -1,0 +1,32 @@
+{
+  "fixture": "ready",
+  "expectedBlocked": false,
+  "expectedUnattended": "YES",
+  "payload": {
+    "source_snapshot_captured_at": "2026-07-04T01:00:00.000Z",
+    "source_status_at_run": { "ok": true, "status": "ready", "source": "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume" },
+    "quote_coverage_at_run": { "ok": true, "fresh_quote_coverage_120s": 0.96, "quote_age_seconds": 8, "quoteRows": 1600 },
+    "intraday_1m_readiness_at_run": { "ok": true, "today_1m_symbols": 1500, "ready_ge_35": 1500, "latest_candle_time": "2026-07-04T04:59:00.000Z", "stale_seconds": 30 },
+    "ma_readiness_at_run": { "ok": true, "ready_ma20_continuous": 1500, "ready_ma35_continuous": 1490 },
+    "preopen_futopt_daily_readiness_at_run": { "daily_volume_status": "ready", "dailyVolumeRows": 260000, "preopen_required": false, "futopt_required": false },
+    "run_quality_at_publish": { "publishAllowed": true, "degradedBlocksLatest": false, "preservePreviousGood": false, "resultCount": 115 },
+    "fallbackUsed": false,
+    "fallbackScope": [],
+    "fallbackAllowed": true,
+    "fallbackDetails": [],
+    "fallbackContract": { "source": { "allowed": false, "formalSource": true } },
+    "degradedBlocksLatest": false,
+    "preservePreviousGood": false,
+    "writeBudget": { "ok": true, "status": "protected", "latestOverwriteBlockedOnDegraded": false },
+    "retentionOk": true,
+    "evidenceStatus": "complete",
+    "unattendedStatus": "YES",
+    "requiredFields": ["source_snapshot_captured_at", "source_status_at_run"],
+    "blankCounts": {},
+    "sampleMissingRows": [],
+    "blockedReason": "",
+    "scanner_block_reason": "",
+    "latestOverwriteAllowed": true,
+    "count": 115
+  }
+}

@@ -59,6 +59,151 @@ function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
   }
 }
 
+function Write-Strategy3BlockedReceipt($Reason, $PreviousGoodRunId, $PreviousGoodCount, $Stage = "runner-source-gate") {
+  $safeRunId = if ([string]::IsNullOrWhiteSpace([string]$PreviousGoodRunId)) { "missing-run" } else { ([string]$PreviousGoodRunId -replace "[^a-zA-Z0-9_-]", "-") }
+  $receiptFile = Join-Path $receiptDir ("strategy3-blocked-runner-{0}-{1}.json" -f (Get-Date -Format yyyyMMdd-HHmmss), $safeRunId)
+  $capturedAt = (Get-Date).ToString("o")
+  $requiredFields = @(
+    "source_snapshot_captured_at",
+    "source_status_at_run",
+    "quote_coverage_at_run",
+    "intraday_1m_readiness_at_run",
+    "ma_readiness_at_run",
+    "preopen_futopt_daily_readiness_at_run",
+    "run_quality_at_publish",
+    "fallbackUsed",
+    "fallbackScope",
+    "fallbackAllowed",
+    "fallbackDetails",
+    "fallbackContract",
+    "degradedBlocksLatest",
+    "preservePreviousGood",
+    "writeBudget",
+    "retentionOk",
+    "evidenceStatus",
+    "unattendedStatus",
+    "requiredFields",
+    "blankCounts",
+    "sampleMissingRows",
+    "blockedReason",
+    "scanner_block_reason"
+  )
+  $sourceStatusAtRun = [ordered]@{
+    ok = $false
+    ready = $false
+    status = "not_ready"
+    reason = $Reason
+    source = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume"
+  }
+  $quoteCoverageAtRun = [ordered]@{
+    ok = $false
+    ready = $false
+    status = "blocked"
+    reason = $Reason
+  }
+  $intradayReadinessAtRun = [ordered]@{
+    ok = $false
+    ready = $false
+    status = "not_ready"
+    reason = $Reason
+  }
+  $maReadinessAtRun = [ordered]@{
+    ok = $false
+    ready = $false
+    status = "blocked"
+    reason = $Reason
+  }
+  $preopenFutoptDailyReadinessAtRun = [ordered]@{
+    ok = $false
+    ready = $false
+    status = "blocked"
+    reason = $Reason
+    preopen = [ordered]@{ status = "not_required"; ok = $true; reason = "strategy3 publish gate does not require preopen snapshot" }
+    futopt = [ordered]@{ status = "not_required"; ok = $true; reason = "strategy3 publish gate does not require futopt source" }
+    dailyVolume = [ordered]@{ status = "unknown"; ok = $false; reason = $Reason }
+  }
+  $writeBudget = [ordered]@{
+    ok = $false
+    status = "blocked"
+    mode = "complete-run-preserve-on-degraded"
+    latestOverwriteBlockedOnDegraded = $true
+    reason = $Reason
+  }
+  $fallbackContract = [ordered]@{
+    source = [ordered]@{ allowed = $false; formalSource = $true; publishGateSource = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume" }
+    tv_candle_diagnostic = [ordered]@{ allowed = $true; formalSource = $false; publishGateSource = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume" }
+  }
+  $runQualityAtPublish = [ordered]@{
+    publishAllowed = $false
+    latestOverwriteAllowed = $false
+    latestWriteAttempted = $false
+    latestPointerUpdated = $false
+    emptyResultWritten = $false
+    preservePreviousGood = $true
+    blockedReceiptWritten = $true
+    degradedBlocksLatest = $true
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = $fallbackContract
+    writeBudget = $writeBudget
+    retentionOk = $true
+    evidenceStatus = "insufficient"
+    unattendedStatus = "NO"
+    blockedReason = $Reason
+    scanner_block_reason = $Reason
+    resultCount = 0
+    readbackCount = $PreviousGoodCount
+  }
+  $receipt = [ordered]@{
+    ok = $false
+    strategy = "strategy3"
+    stage = $Stage
+    runId = $PreviousGoodRunId
+    previousGoodRunId = $PreviousGoodRunId
+    previousGoodCount = $PreviousGoodCount
+    startedAt = $scanStartedAt
+    finishedAt = (Get-Date).ToString("o")
+    blockedReason = $Reason
+    scanner_block_reason = $Reason
+    source_snapshot_captured_at = $capturedAt
+    source_status_at_run = $sourceStatusAtRun
+    quote_coverage_at_run = $quoteCoverageAtRun
+    intraday_1m_readiness_at_run = $intradayReadinessAtRun
+    ma_readiness_at_run = $maReadinessAtRun
+    preopen_futopt_daily_readiness_at_run = $preopenFutoptDailyReadinessAtRun
+    run_quality_at_publish = $runQualityAtPublish
+    publishAllowed = $false
+    latestOverwriteAllowed = $false
+    latestWriteAttempted = $false
+    latestPointerUpdated = $false
+    emptyResultWritten = $false
+    preservePreviousGood = $true
+    blockedReceiptWritten = $true
+    degradedBlocksLatest = $true
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = $fallbackContract
+    writeBudget = $writeBudget
+    retentionOk = $true
+    evidenceStatus = "insufficient"
+    unattendedStatus = "NO"
+    requiredFields = $requiredFields
+    blankCounts = [ordered]@{}
+    sampleMissingRows = @()
+    receiptFile = $receiptFile
+    log = $log
+  }
+  $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $receiptFile -Encoding utf8
+  if ($syncReceiptDir) {
+    $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $syncReceiptDir (Split-Path -Leaf $receiptFile)) -Encoding utf8
+  }
+  return $receiptFile
+}
+
 . "${PSScriptRoot}\schedule-guard.ps1"
 Write-Strategy3CompleteLog "Strategy3 receipt mode=$receiptMode"
 Invoke-FumanWeekdayGuard -Label "Strategy3 complete scan" -LogPath $log
@@ -80,19 +225,19 @@ function Assert-Strategy3CompleteApi {
     [switch]$AllowPreviousComplete
   )
   $apiCheck = @"
-const handler = require("./api/strategy3-latest");
-const { captureHandler } = require("./scripts/strategy-api-capture");
+const handler = require('./api/strategy3-latest');
+const { captureHandler } = require('./scripts/strategy-api-capture');
 captureHandler(handler).then((result) => {
   const payload = result.body || {};
   const count = payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0);
   console.log(JSON.stringify({
     statusCode: result.statusCode,
     body: {
-      usedDate: payload.usedDate || "",
+      usedDate: payload.usedDate || '',
       count,
-      cacheSource: payload.cacheSource || "",
-      runId: payload.runId || "",
-      transport: { gate: payload.transport && payload.transport.gate || "" },
+      cacheSource: payload.cacheSource || '',
+      runId: payload.runId || '',
+      transport: { gate: payload.transport && payload.transport.gate || '' },
     },
   }));
 }).catch((error) => {
@@ -122,7 +267,11 @@ captureHandler(handler).then((result) => {
 
 function Test-Strategy3ControlledSourceNotReady($Message) {
   $text = [string]$Message
-  return $text -match "sessionReadyCount .* below" -or $text -match "intraday1mReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout" -or $text -match "Strategy3 source drift failed"
+  return $text -match "sessionReadyCount .* below" `
+    -or $text -match "intraday1mReadyCount .* below" `
+    -or $text -match "Strategy3 source drift failed" `
+    -or $text -match "v_strategy3_intraday_1m_status rows=\d+/\d+" `
+    -or $text -match "v_strategy3_quote_ready .*statement timeout"
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
@@ -165,7 +314,8 @@ if ($resourceGate.PreserveLatest) {
       throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
     }
   }
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-resource-gate"
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
   Write-Strategy3CompleteLog "Strategy3 resource-gated scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
@@ -190,7 +340,9 @@ try {
       throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
     }
   }
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("source not ready; preserved latest complete run: $scannerError")
+  $reason = "source not ready; preserved latest complete run: $scannerError"
+  $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-scanner-controlled-failure"
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
   Write-Strategy3CompleteLog "Strategy3 deferred complete scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }

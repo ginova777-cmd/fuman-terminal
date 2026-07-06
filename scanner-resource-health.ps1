@@ -42,14 +42,18 @@ function Invoke-ScannerResourceHealthGate {
   $publishAllowed = $status -eq "ready"
   $fallbackWarningOnly = $status -eq "stale"
   $preserveLatest = $status -in @("stale", "not_ready", "failed", "market_closed") -or $exitCode -ne 0
+  $reason = [string]$payload.reason
+  if (-not $reason) { $reason = [string]$payload.error }
+  $suggestedScannerBehavior = [string]$payload.suggestedScannerBehavior
+
   return [pscustomobject]@{
     Ok = $publishAllowed
     PublishAllowed = $publishAllowed
     FallbackWarningOnly = $fallbackWarningOnly
     PreserveLatest = $preserveLatest
     Status = if ($status) { $status } else { "failed" }
-    Reason = [string]($payload.reason ?? $payload.error ?? "")
-    SuggestedScannerBehavior = [string]($payload.suggestedScannerBehavior ?? "")
+    Reason = $reason
+    SuggestedScannerBehavior = $suggestedScannerBehavior
     Payload = $payload
     ExitCode = $exitCode
   }

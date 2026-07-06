@@ -1,0 +1,35 @@
+{
+  "fixture": "fallback-used",
+  "expectedBlocked": false,
+  "expectedUnattended": "YES",
+  "payload": {
+    "source_snapshot_captured_at": "2026-07-04T01:00:00.000Z",
+    "source_status_at_run": { "ok": true, "status": "ready" },
+    "quote_coverage_at_run": { "ok": true, "fresh_quote_coverage_120s": 0.96, "quote_age_seconds": 10 },
+    "intraday_1m_readiness_at_run": { "ok": true, "today_1m_symbols": 1500, "ready_ge_35": 1500, "latest_candle_time": "2026-07-04T04:59:00.000Z", "stale_seconds": 30 },
+    "ma_readiness_at_run": { "ok": true, "ready_ma20_continuous": 1500, "ready_ma35_continuous": 1490 },
+    "preopen_futopt_daily_readiness_at_run": { "daily_volume_status": "ready" },
+    "run_quality_at_publish": { "publishAllowed": true, "degradedBlocksLatest": false, "preservePreviousGood": false, "resultCount": 115 },
+    "fallbackUsed": true,
+    "fallbackScope": ["tv_candle_diagnostic"],
+    "fallbackAllowed": true,
+    "fallbackDetails": [{ "scope": "tv_candle_diagnostic", "allowed": true, "formalSource": false, "purpose": "diagnostic only" }],
+    "fallbackContract": {
+      "tv_candle_diagnostic": { "allowed": true, "formalSource": false },
+      "source": { "allowed": false, "formalSource": true }
+    },
+    "degradedBlocksLatest": false,
+    "preservePreviousGood": false,
+    "writeBudget": { "ok": true, "status": "protected", "latestOverwriteBlockedOnDegraded": false },
+    "retentionOk": true,
+    "evidenceStatus": "complete",
+    "unattendedStatus": "YES",
+    "requiredFields": ["fallbackUsed", "fallbackScope", "fallbackDetails", "fallbackContract"],
+    "blankCounts": {},
+    "sampleMissingRows": [],
+    "blockedReason": "",
+    "scanner_block_reason": "",
+    "latestOverwriteAllowed": true,
+    "count": 115
+  }
+}

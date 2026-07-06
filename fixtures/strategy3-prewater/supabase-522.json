@@ -1,0 +1,33 @@
+{
+  "fixture": "supabase-522",
+  "expectedBlocked": true,
+  "expectedUnattended": "NO",
+  "payload": {
+    "source_snapshot_captured_at": "2026-07-04T01:00:00.000Z",
+    "source_status_at_run": { "ok": false, "status": "timeout", "error": "Supabase HTTP 522" },
+    "quote_coverage_at_run": { "ok": false },
+    "intraday_1m_readiness_at_run": { "ok": false },
+    "ma_readiness_at_run": { "ok": false },
+    "preopen_futopt_daily_readiness_at_run": { "daily_volume_status": "unknown" },
+    "run_quality_at_publish": { "publishAllowed": false, "degradedBlocksLatest": true, "preservePreviousGood": true, "resultCount": 0 },
+    "fallbackUsed": false,
+    "fallbackScope": [],
+    "fallbackAllowed": true,
+    "fallbackDetails": [],
+    "fallbackContract": { "source": { "allowed": false, "formalSource": true } },
+    "degradedBlocksLatest": true,
+    "preservePreviousGood": true,
+    "writeBudget": { "ok": false, "status": "blocked", "latestOverwriteBlockedOnDegraded": true },
+    "retentionOk": false,
+    "evidenceStatus": "insufficient",
+    "unattendedStatus": "NO",
+    "requiredFields": ["source_status_at_run"],
+    "blankCounts": {},
+    "sampleMissingRows": [],
+    "blockedReason": "Supabase HTTP 522",
+    "scanner_block_reason": "supabase_522",
+    "blockedReceipt": "fixtures/receipts/supabase-522-blocked.json",
+    "latestOverwriteAllowed": false,
+    "count": 0
+  }
+}

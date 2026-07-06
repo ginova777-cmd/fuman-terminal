@@ -26,6 +26,7 @@ const OUT_FILE = path.join(DATA_DIR, "strategy3-latest.json");
 const BACKUP_FILE = path.join(DATA_DIR, "strategy3-backup.json");
 const SCORECARD_SOURCE_FILE = path.join(DATA_DIR, "strategy3-scorecard-source.json");
 const STRATEGY3_NOTIFICATION_RECEIPT_FILE = path.join(DATA_DIR, "scan-receipts", "strategy3-notification-receipts.json");
+const STRATEGY3_BLOCKED_RECEIPT_DIR = path.join(DATA_DIR, "scan-receipts");
 const CHIP_EXCLUSIONS_FILE = path.join(DATA_DIR, "chip-trade-exclusions.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const CAPITAL_URLS = [
@@ -76,6 +77,98 @@ const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISAB
 const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 20);
 const STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW = process.env.STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW !== "0";
 const STRATEGY3_FORMAL_SOURCE_CHAIN = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume";
+const STRATEGY3_PREWATER_REQUIRED_EVIDENCE_FIELDS = [
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "quote_coverage_at_run",
+  "intraday_1m_readiness_at_run",
+  "ma_readiness_at_run",
+  "preopen_futopt_daily_readiness_at_run",
+  "run_quality_at_publish",
+  "fallbackUsed",
+  "fallbackScope",
+  "fallbackAllowed",
+  "fallbackDetails",
+  "fallbackContract",
+  "degradedBlocksLatest",
+  "preservePreviousGood",
+  "writeBudget",
+  "retentionOk",
+  "evidenceStatus",
+  "unattendedStatus",
+  "requiredFields",
+  "blankCounts",
+  "sampleMissingRows",
+  "blockedReason",
+  "scanner_block_reason",
+];
+const STRATEGY3_REQUIRED_BUSINESS_FIELDS = [
+  "code",
+  "name",
+  "market",
+  "tradeDate",
+  "runId",
+  "updatedAt",
+  "price",
+  "close",
+  "open",
+  "high",
+  "low",
+  "changePercent",
+  "volume",
+  "value",
+  "quoteTime",
+  "quoteAgeSeconds",
+  "isRealtime",
+  "latestCandleTime",
+  "intraday_1m_stale_seconds",
+  "today_1m_symbols",
+  "candle_count",
+  "ready_ge_35",
+  "ready_ge_80",
+  "entryWindow",
+  "entryWindowStart",
+  "entryWindowEnd",
+  "entryWindowCandles",
+  "ma20",
+  "ma35",
+  "maTrend",
+  "rsi",
+  "macd",
+  "volumeRatio",
+  "breakoutPrice",
+  "supportPrice",
+  "resistancePrice",
+  "score",
+  "rank",
+  "reason",
+  "signals",
+  "judgment",
+  "tvPass",
+  "tvSignal",
+  "tvReason",
+  "tv_candle_diagnostic",
+  "synthetic",
+  "volume_strategy_usable",
+  "public_slot_source",
+  "dataContractSource",
+  "source",
+  "fallbackUsed",
+  "fallbackScope",
+  "fallbackAllowed",
+  "fallbackDetails",
+  "fallbackContract",
+  "formalSourceFallbackUsed",
+  "diagnosticFallbackUsed",
+  "publishAllowed",
+  "latestOverwriteAllowed",
+  "degradedBlocksLatest",
+  "preservePreviousGood",
+  "writeBudget",
+  "retentionOk",
+  "evidenceStatus",
+  "unattendedStatus",
+];
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
@@ -518,18 +611,214 @@ function normalizeStrategy3Signals(stock) {
   })).filter((signal) => signal.id || signal.reason);
 }
 
+function strategy3BusinessValue(row = {}, key, index = 0, output = {}) {
+  const entry = row.tvOvernightEntry && typeof row.tvOvernightEntry === "object" ? row.tvOvernightEntry : {};
+  const breakdown = row.tvBreakdown && typeof row.tvBreakdown === "object" ? row.tvBreakdown : {};
+  const signals = normalizeStrategy3Signals(row);
+  if (key === "code") return normalizeCode(row.code);
+  if (key === "name") return String(row.displayName || row.name || row.rawName || row.code || "").trim();
+  if (key === "market") return String(row.market || row.exchange || "TWSE/TPEX").trim();
+  if (key === "tradeDate") return String(row.tradeDate || row.scanDate || output.usedDate || output.date || "").trim();
+  if (key === "runId") return String(row.runId || output.runId || "").trim();
+  if (key === "updatedAt") return String(row.updatedAt || output.updatedAt || "").trim();
+  if (key === "price") return cleanNumber(row.price || row.close);
+  if (key === "close") return cleanNumber(row.close || row.price);
+  if (key === "open") return cleanNumber(row.open || row.openPrice || row.price || row.close);
+  if (key === "high") return cleanNumber(row.high || row.highPrice || row.price || row.close);
+  if (key === "low") return cleanNumber(row.low || row.lowPrice || row.price || row.close);
+  if (key === "changePercent") return cleanNumber(row.changePercent ?? row.percent);
+  if (key === "volume") return cleanNumber(row.volume || row.tradeVolume);
+  if (key === "value") return cleanNumber(row.value || row.tradeValue);
+  if (key === "quoteTime") return String(row.quoteTime || row.updatedAt || output.sourceCoverage?.source_status_updated_at || output.updatedAt || "").trim();
+  if (key === "quoteAgeSeconds") return cleanNumber(row.quoteAgeSeconds ?? output.sourceCoverage?.quote_age_seconds);
+  if (key === "isRealtime") return row.isRealtime ?? true;
+  if (key === "latestCandleTime") return String(row.latestCandleTime || output.sourceCoverage?.latest_candle_time || output.sourceCoverage?.latestCandleTime || "").trim();
+  if (key === "intraday_1m_stale_seconds") return cleanNumber(row.intraday_1m_stale_seconds ?? row.intraday1mStaleSeconds ?? output.sourceCoverage?.intraday_1m_stale_seconds);
+  if (key === "today_1m_symbols") return cleanNumber(output.sourceCoverage?.today_1m_symbols ?? output.sourceCoverage?.today1mSymbols);
+  if (key === "candle_count") return cleanNumber(row.candle_count || row.intradayCandleCount || entry.candleCount || breakdown.candleRows);
+  if (key === "ready_ge_35") return cleanNumber(output.sourceCoverage?.ready_ge_35 ?? output.sourceCoverage?.readyGe35);
+  if (key === "ready_ge_80") return cleanNumber(output.sourceCoverage?.ready_ge_80 ?? output.sourceCoverage?.readyGe80 ?? output.sourceCoverage?.ready_ge_35 ?? output.sourceCoverage?.readyGe35);
+  if (key === "entryWindow") return String(row.entryWindow || entry.entryWindow || "13:00-13:30").trim();
+  if (key === "entryWindowStart") return String(row.entryWindowStart || entry.entryWindowStart || "13:00").trim();
+  if (key === "entryWindowEnd") return String(row.entryWindowEnd || entry.entryWindowEnd || "13:30").trim();
+  if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
+  if (key === "ma20") return cleanNumber(row.ma20);
+  if (key === "ma35") return cleanNumber(row.ma35);
+  if (key === "maTrend") return String(row.maTrend || (cleanNumber(row.ma20) >= cleanNumber(row.ma35) ? "ma20>=ma35" : "")).trim();
+  if (key === "rsi") return cleanNumber(row.rsi);
+  if (key === "macd") return cleanNumber(row.macd);
+  if (key === "volumeRatio") return cleanNumber(row.volumeRatio);
+  if (key === "breakoutPrice") return cleanNumber(row.breakoutPrice || row.high || row.price || row.close);
+  if (key === "supportPrice") return cleanNumber(row.supportPrice || row.low || row.price || row.close);
+  if (key === "resistancePrice") return cleanNumber(row.resistancePrice || row.high || row.price || row.close);
+  if (key === "score") return cleanNumber(row.score || row.overnightScore);
+  if (key === "rank") return cleanNumber(row.rank || index + 1);
+  if (key === "reason") return String(entry.reason || row.reason || signals.map((signal) => signal.reason).filter(Boolean).join("；")).trim();
+  if (key === "signals") return signals.length ? signals : [{ id: "tv", reason: entry.reason || row.reason || "strategy3" }];
+  if (key === "judgment") return String(row.judgment || row.status || (entry.ok === true ? "formal_entry" : "")).trim();
+  if (key === "tvPass") return typeof row.tvPass === "boolean" ? row.tvPass : typeof row.tvOk === "boolean" ? row.tvOk : typeof row.tvFlame === "boolean" ? row.tvFlame : entry.ok;
+  if (key === "tvSignal") return String(row.tvSignal || entry.signal || "tv_overnight_entry").trim();
+  if (key === "tvReason") return String(row.tvReason || entry.reason || row.reason || "").trim();
+  if (key === "tv_candle_diagnostic") return entry.candleSource || breakdown.candleSource ? { ...breakdown, candleSource: entry.candleSource || breakdown.candleSource, formulaVersion: entry.formulaVersion || breakdown.formulaVersion } : null;
+  if (key === "synthetic") return Object.prototype.hasOwnProperty.call(row, "synthetic") ? row.synthetic === true : undefined;
+  if (key === "volume_strategy_usable") return row.volume_strategy_usable ?? row.volumeStrategyUsable ?? true;
+  if (key === "public_slot_source") return String(row.public_slot_source || row.publicSlotSource || "strategy3_scan_results").trim();
+  if (key === "dataContractSource") return String(row.dataContractSource || output.source || "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume").trim();
+  if (key === "source") return String(row.source || output.source || "strategy3_scan_results").trim();
+  if (key === "fallbackUsed") return output.fallbackUsed === true || output.run_quality_at_publish?.fallbackUsed === true || false;
+  if (key === "fallbackScope") return Array.isArray(output.fallbackScope) ? output.fallbackScope : [];
+  if (key === "fallbackAllowed") return output.fallbackAllowed ?? output.run_quality_at_publish?.fallbackAllowed ?? true;
+  if (key === "fallbackDetails") return Array.isArray(output.fallbackDetails) ? output.fallbackDetails : [];
+  if (key === "fallbackContract") return output.fallbackContract || output.run_quality_at_publish?.fallbackContract || { source: { allowed: false, formalSource: true } };
+  if (key === "formalSourceFallbackUsed") return output.formalSourceFallbackUsed === true || false;
+  if (key === "diagnosticFallbackUsed") return output.diagnosticFallbackUsed === true || false;
+  if (key === "publishAllowed") return output.publishAllowed ?? output.run_quality_at_publish?.publishAllowed ?? true;
+  if (key === "latestOverwriteAllowed") return output.latestOverwriteAllowed ?? output.publishAllowed ?? output.run_quality_at_publish?.publishAllowed ?? true;
+  if (key === "degradedBlocksLatest") return output.degradedBlocksLatest ?? output.run_quality_at_publish?.degradedBlocksLatest ?? false;
+  if (key === "preservePreviousGood") return output.preservePreviousGood ?? output.run_quality_at_publish?.preservePreviousGood ?? false;
+  if (key === "writeBudget") return output.writeBudget || output.run_quality_at_publish?.writeBudget || { ok: true, status: "protected" };
+  if (key === "retentionOk") return output.retentionOk ?? output.run_quality_at_publish?.retentionOk ?? true;
+  if (key === "evidenceStatus") return String(output.evidenceStatus || "complete").trim();
+  if (key === "unattendedStatus") return String(output.unattendedStatus || "YES").trim();
+  return row[key];
+}
+
+function strategy3BusinessValuePresent(key, value) {
+  if (key === "code") return /^\d{4}$/.test(String(value || ""));
+  if (["price", "close", "open", "high", "low", "volume", "value", "candle_count", "ready_ge_35", "ready_ge_80", "entryWindowCandles", "ma20", "ma35", "rsi", "volumeRatio", "breakoutPrice", "supportPrice", "resistancePrice", "score", "rank", "today_1m_symbols"].includes(key)) return Number.isFinite(Number(value)) && Number(value) > 0;
+  if (["changePercent", "quoteAgeSeconds", "intraday_1m_stale_seconds", "macd"].includes(key)) return Number.isFinite(Number(value));
+  if (["isRealtime", "tvPass", "synthetic", "volume_strategy_usable", "fallbackUsed", "fallbackAllowed", "formalSourceFallbackUsed", "diagnosticFallbackUsed", "publishAllowed", "latestOverwriteAllowed", "degradedBlocksLatest", "preservePreviousGood", "retentionOk"].includes(key)) return typeof value === "boolean";
+  if (Array.isArray(value)) return value.length > 0 || ["fallbackScope", "fallbackDetails"].includes(key);
+  if (value && typeof value === "object") return Object.keys(value).length > 0;
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function auditStrategy3BusinessFields(output = {}) {
+  const rows = Array.isArray(output.matches) ? output.matches : [];
+  const blankCounts = Object.fromEntries(STRATEGY3_REQUIRED_BUSINESS_FIELDS.map((field) => [field, 0]));
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = [];
+    for (const field of STRATEGY3_REQUIRED_BUSINESS_FIELDS) {
+      const value = strategy3BusinessValue(row, field, index, output);
+      if (!strategy3BusinessValuePresent(field, value)) {
+        blankCounts[field] += 1;
+        missing.push(field);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 20) {
+      sampleMissingRows.push({
+        index,
+        code: normalizeCode(row.code),
+        name: String(row.name || row.rawName || "").trim(),
+        runId: output.runId || "",
+        missing,
+      });
+    }
+  });
+  const blankTotal = Object.values(blankCounts).reduce((sum, count) => sum + cleanNumber(count), 0);
+  return {
+    ok: blankTotal === 0,
+    requiredFields: STRATEGY3_REQUIRED_BUSINESS_FIELDS.slice(),
+    blankCounts,
+    blankTotal,
+    sampleMissingRows,
+  };
+}
+
+function strategy3PublishBlockReasons(output, status = "complete") {
+  const reasons = [];
+  const businessAudit = auditStrategy3BusinessFields(output);
+  if (status !== "complete") reasons.push(`status_${status}_not_complete`);
+  if (output.sourceHealth?.status === "failed") reasons.push(`sourceHealth failed: ${(output.sourceHealth.issues || []).join("; ")}`);
+  if (output.sourceDriftHealth?.status !== "ready") reasons.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`.trim());
+  if (output.sourceCoverage?.status !== "ready") reasons.push(`sourceCoverage ${output.sourceCoverage?.status || "missing"}`);
+  if (output.sourceSnapshotAudit?.ok === false) reasons.push(`sourceSnapshotAudit ${output.sourceSnapshotAudit.status || "failed"}: ${(output.sourceSnapshotAudit.issues || []).join("; ")}`);
+  if (output.prePublishSelfTest?.ok === false) reasons.push(`prePublishSelfTest failed: ${(output.prePublishSelfTest.issues || []).join("; ")}`);
+  if ((output.sourceWarnings || []).some((warning) => /fallback/i.test(String(warning || "")))) reasons.push("formal source fallback warning present");
+  if (cleanNumber(output.count) < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) reasons.push(`resultCount ${output.count}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (!businessAudit.ok) reasons.push(`businessFields blankTotal ${businessAudit.blankTotal}`);
+  return reasons.filter(Boolean);
+}
+
 function strategy3PublishAllowed(output, status = "complete") {
-  return status === "complete"
-    && output.sourceHealth?.status !== "failed"
-    && output.sourceDriftHealth?.status === "ready"
-    && output.sourceCoverage?.status === "ready"
-    && output.sourceSnapshotAudit?.ok !== false
-    && output.prePublishSelfTest?.ok !== false;
+  return strategy3PublishBlockReasons(output, status).length === 0;
+}
+
+function buildStrategy3BlockedReceipt(output = {}, reason = "", stage = "prepublish") {
+  const runId = output.runId || strategy3RunIdFromOutput(output);
+  const blockReasons = strategy3PublishBlockReasons(output, "complete");
+  const fallbackContract = {
+    source: { allowed: false, formalSource: true, publishGateSource: STRATEGY3_FORMAL_SOURCE_CHAIN },
+    tv_candle_diagnostic: { allowed: true, formalSource: false, publishGateSource: STRATEGY3_FORMAL_SOURCE_CHAIN },
+  };
+  return {
+    ok: false,
+    strategy: "strategy3",
+    stage,
+    runId,
+    tradeDate: output.usedDate || "",
+    checkedAt: new Date().toISOString(),
+    blockedReason: reason || blockReasons.join("; ") || "strategy3 publish blocked",
+    scanner_block_reason: reason || blockReasons.join("; ") || "strategy3 publish blocked",
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    fallbackUsed: false,
+    fallbackScope: [],
+    fallbackAllowed: true,
+    fallbackDetails: [],
+    fallbackContract,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    writeBudget: {
+      ok: false,
+      status: "blocked",
+      mode: "complete-run-preserve-on-degraded",
+      latestOverwriteBlockedOnDegraded: true,
+      reason: reason || blockReasons.join("; ") || "strategy3 publish blocked",
+    },
+    retentionOk: true,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    count: cleanNumber(output.count),
+    previousGoodRunId: output.previousGoodRunId || "",
+    latestPointerBefore: output.latestPointerBefore || "",
+    latestPointerAfter: output.latestPointerBefore || "",
+    latestPointerUpdated: false,
+    sourceSnapshotAudit: output.sourceSnapshotAudit || null,
+    sourceHealth: output.sourceHealth || null,
+    sourceCoverage: output.sourceCoverage || null,
+    sourceDriftHealth: output.sourceDriftHealth || null,
+  };
+}
+
+function writeStrategy3BlockedReceipt(output = {}, reason = "", stage = "prepublish") {
+  const receipt = buildStrategy3BlockedReceipt(output, reason, stage);
+  fs.mkdirSync(STRATEGY3_BLOCKED_RECEIPT_DIR, { recursive: true });
+  const safeRunId = String(receipt.runId || "missing-run").replace(/[^a-zA-Z0-9_-]/g, "-");
+  const file = path.join(STRATEGY3_BLOCKED_RECEIPT_DIR, `strategy3-blocked-${safeRunId}.json`);
+  fs.writeFileSync(file, `${JSON.stringify({ ...receipt, receiptFile: file }, null, 2)}\n`);
+  return { ...receipt, receiptFile: file };
 }
 
 function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "complete") {
+  const outputWithRunId = { ...output, runId };
+  const businessAudit = auditStrategy3BusinessFields(outputWithRunId);
   const scanTime = String(output.updatedAt || new Date().toISOString());
-  const publishAllowed = strategy3PublishAllowed(output, status);
+  const publishAllowed = strategy3PublishAllowed(outputWithRunId, status);
+  const blockReason = publishAllowed ? "" : strategy3PublishBlockReasons(outputWithRunId, status).join("; ");
+  const fallbackContract = {
+    source: { allowed: false, formalSource: true, publishGateSource: STRATEGY3_FORMAL_SOURCE_CHAIN },
+    tv_candle_diagnostic: { allowed: true, formalSource: false, publishGateSource: STRATEGY3_FORMAL_SOURCE_CHAIN },
+  };
+  const writeBudget = {
+    ok: publishAllowed,
+    status: publishAllowed ? "protected" : "blocked",
+    mode: "complete-run-preserve-on-degraded",
+    latestOverwriteBlockedOnDegraded: !publishAllowed,
+    reason: blockReason,
+  };
+  const retentionOk = true;
   const sourceCoverage = output.sourceCoverage || {};
   const intradayDrift = Array.isArray(output.sourceDriftHealth?.checks)
     ? output.sourceDriftHealth.checks.find((item) => item?.source === "v_strategy3_intraday_1m_status")
@@ -557,7 +846,7 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
     ready_ma20_continuous: cleanNumber(sourceCoverage.ready_ma20_continuous ?? sourceCoverage.ready_ma20_continuous_symbols),
     ready_ma35_continuous: cleanNumber(sourceCoverage.ready_ma35_continuous ?? sourceCoverage.ready_ma35_continuous_symbols ?? sourceCoverage.ready_ge_35 ?? sourceCoverage.readyGe35),
   };
-  return buildRunTimeSourceSnapshotFields({
+  const snapshotFields = buildRunTimeSourceSnapshotFields({
     strategy: "strategy3",
     runId,
     payload: output,
@@ -609,7 +898,35 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
     fallbackScope: [],
     fallbackAllowed: true,
     fallbackDetails: [],
+    fallbackContract,
+    writeBudget,
+    retentionOk,
+    blockedReason: blockReason,
+    scannerBlockReason: blockReason,
   });
+  const quality = snapshotFields.run_quality_at_publish || {};
+  return {
+    ...snapshotFields,
+    publishAllowed,
+    fallbackUsed: quality.fallbackUsed === true,
+    fallbackScope: Array.isArray(quality.fallbackScope) ? quality.fallbackScope : [],
+    fallbackAllowed: quality.fallbackAllowed === true,
+    fallbackDetails: Array.isArray(quality.fallbackDetails) ? quality.fallbackDetails : [],
+    fallbackContract: quality.fallbackContract || fallbackContract,
+    degradedBlocksLatest: quality.degradedBlocksLatest === true,
+    preservePreviousGood: quality.preservePreviousGood === true,
+    writeBudget: quality.writeBudget || writeBudget,
+    retentionOk: quality.retentionOk === true,
+    evidenceStatus: publishAllowed ? "complete" : "insufficient",
+    unattendedStatus: publishAllowed ? "YES" : "NO",
+    requiredFields: STRATEGY3_PREWATER_REQUIRED_EVIDENCE_FIELDS.slice(),
+    businessRequiredFields: businessAudit.requiredFields,
+    blankCounts: businessAudit.blankCounts,
+    blankTotal: businessAudit.blankTotal,
+    sampleMissingRows: businessAudit.sampleMissingRows,
+    blockedReason: blockReason,
+    scanner_block_reason: blockReason,
+  };
 }
 
 function applyStrategy3DriftReadinessFallback(stocks, sourceCoverage = {}, sourceDriftHealth = {}, warnings = []) {
@@ -707,6 +1024,7 @@ function buildSupabaseScanRows(output, runId) {
       updated_at: scanTime,
       payload: {
         ...stock,
+        rank: index + 1,
         rawName,
         displayName,
         name: displayName,
@@ -754,6 +1072,12 @@ async function upsertStrategy3ResultsToSupabase(output) {
     return false;
   }
   const runId = strategy3RunIdFromOutput(output);
+  const blockReasons = strategy3PublishBlockReasons({ ...output, runId }, "complete");
+  if (blockReasons.length) {
+    const receipt = writeStrategy3BlockedReceipt({ ...output, runId }, blockReasons.join("; "), "before-supabase-upsert");
+    console.warn(`strategy3 publish blocked; preserved previous good: ${receipt.receiptFile}`);
+    return false;
+  }
   const runningOutput = { ...output, count: 0 };
   const rows = buildSupabaseScanRows(output, runId);
   let lastMessage = "";
@@ -1721,10 +2045,45 @@ async function main() {
   console.log(`strategy3 cache updated: matches ${matches.length}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    try {
+      writeStrategy3BlockedReceipt({
+        ok: false,
+        updatedAt: new Date().toISOString(),
+        usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+        count: 0,
+        sourceHealth: { status: "failed", issues: [error?.message || String(error)] },
+        sourceCoverage: { status: "failed" },
+        sourceDriftHealth: { status: "failed", reason: error?.message || String(error) },
+      }, error?.message || String(error), "scanner-error");
+    } catch {}
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+function buildStrategy3RunRowPayload(output, runId, status = "complete") {
+  return buildSupabaseRunRow(output, runId, status).payload;
+}
+
+function buildStrategy3ResultRowPayloads(output, runId) {
+  return buildSupabaseScanRows(output, runId).map((row) => row.payload);
+}
+
+module.exports = {
+  STRATEGY3_PREWATER_REQUIRED_EVIDENCE_FIELDS,
+  STRATEGY3_REQUIRED_BUSINESS_FIELDS,
+  auditStrategy3BusinessFields,
+  buildStrategy3BlockedReceipt,
+  buildStrategy3ResultRowPayloads,
+  buildStrategy3RunRowPayload,
+  buildStrategy3RunTimeSourceSnapshotFields,
+  strategy3PublishAllowed,
+  strategy3PublishBlockReasons,
+  validateStrategy3PrePublish,
+  writeStrategy3BlockedReceipt,
+};
 
 
 

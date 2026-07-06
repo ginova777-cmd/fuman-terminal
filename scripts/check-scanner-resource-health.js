@@ -37,6 +37,9 @@ const STALE_STATUS = "stale";
 const BLOCKING_STATUSES = new Set(["not_ready", "failed"]);
 const STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S || 0.9);
 const STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS = Number(process.env.STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS || 120);
+const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000);
+const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
+const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -153,6 +156,111 @@ async function fetchSourceStatusPayload() {
   }
 }
 
+function query(params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  });
+  return search.toString();
+}
+
+function candleMinutes(value) {
+  const text = String(value || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Taipei",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date(parsed));
+    const get = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+    return get("hour") * 60 + get("minute");
+  }
+  const match = text.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\b/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+async function supabaseRequest(method, route, body, timeoutMs = 60000) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${SUPABASE_URL}${route}`, {
+      method,
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${method} ${route} HTTP ${response.status}: ${text.slice(0, 240)}`);
+    return text ? JSON.parse(text) : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function taipeiTradeDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+async function fetchStrategy3SessionReadinessStatus() {
+  const tradeDate = String(process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
+  let statusRefresh = null;
+  let statusRefreshWarning = "";
+  try {
+    statusRefresh = await supabaseRequest("POST", "/rest/v1/rpc/refresh_strategy3_intraday_1m_status_latest", { p_trade_date: tradeDate }, 90000);
+  } catch (error) {
+    statusRefreshWarning = error?.message || String(error);
+  }
+  const rows = await supabaseRequest("GET", `/rest/v1/v_strategy3_intraday_1m_status?${query({
+    select: "symbol,latest_candle_time,today_candle_count,updated_at",
+    order: "latest_candle_time.desc",
+    limit: 5000,
+  })}`, undefined, 60000);
+  const statusRows = Array.isArray(rows) ? rows : [];
+  const latestCandleTime = statusRows
+    .map((row) => row.latest_candle_time)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
+  const sessionReadyRows = statusRows.filter((row) => {
+    const count = cleanNumber(row.today_candle_count);
+    const minute = candleMinutes(row.latest_candle_time || row.updated_at);
+    return count >= STRATEGY3_MIN_INTRADAY_1M_CANDLES
+      || (count > 0 && minute != null && minute >= STRATEGY3_SESSION_LATEST_MINUTE);
+  });
+  const ready = sessionReadyRows.length >= STRATEGY3_MIN_INTRADAY_1M_CANDIDATES;
+  return {
+    ready,
+    status: ready ? "ready" : "not_ready",
+    source: "v_strategy3_intraday_1m_status",
+    tradeDate,
+    sessionReadyCount: sessionReadyRows.length,
+    statusRowCount: statusRows.length,
+    minIntraday1mCandidates: STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
+    minIntraday1mCandles: STRATEGY3_MIN_INTRADAY_1M_CANDLES,
+    sessionLatestMinute: STRATEGY3_SESSION_LATEST_MINUTE,
+    latestCandleTime,
+    reason: ready
+      ? "09:00-12:59 intraday status ready"
+      : `sessionReadyCount ${sessionReadyRows.length} below ${STRATEGY3_MIN_INTRADAY_1M_CANDIDATES}`,
+    statusRefreshWarning,
+    statusRefresh,
+  };
+}
+
 function boolValue(value) {
   if (value === true) return true;
   if (value === false) return false;
@@ -265,6 +373,7 @@ async function main() {
   let readinessWarning = "";
   let sourceStatus = null;
   let sourceGateIssues = [];
+  let strategy3Session = null;
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
       readiness = await fetchStrategy2ReadinessStatus();
@@ -286,6 +395,17 @@ async function main() {
       if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
     }
   }
+  if (String(row.strategy || "").toLowerCase() === "strategy3") {
+    try {
+      strategy3Session = await fetchStrategy3SessionReadinessStatus();
+      if (!strategy3Session.ready && effectiveStatus === READY_STATUS) {
+        effectiveStatus = "not_ready";
+      }
+    } catch (error) {
+      readinessWarning = `strategy3 session readiness unavailable: ${error?.message || String(error)}`;
+      if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
+    }
+  }
   const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
   const blocked = !ok;
   const readinessReason = readiness && readiness.strategy2_ready_100 !== true
@@ -296,11 +416,15 @@ async function main() {
       `execution=${Number(readiness.latest_execution_scanned || 0)}/${Number(readiness.latest_execution_expected || 0)}`,
     ].join("; ")
     : "";
+  const strategy3SessionReason = strategy3Session && !strategy3Session.ready ? strategy3Session.reason : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
-  const reason = [row.reason || "", readinessReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const reason = [row.reason || "", readinessReason, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true);
+  const strategy3SessionBlocked = Boolean(strategy3Session && !strategy3Session.ready);
   const suggestedScannerBehavior = sourceGateIssues.length || readinessBlocked
     ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
+    : strategy3SessionBlocked
+      ? "preserve latest complete run; Strategy3 live intraday 1m session readiness is not ready"
     : row.suggested_scanner_behavior || "";
   const payload = {
     ok,
@@ -319,6 +443,7 @@ async function main() {
     suggestedScannerBehavior,
     updatedAt: row.updated_at || "",
     readiness,
+    strategy3Session,
     sourceStatus,
     sourceGate: {
       minFreshQuoteCoverage120s: STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S,

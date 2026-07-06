@@ -1,0 +1,33 @@
+{
+  "fixture": "quote-low",
+  "expectedBlocked": true,
+  "expectedUnattended": "NO",
+  "payload": {
+    "source_snapshot_captured_at": "2026-07-04T01:00:00.000Z",
+    "source_status_at_run": { "ok": false, "status": "degraded", "source": "fugle_quotes_latest", "reason": "fresh_quote_coverage_120s below threshold" },
+    "quote_coverage_at_run": { "ok": false, "fresh_quote_coverage_120s": 0.42, "quote_age_seconds": 180, "quoteRows": 700 },
+    "intraday_1m_readiness_at_run": { "ok": true, "today_1m_symbols": 1500, "ready_ge_35": 1500, "stale_seconds": 30 },
+    "ma_readiness_at_run": { "ok": true, "ready_ma20_continuous": 1500, "ready_ma35_continuous": 1490 },
+    "preopen_futopt_daily_readiness_at_run": { "daily_volume_status": "ready" },
+    "run_quality_at_publish": { "publishAllowed": false, "degradedBlocksLatest": true, "preservePreviousGood": true, "resultCount": 0 },
+    "fallbackUsed": false,
+    "fallbackScope": [],
+    "fallbackAllowed": true,
+    "fallbackDetails": [],
+    "fallbackContract": { "source": { "allowed": false, "formalSource": true } },
+    "degradedBlocksLatest": true,
+    "preservePreviousGood": true,
+    "writeBudget": { "ok": false, "status": "blocked", "latestOverwriteBlockedOnDegraded": true },
+    "retentionOk": true,
+    "evidenceStatus": "insufficient",
+    "unattendedStatus": "NO",
+    "requiredFields": ["quote_coverage_at_run"],
+    "blankCounts": {},
+    "sampleMissingRows": [],
+    "blockedReason": "quote coverage below A threshold",
+    "scanner_block_reason": "quote_freshness_low",
+    "blockedReceipt": "fixtures/receipts/quote-low-blocked.json",
+    "latestOverwriteAllowed": false,
+    "count": 0
+  }
+}

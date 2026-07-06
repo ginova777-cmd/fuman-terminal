@@ -108,6 +108,27 @@ function buildStatusEntry(payload, source) {
     runId: payload?.runId || payload?.transport?.runId || "",
     gate: payload?.transport?.gate || "",
     cacheSource: payload?.cacheSource || "",
+    evidenceStatus: payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "",
+    unattendedStatus: payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "",
+    publishAllowed: payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed ?? null,
+    latestOverwriteAllowed: payload?.latestOverwriteAllowed ?? payload?.run_quality_at_publish?.latestOverwriteAllowed ?? null,
+    preservePreviousGood: payload?.preservePreviousGood ?? payload?.run_quality_at_publish?.preservePreviousGood ?? null,
+    blockedReason: payload?.blockedReason || payload?.scanner_block_reason || payload?.run_quality_at_publish?.blockedReason || "",
+  };
+}
+
+function buildStrategyEvidence(payload) {
+  return {
+    evidenceStatus: payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "",
+    unattendedStatus: payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "",
+    publishAllowed: payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed ?? null,
+    latestOverwriteAllowed: payload?.latestOverwriteAllowed ?? payload?.run_quality_at_publish?.latestOverwriteAllowed ?? null,
+    degradedBlocksLatest: payload?.degradedBlocksLatest ?? payload?.run_quality_at_publish?.degradedBlocksLatest ?? null,
+    preservePreviousGood: payload?.preservePreviousGood ?? payload?.run_quality_at_publish?.preservePreviousGood ?? null,
+    fallbackUsed: payload?.fallbackUsed ?? null,
+    fallbackScope: payload?.fallbackScope || [],
+    blockedReason: payload?.blockedReason || payload?.scanner_block_reason || payload?.run_quality_at_publish?.blockedReason || "",
+    sourceStatus: payload?.source_status_at_run?.status || payload?.sourceHealth?.status || "",
   };
 }
 
@@ -185,6 +206,7 @@ function buildHomePayload(base, parts) {
         top: topRows(strategy3, 12),
         runId: strategy3.runId || strategy3.transport?.runId || "",
         gate: strategy3.transport?.gate || "",
+        ...buildStrategyEvidence(strategy3),
       },
       strategy5: {
         updatedAt: strategy5.updatedAt || strategy5.generatedAt || "",

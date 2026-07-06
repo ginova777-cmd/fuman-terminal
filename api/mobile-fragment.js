@@ -368,7 +368,25 @@ function renderFragment(tab, config, payload) {
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
   const runId = extractRunId(payload, tab);
   const quality = payload?.qualityStatus || payload?.sourceHealth?.status || "";
-  const statusLine = [config.subtitle, runId ? `run ${runId}` : "", quality ? `quality ${quality}` : ""].filter(Boolean).join("｜");
+  const evidenceStatus = payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "";
+  const unattendedStatus = payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "";
+  const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
+  const preservePreviousGood = payload?.preservePreviousGood ?? payload?.run_quality_at_publish?.preservePreviousGood;
+  const blockedReason = payload?.blockedReason || payload?.scanner_block_reason || payload?.run_quality_at_publish?.blockedReason || "";
+  const publishLabel = publishAllowed === false ? "publish blocked" : publishAllowed === true ? "publish allowed" : "";
+  const preserveLabel = preservePreviousGood === true ? "preserve previous good" : "";
+  const statusLine = [
+    config.subtitle,
+    runId ? `run ${runId}` : "",
+    quality ? `quality ${quality}` : "",
+    evidenceStatus ? `evidence ${evidenceStatus}` : "",
+    unattendedStatus ? `unattended ${unattendedStatus}` : "",
+    publishLabel,
+    preserveLabel,
+  ].filter(Boolean).join("｜");
+  const blockedHtml = publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO"
+    ? `<p class="mobile-terminal-blocked" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
+    : "";
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}">
@@ -376,6 +394,7 @@ function renderFragment(tab, config, payload) {
         <small>API-only complete run</small>
         <strong>${esc(config.title)}</strong>
         <p>${esc(statusLine)}</p>
+        ${blockedHtml}
         <div class="mobile-terminal-stats">
           <span>數量<b>${esc(count)}</b></span>
           <span>更新<b>${esc(shortTime(updatedAt))}</b></span>

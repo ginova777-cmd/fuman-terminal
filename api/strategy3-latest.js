@@ -18,6 +18,31 @@ const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_str
 const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
 const DESKTOP_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || process.env.FUMAN_STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2500);
 const FORMAL_SOURCE_CHAIN = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume";
+const STRATEGY3_PREWATER_RESPONSE_FIELDS = [
+  "source_snapshot_captured_at",
+  "source_status_at_run",
+  "quote_coverage_at_run",
+  "intraday_1m_readiness_at_run",
+  "ma_readiness_at_run",
+  "preopen_futopt_daily_readiness_at_run",
+  "run_quality_at_publish",
+  "fallbackUsed",
+  "fallbackScope",
+  "fallbackAllowed",
+  "fallbackDetails",
+  "fallbackContract",
+  "degradedBlocksLatest",
+  "preservePreviousGood",
+  "writeBudget",
+  "retentionOk",
+  "evidenceStatus",
+  "unattendedStatus",
+  "requiredFields",
+  "blankCounts",
+  "sampleMissingRows",
+  "blockedReason",
+  "scanner_block_reason",
+];
 
 function apiOnlyError(reason = "") {
   return {
@@ -471,20 +496,65 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const fallbackScope = Array.isArray(contract.fallbackScope) ? contract.fallbackScope : [];
   const fallbackAllowed = fallbackScope.every((scope) => contract.fallbackContract?.[scope]?.allowed === true);
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
+  const sourceEvidenceIssues = Array.isArray(snapshotAudit.issues) ? snapshotAudit.issues : [];
+  const sourceEvidenceMissingFields = Array.isArray(snapshotAudit.missingFields) ? snapshotAudit.missingFields : [];
+  const sourceEvidenceStatus = snapshotAudit.ok && currentSourceReady && fallbackAllowed ? "complete" : "insufficient";
+  const contractIssues = [
+    ...(Array.isArray(contract.issues) ? contract.issues : []),
+    ...sourceEvidenceIssues,
+  ].filter(Boolean);
+  const apiPublishAllowed = snapshotAudit.ok
+    && currentSourceReady
+    && fallbackAllowed
+    && payload.run_quality_at_publish?.publishAllowed !== false;
+  const apiPreservePreviousGood = apiPublishAllowed
+    ? payload.run_quality_at_publish?.preservePreviousGood === true
+    : true;
+  const blockedReason = apiPublishAllowed ? "" : contractIssues.join("; ") || "strategy3 source evidence incomplete";
+  const runQualityAtPublish = {
+    ...(payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object" ? payload.run_quality_at_publish : {}),
+    publishAllowed: apiPublishAllowed,
+    latestOverwriteAllowed: apiPublishAllowed
+      ? payload.run_quality_at_publish?.latestOverwriteAllowed !== false
+      : false,
+    degradedBlocksLatest: !apiPublishAllowed || payload.run_quality_at_publish?.degradedBlocksLatest === true,
+    preservePreviousGood: apiPreservePreviousGood,
+    fallbackUsed: contract.fallbackUsed,
+    fallbackScope,
+    fallbackAllowed,
+    fallbackDetails: contract.fallbackDetails,
+    fallbackContract: contract.fallbackContract,
+    evidenceStatus: sourceEvidenceStatus,
+    unattendedStatus: apiPublishAllowed ? "YES" : "NO",
+    blockedReason,
+    scanner_block_reason: blockedReason,
+    writeBudget: contract.writeBudget,
+    retentionOk: contract.retentionOk,
+  };
   const existingSnapshotFields = snapshotAudit.ok ? runTimeSourceSnapshotResponseFields(payload) : {};
   const payloadWithContract = {
     ...payload,
     ...contract,
     sourceCoverage,
-    publishAllowed: snapshotAudit.ok ? payload.run_quality_at_publish?.publishAllowed !== false : false,
-    degradedBlocksLatest: snapshotAudit.ok ? payload.run_quality_at_publish?.degradedBlocksLatest === true : true,
-    preservePreviousGood: snapshotAudit.ok ? payload.run_quality_at_publish?.preservePreviousGood === true : true,
+    sourceEvidenceStatus,
+    sourceEvidenceMissingFields,
+    sourceEvidenceIssues,
+    evidenceStatus: sourceEvidenceStatus,
+    unattendedStatus: apiPublishAllowed ? "YES" : "NO",
+    publishAllowed: apiPublishAllowed,
+    latestOverwriteAllowed: runQualityAtPublish.latestOverwriteAllowed,
+    degradedBlocksLatest: !apiPublishAllowed,
+    preservePreviousGood: apiPreservePreviousGood,
     fallbackAllowed,
+    run_quality_at_publish: runQualityAtPublish,
+    blockedReason,
+    scanner_block_reason: blockedReason,
+    issues: contractIssues,
     sourceHealth: payload.sourceHealth || null,
   };
   return {
-    ...payloadWithContract,
     ...existingSnapshotFields,
+    ...payloadWithContract,
   };
 }
 
@@ -683,8 +753,12 @@ async function fetchLatestCompleteRows(limit = 2000) {
   return { rows, run };
 }
 
-module.exports = async function handler(request, response) {
-  wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy3", endpoint: "api/strategy3-latest" });
+async function handler(request, response) {
+  wrapJsonRunTimeSourceEvidence(response, {
+    strategy: "strategy3",
+    endpoint: "api/strategy3-latest",
+    evidenceStatusOnQualityFail: "insufficient",
+  });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
@@ -731,4 +805,7 @@ module.exports = async function handler(request, response) {
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
-};
+}
+
+module.exports = handler;
+module.exports.normalizeStrategy3ApiContract = normalizeStrategy3ApiContract;

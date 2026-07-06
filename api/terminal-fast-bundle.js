@@ -133,6 +133,12 @@ function summarize(payload) {
     runId: payload.runId || payload.transport?.runId || "",
     updatedAt: payload.updatedAt || payload.generatedAt || payload.finishedAt || "",
     source: payload.source || payload.cacheSource || payload.transport?.source || "",
+    evidenceStatus: payload.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "",
+    unattendedStatus: payload.unattendedStatus || payload.run_quality_at_publish?.unattendedStatus || "",
+    publishAllowed: payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed ?? null,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed ?? null,
+    preservePreviousGood: payload.preservePreviousGood ?? payload.run_quality_at_publish?.preservePreviousGood ?? null,
+    blockedReason: payload.blockedReason || payload.scanner_block_reason || payload.run_quality_at_publish?.blockedReason || "",
   };
 }
 
@@ -142,6 +148,8 @@ function publicEndpointMap(results) {
     if (Number(result.statusCode || 0) >= 500) continue;
     if (result.payload && typeof result.payload === "object" && result.payload.ok === false) continue;
     map[endpoint] = result.payload;
+    const canonical = new URL(endpoint, "https://fuman.local").pathname;
+    if (canonical && !map[canonical]) map[canonical] = result.payload;
   }
   return map;
 }
@@ -426,11 +434,11 @@ module.exports = async function handler(request, response) {
 
   const startedAt = Date.now();
   const tasks = [
-    ["/api/terminal-home", terminalHome, {}, 3000],
+    ["/api/terminal-home", terminalHome, {}, 8000],
     ["/api/market", market, compactQuery(24), 4200],
     ["/api/stocks", stocks, { limit: "120", compact: "1", shell: "1" }, 3000],
     ["/api/open-buy-latest", openBuyLatest, compactQuery(60), 2300],
-    ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 2300],
+    ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 8000],
     ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 2500],
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-strategy?key=strategy2", latestStrategy, { key: "strategy2", compact: "1", shell: "1", limit: "80", live: "1" }, 3000],

@@ -1,0 +1,33 @@
+{
+  "fixture": "stale-1m",
+  "expectedBlocked": true,
+  "expectedUnattended": "NO",
+  "payload": {
+    "source_snapshot_captured_at": "2026-07-04T01:00:00.000Z",
+    "source_status_at_run": { "ok": false, "status": "degraded", "reason": "intraday_1m stale" },
+    "quote_coverage_at_run": { "ok": true, "fresh_quote_coverage_120s": 0.96, "quote_age_seconds": 10 },
+    "intraday_1m_readiness_at_run": { "ok": false, "today_1m_symbols": 1200, "ready_ge_35": 900, "stale_seconds": 600 },
+    "ma_readiness_at_run": { "ok": true, "ready_ma20_continuous": 1400, "ready_ma35_continuous": 1300 },
+    "preopen_futopt_daily_readiness_at_run": { "daily_volume_status": "ready" },
+    "run_quality_at_publish": { "publishAllowed": false, "degradedBlocksLatest": true, "preservePreviousGood": true, "resultCount": 0 },
+    "fallbackUsed": false,
+    "fallbackScope": [],
+    "fallbackAllowed": true,
+    "fallbackDetails": [],
+    "fallbackContract": { "source": { "allowed": false, "formalSource": true } },
+    "degradedBlocksLatest": true,
+    "preservePreviousGood": true,
+    "writeBudget": { "ok": false, "status": "blocked", "latestOverwriteBlockedOnDegraded": true },
+    "retentionOk": true,
+    "evidenceStatus": "insufficient",
+    "unattendedStatus": "NO",
+    "requiredFields": ["intraday_1m_readiness_at_run"],
+    "blankCounts": {},
+    "sampleMissingRows": [],
+    "blockedReason": "intraday 1m stale",
+    "scanner_block_reason": "intraday_1m_stale",
+    "blockedReceipt": "fixtures/receipts/stale-1m-blocked.json",
+    "latestOverwriteAllowed": false,
+    "count": 0
+  }
+}
