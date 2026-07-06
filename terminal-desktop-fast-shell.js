@@ -1327,7 +1327,7 @@
     const best = arrays
       .map((rows) => rows.map((row, index) => normalizeCanvasRow(row, index, route)).filter((row) => row.code || row.title))
       .sort((a, b) => b.length - a.length)[0] || [];
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : 120;
+    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     if (isRealtimeRadarRoute(route)) {
       return best
         .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)
