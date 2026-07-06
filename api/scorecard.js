@@ -28,6 +28,114 @@ function compactTimestamp(value) {
   return cleanText(value).replace(/\D/g, "").slice(0, 14);
 }
 
+function createCaptureResponse(resolve) {
+  let settled = false;
+  const done = (statusCode, payload) => {
+    if (settled) return;
+    settled = true;
+    resolve({ statusCode, payload });
+  };
+  return {
+    statusCode: 200,
+    setHeader() {},
+    status(code) {
+      this.statusCode = Number(code) || 200;
+      return this;
+    },
+    json(payload) {
+      done(this.statusCode || 200, payload);
+      return this;
+    },
+    send(payload) {
+      done(this.statusCode || 200, payload);
+      return this;
+    },
+    end(payload = "") {
+      done(this.statusCode || 204, payload);
+      return this;
+    },
+  };
+}
+
+function callStrategy3Latest(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let timer = null;
+    try {
+      const handler = require("./strategy3-latest");
+      const query = {
+        canvas: "1",
+        compact: "1",
+        shell: "1",
+        live: "1",
+        limit: "60",
+      };
+      timer = setTimeout(() => resolve({
+        statusCode: 504,
+        payload: { ok: false, error: "strategy3_source_report_timeout" },
+      }), timeoutMs);
+      const finish = (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      };
+      Promise.resolve(handler({
+        method: "GET",
+        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
+        headers: { host: "localhost", "x-scorecard-source": "1" },
+        query,
+      }, createCaptureResponse(finish))).catch((error) => {
+        finish({
+          statusCode: 500,
+          payload: { ok: false, error: "strategy3_source_report_failed", reason: error?.message || String(error) },
+        });
+      });
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      resolve({
+        statusCode: 500,
+        payload: { ok: false, error: "strategy3_source_report_failed", reason: error?.message || String(error) },
+      });
+    }
+  });
+}
+
+function buildStrategy3SourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  return {
+    key: "strategy3",
+    strategy: "策略3隔日沖成績單",
+    endpoint: "/api/strategy3-latest",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: cleanText(payload.runId || payload.transport?.runId),
+    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
+    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
+    evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
+    unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
+    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+  };
+}
+
+function mergeSourceReport(payload, report) {
+  const reports = Array.isArray(payload?.sourceReports) ? [...payload.sourceReports] : [];
+  const index = reports.findIndex((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
+  if (index >= 0) reports[index] = { ...reports[index], ...report };
+  else reports.push(report);
+  return { ...payload, sourceReports: reports };
+}
+
+async function withLiveStrategy3SourceReport(payload) {
+  const result = await callStrategy3Latest();
+  return mergeSourceReport(payload, buildStrategy3SourceReport(result));
+}
+
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
   const snapshotTradeDate = cleanText(payload?.snapshot?.tradeDate || "");
@@ -126,7 +234,7 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
 async function buildPayload(requestedDate = "") {
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 30000 }).catch(() => null);
   if (snapshot?.payload && typeof snapshot.payload === "object") {
-    return selectPayloadDate(withScorecardContract({
+    const payload = await withLiveStrategy3SourceReport(withScorecardContract({
       ok: snapshot.payload.ok !== false,
       ...snapshot.payload,
       source: snapshot.payload.source || "supabase:scorecard_snapshot",
@@ -137,9 +245,10 @@ async function buildPayload(requestedDate = "") {
         updatedAt: snapshot.updatedAt || "",
         source: snapshot.source || "",
       },
-    }, "complete"), requestedDate);
+    }, "complete"));
+    return selectPayloadDate(payload, requestedDate);
   }
-  return selectPayloadDate(readStaticSnapshot("supabase_scorecard_snapshot_missing"), requestedDate);
+  return selectPayloadDate(await withLiveStrategy3SourceReport(readStaticSnapshot("supabase_scorecard_snapshot_missing")), requestedDate);
 }
 
 module.exports = async function handler(request, response) {
