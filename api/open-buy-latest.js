@@ -131,6 +131,37 @@ function normalizeRow(row) {
   };
 }
 
+function buildStrategy1ApiBusinessFieldAudit(rows = []) {
+  const blankCounts = { code: 0, name: 0, rank: 0, score: 0, reason: 0, decision: 0 };
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = [];
+    const checks = {
+      code: /^\d{4}$/.test(String(row.code || "")),
+      name: String(row.name || "").trim().length > 0,
+      rank: cleanNumber(row.rank || index + 1) > 0,
+      reason: String(row.reason || "").trim().length > 0,
+      decision: ["BUY", "WATCH", "BLOCK"].includes(String(row.decision || "").trim().toUpperCase()),
+      score: String(row.decision || "").trim().toUpperCase() === "BLOCK" || cleanNumber(row.score) > 0,
+    };
+    for (const [key, ok] of Object.entries(checks)) {
+      if (!ok) {
+        blankCounts[key] += 1;
+        missing.push(key);
+      }
+    }
+    if (missing.length && sampleMissingRows.length < 20) {
+      sampleMissingRows.push({
+        index,
+        code: String(row.code || "").trim(),
+        name: String(row.name || "").trim(),
+        missing,
+      });
+    }
+  });
+  return { blankCounts, sampleMissingRows };
+}
+
 function runIsAuthoritative(run = {}) {
   const expectedTotal = cleanNumber(run.expected_total);
   const scannedCount = cleanNumber(run.scanned_count);
@@ -349,19 +380,15 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   }]));
   const stageCards = strategy1StageCards(resultCount, buyCount, readyStatus);
   const futopt0845Stage = stageCards.find((card) => card.key === "candidate_2130_futopt_0845") || null;
+  const businessFieldAudit = buildStrategy1ApiBusinessFieldAudit(normalized);
   const stageBlankCounts = {
     ...(runtimeRunQuality.blankCounts || run?.payload?.blankCounts || {}),
+    ...businessFieldAudit.blankCounts,
     futopt0845StageKey: futopt0845Stage?.key === "candidate_2130_futopt_0845" ? 0 : 1,
     futopt0845SecondaryCount: Number.isFinite(Number(futopt0845Stage?.secondaryCount)) ? 0 : 1,
     futopt0845StageStatus: String(futopt0845Stage?.status || "").trim() ? 0 : 1,
   };
-  const stageSampleMissingRows = [
-    ...(Array.isArray(runtimeRunQuality.sampleMissingRows)
-      ? runtimeRunQuality.sampleMissingRows
-      : Array.isArray(run?.payload?.sampleMissingRows)
-        ? run.payload.sampleMissingRows
-        : []),
-  ];
+  const stageSampleMissingRows = [...businessFieldAudit.sampleMissingRows];
   const missingFutopt0845 = [];
   if (stageBlankCounts.futopt0845StageKey > 0) missingFutopt0845.push("futopt0845StageKey");
   if (stageBlankCounts.futopt0845SecondaryCount > 0) missingFutopt0845.push("futopt0845SecondaryCount");

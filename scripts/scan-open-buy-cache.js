@@ -253,6 +253,15 @@ function isBusinessBlank(value, key) {
   return String(value).trim().length === 0;
 }
 
+function rowDecision(row = {}) {
+  return String(row.decision || row?.payload?.decision || row?.strategy1Decision?.decision || "BUY").trim().toUpperCase();
+}
+
+function fieldRequiredForRow(fieldKey, row = {}) {
+  if (fieldKey === "score" && rowDecision(row) === "BLOCK") return false;
+  return true;
+}
+
 function buildStrategy1BusinessFieldAudit(rows = []) {
   const blankCounts = {
     ...Object.fromEntries(STRATEGY1_REQUIRED_BUSINESS_FIELDS.map((field) => [field.key, 0])),
@@ -262,6 +271,7 @@ function buildStrategy1BusinessFieldAudit(rows = []) {
   rows.forEach((row, index) => {
     const missing = [];
     for (const field of STRATEGY1_REQUIRED_BUSINESS_FIELDS) {
+      if (!fieldRequiredForRow(field.key, row)) continue;
       const value = fieldValue(row, field.key, index);
       if (isBusinessBlank(value, field.key)) {
         blankCounts[field.key] += 1;
@@ -322,7 +332,8 @@ function buildOpenBuyResultRows(output, runId) {
 function buildOpenBuyRunRow(output, runId) {
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const rows = Array.isArray(output.rows) ? output.rows : [];
-  const businessFieldAudit = buildStrategy1BusinessFieldAudit(rows);
+  const resultRows = buildOpenBuyResultRows(output, runId);
+  const businessFieldAudit = buildStrategy1BusinessFieldAudit(resultRows);
   const buyCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BUY").length : cleanNumber(output.buyCount || output.count);
   const watchCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "WATCH").length : cleanNumber(output.watchCount);
   const blockCount = rows.length ? rows.filter((row) => String(row.decision || row.strategy1Decision?.decision || "").toUpperCase() === "BLOCK").length : cleanNumber(output.blockCount);

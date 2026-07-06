@@ -78,26 +78,33 @@ function rowHasAny(row, fields) {
 }
 
 function buildWarrantFieldCompleteness(payload) {
-  const rows = [
-    ...(Array.isArray(payload?.matches) ? payload.matches : []),
-    ...(Array.isArray(payload?.volumeMatches) ? payload.volumeMatches : []),
-    ...(Array.isArray(payload?.singleSignals) ? payload.singleSignals : []),
+  const entries = [
+    ...(Array.isArray(payload?.matches) ? payload.matches.map((row) => ({ row, type: "match" })) : []),
+    ...(Array.isArray(payload?.volumeMatches) ? payload.volumeMatches.map((row) => ({ row, type: "volume" })) : []),
+    ...(Array.isArray(payload?.singleSignals) ? payload.singleSignals.map((row) => ({ row, type: "single" })) : []),
   ];
   const blankCounts = Object.fromEntries(WARRANT_FLOW_BUSINESS_BLANK_KEYS.map((key) => [key, 0]));
   const sampleMissingRows = [];
-  rows.forEach((row, index) => {
+  entries.forEach(({ row, type }, index) => {
     const missing = [];
-    const checks = {
+    const commonChecks = {
       underlyingCode: /^\d{4}$/.test(String(row.underlyingCode || row.code || "")),
       underlyingName: nonBlank(row.underlyingName || row.name),
-      warrantCode: rowHasAny(row, ["warrantCode"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => /^\d{5,6}$/.test(String(item.code || "")))),
-      warrantName: rowHasAny(row, ["warrantName"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.name))),
-      finalScore: cleanNumber(row.finalScore) > 0,
-      score: cleanNumber(row.score || row.finalScore) > 0,
+      score: cleanNumber(row.score || row.finalScore || row.warrantHeatScore || row.volumeMultiple) > 0,
       reason: nonBlank(row.reason),
       actionLabel: nonBlank(row.actionLabel) || nonBlank(row.reason),
-      signalGrade: /^[ABC]$/.test(String(row.signalGrade || "").trim()) || /^[ABC]/.test(String(row.reason || "").trim()),
-      stockRisk: nonBlank(row.stockRisk) || nonBlank(row.reason),
+      signalGrade: /^[ABC]$/.test(String(row.signalGrade || "").trim()) || /^[ABC]/.test(String(row.reason || "").trim()) || type !== "match",
+      stockRisk: nonBlank(row.stockRisk) || nonBlank(row.reason) || type !== "match",
+      quoteSource: nonBlank(row.quoteSource) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.quoteSource))),
+    };
+    const warrantChecks = {
+      warrantCode: rowHasAny(row, ["warrantCode"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => /^\d{5,6}$/.test(String(item.code || "")))),
+      warrantName: rowHasAny(row, ["warrantName"]) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.name))),
+    };
+    const checks = {
+      ...commonChecks,
+      ...warrantChecks,
+      finalScore: cleanNumber(row.finalScore) > 0,
       callValue: cleanNumber(row.callValue || row.value) > 0,
       putValue: row.putValue !== undefined && cleanNumber(row.putValue) >= 0,
       callPutRatio: cleanNumber(row.callPutRatio || row.volumeMultiple || row.warrantHeatScore || row.score) > 0,
@@ -108,8 +115,20 @@ function buildWarrantFieldCompleteness(payload) {
       volumeMultiple: row.volumeMultiple === undefined || cleanNumber(row.volumeMultiple) > 0,
       thirtyMinuteVolume: row.thirtyMinuteVolume === undefined || cleanNumber(row.thirtyMinuteVolume) > 0,
       floatingUnits: row.floatingUnits === undefined || cleanNumber(row.floatingUnits) > 0,
-      quoteSource: nonBlank(row.quoteSource) || (Array.isArray(row.topWarrants) && row.topWarrants.some((item) => nonBlank(item.quoteSource))),
     };
+    if (type === "volume") {
+      delete checks.finalScore;
+      delete checks.putValue;
+      checks.volumeMultiple = cleanNumber(row.volumeMultiple || row.callPutRatio || row.warrantHeatScore || row.score) > 0;
+      checks.callValue = cleanNumber(row.callValue || row.value || row.tradeValue) > 0;
+    }
+    if (type === "single") {
+      delete checks.finalScore;
+      delete checks.putValue;
+      delete checks.callValue;
+      delete checks.callPutRatio;
+      checks.warrantHeatScore = cleanNumber(row.warrantHeatScore || row.score || row.volumeMultiple) > 0;
+    }
     for (const [key, ok] of Object.entries(checks)) {
       if (!ok) {
         blankCounts[key] += 1;

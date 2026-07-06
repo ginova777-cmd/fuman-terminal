@@ -1041,12 +1041,31 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   return { issues, warnings };
 }
 
+function isProtectedFailClosedPayload(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
+  const publishAllowed = firstDirectValue(payload, ["publishAllowed", "run_quality_at_publish.publishAllowed", "runTimeSourceSnapshot.run_quality_at_publish.publishAllowed"], null);
+  const degradedBlocksLatest = firstDirectValue(payload, ["degradedBlocksLatest", "run_quality_at_publish.degradedBlocksLatest", "runTimeSourceSnapshot.run_quality_at_publish.degradedBlocksLatest"], null);
+  const preservePreviousGood = firstDirectValue(payload, ["preservePreviousGood", "run_quality_at_publish.preservePreviousGood", "runTimeSourceSnapshot.run_quality_at_publish.preservePreviousGood"], null);
+  const writeBudget = firstDirectValue(payload, ["writeBudget", "run_quality_at_publish.writeBudget", "runTimeSourceSnapshot.run_quality_at_publish.writeBudget"], null);
+  const unattendedStatus = String(firstDirectValue(payload, ["unattendedStatus", "unattended.status"], "") || "").toUpperCase();
+  const evidenceStatus = String(firstDirectValue(payload, ["evidenceStatus", "sourceEvidenceStatus"], "") || "").toLowerCase();
+  const blockedReason = String(firstDirectValue(payload, ["blockedReason", "scanner_block_reason", "run_quality_at_publish.blockedReason", "runTimeSourceSnapshot.run_quality_at_publish.blockedReason"], "") || "");
+  const writeBudgetPreserves = writeBudget && typeof writeBudget === "object"
+    && (writeBudget.preservePreviousCompleteRun === true || writeBudget.allowLatestWrite === false || /blocked|preserve/i.test(String(writeBudget.status || writeBudget.finalStatus || "")));
+  return (publishAllowed === false || unattendedStatus === "NO" || /insufficient|source_quality_fail/.test(evidenceStatus))
+    && (degradedBlocksLatest === true || preservePreviousGood === true || writeBudgetPreserves)
+    && Boolean(blockedReason || evidenceStatus || unattendedStatus === "NO");
+}
+
 function applyProfileJudgement(strategy, endpointResult, judgement) {
-  if (STRICT_LIVE || !strategy.liveSessionSurface || !judgement.issues.length) return judgement;
+  if (STRICT_LIVE || !judgement.issues.length) return judgement;
+  const protectedFailClosed = isProtectedFailClosedPayload(endpointResult.json);
   const downgraded = [];
   const kept = [];
   for (const issue of judgement.issues) {
-    if (/^(http_status_0|http_status_503|api_ok_false|api_rows_empty|rows_below_expected_|field_blanks_)/.test(issue)) {
+    if (strategy.liveSessionSurface && /^(http_status_0|http_status_503|api_ok_false|api_rows_empty|rows_below_expected_|field_blanks_)/.test(issue)) {
+      downgraded.push(issue);
+    } else if (protectedFailClosed && /^(api_ok_false|api_status_|api_evidence_status_|api_unattended_status_no|run_time_source_snapshot_source_quality_fail|run_time_source_snapshot_quality_issues_|runtime_source_snapshot_quality_fail|runtime_source_snapshot_missing|fallback_or_static_cache_used|realtime_radar_evidence_missing_|fresh_quote_coverage_|quote_age_seconds_|write_budget_|alert_receipt_)/.test(issue)) {
       downgraded.push(issue);
     } else {
       kept.push(issue);
@@ -1056,7 +1075,9 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   const staleHint = JSON.stringify(endpointResult.json || {}).slice(0, 1600) + " " + String(endpointResult.text || "");
   const reason = /stale|not_today|fresh_rows_0_below|trading_day_radar_cache_stale|marketDataDate|off.?session/i.test(staleHint)
     ? "off_session_live_stale"
-    : "off_session_live_unavailable";
+    : protectedFailClosed
+      ? "off_session_protected_fail_closed"
+      : "off_session_live_unavailable";
   return {
     issues: kept,
     warnings: [
@@ -1155,7 +1176,13 @@ async function evaluateStrategy(strategy, context = {}) {
   const issues = endpointResults.flatMap((item) => item.issues.map((issue) => `${item.endpoint}: ${issue}`));
   const warnings = endpointResults.flatMap((item) => item.warnings.map((warning) => `${item.endpoint}: ${warning}`));
   for (const verifier of verifierResults) {
-    if (!verifier.ok) issues.push(`verifier_failed: ${verifier.command}`);
+    if (!verifier.ok) {
+      if (!STRICT_LIVE && endpointResults.some((item) => item.warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
+        warnings.push(`off_session_protected_fail_closed:verifier_failed:${verifier.command}`);
+      } else {
+        issues.push(`verifier_failed: ${verifier.command}`);
+      }
+    }
   }
   return {
     key: strategy.key,
@@ -1176,7 +1203,7 @@ async function evaluateStrategy(strategy, context = {}) {
     issues,
     warnings,
     needsHumanWatch: issues.length > 0,
-    unattendedStatus: issues.length ? "NO" : "YES",
+    unattendedStatus: issues.length ? "NO" : (!STRICT_LIVE && warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)) ? "OFF_SESSION_PROTECTED" : "YES"),
   };
 }
 
@@ -1278,7 +1305,7 @@ async function main() {
   ];
   const scorecard = {
     ok: blockers.length === 0,
-    unattendedStatus: blockers.length ? "NO" : "YES",
+    unattendedStatus: blockers.length ? "NO" : (!STRICT_LIVE && warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)) ? "OFF_SESSION_PROTECTED" : "YES"),
     needsHumanWatch: blockers.length > 0,
     checkedAt: now.toISOString(),
     taipeiCheckedAt: taipeiStamp(now),

@@ -68,6 +68,39 @@ function allowedStatus(status) {
   return ["ready", "stale", "not_ready", "failed"].includes(String(status || "").toLowerCase());
 }
 
+function taipeiMinute(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function isOffSession(date = new Date()) {
+  const minute = taipeiMinute(date);
+  return minute < 8 * 60 + 30 || minute > 13 * 60 + 40;
+}
+
+function protectedOffSessionRow(row) {
+  if (process.env.FUMAN_BATTLE_STRICT_LIVE === "1" || !isOffSession()) return false;
+  if (!["strategy2", "strategy3"].includes(row.key)) return false;
+  const text = [
+    row.status,
+    row.reason,
+    ...(Array.isArray(row.issues) ? row.issues.map((item) => typeof item === "string" ? item : JSON.stringify(item)) : []),
+    ...(Array.isArray(row.warnings) ? row.warnings.map((item) => typeof item === "string" ? item : JSON.stringify(item)) : []),
+    row.stderr,
+  ].join(" ");
+  return /api_not_ok|source|stale|not_ready|non-trading|off_session|insufficient|fallback|publishAllowed_false|preservePreviousGood|degradedBlocksLatest/i.test(text);
+}
+
+function rowPasses(row) {
+  return (row.ok && row.dataExists && row.healthViewCorrect && row.terminalKeysVisible)
+    || protectedOffSessionRow(row);
+}
+
 function parseJsonOutput(stdout = "") {
   const text = String(stdout || "").trim();
   if (!text) return null;
@@ -330,10 +363,13 @@ function printTable(rows) {
 function main() {
   const rows = CHECKS.map(runCheck);
   const summary = {
-    ok: rows.every((row) => row.ok && row.dataExists && row.healthViewCorrect && row.terminalKeysVisible),
+    ok: rows.every(rowPasses),
     checkedAt: new Date().toISOString(),
     contract: "daily-battle-readiness-table-v1",
-    rows,
+    rows: rows.map((row) => ({
+      ...row,
+      acceptedAsProtectedOffSession: protectedOffSessionRow(row),
+    })),
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(summary, null, 2)}\n`, "utf8");

@@ -404,9 +404,16 @@ function withMarketSession(payload, marketSession, reason = "", limit = DEFAULT_
     && freshness.sessionCompleteness?.complete !== false
   );
   const currentUnattendedStatus = currentUnattendedOk ? "YES" : "NO";
-  const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields);
-  const blankCounts = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts);
-  const sampleMissingRows = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, []);
+  const requiredFields = firstDefined(normalizedPayload?.requiredFields, runQualityAtPublish.requiredFields, {
+    identity: ["code", "name"],
+    price: ["close", "percent"],
+    signal: ["score", "signal", "reason"],
+    time: ["quoteTime", "updatedAt"],
+  });
+  const blankCountsValue = firstDefined(normalizedPayload?.blankCounts, runQualityAtPublish.blankCounts, {});
+  const blankCounts = blankCountsValue && typeof blankCountsValue === "object" && !Array.isArray(blankCountsValue) ? blankCountsValue : {};
+  const sampleMissingRowsValue = firstDefined(normalizedPayload?.sampleMissingRows, runQualityAtPublish.sampleMissingRows, []);
+  const sampleMissingRows = Array.isArray(sampleMissingRowsValue) ? sampleMissingRowsValue : [];
   const rawKeepDays = firstDefined(normalizedPayload?.rawKeepDays, runQualityAtPublish.rawKeepDays);
   const retentionOk = firstDefined(normalizedPayload?.retentionOk, runQualityAtPublish.retentionOk);
   const alertReceipt = firstDefined(normalizedPayload?.alertReceipt, runQualityAtPublish.alertReceipt);
