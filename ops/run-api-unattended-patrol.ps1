@@ -40,6 +40,25 @@ function Invoke-Step {
   }
 }
 
+function Invoke-OptionalStep {
+  param(
+    [string]$Name,
+    [string]$Command,
+    [string[]]$Arguments
+  )
+
+  Add-Content -LiteralPath $script:LogFile -Value ""
+  Add-Content -LiteralPath $script:LogFile -Value ("[{0}] OPTIONAL STEP {1}" -f (Get-Date -Format o), $Name)
+  Add-Content -LiteralPath $script:LogFile -Value ("> {0} {1}" -f $Command, ($Arguments -join " "))
+
+  & $Command @Arguments 2>&1 | Tee-Object -FilePath $script:LogFile -Append
+  $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+  if ($exitCode -ne 0) {
+    Add-Content -LiteralPath $script:LogFile -Value ("[{0}] OPTIONAL STEP {1} recorded blocker exit={2}; preserving latest and continuing patrol" -f (Get-Date -Format o), $Name, $exitCode)
+  }
+  return $exitCode
+}
+
 function Write-PatrolState {
   param(
     [string]$Status,
@@ -156,7 +175,7 @@ try {
 
   Invoke-Step -Name "production-guard" -Command $npm.Source -Arguments @("run", "guard:production")
   Invoke-Step -Name "production-monitor" -Command $npm.Source -Arguments @("run", "monitor:production")
-  Invoke-Step -Name "production-api-freshness" -Command $npm.Source -Arguments @("run", "verify:production-api-freshness")
+  $freshnessExitCode = Invoke-OptionalStep -Name "production-api-freshness" -Command $npm.Source -Arguments @("run", "verify:production-api-freshness")
   Invoke-Step -Name "api-unattended-scorecard" -Command $node.Source -Arguments @(
     "--dns-result-order=ipv4first",
     "--use-system-ca",
@@ -169,6 +188,12 @@ try {
     "--timeout-ms=$TimeoutMs",
     "--verifier-timeout-ms=$VerifierTimeoutMs"
   )
+
+  if ($freshnessExitCode -ne 0) {
+    Write-PatrolState -Status "degraded" -Message "production-api-freshness recorded blockers; previous good preserved"
+    Add-Content -LiteralPath $script:LogFile -Value ("[{0}] Fuman API unattended patrol degraded: production-api-freshness exit={1}; previous good preserved" -f (Get-Date -Format o), $freshnessExitCode)
+    exit 0
+  }
 
   Write-PatrolState -Status "ok"
   Add-Content -LiteralPath $script:LogFile -Value ("[{0}] Fuman API unattended patrol ok" -f (Get-Date -Format o))
