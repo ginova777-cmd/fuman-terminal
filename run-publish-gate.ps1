@@ -52,6 +52,25 @@ function Get-ReceiptInt($receipt, $name, $default = 0) {
   return [int]$default
 }
 
+function Get-ReceiptWarnings($receipt) {
+  $value = Get-ReceiptValue $receipt "warnings" @()
+  if ($null -eq $value) { return @() }
+  return @($value)
+}
+
+function Test-PreservePreviousGoodWarningsOnly($warnings) {
+  $items = @($warnings)
+  if ($items.Count -eq 0) { return $false }
+  foreach ($item in $items) {
+    $text = [string]$item
+    if ($text -match "^resource health not_ready:" -or $text -match "^blockedReceipt=") {
+      continue
+    }
+    return $false
+  }
+  return $true
+}
+
 if (-not $SkipReceiptCheck) {
   $required = @("open-buy", "strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
   $issues = New-Object System.Collections.Generic.List[string]
@@ -98,8 +117,8 @@ if (-not $SkipReceiptCheck) {
     if ($quality -in @("partial", "degraded", "incomplete")) {
       $issues.Add("blocking scan receipt: $strategy qualityStatus=$quality") | Out-Null
     }
-    $warnings = if ($null -ne $receipt.warnings) { @($receipt.warnings) } else { @() }
-    if ($warnings.Count -gt 0) {
+    $warnings = Get-ReceiptWarnings $receipt
+    if ($warnings.Count -gt 0 -and -not (Test-PreservePreviousGoodWarningsOnly $warnings)) {
       $issues.Add("blocking scan receipt: $strategy warnings=$($warnings.Count)") | Out-Null
     }
   }
