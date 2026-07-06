@@ -124,6 +124,9 @@ if (-not $ExpectedDate) {
 $tradingDayStatus = Get-TradingDayStatus $ProjectRoot
 $allowPreviousForRun = $AllowPreviousTradeDate -or (-not [bool]$tradingDayStatus.isTradingDay)
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
+if ($allowPreviousForRun) {
+  $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
+}
 
 $sourceFile = Join-Path $RuntimeRoot "data\scorecard-terminal-current.json"
 $snapshotFile = Join-Path $RuntimeRoot "data\scorecard-latest-candidate.json"

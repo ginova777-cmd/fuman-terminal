@@ -42,6 +42,7 @@ $startedAt = (Get-Date).ToString("o")
 $exitCode = $null
 $status = "running"
 $errorText = ""
+$effectiveAllowPreviousTradeDate = $AllowPreviousTradeDate -or [string]::IsNullOrWhiteSpace($ExpectedDate)
 
 if (-not (Test-Path -LiteralPath $coreRunner)) {
   throw "scorecard core runner missing: $coreRunner"
@@ -58,6 +59,7 @@ $receipt = [ordered]@{
   runtimeRoot = $RuntimeRoot
   expectedDate = $ExpectedDate
   allowPreviousTradeDate = [bool]$AllowPreviousTradeDate
+  effectiveAllowPreviousTradeDate = [bool]$effectiveAllowPreviousTradeDate
   noLiveVerify = [bool]$NoLiveVerify
   coreRunner = $coreRunner
   log = $script:LogFile
@@ -111,7 +113,7 @@ try {
   if ($ExpectedDate) {
     $runnerArgs += @("-ExpectedDate", $ExpectedDate)
   }
-  if ($AllowPreviousTradeDate) {
+  if ($effectiveAllowPreviousTradeDate) {
     $runnerArgs += "-AllowPreviousTradeDate"
   }
   if ($NoLiveVerify) {
@@ -156,6 +158,7 @@ try {
     runtimeRoot = $RuntimeRoot
     expectedDate = $ExpectedDate
     allowPreviousTradeDate = [bool]$AllowPreviousTradeDate
+    effectiveAllowPreviousTradeDate = [bool]$effectiveAllowPreviousTradeDate
     noLiveVerify = [bool]$NoLiveVerify
     coreRunner = $coreRunner
     log = $script:LogFile

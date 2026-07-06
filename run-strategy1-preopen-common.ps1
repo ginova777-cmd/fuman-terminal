@@ -214,6 +214,12 @@ function Test-WatchWindowActive {
   return $minute -ge 525 -and $minute -le 539
 }
 
+function Test-FinalWindowActive {
+  $now = Get-TaipeiNow
+  $minute = $now.Hour * 60 + $now.Minute
+  return $minute -ge 535 -and $minute -le 539
+}
+
 Write-PreopenLog "strategy1 preopen runner start mode=$Mode"
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy1 preopen $Mode" -LogPath $log
@@ -227,6 +233,13 @@ $warnings = @()
 try {
   if ($Mode -eq "Watch" -and -not (Test-WatchWindowActive)) {
     $message = "outside STAR preopen watch window; skip"
+    Write-PreopenLog $message
+    Write-PreopenReceipt "complete" 0 "skipped" $message $null 0 @($message)
+    exit 0
+  }
+
+  if ($Mode -eq "Final" -and -not (Test-FinalWindowActive)) {
+    $message = "outside Strategy1 final preopen window; preserve latest and do not publish"
     Write-PreopenLog $message
     Write-PreopenReceipt "complete" 0 "skipped" $message $null 0 @($message)
     exit 0

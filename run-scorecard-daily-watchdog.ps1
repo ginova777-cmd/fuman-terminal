@@ -112,7 +112,7 @@ try {
     for ($attempt = 1; $attempt -le [Math]::Max(1, $MaxRepairAttempts); $attempt++) {
       $repairAttempted = $true
       Write-Log ("repair attempt {0}/{1}: running wrapper" -f $attempt, $MaxRepairAttempts)
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot -ExpectedDate $expectedDate
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot -ExpectedDate $expectedDate -AllowPreviousTradeDate
       $repairExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
       if ($repairExitCode -eq 0) {
         break
