@@ -1763,7 +1763,7 @@ for (const marker of [
   '["/api/open-buy-latest", openBuyLatest, liveCompactQuery(60)',
   '["/api/strategy3-latest", strategy3Latest, liveCompactQuery(60)',
   '["/api/strategy4-latest", strategy4Latest, liveCompactQuery(70)',
-  '["/api/strategy5-latest", strategy5Latest, liveCompactQuery(70)',
+  '["/api/strategy5-latest", strategy5Latest, liveCompactQuery(140)',
   '["/api/institution-latest", institutionLatest, liveCompactQuery(60)',
   '["/api/cb-detect-latest", cbDetectLatest, liveCompactQuery(60)',
   '["/api/warrant-flow-latest", warrantFlowLatest, liveCompactQuery(60)',
