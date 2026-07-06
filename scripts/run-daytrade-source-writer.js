@@ -169,6 +169,21 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeTimestamp(value, fallback = "") {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "number" || /^\d{10,17}$/.test(String(value).trim())) {
+    const raw = Number(value);
+    if (Number.isFinite(raw) && raw > 0) {
+      const millis = raw > 1e15 ? raw / 1000 : raw > 1e12 ? raw : raw > 1e10 ? raw : raw * 1000;
+      const date = new Date(millis);
+      if (Number.isFinite(date.getTime())) return date.toISOString();
+    }
+  }
+  const parsed = Date.parse(String(value));
+  if (!Number.isFinite(parsed)) return fallback;
+  return new Date(parsed).toISOString();
+}
+
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -626,12 +641,13 @@ function normalizeQuote(payload, symbol) {
   const previousClose = numberValue(payload?.previousClose || payload?.referencePrice);
   const changePercent = numberValue(payload?.changePercent, previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : 0);
   const quoteSeenAt = nowIso();
-  const quoteTime = payload?.lastUpdated || payload?.lastTrade?.time || null;
+  const quoteTime = normalizeTimestamp(payload?.lastUpdated || payload?.lastTrade?.time, quoteSeenAt);
+  const lastTradeTime = normalizeTimestamp(payload?.lastTrade?.time || payload?.lastUpdated, quoteTime);
   return {
     symbol: code,
     name: payload?.name || code,
     market: payload?.market || payload?.exchange || "",
-    updated_at: quoteTime || quoteSeenAt,
+    updated_at: quoteTime,
     quote_seen_at: quoteSeenAt,
     price,
     open_price: numberValue(payload?.openPrice),
@@ -650,7 +666,7 @@ function normalizeQuote(payload, symbol) {
     cumulative_bid_ask_volume: (toLots(total.tradeVolumeAtBid) || 0) + (toLots(total.tradeVolumeAtAsk) || 0) || null,
     stock_type: payload?.type || payload?.stockType || "",
     session: payload?.session || "",
-    last_trade_time: payload?.lastTrade?.time || payload?.lastUpdated || null,
+    last_trade_time: lastTradeTime,
     source: "fugle_daytrade_writer",
     payload,
   };
