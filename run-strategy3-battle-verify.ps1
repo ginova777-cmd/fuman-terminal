@@ -59,6 +59,11 @@ $TailText
 try {
   $verify = Invoke-Strategy3BattleStateVerify "initial"
   if ($verify.ExitCode -ne 0) {
+    $controlledSourceNotReady = $verify.Output -match "sourceCoverage_not_ready|liveSourceChain|session1m|source not ready|source drift failed"
+    if ($controlledSourceNotReady) {
+      Add-Content -LiteralPath $log -Encoding utf8 -Value "[$(Get-Date -Format o)] Strategy3 battle verify source not ready; preserve latest complete run and do not publish."
+      exit 0
+    }
     $repairable = $verify.Output -match "live_source_chain_tv_drift_api_|api_count_0|api_runId_.*does_not_match|publishedSelfTest_not_ok|result_exact_count_.*does_not_match"
     if (-not $repairable) {
       throw "Strategy3 battle verify failed with exit code $($verify.ExitCode); log=$log"

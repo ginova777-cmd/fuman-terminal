@@ -85,9 +85,22 @@ function Get-TaipeiMinuteOfDay {
   return ($now.Hour * 60) + $now.Minute
 }
 
+function Test-Strategy2ScanWindow {
+  $minute = Get-TaipeiMinuteOfDay
+  return $minute -ge [int]$env:STRATEGY2_SCAN_START_MINUTES -and $minute -le [int]$env:STRATEGY2_SCAN_END_MINUTES
+}
+
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
+if (-not (Test-Strategy2ScanWindow)) {
+  $reason = "outside Strategy2 scan window; preserve latest and do not publish"
+  "Strategy2 off-session skip: $reason" >> $log
+  $verifiedPayload = Assert-Strategy2ApiPreserve
+  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
+  "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
+  exit 0
+}
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy2" -LogPath $log
 if ($resourceGate.PreserveLatest) {

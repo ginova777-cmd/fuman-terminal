@@ -303,7 +303,19 @@ async function main() {
   };
   pushIssue(issues, completeRunHealth.ok, "warrant_complete_run_health_unreadable", { error: completeRunHealth.error || "" });
   pushIssue(issues, Boolean(healthRow.run_id), "warrant_complete_run_health_missing_run_id", healthRow);
-  pushIssue(issues, completeHealthStatus === "ready", "warrant_complete_run_health_not_ready", healthRow);
+  const staleButReadableCompleteRun = completeHealthStatus === "stale"
+    && scannerStatus === "ready"
+    && Boolean(healthRow.run_id)
+    && cleanNumber(healthRow.row_count) >= MIN_RESULT_ROWS;
+  if (staleButReadableCompleteRun) {
+    warnings.push({
+      id: "warrant_complete_run_health_stale_preserve_latest",
+      ...healthRow,
+      decision: "preserve latest complete run; do not publish incomplete warrant data",
+    });
+  } else {
+    pushIssue(issues, completeHealthStatus === "ready", "warrant_complete_run_health_not_ready", healthRow);
+  }
   pushIssue(issues, cleanNumber(healthRow.row_count) >= MIN_RESULT_ROWS, "warrant_complete_run_health_row_count_below_min", {
     rowCount: healthRow.row_count,
     min: MIN_RESULT_ROWS,

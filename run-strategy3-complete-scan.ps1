@@ -122,7 +122,7 @@ captureHandler(handler).then((result) => {
 
 function Test-Strategy3ControlledSourceNotReady($Message) {
   $text = [string]$Message
-  return $text -match "sessionReadyCount .* below" -or $text -match "intraday1mReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout"
+  return $text -match "sessionReadyCount .* below" -or $text -match "intraday1mReadyCount .* below" -or $text -match "v_strategy3_quote_ready .*statement timeout" -or $text -match "Strategy3 source drift failed"
 }
 
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
