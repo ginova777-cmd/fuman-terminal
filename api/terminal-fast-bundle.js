@@ -243,7 +243,7 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
   });
-  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1"] = shapeTopPayload(request, {
+  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1"] = {
     ...replacement,
     transport: {
       ...(replacement.transport || {}),
@@ -251,7 +251,7 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
       staleSnapshotEndpoint: currentEndpoint,
       fetchedAt: new Date().toISOString(),
     },
-  });
+  };
 }
 
 function isStrategy2SnapshotEndpoint(endpoint) {
