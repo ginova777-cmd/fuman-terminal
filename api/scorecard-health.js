@@ -1,5 +1,5 @@
 const { readSnapshot } = require("../lib/supabase-snapshots");
-const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
@@ -235,8 +235,8 @@ function summarizeScorecard(payload) {
 }
 
 async function fetchSupabaseTable(table) {
-  const url = serverSupabaseUrl();
-  const key = serverSupabaseKey();
+  const url = terminalSupabaseUrl();
+  const key = terminalSupabaseKey();
   if (!url || !key) return { ok: false, reason: "missing_supabase_credentials", rows: 0 };
   const dateColumn = table === "strategy_daily_summary" ? "summary_date" : "record_date";
   const endpoint = `${url}/rest/v1/${table}?select=${dateColumn},updated_at,source&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&order=${dateColumn}.desc&limit=5`;
