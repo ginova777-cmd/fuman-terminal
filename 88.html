@@ -444,6 +444,30 @@ function sourceStatus(payload, latestDate) {
   return { qualityStatus, text: pieces.join("｜") };
 }
 
+function sourceReportForStrategy(strategy) {
+  const normalized = String(strategy || "").toLowerCase();
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  return reports.find((report) => {
+    const keys = [report.key, report.strategy, report.strategyName, report.label]
+      .map((value) => String(value || "").toLowerCase());
+    return keys.includes(normalized)
+      || (normalized.includes("策略1") && keys.some((key) => key.includes("strategy1") || key.includes("open-buy")))
+      || (normalized.includes("策略2") && keys.some((key) => key.includes("strategy2")))
+      || (normalized.includes("策略3") && keys.some((key) => key.includes("strategy3")))
+      || (normalized.includes("策略4") && keys.some((key) => key.includes("strategy4")))
+      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")));
+  }) || null;
+}
+
+function strategyRunId(row) {
+  return row.runId
+    || row.sourceRunId
+    || row.payload?.runId
+    || sourceReportForStrategy(row.strategy)?.runId
+    || payload?.runId
+    || "";
+}
+
 function strategy4LiveStatus(payload) {
   const qualityStatus = String(payload?.qualityStatus || payload?.status || "unknown").trim() || "unknown";
   const fallbackUsed = payload?.fallbackUsed === true;
@@ -584,7 +608,7 @@ function render() {
   );
 
   byId("rows").innerHTML = filtered.length ? filtered.map((row) => `
-    <tr>
+    <tr data-strategy="${esc(row.strategy || "")}" data-run-id="${esc(strategyRunId(row))}" data-source-report-run-id="${esc(sourceReportForStrategy(row.strategy)?.runId || "")}">
       <td>${esc(row.record_date)}</td>
       <td>${esc(row.strategy)}</td>
       <td>${esc(row.ticker)}</td>
