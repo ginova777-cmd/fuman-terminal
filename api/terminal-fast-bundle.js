@@ -220,6 +220,40 @@ async function repairStrategy1WaitingSnapshot(request, endpoints) {
   }
 }
 
+async function repairStrategy5FullSnapshot(request, endpoints) {
+  const currentEntry = Object.entries(endpoints || {})
+    .find(([endpoint]) => String(endpoint || "").startsWith("/api/strategy5-latest"));
+  const currentEndpoint = currentEntry?.[0] || "";
+  const currentPayload = currentEntry?.[1] || {};
+  const currentRows = Array.isArray(currentPayload.matches) ? currentPayload.matches
+    : Array.isArray(currentPayload.rows) ? currentPayload.rows
+      : [];
+  const resultCount = Number(currentPayload.resultCount ?? currentPayload.count ?? currentRows.length) || 0;
+  if (currentEndpoint.includes("limit=140") && (!resultCount || currentRows.length >= resultCount)) return;
+  const result = await callJson("/api/strategy5-latest", strategy5Latest, request, {
+    ...compactQuery(140),
+    live: "1",
+  }, 8000);
+  const replacement = result?.payload;
+  const replacementRows = Array.isArray(replacement?.matches) ? replacement.matches
+    : Array.isArray(replacement?.rows) ? replacement.rows
+      : [];
+  const replacementCount = Number(replacement?.resultCount ?? replacement?.count ?? replacementRows.length) || 0;
+  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || !replacementRows.length || replacementRows.length < replacementCount) return;
+  Object.keys(endpoints || {}).forEach((endpoint) => {
+    if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
+  });
+  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1"] = shapeTopPayload(request, {
+    ...replacement,
+    transport: {
+      ...(replacement.transport || {}),
+      fastBundleRepair: "strategy5-full-140",
+      staleSnapshotEndpoint: currentEndpoint,
+      fetchedAt: new Date().toISOString(),
+    },
+  });
+}
+
 function isStrategy2SnapshotEndpoint(endpoint) {
   const value = String(endpoint || "");
   return value.startsWith("/api/latest-strategy?key=strategy2")
@@ -347,6 +381,7 @@ module.exports = async function handler(request, response) {
       response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       await repairStrategy1WaitingSnapshot(request, endpoints);
+      await repairStrategy5FullSnapshot(request, endpoints);
       const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
         timeoutMs: 5500,
         via: "api/terminal-fast-bundle",
@@ -397,7 +432,7 @@ module.exports = async function handler(request, response) {
     ["/api/open-buy-latest", openBuyLatest, compactQuery(60), 2300],
     ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 2300],
     ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 2500],
-    ["/api/strategy5-latest", strategy5Latest, compactQuery(70), 2300],
+    ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-strategy?key=strategy2", latestStrategy, { key: "strategy2", compact: "1", shell: "1", limit: "80", live: "1" }, 3000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/realtime-radar-latest", realtimeRadarLatest, compactQuery(60), 2100],
