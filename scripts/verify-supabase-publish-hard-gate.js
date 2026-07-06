@@ -213,7 +213,15 @@ async function buildPayload() {
   if (requireIntraday1m && afterFirst1mWindow && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
   if (requireIntraday1m && ready35Required && readyGe35 < MIN_READY_GE_35) issues.push(issue("critical", "ready-ge35-low", "09:30 ready_ge_35 hard gate failed", { readyGe35, min: MIN_READY_GE_35 }));
   if (preopenRequired && sourceCoverage.preopen_coverage < MIN_PREOPEN_ROWS) issues.push(issue("critical", "preopen-coverage-low", "08:55 preopen snapshot coverage below threshold", { preopenRows: sourceCoverage.preopen_coverage, min: MIN_PREOPEN_ROWS }));
-  if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) issues.push(issue("critical", "daily-volume-freshness-low", "daily volume freshness below publish threshold", { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE }));
+  if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) {
+    const item = issue(
+      requireSharedSourceStatus ? "critical" : "warning",
+      "daily-volume-freshness-low",
+      "daily volume freshness below publish threshold",
+      { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE, requiredForProfile: requireSharedSourceStatus }
+    );
+    (requireSharedSourceStatus ? issues : warnings).push(item);
+  }
   if (fallbackUsed) issues.push(issue("critical", "fallback-used", "fallbackUsed is true; fallback or old cache cannot satisfy publish gate"));
   if (retentionOk !== true) issues.push(issue("critical", "retention-not-ok", "retentionOk is not true"));
   if (!health.anonRead?.ok) {

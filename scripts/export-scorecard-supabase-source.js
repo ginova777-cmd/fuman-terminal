@@ -11,6 +11,7 @@ const DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_DAYS || "30"));
 const RECORD_LIMIT = Math.max(1000, Number(process.env.FUMAN_SCORECARD_RECORD_LIMIT || String(DAYS * 800)));
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_PAGE_SIZE = Math.max(100, Number(process.env.FUMAN_SCORECARD_SUPABASE_PAGE_SIZE || "1000")) || 1000;
 const EXPECTED_SCORECARD_STRATEGIES = [
   "策略1開盤入成績單",
@@ -61,6 +62,22 @@ function dateOnly(value) {
 
 function scorecardRunId(latestDate) {
   return `scorecard-${compactDate(latestDate) || "unknown"}-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
+}
+
+function readSourceReports() {
+  const files = [
+    process.env.FUMAN_SCORECARD_SOURCE_REPORTS_FILE,
+    path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json"),
+  ].filter(Boolean);
+  for (const file of files) {
+    try {
+      const payload = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+      if (Array.isArray(payload.sourceReports) && payload.sourceReports.length) {
+        return payload.sourceReports.map((row) => ({ ...row }));
+      }
+    } catch {}
+  }
+  return [];
 }
 
 async function supabaseGet(table, query, options = {}) {
@@ -267,6 +284,7 @@ async function main() {
   )).map(normalizeDaily).filter((row) => row.strategy);
   const dateInfo = completeDateInfo(records);
   const latestDate = (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
+  const sourceReports = readSourceReports();
   if (!latestDate) throw new Error("scorecard Supabase source has no trade_records latestDate");
   if (!records.length) throw new Error("scorecard Supabase source returned 0 trade_records");
   if (expectedDate && latestDate !== expectedDate) {
@@ -295,6 +313,7 @@ async function main() {
     latestDate,
     days: DAYS,
     records,
+    sourceReports,
     summary: summarize(records, dailyRows, latestDate),
   };
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
@@ -305,6 +324,7 @@ async function main() {
     latestDate,
     rows: records.length,
     dailyRows: dailyRows.length,
+    sourceReports: sourceReports.length,
     recordLimit: RECORD_LIMIT,
     fetchedRows: records.length,
     cacheSource: payload.cacheSource,
