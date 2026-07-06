@@ -566,7 +566,9 @@ module.exports = async function handler(request, response) {
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const payload = !snapshotPayload
+    const forceLivePayload = tab === "strategy3";
+    const payload = forceLivePayload
+      || !snapshotPayload
       || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000)
