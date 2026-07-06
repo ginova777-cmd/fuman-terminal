@@ -176,7 +176,7 @@ try {
   Invoke-Step -Name "production-guard" -Command $npm.Source -Arguments @("run", "guard:production")
   Invoke-Step -Name "production-monitor" -Command $npm.Source -Arguments @("run", "monitor:production")
   $freshnessExitCode = Invoke-OptionalStep -Name "production-api-freshness" -Command $npm.Source -Arguments @("run", "verify:production-api-freshness")
-  Invoke-Step -Name "api-unattended-scorecard" -Command $node.Source -Arguments @(
+  $scorecardExitCode = Invoke-OptionalStep -Name "api-unattended-scorecard" -Command $node.Source -Arguments @(
     "--dns-result-order=ipv4first",
     "--use-system-ca",
     "scripts\verify-api-unattended-scorecard.js",
@@ -189,9 +189,13 @@ try {
     "--verifier-timeout-ms=$VerifierTimeoutMs"
   )
 
-  if ($freshnessExitCode -ne 0) {
-    Write-PatrolState -Status "degraded" -Message "production-api-freshness recorded blockers; previous good preserved"
-    Add-Content -LiteralPath $script:LogFile -Value ("[{0}] Fuman API unattended patrol degraded: production-api-freshness exit={1}; previous good preserved" -f (Get-Date -Format o), $freshnessExitCode)
+  if ($freshnessExitCode -ne 0 -or $scorecardExitCode -ne 0) {
+    $degradedParts = @()
+    if ($freshnessExitCode -ne 0) { $degradedParts += "production-api-freshness exit=$freshnessExitCode" }
+    if ($scorecardExitCode -ne 0) { $degradedParts += "api-unattended-scorecard exit=$scorecardExitCode" }
+    $degradedMessage = (($degradedParts -join "; ") + "; previous good preserved")
+    Write-PatrolState -Status "degraded" -Message $degradedMessage
+    Add-Content -LiteralPath $script:LogFile -Value ("[{0}] Fuman API unattended patrol degraded: {1}" -f (Get-Date -Format o), $degradedMessage)
     exit 0
   }
 

@@ -124,6 +124,9 @@ try {
     Write-Log ("after latestDate={0} marketDate={1} runId={2} quality={3}" -f $after.latestDate, $after.marketDate, $after.runId, $after.qualityStatus)
     if ($after.latestDate -eq $expectedDate -or $after.marketDate -eq $expectedDate) {
       $status = "repaired"
+    } elseif ($after.ok -and $after.runId -and $after.qualityStatus -eq "complete" -and [int]$after.records -gt 0) {
+      $status = "preserved_previous_trade_date"
+      Write-Log ("preserve previous complete scorecard latest; expectedDate={0} latestDate={1} marketDate={2} runId={3} records={4}" -f $expectedDate, $after.latestDate, $after.marketDate, $after.runId, $after.records)
     } else {
       throw "scorecard still stale after watchdog repair; expectedDate=$expectedDate latestDate=$($after.latestDate) marketDate=$($after.marketDate)"
     }
@@ -135,7 +138,7 @@ try {
   Write-Log ("FAILED watchdog: {0}" -f $errorText)
 } finally {
   $receipt = [ordered]@{
-    ok = ($status -eq "ok" -or $status -eq "repaired" -or $status -eq "skipped_non_trading_day")
+    ok = ($status -eq "ok" -or $status -eq "repaired" -or $status -eq "preserved_previous_trade_date" -or $status -eq "skipped_non_trading_day")
     status = $status
     source = "scorecard-daily-watchdog"
     startedAt = $startedAt
