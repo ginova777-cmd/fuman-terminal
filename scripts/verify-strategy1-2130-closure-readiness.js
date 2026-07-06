@@ -10,6 +10,7 @@ const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.ve
 const TASK_NAME = "Fuman Open Buy Cache 2130";
 const RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "open-buy.json");
 const STRICT = process.argv.includes("--strict") || process.env.FUMAN_STRATEGY1_2130_STRICT === "1";
+const READINESS_ONLY = process.argv.includes("--readiness-only");
 const EXPECT_RUN_ID = argValue("expect-run-id") || process.env.FUMAN_STRATEGY1_2130_EXPECT_RUN_ID || "";
 const RUN_BAD_SOURCE_DRILL = process.argv.includes("--run-bad-source-drill");
 
@@ -117,12 +118,18 @@ async function main() {
   const mobile = await fetchJson(`/api/mobile-fragment?tab=strategy1&t=${Date.now()}`);
   const scorecard = await fetchJson(`/api/scorecard?t=${Date.now()}`);
   const page88 = await fetchJson(`/88?t=${Date.now()}`);
+  const local88Text = fs.readFileSync(path.join(ROOT, "88.html"), "utf8");
   const openBuyFromBundle = firstEndpoint(bundle.json, "/api/open-buy-latest");
   const mobileRunId = String(mobile.text.match(/data-run-id="([^"]+)"/)?.[1] || "");
   const scorecardStrategy1 = (scorecard.json?.sourceReports || []).find((item) => item.key === "strategy1" || item.strategy === "strategy1") || null;
   const scorecardRows = Array.isArray(scorecard.json?.records) ? scorecard.json.records : [];
   const scorecardStrategy1Rows = scorecardRows.filter((row) => /策略1|Strategy1|open-buy/i.test(String(row.strategy || row.source || row.reason || "")));
+  const page88HasRunIdDomContract = /data-run-id=/.test(local88Text) && /sourceReportForStrategy/.test(local88Text);
   const expectedRunId = EXPECT_RUN_ID || receipt?.runId || "";
+  const apiQualityStatus = String(api.json?.qualityStatus || api.json?.status || "");
+  const bundleQualityStatus = String(openBuyFromBundle?.qualityStatus || openBuyFromBundle?.status || "");
+  const isCarryForward = /carry_forward|previous_2130/i.test(`${apiQualityStatus} ${bundleQualityStatus} ${api.json?.reason || ""} ${openBuyFromBundle?.reason || ""}`);
+  const receiptRunId = String(receipt?.runId || "");
 
   issueWhen(issues, task.TaskName !== TASK_NAME, "strategy1_2130_task_missing", task);
   issueWhen(issues, task.Enabled !== true, "strategy1_2130_task_disabled", task);
@@ -148,11 +155,46 @@ async function main() {
   issueWhen(issues, mobile.status !== 200, "mobile_fragment_not_200", { status: mobile.status, url: mobile.url });
   issueWhen(issues, !mobileRunId, "mobile_fragment_missing_data_run_id", mobile.text.slice(0, 240));
   issueWhen(issues, page88.status !== 200, "scorecard_88_not_200", { status: page88.status, url: page88.url });
+  issueWhen(issues, !page88HasRunIdDomContract, "scorecard_88_row_runId_dom_contract_missing", {
+    hasDataRunId: /data-run-id=/.test(page88.text),
+    hasSourceReportMapping: /sourceReportForStrategy/.test(page88.text),
+  });
 
   if (!scorecardStrategy1?.runId && !scorecardStrategy1Rows.some((row) => row.runId || row.sourceRunId || row.payload?.runId)) {
     warnings.push({
       code: "scorecard_88_strategy1_row_runId_not_exposed",
       evidence: "/88 reads /api/scorecard; current Strategy1 sourceReports/rows do not expose row-level runId",
+    });
+  }
+
+  if (!READINESS_ONLY) {
+    issueWhen(issues, isCarryForward, "strategy1_latest_is_previous_2130_carry_forward_not_new_scanner_run", {
+      apiQualityStatus,
+      bundleQualityStatus,
+      apiRunId: api.json?.runId || "",
+      bundleRunId: openBuyFromBundle?.runId || "",
+    });
+    issueWhen(issues, !receiptRunId, "scanner_receipt_missing_new_runId", {
+      receiptPath: RECEIPT,
+      receiptStartedAt: receipt?.startedAt || "",
+      receiptFinishedAt: receipt?.finishedAt || "",
+      receiptStatus: receipt?.status || "",
+    });
+    issueWhen(issues, receiptRunId && api.json?.runId && receiptRunId !== api.json.runId, "scanner_receipt_runId_not_in_production_api", {
+      receiptRunId,
+      apiRunId: api.json?.runId || "",
+    });
+    issueWhen(issues, receiptRunId && openBuyFromBundle?.runId && receiptRunId !== openBuyFromBundle.runId, "scanner_receipt_runId_not_in_terminal_fast_bundle", {
+      receiptRunId,
+      bundleRunId: openBuyFromBundle?.runId || "",
+    });
+    issueWhen(issues, receiptRunId && mobileRunId && receiptRunId !== mobileRunId, "scanner_receipt_runId_not_in_mobile_fragment", {
+      receiptRunId,
+      mobileRunId,
+    });
+    issueWhen(issues, receiptRunId && scorecardStrategy1?.runId && receiptRunId !== scorecardStrategy1.runId, "scanner_receipt_runId_not_in_scorecard_88", {
+      receiptRunId,
+      scorecardRunId: scorecardStrategy1.runId,
     });
   }
 
@@ -173,9 +215,16 @@ async function main() {
   const badSourceDrill = RUN_BAD_SOURCE_DRILL ? runBadSourceDrill() : null;
   if (RUN_BAD_SOURCE_DRILL && !badSourceDrill.ok) issues.push({ code: "bad_source_drill_failed", evidence: badSourceDrill });
 
+  const closureLevel = issues.length === 0
+    ? "scanner_new_run_terminal_closure"
+    : isCarryForward
+      ? "latest_good_run_carry_forward_only"
+      : "not_closed";
   const output = {
     ok: issues.length === 0,
-    mode: STRICT ? "strict-2130-readback" : "readiness",
+    mode: READINESS_ONLY ? "readiness-only" : STRICT ? "strict-2130-readback" : "new-run-closure",
+    closureLevel,
+    claimableUnattendedYes: issues.length === 0 && closureLevel === "scanner_new_run_terminal_closure",
     checkedAt: new Date().toISOString(),
     task,
     receipt: receipt ? {
@@ -202,7 +251,7 @@ async function main() {
       productionApi: { status: api.status, runId: api.json?.runId || "", qualityStatus: api.json?.qualityStatus || api.json?.status || "", count: api.json?.count ?? null },
       terminalFastBundle: { status: bundle.status, runId: openBuyFromBundle?.runId || "", qualityStatus: openBuyFromBundle?.qualityStatus || openBuyFromBundle?.status || "", count: openBuyFromBundle?.count ?? openBuyFromBundle?.returnedCount ?? null },
       mobileFragment: { status: mobile.status, runId: mobileRunId, rows: (mobile.text.match(/mobile-terminal-row/g) || []).length },
-      scorecard88: { status: page88.status, pageHasStrategy1: /策略1|Strategy1|open-buy/i.test(page88.text), sourceReportRunId: scorecardStrategy1?.runId || "", strategy1Rows: scorecardStrategy1Rows.length },
+      scorecard88: { status: page88.status, pageHasStrategy1: /策略1|Strategy1|open-buy/i.test(page88.text), localRowRunIdDomContract: page88HasRunIdDomContract, sourceReportRunId: scorecardStrategy1?.runId || "", strategy1Rows: scorecardStrategy1Rows.length },
     },
     badSourceDrill,
     warnings,
