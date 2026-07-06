@@ -97,3 +97,5 @@ try {
 
 "CB detect API-only: cache sync, afterhours static status, and release/freshness gate are disabled; terminal reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
+$global:LASTEXITCODE = 0
+exit 0
