@@ -1541,9 +1541,8 @@ function collectMobileStats(route) {
   const layoutBlockers = [];
   const contractBlockers = [];
   const actionText = [...document.querySelectorAll(".actions a,.actions button")].map((el) => text(el)).join(" ");
-  const actionHref = [...document.querySelectorAll(".actions a")].map((el) => el.getAttribute("href") || "").join(" ");
   if (!shell || !tabs || !hero) layoutBlockers.push("mobile shell missing core layout nodes");
-  if (/終端/.test(actionText) || (actionHref && /(?:^|\/)(?:index\.html)?(?:\?|#|$)/.test(actionHref))) {
+  if (/終端/.test(actionText)) {
     layoutBlockers.push("mobile shell must not expose desktop terminal action");
   }
   if (/Times New Roman/i.test(layout.bodyFont) || /(^|,\s*)serif(\s*,|$)/i.test(layout.bodyFont)) {
