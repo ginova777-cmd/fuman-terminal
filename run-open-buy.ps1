@@ -27,7 +27,29 @@ $script:OpenBuyVerifiedRunId = ""
 $script:OpenBuyVerifiedCount = 0
 $script:OpenBuyReceiptWarnings = @()
 
-function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-OpenBuyReceipt(
+  $Status,
+  $ExitCode,
+  $Complete,
+  $Matches,
+  $RunId,
+  $Warnings = @(),
+  $BlockingReason = "",
+  $ExpectedTotal = 0,
+  $ScannedCount = 0,
+  $ReadbackCount = 0,
+  $LatestBeforeRunId = "",
+  $LatestAfterRunId = "",
+  $SourceSnapshotCapturedAt = "",
+  $SourceStatusAtRun = $null,
+  $RunQualityAtPublish = $null
+) {
+  $latestPointerUpdated = -not [string]::IsNullOrWhiteSpace([string]$RunId) -and
+    -not [string]::IsNullOrWhiteSpace([string]$LatestAfterRunId) -and
+    ([string]$LatestAfterRunId -eq [string]$RunId) -and
+    ([string]$LatestBeforeRunId -ne [string]$LatestAfterRunId)
+  $emptyResultWritten = $Complete -and ([int]$ReadbackCount -le 0) -and ([int]$Matches -le 0)
+  $preservePreviousGood = -not $latestPointerUpdated
   $receipt = [ordered]@{
     strategy = "open-buy"
     label = "open buy raw refresh"
@@ -36,13 +58,25 @@ function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode
-    scanned = 0
-    total = 0
+    scanned = $ScannedCount
+    total = $ExpectedTotal
     matches = $Matches
+    resultCount = $Matches
+    expectedTotal = $ExpectedTotal
+    scannedCount = $ScannedCount
+    readbackCount = $ReadbackCount
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
     runId = $RunId
+    latestBeforeRunId = $LatestBeforeRunId
+    latestAfterRunId = $LatestAfterRunId
+    latestPointerUpdated = $latestPointerUpdated
+    emptyResultWritten = $emptyResultWritten
+    preservePreviousGood = $preservePreviousGood
+    source_snapshot_captured_at = $SourceSnapshotCapturedAt
+    source_status_at_run = $SourceStatusAtRun
+    run_quality_at_publish = $RunQualityAtPublish
     payloadPath = (Join-Path $env:FUMAN_DATA_DIR "open-buy-latest.json")
     warnings = @($Warnings)
     blockingReason = $BlockingReason
@@ -51,15 +85,26 @@ function Write-OpenBuyReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "open-buy.json") -Encoding utf8
 }
 
-function Assert-OpenBuyApiPreserve {
+function Get-OpenBuyCompactState {
   $verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing -TimeoutSec 45
   $payload = $response.Content | ConvertFrom-Json
+  return [pscustomobject]@{
+    statusCode = [int]$response.StatusCode
+    payload = $payload
+    url = $verifyUrl
+  }
+}
+
+function Assert-OpenBuyApiPreserve {
+  $state = Get-OpenBuyCompactState
+  $responseStatus = $state.statusCode
+  $payload = $state.payload
   $hasRunId = -not [string]::IsNullOrWhiteSpace([string]$payload.runId)
   $controlledErrors = @("strategy1_decision_not_ready", "strategy1_complete_run_empty", "strategy1_complete_run_missing")
-  $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and ($controlledErrors -contains [string]$payload.error)
-  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or (-not $hasRunId -and -not $isControlledWaiting)) {
-    throw "open-buy preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId) decisionReady=$($payload.decisionReady)"
+  $isControlledWaiting = $responseStatus -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and ($controlledErrors -contains [string]$payload.error)
+  if ($responseStatus -ne 200 -or $payload.ok -ne $true -or (-not $hasRunId -and -not $isControlledWaiting)) {
+    throw "open-buy preserve API verification failed status=$responseStatus ok=$($payload.ok) runId=$($payload.runId) decisionReady=$($payload.decisionReady)"
   }
   $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
   "Open buy preserve API verified runId=$($payload.runId) count=$count decisionReady=$($payload.decisionReady) cache=$($payload.cacheSource)" >> $log
@@ -72,6 +117,9 @@ function Assert-OpenBuyApiPreserve {
 }
 
 . "${PSScriptRoot}\scanner-resource-health.ps1"
+$latestBefore = Get-OpenBuyCompactState
+$latestBeforeRunId = [string]$latestBefore.payload.runId
+"Open buy latest before runId=$latestBeforeRunId status=$($latestBefore.statusCode) quality=$($latestBefore.payload.qualityStatus ?? $latestBefore.payload.status)" >> $log
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy1" -LogPath $log
 $candidateScanAllowedByPhase = $false
 if ($resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "(?i)preopen|futopt|flame|decision|time window") {
@@ -87,11 +135,11 @@ if ($resourceGate.PreserveLatest -and -not $candidateScanAllowedByPhase) {
     & $snapshotScript -Source "open-buy" -LogPath $log
     if ($LASTEXITCODE -ne 0) {
       "Open buy desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
-      Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 ([string]$preservedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+      Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 ([string]$preservedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh" 0 0 0 $latestBeforeRunId ([string]$preservedPayload.runId)
       exit $LASTEXITCODE
     }
   }
-  Write-OpenBuyReceipt "complete" 0 $true ([int]$preservedPayload.count) ([string]$preservedPayload.runId) @($reason) $reason
+  Write-OpenBuyReceipt "blocked" 0 $false 0 ([string]$preservedPayload.runId) @($reason) $reason 0 0 0 $latestBeforeRunId ([string]$preservedPayload.runId)
   "Open buy resource-gated scan end; preserved runId=$($preservedPayload.runId) count=$($preservedPayload.count)" >> $log
   exit 0
 }
@@ -106,16 +154,20 @@ Remove-Item Env:OPEN_BUY_USE_MIS -ErrorAction SilentlyContinue
 
 if ($exitCode -ne 0) {
   "Open buy scan failed with exit code $exitCode" >> $log
-  Write-OpenBuyReceipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode"
+  Write-OpenBuyReceipt "failed" $exitCode $false 0 "" @("scanner exit code $exitCode") "critical scan failed with exit code $exitCode" 0 0 0 $latestBeforeRunId ""
   exit $exitCode
 }
 
 $scanRunId = ""
 $scanMatches = 0
-$runLine = Select-String -LiteralPath $log -Pattern "open-buy supabase run_id gate ok:\s*([^,]+),\s*matches\s+(\d+)" | Select-Object -Last 1
+$scanScanned = 0
+$scanExpected = 0
+$runLine = Select-String -LiteralPath $log -Pattern "open-buy supabase run_id gate ok:\s*([^,]+),\s*matches\s+(\d+),\s*scanned\s+(\d+)\/(\d+)" | Select-Object -Last 1
 if ($runLine -and $runLine.Matches.Count -gt 0) {
   $scanRunId = [string]$runLine.Matches[0].Groups[1].Value
   $scanMatches = [int]$runLine.Matches[0].Groups[2].Value
+  $scanScanned = [int]$runLine.Matches[0].Groups[3].Value
+  $scanExpected = [int]$runLine.Matches[0].Groups[4].Value
 }
 
 $verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
@@ -123,6 +175,11 @@ $verifyUrl = "https://fuman-terminal.vercel.app/api/open-buy-latest?canvas=1&com
 try {
   $response = Invoke-WebRequest $verifyUrl -UseBasicParsing
   $payload = $response.Content | ConvertFrom-Json
+  $readbackCount = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
+  $latestAfterRunId = [string]$payload.runId
+  $sourceSnapshotCapturedAt = [string]$payload.source_snapshot_captured_at
+  $sourceStatusAtRun = $payload.source_status_at_run
+  $runQualityAtPublish = $payload.run_quality_at_publish
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or $payload.complete -ne $true -or -not $payload.runId) {
     $controlledErrors = @("strategy1_decision_not_ready", "strategy1_complete_run_empty", "strategy1_complete_run_missing")
     $isControlledWaiting = $response.StatusCode -eq 200 -and $payload.ok -eq $true -and $payload.decisionReady -eq $false -and ($controlledErrors -contains [string]$payload.error) -and -not [string]::IsNullOrWhiteSpace($scanRunId)
@@ -131,6 +188,13 @@ try {
     }
     $script:OpenBuyVerifiedRunId = $scanRunId
     $script:OpenBuyVerifiedCount = $scanMatches
+    $script:OpenBuyExpectedTotal = $scanExpected
+    $script:OpenBuyScannedCount = $scanScanned
+    $script:OpenBuyReadbackCount = $readbackCount
+    $script:OpenBuyLatestAfterRunId = $latestAfterRunId
+    $script:OpenBuySourceSnapshotCapturedAt = $sourceSnapshotCapturedAt
+    $script:OpenBuySourceStatusAtRun = $sourceStatusAtRun
+    $script:OpenBuyRunQualityAtPublish = $runQualityAtPublish
     $pendingDetail = [string]$payload.detail
     if ([string]::IsNullOrWhiteSpace($pendingDetail)) { $pendingDetail = [string]$payload.reason }
     if ([string]::IsNullOrWhiteSpace($pendingDetail)) { $pendingDetail = [string]$payload.error }
@@ -139,11 +203,18 @@ try {
   } else {
     $script:OpenBuyVerifiedRunId = [string]$payload.runId
     $script:OpenBuyVerifiedCount = [int]$payload.count
+    $script:OpenBuyExpectedTotal = if ($null -ne $payload.expectedTotal) { [int]$payload.expectedTotal } else { $scanExpected }
+    $script:OpenBuyScannedCount = if ($null -ne $payload.scannedCount) { [int]$payload.scannedCount } else { $scanScanned }
+    $script:OpenBuyReadbackCount = $readbackCount
+    $script:OpenBuyLatestAfterRunId = $latestAfterRunId
+    $script:OpenBuySourceSnapshotCapturedAt = $sourceSnapshotCapturedAt
+    $script:OpenBuySourceStatusAtRun = $sourceStatusAtRun
+    $script:OpenBuyRunQualityAtPublish = $runQualityAtPublish
     "Open buy terminal compact API verified runId=$($payload.runId) count=$($payload.count) usedDate=$($payload.usedDate) decisionReady=$($payload.decisionReady)" >> $log
   }
 } catch {
   "Open buy API-only verification failed: $($_.Exception.Message)" >> $log
-  Write-OpenBuyReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
+  Write-OpenBuyReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification" $scanExpected $scanScanned 0 $latestBeforeRunId ""
   exit 1
 }
 
@@ -152,12 +223,12 @@ if (Test-Path -LiteralPath $snapshotScript) {
   & $snapshotScript -Source "open-buy" -LogPath $log
   if ($LASTEXITCODE -ne 0) {
     "Open buy desktop snapshot refresh failed with exit code $LASTEXITCODE" >> $log
-    Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 $script:OpenBuyVerifiedRunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
+    Write-OpenBuyReceipt "failed" $LASTEXITCODE $false 0 $script:OpenBuyVerifiedRunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh" $script:OpenBuyExpectedTotal $script:OpenBuyScannedCount $script:OpenBuyReadbackCount $latestBeforeRunId $script:OpenBuyLatestAfterRunId $script:OpenBuySourceSnapshotCapturedAt $script:OpenBuySourceStatusAtRun $script:OpenBuyRunQualityAtPublish
     exit $LASTEXITCODE
   }
 } else {
   "Open buy desktop snapshot refresh skipped; helper not found." >> $log
 }
 
-Write-OpenBuyReceipt "complete" 0 $true $script:OpenBuyVerifiedCount $script:OpenBuyVerifiedRunId $script:OpenBuyReceiptWarnings
+Write-OpenBuyReceipt "complete" 0 $true $script:OpenBuyVerifiedCount $script:OpenBuyVerifiedRunId $script:OpenBuyReceiptWarnings "" $script:OpenBuyExpectedTotal $script:OpenBuyScannedCount $script:OpenBuyReadbackCount $latestBeforeRunId $script:OpenBuyLatestAfterRunId $script:OpenBuySourceSnapshotCapturedAt $script:OpenBuySourceStatusAtRun $script:OpenBuyRunQualityAtPublish
 "=== Open buy full scan end $(Get-Date) ===" >> $log

@@ -193,6 +193,7 @@
     "verify:cb-alert-path:send": "node --use-system-ca scripts/verify-cb-alert-path.js --send",
     "verify:strategy5-alert-path": "node --use-system-ca scripts/verify-strategy5-alert-path.js",
     "verify:strategy1-autonomy": "node --use-system-ca scripts/verify-strategy1-autonomy-readonly.js",
+    "verify:strategy1-2130-readiness": "node --use-system-ca scripts/verify-strategy1-2130-closure-readiness.js",
     "verify:strategy1-prewater-contract": "node scripts/verify-strategy1-prewater-contract.js --strict",
     "verify:strategy1-business-fields": "node scripts/verify-strategy1-prewater-contract.js --business-fields",
     "verify:strategy1-formal-payloads": "node scripts/verify-strategy1-prewater-contract.js --formal-payloads",
