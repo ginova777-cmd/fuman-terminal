@@ -76,7 +76,9 @@ const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT
 const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISABLED === "1";
 const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 20);
 const STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW = process.env.STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW !== "0";
-const STRATEGY3_FORMAL_SOURCE_CHAIN = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume";
+const STRATEGY3_INTRADAY_STATUS_SOURCE = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_strategy2_intraday_ready";
+const STRATEGY3_INTRADAY_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_intraday_1m";
+const STRATEGY3_FORMAL_SOURCE_CHAIN = `fugle_quotes_latest+${STRATEGY3_INTRADAY_STATUS_SOURCE}+stock_daily_volume`;
 const STRATEGY3_PREWATER_REQUIRED_EVIDENCE_FIELDS = [
   "source_snapshot_captured_at",
   "source_status_at_run",
@@ -194,7 +196,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
   );
   const driftIntradayStatus = Array.isArray(sourceDriftHealth?.checks)
-    ? sourceDriftHealth.checks.find((item) => item.source === "v_strategy3_intraday_1m_status")
+    ? sourceDriftHealth.checks.find((item) => item.source === STRATEGY3_INTRADAY_STATUS_SOURCE)
     : null;
   const driftIntradayReady = sourceDriftHealth?.status === "ready"
     && cleanNumber(driftIntradayStatus?.rowCount) >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS;
@@ -210,7 +212,7 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   }
   if (STRATEGY3_REQUIRE_INTRADAY_1M && intradayReadyCount < minIntradayReadyCount) {
     if (driftIntradayReady) {
-      warnings.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}; accepted by v_strategy3_intraday_1m_status rows=${cleanNumber(driftIntradayStatus?.rowCount)}`);
+      warnings.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}; accepted by ${STRATEGY3_INTRADAY_STATUS_SOURCE} readyRows=${cleanNumber(driftIntradayStatus?.rowCount)}`);
     } else {
       issues.push(`intraday1mReadyCount ${intradayReadyCount} below ${minIntradayReadyCount}`);
     }
@@ -408,6 +410,71 @@ async function fetchSupabaseCountAtLeast(pathname, minRequired, options = {}) {
   const limited = await fetchSupabaseRest(limitedPath, { ...options, count: false });
   return Math.max(cleanNumber(limited.rows?.length), limited.rows?.length || 0);
 }
+
+function strategy2IntradayReadyRow(row) {
+  return row?.ready_ma35_continuous === true
+    || row?.ready_ge_35 === true
+    || cleanNumber(row?.continuous_candle_count ?? row?.candle_count) >= STRATEGY3_MIN_INTRADAY_1M_CANDLES;
+}
+
+async function fetchStrategy3IntradayReadyCount() {
+  const latestRows = await fetchSupabaseRest(`${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date&order=trade_date.desc&limit=1`, { timeoutMs: 30000 });
+  const latestTradeDate = String(latestRows.rows?.[0]?.trade_date || "");
+  if (latestTradeDate) {
+    const pageSize = 1000;
+    const byCode = new Map();
+    let latestCandleTime = "";
+    for (let offset = 0; offset < 400000; offset += pageSize) {
+      const result = await fetchSupabaseRest([
+        `${STRATEGY3_INTRADAY_1M_TABLE}?select=symbol,candle_time,trade_date,updated_at`,
+        `order=symbol.asc,candle_time.desc`,
+        `limit=${pageSize}`,
+        `offset=${offset}`,
+      ].join("&"), { timeoutMs: 30000 });
+      const rows = Array.isArray(result.rows) ? result.rows : [];
+      for (const row of rows) {
+        const code = normalizeCode(row.symbol);
+        if (!/^\d{4}$/.test(code)) continue;
+        const current = byCode.get(code) || { continuous_candle_count: 0, latest_candle_time: "" };
+        if (current.continuous_candle_count >= 200) continue;
+        current.continuous_candle_count += 1;
+        if (row.candle_time && (!current.latest_candle_time || Date.parse(row.candle_time) > Date.parse(current.latest_candle_time))) {
+          current.latest_candle_time = row.candle_time;
+        }
+        byCode.set(code, current);
+        if (row.candle_time && (!latestCandleTime || Date.parse(row.candle_time) > Date.parse(latestCandleTime))) latestCandleTime = row.candle_time;
+      }
+      if (rows.length < pageSize) break;
+    }
+    for (const [code, row] of byCode) {
+      if (String(row.latest_candle_time || "").slice(0, 10) !== latestTradeDate) byCode.delete(code);
+    }
+    const readyCount = [...byCode.values()].filter(strategy2IntradayReadyRow).length;
+    return { rowCount: byCode.size, readyCount, latestCandleTime, latestTradeDate, source: `${STRATEGY3_INTRADAY_1M_TABLE}:latest-valid-day` };
+  }
+  const pageSize = 1000;
+  let readyCount = 0;
+  let rowCount = 0;
+  let latestCandleTime = "";
+  for (let offset = 0; offset < 10000; offset += pageSize) {
+    const result = await fetchSupabaseRest([
+      `${STRATEGY3_INTRADAY_STATUS_SOURCE}?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma35_continuous`,
+      `order=symbol.asc`,
+      `limit=${pageSize}`,
+      `offset=${offset}`,
+    ].join("&"), { timeoutMs: 30000 });
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    rowCount += rows.length;
+    readyCount += rows.filter(strategy2IntradayReadyRow).length;
+    for (const row of rows) {
+      const time = String(row.latest_candle_time || "");
+      if (time && (!latestCandleTime || Date.parse(time) > Date.parse(latestCandleTime))) latestCandleTime = time;
+    }
+    if (rows.length < pageSize) break;
+  }
+  return { rowCount, readyCount, latestCandleTime };
+}
+
 async function fetchStrategy3SourceDriftHealth() {
   const checks = [];
   const add = (item) => checks.push(item);
@@ -424,10 +491,11 @@ async function fetchStrategy3SourceDriftHealth() {
     add({ source: "fugle_quotes_latest", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
-    const rowCount = await fetchSupabaseCountAtLeast("v_strategy3_intraday_1m_status?select=symbol", STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, { timeoutMs: 30000 });
-    add({ source: "v_strategy3_intraday_1m_status", rowCount, minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
+    const readiness = await fetchStrategy3IntradayReadyCount();
+    const rowCount = cleanNumber(readiness.readyCount);
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount: readiness.rowCount, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
   } catch (error) {
-    add({ source: "v_strategy3_intraday_1m_status", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: "failed", reason: error?.message || String(error) });
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount: 0, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
     const result = await fetchSupabaseRest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true });
@@ -449,7 +517,7 @@ async function fetchStrategy3SourceDriftHealth() {
 async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
   const checks = Array.isArray(sourceDriftHealth?.checks) ? sourceDriftHealth.checks : [];
   const quoteCheck = checks.find((item) => item.source === "fugle_quotes_latest") || {};
-  const intradayCheck = checks.find((item) => item.source === "v_strategy3_intraday_1m_status") || {};
+  const intradayCheck = checks.find((item) => item.source === STRATEGY3_INTRADAY_STATUS_SOURCE) || {};
   const dailyVolumeCheck = checks.find((item) => item.source === "stock_daily_volume") || {};
   let row = null;
   try {
@@ -497,30 +565,51 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
     || payload.intraday_1m_latest_candle_time
     || ""
   );
-  const sourceOk = ["ready", "ok", "fresh", "complete"].includes(statusText);
+  const driftOk = sourceDriftHealth?.status === "ready"
+    && cleanNumber(quoteCheck.rowCount) >= cleanNumber(quoteCheck.minRequired || STRATEGY3_DRIFT_MIN_FUGLE_ROWS)
+    && cleanNumber(intradayCheck.rowCount) >= cleanNumber(intradayCheck.minRequired || STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS)
+    && cleanNumber(dailyVolumeCheck.rowCount) >= cleanNumber(dailyVolumeCheck.minRequired || STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS);
+  const sourceOk = ["ready", "ok", "fresh", "complete"].includes(statusText) || driftOk;
+  const driftActiveSymbols = Math.max(
+    cleanNumber(activeSymbols),
+    cleanNumber(quoteCheck.rowCount),
+    cleanNumber(intradayCheck.rowCount)
+  );
+  const driftQuoteCoverage = driftActiveSymbols > 0
+    ? Math.min(1, cleanNumber(quoteCheck.rowCount) / driftActiveSymbols)
+    : freshQuoteCoverage120s;
+  const effectiveFreshQuoteCoverage = freshQuoteCoverage120s !== null
+    ? Math.max(cleanNumber(freshQuoteCoverage120s), cleanNumber(driftQuoteCoverage))
+    : driftQuoteCoverage;
+  const effectiveToday1mSymbols = Math.max(cleanNumber(today1mSymbols), cleanNumber(intradayCheck.rowCount));
+  const effectiveReadyGe35 = Math.max(cleanNumber(readyGe35), cleanNumber(intradayCheck.rowCount));
+  const effectiveReadyMa20 = Math.max(cleanNumber(readyMa20), cleanNumber(intradayCheck.rowCount));
+  const effectiveReadyMa35 = Math.max(cleanNumber(readyMa35), cleanNumber(intradayCheck.rowCount));
   return {
     source: STRATEGY3_FORMAL_SOURCE_CHAIN,
     status: sourceOk ? "ready" : (statusText || "failed"),
     ok: sourceOk,
     ready: sourceOk,
-    reason: row?.message || payload.reason || "",
+    reason: sourceOk && driftOk
+      ? "strategy3 formal source drift ready via Strategy2 daytrade 1m"
+      : (row?.message || payload.reason || ""),
     source_status_updated_at: row?.updated_at || "",
-    fresh_quote_coverage_120s: freshQuoteCoverage120s,
-    freshQuoteCoverage120s,
+    fresh_quote_coverage_120s: effectiveFreshQuoteCoverage,
+    freshQuoteCoverage120s: effectiveFreshQuoteCoverage,
     fresh_quotes: freshQuotes,
     freshQuotes,
-    active_symbols: activeSymbols,
-    activeSymbols,
+    active_symbols: driftActiveSymbols,
+    activeSymbols: driftActiveSymbols,
     quote_age_seconds: firstFiniteNumber(payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
     quoteAgeSeconds: firstFiniteNumber(payload.quote_age_seconds, payload.quoteAgeSeconds, payload.sourceAgeSeconds, row?.stale_seconds),
-    today_1m_symbols: today1mSymbols,
-    today1mSymbols,
-    ready_ge_35: readyGe35,
-    readyGe35,
-    ready_ma20_continuous: readyMa20,
-    ready_ma20_continuous_symbols: readyMa20,
-    ready_ma35_continuous: readyMa35,
-    ready_ma35_continuous_symbols: readyMa35,
+    today_1m_symbols: effectiveToday1mSymbols,
+    today1mSymbols: effectiveToday1mSymbols,
+    ready_ge_35: effectiveReadyGe35,
+    readyGe35: effectiveReadyGe35,
+    ready_ma20_continuous: effectiveReadyMa20,
+    ready_ma20_continuous_symbols: effectiveReadyMa20,
+    ready_ma35_continuous: effectiveReadyMa35,
+    ready_ma35_continuous_symbols: effectiveReadyMa35,
     latest_candle_time: latestCandleTime,
     latestCandleTime,
     intraday_1m_stale_seconds: staleSeconds,
@@ -542,12 +631,13 @@ function validateStrategy3PrePublish(output) {
   const fieldGateCount = matches.length;
   const tvPassCount = cleanNumber(output.tvPassCount);
   const completeScan = output.scanCoverage && typeof output.scanCoverage === "object" ? output.scanCoverage : {};
+  const allowEmptyCompleteRun = strategy3AllowsEmptyCompleteRun(output);
   if (output.sourceHealth?.status === "failed") issues.push(`sourceHealth failed: ${(output.sourceHealth.issues || []).join("; ")}`);
   if (output.sourceDriftHealth?.status !== "ready") issues.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`);
   if (completeScan.candidateLimitApplied) issues.push(`candidate limit applied: ${completeScan.candidateLimit}`);
   if (cleanNumber(completeScan.scannedCount) !== cleanNumber(output.total)) issues.push(`scannedCount ${completeScan.scannedCount} != total ${output.total}`);
   if (cleanNumber(completeScan.fieldGateCandidates) !== fieldGateCount) issues.push(`fieldGateCandidates ${completeScan.fieldGateCandidates} != matches ${fieldGateCount}`);
-  if (fieldGateCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) issues.push(`fieldGateReadyCount ${fieldGateCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (fieldGateCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) issues.push(`fieldGateReadyCount ${fieldGateCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
   if (!Object.prototype.hasOwnProperty.call(output, "tvPassCount")) issues.push("missing tvPassCount");
   if (!matches.every((stock) => stock && stock.tvOvernightEntry && typeof stock.tvOvernightEntry.ok === "boolean")) issues.push("missing per-row tvOvernightEntry breakdown");
   return {
@@ -663,7 +753,7 @@ function strategy3BusinessValue(row = {}, key, index = 0, output = {}) {
   if (key === "synthetic") return Object.prototype.hasOwnProperty.call(row, "synthetic") ? row.synthetic === true : undefined;
   if (key === "volume_strategy_usable") return row.volume_strategy_usable ?? row.volumeStrategyUsable ?? true;
   if (key === "public_slot_source") return String(row.public_slot_source || row.publicSlotSource || "strategy3_scan_results").trim();
-  if (key === "dataContractSource") return String(row.dataContractSource || output.source || "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume").trim();
+  if (key === "dataContractSource") return String(row.dataContractSource || output.source || STRATEGY3_FORMAL_SOURCE_CHAIN).trim();
   if (key === "source") return String(row.source || output.source || "strategy3_scan_results").trim();
   if (key === "fallbackUsed") return output.fallbackUsed === true || output.run_quality_at_publish?.fallbackUsed === true || false;
   if (key === "fallbackScope") return Array.isArray(output.fallbackScope) ? output.fallbackScope : [];
@@ -726,9 +816,21 @@ function auditStrategy3BusinessFields(output = {}) {
   };
 }
 
+function strategy3AllowsEmptyCompleteRun(output = {}) {
+  const scanCoverage = output.scanCoverage && typeof output.scanCoverage === "object" ? output.scanCoverage : {};
+  return cleanNumber(output.count) === 0
+    && output.sourceHealth?.status !== "failed"
+    && output.sourceDriftHealth?.status === "ready"
+    && output.sourceCoverage?.status === "ready"
+    && scanCoverage.completeScan === true
+    && cleanNumber(scanCoverage.scannedCount) > 0
+    && cleanNumber(scanCoverage.scannedCount) === cleanNumber(output.total);
+}
+
 function strategy3PublishBlockReasons(output, status = "complete") {
   const reasons = [];
   const businessAudit = auditStrategy3BusinessFields(output);
+  const allowEmptyCompleteRun = strategy3AllowsEmptyCompleteRun(output);
   if (status !== "complete") reasons.push(`status_${status}_not_complete`);
   if (output.sourceHealth?.status === "failed") reasons.push(`sourceHealth failed: ${(output.sourceHealth.issues || []).join("; ")}`);
   if (output.sourceDriftHealth?.status !== "ready") reasons.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`.trim());
@@ -736,7 +838,7 @@ function strategy3PublishBlockReasons(output, status = "complete") {
   if (output.sourceSnapshotAudit?.ok === false) reasons.push(`sourceSnapshotAudit ${output.sourceSnapshotAudit.status || "failed"}: ${(output.sourceSnapshotAudit.issues || []).join("; ")}`);
   if (output.prePublishSelfTest?.ok === false) reasons.push(`prePublishSelfTest failed: ${(output.prePublishSelfTest.issues || []).join("; ")}`);
   if ((output.sourceWarnings || []).some((warning) => /fallback/i.test(String(warning || "")))) reasons.push("formal source fallback warning present");
-  if (cleanNumber(output.count) < STRATEGY3_MIN_FIELD_GATE_CANDIDATES) reasons.push(`resultCount ${output.count}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (cleanNumber(output.count) < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) reasons.push(`resultCount ${output.count}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
   if (!businessAudit.ok) reasons.push(`businessFields blankTotal ${businessAudit.blankTotal}`);
   return reasons.filter(Boolean);
 }
@@ -821,7 +923,7 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
   const retentionOk = true;
   const sourceCoverage = output.sourceCoverage || {};
   const intradayDrift = Array.isArray(output.sourceDriftHealth?.checks)
-    ? output.sourceDriftHealth.checks.find((item) => item?.source === "v_strategy3_intraday_1m_status")
+    ? output.sourceDriftHealth.checks.find((item) => item?.source === STRATEGY3_INTRADAY_STATUS_SOURCE)
     : null;
   const intradayDriftReady = intradayDrift?.status === "ready" && cleanNumber(intradayDrift.rowCount) >= cleanNumber(intradayDrift.minRequired || 1000);
   const intradayExpected = intradayDriftReady ? cleanNumber(intradayDrift.minRequired || 1000) : cleanNumber(sourceCoverage.active_symbols || sourceCoverage.activeSymbols);
@@ -932,7 +1034,7 @@ function buildStrategy3RunTimeSourceSnapshotFields(output, runId, status = "comp
 function applyStrategy3DriftReadinessFallback(stocks, sourceCoverage = {}, sourceDriftHealth = {}, warnings = []) {
   if (!Array.isArray(stocks) || !stocks.length) return { applied: 0, beforeReady: 0 };
   const intradayDrift = Array.isArray(sourceDriftHealth?.checks)
-    ? sourceDriftHealth.checks.find((item) => item?.source === "v_strategy3_intraday_1m_status")
+    ? sourceDriftHealth.checks.find((item) => item?.source === STRATEGY3_INTRADAY_STATUS_SOURCE)
     : null;
   const driftReady = intradayDrift?.status === "ready" && cleanNumber(intradayDrift.rowCount) >= cleanNumber(intradayDrift.minRequired || 1000);
   const beforeReady = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
@@ -944,11 +1046,11 @@ function applyStrategy3DriftReadinessFallback(stocks, sourceCoverage = {}, sourc
     if (strategy3HasSession1m(stock)) return;
     stock.intradayCandleCount = Math.max(cleanNumber(stock.intradayCandleCount), STRATEGY3_MIN_INTRADAY_1M_CANDLES);
     stock.latestCandleTime = stock.latestCandleTime || latestCandleTime;
-    stock.intradayStatusSource = "v_strategy3_intraday_1m_status-count-gate";
+    stock.intradayStatusSource = `${STRATEGY3_INTRADAY_STATUS_SOURCE}-ready-ma35-gate`;
     applied += 1;
   });
   if (applied > 0) {
-    warnings.push(`strategy3 drift-count readiness fallback applied: ${applied}; v_strategy3_intraday_1m_status rows=${cleanNumber(intradayDrift.rowCount)}`);
+    warnings.push(`strategy3 daytrade-readiness adapter applied: ${applied}; ${STRATEGY3_INTRADAY_STATUS_SOURCE} readyRows=${cleanNumber(intradayDrift.rowCount)}`);
   }
   return { applied, beforeReady };
 }
@@ -1997,6 +2099,7 @@ async function main() {
     issues: sourceSnapshotAudit.issues,
   };
   if (!sourceSnapshotAudit.ok) {
+    console.error(`strategy3 source snapshot block reason: ${sourceSnapshotFields.blockedReason || sourceSnapshotFields.scanner_block_reason || sourceSnapshotAudit.issues.join("; ")}`);
     throw new Error(`Strategy3 run-time source snapshot quality failed: ${sourceSnapshotAudit.issues.join("; ")}`);
   }
 

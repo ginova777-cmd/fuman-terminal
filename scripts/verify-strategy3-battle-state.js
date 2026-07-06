@@ -444,14 +444,14 @@ async function main() {
   const sourceCounts = await Promise.all([
     sourceCount("strategy3_ready_snapshot", "strategy3_ready_snapshot?select=symbol&limit=1"),
     sourceCount("fugle_quotes_latest", "fugle_quotes_latest?select=symbol&limit=1"),
-    sourceCount("v_strategy3_intraday_1m_status", "v_strategy3_intraday_1m_status?select=symbol&limit=1"),
+    sourceCount("v_strategy2_intraday_ready", "v_strategy2_intraday_ready?select=symbol&ready_ma35_continuous=eq.true&limit=1"),
     sourceCount("stock_daily_volume", "stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { latestDate: (rows) => rows?.[0]?.trade_date }),
   ]);
   details.sourceCounts = Object.fromEntries(sourceCounts);
   for (const [name, item] of sourceCounts) {
     if (item.readError) continue;
     if (cleanNumber(item.count) < cleanNumber(item.minRequired || 1000)) {
-      if (!STRICT_LIVE && name === "v_strategy3_intraday_1m_status") {
+      if (!STRICT_LIVE && name === "v_strategy2_intraday_ready") {
         warnings.push(`${name}_off_session_count_${item.count}_below_${item.minRequired || 1000}`);
       } else {
         issues.push(`${name}_count_${item.count}_below_${item.minRequired || 1000}`);

@@ -144,6 +144,7 @@
     "strategy2:snapshot:publish": "node --use-system-ca scripts/publish-strategy2-latest-snapshot.js",
     "strategy2:coverage": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js",
     "strategy2:coverage:watch": "node --use-system-ca scripts/check-strategy2-supabase-coverage.js --watch --until=09:30",
+    "strategy2:daytrade-1m-chain": "node --use-system-ca scripts/check-strategy2-daytrade-1m-chain.js",
     "verify:strategy2-business-fields": "node scripts/verify-strategy2-business-fields.js --business-fields",
     "verify:strategy2-formal-payloads": "node scripts/verify-strategy2-business-fields.js --formal-payloads",
     "verify:strategy2-prewater-strict": "node scripts/verify-strategy2-business-fields.js --strict",

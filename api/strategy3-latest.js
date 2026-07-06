@@ -17,7 +17,8 @@ const TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_re
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
 const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
 const DESKTOP_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || process.env.FUMAN_STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2500);
-const FORMAL_SOURCE_CHAIN = "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume";
+const STRATEGY3_INTRADAY_STATUS_SOURCE = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_strategy2_intraday_ready";
+const FORMAL_SOURCE_CHAIN = `fugle_quotes_latest+${STRATEGY3_INTRADAY_STATUS_SOURCE}+stock_daily_volume`;
 const STRATEGY3_PREWATER_RESPONSE_FIELDS = [
   "source_snapshot_captured_at",
   "source_status_at_run",
@@ -292,7 +293,7 @@ function buildUnattendedContract(payload, context = {}) {
   const sourceStatusPayload = liveProbe?.sourceStatus?.payload && typeof liveProbe.sourceStatus.payload === "object" ? liveProbe.sourceStatus.payload : {};
   const sourceStatusMessage = String(liveProbe?.sourceStatus?.message || "");
   const quoteCheck = findSourceCheck(sourceDriftHealth, "fugle_quotes_latest");
-  const intradayCheck = findSourceCheck(sourceDriftHealth, "v_strategy3_intraday_1m_status");
+  const intradayCheck = findSourceCheck(sourceDriftHealth, STRATEGY3_INTRADAY_STATUS_SOURCE);
   const dailyVolumeCheck = findSourceCheck(sourceDriftHealth, "stock_daily_volume");
   const freshQuoteCoverage120s = firstNumber(
     sourceStatusPayload.fresh_quote_coverage_120s,
@@ -485,6 +486,19 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const contract = buildUnattendedContract(payload, context);
   const sourceFallbackBlocked = Array.isArray(contract.fallbackScope) && contract.fallbackScope.includes("source");
   const currentSourceReady = contract.status === "ready" && !sourceFallbackBlocked;
+  const runQuality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const sourceStatusAtRun = payload.source_status_at_run && typeof payload.source_status_at_run === "object"
+    ? payload.source_status_at_run
+    : {};
+  const sourceAtRunReady = String(sourceStatusAtRun.status || "").toLowerCase() === "ready"
+    && sourceStatusAtRun.ok !== false
+    && !sourceFallbackBlocked;
+  const publishEvidenceAtRunReady = runQuality.publishAllowed === true
+    && sourceAtRunReady
+    && payload.fallbackUsed !== true
+    && !(Array.isArray(payload.fallbackScope) && payload.fallbackScope.includes("source"));
   const sourceCoverage = {
     ...(contract.sourceCoverage || {}),
     ok: currentSourceReady,
@@ -498,26 +512,26 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
   const sourceEvidenceIssues = Array.isArray(snapshotAudit.issues) ? snapshotAudit.issues : [];
   const sourceEvidenceMissingFields = Array.isArray(snapshotAudit.missingFields) ? snapshotAudit.missingFields : [];
-  const sourceEvidenceStatus = snapshotAudit.ok && currentSourceReady && fallbackAllowed ? "complete" : "insufficient";
+  const sourceEvidenceStatus = snapshotAudit.ok && fallbackAllowed && (publishEvidenceAtRunReady || currentSourceReady) ? "complete" : "insufficient";
   const contractIssues = [
     ...(Array.isArray(contract.issues) ? contract.issues : []),
     ...sourceEvidenceIssues,
   ].filter(Boolean);
   const apiPublishAllowed = snapshotAudit.ok
-    && currentSourceReady
+    && (publishEvidenceAtRunReady || currentSourceReady)
     && fallbackAllowed
-    && payload.run_quality_at_publish?.publishAllowed !== false;
+    && runQuality.publishAllowed !== false;
   const apiPreservePreviousGood = apiPublishAllowed
-    ? payload.run_quality_at_publish?.preservePreviousGood === true
+    ? runQuality.preservePreviousGood === true
     : true;
   const blockedReason = apiPublishAllowed ? "" : contractIssues.join("; ") || "strategy3 source evidence incomplete";
   const runQualityAtPublish = {
-    ...(payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object" ? payload.run_quality_at_publish : {}),
+    ...runQuality,
     publishAllowed: apiPublishAllowed,
     latestOverwriteAllowed: apiPublishAllowed
-      ? payload.run_quality_at_publish?.latestOverwriteAllowed !== false
+      ? runQuality.latestOverwriteAllowed !== false
       : false,
-    degradedBlocksLatest: !apiPublishAllowed || payload.run_quality_at_publish?.degradedBlocksLatest === true,
+    degradedBlocksLatest: !apiPublishAllowed || runQuality.degradedBlocksLatest === true,
     preservePreviousGood: apiPreservePreviousGood,
     fallbackUsed: contract.fallbackUsed,
     fallbackScope,

@@ -131,8 +131,10 @@ function candleMinutes(value) {
 
 function sessionReady(status = {}) {
   const count = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
+  const continuous = cleanNumber(status.continuous_candle_count);
+  if (status.ready_ge_35 === true || status.ready_ma35_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
   if (count >= MIN_INTRADAY_1M_CANDLES) return true;
-  const minute = candleMinutes(status.latest_candle_time || status.updated_at);
+  const minute = candleMinutes(status.latest_candle_time || status.intraday_1m_status_updated_at || status.updated_at);
   return count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE;
 }
 
@@ -179,7 +181,7 @@ async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
   const refreshedAt = new Date().toISOString();
 
-  const statusRefresh = await rpc("refresh_strategy3_intraday_1m_status_latest", { p_trade_date: tradeDate });
+  const statusRefresh = await rpc("refresh_strategy2_readiness_cache", {});
   const [quotes, statuses, capitals] = await Promise.all([
     fetchAllRows("fugle_quotes_latest", {
       select: [
@@ -202,8 +204,8 @@ async function main() {
       ].join(","),
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
-    fetchAllRows("v_strategy3_intraday_1m_status", {
-      select: "symbol,code,latest_candle_time,today_candle_count,updated_at",
+    fetchAllRows("v_strategy2_intraday_ready", {
+      select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
       order: "latest_candle_time.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("stock_capital_latest", {

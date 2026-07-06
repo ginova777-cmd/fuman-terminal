@@ -7,8 +7,8 @@ Scope: local-only prep. Do not hit Supabase, do not write Supabase, do not deplo
 | Source | Formal table/view/RPC | A-grade threshold | Fail-closed behavior |
 |---|---|---|---|
 | quote | `fugle_quotes_latest` | quote age within threshold, fresh coverage >= 0.95, rows >= 1000 | block latest, preserve previous good, write blocked receipt |
-| intraday_1m | `v_strategy3_intraday_1m_status` | rowCount >= 1000, `ready_ge_35` sufficient, latest candle present, live stale <= 120s | block latest, no empty overwrite |
-| MA20 / MA35 | `v_strategy3_intraday_1m_status` readiness fields | `ready_ma20_continuous` and `ready_ma35_continuous` at A threshold | block latest |
+| intraday_1m | `v_strategy2_intraday_ready` / `get_strategy2_intraday_1m_latest_n` | Strategy3 reads, verifies, and reuses Strategy2 daytrade 1m; `ready_ma35_continuous` rows >= 1000, latest candle present, live stale <= 120s | block latest, no empty overwrite |
+| MA20 / MA35 | `v_strategy2_intraday_ready` readiness fields | Strategy2 daytrade `ready_ma20_continuous` and `ready_ma35_continuous` at A threshold | block latest |
 | daily volume | `stock_daily_volume` | latest trade date, rows >= 1000 | block latest |
 | preopen | preopen snapshot/source status | Strategy3 NOT_REQUIRED unless checkpoint says required | explicit NOT_REQUIRED or block checkpoint |
 | futopt / TXF | dedicated daytrade futopt/TXF health | ready when dedicated daytrade gate requires it | daytrade formal entry blocked |

@@ -103,12 +103,12 @@ const CONTRACTS = [
         "prev_close", "previous_close", "change_percent", "trade_volume", "trade_volume_lots", "trade_volume_shares", "total_volume",
         "trade_value", "quote_source", "quote_age_seconds", "session", "stock_type", "is_halted", "is_trial",
       ], { order: "updated_at.desc", requireToday: true, purpose: "formal Strategy3 quote source" }),
-      sourceTable("v_strategy3_intraday_1m_status", [
-        "symbol", "latest_candle_time", "today_candle_count",
-      ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source" }),
+      sourceTable("v_strategy2_intraday_ready", [
+        "symbol", "latest_candle_time", "today_candle_count", "continuous_candle_count", "ready_ge_35", "ready_ma35_continuous",
+      ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source via Strategy2 daytrade 1m" }),
       retiredSourceTable(
         "v_strategy3_quote_ready",
-        "fugle_quotes_latest+v_strategy3_intraday_1m_status+stock_daily_volume",
+        "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),

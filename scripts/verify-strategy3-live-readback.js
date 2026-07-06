@@ -168,6 +168,24 @@ function latestPointer(state = {}) {
   };
 }
 
+function allowsExplicitEmptyCompleteRun(state = {}) {
+  const payload = state.mergedPayload || {};
+  const quality = payload.run_quality_at_publish || {};
+  const scanCoverage = payload.scanCoverage || {};
+  const pointer = latestPointer(state);
+  return pointer.resultCount === 0
+    && pointer.readbackCount === 0
+    && payload.count === 0
+    && payload.publishAllowed === true
+    && quality.publishAllowed === true
+    && payload.evidenceStatus === "complete"
+    && payload.unattendedStatus === "YES"
+    && scanCoverage.completeScan === true
+    && cleanNumber(scanCoverage.scannedCount) > 0
+    && cleanNumber(scanCoverage.scannedCount) === cleanNumber(payload.total)
+    && String(payload.noMatchReason || "").trim() !== "";
+}
+
 function newestBlockedReceipt(sinceIso = "") {
   const since = Date.parse(sinceIso || "") || 0;
   let files = [];
@@ -224,7 +242,7 @@ function verifyState(state, options = {}) {
     if (payload.unattendedStatus !== "YES") issues.push(`unattendedStatus_not_YES:${payload.unattendedStatus || "missing"}`);
     if (payload.publishAllowed !== true && quality.publishAllowed !== true) issues.push("publishAllowed_not_true");
     if (payload.latestOverwriteAllowed === false) issues.push("latestOverwriteAllowed_false_on_complete");
-    if (pointer.resultCount <= 0) issues.push("complete_run_empty_result_not_accepted_without_explicit_empty_contract");
+    if (pointer.resultCount <= 0 && !allowsExplicitEmptyCompleteRun(state)) issues.push("complete_run_empty_result_not_accepted_without_explicit_empty_contract");
     if (api.runId && pointer.runId && String(api.runId) !== String(pointer.runId)) issues.push(`api_runId_mismatch:${api.runId}/${pointer.runId}`);
   }
 

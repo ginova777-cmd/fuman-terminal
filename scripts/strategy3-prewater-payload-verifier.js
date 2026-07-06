@@ -57,6 +57,15 @@ function verifyStrategy3PrewaterPayload(payload = {}, options = {}) {
   const fallbackAllowed = payload.fallbackAllowed ?? quality.fallbackAllowed;
   const fallbackContract = payload.fallbackContract || quality.fallbackContract;
   const count = Number(payload.count ?? quality.resultCount ?? 0);
+  const scanCoverage = payload.scanCoverage && typeof payload.scanCoverage === "object" ? payload.scanCoverage : {};
+  const explicitEmptyComplete = count === 0
+    && sourceReady
+    && scanCoverage.completeScan === true
+    && Number(scanCoverage.scannedCount || quality.scannedCount || 0) > 0
+    && Number(scanCoverage.scannedCount || quality.scannedCount || 0) === Number(payload.total || quality.expectedTotal || 0)
+    && Number(quality.resultCount ?? count) === 0
+    && Number(quality.readbackCount ?? payload.readbackCount ?? 0) === 0
+    && String(payload.noMatchReason || "").trim() !== "";
 
   if (requireTopLevelContract) {
     for (const field of REQUIRED_PREWATER_PAYLOAD_FIELDS) {
@@ -100,7 +109,7 @@ function verifyStrategy3PrewaterPayload(payload = {}, options = {}) {
   }
   if (payload.hiddenFallback === true && !fallbackUsed) issues.push("hidden_fallback_not_disclosed");
   if (!sourceReady && publishAllowed) issues.push("source_not_ready_but_latest_allowed");
-  if (count === 0 && publishAllowed && payload.preservePreviousGood !== true && quality.preservePreviousGood !== true) {
+  if (count === 0 && publishAllowed && payload.preservePreviousGood !== true && quality.preservePreviousGood !== true && !explicitEmptyComplete) {
     issues.push("empty_result_overwrites_previous_good");
   }
   if (expectBlocked) {

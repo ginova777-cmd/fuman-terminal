@@ -112,7 +112,7 @@ const STRATEGIES = [
     key: "strategy3",
     name: "Strategy3 late-session TV",
     endpoints: ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
-    sourceChain: ["v_strategy3_latest_complete_run", "strategy3_scan_results", "fugle_quotes_latest", "v_strategy3_intraday_1m_status", "stock_daily_volume"],
+    sourceChain: ["v_strategy3_latest_complete_run", "strategy3_scan_results", "fugle_quotes_latest", "v_strategy2_intraday_ready", "stock_daily_volume"],
     writerRunner: "run-strategy3.ps1 / run-strategy3-complete-scan.ps1 / scripts/scan-strategy3-cache.js",
     latestView: "v_strategy3_latest_complete_run",
     runsTable: "strategy3_scan_runs",

@@ -75,6 +75,32 @@ async function fetchRows(table, query) {
   }
 }
 
+async function callRpc(functionName, body = {}) {
+  const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
+  if (!base || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(`${base}/rest/v1/rpc/${functionName}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body || {}),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${functionName} HTTP ${response.status}: ${text.slice(0, 240)}`);
+    return text ? JSON.parse(text) : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function stage({ key, label, ready, expected, reason, suggestedScannerBehavior }) {
   const status = expected > 0 && ready === expected ? "ready" : "not_ready";
   return {
@@ -132,6 +158,15 @@ async function checkOnce() {
     fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
     log(`readiness market_closed date=${tradingDay.date} reason=${tradingDay.reason}`);
     return payload;
+  }
+  let refreshResult = null;
+  let refreshWarning = "";
+  try {
+    refreshResult = await callRpc("refresh_strategy2_readiness_cache", {});
+    log(`strategy2 readiness cache refreshed result=${JSON.stringify(refreshResult).slice(0, 500)}`);
+  } catch (error) {
+    refreshWarning = error?.message || String(error);
+    log(`WARN strategy2 readiness cache refresh failed: ${refreshWarning}`);
   }
   const statusRows = await fetchRows(
     STATUS_VIEW,
@@ -213,7 +248,10 @@ async function checkOnce() {
       missingView: MISSING_VIEW,
       rpc: "refresh_strategy2_readiness_cache",
       cacheTables: ["strategy2_readiness_status_cache", "strategy2_readiness_missing_cache"],
+      refreshBeforeRead: true,
     },
+    refreshResult,
+    refreshWarning,
     logFile: LOG_FILE,
   };
 
