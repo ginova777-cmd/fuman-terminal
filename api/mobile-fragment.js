@@ -380,13 +380,13 @@ function renderFragment(tab, config, payload) {
     runId ? `run ${runId}` : "",
     quality ? `quality ${quality}` : "",
     evidenceStatus ? `evidence ${evidenceStatus}` : "",
-    unattendedStatus ? `unattended ${unattendedStatus}` : "",
     publishLabel,
     preserveLabel,
   ].filter(Boolean).join("｜");
   const blockedHtml = publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO"
     ? `<p class="mobile-terminal-blocked" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
     : "";
+
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}">

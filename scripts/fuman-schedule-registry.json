@@ -36,6 +36,7 @@
       "Fuman Strategy3 Battle Verify 1305",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy4 Cache 1600",
+      "Fuman Strategy4 Postscan Closure 1605",
       "Fuman Strategy5 Cache 2100",
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
@@ -201,6 +202,10 @@
         267009,
         2147946720,
         -2147020576
+      ],
+      "Fuman Strategy4 Postscan Closure 1605": [
+        0,
+        267009
       ]
     },
     "coveredBy": {
@@ -234,6 +239,12 @@
           "strategy4.json"
         ],
         "detail": "covered by later Strategy4 complete receipt"
+      },
+      "Fuman Strategy4 Postscan Closure 1605": {
+        "files": [
+          "strategy4-postscan-closure-latest.json"
+        ],
+        "detail": "Strategy4 postscan terminal closure receipt"
       }
     },
     "alertSeverity": {
@@ -502,6 +513,16 @@
       "description": "Strategy4 cache after 16:00.",
       "time": "16:00",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Strategy4 Postscan Closure 1605",
+      "displayName": "Fuman Strategy4 Postscan Closure 1605",
+      "description": "Strategy4 postscan closure verifier: scanner runId must match production API, desktop fast bundle, mobile fragment, and /88 Strategy4 row.",
+      "time": "16:05",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "16:05"
+      ]
     },
     {
       "taskName": "\\Fuman Strategy5 Cache 2100",
