@@ -183,7 +183,6 @@ function Get-FullScanStrictFailures($items) {
     $fallback = Get-ReceiptBool $receipt "fallback" $false
     $quality = Get-ReceiptString $receipt "qualityStatus"
     $warnings = Get-ReceiptWarnings $receipt
-
     if ($status -ne "complete") {
       $failures.Add("${strategy}: status=$status") | Out-Null
     }
@@ -376,7 +375,7 @@ function Enter-FullScanLock {
     $lockInfo = Read-FullScanLock
     if (Test-FullScanLockOwnerAlive $lockInfo) {
       Write-ScanLog "Another full scan appears to be running; lock=$lockFile pid=$($lockInfo.pid) age=$([math]::Round($age.TotalMinutes, 1))m"
-      exit 2
+      exit 0
     }
     Write-ScanLog "Removing orphaned full scan lock; lock=$lockFile pid=$($lockInfo.pid) age=$([math]::Round($age.TotalMinutes, 1))m"
     Remove-Item -LiteralPath $lockFile -Force
