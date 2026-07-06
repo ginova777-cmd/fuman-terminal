@@ -55,7 +55,7 @@
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000 },
     "strategy|策略4": { limit: 70, ttl: 24000 },
-    "strategy|策略5": { limit: 70, ttl: 22000 },
+    "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
     "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
     "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
@@ -1109,7 +1109,7 @@
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const strategy2SnapshotFirst = isStrategy2Route(route) && strategy2SnapshotFirstEnabled() && !withBust;
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : 120;
+    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
@@ -1619,6 +1619,21 @@
 
   function routePayloadMeta(route, payload) {
     if (!payload || typeof payload !== "object") return null;
+    if (isStrategy5Route(route)) {
+      const resultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length || payload.rows?.length);
+      return {
+        ok: payload.ok,
+        runId: payload.runId || payload.transport?.runId || payload.meta?.runId || "",
+        updatedAt: payload.updatedAt || payload.generatedAt || payload.source_snapshot_captured_at || "",
+        resultCount,
+        evidenceStatus: payload.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "",
+        unattendedStatus: payload.unattendedStatus || payload.run_quality_at_publish?.unattendedStatus || "",
+        publishAllowed: payload.publishGate?.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed,
+        latestOverwriteAllowed: payload.publishGate?.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed,
+        sourceStatus: payload.source_status_at_run?.status || payload.sourceStatus?.status || "",
+        cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      };
+    }
     if (!isStrategy2Route(route)) return null;
     return {
       ok: payload.ok,
@@ -1639,6 +1654,23 @@
   function strategy2HealthMeta() {
     const stored = canvasStore.get("strategy|策略2")?.meta;
     return canvasState.meta || stored || null;
+  }
+
+  function canvasPayloadMeta(route = canvasState.route) {
+    return canvasState.meta || canvasStore.get(route)?.meta || null;
+  }
+
+  function strategy5MetaSummary(baseSummary, route = canvasState.route) {
+    if (!isStrategy5Route(route)) return baseSummary;
+    const meta = canvasPayloadMeta(route);
+    const parts = [
+      baseSummary,
+      meta?.runId ? `run ${meta.runId}` : "",
+      meta?.resultCount ? `總數 ${meta.resultCount}` : "",
+      meta?.evidenceStatus ? `evidence ${meta.evidenceStatus}` : "",
+      meta?.unattendedStatus ? `unattended ${meta.unattendedStatus}` : "",
+    ].filter(Boolean);
+    return parts.join("｜");
   }
 
   function strategy2AfterhoursHoldActive(meta = strategy2HealthMeta()) {
@@ -5582,13 +5614,15 @@
   }
 
   function canvasShellHtml(key, meta) {
+    const payloadMeta = canvasPayloadMeta(key);
+    const summaryText = strategy5MetaSummary(meta.summary, key);
     return `
-      <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
+      <section class="desktop-route-shell desktop-canvas-app" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}" data-run-id="${escapeHtml(payloadMeta?.runId || "")}" data-result-count="${escapeHtml(payloadMeta?.resultCount || "")}" data-evidence-status="${escapeHtml(payloadMeta?.evidenceStatus || "")}" data-unattended-status="${escapeHtml(payloadMeta?.unattendedStatus || "")}">
         <div class="desktop-route-shell-head">
           <span data-canvas-meta-icon>${escapeHtml(meta.icon)}</span>
           <div>
             <h2 data-canvas-meta-title>${escapeHtml(meta.title)}</h2>
-            <p data-canvas-meta-summary>${escapeHtml(meta.summary)}</p>
+            <p data-canvas-meta-summary>${escapeHtml(summaryText)}</p>
           </div>
         </div>
         <div class="desktop-route-shell-grid">
@@ -6040,8 +6074,13 @@
 
   function updateCanvasShell(shell, key, meta) {
     if (!shell) return null;
+    const payloadMeta = canvasPayloadMeta(key);
     shell.dataset.routeShell = key;
     shell.dataset.routeSource = canvasState.source || "";
+    shell.dataset.runId = payloadMeta?.runId || "";
+    shell.dataset.resultCount = payloadMeta?.resultCount ? String(payloadMeta.resultCount) : "";
+    shell.dataset.evidenceStatus = payloadMeta?.evidenceStatus || "";
+    shell.dataset.unattendedStatus = payloadMeta?.unattendedStatus || "";
     shell.classList.toggle("desktop-strategy4-paged-shell", isStrategy4Route(key));
     const icon = shell.querySelector("[data-canvas-meta-icon]") || shell.querySelector(".desktop-route-shell-head > span");
     const title = shell.querySelector("[data-canvas-meta-title]") || shell.querySelector(".desktop-route-shell-head h2");
@@ -6058,7 +6097,7 @@
     }
     if (icon) icon.textContent = meta.icon;
     if (title) title.textContent = meta.title;
-    if (summary) summary.textContent = meta.summary;
+    if (summary) summary.textContent = strategy5MetaSummary(meta.summary, key);
     if (dataState) dataState.textContent = isLiveStrategyRoute(key) ? "即時偵測" : canvasState.rows.length ? "快照命中" : emptyState ? "受控等待" : "背景更新";
     if (modeState) modeState.textContent = canvasWorkerReady ? "OffscreenCanvas" : "Canvas";
     if (count) count.textContent = `${canvasState.filtered.length}/${canvasState.rows.length}`;
