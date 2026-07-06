@@ -286,6 +286,23 @@ function buildPayload(rows, run, options = {}) {
   }];
   const warnings = [];
   const status = issues.length ? "degraded" : "ready";
+  const runQualityAtPublish = {
+    ...(run?.payload?.run_quality_at_publish || {}),
+    publishAllowed: sourceCoverageReady,
+    latestOverwriteAllowed: sourceCoverageReady,
+    degradedBlocksLatest: !sourceCoverageReady,
+    preservePreviousGood: !sourceCoverageReady,
+    requiredFields: fieldCompleteness.requiredFields,
+    rowsChecked: fieldCompleteness.rowsChecked,
+    blankCounts: fieldCompleteness.blankCounts,
+    blankTotal: fieldCompleteness.blankTotal,
+    blankRate: fieldCompleteness.blankRate,
+    sampleMissingRows: fieldCompleteness.sampleMissingRows,
+    resultCount,
+    readbackCount: sorted.length,
+    expectedTotal,
+    scannedCount,
+  };
   return {
     ok: true,
     status,
@@ -327,6 +344,7 @@ function buildPayload(rows, run, options = {}) {
     fieldCompleteness,
     issues,
     warnings,
+    run_quality_at_publish: runQualityAtPublish,
     publishAllowed: sourceCoverageReady,
     latestOverwriteAllowed: sourceCoverageReady,
     degradedBlocksLatest: !sourceCoverageReady,
