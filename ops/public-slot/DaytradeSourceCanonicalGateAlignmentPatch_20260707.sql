@@ -17,6 +17,11 @@ with status_row as (
   order by s.updated_at desc
   limit 1
 ),
+current_clock as (
+  select
+    ((extract(hour from now() at time zone 'Asia/Taipei')::integer * 60)
+      + extract(minute from now() at time zone 'Asia/Taipei')::integer) as taipei_minutes
+),
 normalized as (
   select
     coalesce(source_name, 'fugle_daytrade_source') as source_name,
@@ -47,16 +52,29 @@ normalized as (
     coalesce((payload->>'futopt_stock_mapped')::integer, 0) as futopt_stock_mapped,
     coalesce((payload->>'rate_limit_status'), 'unknown') as rate_limit_status,
     coalesce((payload->>'phase'), '') as phase,
-    payload
+    payload,
+    case
+      when taipei_minutes < 360 then 'closed_before_0600'
+      when taipei_minutes < 510 then 'warmup_0600_0829'
+      when taipei_minutes < 525 then 'preopen_prepare_0830_0844'
+      when taipei_minutes < 540 then 'opening_boost_0845_0859'
+      when taipei_minutes < 575 then 'opening_detection_0900_0934'
+      when taipei_minutes <= 810 then 'regular_daytrade_0935_1330'
+      else 'after_daytrade_window'
+    end as current_phase
   from status_row
+cross join current_clock
 ),
 scored as (
   select
     *,
     (
       source_status = 'ok'
+      and current_phase not in ('closed_before_0600', 'after_daytrade_window')
       and daytrade_gate_grade = 'A'
       and daytrade_source_speed_ok is true
+      and formal_entry_allowed is true
+      and scanner_can_run_opening is true
       and priority_fresh_quote_coverage_120s >= 0.95
       and quote_age_seconds <= 90
       and rate_limit_status not in ('rate_limited', 'cooldown')
@@ -65,6 +83,8 @@ scored as (
       (source_status = 'ok')::integer
       + (daytrade_gate_grade = 'A')::integer
       + (daytrade_source_speed_ok is true)::integer
+      + (formal_entry_allowed is true)::integer
+      + (scanner_can_run_opening is true)::integer
       + (priority_fresh_quote_coverage_120s >= 0.95)::integer
       + (quote_age_seconds <= 90)::integer
       + (rate_limit_status not in ('rate_limited', 'cooldown'))::integer
@@ -87,8 +107,11 @@ select
   case when canonical_ready then 'ready' else 'not_ready' end as canonical_gate_status,
   case
     when canonical_ready then ''
+    when current_phase in ('closed_before_0600', 'after_daytrade_window') then 'off_session_not_formal_entry'
     when source_status <> 'ok' then 'source_status_not_ok'
     when daytrade_gate_grade <> 'A' then 'daytrade_gate_not_a'
+    when formal_entry_allowed is not true then 'formal_entry_not_allowed'
+    when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
     when priority_fresh_quote_coverage_120s < 0.95 then 'priority_quote_coverage_low'
     when quote_age_seconds > 90 then 'quote_age_too_old'
     when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
@@ -116,8 +139,9 @@ select
   futopt_stock_mapped,
   rate_limit_status,
   phase,
+  current_phase,
   scorecard_required_ok_count,
-  13 as scorecard_required_count,
+  15 as scorecard_required_count,
   case when canonical_ready then 'YES' else 'NO' end as formal_entry_speed_verdict,
   formal_entry_allowed,
   daytrade_source_speed_ok,
@@ -155,6 +179,7 @@ select
   futopt_stock_mapped,
   rate_limit_status,
   phase,
+  current_phase,
   scorecard_required_ok_count,
   scorecard_required_count,
   formal_entry_speed_verdict,

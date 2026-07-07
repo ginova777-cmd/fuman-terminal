@@ -100,6 +100,7 @@ function isSourceA(source) {
     && source.quoteAgeSeconds <= 90
     && source.formalEntryAllowed === true
     && source.scannerCanRunQuoteOnly === true
+    && source.scannerCanRunOpening === true
     && source.rateLimitStatus !== "rate_limited";
 }
 
@@ -107,7 +108,8 @@ function isGateA(gate) {
   return gate.gateGrade === "A"
     && ["ready", "ok", "yes", ""].includes(gate.gateStatus.toLowerCase())
     && gate.priorityFreshQuoteCoverage120s >= 0.95
-    && gate.quoteAgeSeconds <= 90;
+    && gate.quoteAgeSeconds <= 90
+    && gate.formalEntrySpeedVerdict === "YES";
 }
 
 async function main() {
