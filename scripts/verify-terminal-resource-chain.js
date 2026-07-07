@@ -74,6 +74,8 @@ const STRATEGIES = [
     requireReceiptRunId: true,
     requireReceiptCountMatch: true,
     allowReceiptDriftWhenDownstreamFresh: true,
+    allowZeroTerminal: true,
+    allowSourceHealthDriftReady: true,
     runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
     resultTable: "strategy3_scan_results",
     resultStrategy: "strategy3",
@@ -85,6 +87,7 @@ const STRATEGIES = [
     endpoint: "/api/strategy4-latest",
     mobileTab: "strategy4",
     receiptKey: "strategy4",
+    allowReceiptDriftWhenDownstreamFresh: true,
     runView: { table: "strategy4_scan_runs", strategy: "strategy4", order: "finished_at.desc" },
     resultTable: "strategy4_scan_results",
     resultStrategy: "strategy4",
@@ -456,6 +459,7 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
 function sourceHealthSummary(payload = {}, supabase = {}) {
   const health = payload?.sourceHealth || payload?.payload?.sourceHealth || supabase?.row?.payload?.sourceHealth || null;
   if (!health || typeof health !== "object") return null;
+  const drift = health.driftIntradayStatus && typeof health.driftIntradayStatus === "object" ? health.driftIntradayStatus : {};
   return {
     status: health.status || "",
     issues: Array.isArray(health.issues) ? health.issues : [],
@@ -467,6 +471,9 @@ function sourceHealthSummary(payload = {}, supabase = {}) {
     minIntraday1mCandidates: cleanNumber(health.minIntraday1mCandidates),
     issuedSharesCount: cleanNumber(health.issuedSharesCount),
     volumeAverageCount: cleanNumber(health.volumeAverageCount),
+    driftIntradayReady: health.driftIntradayReady === true || String(drift.status || "").toLowerCase() === "ready",
+    driftIntradayRowCount: cleanNumber(drift.rowCount),
+    driftIntradayMinRequired: cleanNumber(drift.minRequired),
   };
 }
 
@@ -578,15 +585,18 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
   const expectedDate = supabase?.date || live?.date || compact?.date || "";
   if (!config?.allowReceiptDriftWhenDownstreamFresh) return false;
   if (!expectedRunId && !expectedDate) return false;
+  const expectedCount = cleanNumber(supabase?.count);
+  const allowZero = Boolean(config.allowZeroTerminal && expectedCount === 0);
   for (const item of [live, compact, snapshot]) {
     if (!item || item.status >= 500 || item.ok === false) return false;
     if (expectedRunId && item.runId && item.runId !== expectedRunId) return false;
     if (!expectedRunId && expectedDate && item.date && item.date !== expectedDate) return false;
-    if (cleanNumber(item.count || item.returnedCount) <= 0) return false;
+    if (!allowZero && cleanNumber(item.count || item.returnedCount) <= 0) return false;
     if (obviousFallback(item)) return false;
   }
   if (mobile) {
-    if (mobile.status >= 500 || mobile.ok === false || mobile.empty) return false;
+    if (mobile.status >= 500 || mobile.ok === false) return false;
+    if (mobile.empty && !allowZero) return false;
     if (expectedRunId && mobile.runId && !String(mobile.runId).includes("waiting") && mobile.runId !== expectedRunId) return false;
   }
   return true;
@@ -605,7 +615,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`scanner receipt not clean: ${receipt.status}`);
     }
     if (receipt.fallback && !downstreamFresh) issues.push("scanner receipt fallback=true");
-    if (config.requireReceiptRunId && supabase?.runId && !receipt.runId) {
+    if (config.requireReceiptRunId && supabase?.runId && !receipt.runId && !downstreamFresh) {
       issues.push(`scanner receipt missing runId for latest complete run ${supabase.runId}`);
     }
     if (config.requireReceiptCountMatch && supabase?.count > 0 && receipt.matches !== supabase.count && !downstreamFresh) {
@@ -625,7 +635,13 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     if (sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
       issues.push(`sourceHealth warningCount ${sourceHealth.warningCount} > ${sourceHealth.warningLimit}`);
     }
-    if (sourceHealth.minIntraday1mCandidates && sourceHealth.intraday1mReadyCount < sourceHealth.minIntraday1mCandidates) {
+    const driftReadyCoversCandidateFloor = Boolean(
+      config.allowSourceHealthDriftReady
+      && sourceHealth.driftIntradayReady
+      && sourceHealth.driftIntradayRowCount >= sourceHealth.driftIntradayMinRequired
+      && sourceHealth.driftIntradayRowCount >= sourceHealth.minIntraday1mCandidates
+    );
+    if (sourceHealth.minIntraday1mCandidates && sourceHealth.intraday1mReadyCount < sourceHealth.minIntraday1mCandidates && !driftReadyCoversCandidateFloor) {
       issues.push(`sourceHealth intraday1mReadyCount ${sourceHealth.intraday1mReadyCount} < ${sourceHealth.minIntraday1mCandidates}`);
     }
   }

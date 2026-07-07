@@ -786,19 +786,6 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    if (tradingDay.isTradingDay && isAfterMarketDetectionWindow() && requestedLimit < FULL_SESSION_RADAR_LIMIT) {
-      try {
-        const quotePayload = await fetchQuoteViewFallback(requestedLimit);
-        if (quotePayload.rows.length) {
-          const session = buildMarketSession(tradingDay, quotePayload);
-          response.status(200).json(withMarketSession(quotePayload, session, "", requestedLimit));
-          return;
-        }
-      } catch (error) {
-        // Fall through to the authoritative radar cache path when the fast quote-view path is unavailable.
-      }
-    }
-
     const radarCache = await fetchRadarCachePayload();
     const row = radarCache.row;
     let primaryError = radarCache.error || "";
