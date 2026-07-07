@@ -41,8 +41,8 @@
     "missingGateModeGateGrade": "D"
   },
   "collector": {
-    "quoteBatchSize": 40,
-    "quoteConcurrency": 1,
+    "quoteBatchSize": 80,
+    "quoteConcurrency": 2,
     "targetBatchIntervalSeconds": 5,
     "priorityOnlyAfter429": true,
     "cooldownStrategy": "exponential",
@@ -53,7 +53,7 @@
   },
   "priorityPool": {
     "targetSymbolsMin": 300,
-    "targetSymbolsMax": 500,
+    "targetSymbolsMax": 450,
     "minFreshQuoteCoverageForA": 0.95,
     "targetFreshQuoteCoverage": 1,
     "selectedSymbolsFreshOkRequiredForA": true,

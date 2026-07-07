@@ -76,7 +76,11 @@ if ($LocalCheck) {
   $args += "--local-check"
 } elseif ($Apply) {
   $args += "--apply"
-  if ($Once -or -not $Continuous) { $args += "--once" }
+  if ($Once) {
+    $args += "--once"
+  } else {
+    $args += "--max-seconds=55"
+  }
 } else {
   $args += "--dry-run"
   $args += "--no-fetch"
@@ -107,8 +111,8 @@ try {
     exit 0
   }
 
-  $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog
-  $exitCode = $nodeProcess.ExitCode
+  & $node @args > $StdoutLog 2> $StderrLog
+  $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
   if ($exitCode -ne 0) {
     Write-FailureArtifact $exitCode "writer_exit_$exitCode"
     Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"

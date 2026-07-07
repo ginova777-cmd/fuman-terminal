@@ -23,6 +23,7 @@ const LOCAL_CHECK = hasFlag("local-check");
 const NO_FETCH = hasFlag("no-fetch") || envFlag("FUMAN_DAYTRADE_WRITER_NO_FETCH");
 const FETCH_ENABLED = !NO_FETCH && (APPLY || hasFlag("fetch") || envFlag("FUMAN_DAYTRADE_WRITER_FETCH"));
 const ONCE = hasFlag("once") || envFlag("FUMAN_DAYTRADE_WRITER_ONCE");
+const MAX_RUN_SECONDS = positiveNumber(argValue("max-seconds", process.env.FUMAN_DAYTRADE_WRITER_MAX_SECONDS || 0), 0);
 const SUPABASE_READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ_TIMEOUT_MS || 8000));
 const SUPABASE_WRITE_TIMEOUT_MS = Math.max(5000, Number(process.env.DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS || 12000));
 
@@ -80,6 +81,7 @@ const COOLDOWN_MAX_SECONDS = positiveNumber(CONFIG.collector?.cooldownMaxSeconds
 const RECENT_429_BLOCK_SECONDS = positiveNumber(CONFIG.rateLimitGate?.recent429BlocksASeconds, 90);
 const FULL_MARKET_PAUSE_MIN_SECONDS = positiveNumber(CONFIG.rateLimitGate?.pauseFullMarketAfter429SecondsMin, 60);
 const FULL_MARKET_PAUSE_MAX_SECONDS = positiveNumber(CONFIG.rateLimitGate?.pauseFullMarketAfter429SecondsMax, 180);
+const QUOTE_NOT_FOUND_SKIP_SECONDS = positiveNumber(CONFIG.rateLimitGate?.quoteNotFoundSkipSeconds, 1800);
 const MAX_INTRADAY_1M_STALE_SECONDS = positiveNumber(CONFIG.intraday1m?.maxStaleSeconds, 120);
 const WEBSOCKET_CANDLE_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_WEBSOCKET_CANDLE_MAX_AGE_MS, 10 * 60 * 1000);
 const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_WEBSOCKET_MAX_AGE_MS, 5 * 60 * 1000);
@@ -240,10 +242,18 @@ function phaseNow() {
 
 function quoteFetchAllowedForPhase(phase) {
   return [
+    "warmup_0600_0829",
     "preopen_prepare_0830_0844",
     "opening_boost_0845_0859",
     "opening_detection_0900_0934",
     "regular_daytrade_0935_1330",
+  ].includes(phase);
+}
+
+function quoteFetchPriorityOnlyForPhase(phase) {
+  return [
+    "warmup_0600_0829",
+    "preopen_prepare_0830_0844",
   ].includes(phase);
 }
 
@@ -370,11 +380,17 @@ async function supabaseInsert(resource, rows, options = {}) {
 
 function readWriterState() {
   const state = readJson(STATE_FILE, {});
+  const notFoundUntilBySymbol = {};
+  for (const [symbol, until] of Object.entries(state.notFoundUntilBySymbol || {})) {
+    const code = normalizeCode(symbol);
+    if (code && futureSeconds(until) > 0) notFoundUntilBySymbol[code] = until;
+  }
   return {
     cursor: Math.max(0, Number(state.cursor || 0)),
     last429At: state.last429At || "",
     cooldownUntil: state.cooldownUntil || "",
     priorityOnlyUntil: state.priorityOnlyUntil || "",
+    notFoundUntilBySymbol,
     consecutive429Count: Math.max(0, Number(state.consecutive429Count || 0)),
     selfHealCount: Math.max(0, Number(state.selfHealCount || 0)),
     lastSelfHealAt: state.lastSelfHealAt || "",
@@ -382,6 +398,17 @@ function readWriterState() {
     lastSelfHealAction: state.lastSelfHealAction || "",
     intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
   };
+}
+
+function applyQuoteNotFoundState(state, errors) {
+  const notFoundUntilBySymbol = { ...(state.notFoundUntilBySymbol || {}) };
+  const until = new Date(Date.now() + QUOTE_NOT_FOUND_SKIP_SECONDS * 1000).toISOString();
+  for (const error of errors || []) {
+    if (Number(error?.status) !== 404) continue;
+    const symbol = normalizeCode(error.symbol);
+    if (symbol) notFoundUntilBySymbol[symbol] = until;
+  }
+  return { ...state, notFoundUntilBySymbol };
 }
 
 function writeWriterState(state) {
@@ -746,16 +773,18 @@ function readWebSocketStatusSummary() {
   };
 }
 
-function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state) {
+function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, options = {}) {
   const active = activeSymbols.map((row) => row.symbol);
   const activeSet = new Set(active);
   const priority = priorityRows.map((row) => row.symbol).filter((symbol) => activeSet.has(symbol));
-  const priorityOnly = futureSeconds(state.priorityOnlyUntil) > 0 || futureSeconds(state.cooldownUntil) > 0;
+  const priorityOnly = Boolean(options.priorityOnly) || futureSeconds(state.priorityOnlyUntil) > 0 || futureSeconds(state.cooldownUntil) > 0;
+  const notFoundUntilBySymbol = state.notFoundUntilBySymbol || {};
+  const skippedByNotFound = (symbol) => futureSeconds(notFoundUntilBySymbol[symbol]) > 0;
   const stale = (symbol, maxAge = WINDOW_SECONDS) => ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))) > maxAge;
   const selected = [];
   const selectedSet = new Set();
   const add = (symbol) => {
-    if (!symbol || selectedSet.has(symbol) || !activeSet.has(symbol) || selected.length >= BATCH_SIZE) return;
+    if (!symbol || selectedSet.has(symbol) || !activeSet.has(symbol) || skippedByNotFound(symbol) || selected.length >= BATCH_SIZE) return;
     selected.push(symbol);
     selectedSet.add(symbol);
   };
@@ -1265,6 +1294,7 @@ async function tick() {
   const state = readWriterState();
   const phase = phaseNow();
   const fetchAllowedForPhase = quoteFetchAllowedForPhase(phase);
+  const fetchPriorityOnlyForPhase = quoteFetchPriorityOnlyForPhase(phase);
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap);
@@ -1322,7 +1352,7 @@ async function tick() {
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
   const selected = cooldownActive || !fetchAllowedForPhase
     ? { symbols: [], priorityOnly: true }
-    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state);
+    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase });
   const fetchResult = fetchAllowedForPhase
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
@@ -1335,6 +1365,7 @@ async function tick() {
   } else if (!cooldownActive) {
     nextState.consecutive429Count = Math.max(0, nextState.consecutive429Count - 1);
   }
+  nextState = applyQuoteNotFoundState(nextState, fetchResult.errors);
   writeWriterState(nextState);
 
   const result = computeStats({
@@ -1402,6 +1433,7 @@ async function main() {
       concurrency: CONCURRENCY,
       targetBatchIntervalSeconds: TARGET_BATCH_INTERVAL_SECONDS,
       requestDelayMs: REQUEST_DELAY_MS,
+      maxRunSeconds: MAX_RUN_SECONDS,
       minPriorityPoolSymbols: MIN_PRIORITY_POOL_SYMBOLS,
       maxPriorityPoolSymbols: MAX_PRIORITY_POOL_SYMBOLS,
     }, null, 2));
@@ -1415,13 +1447,17 @@ async function main() {
     console.error("[daytrade-source-writer] fetch disabled. Use --fetch for dry-run probing or --apply for the approved writer.");
   }
 
+  const runStartedAt = Date.now();
   do {
     const started = Date.now();
     const result = await tick();
     console.log(JSON.stringify(result, null, 2));
     if (ONCE) break;
+    if (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS) break;
     const elapsed = Math.ceil((Date.now() - started) / 1000);
-    await sleep(Math.max(1000, (LOOP_SECONDS - elapsed) * 1000));
+    const sleepMs = Math.max(1000, (LOOP_SECONDS - elapsed) * 1000);
+    if (MAX_RUN_SECONDS > 0 && (Date.now() + sleepMs - runStartedAt) / 1000 >= MAX_RUN_SECONDS) break;
+    await sleep(sleepMs);
   } while (true);
 }
 
