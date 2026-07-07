@@ -1514,6 +1514,20 @@
     return cleanRows;
   }
 
+  function rememberCanvasEmptyPayload(route, source = "api-empty", at = Date.now(), meta = null) {
+    if (!route || !meta || typeof meta !== "object") return false;
+    canvasStore.set(route, { rows: [], source, at, meta });
+    canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
+    canvasPreRenderedRoutes.delete(route);
+    if (canvasState.route === route) {
+      canvasState.rows = [];
+      canvasState.filtered = [];
+      canvasState.source = source;
+      canvasState.meta = meta;
+    }
+    return true;
+  }
+
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
@@ -1898,11 +1912,16 @@
           const source = payload?.snapshotFirst ? "snapshot-first-refreshing" : "api";
           rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, payload));
         } else {
+          rememberCanvasEmptyPayload(route, "api-empty", Date.now(), routePayloadMeta(route, payload));
           const emptyState = routeEmptyStateFromPayload(payload, route);
           if (emptyState) {
             canvasEmptyStates.set(route, emptyState);
             if (canvasState.route === route) {
               canvasState.source = emptyState.qualityStatus || emptyState.reason || "waiting";
+              if (isStrategy3Route(route)) {
+                const panel = document.querySelector("#strategy-view");
+                if (panel) renderStrategy3CompleteRunShell(route, strategyMeta(route), panel);
+              }
             }
           }
         }
