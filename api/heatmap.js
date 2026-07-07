@@ -34,6 +34,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_ROOT });
 const HEATMAP_QUOTE_TABLE = process.env.HEATMAP_QUOTE_TABLE || "fugle_quotes_live";
 const HEATMAP_QUOTE_MIN_ROWS = Math.max(500, Number(process.env.HEATMAP_QUOTE_MIN_ROWS || 500) || 500);
 const HEATMAP_QUOTE_MAX_AGE_SECONDS = Math.max(30, Number(process.env.HEATMAP_QUOTE_MAX_AGE_SECONDS || 180) || 180);
+const HEATMAP_QUOTE_MAX_ROW_LAG_SECONDS = Math.max(1800, Number(process.env.HEATMAP_QUOTE_MAX_ROW_LAG_SECONDS || 3600) || 3600);
 const HEATMAP_LATEST_FILE = "heatmap-latest.json";
 const HEATMAP_WINDOW_START_SECONDS = 9 * 60 * 60;
 const HEATMAP_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;
@@ -2935,7 +2936,7 @@ function supabaseHeatmapObservedAt(row) {
   ]);
 }
 
-function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = taipeiClock()) {
+function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = taipeiClock(), options = {}) {
   const symbol = String(row?.symbol || row?.code || "").trim();
   if (!isCommonStockCode(symbol) || symbol.startsWith("00") || symbol.toUpperCase() === "TEST") return "not_commonstock";
   const market = String(row?.market || "").trim().toUpperCase();
@@ -2955,11 +2956,17 @@ function supabaseHeatmapQuoteRejectReason(row, today = taipeiDateKey(), clock = 
     && Number.isFinite(observedMs)
     && Date.now() - observedMs > HEATMAP_QUOTE_MAX_AGE_SECONDS * 1000
   ) return "stale";
+  const latestObservedMs = Number(options.latestObservedMs || 0);
+  if (
+    latestObservedMs > 0
+    && Number.isFinite(observedMs)
+    && latestObservedMs - observedMs > HEATMAP_QUOTE_MAX_ROW_LAG_SECONDS * 1000
+  ) return "row_stale_vs_batch_latest";
   return "";
 }
 
-function normalizeSupabaseHeatmapQuote(row, today = taipeiDateKey(), clock = taipeiClock()) {
-  const rejectReason = supabaseHeatmapQuoteRejectReason(row, today, clock);
+function normalizeSupabaseHeatmapQuote(row, today = taipeiDateKey(), clock = taipeiClock(), options = {}) {
+  const rejectReason = supabaseHeatmapQuoteRejectReason(row, today, clock, options);
   if (rejectReason) return null;
   const observedAt = supabaseHeatmapObservedAt(row);
   const close = cleanNumber(row.price);
@@ -3018,13 +3025,18 @@ async function fetchSupabaseHeatmapQuotes(clock = taipeiClock()) {
       const observedAt = supabaseHeatmapObservedAt(row);
       const observedMs = Date.parse(String(observedAt || ""));
       if (Number.isFinite(observedMs)) latestMs = Math.max(latestMs, observedMs);
+    }
+
+    for (const row of rows) {
+      const observedAt = supabaseHeatmapObservedAt(row);
       const reason = supabaseHeatmapQuoteRejectReason(row, today, clock);
-      if (reason) {
-        rejectedReasons[reason] = (rejectedReasons[reason] || 0) + 1;
+      const lagReason = reason || supabaseHeatmapQuoteRejectReason(row, today, clock, { latestObservedMs: latestMs });
+      if (lagReason) {
+        rejectedReasons[lagReason] = (rejectedReasons[lagReason] || 0) + 1;
         continue;
       }
       const symbol = String(row?.symbol || "").trim();
-      const quote = normalizeSupabaseHeatmapQuote(row, today, clock);
+      const quote = normalizeSupabaseHeatmapQuote(row, today, clock, { latestObservedMs: latestMs });
       if (symbol && quote) quoteMap.set(symbol, quote);
     }
 
