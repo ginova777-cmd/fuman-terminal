@@ -228,19 +228,28 @@ async function main() {
   issue(checks, resourceHealth?.status === "ready", "resource-health-ready", "Strategy4 resource health status is ready", resourceHealth);
   issue(checks, String(resourceHealth?.requiredSource || "") === "stock_daily_volume", "resource-health-source", "Strategy4 required source is stock_daily_volume", resourceHealth);
   issue(checks, Boolean(resourceHealth?.latestDate), "resource-health-latest-date", "Strategy4 resource health latestDate exists", resourceHealth);
-  issue(checks, cleanNumber(resourceHealth?.rowCount) >= MIN_SOURCE_ROWS, "resource-health-row-count", `Strategy4 resource health rowCount >= ${MIN_SOURCE_ROWS}`, resourceHealth);
+  issue(
+    checks,
+    cleanNumber(resourceHealth?.rowCount) >= MIN_SOURCE_ROWS || cleanNumber(resourceHealth?.dailyFallback?.rowCount) >= MIN_SOURCE_ROWS,
+    "resource-health-row-count",
+    `Strategy4 resource health rowCount or dailyFallback.rowCount >= ${MIN_SOURCE_ROWS}`,
+    resourceHealth
+  );
   issue(checks, Boolean(resourceHealth?.reason), "resource-health-reason", "Strategy4 resource health reason is readable", resourceHealth);
   issue(checks, Boolean(resourceHealth?.suggestedScannerBehavior), "resource-health-behavior", "Strategy4 suggested scanner behavior is readable", resourceHealth);
   issue(checks, Boolean(resourceHealth?.updatedAt), "resource-health-updated-at", "Strategy4 resource health updatedAt exists", resourceHealth);
 
   const historyFrom = isoDateDaysAgo(HISTORY_LOOKBACK_DAYS);
   const stockDaily = await latestDateAndCount("stock_daily_volume", "trade_date");
+  const finmindDaily = await latestDateAndCount("finmind_daily_ohlcv", "trade_date");
   const fugleDaily = await latestDateAndCount("fugle_daily_volume", "trade_date");
   const strategy4History = await historyCount("strategy4_daily_ohlcv_view", "trade_date", historyFrom);
-  details.sourceDrift = { stockDaily, fugleDaily, strategy4History };
-  issue(checks, stockDaily.rowCount >= MIN_SOURCE_ROWS, "source-stock-daily-count", `stock_daily_volume latest rows >= ${MIN_SOURCE_ROWS}`, stockDaily);
+  const dailyAfterCloseReady = stockDaily.rowCount >= MIN_SOURCE_ROWS || finmindDaily.rowCount >= MIN_SOURCE_ROWS;
+  details.sourceDrift = { stockDaily, finmindDaily, fugleDaily, strategy4History };
+  issue(checks, dailyAfterCloseReady, "source-daily-after-close-count", `stock_daily_volume or finmind_daily_ohlcv latest rows >= ${MIN_SOURCE_ROWS}`, { stockDaily, finmindDaily });
   issue(checks, Boolean(stockDaily.latestDate), "source-stock-daily-date", "stock_daily_volume latestDate exists", stockDaily);
-  issue(checks, fugleDaily.rowCount >= MIN_SOURCE_ROWS, "source-fugle-daily-count", `fugle_daily_volume latest rows >= ${MIN_SOURCE_ROWS}`, fugleDaily);
+  issue(checks, Boolean(finmindDaily.latestDate), "source-finmind-daily-date", "finmind_daily_ohlcv latestDate exists", finmindDaily);
+  issue(checks, fugleDaily.rowCount >= MIN_SOURCE_ROWS || finmindDaily.rowCount >= MIN_SOURCE_ROWS, "source-fugle-or-finmind-daily-count", `fugle_daily_volume or finmind_daily_ohlcv latest rows >= ${MIN_SOURCE_ROWS}`, { fugleDaily, finmindDaily });
   issue(checks, Boolean(fugleDaily.latestDate), "source-fugle-daily-date", "fugle_daily_volume latestDate exists", fugleDaily);
   issue(checks, strategy4History.historyRows >= MIN_HISTORY_ROWS, "source-history-count", `strategy4_daily_ohlcv_view ${HISTORY_LOOKBACK_DAYS}d rows >= ${MIN_HISTORY_ROWS}`, strategy4History);
   issue(checks, Boolean(strategy4History.latestDate), "source-history-latest-date", "strategy4_daily_ohlcv_view latestDate exists", strategy4History);

@@ -31,6 +31,7 @@ const STRATEGY4_VOLUME_UNIT = "lots";
 const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
 const STRATEGY4_DAILY_VIEW = process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume";
 const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
+const FINMIND_DAILY_SOURCE = "supabase:finmind_daily_ohlcv";
 const VOLUME_CACHE_UNIT = "lots-v2";
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const ALLOW_LEGACY_VOLUME_FALLBACK = process.env.STRATEGY4_ALLOW_LEGACY_VOLUME_FALLBACK === "1";
@@ -464,16 +465,37 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
       source: `supabase:${STRATEGY4_DAILY_VIEW}`,
     },
     {
+      table: "finmind_daily_ohlcv",
+      select: "symbol,trade_date,close,volume_shares,volume_lots,trade_value_twd",
+      source: FINMIND_DAILY_SOURCE,
+    },
+    {
       table: "fugle_daily_volume",
       select: "symbol,trade_date,volume",
       source: "supabase:fugle_daily_volume:legacy-lots",
     },
   ];
   let lastError = null;
+  const today = new Date().toISOString().slice(0, 10);
   for (const candidate of candidates) {
     try {
       rows.length = 0;
       rows.push(...await fetchPages(candidate.table, candidate.select, candidate.source));
+      const latestDate = rows
+        .map((row) => String(row.trade_date || row.date || row.trading_date || "").slice(0, 10))
+        .filter(Boolean)
+        .sort()
+        .at(-1) || "";
+      const latestRows = rows.filter((row) => String(row.trade_date || row.date || row.trading_date || "").slice(0, 10) === latestDate);
+      if (
+        candidate.source === STOCK_DAILY_VOLUME_SOURCE
+        && latestDate === today
+        && latestRows.length > 0
+        && latestRows.length < MIN_SOURCE_ROW_COUNT
+      ) {
+        lastError = new Error(`${candidate.source} latest ${latestDate} rows ${latestRows.length} < ${MIN_SOURCE_ROW_COUNT}; trying daily fallback`);
+        continue;
+      }
       strategy4VolumeCacheSource = candidate.source;
       lastError = null;
       break;
@@ -1081,7 +1103,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   }
   const rawCoveragePartial = supabaseCoverage?.qualityStatus === "partial";
   const stableSupabaseCoverageComplete = rawCoveragePartial
-    && strategy4VolumeCacheSource === STOCK_DAILY_VOLUME_SOURCE
+    && [STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE].includes(strategy4VolumeCacheSource)
     && complete
     && noDataCount === 0
     && errorCount === 0;

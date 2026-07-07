@@ -199,6 +199,7 @@ const FILES = [
   "ops/public-slot/FugleSourceHistorical1mMaReadinessPatch_20260701.sql",
   "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
   "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+  "ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1",
   "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",

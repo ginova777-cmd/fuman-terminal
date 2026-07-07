@@ -18,9 +18,10 @@ const EXPECTED_SCHEMA = "strategy4-cache-v3-unit-contract";
 const EXPECTED_UNIT = "lots";
 const EXPECTED_SOURCE = "supabase:strategy4_daily_ohlcv_view";
 const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
+const FINMIND_DAILY_SOURCE = "supabase:finmind_daily_ohlcv";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
 const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
-const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, LEGACY_LOTS_SOURCE]);
+const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE, LEGACY_LOTS_SOURCE]);
 const STRATEGY4_REQUIRED_FIELDS = [
   "code",
   "name",

@@ -41,6 +41,7 @@ const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_IN
 const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
 const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_INTRADAY_STATUS_VIEW = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_strategy2_intraday_ready";
+const STRATEGY4_MIN_DAILY_ROWS = Number(process.env.STRATEGY4_STANDARD_MIN_SOURCE_ROWS || 1500);
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -155,6 +156,45 @@ async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function latestDateAndCount(table, dateField = "trade_date") {
+  const rows = await supabaseRequest(
+    "GET",
+    `/rest/v1/${table}?${query({ select: dateField, order: `${dateField}.desc`, limit: 1 })}`,
+    undefined,
+    30000
+  );
+  const latestDate = Array.isArray(rows) && rows[0] ? String(rows[0][dateField] || "") : "";
+  if (!latestDate) return { table, latestDate: "", rowCount: 0 };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(dateField)}&${dateField}=eq.${encodeURIComponent(latestDate)}`, {
+    method: "HEAD",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      Prefer: "count=exact",
+    },
+  });
+  if (!response.ok) throw new Error(`${table} count HTTP ${response.status}`);
+  const range = response.headers.get("content-range") || "";
+  const match = range.match(/\/(\d+)$/);
+  return { table, latestDate, rowCount: match ? Number(match[1]) || 0 : 0 };
+}
+
+async function fetchStrategy4DailyFallbackStatus() {
+  const finmind = await latestDateAndCount("finmind_daily_ohlcv", "trade_date");
+  const ready = finmind.rowCount >= STRATEGY4_MIN_DAILY_ROWS && Boolean(finmind.latestDate);
+  return {
+    ready,
+    status: ready ? READY_STATUS : "not_ready",
+    requiredSource: "finmind_daily_ohlcv",
+    latestDate: finmind.latestDate,
+    rowCount: finmind.rowCount,
+    minRequiredRows: STRATEGY4_MIN_DAILY_ROWS,
+    reason: ready
+      ? `finmind_daily_ohlcv latest_trade_date=${finmind.latestDate}; rows_on_latest_date=${finmind.rowCount}`
+      : `finmind_daily_ohlcv rows_on_latest_date=${finmind.rowCount} < ${STRATEGY4_MIN_DAILY_ROWS}`,
+  };
 }
 
 function query(params = {}) {
@@ -396,6 +436,7 @@ async function main() {
   if (!row) throw new Error(`missing scanner resource health row for ${strategy}`);
   const status = String(row.status || "").toLowerCase();
   let effectiveStatus = status;
+  let dailyFallback = null;
   let readiness = null;
   let readinessWarning = "";
   let sourceStatus = null;
@@ -440,6 +481,24 @@ async function main() {
       if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
     }
   }
+  if (String(row.strategy || "").toLowerCase() === "strategy4" && effectiveStatus !== READY_STATUS) {
+    try {
+      dailyFallback = await fetchStrategy4DailyFallbackStatus();
+      if (dailyFallback.ready) {
+        effectiveStatus = READY_STATUS;
+      }
+    } catch (error) {
+      dailyFallback = {
+        ready: false,
+        status: "failed",
+        requiredSource: "finmind_daily_ohlcv",
+        latestDate: "",
+        rowCount: 0,
+        minRequiredRows: STRATEGY4_MIN_DAILY_ROWS,
+        reason: `finmind_daily_ohlcv unavailable: ${error?.message || String(error)}`,
+      };
+    }
+  }
   const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
   const blocked = !ok;
   const readinessReason = readiness && readiness.strategy2_ready_100 !== true
@@ -461,7 +520,8 @@ async function main() {
   const readinessDiagnostic = strategy2DedicatedSourceReady && readinessReason
     ? `diagnostic_only:${readinessReason}`
     : readinessReason;
-  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
+  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
   const strategy3SessionBlocked = Boolean(strategy3Session && !strategy3Session.ready);
   const suggestedScannerBehavior = strategy2DedicatedSourceReady
@@ -489,6 +549,7 @@ async function main() {
     updatedAt: row.updated_at || "",
     readiness,
     strategy3Session,
+    dailyFallback,
     sourceStatus,
     sourceGate: {
       minFreshQuoteCoverage120s: STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S,

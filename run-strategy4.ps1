@@ -79,6 +79,71 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
   }
 }
 
+function Invoke-Strategy4SourceRepair {
+  param([string]$Reason = "")
+
+  if ($env:STRATEGY4_DISABLE_SOURCE_REPAIR -eq "1") {
+    Write-Log "Strategy4 source repair skipped by STRATEGY4_DISABLE_SOURCE_REPAIR=1. reason=$Reason"
+    return $false
+  }
+
+  Write-Log "Strategy4 source repair start. reason=$Reason"
+  $previousValues = @{
+    STRATEGY4_USE_MIS = $env:STRATEGY4_USE_MIS
+    STRATEGY4_PREWARM_BATCH_SIZE = $env:STRATEGY4_PREWARM_BATCH_SIZE
+    STRATEGY4_PREWARM_BATCHES_PER_RUN = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
+    STRATEGY4_PREWARM_SLEEP_MS = $env:STRATEGY4_PREWARM_SLEEP_MS
+    STRATEGY4_PREWARM_MAX_REMAINING_MISS = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
+    STRATEGY4_HISTORY_LOOKBACK_DAYS = $env:STRATEGY4_HISTORY_LOOKBACK_DAYS
+    STRATEGY4_HISTORY_CACHE_ROWS = $env:STRATEGY4_HISTORY_CACHE_ROWS
+    STRATEGY4_PREWARM_SUPABASE_ONLY = $env:STRATEGY4_PREWARM_SUPABASE_ONLY
+    STRATEGY4_ALLOW_YAHOO_FALLBACK = $env:STRATEGY4_ALLOW_YAHOO_FALLBACK
+  }
+
+  try {
+    $env:STRATEGY4_USE_MIS = "0"
+    $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
+    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "999"
+    $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
+    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
+    $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
+    $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
+    $env:STRATEGY4_PREWARM_SUPABASE_ONLY = "0"
+    $env:STRATEGY4_ALLOW_YAHOO_FALLBACK = "0"
+
+    & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
+    $prewarmExit = $LASTEXITCODE
+    if ($prewarmExit -ne 0) {
+      Write-Log "Strategy4 source repair prewarm failed with exit code $prewarmExit"
+      return $false
+    }
+
+    $importScript = Join-Path $repo "ops\public-slot\Import-Strategy4DailyCacheToSupabase.ps1"
+    if (-not (Test-Path -LiteralPath $importScript)) {
+      Write-Log "Strategy4 source repair import skipped; helper not found: $importScript"
+      return $false
+    }
+
+    & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $importScript -RetainTradeDays 120 -BatchSize 500 *>&1 | Tee-Object -FilePath $log -Append
+    $importExit = $LASTEXITCODE
+    if ($importExit -ne 0) {
+      Write-Log "Strategy4 source repair import failed with exit code $importExit"
+      return $false
+    }
+
+    Write-Log "Strategy4 source repair complete."
+    return $true
+  } finally {
+    foreach ($key in $previousValues.Keys) {
+      if ($null -ne $previousValues[$key]) {
+        Set-Item -Path "Env:$key" -Value $previousValues[$key]
+      } else {
+        Remove-Item "Env:$key" -ErrorAction SilentlyContinue
+      }
+    }
+  }
+}
+
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
@@ -101,10 +166,19 @@ if ($publishGateExit -ne 0) {
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
-  Write-Log "Strategy4 source gate blocked new publish; preserving latest complete run. $reason"
-  $latestPayload = Assert-Strategy4LatestApi
-  Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
-  exit 0
+  Write-Log "Strategy4 source gate blocked new publish; attempting source repair before preserving latest. $reason"
+  $repairOk = Invoke-Strategy4SourceRepair $reason
+  if ($repairOk) {
+    $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
+  }
+  if ($resourceGate.PreserveLatest) {
+    $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+    Write-Log "Strategy4 source gate still blocked after repair; preserving latest complete run. $reason"
+    $latestPayload = Assert-Strategy4LatestApi
+    Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
+    exit 0
+  }
+  Write-Log "Strategy4 source gate recovered after repair; continuing full scan."
 }
 if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
   try {

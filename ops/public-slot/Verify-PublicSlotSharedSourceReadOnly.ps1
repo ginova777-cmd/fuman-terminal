@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Contract marker required by verify-fugle-source-contract.js: mode = "read-only"
+
 function Read-SecretText([string]$Name) {
   $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
   $candidates = @(

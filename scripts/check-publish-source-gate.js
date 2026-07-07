@@ -169,6 +169,13 @@ function isNonTradingDayBlock(issue) {
   return /not_trading_day|market_closed|non-trading day|weekend/.test(text);
 }
 
+function strategy1FormalWindowRequired(date = new Date()) {
+  const minute = taipeiMinuteOfDay(date);
+  const nightCandidate = minute >= 21 * 60 + 25 && minute <= 21 * 60 + 45;
+  const morningDecision = minute >= 8 * 60 + 40 && minute <= 9 * 60 + 5;
+  return nightCandidate || morningDecision;
+}
+
 function sendAlert(payload, dryRun) {
   const text = [
     "Fuman publish source gate blocked.",
@@ -245,7 +252,12 @@ async function main() {
   for (const [strategy, gate] of Object.entries(scannerGates)) {
     const issue = issueFromGate(strategy, gate);
     if (!issue) continue;
-    if (!hardGateRequired && (strategy === "strategy2" || strategy === "strategy3" || isNonTradingDayBlock(issue))) warnings.push(downgradedWarning(issue));
+    if (!hardGateRequired && (
+      strategy === "strategy2"
+      || strategy === "strategy3"
+      || (strategy === "strategy1" && !strategy1FormalWindowRequired())
+      || isNonTradingDayBlock(issue)
+    )) warnings.push(downgradedWarning(issue, strategy === "strategy1" ? "strategy1_off_formal_window" : "non_live_phase"));
     else issues.push(issue);
   }
   if (simulateCritical) {
