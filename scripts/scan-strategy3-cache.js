@@ -191,17 +191,27 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   const issues = [];
   const warnings = [];
   const intradayReadyCount = stocks.filter((stock) => strategy3HasSession1m(stock)).length;
+  const sideVolumeReadyCount = stocks.filter((stock) => {
+    const outsideVolume = cleanNumber(stock.outsideVolume ?? stock.cumulativeAskVolume);
+    const insideVolume = cleanNumber(stock.insideVolume ?? stock.cumulativeBidVolume);
+    return outsideVolume > 0 || insideVolume > 0 || cleanNumber(stock.sideVolumeTotal) > 0;
+  }).length;
   const latestCandleTime = latestTime(stocks.map((stock) => stock.latestCandleTime));
   const latestCandleMinute = candleMinutes({ candleTime: latestCandleTime });
   const minIntradayReadyCount = Math.min(
     STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
     Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
   );
+  const minSideVolumeReadyCount = Math.min(
+    STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
+    Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
+  );
   const driftIntradayStatus = Array.isArray(sourceDriftHealth?.checks)
     ? sourceDriftHealth.checks.find((item) => item.source === STRATEGY3_INTRADAY_STATUS_SOURCE)
     : null;
+  const driftIntradayMinRequired = cleanNumber(driftIntradayStatus?.minRequired) || STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS;
   const driftIntradayReady = sourceDriftHealth?.status === "ready"
-    && cleanNumber(driftIntradayStatus?.rowCount) >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS;
+    && cleanNumber(driftIntradayStatus?.rowCount) >= driftIntradayMinRequired;
   if (STRATEGY3_REQUIRE_TURNOVER && issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
     issues.push(`issuedSharesCount ${issuedSharesMap.size} below ${MIN_ISSUED_SHARES_COUNT}`);
   } else if (issuedSharesMap.size < MIN_ISSUED_SHARES_COUNT) {
@@ -222,6 +232,9 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
   if (STRATEGY3_REQUIRE_INTRADAY_1M && latestCandleMinute != null && latestCandleMinute < STRATEGY3_SESSION_LATEST_MINUTE) {
     issues.push(`latestCandleMinute ${latestCandleMinute} before ${STRATEGY3_SESSION_LATEST_MINUTE}`);
   }
+  if (STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE && sideVolumeReadyCount < minSideVolumeReadyCount) {
+    issues.push(`sideVolumeReadyCount ${sideVolumeReadyCount} below ${minSideVolumeReadyCount}`);
+  }
   const warningCount = sourceWarnings.length + warnings.length;
   if (warningCount > SOURCE_WARNING_LIMIT) {
     issues.push(`warningCount ${warningCount} above ${SOURCE_WARNING_LIMIT}`);
@@ -232,6 +245,8 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     volumeAverageCount: volumeAverageMap.size,
     stockUniverseCount: stocks.length,
     intraday1mReadyCount: intradayReadyCount,
+    sideVolumeReadyCount,
+    minSideVolumeReadyCount,
     minIntraday1mCandidates: STRATEGY3_MIN_INTRADAY_1M_CANDIDATES,
     minIntraday1mReadyCount: minIntradayReadyCount,
     minIntraday1mCoverage: STRATEGY3_MIN_INTRADAY_1M_COVERAGE,
@@ -419,7 +434,8 @@ function strategy2IntradayReadyRow(row) {
     || cleanNumber(row?.continuous_candle_count ?? row?.candle_count) >= STRATEGY3_MIN_INTRADAY_1M_CANDLES;
 }
 
-async function fetchStrategy3IntradayReadyCount() {
+async function fetchStrategy3IntradayReadyCount(minRequired = STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS) {
+  let rawLatestValidDay = null;
   const latestRows = await fetchSupabaseRest(`${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date&order=trade_date.desc&limit=1`, { timeoutMs: 30000 });
   const latestTradeDate = String(latestRows.rows?.[0]?.trade_date || "");
   if (latestTradeDate) {
@@ -429,6 +445,7 @@ async function fetchStrategy3IntradayReadyCount() {
     for (let offset = 0; offset < 400000; offset += pageSize) {
       const result = await fetchSupabaseRest([
         `${STRATEGY3_INTRADAY_1M_TABLE}?select=symbol,candle_time,trade_date,updated_at`,
+        `trade_date=eq.${encodeURIComponent(latestTradeDate)}`,
         `order=symbol.asc,candle_time.desc`,
         `limit=${pageSize}`,
         `offset=${offset}`,
@@ -452,7 +469,8 @@ async function fetchStrategy3IntradayReadyCount() {
       if (String(row.latest_candle_time || "").slice(0, 10) !== latestTradeDate) byCode.delete(code);
     }
     const readyCount = [...byCode.values()].filter(strategy2IntradayReadyRow).length;
-    return { rowCount: byCode.size, readyCount, latestCandleTime, latestTradeDate, source: `${STRATEGY3_INTRADAY_1M_TABLE}:latest-valid-day` };
+    rawLatestValidDay = { rowCount: byCode.size, readyCount, latestCandleTime, latestTradeDate, source: `${STRATEGY3_INTRADAY_1M_TABLE}:latest-valid-day` };
+    if (readyCount >= cleanNumber(minRequired)) return rawLatestValidDay;
   }
   const pageSize = 1000;
   let readyCount = 0;
@@ -474,10 +492,13 @@ async function fetchStrategy3IntradayReadyCount() {
     }
     if (rows.length < pageSize) break;
   }
-  return { rowCount, readyCount, latestCandleTime };
+  const statusResult = { rowCount, readyCount, latestCandleTime, source: STRATEGY3_INTRADAY_STATUS_SOURCE, rawLatestValidDay };
+  if (cleanNumber(rawLatestValidDay?.readyCount) > readyCount) return rawLatestValidDay;
+  return statusResult;
 }
 
-async function fetchStrategy3SourceDriftHealth() {
+async function fetchStrategy3SourceDriftHealth(options = {}) {
+  const minIntradayRows = Math.max(1, cleanNumber(options.minIntradayRows) || STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS);
   const checks = [];
   const add = (item) => checks.push(item);
   try {
@@ -493,11 +514,11 @@ async function fetchStrategy3SourceDriftHealth() {
     add({ source: "fugle_quotes_latest", rowCount: 0, minRequired: STRATEGY3_DRIFT_MIN_FUGLE_ROWS, status: "failed", reason: error?.message || String(error) });
   }
   try {
-    const readiness = await fetchStrategy3IntradayReadyCount();
+    const readiness = await fetchStrategy3IntradayReadyCount(minIntradayRows);
     const rowCount = cleanNumber(readiness.readyCount);
-    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount: readiness.rowCount, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: rowCount >= STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS ? "ready" : "failed" });
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount: readiness.rowCount, rawLatestValidDay: readiness.rawLatestValidDay || null, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: minIntradayRows, status: rowCount >= minIntradayRows ? "ready" : "failed" });
   } catch (error) {
-    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount: 0, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS, status: "failed", reason: error?.message || String(error) });
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount: 0, metric: "ready_ma35_continuous OR ready_ge_35 OR continuous_candle_count>=35", upstreamSource: "Strategy2 daytrade 1m", minRequired: minIntradayRows, status: "failed", reason: error?.message || String(error) });
   }
   try {
     const result = await fetchSupabaseRest("stock_daily_volume?select=trade_date&order=trade_date.desc&limit=1", { count: true });
@@ -893,6 +914,8 @@ function buildStrategy3BlockedReceipt(output = {}, reason = "", stage = "prepubl
     sourceHealth: output.sourceHealth || null,
     sourceCoverage: output.sourceCoverage || null,
     sourceDriftHealth: output.sourceDriftHealth || null,
+    scanCoverage: output.scanCoverage || null,
+    matchDiagnostics: output.matchDiagnostics || null,
   };
 }
 
@@ -2107,7 +2130,11 @@ async function main() {
   stocks = exclusionResult.stocks;
   exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
-  const sourceDriftHealth = await fetchStrategy3SourceDriftHealth();
+  const strategy3DriftMinIntradayRows = Math.min(
+    STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS,
+    Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
+  );
+  const sourceDriftHealth = await fetchStrategy3SourceDriftHealth({ minIntradayRows: strategy3DriftMinIntradayRows });
   if (sourceDriftHealth.status !== "ready") {
     throw new Error(`Strategy3 source drift failed: ${sourceDriftHealth.reason}`);
   }
@@ -2120,6 +2147,31 @@ async function main() {
     console.warn(`strategy3 source health ${sourceHealth.status}: ${sourceHealth.issues.join("; ") || "warnings present"}`);
   }
   if (sourceHealth.status === "failed") {
+    const blockReason = `Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`;
+    const receipt = writeStrategy3BlockedReceipt({
+      ok: false,
+      source,
+      startedAt,
+      updatedAt: new Date().toISOString(),
+      usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+      total: stocks.length,
+      count: 0,
+      complete: false,
+      sourceWarnings,
+      qualityStatus: sourceHealth.status,
+      sourceHealth,
+      sourceCoverage,
+      sourceDriftHealth,
+      scanCoverage: {
+        completeScan: false,
+        sourceUniverseCount: stocks.length,
+        scannedCount: 0,
+        resultCount: 0,
+        reason: blockReason,
+      },
+    }, blockReason, "source-health");
+    console.error(`strategy3 source health block reason: ${blockReason}`);
+    console.error(`strategy3 blocked receipt: ${receipt.receiptFile}`);
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
@@ -2179,7 +2231,13 @@ async function main() {
     issues: sourceSnapshotAudit.issues,
   };
   if (!sourceSnapshotAudit.ok) {
-    console.error(`strategy3 source snapshot block reason: ${sourceSnapshotFields.blockedReason || sourceSnapshotFields.scanner_block_reason || sourceSnapshotAudit.issues.join("; ")}`);
+    const blockReason = sourceSnapshotFields.blockedReason || sourceSnapshotFields.scanner_block_reason || sourceSnapshotAudit.issues.join("; ");
+    const receipt = writeStrategy3BlockedReceipt({
+      ...output,
+      ...sourceSnapshotFields,
+    }, blockReason, "source-snapshot-audit");
+    console.error(`strategy3 source snapshot block reason: ${blockReason}`);
+    console.error(`strategy3 blocked receipt: ${receipt.receiptFile}`);
     throw new Error(`Strategy3 run-time source snapshot quality failed: ${sourceSnapshotAudit.issues.join("; ")}`);
   }
 
@@ -2231,15 +2289,18 @@ async function main() {
 if (require.main === module) {
   main().catch((error) => {
     try {
-      writeStrategy3BlockedReceipt({
-        ok: false,
-        updatedAt: new Date().toISOString(),
-        usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
-        count: 0,
-        sourceHealth: { status: "failed", issues: [error?.message || String(error)] },
-        sourceCoverage: { status: "failed" },
-        sourceDriftHealth: { status: "failed", reason: error?.message || String(error) },
-      }, error?.message || String(error), "scanner-error");
+      const message = error?.message || String(error);
+      if (!/run-time source snapshot quality failed|Strategy3 source health failed/i.test(message)) {
+        writeStrategy3BlockedReceipt({
+          ok: false,
+          updatedAt: new Date().toISOString(),
+          usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+          count: 0,
+          sourceHealth: { status: "failed", issues: [message] },
+          sourceCoverage: { status: "failed" },
+          sourceDriftHealth: { status: "failed", reason: message },
+        }, message, "scanner-error");
+      }
     } catch {}
     console.error(error);
     process.exit(1);
