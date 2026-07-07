@@ -262,6 +262,38 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
   };
 }
 
+async function repairStrategy3LatestSnapshot(request, endpoints) {
+  const currentEntry = Object.entries(endpoints || {})
+    .find(([endpoint]) => String(endpoint || "").startsWith("/api/strategy3-latest"));
+  if (!currentEntry) return;
+  const [currentEndpoint, currentPayload] = currentEntry;
+  const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
+    ...compactQuery(60),
+    live: "1",
+    verify: "1",
+    noSnapshot: "1",
+  }, 9000);
+  const replacement = result?.payload;
+  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "");
+  const currentRunId = String(currentPayload?.runId || currentPayload?.transport?.runId || "");
+  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
+  if (!replacementRunId || replacementRunId === currentRunId) return;
+  if (replacement?.evidenceStatus !== "complete" || replacement?.publishAllowed !== true) return;
+  Object.keys(endpoints || {}).forEach((endpoint) => {
+    if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
+  });
+  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+    ...replacement,
+    transport: {
+      ...(replacement.transport || {}),
+      fastBundleRepair: "strategy3-latest-complete-run",
+      staleSnapshotEndpoint: currentEndpoint,
+      staleSnapshotRunId: currentRunId,
+      fetchedAt: new Date().toISOString(),
+    },
+  });
+}
+
 function isStrategy2SnapshotEndpoint(endpoint) {
   const value = String(endpoint || "");
   return value.startsWith("/api/latest-strategy?key=strategy2")
@@ -390,6 +422,7 @@ module.exports = async function handler(request, response) {
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       await repairStrategy1WaitingSnapshot(request, endpoints);
       await repairStrategy5FullSnapshot(request, endpoints);
+      await repairStrategy3LatestSnapshot(request, endpoints);
       const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
         timeoutMs: 5500,
         via: "api/terminal-fast-bundle",

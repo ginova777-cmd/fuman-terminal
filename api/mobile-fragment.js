@@ -562,6 +562,7 @@ module.exports = async function handler(request, response) {
       compact: 1,
       shell: 1,
       limit: 60,
+      ...(tab === "strategy3" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
