@@ -1211,6 +1211,22 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       currentGateReason: sourceGateCoverage.reason || "",
     }
     : sourceGateCoverage;
+  const publishRunQuality = publishAllowed ? {
+    ...(payload.run_quality_at_publish || {}),
+    publishAllowed: true,
+    degradedBlocksLatest: false,
+    preservePreviousGood: false,
+    fallbackUsed: payload.fallbackUsed === true || sourceGate?.fallbackUsed === true,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    fallbackAllowed: true,
+    fallbackDetails: Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : [],
+    writeBudget,
+    retentionOk,
+    qualityStatus: "complete",
+    blockedReason: "",
+    scanner_block_reason: "",
+    reason: "strategy2_source_publish_gate_ready",
+  } : payload.run_quality_at_publish;
   const nextPayload = {
     ...payload,
     ok: publishAllowed ? true : payload.ok,
@@ -1258,6 +1274,15 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     mustPreserveLatest: publishAllowed ? false : payload.mustPreserveLatest,
     latestWriteAttempted: publishAllowed ? true : payload.latestWriteAttempted,
     latestPointerUpdated: publishAllowed ? true : payload.latestPointerUpdated,
+    run_quality_at_publish: publishRunQuality,
+    runTimeSourceSnapshot: publishAllowed && payload.runTimeSourceSnapshot ? {
+      ...payload.runTimeSourceSnapshot,
+      run_quality_at_publish: publishRunQuality,
+    } : payload.runTimeSourceSnapshot,
+    run_time_source_snapshot: publishAllowed && payload.run_time_source_snapshot ? {
+      ...payload.run_time_source_snapshot,
+      run_quality_at_publish: publishRunQuality,
+    } : payload.run_time_source_snapshot,
     issues: publishAllowed ? [] : (runSnapshotReady ? priorIssues : [...priorIssues, ...gateIssues]),
     warnings: publishAllowed ? gateWarnings : (runSnapshotReady ? priorWarnings : [...priorWarnings, ...gateWarnings]),
     reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
