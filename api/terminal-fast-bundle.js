@@ -169,14 +169,29 @@ function sanitizeStrategy2RunIds(value, canonicalRunId) {
   return value;
 }
 
-function sanitizeStrategy2Endpoints(endpoints = {}) {
+function findStrategy2CanonicalRunId(endpoints = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const canonicalRunId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (!canonicalRunId.startsWith("strategy2-")) continue;
+    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
+    if (runId.startsWith("strategy2-")) return runId;
+  }
+  return "";
+}
+
+function sanitizeStrategy2Endpoints(endpoints = {}) {
+  const canonicalRunId = findStrategy2CanonicalRunId(endpoints);
+  if (!canonicalRunId) return endpoints;
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
     endpoints[endpoint] = sanitizeStrategy2RunIds(payload, canonicalRunId);
   }
   return endpoints;
+}
+
+function sanitizeStrategy2BundlePayload(payload, endpoints = {}) {
+  const canonicalRunId = findStrategy2CanonicalRunId(endpoints || payload?.endpoints || {});
+  if (!canonicalRunId) return payload;
+  return sanitizeStrategy2RunIds(payload, canonicalRunId);
 }
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};
@@ -476,7 +491,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(payload);
+      response.status(200).json(sanitizeStrategy2BundlePayload(payload, endpoints));
       return;
     }
     if (!liveFallbackEnabled(request)) {
@@ -542,6 +557,6 @@ module.exports = async function handler(request, response) {
     response.status(200).end("");
     return;
   }
-  response.status(200).json(payload);
+  response.status(200).json(sanitizeStrategy2BundlePayload(payload, endpoints));
 };
 
