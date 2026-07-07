@@ -98,7 +98,7 @@ requireMarkers("data/contracts/source-layer-strategy-map.json", [
   "blocked_preserve_previous_good",
 ]);
 
-requireMarkers("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1", [
+requireMarkers("ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1", [
   "shared_market",
   "strictLiveQuoteRequired",
   "displayReadbackAllowed",

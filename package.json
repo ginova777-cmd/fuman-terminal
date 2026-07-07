@@ -63,7 +63,7 @@
     "futopt-websocket:collector": "node scripts/fugle-futopt-websocket-collector.js",
     "verify:futopt-websocket": "node --check lib/fugle-futopt-websocket.js && node --check scripts/fugle-futopt-websocket-collector.js",
     "verify:fugle-websocket-sources": "node --check lib/fugle-websocket-quotes.js && node --check scripts/fugle-websocket-collector.js && node --check lib/fugle-futopt-websocket.js && node --check scripts/fugle-futopt-websocket-collector.js && node scripts/verify-fugle-websocket-sources.js",
-    "verify:shared-source-readonly": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+    "verify:shared-source-readonly": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1",
     "guard:notifications": "node scripts/verify-notification-guard.js",
     "supabase:incident:enter": "node scripts/supabase-incident-guard.js enter",
     "supabase:incident:exit": "node scripts/supabase-incident-guard.js exit",
