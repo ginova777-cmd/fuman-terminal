@@ -230,6 +230,21 @@ function isCompleteEmptySourceReport(report) {
     && count === 0;
 }
 
+function blockedStrategiesFromPayload(payload) {
+  const fromSummary = Array.isArray(payload?.summary?.blockedStrategies) ? payload.summary.blockedStrategies : [];
+  const fromReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+    .filter((report) => {
+      const evidenceStatus = cleanText(report?.evidenceStatus).toLowerCase();
+      return report?.ok === false
+        || report?.publishAllowed === false
+        || evidenceStatus === "insufficient"
+        || evidenceStatus === "source_quality_fail";
+    })
+    .map((report) => cleanText(report?.strategy))
+    .filter(Boolean);
+  return [...new Set([...fromSummary.map(cleanText), ...fromReports])].filter(Boolean);
+}
+
 function timeMinutes(value) {
   const match = cleanText(value).match(/(?:^|T|\s)(\d{1,2}):(\d{2})(?::\d{2})?/);
   if (!match) return null;
@@ -244,9 +259,10 @@ function summarizeScorecard(payload) {
   const latestDate = cleanText(payload?.latestDate || payload?.summary?.latestDate);
   const selectedRows = latestDate ? records.filter((row) => cleanText(row.record_date) === latestDate) : records;
   const byStrategy = strategyBreakdown(selectedRows);
+  const blockedStrategies = blockedStrategiesFromPayload(payload);
   const rawMissingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
   const emptyCompleteStrategies = rawMissingStrategies.filter((strategy) => isCompleteEmptySourceReport(sourceReportForStrategy(payload, strategy)));
-  const missingStrategies = rawMissingStrategies.filter((strategy) => !emptyCompleteStrategies.includes(strategy));
+  const missingStrategies = rawMissingStrategies.filter((strategy) => !emptyCompleteStrategies.includes(strategy) && !blockedStrategies.includes(strategy));
   const missingRequiredFields = selectedRows.filter((row) => [
     cleanText(row.record_date),
     cleanText(row.strategy),
@@ -281,6 +297,8 @@ function summarizeScorecard(payload) {
     missingStrategies,
     rawMissingStrategies,
     emptyCompleteStrategies,
+    blockedStrategies,
+    suppressedRows: cleanNumber(payload?.summary?.suppressedRows),
     missingRequiredFields,
     strategy2OutOfWindow,
     strategy3BadEntry,
