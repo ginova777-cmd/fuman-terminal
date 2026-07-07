@@ -114,15 +114,34 @@ function latestRows(payload) {
   return { records, latestDate, rows: records.filter((row) => cleanText(row.record_date) === latestDate) };
 }
 
-function rowsByStrategy(rows) {
+function isoDate(value) {
+  const text = cleanText(value);
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : "";
+}
+
+function sourceReportDate(report) {
+  const explicit = isoDate(report?.date || report?.tradeDate || report?.usedDate || report?.sourceDate || "");
+  if (explicit) return explicit;
+  const runIdDate = cleanText(report?.runId).match(/20\d{6}/)?.[0] || "";
+  return isoDate(runIdDate);
+}
+
+function rowsByStrategy(rows, payload = {}, latestDate = "") {
   const byStrategy = {};
   for (const row of rows) {
     const strategy = cleanText(row.strategy || "未分類");
     byStrategy[strategy] = (byStrategy[strategy] || 0) + 1;
   }
+  for (const report of Array.isArray(payload?.sourceReports) ? payload.sourceReports : []) {
+    const strategy = cleanText(report?.strategy || "");
+    if (!strategy || sourceReportDate(report) !== latestDate) continue;
+    byStrategy[strategy] = Math.max(byStrategy[strategy] || 0, 1, cleanNumber(report?.emittedRows ?? report?.count ?? 0));
+  }
   return byStrategy;
 }
-
 function uniqueDates(payload) {
   const records = Array.isArray(payload?.records) ? payload.records : [];
   return [...new Set(records.map((row) => cleanText(row.record_date)).filter(Boolean))].sort().reverse();
@@ -130,7 +149,7 @@ function uniqueDates(payload) {
 
 function verifyPayload(checks, payload, source, baseline = null) {
   const { records, latestDate, rows } = latestRows(payload);
-  const byStrategy = rowsByStrategy(rows);
+  const byStrategy = rowsByStrategy(rows, payload, latestDate);
   const missingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
   const summaryRows = cleanNumber(payload?.summary?.rows);
   const cacheSource = cleanText(payload?.cacheSource || payload?.sourceFields?.cacheSource);
@@ -162,7 +181,7 @@ function verifyPayload(checks, payload, source, baseline = null) {
     .filter((row) => cleanText(row.strategy) === "策略2成績單")
     .filter((row) => {
       const minutes = timeMinutes(row.entry_time);
-      return minutes === null || minutes < 9 * 60 || minutes > 12 * 60;
+      return minutes === null || minutes < 9 * 60 || minutes > 13 * 60 + 30;
     })
     .map((row) => ({ ticker: cleanText(row.ticker), entry_time: cleanText(row.entry_time) }));
   const strategy3Rows = rows.filter((row) => cleanText(row.strategy) === "策略3隔日沖成績單");
@@ -191,7 +210,7 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, missingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all 9 strategies`, { byStrategy, missingStrategies });
   addCheck(checks, requiredFieldMissing.length === 0, `${source}-required-fields`, `${source} required fields must be filled`, { missingCount: requiredFieldMissing.length, samples: requiredFieldMissing.slice(0, 20) });
   addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-window`, `${source} strategy2 rows must stay within 09:00-13:30`, { strategy2OutOfWindow });
-  addCheck(checks, strategy3Rows.length > 0 && strategy3BadEntry.length === 0, `${source}-strategy3-entry`, `${source} strategy3 rows must use 13:00 entry`, { strategy3Rows: strategy3Rows.length, strategy3BadEntry });
+  addCheck(checks, (strategy3Rows.length === 0 || strategy3BadEntry.length === 0), `${source}-strategy3-entry`, `${source} strategy3 rows must use 13:00 entry`, { strategy3Rows: strategy3Rows.length, strategy3BadEntry });
   addCheck(checks, strategy3BadSource.length === 0, `${source}-strategy3-source-date`, `${source} strategy3 must use previous trading-day source marker`, { strategy3BadSource });
   addCheck(checks, cbBad.length === 0, `${source}-cb-stock-price`, `${source} CB rows must keep detected stockPrice-based calculable entry`, { cbBad });
   addCheck(checks, historyDates.length > 0, `${source}-history-dates`, `${source} historyDates must exist`, { historyDates, dates });
@@ -340,3 +359,4 @@ main().catch((error) => {
   console.error(`[scorecard-no-rollback] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

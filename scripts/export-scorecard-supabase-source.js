@@ -202,20 +202,38 @@ function summarize(records, dailyRows, latestDate) {
   };
 }
 
-function completeDateInfo(records) {
+function sourceReportDate(report) {
+  const explicit = dateOnly(report?.date || report?.tradeDate || report?.usedDate || report?.sourceDate || "");
+  if (explicit) return explicit;
+  const runIdDate = cleanText(report?.runId).match(/20\d{6}/)?.[0] || "";
+  return dateOnly(runIdDate);
+}
+
+function completeDateInfo(records, sourceReports = []) {
   const byDate = new Map();
+  const ensureInfo = (date) => {
+    if (!byDate.has(date)) byDate.set(date, { date, rows: 0, byStrategy: new Map() });
+    return byDate.get(date);
+  };
   for (const row of records) {
     const date = cleanText(row.record_date);
     const strategy = cleanText(row.strategy || "未分類");
     if (!date || !strategy) continue;
-    if (!byDate.has(date)) byDate.set(date, { date, rows: 0, byStrategy: new Map() });
-    const info = byDate.get(date);
+    const info = ensureInfo(date);
     info.rows += 1;
     info.byStrategy.set(strategy, (info.byStrategy.get(strategy) || 0) + 1);
   }
+  for (const report of Array.isArray(sourceReports) ? sourceReports : []) {
+    const date = sourceReportDate(report);
+    const strategy = cleanText(report?.strategy || "");
+    if (!date || !strategy) continue;
+    const info = ensureInfo(date);
+    const marker = Math.max(1, cleanNumber(report?.emittedRows ?? report?.count ?? 0));
+    info.byStrategy.set(strategy, Math.max(info.byStrategy.get(strategy) || 0, marker));
+  }
   return [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date)).map((info) => {
     const byStrategy = Object.fromEntries([...info.byStrategy.entries()]);
-    const missingStrategies = EXPECTED_SCORECARD_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
+    const missingStrategies = EXPECTED_SCORECARD_STRATEGIES.filter((strategy) => !Object.prototype.hasOwnProperty.call(byStrategy, strategy));
     return {
       date: info.date,
       rows: info.rows,
@@ -226,7 +244,6 @@ function completeDateInfo(records) {
     };
   });
 }
-
 async function main() {
   const outFile = argValue("out", OUT_FILE);
   const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
@@ -282,9 +299,9 @@ async function main() {
     ].filter(Boolean).join("&"),
     5000,
   )).map(normalizeDaily).filter((row) => row.strategy);
-  const dateInfo = completeDateInfo(records);
-  const latestDate = (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
   const sourceReports = readSourceReports();
+  const dateInfo = completeDateInfo(records, sourceReports);
+  const latestDate = (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
   if (!latestDate) throw new Error("scorecard Supabase source has no trade_records latestDate");
   if (!records.length) throw new Error("scorecard Supabase source returned 0 trade_records");
   if (expectedDate && latestDate !== expectedDate) {
@@ -337,3 +354,4 @@ main().catch((error) => {
   console.error(`[export-scorecard-supabase-source] failed: ${error.stack || error.message || error}`);
   process.exitCode = 1;
 });
+

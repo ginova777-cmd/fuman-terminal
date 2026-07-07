@@ -452,7 +452,7 @@ function entryTimeOf(task, payload, row) {
 function includeInScorecard(row) {
   const minutes = timeMinutes(row.entry_time);
   if (row.strategy === "策略2成績單") {
-    return minutes !== null && minutes >= 9 * 60 && minutes <= 12 * 60;
+    return minutes !== null && minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
   }
   if (row.strategy === "即時雷達成績單") {
     return minutes !== null && minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
@@ -814,3 +814,4 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+
