@@ -1,7 +1,3 @@
--- Align dedicated daytrade live REST gates with source_status:fugle_daytrade_source.
--- This prevents source_status, canonical gate, and unattended gate from reporting
--- different priority universes / quote-age semantics for the same source.
-
 begin;
 
 create or replace view public.v_fugle_daytrade_canonical_gate as
@@ -32,7 +28,7 @@ normalized as (
     coalesce((payload->>'priority_gate_grade'), 'D') as priority_gate_grade,
     coalesce((payload->>'full_market_gate_grade'), 'D') as full_market_gate_grade,
     coalesce((payload->>'daytrade_source_speed_ok')::boolean, false) as daytrade_source_speed_ok,
-    coalesce((payload->>'formal_entry_allowed')::boolean, false) as formal_entry_allowed,
+    coalesce((payload->>'formal_entry_allowed')::boolean, false) as writer_formal_entry_allowed,
     coalesce((payload->>'scanner_can_run_quote_only')::boolean, false) as scanner_can_run_quote_only,
     coalesce((payload->>'scanner_can_run_opening')::boolean, false) as scanner_can_run_opening,
     coalesce((payload->>'selected_symbols_fresh_ok')::boolean, false) as selected_symbols_fresh_ok,
@@ -52,7 +48,7 @@ normalized as (
     coalesce((payload->>'futopt_stock_mapped')::integer, 0) as futopt_stock_mapped,
     coalesce((payload->>'rate_limit_status'), 'unknown') as rate_limit_status,
     coalesce((payload->>'phase'), '') as phase,
-    payload,
+    coalesce(payload, '{}'::jsonb) as payload,
     case
       when taipei_minutes < 360 then 'closed_before_0600'
       when taipei_minutes < 510 then 'warmup_0600_0829'
@@ -63,7 +59,7 @@ normalized as (
       else 'after_daytrade_window'
     end as current_phase
   from status_row
-cross join current_clock
+  cross join current_clock
 ),
 scored as (
   select
@@ -73,7 +69,7 @@ scored as (
       and current_phase not in ('closed_before_0600', 'after_daytrade_window')
       and daytrade_gate_grade = 'A'
       and daytrade_source_speed_ok is true
-      and formal_entry_allowed is true
+      and writer_formal_entry_allowed is true
       and scanner_can_run_opening is true
       and priority_fresh_quote_coverage_120s >= 0.95
       and quote_age_seconds <= 90
@@ -83,7 +79,7 @@ scored as (
       (source_status = 'ok')::integer
       + (daytrade_gate_grade = 'A')::integer
       + (daytrade_source_speed_ok is true)::integer
-      + (formal_entry_allowed is true)::integer
+      + (writer_formal_entry_allowed is true)::integer
       + (scanner_can_run_opening is true)::integer
       + (priority_fresh_quote_coverage_120s >= 0.95)::integer
       + (quote_age_seconds <= 90)::integer
@@ -97,26 +93,38 @@ scored as (
       + (updated_at is not null)::integer
     ) as scorecard_required_ok_count
   from normalized
+),
+projected as (
+  select
+    *,
+    case when canonical_ready then 'A' else 'D' end as final_gate_grade,
+    case when canonical_ready then 'ready' else 'not_ready' end as final_gate_status,
+    case
+      when canonical_ready then ''
+      when current_phase in ('closed_before_0600', 'after_daytrade_window') then 'off_session_not_formal_entry'
+      when source_status <> 'ok' then 'source_status_not_ok'
+      when daytrade_gate_grade <> 'A' then 'daytrade_gate_not_a'
+      when writer_formal_entry_allowed is not true then 'formal_entry_not_allowed'
+      when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
+      when priority_fresh_quote_coverage_120s < 0.95 then 'priority_quote_coverage_low'
+      when quote_age_seconds > 90 then 'quote_age_too_old'
+      when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
+      else 'source_contract_not_ready'
+    end as final_reason
+  from scored
 )
 select
   source_name,
   updated_at as checked_at,
   source_status,
   message,
-  case when canonical_ready then 'A' else daytrade_gate_grade end as canonical_gate_grade,
-  case when canonical_ready then 'ready' else 'not_ready' end as canonical_gate_status,
-  case
-    when canonical_ready then ''
-    when current_phase in ('closed_before_0600', 'after_daytrade_window') then 'off_session_not_formal_entry'
-    when source_status <> 'ok' then 'source_status_not_ok'
-    when daytrade_gate_grade <> 'A' then 'daytrade_gate_not_a'
-    when formal_entry_allowed is not true then 'formal_entry_not_allowed'
-    when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
-    when priority_fresh_quote_coverage_120s < 0.95 then 'priority_quote_coverage_low'
-    when quote_age_seconds > 90 then 'quote_age_too_old'
-    when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
-    else 'source_contract_not_ready'
-  end as reason,
+  final_gate_grade as canonical_gate_grade,
+  final_gate_status as canonical_gate_status,
+  final_gate_grade as gate,
+  final_gate_status as status,
+  final_gate_grade as gate_grade,
+  final_gate_status as gate_status,
+  final_reason as reason,
   daytrade_gate_grade,
   priority_gate_grade,
   full_market_gate_grade,
@@ -139,58 +147,18 @@ select
   futopt_stock_mapped,
   rate_limit_status,
   phase,
-  current_phase,
   scorecard_required_ok_count,
   15 as scorecard_required_count,
   case when canonical_ready then 'YES' else 'NO' end as formal_entry_speed_verdict,
-  formal_entry_allowed,
+  canonical_ready as formal_entry_allowed,
   daytrade_source_speed_ok,
-  payload
-from scored;
-
-create or replace view public.v_fugle_daytrade_unattended_gate_status as
-select
-  source_name,
-  checked_at,
-  source_status,
-  message,
-  canonical_gate_grade,
-  canonical_gate_status,
-  reason,
-  daytrade_gate_grade,
-  priority_gate_grade,
-  full_market_gate_grade,
-  priority_fresh_quote_coverage_120s,
-  priority_fresh_quotes_120s,
-  priority_pool_symbols,
-  fresh_quote_coverage_120s,
-  fresh_quotes_120s,
-  active_symbols,
-  quote_age_seconds,
-  scanner_can_run_quote_only,
-  scanner_can_run_opening,
-  selected_symbols_fresh_ok,
-  daily_volume_status,
-  ready_ma20_continuous_symbols,
-  ready_ma35_continuous_symbols,
-  intraday_1m_stale_seconds,
-  today_1m_symbols,
-  today_1m_rows,
-  futopt_stock_mapped,
-  rate_limit_status,
-  phase,
-  current_phase,
-  scorecard_required_ok_count,
-  scorecard_required_count,
-  formal_entry_speed_verdict,
-  formal_entry_allowed,
-  daytrade_source_speed_ok,
-  case when canonical_gate_grade = 'A' then 'YES' else 'NO' end as unattended_status,
-  case when canonical_gate_grade = 'A' then 'complete' else 'insufficient' end as evidence_status,
-  payload
-from public.v_fugle_daytrade_canonical_gate;
+  payload || jsonb_build_object(
+    'current_phase', current_phase,
+    'writer_formal_entry_allowed', writer_formal_entry_allowed,
+    'canonical_formal_entry_allowed', canonical_ready
+  ) as payload
+from projected;
 
 grant select on public.v_fugle_daytrade_canonical_gate to anon, authenticated, service_role;
-grant select on public.v_fugle_daytrade_unattended_gate_status to anon, authenticated, service_role;
 
 commit;

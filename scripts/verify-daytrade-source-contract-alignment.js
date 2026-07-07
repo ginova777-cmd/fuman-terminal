@@ -112,6 +112,28 @@ function isGateA(gate) {
     && gate.formalEntrySpeedVerdict === "YES";
 }
 
+function isGateFailClosed(gate) {
+  return gate.gateGrade !== "A"
+    && gate.gateStatus === "not_ready"
+    && gate.reason === "off_session_not_formal_entry"
+    && gate.formalEntrySpeedVerdict === "NO";
+}
+
+function gateVerdict(source, canonicalGate, unattendedGate) {
+  const sourceA = isSourceA(source);
+  const canonicalA = isGateA(canonicalGate);
+  const unattendedA = isGateA(unattendedGate);
+  const canonicalClosed = isGateFailClosed(canonicalGate);
+  const unattendedClosed = isGateFailClosed(unattendedGate);
+  if (sourceA && canonicalA && unattendedA) return { ok: true, verdict: "A_READY_ALIGNED", mode: "formal_ready", issues: [] };
+  if (sourceA && canonicalClosed && unattendedClosed) return { ok: true, verdict: "OFF_SESSION_FAIL_CLOSED_ALIGNED", mode: "off_session_fail_closed", issues: [] };
+  const issues = [];
+  if (!sourceA) issues.push("source_status_not_a");
+  if (!canonicalA && !canonicalClosed) issues.push("canonical_gate_not_a_or_fail_closed");
+  if (!unattendedA && !unattendedClosed) issues.push("unattended_gate_not_a_or_fail_closed");
+  return { ok: false, verdict: "NOT_ALIGNED", mode: "mismatch", issues };
+}
+
 async function main() {
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
     path.join("C:", "fuman-runtime", "secrets", "supabase-anon-key.txt"),
@@ -128,10 +150,8 @@ async function main() {
   const sourceStatus = normalizeSourceStatus(firstObject(sourceRows));
   const canonicalGate = normalizeGate(firstObject(canonicalRows));
   const unattendedGate = normalizeGate(firstObject(unattendedRows));
-  const issues = [];
-  if (!isSourceA(sourceStatus)) issues.push("source_status_not_a");
-  if (!isGateA(canonicalGate)) issues.push("canonical_gate_not_a");
-  if (!isGateA(unattendedGate)) issues.push("unattended_gate_not_a");
+  const alignment = gateVerdict(sourceStatus, canonicalGate, unattendedGate);
+  const issues = [...alignment.issues];
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
 
@@ -143,7 +163,8 @@ async function main() {
     canonicalGate,
     unattendedGate,
     issues,
-    verdict: issues.length === 0 ? "A_READY_ALIGNED" : "NOT_ALIGNED",
+    mode: alignment.mode,
+    verdict: alignment.verdict,
   };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;
