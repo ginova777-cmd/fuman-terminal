@@ -184,6 +184,30 @@ function inStrategy2Window(row) {
   return seconds >= 8 * 3600 + 45 * 60 && seconds <= 12 * 3600;
 }
 
+function isEvidenceLikeRow(row) {
+  if (!row || typeof row !== "object") return true;
+  const text = JSON.stringify(row).slice(0, 1200);
+  return /not required|not_required|source status not required|does not require|writer=|collector=|already-running|api-only-poll/i.test(text);
+}
+
+function isValidBusinessRow(row, tab = "") {
+  if (!row || typeof row !== "object" || isEvidenceLikeRow(row)) return false;
+  if (tab === "cb") {
+    const cbCode = String(firstValue(row, ["cbCode", "cb_code", "convertibleBondCode", "bondCode", "symbol", "code"], "")).trim();
+    const stockCode = String(firstValue(row, ["stockCode", "stock_id", "stockId", "underlyingCode", "code"], "")).trim();
+    return /^\d{4,6}$/.test(cbCode) && /^\d{4}$/.test(stockCode || cbCode.slice(0, 4));
+  }
+  if (["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)) {
+    const code = String(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")).trim();
+    return /^\d{4}$/.test(code);
+  }
+  if (tab === "warrant") {
+    const code = String(firstValue(row, ["underlyingCode", "code", "stockCode"], "")).trim();
+    const warrantCode = String(firstValue(row, ["warrantCode", "symbol"], "")).trim();
+    return /^\d{4}$/.test(code) || /^\d{5,6}$/.test(warrantCode);
+  }
+  return true;
+}
 function normalizeRows(payload, tab = "") {
   const rows = arrayAt(payload, [
     "matches",
@@ -205,9 +229,9 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy2") {
     const sortedRows = [...rows].sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a));
     const windowRows = sortedRows.filter(inStrategy2Window);
-    return (windowRows.length ? windowRows : sortedRows).slice(0, 20);
+    return (windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
   }
-  return rows.slice(0, 20);
+  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
 }
 
 function isEmptyStrategy2Snapshot(payload) {
