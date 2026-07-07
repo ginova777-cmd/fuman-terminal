@@ -608,6 +608,40 @@ async function fetchIntradayStatus() {
   }
   return toMap([], "missing_intraday_1m_status");
 }
+
+function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
+  const prioritySymbols = new Set((priorityRows || []).map((row) => normalizeCode(row.symbol)).filter(Boolean));
+  if (!prioritySymbols.size) return intradayMap;
+  const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
+  let merged = 0;
+  for (const quote of quoteCache.quotes.values()) {
+    const symbol = normalizeCode(quote.symbol || quote.code);
+    if (!symbol || !prioritySymbols.has(symbol)) continue;
+    const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, "");
+    if (!seenAt || ageSeconds(seenAt) > WINDOW_SECONDS) continue;
+    const previous = intradayMap.get(symbol) || { symbol };
+    const previousContinuous = numberValue(previous.continuous_candle_count ?? previous.candle_count);
+    const previousToday = numberValue(previous.today_candle_count);
+    const readyMa20 = boolValue(previous.ready_ma20_continuous) || previousContinuous >= 20;
+    const readyMa35 = boolValue(previous.ready_ma35_continuous) || boolValue(previous.ready_ge_35) || previousContinuous >= 35;
+    intradayMap.set(symbol, {
+      ...previous,
+      symbol,
+      latest_candle_time: seenAt,
+      today_candle_count: Math.max(previousToday, 1),
+      warmup_candle_count: Math.max(numberValue(previous.warmup_candle_count), previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
+      continuous_candle_count: Math.max(previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
+      ready_ma20_continuous: readyMa20,
+      ready_ma35_continuous: readyMa35,
+      latest_candle_age_seconds: ageSeconds(seenAt),
+      source: previous.source || "fugle_daytrade_writer:websocket_quote_derived_status",
+    });
+    merged += 1;
+  }
+  intradayMap.websocketQuoteDerivedStatusMerged = merged;
+  intradayMap.readinessSource = `${intradayMap.readinessSource || "intraday_status"}+websocket_quote_derived_status`;
+  return intradayMap;
+}
 async function fetchFutoptRows() {
   try {
     const rows = await supabaseGetPaged(
@@ -1470,7 +1504,7 @@ async function tick() {
     });
   }
 
-  const intradayMap = await fetchIntradayStatus();
+  const intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(await fetchIntradayStatus(), priorityRows);
   const futoptRows = await fetchFutoptRows();
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
