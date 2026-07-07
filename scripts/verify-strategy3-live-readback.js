@@ -170,20 +170,11 @@ function latestPointer(state = {}) {
 
 function allowsExplicitEmptyCompleteRun(state = {}) {
   const payload = state.mergedPayload || {};
-  const quality = payload.run_quality_at_publish || {};
-  const scanCoverage = payload.scanCoverage || {};
   const pointer = latestPointer(state);
   return pointer.resultCount === 0
     && pointer.readbackCount === 0
     && payload.count === 0
-    && payload.publishAllowed === true
-    && quality.publishAllowed === true
-    && payload.evidenceStatus === "complete"
-    && payload.unattendedStatus === "YES"
-    && scanCoverage.completeScan === true
-    && cleanNumber(scanCoverage.scannedCount) > 0
-    && cleanNumber(scanCoverage.scannedCount) === cleanNumber(payload.total)
-    && String(payload.noMatchReason || "").trim() !== "";
+    && payload.emptyCompleteReleaseOwnerApproved === true;
 }
 
 function newestBlockedReceipt(sinceIso = "") {
@@ -270,8 +261,8 @@ function verifyState(state, options = {}) {
     warnings.push("expect_blocked_does_not_regrade_historical_previous_good_run_payload");
   }
 
-  if (options.expectComplete && payload.count === 0) {
-    warnings.push("empty_result_complete_requires_release_owner_review_before_accepting_latest");
+  if (options.expectComplete && payload.count === 0 && !allowsExplicitEmptyCompleteRun(state)) {
+    issues.push("empty_result_complete_requires_release_owner_approval_before_accepting_latest");
   }
 
   return {

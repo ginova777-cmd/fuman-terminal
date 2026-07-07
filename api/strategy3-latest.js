@@ -513,14 +513,22 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const sourceEvidenceIssues = Array.isArray(snapshotAudit.issues) ? snapshotAudit.issues : [];
   const sourceEvidenceMissingFields = Array.isArray(snapshotAudit.missingFields) ? snapshotAudit.missingFields : [];
   const sourceEvidenceStatus = snapshotAudit.ok && fallbackAllowed && (publishEvidenceAtRunReady || currentSourceReady) ? "complete" : "insufficient";
+  const resultCount = cleanNumber(payload.count ?? runQuality.resultCount);
+  const emptyResultApproved = resultCount === 0 && payload.emptyCompleteReleaseOwnerApproved === true;
+  const emptyResultBlocksLatest = resultCount === 0 && !emptyResultApproved;
+  const emptyResultIssue = emptyResultBlocksLatest
+    ? "empty_result_requires_release_owner_approval"
+    : "";
   const contractIssues = [
     ...(Array.isArray(contract.issues) ? contract.issues : []),
     ...sourceEvidenceIssues,
+    emptyResultIssue,
   ].filter(Boolean);
   const apiPublishAllowed = snapshotAudit.ok
     && (publishEvidenceAtRunReady || currentSourceReady)
     && fallbackAllowed
-    && runQuality.publishAllowed !== false;
+    && runQuality.publishAllowed !== false
+    && !emptyResultBlocksLatest;
   const apiPreservePreviousGood = apiPublishAllowed
     ? runQuality.preservePreviousGood === true
     : true;

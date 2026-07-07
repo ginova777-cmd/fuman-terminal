@@ -6112,6 +6112,90 @@
     return canvas;
   }
 
+  function renderStrategy3CompleteRunShell(key, meta, panel) {
+    const payloadMeta = canvasPayloadMeta(key) || {};
+    const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
+      .filter((row) => /^\d{4}$/.test(String(row.code || "").trim()));
+    const headerTitle = panel.querySelector(".strategy-header h1");
+    const headerText = panel.querySelector(".strategy-header p");
+    const headerBadge = panel.querySelector(".strategy-header .console-badge");
+    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
+    const summary = panel.querySelector("#strategy-summary");
+    const count = panel.querySelector("#strategy-match-count");
+    const avg = panel.querySelector("#strategy-avg-score");
+    const top = panel.querySelector("#strategy-top-hit");
+    const table = panel.querySelector("#strategy-table");
+    const runId = payloadMeta.runId || "";
+    const evidenceStatus = payloadMeta.evidenceStatus || "";
+    const unattendedStatus = payloadMeta.unattendedStatus || "";
+    const publishAllowed = payloadMeta.publishAllowed === true || payloadMeta.publishAllowed === "true";
+    panel.dataset.fumanRouteSnapshotRestoring = "1";
+    panel.dataset.fumanCanvasPersistent = "0";
+    panel.classList.add("fuman-api-only-strategy-route", "strategy3-only");
+    panel.classList.remove("strategy5-only", "swing-only", "open-buy-only");
+    if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
+    if (headerText) headerText.textContent = `${meta.summary}；完整掃描結果直接讀 /api/strategy3-latest。`;
+    if (headerBadge) headerBadge.textContent = meta.badge;
+    if (toolbarTitle) toolbarTitle.textContent = meta.title;
+    if (toolbarBadge) toolbarBadge.textContent = meta.badge;
+    if (summary) summary.textContent = `${meta.title}｜完整掃描 run=${runId || "--"}｜候選 ${rows.length} 檔`;
+    if (count) count.textContent = String(rows.length);
+    if (avg) avg.textContent = rows.length ? String(Math.round(rows.reduce((sum, row) => sum + cleanNumber(row.score), 0) / rows.length)) : "--";
+    if (top) top.textContent = rows[0]?.code || "--";
+    if (table) {
+      const statusLine = [
+        runId ? `runId=${runId}` : "runId=--",
+        evidenceStatus ? `evidence=${evidenceStatus}` : "",
+        unattendedStatus ? `unattended=${unattendedStatus}` : "",
+        `publish=${publishAllowed ? "allowed" : "not_allowed"}`,
+        `source=${canvasState.source || "api"}`
+      ].filter(Boolean).join("｜");
+      const body = rows.length ? rows.map((row, index) => `
+        <article class="strategy3-table-row">
+          <div class="strategy3-rank-cell"><span class="strategy3-rank">${index + 1}</span></div>
+          <div class="strategy3-code">${escapeHtml(row.code || "--")}</div>
+          <div class="strategy3-name">${escapeHtml(row.title || row.name || "--")}</div>
+          <div class="strategy3-entry-price">
+            <strong>${escapeHtml(row.price || row.close || "--")}</strong>
+            <small>${escapeHtml(row.change || row.percent || "--")}</small>
+          </div>
+          <div class="strategy3-reason strategy3-reason-cell">${escapeHtml(row.reason || row.line || row.signalLine || "--")}</div>
+        </article>
+      `).join("") : `
+        <div class="empty-state">
+          策略3本次完整掃描已完成，0 檔符合隔日沖條件。這不是讀取失敗；終端已對齊最新 run。
+        </div>
+      `;
+      table.innerHTML = `
+        <section class="strategy5-shell">
+          <section class="strategy5-dashboard strategy3-clean">
+            <section class="strategy5-results" data-run-id="${escapeHtml(runId)}" data-result-count="${rows.length}" data-evidence-status="${escapeHtml(evidenceStatus)}" data-unattended-status="${escapeHtml(unattendedStatus)}">
+              <div class="strategy5-results-head">
+                <div>
+                  <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
+                  <p>${escapeHtml(statusLine)}</p>
+                </div>
+              </div>
+              <section class="strategy3-table" aria-label="策略3隔日沖完整掃描結果">
+                <div class="strategy3-table-head">
+                  <span>排名</span>
+                  <span>股票代號</span>
+                  <span>股票名稱</span>
+                  <span>尾盤進場價</span>
+                  <span>原因</span>
+                </div>
+                ${body}
+              </section>
+            </section>
+          </section>
+        </section>
+      `;
+    }
+    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    return true;
+  }
+
   function renderStrategyRouteShell(link, source, rows = []) {
     const panel = document.querySelector("#strategy-view");
     if (!panel) return false;
@@ -6139,6 +6223,7 @@
       return rendered;
     }
     const meta = strategyMeta(link);
+    if (isStrategy3Route(key)) return renderStrategy3CompleteRunShell(key, meta, panel);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-api-only-strategy-route");

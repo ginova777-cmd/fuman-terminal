@@ -817,14 +817,7 @@ function auditStrategy3BusinessFields(output = {}) {
 }
 
 function strategy3AllowsEmptyCompleteRun(output = {}) {
-  const scanCoverage = output.scanCoverage && typeof output.scanCoverage === "object" ? output.scanCoverage : {};
-  return cleanNumber(output.count) === 0
-    && output.sourceHealth?.status !== "failed"
-    && output.sourceDriftHealth?.status === "ready"
-    && output.sourceCoverage?.status === "ready"
-    && scanCoverage.completeScan === true
-    && cleanNumber(scanCoverage.scannedCount) > 0
-    && cleanNumber(scanCoverage.scannedCount) === cleanNumber(output.total);
+  return output.emptyCompleteReleaseOwnerApproved === true;
 }
 
 function strategy3PublishBlockReasons(output, status = "complete") {
@@ -838,7 +831,12 @@ function strategy3PublishBlockReasons(output, status = "complete") {
   if (output.sourceSnapshotAudit?.ok === false) reasons.push(`sourceSnapshotAudit ${output.sourceSnapshotAudit.status || "failed"}: ${(output.sourceSnapshotAudit.issues || []).join("; ")}`);
   if (output.prePublishSelfTest?.ok === false) reasons.push(`prePublishSelfTest failed: ${(output.prePublishSelfTest.issues || []).join("; ")}`);
   if ((output.sourceWarnings || []).some((warning) => /fallback/i.test(String(warning || "")))) reasons.push("formal source fallback warning present");
-  if (cleanNumber(output.count) < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) reasons.push(`resultCount ${output.count}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (cleanNumber(output.count) < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) {
+    reasons.push(`resultCount ${output.count}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  }
+  if (cleanNumber(output.count) === 0 && !allowEmptyCompleteRun) {
+    reasons.push("empty_result_requires_release_owner_approval");
+  }
   if (!businessAudit.ok) reasons.push(`businessFields blankTotal ${businessAudit.blankTotal}`);
   return reasons.filter(Boolean);
 }
