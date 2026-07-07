@@ -41,7 +41,7 @@
     "missingGateModeGateGrade": "D"
   },
   "collector": {
-    "quoteBatchSize": 150,
+    "quoteBatchSize": 225,
     "quoteConcurrency": 3,
     "targetBatchIntervalSeconds": 5,
     "priorityOnlyAfter429": true,
