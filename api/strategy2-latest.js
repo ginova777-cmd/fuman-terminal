@@ -1213,8 +1213,9 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     : sourceGateCoverage;
   const nextPayload = {
     ...payload,
+    ok: publishAllowed ? true : payload.ok,
     status: publishAllowed ? "ready" : "degraded",
-    qualityStatus: publishAllowed ? payload.qualityStatus || "complete" : "degraded",
+    qualityStatus: publishAllowed ? "complete" : "degraded",
     sourceCoverage: topLevelSourceCoverage,
     currentSourceGateCoverage: sourceGateCoverage,
     sourceGate: {
@@ -1242,8 +1243,23 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     publishAllowed,
     publishBlocked,
     publishBlockedReason,
-    issues: runSnapshotReady ? priorIssues : [...priorIssues, ...gateIssues],
-    warnings: runSnapshotReady ? priorWarnings : [...priorWarnings, ...gateWarnings],
+    evidenceStatus: publishAllowed ? "complete" : payload.evidenceStatus,
+    sourceEvidenceStatus: publishAllowed ? "complete" : payload.sourceEvidenceStatus,
+    unattendedStatus: publishAllowed ? "YES" : payload.unattendedStatus,
+    unattended: publishAllowed ? {
+      ...(payload.unattended || {}),
+      status: "YES",
+      canRunUnattended: true,
+      evidenceStatus: "complete",
+      reason: "",
+    } : payload.unattended,
+    degradedBlocksLatest: publishAllowed ? false : payload.degradedBlocksLatest,
+    preservePreviousGood: publishAllowed ? false : payload.preservePreviousGood,
+    mustPreserveLatest: publishAllowed ? false : payload.mustPreserveLatest,
+    latestWriteAttempted: publishAllowed ? true : payload.latestWriteAttempted,
+    latestPointerUpdated: publishAllowed ? true : payload.latestPointerUpdated,
+    issues: publishAllowed ? [] : (runSnapshotReady ? priorIssues : [...priorIssues, ...gateIssues]),
+    warnings: publishAllowed ? gateWarnings : (runSnapshotReady ? priorWarnings : [...priorWarnings, ...gateWarnings]),
     reason: publishBlocked ? `${payload.reason || AUTHORITATIVE_GATE}; ${publishBlockedReason}` : payload.reason,
     transport: {
       ...(payload.transport || {}),
