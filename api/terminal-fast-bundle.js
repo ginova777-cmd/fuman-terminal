@@ -154,6 +154,30 @@ function publicEndpointMap(results) {
   return map;
 }
 
+function sanitizeStrategy2RunIds(value, canonicalRunId) {
+  if (!canonicalRunId || !String(canonicalRunId).startsWith("strategy2-")) return value;
+  const pattern = /strategy2-\d{8}-\d+/g;
+  if (typeof value === "string") {
+    return value.replace(pattern, (match) => (match === canonicalRunId ? match : canonicalRunId));
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeStrategy2RunIds(item, canonicalRunId));
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) next[key] = sanitizeStrategy2RunIds(item, canonicalRunId);
+    return next;
+  }
+  return value;
+}
+
+function sanitizeStrategy2Endpoints(endpoints = {}) {
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
+    const canonicalRunId = String(payload?.runId || payload?.transport?.runId || "").trim();
+    if (!canonicalRunId.startsWith("strategy2-")) continue;
+    endpoints[endpoint] = sanitizeStrategy2RunIds(payload, canonicalRunId);
+  }
+  return endpoints;
+}
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
@@ -435,6 +459,7 @@ module.exports = async function handler(request, response) {
           updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
         });
       }
+      sanitizeStrategy2Endpoints(endpoints);
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -494,6 +519,7 @@ module.exports = async function handler(request, response) {
     cacheSource: "api/terminal-fast-bundle",
     via: "api/terminal-fast-bundle",
   });
+  sanitizeStrategy2Endpoints(endpoints);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
   const misses = rows
@@ -518,3 +544,4 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(payload);
 };
+
