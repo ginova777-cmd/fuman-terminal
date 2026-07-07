@@ -37,19 +37,77 @@ function Invoke-PublicSlotUpsert {
     [string]$ServiceRoleKey
   )
   if ($Rows.Count -eq 0 -or $DryRun) { return }
+  $Rows = @(Remove-DuplicateUpsertRows -Rows $Rows -OnConflict $OnConflict)
+  if ($Rows.Count -eq 0) { return }
+  Invoke-PublicSlotUpsertChunk -Table $Table -OnConflict $OnConflict -Rows $Rows -ServiceRoleKey $ServiceRoleKey
+}
+
+function Get-UpsertRowValue {
+  param([object]$Row, [string]$Name)
+  if ($Row -is [System.Collections.IDictionary]) { return $Row[$Name] }
+  return $Row.$Name
+}
+
+function Remove-DuplicateUpsertRows {
+  param([object[]]$Rows, [string]$OnConflict)
+  $keys = @($OnConflict -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  if ($keys.Count -eq 0) { return @($Rows) }
+  $map = [ordered]@{}
+  foreach ($row in @($Rows)) {
+    $key = ($keys | ForEach-Object { [string](Get-UpsertRowValue -Row $row -Name $_) }) -join "`u{001f}"
+    if ([string]::IsNullOrWhiteSpace($key)) { continue }
+    $map[$key] = $row
+  }
+  return @($map.Values)
+}
+
+function Get-WebErrorBody {
+  param([object]$ErrorRecord)
+  $message = [string]$ErrorRecord.Exception.Message
+  try {
+    $response = $ErrorRecord.Exception.Response
+    if ($null -ne $response -and $null -ne $response.GetResponseStream()) {
+      $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+      $body = $reader.ReadToEnd()
+      if (-not [string]::IsNullOrWhiteSpace($body)) {
+        return "$message :: $($body.Substring(0, [Math]::Min(800, $body.Length)))"
+      }
+    }
+  } catch {}
+  return $message
+}
+
+function Invoke-PublicSlotUpsertChunk {
+  param(
+    [string]$Table,
+    [string]$OnConflict,
+    [object[]]$Rows,
+    [string]$ServiceRoleKey
+  )
+  if ($Rows.Count -eq 0 -or $DryRun) { return }
   $headers = @{
     apikey = $ServiceRoleKey
     Authorization = "Bearer $ServiceRoleKey"
     "Content-Type" = "application/json"
     Prefer = "resolution=merge-duplicates,return=minimal"
   }
-  $body = @($Rows) | ConvertTo-Json -Depth 40 -Compress
-  Invoke-WebRequest `
-    -Uri "$($ProjectUrl.TrimEnd('/'))/rest/v1/${Table}?on_conflict=$OnConflict" `
-    -Method Post `
-    -Headers $headers `
-    -Body $body `
-    -TimeoutSec 120 | Out-Null
+  $body = ConvertTo-Json -InputObject @($Rows) -Depth 40 -Compress
+  try {
+    Invoke-WebRequest `
+      -Uri "$($ProjectUrl.TrimEnd('/'))/rest/v1/${Table}?on_conflict=$OnConflict" `
+      -Method Post `
+      -Headers $headers `
+      -Body $body `
+      -TimeoutSec 120 | Out-Null
+  } catch {
+    if ($Rows.Count -le 1) {
+      $detail = Get-WebErrorBody -ErrorRecord $_
+      throw "upsert ${Table} failed rows=1 on_conflict=$OnConflict detail=$detail row=$($body.Substring(0, [Math]::Min(600, $body.Length)))"
+    }
+    $mid = [Math]::Floor($Rows.Count / 2)
+    Invoke-PublicSlotUpsertChunk -Table $Table -OnConflict $OnConflict -Rows @($Rows[0..($mid - 1)]) -ServiceRoleKey $ServiceRoleKey
+    Invoke-PublicSlotUpsertChunk -Table $Table -OnConflict $OnConflict -Rows @($Rows[$mid..($Rows.Count - 1)]) -ServiceRoleKey $ServiceRoleKey
+  }
 }
 
 function Invoke-PublicSlotGetAll {

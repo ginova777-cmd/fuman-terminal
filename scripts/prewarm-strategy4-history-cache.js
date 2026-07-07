@@ -151,6 +151,7 @@ function writePrefilterVolumeCache(code, from, to, rows, source = "supabase-fugl
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-5);
   if (normalizedRows.length < 5) return false;
+  if (to && normalizedRows[normalizedRows.length - 1]?.date !== to) return false;
   fs.mkdirSync(FUGLE_HISTORY_CACHE_DIR, { recursive: true });
   fs.writeFileSync(historyCacheFile(code), `${JSON.stringify({
     code: normalizeCode(code),
@@ -171,6 +172,7 @@ function writeHistoryCache(code, from, to, rows, source = "supabase-fugle", opti
     .slice(-HISTORY_CACHE_ROWS);
   const minRows = Number(options.minRows || STRATEGY4_MIN_HISTORY_BARS);
   if (normalizedRows.length < minRows) return false;
+  if (to && normalizedRows[normalizedRows.length - 1]?.date !== to) return false;
   fs.mkdirSync(FUGLE_HISTORY_CACHE_DIR, { recursive: true });
   fs.writeFileSync(historyCacheFile(code), `${JSON.stringify({
     code: normalizeCode(code),
@@ -186,11 +188,17 @@ function writeHistoryCache(code, from, to, rows, source = "supabase-fugle", opti
 function hasFreshHistoryCache(code, from, to) {
   try {
     const payload = JSON.parse(fs.readFileSync(historyCacheFile(code), "utf8"));
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const latestDate = rows
+      .map((row) => String(row.date || row.trade_date || "").slice(0, 10))
+      .filter(Boolean)
+      .sort()
+      .at(-1) || "";
     return payload?.code === normalizeCode(code)
       && payload?.from === from
       && payload?.to === to
-      && Array.isArray(payload?.rows)
-      && payload.rows.length >= STRATEGY4_MIN_HISTORY_BARS;
+      && rows.length >= STRATEGY4_MIN_HISTORY_BARS
+      && (!to || latestDate === to);
   } catch {
     return false;
   }
@@ -208,7 +216,7 @@ function historyCacheSummary(code, from, to) {
       rows: rows.length,
       firstDate: rows[0]?.date || rows[0]?.trade_date || "",
       lastDate: rows[rows.length - 1]?.date || rows[rows.length - 1]?.trade_date || "",
-      freshRange: payload?.from === from && payload?.to === to,
+      freshRange: payload?.from === from && payload?.to === to && (!to || (rows[rows.length - 1]?.date || rows[rows.length - 1]?.trade_date || "") === to),
     };
   } catch {
     return {
