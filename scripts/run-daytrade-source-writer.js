@@ -258,7 +258,7 @@ function quoteFetchPriorityOnlyForPhase(phase) {
 }
 
 function quoteFreshnessTime(quote) {
-  return quote?.updated_at || quote?.last_trade_time || quote?.quote_seen_at || "";
+  return quote?.quote_seen_at || quote?.updated_at || quote?.last_trade_time || "";
 }
 
 function ageSeconds(value, fallback = 999999) {
