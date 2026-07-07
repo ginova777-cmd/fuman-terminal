@@ -98,7 +98,7 @@ requireMarkers("data/contracts/source-layer-strategy-map.json", [
   "blocked_preserve_previous_good",
 ]);
 
-requireMarkers("ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1", [
+requireMarkers("ops/public-slot/SharedSourceReadOnlyVerifier.ps1", [
   "shared_market",
   "strictLiveQuoteRequired",
   "displayReadbackAllowed",
@@ -279,4 +279,5 @@ console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
   message: "all strategies are pinned to the unified source gate and run-time evidence contract",
 }, null, 2));
+
 

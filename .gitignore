@@ -19,3 +19,8 @@ data/mobile-analysis/*.json
 data/market-ai-live.json
 
 .env*
+
+# Retired public-slot read-only verifier names are left behind on some Windows
+# mirrors with protected ACLs. Active contract uses SharedSourceReadOnly*.ps1.
+ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1
+ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1

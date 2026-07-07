@@ -271,7 +271,7 @@ function staticChecks() {
     "grant select",
   ]);
 
-  requireIncludes("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1", [
+  requireIncludes("ops/public-slot/SharedSourceReadOnlyProbe.ps1", [
     "v_fuman_shared_source_readonly_scorecard",
     "mode = \"read-only\"",
     "fresh_quote_coverage_120s",
@@ -400,7 +400,7 @@ function staticChecks() {
     "data writes in read-only shared source scorecard"
   );
   forbidRegex(
-    "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+    "ops/public-slot/SharedSourceReadOnlyProbe.ps1",
     /Write-PublicSlot|Invoke-PublicSlotUpsert|Invoke-RestMethod[\s\S]{0,120}-Method\s+(Post|Patch|Delete)|Set-Content|Add-Content|Out-File/i,
     "writes in read-only shared source verifier"
   );
@@ -665,3 +665,4 @@ async function liveChecks() {
   console.error(error.stack || error.message);
   process.exit(1);
 });
+
