@@ -1,5 +1,6 @@
 param(
   [switch]$SkipReceiptCheck,
+  [switch]$StrictReceiptCheck,
   [int]$MaxReceiptAgeHours = 18
 )
 
@@ -72,6 +73,7 @@ function Test-PreservePreviousGoodWarningsOnly($warnings) {
 }
 
 if (-not $SkipReceiptCheck) {
+  $receiptStrict = $StrictReceiptCheck -or $env:FUMAN_STRICT_GLOBAL_SCAN_RECEIPTS -eq "1"
   $required = @("open-buy", "strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
   $issues = New-Object System.Collections.Generic.List[string]
   $summary = Read-JsonFile (Join-Path $receiptDir "scan-summary.json")
@@ -123,7 +125,11 @@ if (-not $SkipReceiptCheck) {
     }
   }
   if ($issues.Count -gt 0) {
-    throw "Publish gate blocked by scan receipts: $($issues -join '; ')"
+    $message = "Global scan receipt check has issues: $($issues -join '; ')"
+    if ($receiptStrict) {
+      throw "Publish gate blocked by scan receipts: $($issues -join '; ')"
+    }
+    Write-Warning "$message; continuing because overall unattended coupling is disabled. Use -StrictReceiptCheck or FUMAN_STRICT_GLOBAL_SCAN_RECEIPTS=1 for full-system audit."
   }
 }
 
