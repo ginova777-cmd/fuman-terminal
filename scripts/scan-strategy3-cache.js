@@ -104,6 +104,8 @@ const STRATEGY3_PREWATER_REQUIRED_EVIDENCE_FIELDS = [
   "blockedReason",
   "scanner_block_reason",
 ];
+
+let lastStrategy3MatchDiagnostics = null;
 const STRATEGY3_REQUIRED_BUSINESS_FIELDS = [
   "code",
   "name",
@@ -628,7 +630,7 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
 function validateStrategy3PrePublish(output) {
   const issues = [];
   const matches = Array.isArray(output.matches) ? output.matches : [];
-  const fieldGateCount = matches.length;
+  const resultCount = matches.length;
   const tvPassCount = cleanNumber(output.tvPassCount);
   const completeScan = output.scanCoverage && typeof output.scanCoverage === "object" ? output.scanCoverage : {};
   const allowEmptyCompleteRun = strategy3AllowsEmptyCompleteRun(output);
@@ -636,14 +638,16 @@ function validateStrategy3PrePublish(output) {
   if (output.sourceDriftHealth?.status !== "ready") issues.push(`sourceDrift ${output.sourceDriftHealth?.status || "missing"}: ${output.sourceDriftHealth?.reason || ""}`);
   if (completeScan.candidateLimitApplied) issues.push(`candidate limit applied: ${completeScan.candidateLimit}`);
   if (cleanNumber(completeScan.scannedCount) !== cleanNumber(output.total)) issues.push(`scannedCount ${completeScan.scannedCount} != total ${output.total}`);
-  if (cleanNumber(completeScan.fieldGateCandidates) !== fieldGateCount) issues.push(`fieldGateCandidates ${completeScan.fieldGateCandidates} != matches ${fieldGateCount}`);
-  if (fieldGateCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) issues.push(`fieldGateReadyCount ${fieldGateCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
+  if (cleanNumber(completeScan.fixedPassCandidates) !== resultCount) issues.push(`fixedPassCandidates ${completeScan.fixedPassCandidates} != matches ${resultCount}`);
+  if (resultCount < STRATEGY3_MIN_FIELD_GATE_CANDIDATES && !allowEmptyCompleteRun) issues.push(`resultCount ${resultCount}<${STRATEGY3_MIN_FIELD_GATE_CANDIDATES}`);
   if (!Object.prototype.hasOwnProperty.call(output, "tvPassCount")) issues.push("missing tvPassCount");
   if (!matches.every((stock) => stock && stock.tvOvernightEntry && typeof stock.tvOvernightEntry.ok === "boolean")) issues.push("missing per-row tvOvernightEntry breakdown");
   return {
     ok: issues.length === 0,
-    completeScan: issues.filter((issue) => /candidate limit applied|scannedCount|fieldGateCandidates/.test(issue)).length === 0,
-    fieldGateReadyCount: fieldGateCount,
+    completeScan: issues.filter((issue) => /candidate limit applied|scannedCount|fixedPassCandidates/.test(issue)).length === 0,
+    fieldGateReadyCount: cleanNumber(completeScan.fieldGateCandidates),
+    fixedPassReadyCount: resultCount,
+    resultCount,
     minFieldGateCandidates: STRATEGY3_MIN_FIELD_GATE_CANDIDATES,
     scannedCount: cleanNumber(completeScan.scannedCount),
     sourceUniverseCount: cleanNumber(completeScan.sourceUniverseCount),
@@ -1694,10 +1698,73 @@ function strategy3FieldGate(stock, volumeRatio, volumeLots) {
   return { ok, checks, reason, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
 }
 
+function incrementStrategy3Reason(map, key) {
+  const reason = String(key || "unknown");
+  map[reason] = cleanNumber(map[reason]) + 1;
+}
+
+function summarizeStrategy3RejectMap(map) {
+  return Object.entries(map || {})
+    .map(([reason, count]) => ({ reason, count: cleanNumber(count) }))
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+    .slice(0, 20);
+}
+
+function buildStrategy3MatchDiagnostics(scored, tvAnalyzed = []) {
+  const fieldGateRejects = {};
+  const tvRejects = {};
+  const samples = [];
+  for (const stock of scored) {
+    if (!(stock.close > 0)) incrementStrategy3Reason(fieldGateRejects, "price_not_positive");
+    if (!stock.strategy3Session1mReady) incrementStrategy3Reason(fieldGateRejects, "session_1m_not_ready");
+    const checks = stock.strategy3FieldGate?.checks || {};
+    for (const [key, ok] of Object.entries(checks)) {
+      if (!ok) incrementStrategy3Reason(fieldGateRejects, `field_gate_${key}`);
+    }
+    if (!stock.strategy3TurnoverPass) incrementStrategy3Reason(fieldGateRejects, "turnover_not_ready");
+    if (!stock.strategy3FixedPass && samples.length < 12) {
+      samples.push({
+        code: stock.code,
+        name: stock.name,
+        close: cleanNumber(stock.close),
+        changePercent: cleanNumber(stock.percent ?? stock.changePercent),
+        volumeRatio: cleanNumber(stock.volumeRatio),
+        intradayCandleCount: cleanNumber(stock.intradayCandleCount),
+        outsideInsideDiff: cleanNumber(stock.outsideInsideDiff),
+        outsideInsideRatio: cleanNumber(stock.outsideInsideRatio),
+      });
+    }
+  }
+  for (const stock of tvAnalyzed) {
+    if (!stock.tvOvernightEntry?.ok) {
+      const reason = String(stock.tvOvernightEntry?.reason || "tv_entry_not_ok")
+        .replace(/\s+/g, " ")
+        .slice(0, 160);
+      incrementStrategy3Reason(tvRejects, reason || "tv_entry_not_ok");
+    }
+  }
+  const sessionReadyCandidates = scored.filter((stock) => stock.strategy3Session1mReady).length;
+  const hardFieldGateCandidates = scored.filter((stock) => stock.strategy3FieldGate?.ok).length;
+  const fixedPassCandidates = scored.filter((stock) => stock.strategy3FixedPass).length;
+  const tvPassCount = tvAnalyzed.filter((stock) => stock.tvOvernightEntry?.ok).length;
+  return {
+    sourceUniverseCount: scored.length,
+    sessionReadyCandidates,
+    hardFieldGateCandidates,
+    fixedPassCandidates,
+    tvAnalyzedCount: tvAnalyzed.length,
+    tvPassCount,
+    fieldGateRejectBreakdown: summarizeStrategy3RejectMap(fieldGateRejects),
+    tvRejectBreakdown: summarizeStrategy3RejectMap(tvRejects),
+    sampleRejectedRows: samples,
+  };
+}
+
 async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const valueRanks = rankMap(stocks, "value");
   const volumeRanks = rankMap(stocks, "tradeVolume");
-  const scored = stocks.map((stock) => {
+  const allScored = stocks.map((stock) => {
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
     const pct = Number(stock.percent) || 0;
@@ -1745,18 +1812,23 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       outsideDominanceScore: Number(outsideDominanceScore.toFixed(2)),
       strategy3FieldGate: fieldGate,
       strategy3Session1mReady: session1mReady,
+      strategy3TurnoverPass: turnoverPass,
       strategy3FixedPass: fixedPass,
       overnightScore,
       overnightState: fixedPass ? "待TV判斷" : "觀察",
       score: overnightScore,
       matches: [{ id: "overnight_chip", reason: fixedReason }],
     };
-  })
+  });
+  const scored = allScored
     .filter((stock) => stock.close > 0 && strategy3HasSession1m(stock))
     .filter((stock) => stock.strategy3FixedPass)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value);
 
-  if (!STRATEGY3_REQUIRE_TV_ENTRY) return scored;
+  if (!STRATEGY3_REQUIRE_TV_ENTRY) {
+    lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, scored);
+    return scored;
+  }
 
   const analyzed = await mapLimit(scored, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
@@ -1801,6 +1873,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     }
   });
 
+  lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, analyzed);
   return analyzed
     .sort((a, b) => {
       const tvDiff = Number(Boolean(b.tvOvernightEntry?.ok)) - Number(Boolean(a.tvOvernightEntry?.ok));
@@ -2054,16 +2127,24 @@ async function main() {
   const tvPassCount = matches.filter((stock) => stock.tvOvernightEntry?.ok).length;
   const displayMode = matches.length ? "field_gate_with_tv_flame" : "no_tv_pass";
   const noMatchReason = matches.length ? "" : STRATEGY3_NO_TV_PASS_REASON;
+  const matchDiagnostics = lastStrategy3MatchDiagnostics || {};
   const scanCoverage = {
     completeScan: true,
     sourceUniverseCount: stocks.length,
     scannedCount: stocks.length,
-    sessionReadyCandidates: stocks.filter((stock) => strategy3HasSession1m(stock)).length,
-    fieldGateCandidates: matches.length,
+    sessionReadyCandidates: cleanNumber(matchDiagnostics.sessionReadyCandidates),
+    hardFieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
+    fieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
+    fixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    tvAnalyzedCount: cleanNumber(matchDiagnostics.tvAnalyzedCount),
+    tvPassCount: cleanNumber(matchDiagnostics.tvPassCount),
     resultCount: matches.length,
     candidateLimit: STRATEGY3_TV_CANDIDATE_LIMIT,
     candidateLimitApplied: STRATEGY3_TV_CANDIDATE_LIMIT > 0,
     tvEntryRequired: STRATEGY3_REQUIRE_TV_ENTRY,
+    fieldGateRejectBreakdown: matchDiagnostics.fieldGateRejectBreakdown || [],
+    tvRejectBreakdown: matchDiagnostics.tvRejectBreakdown || [],
+    sampleRejectedRows: matchDiagnostics.sampleRejectedRows || [],
   };
   const output = {
     ok: true,
@@ -2081,6 +2162,7 @@ async function main() {
     sourceCoverage,
     sourceDriftHealth,
     scanCoverage,
+    matchDiagnostics,
     displayMode,
     noMatchReason,
     matches,
