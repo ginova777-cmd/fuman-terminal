@@ -24,13 +24,13 @@
     "fullMarketFreshCoverageBlocksOpeningA": false,
     "requiredSymbolsPerSecond": 12.5,
     "assumedBatchSize": 40,
-    "maxBatchIntervalSeconds": 5,
+    "maxBatchIntervalSeconds": 60,
     "fullMarketTargetRoundSecondsMin": 120,
     "fullMarketTargetRoundSecondsMax": 180,
     "hardFresh120ForEveryFullMarketSymbol": false,
     "maxQuoteAgeSeconds": 120,
     "preferredQuoteAgeSeconds": 60,
-    "selectedSymbolMaxQuoteAgeSeconds": 90
+    "selectedSymbolMaxQuoteAgeSeconds": 120
   },
   "gateMode": {
     "mode": "priority_first",
@@ -41,9 +41,10 @@
     "missingGateModeGateGrade": "D"
   },
   "collector": {
-    "quoteBatchSize": 225,
-    "quoteConcurrency": 3,
-    "targetBatchIntervalSeconds": 5,
+    "quoteBatchSize": 40,
+    "quoteConcurrency": 1,
+    "targetBatchIntervalSeconds": 60,
+    "restFallbackEnabled": false,
     "priorityOnlyAfter429": true,
     "cooldownStrategy": "exponential",
     "cooldownInitialSeconds": 180,
@@ -52,14 +53,14 @@
     "notNo429Guarantee": true
   },
   "priorityPool": {
-    "targetSymbolsMin": 300,
-    "targetSymbolsMax": 450,
+    "targetSymbolsMin": 40,
+    "targetSymbolsMax": 40,
     "minFreshQuoteCoverageForA": 0.95,
     "targetFreshQuoteCoverage": 1,
     "selectedSymbolsFreshOkRequiredForA": true,
     "quoteBatchSize": 40,
-    "batchIntervalSecondsMin": 5,
-    "batchIntervalSecondsMax": 6,
+    "batchIntervalSecondsMin": 60,
+    "batchIntervalSecondsMax": 60,
     "readyBefore": "09:00",
     "protectedAfter429": true
   },
@@ -120,12 +121,12 @@
     },
     {
       "name": "regular_daytrade_0935_1330",
-      "expected": ["fresh_quote_coverage_120s>=0.90", "intraday_1m_stale_seconds<=120", "ready_ma35_continuous>=1500", "daily_volume_ready"]
+      "expected": ["priority_fresh_quote_coverage_120s>=0.95", "intraday_1m_stale_seconds<=180", "ready_ma35_continuous>=core_pool_required", "daily_volume_ready"]
     }
   ],
   "intraday1m": {
     "mode": "priority_hot_only",
-    "maxStaleSeconds": 120,
+    "maxStaleSeconds": 180,
     "preferredMaxStaleSeconds": 60,
     "blocksQuoteWriter": false
   },
