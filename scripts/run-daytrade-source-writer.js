@@ -267,6 +267,16 @@ function ageSeconds(value, fallback = 999999) {
   return Math.max(0, Math.floor((Date.now() - ts) / 1000));
 }
 
+function percentile(values, ratio) {
+  const sorted = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (!sorted.length) return 999999;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
+  return sorted[index];
+}
+
 function futureSeconds(value) {
   const ts = Date.parse(String(value || ""));
   if (!Number.isFinite(ts)) return 0;
@@ -935,6 +945,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const freshPriority = [];
   const quoteAges = [];
   const priorityAges = [];
+  const freshPriorityAges = [];
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
     const quoteAge = ageSeconds(quoteFreshnessTime(quote));
@@ -944,8 +955,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   for (const symbol of prioritySet) {
     const quote = quoteMap.get(symbol);
     const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    if (quote) priorityAges.push(quoteAge);
-    if (quoteAge <= WINDOW_SECONDS) freshPriority.push(symbol);
+    priorityAges.push(quote ? quoteAge : 999999);
+    if (quoteAge <= WINDOW_SECONDS) {
+      freshPriority.push(symbol);
+      freshPriorityAges.push(quoteAge);
+    }
   }
 
   const priorityPoolSymbols = prioritySet.size;
@@ -953,10 +967,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const freshQuoteCoverage = activeCount ? freshFull.length / activeCount : 0;
   const priorityFreshCoverage = priorityPoolSymbols ? freshPriority.length / priorityPoolSymbols : 0;
   const priorityMaxAge = priorityAges.length ? Math.max(...priorityAges) : 999999;
+  const priorityFreshMaxAge = freshPriorityAges.length ? Math.max(...freshPriorityAges) : 999999;
+  const priorityCoverageAge = percentile(priorityAges, MIN_PRIORITY_FRESH_COVERAGE);
+  const priorityStaleOrMissingSymbols = Math.max(0, priorityPoolSymbols - freshPriority.length);
   const latestQuoteAge = quoteAges.length ? Math.min(...quoteAges) : 999999;
   const selectedSymbolsFreshOk = priorityPoolSymbols >= MIN_PRIORITY_POOL_SYMBOLS
     && priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
-    && priorityMaxAge <= SELECTED_SYMBOL_MAX_AGE_SECONDS;
+    && priorityCoverageAge <= SELECTED_SYMBOL_MAX_AGE_SECONDS;
 
   let avgVolume5Eligible = 0;
   for (const symbol of prioritySet) {
@@ -1010,7 +1027,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     selectedSymbolsFreshOk,
     priorityPoolSymbols,
     priorityFreshCoverage,
-    quoteAgeSeconds: priorityMaxAge,
+    quoteAgeSeconds: priorityCoverageAge,
     cooldownRemaining,
     last429AgeSeconds,
     dailyVolumeStatus,
@@ -1042,7 +1059,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     fresh_quotes_120s: freshFull.length,
     fresh_quote_coverage_120s: Number(freshQuoteCoverage.toFixed(4)),
     active_symbols: activeCount,
-    quote_age_seconds: priorityPoolSymbols ? priorityMaxAge : latestQuoteAge,
+    quote_age_seconds: priorityPoolSymbols ? priorityCoverageAge : latestQuoteAge,
+    priority_quote_age_p95_seconds: priorityCoverageAge,
+    priority_fresh_max_quote_age_seconds: priorityFreshMaxAge,
+    priority_max_quote_age_seconds: priorityMaxAge,
+    priority_stale_or_missing_symbols: priorityStaleOrMissingSymbols,
     required_quote_speed_per_sec: REQUIRED_SYMBOLS_PER_SECOND,
     actual_quote_speed_per_sec: actualQuoteSpeed,
     quote_transport: quoteTransport,
