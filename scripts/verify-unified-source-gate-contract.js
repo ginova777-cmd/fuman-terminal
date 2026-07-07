@@ -78,9 +78,24 @@ requireMarkers("lib/source-layer-contract.js", [
 
 requireMarkers("scripts/verify-source-layer-contract.js", [
   "source-layer-contract-v1",
+  "source-layer-strategy-map-v1",
   "shared_market_off_session_does_not_fake_live_a_but_allows_display_readback",
   "shared_market_live_session_blocks_bad_freshness",
   "strategy2_uses_daytrade_dedicated",
+]);
+
+requireMarkers("data/contracts/source-layer-strategy-map.json", [
+  "source-layer-strategy-map-v1",
+  "requiredScorecardFields",
+  "sourceLayer",
+  "currentPhase",
+  "allowedAction",
+  "daytrade_dedicated",
+  "shared_market",
+  "daily_after_close",
+  "scanner_new_run",
+  "latest_good_run_display_only",
+  "blocked_preserve_previous_good",
 ]);
 
 requireMarkers("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1", [

@@ -1,0 +1,151 @@
+{
+  "contract": "source-layer-strategy-map-v1",
+  "requiredScorecardFields": [
+    "sourceLayer",
+    "currentPhase",
+    "allowedAction",
+    "sourceLayerReason",
+    "scannerNewRunAllowed",
+    "latestGoodRunDisplayAllowed",
+    "mustPreservePreviousGood"
+  ],
+  "allowedActions": [
+    "scanner_new_run",
+    "latest_good_run_display_only",
+    "blocked_preserve_previous_good"
+  ],
+  "strategies": [
+    {
+      "key": "strategy1",
+      "label": "Strategy1 open-buy",
+      "sourceLayer": "daytrade_dedicated",
+      "formalSource": "fugle_daytrade_source",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "blocked_preserve_previous_good",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market", "finmind", "static_json"],
+      "reason": "formal daytrade/opening entry must use dedicated daytrade source only"
+    },
+    {
+      "key": "strategy2",
+      "label": "Strategy2 daytrade radar",
+      "sourceLayer": "daytrade_dedicated",
+      "formalSource": "fugle_daytrade_source",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "latest_good_run_display_only",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market", "finmind", "static_json"],
+      "reason": "formal daytrade run must use dedicated daytrade quote/1m/preopen/futopt contract"
+    },
+    {
+      "key": "strategy3",
+      "label": "Strategy3 daytrade-dependent swing candidate",
+      "sourceLayer": "daytrade_dedicated",
+      "formalSource": "fugle_daytrade_source",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "latest_good_run_display_only",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market", "finmind", "static_json"],
+      "reason": "Strategy3 reuses Strategy2/daytrade 1m readiness and must not self-upgrade with shared source"
+    },
+    {
+      "key": "seven-strategies",
+      "label": "Fugle seven strategies PS1",
+      "sourceLayer": "daytrade_dedicated",
+      "formalSource": "fugle_daytrade_source",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "blocked_preserve_previous_good",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market", "finmind", "static_json"],
+      "reason": "PS1 formal entry must align with dedicated daytrade source and fail closed otherwise"
+    },
+    {
+      "key": "heatmap",
+      "label": "Heatmap",
+      "sourceLayer": "shared_market",
+      "formalSource": "v_fuman_shared_source_readonly_scorecard",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "latest_good_run_display_only",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["finmind", "static_json"],
+      "reason": "market heatmap needs shared market quote freshness during session; after close only display latest-good-run"
+    },
+    {
+      "key": "market-ai",
+      "label": "Market AI live",
+      "sourceLayer": "shared_market",
+      "formalSource": "v_fuman_shared_source_readonly_scorecard",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "latest_good_run_display_only",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["finmind", "static_json"],
+      "reason": "AI live market readback follows shared market source phase; off-session cannot request new scanner freshness"
+    },
+    {
+      "key": "realtime-radar",
+      "label": "Realtime Radar",
+      "sourceLayer": "shared_market",
+      "formalSource": "v_fuman_shared_source_readonly_scorecard",
+      "regularSessionAction": "scanner_new_run",
+      "offSessionAction": "latest_good_run_display_only",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["finmind", "static_json"],
+      "reason": "realtime radar is quote-driven in session; off-session closure must be latest-good-run only"
+    },
+    {
+      "key": "strategy4",
+      "label": "Strategy4 after-close swing",
+      "sourceLayer": "daily_after_close",
+      "formalSource": "stock_daily_volume / strategy4 complete run",
+      "regularSessionAction": "latest_good_run_display_only",
+      "offSessionAction": "scanner_new_run",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market_intraday_upgrade", "finmind", "static_json"],
+      "reason": "after-close strategy depends on daily source profile, not 120s intraday quote freshness"
+    },
+    {
+      "key": "strategy5",
+      "label": "Strategy5 chip composite",
+      "sourceLayer": "daily_after_close",
+      "formalSource": "chip/institution source profile",
+      "regularSessionAction": "latest_good_run_display_only",
+      "offSessionAction": "scanner_new_run",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market_intraday_upgrade", "finmind", "static_json"],
+      "reason": "chip composite publish depends on chip/institutional coverage and readback"
+    },
+    {
+      "key": "institution",
+      "label": "Institution buy-sell",
+      "sourceLayer": "daily_after_close",
+      "formalSource": "TWSE T86 / TPEx institutional source",
+      "regularSessionAction": "latest_good_run_display_only",
+      "offSessionAction": "scanner_new_run",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market_intraday_upgrade", "finmind", "static_json"],
+      "reason": "institution source is official chip flow, not intraday quote freshness"
+    },
+    {
+      "key": "cb",
+      "label": "CB detect",
+      "sourceLayer": "daily_after_close",
+      "formalSource": "cb complete run source",
+      "regularSessionAction": "latest_good_run_display_only",
+      "offSessionAction": "scanner_new_run",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market_intraday_upgrade", "finmind", "static_json"],
+      "reason": "CB detector depends on CB-specific complete run/readback"
+    },
+    {
+      "key": "warrant",
+      "label": "Warrant flow",
+      "sourceLayer": "daily_after_close",
+      "formalSource": "warrant_flow_scan_results / v_warrant_flow_latest_complete_run",
+      "regularSessionAction": "latest_good_run_display_only",
+      "offSessionAction": "scanner_new_run",
+      "latestGoodRunDisplayAllowed": true,
+      "forbiddenUpgradeSources": ["shared_market_intraday_upgrade", "finmind", "static_json"],
+      "reason": "warrant flow publish depends on warrant source readback, not shared quote freshness"
+    }
+  ]
+}
