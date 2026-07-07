@@ -696,20 +696,22 @@ function buildStrategy2CompleteRunPayload(report) {
   const qualityStatus = report.qualityStatus
     || (report.realtime?.entrySourceHealthy === false || report.realtime?.skippedPartialCoverage ? "degraded" : "ok");
   const dedupeRows = (rows, kind) => {
-    const seen = new Set();
-    return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const byConflictKey = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
       if (!row || typeof row !== "object") return false;
       const key = [
         kind,
         row.code || row.symbol || "",
         row.rowKind || row.row_kind || row.stateId || row.state_id || "",
         row.signalId || row.signal_id || row.primaryStrategy || "",
-        row.entryAt || row.timestamp || row.time || row.latestSeenAt || "",
       ].join("|");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+      if (!key.replace(/\|/g, "")) return;
+      const current = byConflictKey.get(key);
+      if (!current || strategy2RecordSortTime(row).localeCompare(strategy2RecordSortTime(current)) >= 0) {
+        byConflictKey.set(key, row);
+      }
     });
+    return [...byConflictKey.values()];
   };
   return {
     ...report,
@@ -2287,7 +2289,7 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
   cache.updatedAt = updatedAt;
   cache.realtime = {
     source: "supabase-public-slot",
-    sourceName: "fugle_shared_source",
+    sourceName: "fugle_daytrade_source",
     sourceStatus: statusText,
     sourceStatusPayload: statusPayload,
     sourceStatusUpdatedAt: health?.status?.updated_at || health?.status?.checked_at || "",

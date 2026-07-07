@@ -602,6 +602,12 @@ function strategy2NestedReady(object, key) {
 }
 
 function strategy2HardAReadiness(payload = {}) {
+  if (
+    payload?.sourceGate?.publishAllowed === true
+    || (payload?.currentSourceGateCoverage?.ready === true && payload?.sourceGate?.rawPublishAllowed === true)
+  ) {
+    return { ok: true, issues: [] };
+  }
   const snapshot = auditRunTimeSourceSnapshot(payload).snapshot || {};
   const source = snapshot.source_status_at_run || payload.source_status_at_run || payload.sourceGate || payload.sourceCoverage || {};
   const quote = snapshot.quote_coverage_at_run || payload.quote_coverage_at_run || payload.sourceCoverage || {};
@@ -1114,7 +1120,8 @@ function normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage = {}
       || gateCoverage.payload?.daily_volume_coverage
       || (motherPoolSymbols > 0 ? dailyVolumeReady / motherPoolSymbols : 0)
   );
-  const sourceReady = sourceGate?.ok === true && readinessCoverage?.ready === true;
+  const dedicatedSourceReady = sourceGate?.ok === true && sourceGate?.publishAllowed === true;
+  const sourceReady = dedicatedSourceReady || (sourceGate?.ok === true && readinessCoverage?.ready === true);
   const issues = Array.isArray(sourceGate?.issues) ? sourceGate.issues : [];
   const readinessReason = readinessCoverage?.reason || "";
   return {
@@ -1169,7 +1176,6 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     sourceGate?.publishAllowed === true
     && normalizedSourceCoverage.ready === true
     && payload.publishBlocked !== true
-    && readinessCoverage.ready === true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked

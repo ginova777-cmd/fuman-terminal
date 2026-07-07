@@ -133,13 +133,13 @@ async function fetchStrategy2ReadinessStatus() {
   }
 }
 
-async function fetchSourceStatusPayload() {
+async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const select = "source_name,status,updated_at,stale_seconds,message,payload";
-    const url = `${SUPABASE_URL}/rest/v1/source_status?source_name=eq.fugle_shared_source&select=${encodeURIComponent(select)}&limit=1`;
+    const url = `${SUPABASE_URL}/rest/v1/source_status?source_name=eq.${encodeURIComponent(sourceName)}&select=${encodeURIComponent(select)}&order=updated_at.desc&limit=1`;
     const response = await fetch(url, {
       headers: {
         apikey: SUPABASE_KEY,
@@ -312,13 +312,15 @@ function taipeiMinutes(date = new Date()) {
 }
 
 function strategy2SourceGateIssues(sourceStatus) {
-  if (!sourceStatus) return ["source_status fugle_shared_source missing"];
+  if (!sourceStatus) return ["source_status fugle_daytrade_source missing"];
   const payload = sourceStatus.payload || {};
-  const activeSymbols = cleanNumber(payload.mother_pool_symbols) || cleanNumber(payload.active_symbols);
-  const freshQuotes120s = cleanNumber(payload.fresh_quotes_120s);
-  const freshQuoteCoverage120s = cleanNumber(payload.fresh_quote_coverage_120s) || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
+  const activeSymbols = cleanNumber(payload.priority_pool_symbols) || cleanNumber(payload.mother_pool_symbols) || cleanNumber(payload.active_symbols);
+  const freshQuotes120s = cleanNumber(payload.priority_fresh_quotes_120s) || cleanNumber(payload.fresh_quotes_120s);
+  const freshQuoteCoverage120s = cleanNumber(payload.priority_fresh_quote_coverage_120s) || cleanNumber(payload.fresh_quote_coverage_120s) || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
   const today1mSymbols = cleanNumber(payload.today_1m_symbols || payload.intraday_1m_symbols_today);
   const staleSeconds = cleanNumber(payload.intraday_1m_stale_seconds);
+  const scannerCanRunOpening = boolValue(payload.scanner_can_run_opening);
+  const formalEntryAllowed = boolValue(payload.formal_entry_allowed);
   const hardSeconds = cleanNumber(payload.intraday_1m_fresh_hard_seconds) || STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS;
   const hasCandidateLimit = Object.prototype.hasOwnProperty.call(payload, "quote_derived_1m_candidate_limit");
   const fullUniverse = boolValue(payload.quote_derived_1m_full_universe)
@@ -334,15 +336,17 @@ function strategy2SourceGateIssues(sourceStatus) {
   if (String(payload.quote_status || "").toLowerCase() && String(payload.quote_status || "").toLowerCase() !== "ready") {
     issues.push(`quote_status=${payload.quote_status}`);
   }
-  if (activeSymbols >= 1000 && freshQuoteCoverage120s < STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S) {
+  if (activeSymbols > 0 && freshQuoteCoverage120s < STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S) {
     issues.push(`quote fresh 120s coverage ${freshQuoteCoverage120s.toFixed(4)} < ${STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S}`);
   }
   if (regularNow) {
-    if (!fullUniverse) issues.push("quote_derived_1m_full_universe=false");
-    if (activeSymbols >= 1000 && today1mSymbols < activeSymbols) {
+    if (!scannerCanRunOpening) issues.push("scanner_can_run_opening=false");
+    if (!formalEntryAllowed) issues.push("formal_entry_allowed=false");
+    if (!fullUniverse && !scannerCanRunOpening) issues.push("quote_derived_1m_full_universe=false");
+    if (!scannerCanRunOpening && activeSymbols >= 1000 && today1mSymbols < activeSymbols) {
       issues.push(`today_1m_symbols ${today1mSymbols}/${activeSymbols} not full universe`);
     }
-    if (staleSeconds > hardSeconds) {
+    if (!scannerCanRunOpening && staleSeconds > hardSeconds) {
       issues.push(`intraday_1m_stale_seconds ${staleSeconds} > ${hardSeconds}`);
     }
     if (String(payload.intraday_1m_status || "").toLowerCase() && String(payload.intraday_1m_status || "").toLowerCase() !== "ready") {
@@ -408,9 +412,16 @@ async function main() {
       if (status === READY_STATUS) effectiveStatus = "failed";
     }
     try {
-      sourceStatus = await fetchSourceStatusPayload();
+      sourceStatus = await fetchSourceStatusPayload("fugle_daytrade_source");
       sourceGateIssues = strategy2SourceGateIssues(sourceStatus);
-      if (sourceGateIssues.length > 0 && effectiveStatus === READY_STATUS) {
+      const sourcePayload = sourceStatus?.payload || {};
+      const dedicatedSourceReady = sourceGateIssues.length === 0
+        && String(sourceStatus?.status || "").toLowerCase() === "ok"
+        && boolValue(sourcePayload.scanner_can_run_opening)
+        && boolValue(sourcePayload.formal_entry_allowed);
+      if (dedicatedSourceReady) {
+        effectiveStatus = READY_STATUS;
+      } else if (sourceGateIssues.length > 0 && effectiveStatus === READY_STATUS) {
         effectiveStatus = "not_ready";
       }
     } catch (error) {
@@ -441,14 +452,25 @@ async function main() {
     : "";
   const strategy3SessionReason = strategy3Session && !strategy3Session.ready ? strategy3Session.reason : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
-  const reason = [row.reason || "", readinessReason, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
-  const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true);
+  const strategy2DedicatedSourceReady = String(row.strategy || "").toLowerCase() === "strategy2"
+    && sourceStatus
+    && String(sourceStatus.status || "").toLowerCase() === "ok"
+    && sourceGateIssues.length === 0
+    && boolValue(sourceStatus.payload?.scanner_can_run_opening)
+    && boolValue(sourceStatus.payload?.formal_entry_allowed);
+  const readinessDiagnostic = strategy2DedicatedSourceReady && readinessReason
+    ? `diagnostic_only:${readinessReason}`
+    : readinessReason;
+  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
   const strategy3SessionBlocked = Boolean(strategy3Session && !strategy3Session.ready);
-  const suggestedScannerBehavior = sourceGateIssues.length || readinessBlocked
-    ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
-    : strategy3SessionBlocked
-      ? "preserve latest complete run; Strategy2 daytrade intraday 1m source is not ready for Strategy3"
-    : row.suggested_scanner_behavior || "";
+  const suggestedScannerBehavior = strategy2DedicatedSourceReady
+    ? "publish allowed; dedicated daytrade source is A and readiness cache is diagnostic-only"
+    : sourceGateIssues.length || readinessBlocked
+      ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
+      : strategy3SessionBlocked
+        ? "preserve latest complete run; Strategy2 daytrade intraday 1m source is not ready for Strategy3"
+      : row.suggested_scanner_behavior || "";
   const payload = {
     ok,
     blocked,
