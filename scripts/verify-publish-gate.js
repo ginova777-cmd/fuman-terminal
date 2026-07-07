@@ -521,7 +521,7 @@ if (!String(packageJson.scripts?.["verify:chip-source"] || "").includes("scripts
 if (!String(packageJson.scripts?.["verify:fugle-source-contract"] || "").includes("scripts/verify-fugle-source-contract.js")) {
   issues.push("package.json missing scripts.verify:fugle-source-contract for four-layer shared source contract gate");
 }
-if (!String(packageJson.scripts?.["verify:shared-source-readonly"] || "").includes("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1")) {
+if (!String(packageJson.scripts?.["verify:shared-source-readonly"] || "").includes("ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1")) {
   issues.push("package.json missing scripts.verify:shared-source-readonly for read-only cross-computer shared source scorecard");
 }
 if (!String(packageJson.scripts?.["check:scanner-resource-health"] || "").includes("scripts/check-scanner-resource-health.js")) {
@@ -813,7 +813,7 @@ const strategy2ReadinessSql = [
 ].join("\n");
 const intraday1mCoverageStatsRpcSql = read("ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql");
 const sharedSourceReadonlyScorecardSql = read("ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql");
-const sharedSourceReadonlyVerifier = read("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1");
+const sharedSourceReadonlyVerifier = read("ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1");
 if (!/dataManifest:\s*""/.test(runtimeConfig)) {
   issues.push("terminal-runtime-config.js dataManifest must be an empty string; static JSON manifest polling must stay disabled");
 }
@@ -1394,10 +1394,10 @@ for (const marker of [
   "dynamicMotherPoolSymbols",
   "collectorAdaptiveRpm",
 ]) {
-  if (!sharedSourceReadonlyVerifier.includes(marker)) issues.push(`Test-PublicSlotSharedSourceReadOnly.ps1 missing read-only verifier marker ${marker}`);
+  if (!sharedSourceReadonlyVerifier.includes(marker)) issues.push(`Verify-PublicSlotSharedSourceReadOnly.ps1 missing read-only verifier marker ${marker}`);
 }
 if (/Write-PublicSlot|Invoke-PublicSlotUpsert|Invoke-RestMethod[\s\S]{0,120}-Method\s+(Post|Patch|Delete)|Set-Content|Add-Content|Out-File/i.test(sharedSourceReadonlyVerifier)) {
-  issues.push("Test-PublicSlotSharedSourceReadOnly.ps1 must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
+  issues.push("Verify-PublicSlotSharedSourceReadOnly.ps1 must stay read-only: no writes, no source_status overwrite, no local cache/runtime output");
 }
 if (!publicSlotSharedSourceRunner.includes("get_fugle_intraday_1m_coverage_stats")) {
   issues.push("Run-PublicSlotSharedSource.ps1 must prefer get_fugle_intraday_1m_coverage_stats before REST batch fallback");
@@ -2418,7 +2418,7 @@ for (const file of [
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/ScorecardSourceContract.sql",
   "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
-  "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+  "ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1",
   "ops/public-slot/Watchdog-PublicSlotSharedSource.ps1",
   "ops/public-slot/Guard-PublicSlotSourceAntiRollback.ps1",
   "ops/public-slot/Run-PublicSlotSharedSource.ps1",
@@ -3357,7 +3357,7 @@ if (fetchResult.status !== 0) {
       "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
       "ops/public-slot/FugleSourceHistorical1mMaReadinessPatch_20260701.sql",
       "ops/public-slot/SharedSourceReadOnlyScorecardPatch_20260701.sql",
-      "ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1",
+      "ops/public-slot/Verify-PublicSlotSharedSourceReadOnly.ps1",
       "ops/public-slot/public-slot-shared-source.config.example.json",
       "ops/public-slot/Strategy2ReadinessContractCache.sql",
       "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
@@ -3386,4 +3386,5 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+
 
