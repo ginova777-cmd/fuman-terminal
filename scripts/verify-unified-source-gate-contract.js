@@ -65,6 +65,31 @@ requireMarkers("scripts/verify-publish-gate.js", [
   "verify:unified-source-gate",
 ]);
 
+
+requireMarkers("lib/source-layer-contract.js", [
+  "classifyTaipeiSourcePhase",
+  "evaluateSharedMarketSource",
+  "strategySourceLayer",
+  "daytrade_dedicated",
+  "shared_market",
+  "daily_after_close",
+  "off_session_not_required",
+]);
+
+requireMarkers("scripts/verify-source-layer-contract.js", [
+  "source-layer-contract-v1",
+  "shared_market_off_session_does_not_fake_live_a_but_allows_display_readback",
+  "shared_market_live_session_blocks_bad_freshness",
+  "strategy2_uses_daytrade_dedicated",
+]);
+
+requireMarkers("ops/public-slot/Test-PublicSlotSharedSourceReadOnly.ps1", [
+  "shared_market",
+  "strictLiveQuoteRequired",
+  "displayReadbackAllowed",
+  "off_session_not_required",
+  "shared_market_live_blocked",
+]);
 requireMarkers("UNIFIED-SOURCE-GATE-CONTRACT.md", [
   "唯一水源總閘",
   "not ready",
@@ -239,3 +264,4 @@ console.log(JSON.stringify({
   checkedAt: new Date().toISOString(),
   message: "all strategies are pinned to the unified source gate and run-time evidence contract",
 }, null, 2));
+
