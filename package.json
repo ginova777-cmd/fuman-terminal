@@ -54,6 +54,8 @@
     "verify:fugle-source-contract": "node --use-system-ca scripts/verify-fugle-source-contract.js",
     "verify:unified-source-gate": "node scripts/verify-unified-source-gate-contract.js",
     "verify:daytrade-source-speed": "node --use-system-ca scripts/verify-daytrade-source-speed-readonly.js",
+    "verify:daytrade-source-contract-alignment": "node --use-system-ca scripts/verify-daytrade-source-contract-alignment.js",
+    "apply:daytrade-source-contract-alignment": "node --use-system-ca scripts/apply-daytrade-source-contract-alignment.js",
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",
     "daytrade-source:writer": "node --use-system-ca scripts/run-daytrade-source-writer.js --apply",
     "daytrade-source:writer:dry-run": "node --use-system-ca scripts/run-daytrade-source-writer.js --dry-run --no-fetch --once",
