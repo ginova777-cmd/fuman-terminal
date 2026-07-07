@@ -26,6 +26,17 @@ const EXPECTED_STRATEGIES = [
   "CB成績單",
   "即時雷達成績單",
 ];
+const STRATEGY_SOURCE_REPORT_KEYS = {
+  "策略1開盤入成績單": "strategy1",
+  "策略2成績單": "strategy2",
+  "策略3隔日沖成績單": "strategy3",
+  "策略4成績單": "strategy4",
+  "策略5成績單": "strategy5",
+  "買賣超成績單": "institution",
+  "權證成績單": "warrant",
+  "CB成績單": "cb",
+  "即時雷達成績單": "realtime-radar",
+};
 
 function cleanText(value) {
   return String(value ?? "").trim();
@@ -200,6 +211,25 @@ function strategyBreakdown(records) {
   return byStrategy;
 }
 
+function sourceReportForStrategy(payload, strategy) {
+  const key = STRATEGY_SOURCE_REPORT_KEYS[strategy] || "";
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  return reports.find((report) => cleanText(report?.key).toLowerCase() === key);
+}
+
+function isCompleteEmptySourceReport(report) {
+  if (!report || typeof report !== "object") return false;
+  const evidenceStatus = cleanText(report.evidenceStatus).toLowerCase();
+  const unattendedStatus = cleanText(report.unattendedStatus).toUpperCase();
+  const count = cleanNumber(report.count ?? report.emittedRows ?? report.resultCount ?? report.readbackCount);
+  return Boolean(cleanText(report.runId))
+    && report.ok !== false
+    && report.publishAllowed === true
+    && (evidenceStatus === "complete" || evidenceStatus === "sufficient")
+    && (unattendedStatus === "YES" || unattendedStatus === "")
+    && count === 0;
+}
+
 function timeMinutes(value) {
   const match = cleanText(value).match(/(?:^|T|\s)(\d{1,2}):(\d{2})(?::\d{2})?/);
   if (!match) return null;
@@ -214,7 +244,9 @@ function summarizeScorecard(payload) {
   const latestDate = cleanText(payload?.latestDate || payload?.summary?.latestDate);
   const selectedRows = latestDate ? records.filter((row) => cleanText(row.record_date) === latestDate) : records;
   const byStrategy = strategyBreakdown(selectedRows);
-  const missingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
+  const rawMissingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
+  const emptyCompleteStrategies = rawMissingStrategies.filter((strategy) => isCompleteEmptySourceReport(sourceReportForStrategy(payload, strategy)));
+  const missingStrategies = rawMissingStrategies.filter((strategy) => !emptyCompleteStrategies.includes(strategy));
   const missingRequiredFields = selectedRows.filter((row) => [
     cleanText(row.record_date),
     cleanText(row.strategy),
@@ -247,6 +279,8 @@ function summarizeScorecard(payload) {
     historyDates: Array.isArray(payload?.historyDates) ? payload.historyDates : [],
     byStrategy,
     missingStrategies,
+    rawMissingStrategies,
+    emptyCompleteStrategies,
     missingRequiredFields,
     strategy2OutOfWindow,
     strategy3BadEntry,
@@ -259,6 +293,20 @@ function summarizeScorecard(payload) {
       ruleGroupsByStrategy: strategyRules.ruleGroupsByStrategy,
     },
   };
+}
+
+function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
+  const missing = Array.isArray(summary?.missingStrategies) ? summary.missingStrategies : [];
+  if (!missing.length) return true;
+  const covered = new Set(Array.isArray(peerSummary?.emptyCompleteStrategies) ? peerSummary.emptyCompleteStrategies : []);
+  return missing.every((strategy) => covered.has(strategy));
+}
+
+function strategy2OutOfWindowCovered(summary, peerSummary) {
+  const count = cleanNumber(summary?.strategy2OutOfWindow);
+  if (count <= 0) return true;
+  const blocked = new Set(Array.isArray(peerSummary?.blockedStrategies) ? peerSummary.blockedStrategies : []);
+  return blocked.has("策略2成績單") && cleanNumber(peerSummary?.suppressedRows) >= count;
 }
 
 async function fetchSupabaseTable(table) {
@@ -338,6 +386,10 @@ module.exports = async function handler(request, response) {
   const snapshotSummary = summarizeScorecard(snapshotPayload || {});
   const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 30000);
   const scorecardSummary = summarizeScorecard(scorecardApi.json || {});
+  const snapshotMissingCovered = missingStrategiesCoveredByEmptyComplete(snapshotSummary, scorecardSummary);
+  const apiMissingCovered = missingStrategiesCoveredByEmptyComplete(scorecardSummary, snapshotSummary);
+  const snapshotStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(snapshotSummary, scorecardSummary);
+  const apiStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(scorecardSummary, snapshotSummary);
   const freshnessRequirement = scorecardFreshnessRequirement(request);
   const sourceDatesOk = !freshnessRequirement.required
     || (
@@ -365,9 +417,9 @@ module.exports = async function handler(request, response) {
     && snapshotSummary.cacheSource === "supabase-snapshot"
     && snapshotSummary.rows > 0
     && snapshotDateOk
-    && snapshotSummary.missingStrategies.length === 0
+    && snapshotMissingCovered
     && snapshotSummary.missingRequiredFields === 0
-    && snapshotSummary.strategy2OutOfWindow === 0
+    && snapshotStrategy2OutOfWindowCovered
     && snapshotSummary.strategy3BadEntry === 0
     && snapshotSummary.cbBad === 0
     && snapshotSummary.strategyRules.ok;
@@ -375,9 +427,9 @@ module.exports = async function handler(request, response) {
     && scorecardSummary.cacheSource === "supabase-snapshot"
     && scorecardSummary.rows > 0
     && apiDateOk
-    && scorecardSummary.missingStrategies.length === 0
+    && apiMissingCovered
     && scorecardSummary.missingRequiredFields === 0
-    && scorecardSummary.strategy2OutOfWindow === 0
+    && apiStrategy2OutOfWindowCovered
     && scorecardSummary.strategy3BadEntry === 0
     && scorecardSummary.cbBad === 0
     && scorecardSummary.strategyRules.ok;
@@ -411,9 +463,11 @@ module.exports = async function handler(request, response) {
       tradeDate: snapshot?.tradeDate || "",
       updatedAt: snapshot?.updatedAt || "",
       freshness: { ...freshnessRequirement, dateOk: snapshotDateOk },
+      missingStrategiesCoveredByApiSourceReports: snapshotMissingCovered,
+      strategy2OutOfWindowCoveredByApiSuppression: snapshotStrategy2OutOfWindowCovered,
       summary: snapshotSummary,
     }),
-    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, summary: scorecardSummary }),
+    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, missingStrategiesCoveredBySnapshotSourceReports: apiMissingCovered, strategy2OutOfWindowCoveredBySnapshotSuppression: apiStrategy2OutOfWindowCovered, summary: scorecardSummary }),
     scorecardFreshness: stage(snapshotDateOk && apiDateOk, {
       ...freshnessRequirement,
       snapshotLatestDate: snapshotSummary.latestDate,

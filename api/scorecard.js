@@ -200,14 +200,30 @@ function summarize(records, dailyRows, latestDate) {
   };
 }
 
+function blockedSourceReports(sourceReports) {
+  return (Array.isArray(sourceReports) ? sourceReports : []).filter((report) => {
+    const evidenceStatus = cleanText(report?.evidenceStatus).toLowerCase();
+    return report?.ok === false
+      || report?.publishAllowed === false
+      || evidenceStatus === "insufficient"
+      || evidenceStatus === "source_quality_fail";
+  });
+}
+
 function selectPayloadDate(payload, requestedDate = "") {
   const allRecords = Array.isArray(payload?.records) ? payload.records : [];
   const dates = historyDates(allRecords);
   const selectedDate = dates.includes(requestedDate) ? requestedDate : (isoDate(payload?.latestDate) || dates[0] || "");
-  const records = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
+  const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
   const allDaily = Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [];
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
   const sourceReports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const blockedReports = blockedSourceReports(sourceReports);
+  const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
+  const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));
+  const records = blockedStrategies.size
+    ? selectedRecords.filter((row) => !blockedStrategies.has(cleanText(row.strategy)))
+    : selectedRecords;
   return {
     ...payload,
     latestDate: selectedDate || payload.latestDate || "",
@@ -216,7 +232,23 @@ function selectPayloadDate(payload, requestedDate = "") {
     historyDates: dates,
     records,
     sourceReports,
-    summary: summarize(records, daily, selectedDate || payload.latestDate || ""),
+    suppressedRows: suppressedRows.map((row) => ({
+      record_id: cleanText(row.record_id),
+      strategy: cleanText(row.strategy),
+      ticker: cleanText(row.ticker),
+      entry_time: cleanText(row.entry_time),
+    })),
+    blockedSourceReports: blockedReports.map((report) => ({
+      key: cleanText(report.key),
+      strategy: cleanText(report.strategy),
+      runId: cleanText(report.runId),
+      reason: cleanText(report.reason),
+    })),
+    summary: {
+      ...summarize(records, daily, selectedDate || payload.latestDate || ""),
+      suppressedRows: suppressedRows.length,
+      blockedStrategies: [...blockedStrategies],
+    },
   };
 }
 
