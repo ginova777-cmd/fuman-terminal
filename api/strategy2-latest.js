@@ -1175,7 +1175,6 @@ function attachStrategy2PublishGate(payload, sourceGate) {
   const publishAllowed = Boolean(
     sourceGate?.publishAllowed === true
     && normalizedSourceCoverage.ready === true
-    && payload.publishBlocked !== true
   );
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
