@@ -245,6 +245,7 @@
     "verify:scorecard-seven-strategy-daily-history": "node scripts/verify-scorecard-seven-strategy-daily-history-contract.js",
     "verify:scorecard-seven-strategy-daily-history-live": "node --use-system-ca scripts/verify-scorecard-seven-strategy-daily-history-live.js",
     "verify:scorecard-seven-strategy-daily-history-live:strict": "node --use-system-ca scripts/verify-scorecard-seven-strategy-daily-history-live.js --require-rows",
+    "verify:scorecard-a-readiness": "node --use-system-ca scripts/verify-scorecard-a-readiness.js",
     "seven-strategy-daily-history:publish": "node --use-system-ca scripts/publish-seven-strategy-daily-history.js --apply",
     "seven-strategy-daily-history:dry-run": "node --use-system-ca scripts/publish-seven-strategy-daily-history.js --dry-run",
     "verify:seven-strategy-daily-history-writer": "node scripts/verify-seven-strategy-daily-history-writer-contract.js",
