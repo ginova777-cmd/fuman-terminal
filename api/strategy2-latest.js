@@ -533,7 +533,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
     ...payload,
     ...snapshotFields,
   };
-  return applyStrategy2HardAFailClosed({
+  const checkedPayload = {
     ...evidencedPayload,
     selfCheck: {
       strategy: "strategy2",
@@ -565,7 +565,28 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       issues,
       warnings,
     },
-  });
+  };
+  if (strategy2PublishedRunSnapshotAllowed(checkedPayload)) return checkedPayload;
+  return applyStrategy2HardAFailClosed(checkedPayload);
+}
+
+function strategy2PublishedRunSnapshotAllowed(payload = {}) {
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const resultCount = cleanNumber(quality.resultCount ?? payload.resultCount ?? payload.count);
+  const readbackCount = cleanNumber(quality.readbackCount ?? payload.readbackCount ?? payload.count);
+  return Boolean(
+    payload.complete === true
+    && payload.runId
+    && String(payload.qualityStatus || "").toLowerCase() === "complete"
+    && payload.cacheSource === "supabase-api"
+    && payload.fallbackUsed !== true
+    && payload.noTodayDetections !== true
+    && quality.publishAllowed === true
+    && resultCount > 0
+    && readbackCount === resultCount
+  );
 }
 
 function readinessRatio(part = {}) {
