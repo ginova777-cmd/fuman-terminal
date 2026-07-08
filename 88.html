@@ -985,11 +985,12 @@ function render() {
 
   const strategies = uniqueStrategies(rows);
   const jumpTabs = [
-    ["當沖 PS1", "daytradeEntryPanel"],
+    ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
+    ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
   ];
   byId("tabs").innerHTML = [
-    ...jumpTabs.map(([label, panelId]) =>
-      `<button class="tab" data-jump-panel="${esc(panelId)}" type="button" data-testid="scorecard-daytrade-ps1-tab">${esc(label)}</button>`
+    ...jumpTabs.map(([label, panelId, testId]) =>
+      `<button class="tab" data-jump-panel="${esc(panelId)}" type="button" data-testid="${esc(testId)}">${esc(label)}</button>`
     ),
     ...strategies.map((strategy) =>
     `<button class="tab ${strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
