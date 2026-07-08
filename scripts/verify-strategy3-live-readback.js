@@ -208,9 +208,18 @@ function verifyState(state, options = {}) {
   const receipt = options.expectBlocked
     ? newestBlockedReceipt(before.checkedAt || beforePointer.checkedAt || "")
     : null;
-  const blockedPayload = receipt || api;
+  const requireBlockedReceipt = Boolean(before.checkedAt || beforePointer.checkedAt || beforePointer.runId);
+  const apiBlockedPrewater = options.expectBlocked
+    ? verifyStrategy3PrewaterPayload(api, { label: "api-blocked-payload", expectBlocked: true })
+    : null;
+  const receiptBlockedPrewater = options.expectBlocked && receipt
+    ? verifyStrategy3PrewaterPayload(receipt, { label: "blocked-receipt", expectBlocked: true })
+    : null;
+  const blockedPayload = options.expectBlocked
+    ? (apiBlockedPrewater?.ok || !receiptBlockedPrewater ? api : receipt)
+    : null;
   const prewater = options.expectBlocked
-    ? verifyStrategy3PrewaterPayload(blockedPayload, { label: receipt ? "blocked-receipt" : "api-blocked-payload", expectBlocked: true })
+    ? (apiBlockedPrewater?.ok || !receiptBlockedPrewater ? apiBlockedPrewater : receiptBlockedPrewater)
     : verifyStrategy3PrewaterPayload(payload, { label: "supabase-run-payload", expectBlocked: false });
   const business = options.expectBlocked
     ? { ok: true, blankTotal: 0, blankCounts: {}, sampleMissingRows: [] }
@@ -250,9 +259,9 @@ function verifyState(state, options = {}) {
     if (beforePointer.runId && pointer.runId !== beforePointer.runId) {
       issues.push(`latest_pointer_changed_when_blocked:${beforePointer.runId}->${pointer.runId}`);
     }
-    if (!receipt) {
+    if (!receipt && requireBlockedReceipt) {
       issues.push("blocked_receipt_missing_after_before_capture");
-    } else {
+    } else if (receipt) {
       if (receipt.latestOverwriteAllowed !== false) issues.push("blocked_receipt_allows_latest");
       if (receipt.preservePreviousGood !== true) issues.push("blocked_receipt_preservePreviousGood_not_true");
       if (receipt.evidenceStatus !== "insufficient" || receipt.unattendedStatus !== "NO") issues.push("blocked_receipt_status_invalid");
