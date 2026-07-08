@@ -302,6 +302,7 @@
 
   <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status"></section>
+  <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports">sourceReports 讀取中...</section>
   <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status">策略4 latest run 讀取中...</section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
@@ -459,6 +460,26 @@ function sourceReportForStrategy(strategy) {
   }) || null;
 }
 
+function sourceReportsStatus(payload) {
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  if (!reports.length) return { qualityStatus: "blocked", text: "sourceReports=missing｜策略來源回讀不可驗" };
+  const keyOrder = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant", "realtime-radar"];
+  const byKey = new Map(reports.map((report) => [String(report.key || report.strategy || report.label || "").toLowerCase(), report]));
+  const ordered = [
+    ...keyOrder.map((key) => reports.find((report) => String(report.key || report.strategy || "").toLowerCase() === key)).filter(Boolean),
+    ...reports.filter((report) => !keyOrder.includes(String(report.key || report.strategy || "").toLowerCase())),
+  ];
+  const text = ordered.map((report) => {
+    const key = report.key || report.strategy || report.label || "--";
+    const runId = report.runId || report.run_id || "--";
+    const evidence = report.evidenceStatus || report.sourceEvidenceStatus || "--";
+    const publish = report.publishAllowed === true ? "allowed" : report.publishAllowed === false ? "blocked" : "--";
+    return `${key}=${runId}｜evidence=${evidence}｜publish=${publish}`;
+  }).join("；");
+  const blocked = ordered.some((report) => report.evidenceStatus === "insufficient" || report.publishAllowed === false || report.blockedReason);
+  return { qualityStatus: blocked ? "partial" : "complete", text };
+}
+
 function strategyRunId(row) {
   return row.runId
     || row.sourceRunId
@@ -576,6 +597,10 @@ function render() {
   const statusNode = byId("sourceStatus");
   statusNode.className = `status-line ${status.qualityStatus}`;
   statusNode.textContent = status.text;
+  const reportsStatus = sourceReportsStatus(payload);
+  const reportsNode = byId("scorecardSourceReports");
+  reportsNode.className = `status-line ${reportsStatus.qualityStatus}`;
+  reportsNode.textContent = reportsStatus.text;
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),
