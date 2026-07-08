@@ -18,6 +18,16 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function sampleDates() {
+  const now = new Date();
+  const isoDate = now.toISOString().slice(0, 10);
+  return {
+    compactDate: isoDate.replace(/-/g, ""),
+    isoDate,
+    updatedAt: `${isoDate}T02:00:00.000Z`,
+  };
+}
+
 function numberValue(value, fallback = 0) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : fallback;
@@ -244,7 +254,8 @@ function institutionRows(count) {
 }
 
 function sampleOutput() {
-  const updatedAt = "2026-07-04T02:00:00.000Z";
+  const dates = sampleDates();
+  const { updatedAt } = dates;
   const rows = institutionRows(1600);
   return {
     ok: true,
@@ -252,12 +263,12 @@ function sampleOutput() {
     source: "official TWSE T86 / TPEx 3itrade strict sample",
     updatedAt,
     startedAt: updatedAt,
-    usedDate: "20260704",
+    usedDate: dates.compactDate,
     sourceCount: rows.length,
     scannedCount: rows.length,
     readbackCount: rows.length,
     count: rows.length,
-    sourceDates: { twse: "20260704", tpex: "20260704" },
+    sourceDates: { twse: dates.compactDate, tpex: dates.compactDate },
     sources: ["TWSE T86", "TPEx 3itrade"],
     data: Object.fromEntries(rows.map((row) => [row.code, row])),
     fallbackUsed: false,
@@ -266,7 +277,7 @@ function sampleOutput() {
     fallbackDetails: [],
     sourceHealth: {
       coverageStatus: "ready",
-      latestTradeDate: "2026-07-04",
+      latestTradeDate: dates.isoDate,
       institutionalRows: rows.length,
       validAfterExclusionRows: rows.length,
       minRequiredRows: MIN_ROWS,
@@ -295,6 +306,7 @@ function scannerRunPayload() {
 
 function apiLatestPayload() {
   const output = sampleOutput();
+  const dates = sampleDates();
   const resultRows = buildInstitutionResultRows(output, output.runId);
   const runRow = buildInstitutionRunRow(output, output.runId, "complete");
   return institutionApi._test.buildPayload(resultRows, runRow, {
@@ -303,12 +315,12 @@ function apiLatestPayload() {
     limit: 120,
     sourceHealth: {
       coverage_status: "ready",
-      latest_trade_date: "2026-07-04",
+      latest_trade_date: dates.isoDate,
       institutional_rows: resultRows.length,
       valid_after_exclusion_rows: resultRows.length,
       min_required_rows: MIN_ROWS,
       reason: "strict formal sample ready",
-      institutional_latest_updated_at: "2026-07-04T02:00:00.000Z",
+      institutional_latest_updated_at: dates.updatedAt,
     },
   });
 }
@@ -394,7 +406,7 @@ function battleOutputPayload() {
   const payload = apiLatestPayload();
   return {
     ...payload,
-    source_snapshot_captured_at: payload.source_snapshot_captured_at || "2026-07-04T02:00:00.000Z",
+    source_snapshot_captured_at: payload.source_snapshot_captured_at || sampleDates().updatedAt,
     evidenceStatus: "complete",
     unattendedStatus: "YES",
     rows: payload.rows,

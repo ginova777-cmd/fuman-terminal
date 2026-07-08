@@ -273,6 +273,47 @@ function callStrategy5Latest(timeoutMs = 12000) {
   });
 }
 
+function callInstitutionLatest(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let timer = null;
+    try {
+      const handler = require("./institution-latest");
+      const query = {
+        canvas: "1",
+        compact: "1",
+        shell: "1",
+        live: "1",
+        limit: "1200",
+      };
+      timer = setTimeout(() => resolve({
+        statusCode: 504,
+        payload: { ok: false, error: "institution_source_report_timeout" },
+      }), timeoutMs);
+      const finish = (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      };
+      Promise.resolve(handler({
+        method: "GET",
+        url: "/api/institution-latest?canvas=1&compact=1&shell=1&live=1&limit=1200",
+        headers: { host: "localhost", "x-scorecard-source": "1" },
+        query,
+      }, createCaptureResponse(finish))).catch((error) => {
+        finish({
+          statusCode: 500,
+          payload: { ok: false, error: "institution_source_report_failed", reason: error?.message || String(error) },
+        });
+      });
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      resolve({
+        statusCode: 500,
+        payload: { ok: false, error: "institution_source_report_failed", reason: error?.message || String(error) },
+      });
+    }
+  });
+}
+
 function callSevenStrategyDailyHistory(timeoutMs = 12000) {
   return new Promise((resolve) => {
     let timer = null;
@@ -316,6 +357,37 @@ function buildStrategy5SourceReport(result) {
     key: "strategy5",
     strategy: "策略5成績單",
     endpoint: "/api/strategy5-latest",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: cleanText(payload.runId || payload.transport?.runId),
+    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
+    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
+    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
+    expectedTotal: cleanNumber(payload.expectedTotal ?? quality.expectedTotal),
+    scannedCount: cleanNumber(payload.scannedCount ?? quality.scannedCount),
+    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
+    sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
+    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
+    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
+    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
+    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+  };
+}
+
+function buildInstitutionSourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  return {
+    key: "institution",
+    strategy: "買賣超成績單",
+    endpoint: "/api/institution-latest",
     statusCode: Number(result?.statusCode || 0) || 0,
     ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
     runId: cleanText(payload.runId || payload.transport?.runId),
@@ -459,10 +531,11 @@ async function withLiveStrategy3SourceReport(payload) {
 }
 
 async function withLiveSourceReports(payload) {
-  const [strategy2, strategy3, strategy5, cb, sevenStrategyDailyHistory] = await Promise.all([
+  const [strategy2, strategy3, strategy5, institution, cb, sevenStrategyDailyHistory] = await Promise.all([
     callStrategy2Latest(),
     callStrategy3Latest(),
     callStrategy5Latest(),
+    callInstitutionLatest(),
     callCbDetectLatest(),
     callSevenStrategyDailyHistory(),
   ]);
@@ -470,6 +543,7 @@ async function withLiveSourceReports(payload) {
     buildStrategy2SourceReport(strategy2),
     buildStrategy3SourceReport(strategy3),
     buildStrategy5SourceReport(strategy5),
+    buildInstitutionSourceReport(institution),
     buildCbSourceReport(cb),
     buildSevenStrategyDailyHistorySourceReport(sevenStrategyDailyHistory),
   ].reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
