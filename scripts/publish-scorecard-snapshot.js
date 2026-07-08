@@ -10,7 +10,7 @@ const SNAPSHOT_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const MIN_ROWS = Number(process.env.FUMAN_SCORECARD_MIN_ROWS || "450") || 0;
 const MIN_ROW_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_ROW_RATIO || "0.8") || 0;
-const PUBLISH_TIMEOUT_MS = Math.max(30000, Number(process.env.FUMAN_SCORECARD_PUBLISH_TIMEOUT_MS || "30000") || 30000);
+const PUBLISH_TIMEOUT_MS = Math.max(120000, Number(process.env.FUMAN_SCORECARD_PUBLISH_TIMEOUT_MS || "120000") || 120000);
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
