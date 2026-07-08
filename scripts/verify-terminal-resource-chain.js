@@ -474,6 +474,8 @@ function sourceHealthSummary(payload = {}, supabase = {}) {
     driftIntradayReady: health.driftIntradayReady === true || String(drift.status || "").toLowerCase() === "ready",
     driftIntradayRowCount: cleanNumber(drift.rowCount),
     driftIntradayMinRequired: cleanNumber(drift.minRequired),
+    driftIntradayEffectiveMinRequired: cleanNumber(drift.effectiveMinRequired || drift.minRequired),
+    driftIntradayReadinessGrade: String(drift.readinessGrade || ""),
   };
 }
 
@@ -638,8 +640,11 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     const driftReadyCoversCandidateFloor = Boolean(
       config.allowSourceHealthDriftReady
       && sourceHealth.driftIntradayReady
-      && sourceHealth.driftIntradayRowCount >= sourceHealth.driftIntradayMinRequired
-      && sourceHealth.driftIntradayRowCount >= sourceHealth.minIntraday1mCandidates
+      && sourceHealth.driftIntradayRowCount >= (sourceHealth.driftIntradayEffectiveMinRequired || sourceHealth.driftIntradayMinRequired)
+      && (
+        sourceHealth.driftIntradayRowCount >= sourceHealth.minIntraday1mCandidates
+        || sourceHealth.driftIntradayReadinessGrade === "ready_with_tolerance"
+      )
     );
     if (sourceHealth.minIntraday1mCandidates && sourceHealth.intraday1mReadyCount < sourceHealth.minIntraday1mCandidates && !driftReadyCoversCandidateFloor) {
       issues.push(`sourceHealth intraday1mReadyCount ${sourceHealth.intraday1mReadyCount} < ${sourceHealth.minIntraday1mCandidates}`);
