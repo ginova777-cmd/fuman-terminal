@@ -14,8 +14,19 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function sampleDates() {
+  const now = new Date();
+  const isoDate = now.toISOString().slice(0, 10);
+  return {
+    compactDate: isoDate.replace(/-/g, ""),
+    isoDate,
+    updatedAt: `${isoDate}T02:00:00.000Z`,
+  };
+}
+
 function sampleOutput() {
-  const updatedAt = "2026-07-04T02:00:00.000Z";
+  const dates = sampleDates();
+  const { updatedAt } = dates;
   const matches = [
     {
       code: "2330",
@@ -50,9 +61,9 @@ function sampleOutput() {
     source: "formal-payload-sample",
     updatedAt,
     startedAt: updatedAt,
-    generatedDate: "20260704",
-    usedDate: "20260704",
-    sourceDate: "20260704",
+    generatedDate: dates.compactDate,
+    usedDate: dates.compactDate,
+    sourceDate: dates.compactDate,
     schedule: "formal payload verifier",
     fullScan: true,
     complete: true,
@@ -65,7 +76,7 @@ function sampleOutput() {
     retentionOk: true,
     sourceHealth: {
       coverageStatus: "ready",
-      latestTradeDate: "2026-07-04",
+      latestTradeDate: dates.isoDate,
       institutionalRows: 1800,
       marginRows: 1800,
       unifiedRows: 1800,
@@ -75,7 +86,7 @@ function sampleOutput() {
     },
     dataFreshness: {
       coverageStatus: "ready",
-      latestTradeDate: "2026-07-04",
+      latestTradeDate: dates.isoDate,
       reason: "formal sample ready",
     },
     matches,
@@ -84,6 +95,7 @@ function sampleOutput() {
 
 function sampleApiPayload() {
   const output = sampleOutput();
+  const dates = sampleDates();
   const resultRows = buildStrategy5ResultRows(output, output.runId);
   const runRow = buildStrategy5RunRow(output, output.runId, "complete");
   const run = {
@@ -95,7 +107,7 @@ function sampleApiPayload() {
     canvas: true,
     chipSourceHealth: {
       coverage_status: "ready",
-      latest_trade_date: "2026-07-04",
+      latest_trade_date: dates.isoDate,
       institutional_rows: 1800,
       margin_rows: 1800,
       unified_rows: 1800,
