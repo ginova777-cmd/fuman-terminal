@@ -1172,10 +1172,21 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && payload.runId);
   const normalizedSourceCoverage = normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage);
   const runSnapshotReady = strategy2RunSnapshotReady(payload);
-  const publishAllowed = Boolean(
+  const currentGatePublishAllowed = Boolean(
     sourceGate?.publishAllowed === true
     && normalizedSourceCoverage.ready === true
   );
+  const publishedRunSnapshotAllowed = Boolean(
+    runSnapshotReady
+    && payload?.complete === true
+    && payload?.runId
+    && String(payload?.qualityStatus || "").toLowerCase() === "complete"
+    && payload?.cacheSource === "supabase-api"
+    && payload?.fallbackUsed !== true
+    && payload?.noTodayDetections !== true
+    && payload?.run_quality_at_publish?.publishAllowed === true
+  );
+  const publishAllowed = Boolean(currentGatePublishAllowed || publishedRunSnapshotAllowed);
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
     ? gateIssues.join("; ") || payload.publishBlockedReason || readinessCoverage.reason || "strategy2 source publish gate blocked"
@@ -1203,7 +1214,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       ok: true,
       ready: true,
       status: "ready",
-      reason: publishAllowed && sourceGateCoverage.ready === true
+      reason: currentGatePublishAllowed && sourceGateCoverage.ready === true
         ? sourceGateCoverage.reason || "strategy2_source_publish_gate_ready"
         : "strategy2_complete_run_source_snapshot_ready_current_gate_disclosed",
       currentGateStatus: sourceGateCoverage.status,
@@ -1225,7 +1236,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     qualityStatus: "complete",
     blockedReason: "",
     scanner_block_reason: "",
-    reason: "strategy2_source_publish_gate_ready",
+    reason: currentGatePublishAllowed ? "strategy2_source_publish_gate_ready" : "strategy2_complete_run_source_snapshot_ready",
   } : payload.run_quality_at_publish;
   const nextPayload = {
     ...payload,
@@ -1238,6 +1249,8 @@ function attachStrategy2PublishGate(payload, sourceGate) {
       ok: publishAllowed,
       publishAllowed,
       rawPublishAllowed: sourceGate?.publishAllowed === true,
+      currentGatePublishAllowed,
+      publishedRunSnapshotAllowed,
       runSnapshotReady,
       sourceStatus: sourceGate?.sourceStatus || "",
       staleSeconds: cleanNumberOr(sourceGate?.staleSeconds, 999999),
