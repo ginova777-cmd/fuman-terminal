@@ -186,13 +186,13 @@ async function main() {
       retired: true,
       formal: false,
       source: "v_strategy3_quote_ready",
-      replacement: "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
+      replacement: "fugle_quotes_latest+v_fugle_daytrade_intraday_1m_status+stock_daily_volume",
       reason: "Strategy3 formal gating no longer reads quote-ready view",
     },
     retiredDiagnostics: {
       v_strategy3_quote_ready: {
         status: "retired",
-        replacement: "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
+        replacement: "fugle_quotes_latest+v_fugle_daytrade_intraday_1m_status+stock_daily_volume",
       },
     },
     latestQuoteRows: latest.quotes.length,

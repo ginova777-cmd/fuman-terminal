@@ -1592,6 +1592,29 @@ function Get-DynamicVolumeSurgeSymbols {
   return @(Get-UniqueSymbols -Values (@($rows | ForEach-Object { $_.symbol })) -UniverseSet $UniverseSet)
 }
 
+function Get-Strategy3PriorityQuoteSymbols {
+  param([object[]]$QuoteRows, [System.Collections.Generic.HashSet[string]]$UniverseSet, [int]$Limit = 650)
+
+  $rows = @($QuoteRows | Where-Object {
+    $symbol = [string]$_.symbol
+    if ($symbol -notmatch '^\d{4}$' -or ($null -ne $UniverseSet -and -not $UniverseSet.Contains($symbol))) { return $false }
+    $price = Get-Number $_.price
+    $volumeLots = Get-Number $_.total_volume
+    $age = Get-IsoAgeSeconds -IsoTime ([string]$_.updated_at) -FallbackSeconds 999999
+    return $price -ge 10 `
+      -and $volumeLots -ge 3000 `
+      -and -not [bool]$_.is_halted `
+      -and -not [bool]$_.is_trial `
+      -and $age -le ([math]::Max($StaleSeconds, 300))
+  } | Sort-Object `
+    @{ Expression = { Get-Number $_.total_volume }; Descending = $true }, `
+    @{ Expression = { Get-Number $_.trade_value }; Descending = $true }, `
+    @{ Expression = { [math]::Abs((Get-Number $_.change_percent)) }; Descending = $true } |
+    Select-Object -First $Limit)
+
+  return @(Get-UniqueSymbols -Values (@($rows | ForEach-Object { $_.symbol })) -UniverseSet $UniverseSet)
+}
+
 function Get-PrioritySymbolGroups {
   param([string[]]$Symbols, [object[]]$QuoteRows)
 
@@ -1603,11 +1626,14 @@ function Get-PrioritySymbolGroups {
   $threeDayOpenHighFade = @(Get-ThreeDayOpenHighFadeSymbols -UniverseSymbols $base)
   $dynamicAmplitudeBull = @(Get-DynamicAmplitudeBullSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
   $dynamicVolumeSurge = @(Get-DynamicVolumeSurgeSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
+  $strategy3QuotePriority = @(Get-Strategy3PriorityQuoteSymbols -QuoteRows $QuoteRows -UniverseSet $universeSet)
+  $strategy3Priority = @(Get-UniqueSymbols -Values (@($strategy.strategy3) + @($strategy3QuotePriority)) -UniverseSet $universeSet)
   $hot = @(Get-DaytradeHotQuoteSymbols -QuoteRows $QuoteRows)
   $strong = @(Get-StrongQuoteSymbols -QuoteRows $QuoteRows)
   $openingPrioritySymbols = @(Get-UniqueSymbols -Values (
     @($terminalPriority) +
     @($strategy.symbols) +
+    @($strategy3Priority) +
     @($threeDayOpenHighFade) +
     @($dynamicAmplitudeBull) +
     @($dynamicVolumeSurge) +
@@ -1621,7 +1647,7 @@ function Get-PrioritySymbolGroups {
     @($terminalPriority),
     @($strategy.strategy1),
     @($strategy.strategy2),
-    @($strategy.strategy3),
+    @($strategy3Priority),
     @($strategy.strategy4),
     @($strategy.strategy5),
     @($strategy.institution),
@@ -1648,6 +1674,7 @@ function Get-PrioritySymbolGroups {
   $script:ApiUniverseStats.opening_priority_symbols = $openingPrioritySymbols.Count
   $script:ApiUniverseStats.dynamic_amplitude_bull_symbols = $dynamicAmplitudeBull.Count
   $script:ApiUniverseStats.dynamic_volume_surge_symbols = $dynamicVolumeSurge.Count
+  $script:ApiUniverseStats.strategy3_quote_priority_symbols = $strategy3QuotePriority.Count
   $script:ApiUniverseStats.dynamic_mother_pool_symbols = @(Get-UniqueSymbols -Values (@($dynamicAmplitudeBull) + @($dynamicVolumeSurge)) -UniverseSet $universeSet).Count
   $script:ApiUniverseStats.priority_symbols = $ordered.Count
 
@@ -1655,7 +1682,8 @@ function Get-PrioritySymbolGroups {
     terminalPrioritySymbols = @($terminalPriority)
     strategy1 = @($strategy.strategy1)
     strategy2 = @($strategy.strategy2)
-    strategy3 = @($strategy.strategy3)
+    strategy3 = @($strategy3Priority)
+    strategy3QuotePriority = @($strategy3QuotePriority)
     strategy4 = @($strategy.strategy4)
     strategy5 = @($strategy.strategy5)
     institution = @($strategy.institution)
@@ -1705,6 +1733,7 @@ function Write-WebSocketPrioritySymbols {
       strategy1 = @($groups.strategy1)
       strategy2 = @($groups.strategy2)
       strategy3 = @($groups.strategy3)
+      strategy3QuotePriority = @($groups.strategy3QuotePriority)
       strategy4 = @($groups.strategy4)
       strategy5 = @($groups.strategy5)
       institution = @($groups.institution)
@@ -1724,6 +1753,7 @@ function Write-WebSocketPrioritySymbols {
         strategy1 = @($groups.strategy1).Count
         strategy2 = @($groups.strategy2).Count
         strategy3 = @($groups.strategy3).Count
+        strategy3QuotePriority = @($groups.strategy3QuotePriority).Count
         strategy4 = @($groups.strategy4).Count
         strategy5 = @($groups.strategy5).Count
         institution = @($groups.institution).Count

@@ -338,8 +338,7 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
 async function repairStrategy3LatestSnapshot(request, endpoints) {
   const currentEntry = Object.entries(endpoints || {})
     .find(([endpoint]) => String(endpoint || "").startsWith("/api/strategy3-latest"));
-  if (!currentEntry) return;
-  const [currentEndpoint, currentPayload] = currentEntry;
+  const [currentEndpoint, currentPayload] = currentEntry || ["", null];
   const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
     ...compactQuery(60),
     live: "1",
@@ -350,7 +349,7 @@ async function repairStrategy3LatestSnapshot(request, endpoints) {
   const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "");
   const currentRunId = String(currentPayload?.runId || currentPayload?.transport?.runId || "");
   if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
-  if (!replacementRunId || replacementRunId === currentRunId) return;
+  if (!replacementRunId || (currentRunId && replacementRunId === currentRunId)) return;
   if (replacement?.evidenceStatus !== "complete" || replacement?.publishAllowed !== true) return;
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
@@ -535,7 +534,16 @@ module.exports = async function handler(request, response) {
         response.status(204).end("");
         return;
       }
-      response.status(200).json(snapshotMissPayload());
+      const endpoints = {};
+      await repairStrategy3LatestSnapshot(request, endpoints);
+      const missPayload = {
+        ...snapshotMissPayload(),
+        endpoints,
+        summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
+        misses: Object.keys(endpoints).length ? [] : ["desktop_route_snapshot"],
+        snapshotRepairs: Object.keys(endpoints).length ? { strategy3: "live-repair-on-snapshot-miss" } : {},
+      };
+      response.status(200).json(sanitizeStrategy2BundlePayload(missPayload, endpoints));
       return;
     }
   }
