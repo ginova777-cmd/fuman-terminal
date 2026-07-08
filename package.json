@@ -240,10 +240,13 @@
     "verify:scorecard-daytrade-entry-supabase": "node --use-system-ca scripts/verify-scorecard-daytrade-entry-supabase.js",
     "verify:scorecard-daytrade-entry-live": "node --use-system-ca scripts/verify-scorecard-daytrade-entry-live.js",
     "verify:scorecard-daytrade-entry-live:strict": "node --use-system-ca scripts/verify-scorecard-daytrade-entry-live.js --require-rows",
+    "verify:scorecard-seven-strategy-daily-history": "node scripts/verify-scorecard-seven-strategy-daily-history-contract.js",
+    "verify:scorecard-seven-strategy-daily-history-live": "node --use-system-ca scripts/verify-scorecard-seven-strategy-daily-history-live.js",
+    "verify:scorecard-seven-strategy-daily-history-live:strict": "node --use-system-ca scripts/verify-scorecard-seven-strategy-daily-history-live.js --require-rows",
     "daytrade-ps1-entry:publish": "node --use-system-ca scripts/publish-daytrade-ps1-entry.js --apply",
     "daytrade-ps1-entry:dry-run": "node --use-system-ca scripts/publish-daytrade-ps1-entry.js --dry-run",
     "verify:daytrade-ps1-entry-writer": "node scripts/verify-daytrade-ps1-entry-writer-contract.js",
-    "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract && npm run verify:daytrade-ps1-entry-writer"
+    "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract && npm run verify:scorecard-seven-strategy-daily-history && npm run verify:daytrade-ps1-entry-writer"
   },
   "engines": {
     "node": "24.x"

@@ -232,6 +232,40 @@ function callCbDetectLatest(timeoutMs = 12000) {
   });
 }
 
+function callSevenStrategyDailyHistory(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let timer = null;
+    try {
+      const handler = require("./seven-strategy-daily-history");
+      timer = setTimeout(() => resolve({
+        statusCode: 504,
+        payload: { ok: false, error: "seven_strategy_daily_history_timeout" },
+      }), timeoutMs);
+      const finish = (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      };
+      Promise.resolve(handler({
+        method: "GET",
+        url: "/api/seven-strategy-daily-history?limit=100",
+        headers: { host: "localhost", "x-scorecard-source": "1" },
+        query: { limit: "100" },
+      }, createCaptureResponse(finish))).catch((error) => {
+        finish({
+          statusCode: 500,
+          payload: { ok: false, error: "seven_strategy_daily_history_failed", reason: error?.message || String(error) },
+        });
+      });
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      resolve({
+        statusCode: 500,
+        payload: { ok: false, error: "seven_strategy_daily_history_failed", reason: error?.message || String(error) },
+      });
+    }
+  });
+}
+
 function buildStrategy2SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
@@ -309,6 +343,36 @@ function buildCbSourceReport(result) {
   };
 }
 
+function buildSevenStrategyDailyHistorySourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  return {
+    key: "seven_strategy_daily_history",
+    strategy: "七策略每日紀錄",
+    endpoint: "/api/seven-strategy-daily-history",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: cleanText(payload.runId || `seven-strategy-daily-history-${payload.tradeDate || "unknown"}`),
+    count: cleanNumber(payload.count ?? payload.totalKept ?? 0),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : 0,
+    date: cleanText(payload.tradeDate),
+    sourceName: cleanText(payload.sourceName || "seven_strategy_daily_history"),
+    source: cleanText(payload.source || "supabase:public.seven_strategy_daily_history"),
+    table: cleanText(payload.table || "public.seven_strategy_daily_history"),
+    timeWindow: payload.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+    formalCount: cleanNumber(payload.formalCount),
+    detectedCount: cleanNumber(payload.detectedCount),
+    strategyDistribution: payload.strategyDistribution || {},
+    evidenceStatus: payload.ok === false ? "insufficient" : "complete",
+    unattendedStatus: payload.ok === false ? "NO" : "YES",
+    publishAllowed: payload.ok !== false,
+    latestOverwriteAllowed: payload.ok !== false,
+    preservePreviousGood: payload.ok === false,
+    fallbackUsed: false,
+    blockedReason: payload.ok === false ? cleanText(payload.reason || payload.error || "seven_strategy_daily_history_unavailable") : "",
+    reason: cleanText(payload.reason || payload.error || ""),
+  };
+}
+
 function mergeSourceReport(payload, report) {
   const reports = Array.isArray(payload?.sourceReports) ? [...payload.sourceReports] : [];
   const index = reports.findIndex((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
@@ -323,15 +387,17 @@ async function withLiveStrategy3SourceReport(payload) {
 }
 
 async function withLiveSourceReports(payload) {
-  const [strategy2, strategy3, cb] = await Promise.all([
+  const [strategy2, strategy3, cb, sevenStrategyDailyHistory] = await Promise.all([
     callStrategy2Latest(),
     callStrategy3Latest(),
     callCbDetectLatest(),
+    callSevenStrategyDailyHistory(),
   ]);
   return [
     buildStrategy2SourceReport(strategy2),
     buildStrategy3SourceReport(strategy3),
     buildCbSourceReport(cb),
+    buildSevenStrategyDailyHistorySourceReport(sevenStrategyDailyHistory),
   ].reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
 }
 
