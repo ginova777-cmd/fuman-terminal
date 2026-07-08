@@ -188,10 +188,16 @@ function verifyPayload(checks, payload, source, baseline = null) {
   const strategy3BadEntry = strategy3Rows
     .filter((row) => timeMinutes(row.entry_time) !== 13 * 60)
     .map((row) => ({ ticker: cleanText(row.ticker), entry_time: cleanText(row.entry_time) }));
+  const strategy3ReportDates = new Set((Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+    .filter((report) => cleanText(report?.key) === "strategy3" || cleanText(report?.strategy) === "策略3隔日沖成績單")
+    .map(sourceReportDate)
+    .filter(Boolean));
   const strategy3BadSource = strategy3Rows
     .filter((row) => {
       const sourceDate = cleanText(row.source_date) || cleanText(row.reason).match(/策略3來源日=(\d{4}-\d{2}-\d{2})/)?.[1] || "";
-      return !sourceDate || sourceDate === latestDate;
+      if (!sourceDate) return true;
+      if (strategy3ReportDates.size > 0 && !strategy3ReportDates.has(sourceDate)) return true;
+      return false;
     })
     .map((row) => ({ ticker: cleanText(row.ticker), record_date: cleanText(row.record_date), source_date: cleanText(row.source_date) }));
   const cbBad = rows
@@ -211,7 +217,7 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, requiredFieldMissing.length === 0, `${source}-required-fields`, `${source} required fields must be filled`, { missingCount: requiredFieldMissing.length, samples: requiredFieldMissing.slice(0, 20) });
   addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-window`, `${source} strategy2 rows must stay within 09:00-13:30`, { strategy2OutOfWindow });
   addCheck(checks, (strategy3Rows.length === 0 || strategy3BadEntry.length === 0), `${source}-strategy3-entry`, `${source} strategy3 rows must use 13:00 entry`, { strategy3Rows: strategy3Rows.length, strategy3BadEntry });
-  addCheck(checks, strategy3BadSource.length === 0, `${source}-strategy3-source-date`, `${source} strategy3 must use previous trading-day source marker`, { strategy3BadSource });
+  addCheck(checks, strategy3BadSource.length === 0, `${source}-strategy3-source-date`, `${source} strategy3 source_date must be present and match the Strategy3 source report date`, { strategy3BadSource, strategy3ReportDates: [...strategy3ReportDates] });
   addCheck(checks, cbBad.length === 0, `${source}-cb-stock-price`, `${source} CB rows must keep detected stockPrice-based calculable entry`, { cbBad });
   addCheck(checks, historyDates.length > 0, `${source}-history-dates`, `${source} historyDates must exist`, { historyDates, dates });
 
