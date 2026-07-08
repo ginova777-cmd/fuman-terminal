@@ -104,6 +104,19 @@ function isSourceA(source) {
     && source.rateLimitStatus !== "rate_limited";
 }
 
+function isSourceOffSessionFailClosed(source) {
+  const message = `${source.status} ${source.message}`.toLowerCase();
+  return source.status === "stopped"
+    && message.includes("off-session")
+    && source.daytradeGateGrade === "A"
+    && source.priorityFreshQuoteCoverage120s >= 0.95
+    && source.quoteAgeSeconds <= 90
+    && source.formalEntryAllowed === false
+    && source.scannerCanRunQuoteOnly === true
+    && source.scannerCanRunOpening === true
+    && source.rateLimitStatus !== "rate_limited";
+}
+
 function isGateA(gate) {
   return gate.gateGrade === "A"
     && ["ready", "ok", "yes", ""].includes(gate.gateStatus.toLowerCase())
@@ -115,20 +128,21 @@ function isGateA(gate) {
 function isGateFailClosed(gate) {
   return gate.gateGrade !== "A"
     && gate.gateStatus === "not_ready"
-    && gate.reason === "off_session_not_formal_entry"
+    && ["off_session_not_formal_entry", "source_status_not_ok"].includes(gate.reason)
     && gate.formalEntrySpeedVerdict === "NO";
 }
 
 function gateVerdict(source, canonicalGate, unattendedGate) {
   const sourceA = isSourceA(source);
+  const sourceOffSession = isSourceOffSessionFailClosed(source);
   const canonicalA = isGateA(canonicalGate);
   const unattendedA = isGateA(unattendedGate);
   const canonicalClosed = isGateFailClosed(canonicalGate);
   const unattendedClosed = isGateFailClosed(unattendedGate);
   if (sourceA && canonicalA && unattendedA) return { ok: true, verdict: "A_READY_ALIGNED", mode: "formal_ready", issues: [] };
-  if (sourceA && canonicalClosed && unattendedClosed) return { ok: true, verdict: "OFF_SESSION_FAIL_CLOSED_ALIGNED", mode: "off_session_fail_closed", issues: [] };
+  if (sourceOffSession && canonicalClosed && unattendedClosed) return { ok: true, verdict: "OFF_SESSION_FAIL_CLOSED_ALIGNED", mode: "off_session_fail_closed", issues: [] };
   const issues = [];
-  if (!sourceA) issues.push("source_status_not_a");
+  if (!sourceA && !sourceOffSession) issues.push("source_status_not_a_or_off_session_fail_closed");
   if (!canonicalA && !canonicalClosed) issues.push("canonical_gate_not_a_or_fail_closed");
   if (!unattendedA && !unattendedClosed) issues.push("unattended_gate_not_a_or_fail_closed");
   return { ok: false, verdict: "NOT_ALIGNED", mode: "mismatch", issues };
