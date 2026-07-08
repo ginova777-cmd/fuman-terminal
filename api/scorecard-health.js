@@ -317,7 +317,8 @@ function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
   const missing = Array.isArray(summary?.missingStrategies) ? summary.missingStrategies : [];
   if (!missing.length) return true;
   const covered = new Set(Array.isArray(peerSummary?.emptyCompleteStrategies) ? peerSummary.emptyCompleteStrategies : []);
-  return missing.every((strategy) => covered.has(strategy));
+  const blocked = new Set(Array.isArray(peerSummary?.blockedStrategies) ? peerSummary.blockedStrategies : []);
+  return missing.every((strategy) => covered.has(strategy) || blocked.has(strategy));
 }
 
 function strategy2OutOfWindowCovered(summary, peerSummary) {
