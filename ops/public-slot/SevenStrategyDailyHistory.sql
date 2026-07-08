@@ -8,6 +8,7 @@ create table if not exists public.seven_strategy_daily_history (
   id bigserial primary key,
   trade_date date not null,
   detect_time time without time zone not null,
+  entry_time time without time zone,
   symbol text not null,
   name text not null,
   entry_price numeric not null,
@@ -15,6 +16,7 @@ create table if not exists public.seven_strategy_daily_history (
   change_percent numeric,
   score numeric,
   strategy text not null,
+  strategy_label text,
   signal_type text not null,
   source text not null default 'seven_strategy_daily_history',
   run_id text,
@@ -30,12 +32,44 @@ create table if not exists public.seven_strategy_daily_history (
   constraint seven_strategy_daily_history_signal_type
     check (signal_type in ('formal', 'detected')),
   constraint seven_strategy_daily_history_regular_session
-    check (detect_time >= time '09:00:00' and detect_time <= time '13:30:00'),
+    check (coalesce(detect_time, entry_time) >= time '09:00:00' and coalesce(detect_time, entry_time) <= time '13:30:00'),
   constraint seven_strategy_daily_history_no_replay
     check (
       position('replay' in lower(coalesce(source, '') || ' ' || coalesce(strategy, '') || ' ' || coalesce(signal_type, ''))) = 0
     )
 );
+
+alter table public.seven_strategy_daily_history
+  add column if not exists entry_time time without time zone;
+
+alter table public.seven_strategy_daily_history
+  add column if not exists strategy_label text;
+
+update public.seven_strategy_daily_history
+set entry_time = coalesce(entry_time, detect_time),
+    strategy_label = coalesce(nullif(btrim(strategy_label), ''), strategy)
+where entry_time is null
+   or nullif(btrim(strategy_label), '') is null;
+
+alter table public.seven_strategy_daily_history
+  alter column detect_time drop not null;
+
+alter table public.seven_strategy_daily_history
+  alter column strategy drop not null;
+
+alter table public.seven_strategy_daily_history
+  drop constraint if exists seven_strategy_daily_history_strategy_not_blank;
+
+alter table public.seven_strategy_daily_history
+  add constraint seven_strategy_daily_history_strategy_not_blank
+  check (btrim(coalesce(strategy, strategy_label, '')) <> '');
+
+alter table public.seven_strategy_daily_history
+  drop constraint if exists seven_strategy_daily_history_regular_session;
+
+alter table public.seven_strategy_daily_history
+  add constraint seven_strategy_daily_history_regular_session
+  check (coalesce(detect_time, entry_time) >= time '09:00:00' and coalesce(detect_time, entry_time) <= time '13:30:00');
 
 create index if not exists idx_seven_strategy_daily_history_today_latest
   on public.seven_strategy_daily_history(trade_date desc, detect_time desc, updated_at desc);
@@ -49,6 +83,16 @@ create index if not exists idx_seven_strategy_daily_history_signal_type
 create unique index if not exists uq_seven_strategy_daily_history_record
   on public.seven_strategy_daily_history(trade_date, detect_time, symbol, strategy, signal_type, source);
 
+create unique index if not exists uq_seven_strategy_daily_history_record_normalized
+  on public.seven_strategy_daily_history(
+    trade_date,
+    (coalesce(detect_time, entry_time)),
+    symbol,
+    (coalesce(strategy, strategy_label)),
+    signal_type,
+    source
+  );
+
 alter table public.seven_strategy_daily_history enable row level security;
 
 drop policy if exists "read seven strategy daily history" on public.seven_strategy_daily_history;
@@ -58,6 +102,13 @@ create policy "read seven strategy daily history"
   to anon, authenticated
   using (true);
 
+drop policy if exists "insert seven strategy daily history" on public.seven_strategy_daily_history;
+create policy "insert seven strategy daily history"
+  on public.seven_strategy_daily_history
+  for insert
+  to anon, authenticated
+  with check (true);
+
 drop policy if exists "service manage seven strategy daily history" on public.seven_strategy_daily_history;
 create policy "service manage seven strategy daily history"
   on public.seven_strategy_daily_history
@@ -66,8 +117,8 @@ create policy "service manage seven strategy daily history"
   using (true)
   with check (true);
 
-grant select on public.seven_strategy_daily_history to anon, authenticated;
+grant select, insert on public.seven_strategy_daily_history to anon, authenticated;
 grant all on public.seven_strategy_daily_history to service_role;
-grant usage, select on sequence public.seven_strategy_daily_history_id_seq to service_role;
+grant usage, select on sequence public.seven_strategy_daily_history_id_seq to anon, authenticated, service_role;
 
 commit;

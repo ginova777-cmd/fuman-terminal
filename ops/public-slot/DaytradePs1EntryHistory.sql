@@ -13,6 +13,7 @@ create table if not exists public.fugle_daytrade_entry_history (
   entry_price numeric,
   current_price numeric,
   strategy_label text not null default 'PS1',
+  signal_type text not null default 'formal',
   note text,
   source text not null default 'ps1-live',
   run_id text,
@@ -26,9 +27,21 @@ create table if not exists public.fugle_daytrade_entry_history (
       position('replay' in lower(coalesce(source, '') || ' ' || coalesce(strategy_label, ''))) = 0
       and position('observation' in lower(coalesce(source, '') || ' ' || coalesce(strategy_label, ''))) = 0
     ),
+  constraint fugle_daytrade_entry_history_signal_type
+    check (signal_type in ('formal', 'detected')),
   constraint fugle_daytrade_entry_history_regular_session
     check (entry_time >= time '09:00:00' and entry_time <= time '13:30:00')
 );
+
+alter table public.fugle_daytrade_entry_history
+  add column if not exists signal_type text not null default 'formal';
+
+alter table public.fugle_daytrade_entry_history
+  drop constraint if exists fugle_daytrade_entry_history_signal_type;
+
+alter table public.fugle_daytrade_entry_history
+  add constraint fugle_daytrade_entry_history_signal_type
+  check (signal_type in ('formal', 'detected'));
 
 create index if not exists idx_fugle_daytrade_entry_history_today_latest
   on public.fugle_daytrade_entry_history(trade_date desc, entry_time desc, created_at desc);
@@ -48,6 +61,13 @@ create policy "read fugle daytrade entry history"
   to anon, authenticated
   using (true);
 
+drop policy if exists "insert fugle daytrade entry history" on public.fugle_daytrade_entry_history;
+create policy "insert fugle daytrade entry history"
+  on public.fugle_daytrade_entry_history
+  for insert
+  to anon, authenticated
+  with check (true);
+
 drop policy if exists "service manage fugle daytrade entry history" on public.fugle_daytrade_entry_history;
 create policy "service manage fugle daytrade entry history"
   on public.fugle_daytrade_entry_history
@@ -56,8 +76,8 @@ create policy "service manage fugle daytrade entry history"
   using (true)
   with check (true);
 
-grant select on public.fugle_daytrade_entry_history to anon, authenticated;
+grant select, insert on public.fugle_daytrade_entry_history to anon, authenticated;
 grant all on public.fugle_daytrade_entry_history to service_role;
-grant usage, select on sequence public.fugle_daytrade_entry_history_id_seq to service_role;
+grant usage, select on sequence public.fugle_daytrade_entry_history_id_seq to anon, authenticated, service_role;
 
 commit;

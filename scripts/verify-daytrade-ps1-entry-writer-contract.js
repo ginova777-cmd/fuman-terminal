@@ -15,6 +15,7 @@ const base = {
   entry_price: 1000,
   current_price: 1005,
   strategy_label: "PS1",
+  signal_type: "formal",
   note: "formal entry",
   source: "ps1-live",
 };
@@ -31,6 +32,7 @@ const cases = [
   ["after 13:30", ["entry_time_outside_window"], issueOf((row) => ({ ...row, entry_time: "13:30:01" }))],
   ["replay source", ["source_contains_replay"], issueOf((row) => ({ ...row, source: "ps1-replay" }))],
   ["observation strategy", ["source_contains_observation"], issueOf((row) => ({ ...row, strategy_label: "PS1 observation" }))],
+  ["detected signal_type", ["signal_type_not_formal"], issueOf((row) => ({ ...row, signal_type: "detected" }))],
   ["blank symbol", ["missing_symbol", "symbol_invalid"], issueOf((row) => ({ ...row, symbol: "" }))],
   ["missing price", ["missing_entry_price", "entry_price_not_positive"], issueOf((row) => ({ ...row, entry_price: null }))],
 ];
@@ -55,4 +57,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("[daytrade-ps1-entry-writer-contract] rawOk=true valid=formal-entry mutationIssues=old_date,time_window,replay,observation,blank_symbol,missing_price sourceGate=A_only writerMode=service_role_script");
+console.log("[daytrade-ps1-entry-writer-contract] rawOk=true valid=formal-entry mutationIssues=old_date,time_window,replay,observation,signal_type,blank_symbol,missing_price sourceGate=A_only writerMode=service_role_script");

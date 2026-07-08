@@ -55,6 +55,7 @@ function daytradeIssues(payload, expectedDate) {
     const key = secondsFromTime(row.entry_time);
     if (key < secondsFromTime("09:00:00") || key > secondsFromTime("13:30:00")) issues.push(`daytrade_row_${index}_outside_window`);
     if (!String(row.symbol || "").trim()) issues.push(`daytrade_row_${index}_blank_symbol`);
+    if (String(row.signal_type || "formal").toLowerCase() !== "formal") issues.push(`daytrade_row_${index}_signal_type_not_formal`);
   }
   return { rows: rows.length, issues };
 }

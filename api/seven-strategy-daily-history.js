@@ -8,6 +8,7 @@ const REQUIRED_FIELDS = ["tradeDate", "detectTime", "symbol", "name", "entryPric
 const SELECT_FIELDS = [
   "trade_date",
   "detect_time",
+  "entry_time",
   "symbol",
   "name",
   "entry_price",
@@ -15,10 +16,12 @@ const SELECT_FIELDS = [
   "change_percent",
   "score",
   "strategy",
+  "strategy_label",
   "signal_type",
   "source",
   "updated_at",
 ];
+const LEGACY_SELECT_FIELDS = SELECT_FIELDS.filter((field) => field !== "entry_time" && field !== "strategy_label");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -78,16 +81,20 @@ function normalizeSignalType(value, source = "") {
 }
 
 function normalizeRow(row) {
+  const detectTime = normalizeDetectTime(row.detect_time ?? row.detectTime ?? row.entry_time ?? row.entryTime);
+  const strategy = text(row.strategy ?? row.strategy_label ?? row.strategyLabel);
   return {
     tradeDate: normalizeTradeDate(row.trade_date ?? row.tradeDate),
-    detectTime: normalizeDetectTime(row.detect_time ?? row.detectTime),
+    detectTime,
+    entryTime: detectTime,
     symbol: text(row.symbol),
     name: text(row.name),
     entryPrice: numberOrNull(row.entry_price ?? row.entryPrice),
     currentPrice: numberOrNull(row.current_price ?? row.currentPrice),
     changePercent: numberOrNull(row.change_percent ?? row.changePercent),
     score: numberOrNull(row.score),
-    strategy: text(row.strategy),
+    strategy,
+    strategyLabel: strategy,
     signalType: normalizeSignalType(row.signal_type ?? row.signalType, row.source),
     source: text(row.source || SOURCE_NAME),
     updatedAt: text(row.updated_at ?? row.updatedAt),
@@ -171,13 +178,18 @@ async function fetchSupabaseRows(tradeDate, limit) {
   if (!url || !key) {
     return { ok: false, status: 503, reason: "missing_supabase_credentials", rawRows: [] };
   }
+  async function query(fields, legacy = false) {
   const params = new URLSearchParams();
-  params.set("select", SELECT_FIELDS.join(","));
+  params.set("select", fields.join(","));
   params.set("trade_date", `eq.${tradeDate}`);
-  params.append("detect_time", "gte.09:00:00");
-  params.append("detect_time", "lte.13:30:00");
-  params.set("order", "detect_time.desc,updated_at.desc");
-  params.set("limit", String(Math.min(Math.max(Number(limit) || 100, 1), 200)));
+  if (legacy) {
+    params.append("detect_time", "gte.09:00:00");
+    params.append("detect_time", "lte.13:30:00");
+    params.set("order", "detect_time.desc,updated_at.desc");
+  } else {
+    params.set("order", "updated_at.desc");
+  }
+  params.set("limit", String(Math.max(500, Math.min(Math.max(Number(limit) || 100, 1), 500))));
   const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
   const response = await fetch(endpoint, {
     headers: {
@@ -187,6 +199,9 @@ async function fetchSupabaseRows(tradeDate, limit) {
       "cache-control": "no-store",
     },
   });
+    return response;
+  }
+  let response = await query(SELECT_FIELDS);
   const rawText = await response.text();
   let data = null;
   try {
@@ -195,6 +210,23 @@ async function fetchSupabaseRows(tradeDate, limit) {
     data = null;
   }
   if (!response.ok) {
+    if (/entry_time|strategy_label/i.test(rawText)) {
+      response = await query(LEGACY_SELECT_FIELDS, true);
+      const fallbackText = await response.text();
+      try {
+        data = fallbackText ? JSON.parse(fallbackText) : null;
+      } catch {
+        data = null;
+      }
+      if (response.ok) return { ok: true, status: response.status, reason: "legacy_without_entry_time_strategy_label", rawRows: Array.isArray(data) ? data : [] };
+      return {
+        ok: false,
+        status: response.status,
+        reason: "seven_strategy_daily_history_query_failed",
+        error: data?.message || fallbackText.slice(0, 240),
+        rawRows: [],
+      };
+    }
     return {
       ok: false,
       status: response.status,
@@ -226,7 +258,7 @@ async function buildPayload(options = {}) {
     table: TABLE_NAME,
     tradeDate,
     timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
-    order: "detect_time.desc,updated_at.desc",
+    order: "coalesce(detect_time,entry_time).desc,updated_at.desc",
     limit,
     count: normalized.rows.length,
     totalKept: normalized.totalKept,

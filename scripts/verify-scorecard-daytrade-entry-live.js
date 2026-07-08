@@ -42,7 +42,7 @@ function secondsFromTime(value) {
 }
 
 function hasReplayObservation(row) {
-  return [row.source, row.strategy_label].some((value) => String(value || "").toLowerCase().includes("replay")
+  return [row.source, row.strategy_label, row.signal_type].some((value) => String(value || "").toLowerCase().includes("replay")
     || String(value || "").toLowerCase().includes("observation"));
 }
 
@@ -64,6 +64,7 @@ async function main() {
     if (key < secondsFromTime("09:00:00") || key > secondsFromTime("13:30:00")) issues.push(`row_${index}_outside_window_${row.entry_time || "missing"}`);
     if (!String(row.symbol || "").trim()) issues.push(`row_${index}_blank_symbol`);
     if (hasReplayObservation(row)) issues.push(`row_${index}_replay_observation`);
+    if (String(row.signal_type || "formal").toLowerCase() !== "formal") issues.push(`row_${index}_signal_type_not_formal`);
     if (index > 0) {
       const previous = rows[index - 1];
       const previousKey = secondsFromTime(previous.entry_time);

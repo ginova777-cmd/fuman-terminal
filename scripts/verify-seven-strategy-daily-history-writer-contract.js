@@ -39,13 +39,14 @@ if (TABLE_NAME !== "seven_strategy_daily_history") issues.push("wrong_table_name
 if (normalized.accepted.length !== 2) issues.push(`accepted_count:${normalized.accepted.length}`);
 if (normalized.rejected.length !== 4) issues.push(`rejected_count:${normalized.rejected.length}`);
 if (normalized.accepted[0]?.symbol !== "2317") issues.push(`latest_first:${normalized.accepted[0]?.symbol || "missing"}`);
+if (normalized.accepted.some((row) => !row.entry_time || !row.strategy_label)) issues.push("missing_entry_time_or_strategy_label_output");
 for (const expected of ["trade_date_not_today", "detect_time_outside_window", "source_contains_replay", "missing_symbol", "missing_entry_price"]) {
   if (!mutationIssues.some((issue) => String(issue || "").startsWith(expected))) issues.push(`missing_mutation_issue:${expected}`);
 }
 for (const marker of ["--entry-file", "--detected-file", "fugle-entry-history", "fugle-detected-history"]) {
   if (!scriptSource.includes(marker)) issues.push(`missing_cli_marker:${marker}`);
 }
-for (const marker of ["on_conflict=trade_date,detect_time,symbol,strategy,signal_type,source", "resolution=merge-duplicates", "serverSupabaseKey"]) {
+for (const marker of ["entry_time", "strategy_label", "on_conflict=trade_date,detect_time,symbol,strategy,signal_type,source", "resolution=merge-duplicates", "serverSupabaseKey"]) {
   if (!libSource.includes(marker)) issues.push(`missing_writer_marker:${marker}`);
 }
 

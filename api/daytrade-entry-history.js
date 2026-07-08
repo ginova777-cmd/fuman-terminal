@@ -11,10 +11,12 @@ const ENTRY_FIELDS = [
   "entry_price",
   "current_price",
   "strategy_label",
+  "signal_type",
   "note",
   "source",
   "created_at",
 ];
+const LEGACY_ENTRY_FIELDS = ENTRY_FIELDS.filter((field) => field !== "signal_type");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -60,8 +62,11 @@ function isEntryInWindow(value) {
 }
 
 function isFormalEntry(row) {
-  const sourceText = [row?.source, row?.strategy_label].map(text).join(" ").toLowerCase();
-  return !sourceText.includes("replay") && !sourceText.includes("observation");
+  const sourceText = [row?.source, row?.strategy_label, row?.signal_type].map(text).join(" ").toLowerCase();
+  const signalType = text(row?.signal_type || "formal").toLowerCase();
+  return (signalType === "formal" || signalType === "")
+    && !sourceText.includes("replay")
+    && !sourceText.includes("observation");
 }
 
 function normalizeEntry(row) {
@@ -73,6 +78,7 @@ function normalizeEntry(row) {
     entry_price: row.entry_price ?? null,
     current_price: row.current_price ?? null,
     strategy_label: text(row.strategy_label),
+    signal_type: text(row.signal_type || "formal"),
     note: text(row.note),
     source: text(row.source),
     created_at: text(row.created_at),
@@ -122,8 +128,9 @@ async function fetchSupabaseEntries(today) {
   if (!url || !key) {
     return { ok: false, status: 503, reason: "missing_supabase_credentials", rawRows: [] };
   }
+  async function query(fields) {
   const params = new URLSearchParams();
-  params.set("select", ENTRY_FIELDS.join(","));
+  params.set("select", fields.join(","));
   params.set("trade_date", `eq.${today}`);
   params.append("entry_time", "gte.09:00:00");
   params.append("entry_time", "lte.13:30:00");
@@ -138,6 +145,9 @@ async function fetchSupabaseEntries(today) {
       "cache-control": "no-store",
     },
   });
+    return response;
+  }
+  let response = await query(ENTRY_FIELDS);
   const rawText = await response.text();
   let data = null;
   try {
@@ -146,6 +156,23 @@ async function fetchSupabaseEntries(today) {
     data = null;
   }
   if (!response.ok) {
+    if (/signal_type/i.test(rawText)) {
+      response = await query(LEGACY_ENTRY_FIELDS);
+      const fallbackText = await response.text();
+      try {
+        data = fallbackText ? JSON.parse(fallbackText) : null;
+      } catch {
+        data = null;
+      }
+      if (response.ok) return { ok: true, status: response.status, reason: "legacy_without_signal_type", rawRows: Array.isArray(data) ? data : [] };
+      return {
+        ok: false,
+        status: response.status,
+        reason: "supabase_entry_history_query_failed",
+        error: data?.message || fallbackText.slice(0, 240),
+        rawRows: [],
+      };
+    }
     return {
       ok: false,
       status: response.status,
