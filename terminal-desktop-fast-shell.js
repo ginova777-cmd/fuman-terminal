@@ -988,6 +988,10 @@
     return String(route || "") === REALTIME_RADAR_ROUTE;
   }
 
+  function isCbDetectRoute(route) {
+    return String(route || "") === CB_DETECT_ROUTE;
+  }
+
   function isMarketViewActive() {
     const panel = document.querySelector("#market-view");
     return Boolean(panel?.classList?.contains("active") && !panel.hidden);
@@ -1311,11 +1315,74 @@
     };
   }
 
+  function normalizeCbDetectRow(row, index) {
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+    const merged = { ...payload, ...row };
+    const cbCode = String(merged.cbCode || merged.cb_code || merged.symbol || merged.code || "").trim();
+    const stockCode = String(merged.code || merged.stockCode || merged.stock_code || "").match(/\d{4}/)?.[0] || "";
+    const cbName = compactText(merged.cbName || merged.cb_name || merged.name || cbCode || stockCode || `CB ${index + 1}`, 64);
+    const entryLabel = compactText(merged.entryLabel || merged.entryPlan?.label || merged.selectedEntryModel || merged.entrySignal || merged.stage || "", 42);
+    const sourceLayer = compactText(merged.sourceLayer || merged.dataContractSource || "cb_detect_scan_results", 72);
+    const premium = pickFirstValue(merged.premium, merged.premiumLow, merged.premiumHigh, merged.conversionDistancePct);
+    const pct = premium === "" || premium == null ? "" : `${cleanNumber(premium).toFixed(2)}%`;
+    const price = pickFirstValue(merged.stockPrice, merged.preferredEntry, merged.entryPlan?.preferredEntry, merged.convertPrice, merged.effectiveConvertPrice);
+    const riskReward = pickFirstValue(merged.riskReward, merged.entryPlan?.riskReward);
+    const tags = normalizeArray(merged.tags).map((tag) => compactText(String(tag || ""), 24)).filter(Boolean).slice(0, 5);
+    const reason = compactText([
+      entryLabel,
+      merged.tradableLabel || "",
+      riskReward ? `風報比 ${riskReward}` : "",
+      price ? `參考價 ${price}` : "",
+      sourceLayer,
+    ].filter(Boolean).join(" ｜ "), 180);
+    return {
+      rank: cleanNumber(merged.rank) || index + 1,
+      code: cbCode || stockCode,
+      title: cbName,
+      pct,
+      score: merged.score === "" || merged.score == null ? "" : String(Math.round(cleanNumber(merged.score) * 100) / 100),
+      reason,
+      state: compactText(merged.stage || merged.tradableLabel || "", 32),
+      subStrategy: entryLabel,
+      subStrategyId: compactText(merged.entrySignal || merged.selectedEntryModel || entryLabel, 48),
+      strategyDisplay: entryLabel,
+      signalLabel: entryLabel,
+      signalLine: compactText(tags.join(" / "), 120),
+      signals: tags.map((tag) => ({ id: tag, label: tag, reason: "" })),
+      tags,
+      signalTags: tags,
+      price: price === "" || price == null ? "" : String(price),
+      entryPrice: price === "" || price == null ? "" : String(price),
+      volume: merged.tradeVolume === "" || merged.tradeVolume == null ? "" : String(merged.tradeVolume || merged.volume || ""),
+      volumeRatio: merged.volumeRatio20 === "" || merged.volumeRatio20 == null ? "" : String(merged.volumeRatio20 || ""),
+      tradeValue: merged.tradeVolume === "" || merged.tradeVolume == null ? "" : String(merged.tradeVolume || ""),
+      quoteTime: compactText(merged.quoteDate || merged.date || "", 32),
+      radarDate: compactText(merged.quoteDate || merged.date || "", 16),
+      side: "多",
+      longShort: "多",
+      aiStatus: compactText(merged.technicalPass === false ? "觀察" : "通過", 16),
+      aiSummary: compactText(reason, 180),
+      triggerReason: reason,
+      triggerTags: tags,
+      line: compactText([cbCode || stockCode, cbName, entryLabel, reason].filter(Boolean).join(" ｜ "), 160),
+    };
+  }
+
   function normalizeCanvasRowsFromPayload(payload, route = "") {
     if (isRoutePayloadNotDrawable(payload, route)) return [];
     const limit = canvasOptionsForRoute(route).limit || 60;
     const minLimit = isStrategy4Route(route) ? 10 : 20;
     const arrays = flattenApiArrays(payload);
+    if (isCbDetectRoute(route)) {
+      const preferred = Array.isArray(payload?.rows) && payload.rows.some((row) => row && typeof row === "object")
+        ? payload.rows
+        : arrays.sort((a, b) => b.length - a.length)[0] || [];
+      return preferred
+        .map((row, index) => normalizeCbDetectRow(row, index))
+        .filter((row) => row.code || row.title)
+        .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || cleanNumber(b.score) - cleanNumber(a.score) || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+        .slice(0, Math.max(5, Math.min(120, limit)));
+    }
     if (isStrategy2Route(route)) {
       const preferred = Array.isArray(payload?.rows) && payload.rows.some((row) => row && typeof row === "object")
         ? payload.rows
@@ -1663,6 +1730,25 @@
         publishAllowed: payload.publishGate?.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed,
         latestOverwriteAllowed: payload.publishGate?.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed,
         sourceStatus: payload.source_status_at_run?.status || payload.sourceStatus?.status || "",
+        cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      };
+    }
+    if (isCbDetectRoute(route)) {
+      const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+        ? payload.run_quality_at_publish
+        : {};
+      const resultCount = cleanNumber(payload.resultCount || payload.count || payload.rows?.length || payload.matches?.length);
+      return {
+        ok: payload.ok,
+        runId: payload.runId || payload.latestRunId || payload.transport?.runId || payload.meta?.runId || "",
+        updatedAt: payload.updatedAt || payload.generatedAt || payload.source_snapshot_captured_at || "",
+        resultCount,
+        evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || "",
+        unattendedStatus: payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "",
+        qualityStatus: payload.qualityStatus || payload.status || "",
+        publishAllowed: payload.publishAllowed ?? quality.publishAllowed,
+        latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
+        sourceStatus: payload.source_status_at_run?.status || payload.sourceCoverage?.status || payload.sourceHealth?.status || "",
         cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
       };
     }
