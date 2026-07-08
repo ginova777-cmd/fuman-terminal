@@ -65,7 +65,20 @@ function taipeiTimeText(date = new Date()) {
     hour12: false,
   }).formatToParts(date);
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${byType.hour}:${byType.minute}:${byType.second}`;
+  return byType.hour + ":" + byType.minute + ":" + byType.second;
+}
+
+function secondsOfDay(text) {
+  const match = String(text || "").match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+}
+
+function shouldStopByConfiguredTime() {
+  const stopAt = secondsOfDay(process.env.STRATEGY2_LIVE_STOP_AT);
+  if (stopAt === null) return false;
+  const now = secondsOfDay(taipeiTimeText());
+  return now !== null && now >= stopAt;
 }
 
 function intradayTimeText(value) {
@@ -132,6 +145,10 @@ async function loop() {
   let loopCount = 0;
   while (true) {
     loopCount += 1;
+    if (shouldStopByConfiguredTime()) {
+      console.log("strategy2 live LINE patrol stop: reached " + process.env.STRATEGY2_LIVE_STOP_AT);
+      break;
+    }
     try {
       const signature = latestSignature();
       if (signature && signature !== lastSignature) {
