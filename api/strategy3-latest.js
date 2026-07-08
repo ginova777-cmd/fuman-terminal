@@ -564,6 +564,9 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const payloadWithContract = {
     ...payload,
     ...contract,
+    status: apiPublishAllowed ? "ready" : contract.status,
+    sourceStatus: apiPublishAllowed ? "ready" : contract.sourceStatus,
+    qualityStatus: apiPublishAllowed ? "complete" : (payload.qualityStatus || contract.status),
     sourceCoverage,
     sourceEvidenceStatus,
     sourceEvidenceMissingFields,
