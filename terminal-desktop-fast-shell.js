@@ -4958,7 +4958,12 @@
       futuresNext ? !String(futuresNext?.change || "").includes("-") : null
     );
 
-    const sectors = normalizeArray(heatmapPayload?.sectors);
+    const heatmapBlocked = marketPayloadBlockedForFormalDisplay(heatmapPayload);
+    if (heatmapBlocked) {
+      renderMarketHeatmapBlocked(heatmapPayload, heatmapBlocked);
+    }
+
+    const sectors = heatmapBlocked ? [] : normalizeArray(heatmapPayload?.sectors);
     const stocks = sectors.flatMap((sector) => normalizeArray(sector?.stocks));
     const up = sectors.reduce((sum, sector) => sum + marketNumber(sector?.up), 0);
     const down = sectors.reduce((sum, sector) => sum + marketNumber(sector?.down), 0);
@@ -4999,13 +5004,58 @@
       }).join("");
     }
     const message = market.querySelector("#terminal-message");
-    if (message) message.textContent = "市場總覽已同步 Supabase/API 快照，熱力圖可點選看相關股票。";
+    if (message) {
+      message.textContent = heatmapBlocked
+        ? `熱力圖正式水源未通過：${heatmapBlocked}。不以 fallback/壞水源顯示正常盤面。`
+        : "市場總覽已同步 Supabase/API 快照，熱力圖可點選看相關股票。";
+    }
+  }
+
+  function marketPayloadBlockedForFormalDisplay(payload = {}) {
+    if (!payload || typeof payload !== "object") return "";
+    const evidence = String(payload.evidenceStatus || payload.sourceEvidenceStatus || payload.unattended?.evidenceStatus || "").toLowerCase();
+    const unattended = String(payload.unattendedStatus || payload.unattended?.status || "").toUpperCase();
+    const status = String(payload.status || payload.qualityStatus || "").toLowerCase();
+    const issues = normalizeArray(payload.issues || payload.blockers || payload.run_quality_at_publish?.issues);
+    if (payload.ok === false) return "api_ok_false";
+    if (payload.fallbackUsed === true || payload.run_quality_at_publish?.fallbackUsed === true) return "fallback_used";
+    if (payload.publishAllowed === false || payload.run_quality_at_publish?.publishAllowed === false) return "publish_not_allowed";
+    if (unattended === "NO") return "unattended_no";
+    if (/(insufficient|fail|blocked|degraded)/.test(evidence)) return evidence || "evidence_not_complete";
+    if (/(blocked|degraded|fail)/.test(status)) return status;
+    const sourceStatus = String(payload.source_status_at_run?.status || payload.sourceStatusAtRun?.status || "").toLowerCase();
+    if (sourceStatus && !["ready", "ok", "not_required", "not_applicable"].includes(sourceStatus)) return `source_${sourceStatus}`;
+    const issueText = issues.join(";");
+    if (/fallback|source_quality_fail|quote_coverage|not_ok|degraded/i.test(issueText)) return issueText.slice(0, 160);
+    return "";
+  }
+
+  function renderMarketHeatmapBlocked(payload = {}, reason = "source_not_ready") {
+    const shell = ensureMarketDesktopShell();
+    const market = shell.market || document.querySelector("#market-view");
+    const heatmap = market?.querySelector?.("#heatmap");
+    if (!heatmap) return;
+    const issues = normalizeArray(payload.issues || payload.blockers || payload.warnings || payload.run_quality_at_publish?.issues).slice(0, 6);
+    const updatedAt = payload.updatedAt || payload.servedAt || payload.source_snapshot_captured_at || "";
+    heatmap.innerHTML = `
+      <div class="empty-state heatmap-blocked-state">
+        <strong>熱力圖正式水源未通過</strong>
+        <p>reason=${escapeHtml(String(reason || "source_not_ready"))}</p>
+        <p>evidence=${escapeHtml(String(payload.evidenceStatus || payload.sourceEvidenceStatus || "--"))}｜unattended=${escapeHtml(String(payload.unattendedStatus || payload.unattended?.status || "--"))}｜publish=${escapeHtml(String(payload.publishAllowed === true ? "allowed" : "blocked"))}</p>
+        ${updatedAt ? `<p>updatedAt=${escapeHtml(String(updatedAt))}</p>` : ""}
+        ${issues.length ? `<ul>${issues.map((issue) => `<li>${escapeHtml(String(issue))}</li>`).join("")}</ul>` : ""}
+      </div>
+    `;
+    const titleCount = document.querySelector("#market-view .sector-section .section-title > span");
+    if (titleCount) titleCount.textContent = "正式水源 blocked";
   }
 
   let marketSnapshotFirstLoading = false;
   function paintMarketSnapshotFirstPayload(payload = marketSnapshotFirstPayload, marketPayload = {}) {
-    if (!payload?.sectors?.length || !isMarketViewActive()) return false;
+    if (!payload || !isMarketViewActive()) return false;
     renderMarketOverviewApi(marketPayload || {}, payload);
+    if (marketPayloadBlockedForFormalDisplay(payload)) return true;
+    if (!payload?.sectors?.length) return false;
     renderMarketHeatmapApi(payload.sectors, payload);
     return true;
   }
@@ -5086,6 +5136,11 @@
     const market = shell.market || document.querySelector("#market-view");
     const heatmap = market?.querySelector?.("#heatmap");
     if (!heatmap) return;
+    const blockedReason = marketPayloadBlockedForFormalDisplay(payload);
+    if (blockedReason) {
+      renderMarketHeatmapBlocked(payload, blockedReason);
+      return;
+    }
     const rawSectors = normalizeArray(sectors);
     if (rawSectors.length) {
       marketHeatmapPayload = { ...(payload || {}), sectors: rawSectors };
@@ -5131,6 +5186,34 @@
   function renderMarketApiAi(heatmapPayload, radarPayload, aiPayload = {}) {
     const panels = ensureMarketApiPanels();
     if (!panels.ai) return;
+    const aiBlockedReason = marketPayloadBlockedForFormalDisplay(aiPayload);
+    if (aiBlockedReason) {
+      const issues = normalizeArray(aiPayload.issues || aiPayload.blockers || aiPayload.warnings).slice(0, 8);
+      panels.ai.classList.add("market-ai-visual-dashboard");
+      panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
+      panels.ai.dataset.marketApiAi = "blocked";
+      panels.ai.innerHTML = `
+        <section class="market-ai-summary">
+          <article class="market-ai-card warning">
+            <small>AI 判讀正式水源</small>
+            <strong>未通過，不顯示正常判讀</strong>
+            <p>reason=${escapeHtml(String(aiBlockedReason || "source_not_ready"))}</p>
+          </article>
+          <article class="market-ai-card warning">
+            <small>contract</small>
+            <strong>evidence=${escapeHtml(String(aiPayload.evidenceStatus || "--"))}</strong>
+            <p>unattended=${escapeHtml(String(aiPayload.unattendedStatus || "--"))}｜publish=${escapeHtml(String(aiPayload.publishAllowed === true ? "allowed" : "blocked"))}｜fallback=${escapeHtml(String(aiPayload.fallbackUsed === true))}</p>
+          </article>
+        </section>
+        <section class="market-ai-block">
+          <h3>阻擋原因</h3>
+          <div class="market-ai-list">
+            ${(issues.length ? issues : [aiBlockedReason]).map((issue, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeHtml(String(issue))}</span></div>`).join("")}
+          </div>
+        </section>
+      `;
+      return;
+    }
     const sectors = normalizeArray(heatmapPayload?.sectors);
     const radarRows = normalizeArray(radarPayload?.rows);
     const aiRows = [
