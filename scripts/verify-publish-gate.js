@@ -702,6 +702,7 @@ const realtimeRadarCss = read("terminal-realtime-radar.css");
 const openBuyLatestApi = read("api/open-buy-latest.js");
 const latestStrategyApi = read("api/latest-strategy.js");
 const strategy2LatestApi = read("api/strategy2-latest.js");
+const strategy2IntradayScanner = read("scripts/scan-intraday-signals.js");
 const strategy3LatestApi = read("api/strategy3-latest.js");
 const strategy4LatestApi = read("api/strategy4-latest.js");
 const strategy5LatestApi = read("api/strategy5-latest.js");
@@ -3048,6 +3049,24 @@ for (const marker of [
 }
 if (/readValidatedFullWindowReplayReport|source gate using validated full-window replay|LOCAL_COMPLETE_RUN_FILE|strategy2-full-window-1m-replay/.test(strategy2CompleteRunPublisher)) {
   issues.push("publish-strategy2-complete-run.js must fail closed when source gate blocks; replay/local complete-run bypass is not allowed");
+}
+for (const marker of [
+  "assertStrategy2SourcePublishGate",
+  "buildRunTimeSourceSnapshotFields",
+  "auditRunTimeSourceSnapshot",
+  "scanner-latest-complete-run-publish",
+  "strategy2_latest upsert blocked by source gate",
+  "strategy2 complete run publish blocked: missing run-time evidence",
+]) {
+  if (!strategy2IntradayScanner.includes(marker)) {
+    issues.push(`scan-intraday-signals.js missing Strategy2 direct publish evidence gate marker ${marker}`);
+  }
+}
+if (!/assertStrategy2SourcePublishGate[\s\S]{0,2400}strategy2_latest\?on_conflict=id/.test(strategy2IntradayScanner)) {
+  issues.push("scan-intraday-signals.js must evaluate Strategy2 source gate before strategy2_latest upsert");
+}
+if (!/auditRunTimeSourceSnapshot\(report\)[\s\S]{0,2600}publish_strategy2_complete_run/.test(strategy2IntradayScanner)) {
+  issues.push("scan-intraday-signals.js must audit run-time evidence before publish_strategy2_complete_run RPC");
 }
 if (/run-full-scan|run-daily-release|freshness:gate|release:daily|scan:full|run-strategy3|run-strategy4|run-strategy5|run-institution|run-warrant-flow|run-cb-detect|run-cache-sync/.test(productionHealthMonitor + "\n" + productionHealthMonitorRunner)) {
   issues.push("production health monitor must stay read-only: no full scan, daily release, freshness gate, scanner runner, or cache sync");

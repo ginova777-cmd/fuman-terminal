@@ -3,6 +3,11 @@ const path = require("path");
 const { buildRanks, cleanNumber, detectSignals, isIntradayTradable, ma35SourceLabel } = require("./intraday-radar-rules");
 const { rotateStrategy2IntradayCache } = require("./strategy2-cache-rotation");
 const { overlayFugleWebSocketQuoteMap } = require("../lib/fugle-quote-overlay");
+const { assertStrategy2SourcePublishGate } = require("../lib/strategy2-source-publish-gate");
+const {
+  auditRunTimeSourceSnapshot,
+  buildRunTimeSourceSnapshotFields,
+} = require("../lib/run-time-source-snapshot-contract");
 const {
   fetchActiveCommonStockQuotes,
   fetchDailyVolumeAverages,
@@ -846,6 +851,10 @@ async function publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey, 
     console.warn("strategy2 complete run publish skipped: empty report has no records/events");
     return false;
   }
+  const evidenceAudit = auditRunTimeSourceSnapshot(report);
+  if (!evidenceAudit.ok) {
+    throw new Error(`strategy2 complete run publish blocked: missing run-time evidence ${evidenceAudit.missingFields.join(",")}`);
+  }
   const scanDate = String(report.date || "").match(/^\d{4}-\d{2}-\d{2}$/)
     ? String(report.date)
     : (() => {
@@ -920,11 +929,57 @@ async function upsertStrategy2LatestToSupabase(report) {
     console.warn("strategy2_latest upsert skipped: missing Supabase anon key");
     return false;
   }
+  if (!serviceKey) {
+    console.warn("strategy2_latest upsert skipped: missing Supabase service role key");
+    return false;
+  }
   const completePayload = buildStrategy2CompleteRunPayload(report);
   const recordCount = Array.isArray(completePayload.records) ? completePayload.records.length : 0;
   const eventCount = Array.isArray(completePayload.events) ? completePayload.events.length : 0;
   if (recordCount <= 0 && eventCount <= 0) {
     console.warn("strategy2_latest upsert skipped: empty report has no records/events");
+    return false;
+  }
+  let sourceGate = null;
+  try {
+    sourceGate = await assertStrategy2SourcePublishGate({
+      supabaseUrl,
+      serviceKey,
+      publishKey: serviceKey,
+      anonKey,
+    }, { stage: "scanner-latest-complete-run-publish" });
+  } catch (error) {
+    const issues = error?.gate?.issues || [];
+    console.warn(`strategy2_latest upsert blocked by source gate: ${(issues.length ? issues.join("; ") : error?.message || String(error)).slice(0, 320)}`);
+    return false;
+  }
+  const runId = buildStrategy2CompleteRunId(completePayload);
+  Object.assign(completePayload, buildRunTimeSourceSnapshotFields({
+    strategy: "strategy2",
+    runId,
+    payload: completePayload,
+    startedAt: completePayload.startedAt || completePayload.generatedAt || completePayload.updatedAt || new Date().toISOString(),
+    finishedAt: completePayload.updatedAt || completePayload.generatedAt || new Date().toISOString(),
+    expectedTotal: recordCount,
+    scannedCount: recordCount,
+    resultCount: cleanNumber(completePayload.entryCount || completePayload.aCount || eventCount),
+    readbackCount: null,
+    sourceStatus: sourceGate?.sourceCoverage || {},
+    quoteCoverage: sourceGate?.sourceCoverage || {},
+    intraday1mReadiness: sourceGate?.sourceCoverage || {},
+    maReadiness: sourceGate?.sourceCoverage || {},
+    preopenFutoptDailyReadiness: sourceGate?.sourceCoverage || {},
+    publishAllowed: sourceGate?.publishAllowed === true,
+    degradedBlocksLatest: sourceGate?.publishAllowed !== true,
+    preservePreviousGood: sourceGate?.publishAllowed !== true,
+    fallbackUsed: sourceGate?.fallbackUsed === true,
+    writeBudget: sourceGate?.writeBudget || null,
+    retentionOk: sourceGate?.retentionOk ?? null,
+    qualityStatus: completePayload.qualityStatus || "complete",
+  }));
+  const evidenceAudit = auditRunTimeSourceSnapshot(completePayload);
+  if (!evidenceAudit.ok) {
+    console.warn(`strategy2_latest upsert blocked: missing run-time evidence ${evidenceAudit.missingFields.join(",")}`);
     return false;
   }
   const payload = {
