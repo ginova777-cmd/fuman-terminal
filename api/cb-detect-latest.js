@@ -160,6 +160,37 @@ function rowsFromCompleteRun(resultRows = []) {
     .sort((a, b) => (cleanNumber(a.rank) || 99999) - (cleanNumber(b.rank) || 99999) || cleanNumber(b.score) - cleanNumber(a.score));
 }
 
+function hasRequiredValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return String(value).trim() !== "";
+}
+
+function auditCbBusinessFields(rows = [], requiredFields = []) {
+  const blankCounts = Object.fromEntries(requiredFields.map((field) => [field, 0]));
+  const sampleMissingRows = [];
+  rows.forEach((row, index) => {
+    const missing = requiredFields.filter((field) => !hasRequiredValue(row?.[field]));
+    missing.forEach((field) => {
+      blankCounts[field] = (blankCounts[field] || 0) + 1;
+    });
+    if (missing.length && sampleMissingRows.length < 5) {
+      sampleMissingRows.push({
+        index,
+        symbol: row?.symbol || row?.cbCode || row?.code || "",
+        name: row?.cbName || row?.name || "",
+        missing,
+      });
+    }
+  });
+  return {
+    blankCounts,
+    blankTotal: Object.values(blankCounts).reduce((sum, value) => sum + (Number(value) || 0), 0),
+    sampleMissingRows,
+  };
+}
 function normalizeCbHealthStatus(value) {
   const status = String(value || "").toLowerCase();
   if (["ok", "ready", "complete"].includes(status)) return "ok";
@@ -336,6 +367,8 @@ async function readLatestCompleteRun(options) {
   const scannerStatus = String(scannerHealth?.status || "ready").toLowerCase();
   const qualityStatus = completeRunStatus === "ready" ? (run.quality_status || "complete") : completeRunStatus;
   const outputRows = options.compactIntent ? rows.slice(0, options.limit || 60) : rows;
+  const requiredFields = ["symbol", "cbCode", "cbName", "score", "entryLabel", "sourceLayer", "stockPrice", "convertPrice", "riskReward", "dataContractSource"];
+  const fieldAudit = auditCbBusinessFields(rows, requiredFields);
   return {
     ok: true,
     complete: true,
@@ -360,6 +393,11 @@ async function readLatestCompleteRun(options) {
     expectedTotal: cleanNumber(run.expected_total) || count,
     scannedCount: cleanNumber(run.scanned_count) || count,
     resultCount: count,
+    readbackCount: rows.length,
+    requiredFields,
+    blankCounts: fieldAudit.blankCounts,
+    blankTotal: fieldAudit.blankTotal,
+    sampleMissingRows: fieldAudit.sampleMissingRows,
     run,
     sourceHealth: buildCbSourceHealth(health, scannerHealth),
     transport: {
@@ -397,5 +435,6 @@ module.exports = async function handler(request, response) {
     response.status(503).json(attachCbSelfCheck(apiOnlyError(error?.message || String(error)), { status: "blocked" }));
   }
 };
+
 
 
