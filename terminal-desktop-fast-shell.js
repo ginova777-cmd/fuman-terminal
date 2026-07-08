@@ -1667,11 +1667,20 @@
       };
     }
     if (!isStrategy2Route(route)) return null;
+    const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+      ? payload.run_quality_at_publish
+      : {};
+    const resultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length || payload.rows?.length);
     return {
       ok: payload.ok,
       runId: payload.runId || payload.transport?.runId || "",
       updatedAt: payload.updatedAt || payload.generatedAt || "",
+      resultCount,
       qualityStatus: payload.qualityStatus || "",
+      evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || "",
+      unattendedStatus: payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "",
+      publishAllowed: payload.publishAllowed ?? quality.publishAllowed,
+      latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
       reason: payload.publishBlockedReason || payload.selfCheck?.reason || payload.sourceCoverage?.reason || payload.resourceReadiness?.reason || payload.reason || "",
       publishBlocked: payload.publishBlocked === true || payload.transport?.publishBlocked === true,
       cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
@@ -5785,8 +5794,9 @@
   }
 
   function strategy2BattleShellHtml(key, meta) {
+    const routeMeta = strategy2HealthMeta() || {};
     return `
-      <section class="desktop-route-shell desktop-canvas-app strategy2-battle-shell" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}">
+      <section class="desktop-route-shell desktop-canvas-app strategy2-battle-shell" data-route-shell="${escapeHtml(key)}" data-route-source="${escapeHtml(canvasState.source || "")}" data-run-id="${escapeHtml(routeMeta.runId || "")}" data-result-count="${escapeHtml(routeMeta.resultCount || "")}" data-evidence-status="${escapeHtml(routeMeta.evidenceStatus || "")}" data-unattended-status="${escapeHtml(routeMeta.unattendedStatus || "")}">
         <div class="strategy2-battle-header">
           <div>
             <span class="strategy2-battle-kicker">${escapeHtml(meta.icon)} 策略2</span>
@@ -5830,6 +5840,11 @@
     if (!shell) return;
     shell.dataset.routeShell = key;
     shell.dataset.routeSource = canvasState.source || "";
+    const routeMeta = strategy2HealthMeta() || {};
+    shell.dataset.runId = routeMeta.runId || "";
+    shell.dataset.resultCount = routeMeta.resultCount || "";
+    shell.dataset.evidenceStatus = routeMeta.evidenceStatus || "";
+    shell.dataset.unattendedStatus = routeMeta.unattendedStatus || "";
     const rows = [...canvasState.filtered].sort(strategy2SortRows);
     const liveRows = rows.filter((row) => {
       const tone = strategy2Tone(row);
@@ -5857,9 +5872,17 @@
       if (header) header.insertAdjacentHTML("afterend", nextBanner);
     }
     if (title) title.textContent = meta.title;
-    if (summary) summary.textContent = afterhoursHold
-      ? "今日策略2圖卡收盤後保留顯示，24:00 自動重置。"
-      : "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
+    if (summary) {
+      const metaLine = [
+        routeMeta.runId ? `run=${routeMeta.runId}` : "run=--",
+        routeMeta.evidenceStatus ? `evidence=${routeMeta.evidenceStatus}` : "",
+        routeMeta.publishAllowed === true ? "publish=allowed" : routeMeta.publishAllowed === false ? "publish=not_allowed" : "",
+      ].filter(Boolean).join("｜");
+      const baseLine = afterhoursHold
+        ? "今日策略2圖卡收盤後保留顯示，24:00 自動重置。"
+        : "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
+      summary.textContent = [baseLine, metaLine].filter(Boolean).join("｜");
+    }
     if (count) count.textContent = `${rows.length}筆`;
     if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
       ? "快照先顯示｜即時刷新中"
