@@ -397,6 +397,10 @@
     <h2>當沖 PS1 今日進場紀錄</h2>
     <div class="empty">載入 Supabase 今日正式紀錄...</div>
   </section>
+  <section class="entry-panel" id="sevenStrategyDailyHistoryPanel" data-testid="seven-strategy-daily-history-panel">
+    <h2>七策略每日紀錄</h2>
+    <div class="empty">載入 Supabase 今日七策略紀錄...</div>
+  </section>
   <section class="audit-panel" id="auditPanel" data-testid="scorecard-audit-panel"></section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
@@ -434,6 +438,7 @@
 <script>
 let payload = null;
 let daytradeEntryPayload = null;
+let sevenStrategyDailyHistoryPayload = null;
 let activeStrategy = "全部";
 let activeResult = "all";
 let activeDate = "";
@@ -720,6 +725,84 @@ function renderDaytradeEntries() {
   `;
 }
 
+function renderSevenStrategyDailyHistory() {
+  const panel = byId("sevenStrategyDailyHistoryPanel");
+  const data = sevenStrategyDailyHistoryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const filtered = data.filtered || {};
+  const source = data.source || "supabase:public.seven_strategy_daily_history";
+  const tradeDate = data.tradeDate || "--";
+  const windowText = data.timeWindow ? `${data.timeWindow.from} - ${data.timeWindow.to}` : "09:00:00 - 13:30:00";
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
+  const distribution = data.strategyDistribution && typeof data.strategyDistribution === "object"
+    ? Object.entries(data.strategyDistribution).map(([strategy, total]) => `${strategy}:${total}`).join(" / ")
+    : "--";
+  if (!data.ok) {
+    panel.innerHTML = `
+      <h2>七策略每日紀錄</h2>
+      <div class="entry-meta">
+        <span>來源：${esc(source)}</span>
+        <span>sourceName=${esc(data.sourceName || "seven_strategy_daily_history")}</span>
+        <span>tradeDate=${esc(tradeDate)}</span>
+        <span>window=${esc(windowText)}</span>
+      </div>
+      <div class="status-line blocked">尚未取得 Supabase 七策略每日紀錄｜reason=${esc(data.reason || data.error || "not_loaded")}</div>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <h2>七策略每日紀錄</h2>
+    <div class="entry-meta">
+      <span>來源：${esc(source)}</span>
+      <span>sourceName=${esc(data.sourceName || "seven_strategy_daily_history")}</span>
+      <span>日期=${esc(tradeDate)}</span>
+      <span>window=${esc(windowText)}</span>
+      <span>總筆數=${count(data.count ?? rows.length)}</span>
+      <span>正式進場=${count(data.formalCount)}</span>
+      <span>觀察=${count(data.detectedCount)}</span>
+      <span>策略分布=${esc(distribution || "--")}</span>
+      <span>filtered old=${count(filtered.nonToday)} / window=${count(filtered.outsideWindow)} / replay=${count(filtered.replay)} / blank=${count(filtered.blankRequired)}</span>
+      <span>updated=${esc(updatedAt)}</span>
+    </div>
+    ${rows.length ? `
+      <div class="entry-table-wrap">
+        <table class="entry-table">
+          <thead>
+            <tr>
+              <th>偵測時間</th>
+              <th>類型</th>
+              <th>代號</th>
+              <th>名稱</th>
+              <th>進場價</th>
+              <th>現價</th>
+              <th>漲跌%</th>
+              <th>分數</th>
+              <th>策略</th>
+              <th>source</th>
+            </tr>
+          </thead>
+          <tbody data-testid="seven-strategy-daily-history-rows">
+            ${rows.slice(0, 100).map((row) => `
+              <tr>
+                <td>${esc(row.detectTime || "--")}</td>
+                <td>${esc(row.signalType || "--")}</td>
+                <td>${esc(row.symbol || "--")}</td>
+                <td>${esc(row.name || "--")}</td>
+                <td>${optionalPrice(row.entryPrice)}</td>
+                <td>${optionalPrice(row.currentPrice)}</td>
+                <td>${row.changePercent === null || row.changePercent === undefined ? "--" : esc(String(row.changePercent))}</td>
+                <td>${row.score === null || row.score === undefined ? "--" : esc(String(row.score))}</td>
+                <td>${esc(row.strategy || "--")}</td>
+                <td>${esc(row.source || "--")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="empty">今日 09:00-13:30 尚無七策略正式進場或觀察紀錄</div>`}
+  `;
+}
+
 function sourceStatus(payload, latestDate) {
   const qualityStatus = String(payload?.qualityStatus || "unknown").trim() || "unknown";
   const cacheSource = payload?.cacheSource || payload?.source || "scorecard";
@@ -753,7 +836,7 @@ function sourceReportForStrategy(strategy) {
 function sourceReportsStatus(payload) {
   const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
   if (!reports.length) return { qualityStatus: "blocked", text: "sourceReports=missing｜策略來源回讀不可驗" };
-  const keyOrder = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant", "realtime-radar"];
+  const keyOrder = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "seven_strategy_daily_history", "institution", "cb", "warrant", "realtime-radar"];
   const byKey = new Map(reports.map((report) => [String(report.key || report.strategy || report.label || "").toLowerCase(), report]));
   const ordered = [
     ...keyOrder.map((key) => reports.find((report) => String(report.key || report.strategy || "").toLowerCase() === key)).filter(Boolean),
@@ -901,9 +984,18 @@ function render() {
   ].join("");
 
   const strategies = uniqueStrategies(rows);
-  byId("tabs").innerHTML = strategies.map((strategy) =>
+  const jumpTabs = [
+    ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
+    ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
+  ];
+  byId("tabs").innerHTML = [
+    ...jumpTabs.map(([label, panelId, testId]) =>
+      `<button class="tab" data-jump-panel="${esc(panelId)}" type="button" data-testid="${esc(testId)}">${esc(label)}</button>`
+    ),
+    ...strategies.map((strategy) =>
     `<button class="tab ${strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
-  ).join("");
+    ),
+  ].join("");
 
   byId("resultPills").innerHTML = resultFilters.map(([value, label]) =>
     `<button class="pill ${value === activeResult ? "active" : ""}" data-result="${value}" type="button">${esc(label)}</button>`
@@ -998,7 +1090,38 @@ async function loadDaytradeEntries() {
   renderDaytradeEntries();
 }
 
+async function loadSevenStrategyDailyHistory() {
+  sevenStrategyDailyHistoryPayload = {
+    ok: false,
+    sourceName: "seven_strategy_daily_history",
+    source: "supabase:public.seven_strategy_daily_history",
+    reason: "loading",
+    rows: [],
+  };
+  renderSevenStrategyDailyHistory();
+  try {
+    const response = await fetch(`/api/seven-strategy-daily-history?limit=100&t=${Date.now()}`, { cache: "no-store" });
+    sevenStrategyDailyHistoryPayload = await response.json();
+  } catch (error) {
+    sevenStrategyDailyHistoryPayload = {
+      ok: false,
+      sourceName: "seven_strategy_daily_history",
+      source: "supabase:public.seven_strategy_daily_history",
+      reason: "seven_strategy_daily_history_fetch_failed",
+      error: error.message || String(error),
+      rows: [],
+    };
+  }
+  renderSevenStrategyDailyHistory();
+}
+
 byId("tabs").addEventListener("click", (event) => {
+  const jumpButton = event.target.closest("[data-jump-panel]");
+  if (jumpButton) {
+    const panel = byId(jumpButton.dataset.jumpPanel);
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   const button = event.target.closest("[data-strategy]");
   if (!button) return;
   activeStrategy = button.dataset.strategy;
@@ -1024,11 +1147,13 @@ byId("reload").addEventListener("click", () => {
   load(activeDate);
   loadStrategy4Live();
   loadDaytradeEntries();
+  loadSevenStrategyDailyHistory();
 });
 applyTheme(preferredTheme());
 load();
 loadStrategy4Live();
 loadDaytradeEntries();
+loadSevenStrategyDailyHistory();
 </script>
 </body>
 </html>
