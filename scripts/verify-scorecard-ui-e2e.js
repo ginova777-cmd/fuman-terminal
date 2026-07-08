@@ -152,7 +152,7 @@ function verifyPayload(checks, payload, source = "payload") {
   const strategy2Rows = records.filter((row) => cleanText(row.strategy) === "策略2成績單");
   const strategy2OutOfWindow = strategy2Rows.filter((row) => {
     const minutes = timeMinutes(row.entry_time);
-    return minutes === null || minutes < 9 * 60 || minutes > 12 * 60;
+    return minutes === null || minutes < 9 * 60 || minutes > 13 * 60 + 30;
   }).map((row) => ({
     ticker: cleanText(row.ticker),
     name: cleanText(row.name),
@@ -164,9 +164,19 @@ function verifyPayload(checks, payload, source = "payload") {
     name: cleanText(row.name),
     entry_time: cleanText(row.entry_time),
   }));
+  const strategy3ReportDates = new Set((Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+    .filter((report) => cleanText(report?.key) === "strategy3" || cleanText(report?.strategy) === "策略3隔日沖成績單")
+    .map((report) => cleanText(report?.date))
+    .filter(Boolean)
+    .map((date) => {
+      const digits = date.replace(/\D/g, "");
+      return /^\d{8}$/.test(digits) ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : date.slice(0, 10);
+    }));
   const strategy3BadSourceDate = strategy3Rows.filter((row) => {
     const sourceDate = cleanText(row.source_date) || cleanText(row.reason).match(/策略3來源日=(\d{4}-\d{2}-\d{2})/)?.[1] || "";
-    return !sourceDate || sourceDate === latestDate;
+    if (!sourceDate) return true;
+    if (strategy3ReportDates.size > 0 && !strategy3ReportDates.has(sourceDate)) return true;
+    return false;
   }).map((row) => ({
     ticker: cleanText(row.ticker),
     name: cleanText(row.name),
@@ -190,7 +200,7 @@ function verifyPayload(checks, payload, source = "payload") {
   addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-display-window`, `${source} 策略2 scorecard rows are limited to 09:00-13:30`, { strategy2Rows: strategy2Rows.length, strategy2OutOfWindow });
   addCheck(checks, cleanNumber(latestStats.byStrategy["策略3隔日沖成績單"]?.rows) > 0, `${source}-strategy3`, `${source} includes 策略3隔日沖成績單 rows`, latestStats.byStrategy["策略3隔日沖成績單"] || {});
   addCheck(checks, strategy3WrongEntryTime.length === 0, `${source}-strategy3-entry-time`, `${source} 策略3 full-scan entry_time is 13:00`, { strategy3Rows: strategy3Rows.length, strategy3WrongEntryTime });
-  addCheck(checks, strategy3BadSourceDate.length === 0, `${source}-strategy3-source-date`, `${source} 策略3 scorecard uses the previous trading-day scan as source_date`, { latestDate, strategy3Rows: strategy3Rows.length, strategy3BadSourceDate });
+  addCheck(checks, strategy3BadSourceDate.length === 0, `${source}-strategy3-source-date`, `${source} 策略3 scorecard source_date is present and matches the Strategy3 source report date`, { latestDate, strategy3Rows: strategy3Rows.length, strategy3ReportDates: [...strategy3ReportDates], strategy3BadSourceDate });
   addCheck(checks, cleanNumber(latestStats.byStrategy["權證成績單"]?.rows) > 0, `${source}-warrant`, `${source} includes 權證成績單 rows`, latestStats.byStrategy["權證成績單"] || {});
   addCheck(checks, nonCbEntryMissing === 0, `${source}-entry-filled`, `${source} non-CB rows have entry_price`, { nonCbEntryMissing });
   addCheck(checks, nonCbHighMissing === 0, `${source}-high-filled`, `${source} non-CB rows have high_price`, { nonCbHighMissing });
