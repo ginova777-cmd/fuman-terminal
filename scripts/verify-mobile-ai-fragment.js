@@ -43,27 +43,26 @@ if (!legacyStaticMode) {
   if ((result.status || 0) !== 0) process.exit(result.status || 1);
   if (live) {
     const fragmentUrl = `${baseUrl}/api/mobile-fragment?tab=ai&verify=${Date.now()}`;
-    fetch(fragmentUrl, { cache: "no-store" })
-      .then(async (response) => {
-        const html = await response.text();
-        const localIssues = [];
-        if (!response.ok) localIssues.push(`mobile AI fragment returned HTTP ${response.status}: ${html.slice(0, 180)}`);
-        if (!html.includes(`data-mobile-fragment-key="ai"`)) localIssues.push("mobile AI fragment missing data-mobile-fragment-key=ai");
-        if (!html.includes(`data-mobile-ai-fragment="1"`)) localIssues.push("mobile AI fragment missing data-mobile-ai-fragment=1");
-        if (!html.includes("market-ai")) localIssues.push("mobile AI fragment missing market-ai content");
-        if (/手機 API fragment 暫時無法取得|This operation was aborted|HTTP 5\d\d/i.test(html)) localIssues.push("mobile AI fragment rendered fetch/abort/error state");
-        if (localIssues.length) {
-          console.error(`[mobile-ai-fragment${live ? ":live" : ""}] FAIL`);
-          for (const issue of localIssues) console.error(`- ${issue}`);
-          process.exit(1);
-        }
-        console.log(`[mobile-ai-fragment${live ? ":live" : ""}] ok fragmentStatus=${response.status} bytes=${Buffer.byteLength(html)} url=${fragmentUrl}`);
-        process.exit(0);
-      })
-      .catch((error) => {
-        console.error(`[mobile-ai-fragment${live ? ":live" : ""}] FAIL ${error.message}`);
-        process.exit(1);
-      });
+    (async () => {
+      const response = await fetch(fragmentUrl, { cache: "no-store" });
+      const html = await response.text();
+      const localIssues = [];
+      if (!response.ok) localIssues.push(`mobile AI fragment returned HTTP ${response.status}: ${html.slice(0, 180)}`);
+      if (!html.includes(`data-mobile-fragment-key="ai"`)) localIssues.push("mobile AI fragment missing data-mobile-fragment-key=ai");
+      if (!html.includes(`data-mobile-ai-fragment="1"`)) localIssues.push("mobile AI fragment missing data-mobile-ai-fragment=1");
+      if (!html.includes("market-ai")) localIssues.push("mobile AI fragment missing market-ai content");
+      if (/手機 API fragment 暫時無法取得|This operation was aborted|HTTP 5\d\d/i.test(html)) localIssues.push("mobile AI fragment rendered fetch/abort/error state");
+      if (localIssues.length) {
+        console.error(`[mobile-ai-fragment${live ? ":live" : ""}] FAIL`);
+        for (const issue of localIssues) console.error(`- ${issue}`);
+        process.exitCode = 1;
+        return;
+      }
+      console.log(`[mobile-ai-fragment${live ? ":live" : ""}] ok fragmentStatus=${response.status} bytes=${Buffer.byteLength(html)} url=${fragmentUrl}`);
+    })().catch((error) => {
+      console.error(`[mobile-ai-fragment${live ? ":live" : ""}] FAIL ${error.message}`);
+      process.exitCode = 1;
+    });
     return;
   }
   console.log(`[mobile-ai-fragment${live ? ":live" : ""}] legacy static fragment check skipped; API-only mobile contract is authoritative`);
