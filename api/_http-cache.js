@@ -89,6 +89,33 @@ function compactRows(value) {
   return Array.isArray(value) ? value.map(compactRow) : value;
 }
 
+function compactHeatmapSector(sector, limit) {
+  if (!sector || typeof sector !== "object") return sector;
+  const shaped = {};
+  const keys = [
+    "name",
+    "count",
+    "up",
+    "down",
+    "flat",
+    "pct",
+    "avgPct",
+    "breadthPct",
+    "leader",
+    "leaderCode",
+    "amountYi",
+    "totalValue",
+  ];
+  for (const key of keys) {
+    if (sector[key] !== undefined && sector[key] !== null && sector[key] !== "") shaped[key] = sector[key];
+  }
+  if (Array.isArray(sector.stocks)) {
+    shaped.stocksTotal = sector.stocks.length;
+    shaped.stocks = compactRows(topArray(sector.stocks, Math.min(limit, 12)));
+  }
+  return shaped;
+}
+
 function shapeTopPayload(req, payload) {
   const compact = wantsCompactPayload(req);
   if ((!wantsTopPayload(req) && !compact) || !payload || typeof payload !== "object") return payload;
@@ -121,6 +148,14 @@ function shapeTopPayload(req, payload) {
     } else {
       shaped.data = Object.fromEntries(entries.slice(0, limit).map(([code, row]) => [code, compact ? compactRow(row) : row]));
     }
+  }
+  if (Array.isArray(payload.sectors)) {
+    shaped.sectorsTotal = payload.sectors.length;
+    shaped.sectors = payload.sectors.map((sector) => compactHeatmapSector(sector, limit));
+  }
+  if (Array.isArray(payload.industryMaster)) {
+    shaped.industryMasterTotal = payload.industryMaster.length;
+    shaped.industryMaster = compactRows(topArray(payload.industryMaster, limit));
   }
   if (payload.count === undefined && Array.isArray(payload.matches)) shaped.count = payload.matches.length;
   if (payload.count === undefined && Array.isArray(payload.rows)) shaped.count = payload.rows.length;
