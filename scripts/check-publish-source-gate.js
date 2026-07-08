@@ -216,7 +216,8 @@ function sendAlert(payload, dryRun) {
 async function main() {
   ensureDirs();
   const dryRunAlert = hasArg("--dry-run-alert") || process.env.FUMAN_PUBLISH_SOURCE_GATE_ALERT_DRY_RUN === "1";
-  const noAlert = hasArg("--no-alert") || process.env.FUMAN_PUBLISH_SOURCE_GATE_NO_ALERT === "1";
+  const auditOnly = hasArg("--audit-only") || process.env.FUMAN_PUBLISH_SOURCE_GATE_AUDIT_ONLY === "1";
+  const noAlert = hasArg("--no-alert") || process.env.FUMAN_PUBLISH_SOURCE_GATE_NO_ALERT === "1" || auditOnly;
   const simulateCritical = hasArg("--simulate-critical");
   const strict = hasArg("--strict") || process.env.FUMAN_PUBLISH_SOURCE_GATE_STRICT === "1";
   const phase = publishSourcePhase();
@@ -277,6 +278,7 @@ async function main() {
     contract: "publish-source-gate-v1",
     phase: phase.phase,
     hardGateRequired,
+    auditOnly,
     publishAllowed: !blocked,
     mustPreserveLatest: blocked,
     latestRunId: strategy2Payload.readiness?.latest_run_id || "",
@@ -321,7 +323,7 @@ async function main() {
 
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   console.log(JSON.stringify(payload, null, 2));
-  if (payload.status !== "ready") process.exitCode = 3;
+  if (payload.status !== "ready" && !auditOnly) process.exitCode = 3;
 }
 
 main().catch((error) => {

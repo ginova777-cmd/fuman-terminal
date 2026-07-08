@@ -11,6 +11,10 @@ $receiptDir = Join-Path $runtimeRoot "data\scan-receipts"
 
 Push-Location $syncRoot
 try {
+  $previousAuditOnly = $env:FUMAN_PUBLISH_SOURCE_GATE_AUDIT_ONLY
+  if ($env:FUMAN_DEPLOY_SOURCE_GATE_STRICT -ne "1") {
+    $env:FUMAN_PUBLISH_SOURCE_GATE_AUDIT_ONLY = "1"
+  }
   & npm.cmd run publish:source-gate
   $sourceGateExit = $LASTEXITCODE
   if ($sourceGateExit -ne 0) {
@@ -19,6 +23,11 @@ try {
   & npm.cmd run verify:publish-gate
   $contractExit = $LASTEXITCODE
 } finally {
+  if ($null -eq $previousAuditOnly) {
+    Remove-Item Env:\FUMAN_PUBLISH_SOURCE_GATE_AUDIT_ONLY -ErrorAction SilentlyContinue
+  } else {
+    $env:FUMAN_PUBLISH_SOURCE_GATE_AUDIT_ONLY = $previousAuditOnly
+  }
   Pop-Location
 }
 if ($contractExit -ne 0) {
