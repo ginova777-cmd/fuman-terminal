@@ -984,9 +984,17 @@ function render() {
   ].join("");
 
   const strategies = uniqueStrategies(rows);
-  byId("tabs").innerHTML = strategies.map((strategy) =>
+  const jumpTabs = [
+    ["當沖 PS1", "daytradeEntryPanel"],
+  ];
+  byId("tabs").innerHTML = [
+    ...jumpTabs.map(([label, panelId]) =>
+      `<button class="tab" data-jump-panel="${esc(panelId)}" type="button" data-testid="scorecard-daytrade-ps1-tab">${esc(label)}</button>`
+    ),
+    ...strategies.map((strategy) =>
     `<button class="tab ${strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
-  ).join("");
+    ),
+  ].join("");
 
   byId("resultPills").innerHTML = resultFilters.map(([value, label]) =>
     `<button class="pill ${value === activeResult ? "active" : ""}" data-result="${value}" type="button">${esc(label)}</button>`
@@ -1107,6 +1115,12 @@ async function loadSevenStrategyDailyHistory() {
 }
 
 byId("tabs").addEventListener("click", (event) => {
+  const jumpButton = event.target.closest("[data-jump-panel]");
+  if (jumpButton) {
+    const panel = byId(jumpButton.dataset.jumpPanel);
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   const button = event.target.closest("[data-strategy]");
   if (!button) return;
   activeStrategy = button.dataset.strategy;

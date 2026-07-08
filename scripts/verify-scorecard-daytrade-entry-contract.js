@@ -50,6 +50,7 @@ const fixture = [
 const normalized = hooks.normalizeRows(fixture, today);
 const issueChecks = [
   ["html_section_marker", html.includes("daytrade-ps1-entry-panel")],
+  ["html_tab_marker", html.includes("scorecard-daytrade-ps1-tab") && html.includes("data-jump-panel")],
   ["html_fetches_supabase_api", html.includes("/api/daytrade-entry-history")],
   ["html_has_no_local_entry_file_fetch", !/\/data\/.*entry/i.test(html)],
   ["api_table_contract", apiSource.includes("public.fugle_daytrade_entry_history")],
