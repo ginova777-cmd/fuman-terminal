@@ -471,14 +471,21 @@ async function main() {
     }
   }
   if (String(row.strategy || "").toLowerCase() === "strategy3") {
-    try {
-      strategy3Session = await fetchStrategy3SessionReadinessStatus();
-      if (!strategy3Session.ready && effectiveStatus === READY_STATUS) {
-        effectiveStatus = "not_ready";
+    if (process.env.STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC === "1") {
+      try {
+        strategy3Session = await fetchStrategy3SessionReadinessStatus();
+      } catch (error) {
+        readinessWarning = `strategy3 session readiness unavailable: ${error?.message || String(error)}`;
       }
-    } catch (error) {
-      readinessWarning = `strategy3 session readiness unavailable: ${error?.message || String(error)}`;
-      if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
+    } else {
+      strategy3Session = {
+        ready: true,
+        status: "diagnostic_skipped",
+        source: STRATEGY3_INTRADAY_STATUS_VIEW,
+        upstreamSource: "Strategy2 daytrade 1m",
+        diagnosticOnly: true,
+        reason: "Strategy3 latest complete run resource health is authoritative; deep 1m status view skipped by default",
+      };
     }
   }
   if (String(row.strategy || "").toLowerCase() === "strategy4" && effectiveStatus !== READY_STATUS) {
@@ -509,7 +516,7 @@ async function main() {
       `execution=${Number(readiness.latest_execution_scanned || 0)}/${Number(readiness.latest_execution_expected || 0)}`,
     ].join("; ")
     : "";
-  const strategy3SessionReason = strategy3Session && !strategy3Session.ready ? strategy3Session.reason : "";
+  const strategy3SessionReason = strategy3Session && strategy3Session.ready === false ? `diagnostic_only:${strategy3Session.reason}` : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
   const strategy2DedicatedSourceReady = String(row.strategy || "").toLowerCase() === "strategy2"
     && sourceStatus
@@ -523,13 +530,10 @@ async function main() {
   const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
   const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
-  const strategy3SessionBlocked = Boolean(strategy3Session && !strategy3Session.ready);
   const suggestedScannerBehavior = strategy2DedicatedSourceReady
     ? "publish allowed; dedicated daytrade source is A and readiness cache is diagnostic-only"
     : sourceGateIssues.length || readinessBlocked
       ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"
-      : strategy3SessionBlocked
-        ? "preserve latest complete run; Strategy2 daytrade intraday 1m source is not ready for Strategy3"
       : row.suggested_scanner_behavior || "";
   const payload = {
     ok,
@@ -543,7 +547,7 @@ async function main() {
     rowCount: Number(row.row_count || 0),
     minRequiredRows: Number(row.min_required_rows || 0),
     reason,
-    scanner_block_reason: reason || (blocked ? "scanner source gate blocked" : ""),
+    scanner_block_reason: blocked ? (reason || "scanner source gate blocked") : "",
     publishAllowed: ok,
     suggestedScannerBehavior,
     updatedAt: row.updated_at || "",
