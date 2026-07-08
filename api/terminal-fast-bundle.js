@@ -304,8 +304,7 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
 async function repairStrategy2LatestSnapshot(request, endpoints) {
   const currentEntry = Object.entries(endpoints || {})
     .find(([endpoint]) => isStrategy2SnapshotEndpoint(endpoint));
-  if (!currentEntry) return;
-  const [currentEndpoint, currentPayload] = currentEntry;
+  const [currentEndpoint, currentPayload] = currentEntry || ["", null];
   const result = await callJson("/api/latest-strategy", latestStrategy, request, {
     key: "strategy2",
     compact: "1",
@@ -329,8 +328,9 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
     transport: {
       ...(replacement.transport || {}),
       fastBundleRepair: "strategy2-latest-complete-run",
-      staleSnapshotEndpoint: currentEndpoint,
-      staleSnapshotRunId: currentRunId,
+      staleSnapshotEndpoint: currentEndpoint || "",
+      staleSnapshotRunId: currentRunId || "",
+      snapshotEndpointWasMissing: !currentEndpoint,
       fetchedAt: new Date().toISOString(),
     },
   });
