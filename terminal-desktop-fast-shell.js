@@ -53,7 +53,7 @@
     "realtime-radar|即時雷達": { limit: 1200, ttl: 6500, live: true, today: true, full: true },
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
-    "strategy|策略3": { limit: 60, ttl: 22000 },
+    "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
     "strategy|策略4": { limit: 70, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
@@ -1119,6 +1119,8 @@
     if (options.full || isRealtimeRadarRoute(route)) query.set("full", "1");
     if (strategy2SnapshotFirst) query.set("snapshot", "1");
     else if (options.live) query.set("live", "1");
+    if (options.verify) query.set("verify", "1");
+    if (options.noSnapshot) query.set("noSnapshot", "1");
     if (options.today) query.set("today", "1");
     if (isChipTradeRoute(route)) query.set("fieldContract", CHIP_TRADE_FIELD_CONTRACT_VERSION);
     if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
@@ -1633,6 +1635,22 @@
 
   function routePayloadMeta(route, payload) {
     if (!payload || typeof payload !== "object") return null;
+    if (isStrategy3Route(route)) {
+      const resultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length || payload.rows?.length);
+      return {
+        ok: payload.ok,
+        runId: payload.runId || payload.run_id || payload.transport?.runId || payload.meta?.runId || "",
+        updatedAt: payload.updatedAt || payload.generatedAt || payload.source_snapshot_captured_at || "",
+        resultCount,
+        evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "",
+        unattendedStatus: payload.unattendedStatus || payload.unattended?.status || payload.run_quality_at_publish?.unattendedStatus || "",
+        qualityStatus: payload.qualityStatus || payload.status || "",
+        publishAllowed: payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed,
+        latestOverwriteAllowed: payload.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed,
+        sourceStatus: payload.source_status_at_run?.status || payload.sourceCoverage?.status || "",
+        cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      };
+    }
     if (isStrategy5Route(route)) {
       const resultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length || payload.rows?.length);
       return {
