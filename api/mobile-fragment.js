@@ -596,7 +596,7 @@ module.exports = async function handler(request, response) {
       || !snapshotPayload
       || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
-      ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, 12000)
+      ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000)
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
