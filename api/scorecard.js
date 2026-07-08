@@ -232,6 +232,46 @@ function callCbDetectLatest(timeoutMs = 12000) {
   });
 }
 
+function callWarrantLatest(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let timer = null;
+    try {
+      const handler = require("./warrant-flow-latest");
+      const query = {
+        canvas: "1",
+        compact: "1",
+        shell: "1",
+        live: "1",
+        limit: "500",
+      };
+      timer = setTimeout(() => resolve({
+        statusCode: 504,
+        payload: { ok: false, error: "warrant_source_report_timeout" },
+      }), timeoutMs);
+      const finish = (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      };
+      Promise.resolve(handler({
+        method: "GET",
+        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&live=1&limit=500",
+        headers: { host: "localhost", "x-scorecard-source": "1" },
+        query,
+      }, createCaptureResponse(finish))).catch((error) => {
+        finish({
+          statusCode: 500,
+          payload: { ok: false, error: "warrant_source_report_failed", reason: error?.message || String(error) },
+        });
+      });
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      resolve({
+        statusCode: 500,
+        payload: { ok: false, error: "warrant_source_report_failed", reason: error?.message || String(error) },
+      });
+    }
+  });
+}
 function callStrategy5Latest(timeoutMs = 12000) {
   return new Promise((resolve) => {
     let timer = null;
@@ -487,6 +527,33 @@ function buildCbSourceReport(result) {
   };
 }
 
+function buildWarrantSourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  return {
+    key: "warrant",
+    strategy: "權證成績單",
+    endpoint: "/api/warrant-flow-latest",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: cleanText(payload.runId || payload.transport?.runId),
+    count: cleanNumber(payload.count ?? payload.resultCount ?? quality.resultCount ?? payload.total),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
+    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
+    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
+    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
+    evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
+    unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
+    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
+    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+  };
+}
 function buildSevenStrategyDailyHistorySourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   return {
@@ -531,12 +598,13 @@ async function withLiveStrategy3SourceReport(payload) {
 }
 
 async function withLiveSourceReports(payload) {
-  const [strategy2, strategy3, strategy5, institution, cb, sevenStrategyDailyHistory] = await Promise.all([
+  const [strategy2, strategy3, strategy5, institution, cb, warrant, sevenStrategyDailyHistory] = await Promise.all([
     callStrategy2Latest(),
     callStrategy3Latest(),
     callStrategy5Latest(),
     callInstitutionLatest(),
     callCbDetectLatest(),
+    callWarrantLatest(),
     callSevenStrategyDailyHistory(),
   ]);
   return [
@@ -545,6 +613,7 @@ async function withLiveSourceReports(payload) {
     buildStrategy5SourceReport(strategy5),
     buildInstitutionSourceReport(institution),
     buildCbSourceReport(cb),
+    buildWarrantSourceReport(warrant),
     buildSevenStrategyDailyHistorySourceReport(sevenStrategyDailyHistory),
   ].reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
 }
