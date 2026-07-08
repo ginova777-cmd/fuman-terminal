@@ -440,6 +440,7 @@ let payload = null;
 let daytradeEntryPayload = null;
 let sevenStrategyDailyHistoryPayload = null;
 let activeStrategy = "全部";
+let activeSupplement = "";
 let activeResult = "all";
 let activeDate = "";
 const THEME_KEY = "fuman-scorecard-theme";
@@ -601,6 +602,87 @@ function renderEvidence(row) {
   const state = ok ? "YES" : (row.unattendedStatus || "NO");
   const cls = ok ? "good" : "bad";
   return `<details><summary><span class="${cls}">${esc(state)}</span>｜${esc(details.evidenceStatus)}｜blockers ${blockers.length}</summary><pre>${esc(compactJson(details))}</pre></details>`;
+}
+
+function supplementalEvidence(row) {
+  const details = row.supplementalEvidence || {};
+  return `<details><summary><span class="good">SOURCE</span>｜${esc(details.sourceName || row.strategy || "--")}｜${esc(details.source || "--")}</summary><pre>${esc(compactJson(details))}</pre></details>`;
+}
+
+function renderTableRows(rows, emptyText = "沒有符合條件的資料") {
+  return rows.length ? rows.map((row) => `
+    <tr data-strategy="${esc(row.strategy || "")}" data-run-id="${esc(strategyRunId(row))}" data-source-report-run-id="${esc(sourceReportForStrategy(row.strategy)?.runId || "")}">
+      <td>${esc(row.record_date)}</td>
+      <td>${esc(row.strategy)}</td>
+      <td>${esc(row.ticker)}</td>
+      <td>${esc(row.name)}</td>
+      <td>${esc(row.entry_time || "--")}</td>
+      <td>${price(row.entry_price)}</td>
+      <td>${price(row.high_price)}</td>
+      <td class="${Number(row.pnl) >= 0 ? "good" : "bad"}">${pnlText(row.pnl)}</td>
+      <td class="rule-group">${esc(rowRuleGroup(row))}</td>
+      <td class="rule-tags">${renderRuleTags(row)}</td>
+      <td class="followup">${rowFollowup(row)}</td>
+      <td class="evidence">${row.supplementalSource ? supplementalEvidence(row) : renderEvidence(row)}</td>
+      <td class="reason">${esc(cleanReason(row))}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="13" class="empty">${esc(emptyText)}</td></tr>`;
+}
+
+function daytradeRowsForTable() {
+  const data = daytradeEntryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.map((row) => ({
+    supplementalSource: "daytrade_ps1",
+    record_date: row.trade_date || data.tradeDate || "",
+    strategy: "當沖 PS1",
+    ticker: row.symbol || "",
+    name: row.name || "",
+    entry_time: row.entry_time || "",
+    entry_price: row.entry_price,
+    high_price: row.current_price,
+    pnl: 0,
+    rule_group: "當沖 PS1 今日進場",
+    rule_tags: [row.strategy_label || "PS1", row.source || "supabase"],
+    reason: row.note || "Supabase 今日正式紀錄",
+    supplementalEvidence: {
+      sourceName: "fugle_daytrade_entry_history",
+      apiSource: data.source || "supabase:public.fugle_daytrade_entry_history",
+      table: data.table || "public.fugle_daytrade_entry_history",
+      tradeDate: data.tradeDate || row.trade_date || "",
+      timeWindow: data.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+      source: row.source || "",
+      updatedAt: data.updatedAt || "",
+    },
+  }));
+}
+
+function sevenStrategyRowsForTable() {
+  const data = sevenStrategyDailyHistoryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.map((row) => ({
+    supplementalSource: "seven_strategy_daily_history",
+    record_date: row.tradeDate || data.tradeDate || "",
+    strategy: "七策略每日紀錄",
+    ticker: row.symbol || "",
+    name: row.name || "",
+    entry_time: row.detectTime || "",
+    entry_price: row.entryPrice,
+    high_price: row.currentPrice,
+    pnl: 0,
+    rule_group: row.signalType === "formal" ? "正式進場" : "偵測/觀察",
+    rule_tags: [row.strategy || "PS1", row.signalType || "detected", row.source || "supabase"],
+    reason: `changePercent=${row.changePercent ?? "--"}；score=${row.score ?? "--"}`,
+    supplementalEvidence: {
+      sourceName: data.sourceName || "seven_strategy_daily_history",
+      source: data.source || "supabase:public.seven_strategy_daily_history",
+      table: data.table || "public.seven_strategy_daily_history",
+      tradeDate: data.tradeDate || row.tradeDate || "",
+      timeWindow: data.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+      signalType: row.signalType || "",
+      updatedAt: row.updatedAt || data.updatedAt || "",
+    },
+  }));
 }
 
 function auditChecks(payload, rows) {
@@ -984,16 +1066,16 @@ function render() {
   ].join("");
 
   const strategies = uniqueStrategies(rows);
-  const jumpTabs = [
+  const supplementalTabs = [
     ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
     ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
   ];
   byId("tabs").innerHTML = [
-    ...jumpTabs.map(([label, panelId, testId]) =>
-      `<button class="tab" data-jump-panel="${esc(panelId)}" type="button" data-testid="${esc(testId)}">${esc(label)}</button>`
+    ...supplementalTabs.map(([label, panelId, testId]) =>
+      `<button class="tab ${activeSupplement === panelId ? "active" : ""}" data-supplement="${esc(panelId)}" type="button" data-testid="${esc(testId)}">${esc(label)}</button>`
     ),
     ...strategies.map((strategy) =>
-    `<button class="tab ${strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
+    `<button class="tab ${!activeSupplement && strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
     ),
   ].join("");
 
@@ -1006,6 +1088,22 @@ function render() {
   ).join("");
 
   const query = byId("search").value.trim().toLowerCase();
+  if (activeSupplement) {
+    const supplementRows = activeSupplement === "daytradeEntryPanel"
+      ? daytradeRowsForTable()
+      : sevenStrategyRowsForTable();
+    const filteredSupplementRows = supplementRows.filter((row) =>
+      (!query || String(row.ticker).toLowerCase().includes(query) || String(row.name).toLowerCase().includes(query))
+      && (activeResult === "all"
+        || (activeResult === "win" && Number(row.pnl) > 0)
+        || (activeResult === "loss" && Number(row.pnl) < 0)
+        || (activeResult === "flat" && Number(row.pnl) === 0))
+    );
+    const label = activeSupplement === "daytradeEntryPanel" ? "當沖 PS1 今日進場紀錄" : "七策略每日紀錄";
+    byId("rows").innerHTML = renderTableRows(filteredSupplementRows, `${label} 尚無符合條件的資料`);
+    byId("footer").textContent = `來源：${label}｜日期 ${latestDate}｜顯示 ${filteredSupplementRows.length} / ${supplementRows.length} 筆｜下方表格模式`;
+    return;
+  }
   const filtered = rows.filter((row) =>
     (activeStrategy === "全部" || row.strategy === activeStrategy)
     && (!query || String(row.ticker).toLowerCase().includes(query) || String(row.name).toLowerCase().includes(query))
@@ -1015,23 +1113,7 @@ function render() {
       || (activeResult === "flat" && Number(row.pnl) === 0))
   );
 
-  byId("rows").innerHTML = filtered.length ? filtered.map((row) => `
-    <tr data-strategy="${esc(row.strategy || "")}" data-run-id="${esc(strategyRunId(row))}" data-source-report-run-id="${esc(sourceReportForStrategy(row.strategy)?.runId || "")}">
-      <td>${esc(row.record_date)}</td>
-      <td>${esc(row.strategy)}</td>
-      <td>${esc(row.ticker)}</td>
-      <td>${esc(row.name)}</td>
-      <td>${esc(row.entry_time || "--")}</td>
-      <td>${price(row.entry_price)}</td>
-      <td>${price(row.high_price)}</td>
-      <td class="${Number(row.pnl) >= 0 ? "good" : "bad"}">${pnlText(row.pnl)}</td>
-      <td class="rule-group">${esc(rowRuleGroup(row))}</td>
-      <td class="rule-tags">${renderRuleTags(row)}</td>
-      <td class="followup">${rowFollowup(row)}</td>
-      <td class="evidence">${renderEvidence(row)}</td>
-      <td class="reason">${esc(cleanReason(row))}</td>
-    </tr>
-  `).join("") : `<tr><td colspan="13" class="empty">沒有符合條件的資料</td></tr>`;
+  byId("rows").innerHTML = renderTableRows(filtered);
 
   byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜contract ${payload.contract || "--"}｜runId ${payload.runId || "--"}｜marketDate ${payload.marketDate || latestDate || "--"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
 }
@@ -1088,6 +1170,7 @@ async function loadDaytradeEntries() {
     };
   }
   renderDaytradeEntries();
+  if (activeSupplement === "daytradeEntryPanel") render();
 }
 
 async function loadSevenStrategyDailyHistory() {
@@ -1113,17 +1196,21 @@ async function loadSevenStrategyDailyHistory() {
     };
   }
   renderSevenStrategyDailyHistory();
+  if (activeSupplement === "sevenStrategyDailyHistoryPanel") render();
 }
 
 byId("tabs").addEventListener("click", (event) => {
-  const jumpButton = event.target.closest("[data-jump-panel]");
-  if (jumpButton) {
-    const panel = byId(jumpButton.dataset.jumpPanel);
-    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  const supplementButton = event.target.closest("[data-supplement]");
+  if (supplementButton) {
+    activeSupplement = supplementButton.dataset.supplement;
+    activeStrategy = "全部";
+    activeResult = "all";
+    render();
     return;
   }
   const button = event.target.closest("[data-strategy]");
   if (!button) return;
+  activeSupplement = "";
   activeStrategy = button.dataset.strategy;
   render();
 });
@@ -1137,6 +1224,7 @@ byId("search").addEventListener("input", render);
 byId("historyDate").addEventListener("change", (event) => {
   activeDate = event.target.value;
   activeStrategy = "全部";
+  activeSupplement = "";
   activeResult = "all";
   load(activeDate);
 });
