@@ -476,8 +476,20 @@ function Restart-FugleQuoteCollector {
       Write-WatchdogLog "找不到 collector script：$CollectorScript"
       return
     }
-    Start-Process -FilePath $NodeExe -ArgumentList "`"$CollectorScript`"" -WindowStyle Hidden | Out-Null
-    Write-WatchdogLog "已啟動 collector：$CollectorScript"
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $NodeExe
+    $psi.Arguments = "`"$CollectorScript`""
+    $psi.WorkingDirectory = Split-Path -Parent $CollectorScript
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.Environment["FUMAN_RUNTIME_DIR"] = $RuntimeDir
+    # Shared-source full-market quote surfaces need complete quote snapshots.
+    # Daytrade latency-sensitive trades stay in the dedicated daytrade writer.
+    $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "aggregates"
+    $psi.Environment["FUGLE_STREAMING_MAX_SYMBOLS"] = "1800"
+    $psi.Environment["FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "1800"
+    [System.Diagnostics.Process]::Start($psi) | Out-Null
+    Write-WatchdogLog "已啟動 collector：$CollectorScript channels=aggregates"
   } catch {
     Write-WatchdogLog "重啟 collector 失敗：$($_.Exception.Message)"
   }

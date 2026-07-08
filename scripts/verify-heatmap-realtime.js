@@ -130,6 +130,21 @@ async function fetchReferenceQuote(code, today) {
   return null;
 }
 
+function twseTickTolerance(price) {
+  const value = Math.abs(toNumber(price));
+  if (value >= 1000) return 5;
+  if (value >= 500) return 1;
+  if (value >= 100) return 0.5;
+  if (value >= 50) return 0.1;
+  if (value >= 10) return 0.05;
+  return 0.01;
+}
+
+function heatmapCrossCheckTolerance(stockClose, referenceClose) {
+  const price = Math.max(Math.abs(toNumber(stockClose)), Math.abs(toNumber(referenceClose)));
+  return Math.max(0.11, twseTickTolerance(price));
+}
+
 function fail(message, detail) {
   console.error(`[heatmap-realtime] failed: ${message}`);
   if (detail) console.error(JSON.stringify(detail, null, 2));
@@ -209,7 +224,9 @@ function validateHeatmapPayload(label, result) {
     const delta = Math.abs(toNumber(stock.close) - toNumber(reference.close));
     const result = { code, source: reference.source, close: stock.close, reference: reference.close, delta };
     crossChecks.push(result);
-    if (delta > 0.11) mismatches.push(result);
+    const tolerance = heatmapCrossCheckTolerance(stock.close, reference.close);
+    result.tolerance = tolerance;
+    if (delta > tolerance) mismatches.push(result);
   }
 
   if (mismatches.length) {
