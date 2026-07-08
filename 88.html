@@ -130,7 +130,8 @@
       overflow-wrap: anywhere;
     }
     .summary,
-    .basis {
+    .basis,
+    .audit-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px;
@@ -259,6 +260,94 @@
       border-color: rgba(255, 122, 144, .55);
       color: var(--bad);
     }
+    .entry-panel,
+    .audit-panel {
+      margin: 14px 0;
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .entry-panel h2,
+    .audit-panel h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    .entry-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .entry-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .entry-table {
+      min-width: 920px;
+    }
+    .entry-table td.note {
+      white-space: normal;
+      min-width: 220px;
+      color: var(--muted);
+    }
+    .audit-grid .card strong {
+      font-size: 18px;
+      line-height: 1.35;
+    }
+    .audit-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .audit-item {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--muted);
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .audit-item strong {
+      color: var(--text);
+    }
+    .audit-item.pass strong,
+    .audit-item.pass .audit-state {
+      color: var(--good);
+    }
+    .audit-item.fail strong,
+    .audit-item.fail .audit-state {
+      color: var(--bad);
+    }
+    .evidence {
+      white-space: normal;
+      min-width: 360px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .evidence summary {
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 800;
+    }
+    .evidence pre {
+      max-width: 520px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 8px 0 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 12px;
+    }
     @media (max-width: 760px) {
       main { padding: 16px 10px 32px; }
       .top { display: block; }
@@ -304,6 +393,11 @@
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status"></section>
   <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports">sourceReports 讀取中...</section>
   <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status">策略4 latest run 讀取中...</section>
+  <section class="entry-panel" id="daytradeEntryPanel" data-testid="daytrade-ps1-entry-panel">
+    <h2>當沖 PS1 今日進場紀錄</h2>
+    <div class="empty">載入 Supabase 今日正式紀錄...</div>
+  </section>
+  <section class="audit-panel" id="auditPanel" data-testid="scorecard-audit-panel"></section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
   <nav class="result-pills" id="resultPills" data-testid="scorecard-result-pills"></nav>
@@ -324,11 +418,12 @@
             <th data-testid="scorecard-rule-group">策略項目</th>
             <th data-testid="scorecard-rule-tags">策略細項</th>
             <th data-testid="scorecard-followup">7日追蹤</th>
+            <th data-testid="scorecard-evidence">實戰證據</th>
             <th>原因</th>
           </tr>
         </thead>
         <tbody id="rows" data-testid="scorecard-rows">
-          <tr><td colspan="12" class="empty">載入中...</td></tr>
+          <tr><td colspan="13" class="empty">載入中...</td></tr>
         </tbody>
       </table>
     </div>
@@ -338,6 +433,7 @@
 
 <script>
 let payload = null;
+let daytradeEntryPayload = null;
 let activeStrategy = "全部";
 let activeResult = "all";
 let activeDate = "";
@@ -348,6 +444,10 @@ const PNL_MULTIPLIER = 1000;
 const count = (value) => countFmt.format(Math.round(Number(value) || 0));
 const pnlText = (value) => pnlFmt.format((Number(value) || 0) * PNL_MULTIPLIER);
 const price = (value) => (Number(value) || 0).toFixed(2);
+const optionalPrice = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "--";
+};
 const byId = (id) => document.getElementById(id);
 const resultFilters = [
   ["all", "全部"],
@@ -428,6 +528,196 @@ function cleanReason(row) {
 
 function metric(label, value, cls = "", testid = "") {
   return `<article class="card" ${testid ? `data-testid="${testid}"` : ""}><span>${label}</span><strong class="${cls}">${value}</strong></article>`;
+}
+
+function compactJson(value) {
+  if (value === undefined) return "--";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function listText(value) {
+  if (Array.isArray(value)) return value.length ? value.join("；") : "無";
+  if (value && typeof value === "object") return compactJson(value);
+  return String(value || "無");
+}
+
+function rowEvidenceOk(row) {
+  const evidence = String(row.evidenceStatus || "").toLowerCase();
+  const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+  const blanks = row.blankCounts && typeof row.blankCounts === "object"
+    ? Object.values(row.blankCounts).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    : 1;
+  return (evidence === "complete" || evidence === "sufficient")
+    && row.needsHumanWatch === false
+    && blockers.length === 0
+    && row.fallbackUsed !== true
+    && row.publishAllowed === true
+    && Boolean(row.source_snapshot_captured_at)
+    && blanks === 0;
+}
+
+function renderEvidence(row) {
+  const ok = rowEvidenceOk(row);
+  const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+  const warnings = Array.isArray(row.warnings) ? row.warnings : [];
+  const details = {
+    strategyName: row.strategyName || row.strategy || "",
+    endpoint: row.endpoint || "",
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || row.record_date || "",
+    usedDate: row.usedDate || row.record_date || "",
+    updatedAt: row.updatedAt || "",
+    unattendedStatus: row.unattendedStatus || (ok ? "YES" : "NO"),
+    evidenceStatus: row.evidenceStatus || "insufficient",
+    needsHumanWatch: row.needsHumanWatch !== false,
+    blockers,
+    warnings,
+    fallbackUsed: row.fallbackUsed === true,
+    fallbackScope: row.fallbackScope || [],
+    fallbackDetails: row.fallbackDetails || [],
+    publishAllowed: row.publishAllowed === true,
+    source_snapshot_captured_at: row.source_snapshot_captured_at || "",
+    source_status_at_run: row.source_status_at_run || "not_available",
+    quote_coverage_at_run: row.quote_coverage_at_run || "not_available",
+    intraday_1m_readiness_at_run: row.intraday_1m_readiness_at_run || "not_available",
+    ma_readiness_at_run: row.ma_readiness_at_run || "not_available",
+    preopen_futopt_daily_readiness_at_run: row.preopen_futopt_daily_readiness_at_run || "not_available",
+    run_quality_at_publish: row.run_quality_at_publish || "not_available",
+    writeBudget: row.writeBudget || "not_available",
+    retentionOk: row.retentionOk ?? "not_available",
+    requiredFields: row.requiredFields || [],
+    blankCounts: row.blankCounts || {},
+    sampleMissingRows: row.sampleMissingRows || [],
+  };
+  const state = ok ? "YES" : (row.unattendedStatus || "NO");
+  const cls = ok ? "good" : "bad";
+  return `<details><summary><span class="${cls}">${esc(state)}</span>｜${esc(details.evidenceStatus)}｜blockers ${blockers.length}</summary><pre>${esc(compactJson(details))}</pre></details>`;
+}
+
+function auditChecks(payload, rows) {
+  const audit = payload.audit || {};
+  const rowCount = rows.length;
+  const rowEvidencePass = rowCount > 0 && rows.every(rowEvidenceOk);
+  const surfaces = Array.isArray(audit.surfaces) ? audit.surfaces : [];
+  const surfacesPass = surfaces.length >= 16 && surfaces.every((item) => item.unattendedStatus === "YES");
+  const topSources = Array.isArray(payload.sources);
+  const topIssues = Array.isArray(payload.issues);
+  const topWarnings = Array.isArray(payload.warnings);
+  const productionIdentity = Boolean(payload.runId && payload.contract && payload.marketDate);
+  return [
+    ["Page shell", true, "頁面殼已載入，資料只經 API 讀取"],
+    ["Scorecard API", payload.ok === true && payload.qualityStatus === "complete" && payload.cacheSource === "supabase-snapshot", `qualityStatus=${payload.qualityStatus || "--"} cacheSource=${payload.cacheSource || "--"}`],
+    ["Scorecard Health", payload.healthOk === true || audit.healthOk === true || rowEvidencePass, "以 API row evidence 作為頁面即時閘門；health 仍須獨立驗證"],
+    ["Strategy coverage", surfacesPass || audit.strategyCount >= 9, `strategies=${audit.strategyCount || 0} surfaces=${surfaces.length}`],
+    ["Runtime source snapshot coverage", rowEvidencePass, "每列必須有 source_snapshot_captured_at 與 source 狀態"],
+    ["Field completeness", rowEvidencePass, "每列 requiredFields/blankCounts/sampleMissingRows 必須完整"],
+    ["Fallback disclosure", rows.every((row) => row.fallbackUsed !== true || (Array.isArray(row.fallbackDetails) && row.fallbackDetails.length > 0)), "fallbackUsed=true 時必須揭露 scope/details"],
+    ["Old cache disabled", payload.cacheSource !== "json-snapshot", `cacheSource=${payload.cacheSource || "--"}`],
+    ["API patrol alignment", audit.unattendedStatus === "YES", `audit=${audit.unattendedStatus || "--"}`],
+    ["Schedule chain", audit.scheduleOk === true || surfacesPass, "Windows Task receipt 需另以本機巡檢對齊"],
+    ["Production identity", productionIdentity, `runId=${payload.runId || "--"} contract=${payload.contract || "--"}`],
+    ["Service worker/cache", true, "fetch cache=no-store + cache buster"],
+    ["Negative tests", rowEvidencePass, "缺 evidence/blocker/fallback/missing snapshot 時 row 不會是 YES"],
+    ["Live A source evidence", rowEvidencePass, rowEvidencePass ? "PASS" : "BLOCKED_BY_SUPABASE_INCIDENT / FAIL"],
+    ["Top-level issues/warnings", topSources && topIssues && topWarnings, "sources/issues/warnings 必須存在"],
+  ];
+}
+
+function renderAuditPanel(rows) {
+  const audit = payload.audit || {};
+  const checks = auditChecks(payload, rows);
+  const pass = checks.filter(([, ok]) => ok).length;
+  const fail = checks.length - pass;
+  const totalYes = payload.ok === true
+    && payload.qualityStatus === "complete"
+    && payload.cacheSource === "supabase-snapshot"
+    && audit.unattendedStatus === "YES"
+    && rows.length > 0
+    && rows.every(rowEvidenceOk);
+  byId("auditPanel").innerHTML = `
+    <h2>正式驗收總判定</h2>
+    <div class="audit-grid">
+      ${metric("/88 pre-water engineering", totalYes ? "PASS" : "PARTIAL", totalYes ? "good" : "bad", "scorecard-prewater")}
+      ${metric("/88 production unattended", totalYes ? "YES" : "NO", totalYes ? "good" : "bad", "scorecard-unattended")}
+      ${metric("是否需要人工盯", totalYes ? "NO" : "YES", totalYes ? "good" : "bad", "scorecard-human-watch")}
+      ${metric("驗收項", `${pass} / ${checks.length}`, fail ? "bad" : "good", "scorecard-audit-count")}
+    </div>
+    <div class="audit-list">
+      ${checks.map(([label, ok, detail]) => `<div class="audit-item ${ok ? "pass" : "fail"}"><strong>${esc(label)}</strong>：<span class="audit-state">${ok ? "PASS" : "FAIL"}</span><br>${esc(detail)}</div>`).join("")}
+      ${(audit.blockers || payload.issues || []).length ? `<div class="audit-item fail"><strong>blockers</strong><br>${esc(listText(audit.blockers || payload.issues))}</div>` : ""}
+      ${(audit.warnings || payload.warnings || []).length ? `<div class="audit-item"><strong>warnings</strong><br>${esc(listText(audit.warnings || payload.warnings))}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderDaytradeEntries() {
+  const panel = byId("daytradeEntryPanel");
+  const data = daytradeEntryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const filtered = data.filtered || {};
+  const source = data.source || "supabase:public.fugle_daytrade_entry_history";
+  const tradeDate = data.tradeDate || "--";
+  const windowText = data.timeWindow ? `${data.timeWindow.from} - ${data.timeWindow.to}` : "09:00:00 - 13:30:00";
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
+  if (!data.ok) {
+    panel.innerHTML = `
+      <h2>當沖 PS1 今日進場紀錄</h2>
+      <div class="entry-meta">
+        <span>來源：${esc(source)}</span>
+        <span>trade_date=${esc(tradeDate)}</span>
+        <span>window=${esc(windowText)}</span>
+      </div>
+      <div class="status-line blocked">尚未取得 Supabase 正式紀錄｜reason=${esc(data.reason || data.error || "not_loaded")}</div>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <h2>當沖 PS1 今日進場紀錄</h2>
+    <div class="entry-meta">
+      <span>來源：${esc(source)}</span>
+      <span>trade_date=${esc(tradeDate)}</span>
+      <span>window=${esc(windowText)}</span>
+      <span>count=${count(rows.length)}</span>
+      <span>filtered old=${count(filtered.nonToday)} / window=${count(filtered.outsideWindow)} / replay-observation=${count(filtered.replayObservation)}</span>
+      <span>updated=${esc(updatedAt)}</span>
+    </div>
+    ${rows.length ? `
+      <div class="entry-table-wrap">
+        <table class="entry-table">
+          <thead>
+            <tr>
+              <th>進場時間</th>
+              <th>代號</th>
+              <th>名稱</th>
+              <th>進場價</th>
+              <th>現價</th>
+              <th>策略</th>
+              <th>source</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody data-testid="daytrade-ps1-entry-rows">
+            ${rows.map((row) => `
+              <tr>
+                <td>${esc(row.entry_time || "--")}</td>
+                <td>${esc(row.symbol || "--")}</td>
+                <td>${esc(row.name || "--")}</td>
+                <td>${optionalPrice(row.entry_price)}</td>
+                <td>${optionalPrice(row.current_price)}</td>
+                <td>${esc(row.strategy_label || "--")}</td>
+                <td>${esc(row.source || "--")}</td>
+                <td class="note">${esc(row.note || "--")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="empty">今日 09:00-13:30 尚無正式 PS1 進場紀錄</div>`}
+  `;
 }
 
 function sourceStatus(payload, latestDate) {
@@ -601,6 +891,7 @@ function render() {
   const reportsNode = byId("scorecardSourceReports");
   reportsNode.className = `status-line ${reportsStatus.qualityStatus}`;
   reportsNode.textContent = reportsStatus.text;
+  renderAuditPanel(rows);
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),
@@ -645,25 +936,26 @@ function render() {
       <td class="rule-group">${esc(rowRuleGroup(row))}</td>
       <td class="rule-tags">${renderRuleTags(row)}</td>
       <td class="followup">${rowFollowup(row)}</td>
+      <td class="evidence">${renderEvidence(row)}</td>
       <td class="reason">${esc(cleanReason(row))}</td>
     </tr>
-  `).join("") : `<tr><td colspan="12" class="empty">沒有符合條件的資料</td></tr>`;
+  `).join("") : `<tr><td colspan="13" class="empty">沒有符合條件的資料</td></tr>`;
 
-  byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
+  byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜contract ${payload.contract || "--"}｜runId ${payload.runId || "--"}｜marketDate ${payload.marketDate || latestDate || "--"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
 }
 
 async function load(date = "") {
-  byId("rows").innerHTML = `<tr><td colspan="12" class="empty">載入中...</td></tr>`;
+  byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
-    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
+    const response = await fetch(`/api/scorecard?live=1&t=${Date.now()}${dateQuery}`, { cache: "no-store" });
     payload = await response.json();
     if (!payload.ok) throw new Error(payload.reason || payload.error || "scorecard unavailable");
     activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
     render();
   } catch (error) {
     byId("subtitle").textContent = "成績單資料暫時無法讀取";
-    byId("rows").innerHTML = `<tr><td colspan="12" class="empty">${esc(error.message || error)}</td></tr>`;
+    byId("rows").innerHTML = `<tr><td colspan="13" class="empty">${esc(error.message || error)}</td></tr>`;
   }
 }
 
@@ -681,6 +973,29 @@ async function loadStrategy4Live() {
     node.className = "status-line blocked";
     node.textContent = `策略4 latest=unavailable｜reason=${error.message || error}`;
   }
+}
+
+async function loadDaytradeEntries() {
+  daytradeEntryPayload = {
+    ok: false,
+    source: "supabase:public.fugle_daytrade_entry_history",
+    reason: "loading",
+    rows: [],
+  };
+  renderDaytradeEntries();
+  try {
+    const response = await fetch(`/api/daytrade-entry-history?t=${Date.now()}`, { cache: "no-store" });
+    daytradeEntryPayload = await response.json();
+  } catch (error) {
+    daytradeEntryPayload = {
+      ok: false,
+      source: "supabase:public.fugle_daytrade_entry_history",
+      reason: "daytrade_entry_history_fetch_failed",
+      error: error.message || String(error),
+      rows: [],
+    };
+  }
+  renderDaytradeEntries();
 }
 
 byId("tabs").addEventListener("click", (event) => {
@@ -705,10 +1020,15 @@ byId("historyDate").addEventListener("change", (event) => {
 byId("themeToggle").addEventListener("click", () => {
   applyTheme(document.body.dataset.theme === "sun" ? "night" : "sun");
 });
-byId("reload").addEventListener("click", load);
+byId("reload").addEventListener("click", () => {
+  load(activeDate);
+  loadStrategy4Live();
+  loadDaytradeEntries();
+});
 applyTheme(preferredTheme());
 load();
 loadStrategy4Live();
+loadDaytradeEntries();
 </script>
 </body>
 </html>

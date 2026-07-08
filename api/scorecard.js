@@ -5,6 +5,46 @@ const { readSnapshot } = require("../lib/supabase-snapshots");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
+const FORMAL_STRATEGY_ENDPOINTS = {
+  "策略1開盤入成績單": "/api/open-buy-latest?live=1",
+  "策略2成績單": "/api/strategy2-latest?live=1",
+  "策略3隔日沖成績單": "/api/strategy3-latest?live=1",
+  "策略4成績單": "/api/strategy4-latest?live=1",
+  "策略5成績單": "/api/strategy5-latest?live=1",
+  "買賣超成績單": "/api/institution-latest?live=1",
+  "權證成績單": "/api/warrant-flow-latest?live=1",
+  "CB成績單": "/api/cb-detect-latest?live=1",
+  "即時雷達成績單": "/api/realtime-radar-latest?live=1",
+};
+const AUDIT_SURFACES = [
+  ["strategy1", "Strategy1 open-buy", "/api/open-buy-latest?live=1"],
+  ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest?live=1"],
+  ["strategy3", "Strategy3", "/api/strategy3-latest?live=1"],
+  ["strategy4", "Strategy4", "/api/strategy4-latest?live=1"],
+  ["strategy5", "Strategy5", "/api/strategy5-latest?live=1"],
+  ["institution", "Institution / 買賣超", "/api/institution-latest?live=1"],
+  ["cb", "CB", "/api/cb-detect-latest?live=1"],
+  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest?live=1"],
+  ["realtime-radar", "Realtime Radar", "/api/realtime-radar-latest?live=1"],
+  ["heatmap", "Heatmap", "/api/heatmap?source=desktop-live-contract"],
+  ["market-ai", "Market AI", "/api/market-ai-live"],
+  ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
+  ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
+  ["shared-source", "Shared source / Supabase source gate", "supabase:scorecard_latest"],
+  ["schedule-registry", "Schedule registry", "Windows Task:Fuman Scorecard Daily Automation 1400"],
+  ["deploy-hygiene", "Deploy hygiene", "/api/release-manifest"],
+];
+const SCORECARD_REQUIRED_FIELDS = [
+  "record_date",
+  "strategy",
+  "ticker",
+  "name",
+  "entry_time",
+  "entry_price",
+  "high_price",
+  "pnl",
+  "reason",
+];
 
 function cleanText(value) {
   return String(value ?? "").trim();
@@ -13,6 +53,16 @@ function cleanText(value) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
+}
+
+function isBlank(value) {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "number") return !Number.isFinite(value);
+  if (typeof value === "boolean") return false;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  const text = String(value).trim();
+  return !text || text === "--" || /^n\/a$/i.test(text) || /^null$/i.test(text) || /^undefined$/i.test(text);
 }
 
 function isoDate(value) {
@@ -303,6 +353,223 @@ function withScorecardContract(payload, status, reason = "") {
   };
 }
 
+function fieldCompleteness(row) {
+  const blankCounts = {};
+  const sampleMissingRows = [];
+  for (const field of SCORECARD_REQUIRED_FIELDS) {
+    const blank = isBlank(row?.[field]);
+    blankCounts[field] = blank ? 1 : 0;
+    if (blank) {
+      sampleMissingRows.push({
+        field,
+        record_id: cleanText(row?.record_id || row?.id || ""),
+        strategy: cleanText(row?.strategy || ""),
+        ticker: cleanText(row?.ticker || ""),
+      });
+    }
+  }
+  return {
+    requiredFields: [...SCORECARD_REQUIRED_FIELDS],
+    blankCounts,
+    sampleMissingRows,
+    blankTotal: Object.values(blankCounts).reduce((sum, value) => sum + value, 0),
+  };
+}
+
+function fallbackContract(payload, reason = "") {
+  const fallbackUsed = payload?.cacheSource !== "supabase-snapshot" || Boolean(reason);
+  return {
+    fallbackUsed,
+    fallbackAllowed: false,
+    fallbackScope: fallbackUsed ? ["scorecard_snapshot"] : [],
+    fallbackDetails: fallbackUsed ? [{
+      source: cleanText(payload?.cacheSource || "unknown"),
+      reason: cleanText(reason || payload?.fallbackReason || "fallback_used"),
+      formalPublishAllowed: false,
+    }] : [],
+  };
+}
+
+function sourceSnapshot(payload, fallback) {
+  const capturedAt = cleanText(
+    payload?.source_snapshot_captured_at
+    || payload?.snapshot?.updatedAt
+    || payload?.updatedAt
+  );
+  return {
+    source_snapshot_captured_at: capturedAt,
+    source_status_at_run: payload?.source_status_at_run || {
+      status: fallback.fallbackUsed ? "blocked" : "complete",
+      source: cleanText(payload?.cacheSource || payload?.source || "scorecard"),
+    },
+    quote_coverage_at_run: payload?.quote_coverage_at_run || { status: "not_required", reason: "scorecard_rows_use_published_entry_high_prices" },
+    intraday_1m_readiness_at_run: payload?.intraday_1m_readiness_at_run || { status: "not_required", reason: "scorecard_snapshot_readback" },
+    ma_readiness_at_run: payload?.ma_readiness_at_run || { status: "not_required", reason: "scorecard_snapshot_readback" },
+    preopen_futopt_daily_readiness_at_run: payload?.preopen_futopt_daily_readiness_at_run || { status: "not_required", reason: "scorecard_snapshot_readback" },
+    run_quality_at_publish: payload?.run_quality_at_publish || {
+      status: fallback.fallbackUsed ? "blocked" : "complete",
+      publishAllowed: fallback.fallbackUsed !== true,
+      reason: fallback.fallbackUsed ? "fallback_source_cannot_publish_yes" : "formal_scorecard_snapshot",
+    },
+    writeBudget: payload?.writeBudget || { status: "not_required", reason: "read_only_scorecard_api" },
+    retentionOk: payload?.retentionOk ?? true,
+  };
+}
+
+function decorateRecords(payload, reason = "") {
+  const fallback = fallbackContract(payload, reason);
+  const snapshot = sourceSnapshot(payload, fallback);
+  const formal = payload?.ok !== false
+    && cleanText(payload?.qualityStatus) === "complete"
+    && cleanText(payload?.cacheSource) === "supabase-snapshot"
+    && !fallback.fallbackUsed
+    && !isBlank(snapshot.source_snapshot_captured_at);
+  const records = Array.isArray(payload?.records) ? payload.records : [];
+  return records.map((row) => {
+    const fields = fieldCompleteness(row);
+    const blockers = [];
+    if (!formal) blockers.push(cleanText(reason || payload?.fallbackReason || "scorecard_source_not_formal"));
+    if (fields.blankTotal > 0) blockers.push(`blank_fields_${fields.blankTotal}`);
+    if (isBlank(snapshot.source_snapshot_captured_at)) blockers.push("source_snapshot_captured_at_missing");
+    const evidenceStatus = blockers.length ? "insufficient" : "complete";
+    const publishAllowed = blockers.length === 0;
+    const strategyName = cleanText(row.strategy || "未分類");
+    return {
+      ...row,
+      strategyName,
+      endpoint: FORMAL_STRATEGY_ENDPOINTS[strategyName] || "/api/scorecard?live=1",
+      runId: cleanText(payload.runId),
+      tradeDate: cleanText(row.record_date || payload.marketDate || payload.latestDate),
+      usedDate: cleanText(row.record_date || payload.latestDate),
+      updatedAt: cleanText(payload.updatedAt || snapshot.source_snapshot_captured_at),
+      unattendedStatus: publishAllowed ? "YES" : "NO",
+      evidenceStatus,
+      needsHumanWatch: !publishAllowed,
+      blockers,
+      warnings: [],
+      fallbackUsed: fallback.fallbackUsed,
+      fallbackAllowed: fallback.fallbackAllowed,
+      fallbackScope: fallback.fallbackScope,
+      fallbackDetails: fallback.fallbackDetails,
+      publishAllowed,
+      source_snapshot_captured_at: snapshot.source_snapshot_captured_at,
+      source_status_at_run: snapshot.source_status_at_run,
+      quote_coverage_at_run: snapshot.quote_coverage_at_run,
+      intraday_1m_readiness_at_run: snapshot.intraday_1m_readiness_at_run,
+      ma_readiness_at_run: snapshot.ma_readiness_at_run,
+      preopen_futopt_daily_readiness_at_run: snapshot.preopen_futopt_daily_readiness_at_run,
+      run_quality_at_publish: snapshot.run_quality_at_publish,
+      writeBudget: snapshot.writeBudget,
+      retentionOk: snapshot.retentionOk,
+      requiredFields: fields.requiredFields,
+      blankCounts: fields.blankCounts,
+      sampleMissingRows: fields.sampleMissingRows,
+    };
+  });
+}
+
+function buildAuditSurfaces(payload, reason = "") {
+  const records = Array.isArray(payload?.records) ? payload.records : [];
+  const strategies = new Set(records.map((row) => cleanText(row.strategyName || row.strategy)).filter(Boolean));
+  const formal = payload?.ok !== false
+    && cleanText(payload?.qualityStatus) === "complete"
+    && cleanText(payload?.cacheSource) === "supabase-snapshot"
+    && records.length > 0;
+  return AUDIT_SURFACES.map(([key, name, endpoint]) => {
+    const isTradingSurface = Object.values(FORMAL_STRATEGY_ENDPOINTS).includes(endpoint);
+    const covered = isTradingSurface
+      ? [...strategies].some((strategy) => endpoint === FORMAL_STRATEGY_ENDPOINTS[strategy])
+      : formal;
+    const blockers = [];
+    if (!formal) blockers.push(cleanText(reason || payload?.fallbackReason || "scorecard_source_not_formal"));
+    if (!covered) blockers.push("surface_not_covered");
+    return {
+      key,
+      strategyName: name,
+      endpoint,
+      runId: cleanText(payload?.runId),
+      tradeDate: cleanText(payload?.marketDate || payload?.latestDate),
+      usedDate: cleanText(payload?.latestDate),
+      updatedAt: cleanText(payload?.updatedAt),
+      unattendedStatus: blockers.length ? "NO" : "YES",
+      evidenceStatus: blockers.length ? "insufficient" : "complete",
+      needsHumanWatch: blockers.length > 0,
+      blockers,
+      warnings: [],
+      fallbackUsed: payload?.cacheSource !== "supabase-snapshot",
+      publishAllowed: blockers.length === 0,
+      source_snapshot_captured_at: cleanText(payload?.source_snapshot_captured_at || payload?.snapshot?.updatedAt || payload?.updatedAt),
+      requiredFields: ["surface", "endpoint", "runId", "source_snapshot_captured_at"],
+      blankCounts: {
+        surface: isBlank(name) ? 1 : 0,
+        endpoint: isBlank(endpoint) ? 1 : 0,
+        runId: isBlank(payload?.runId) ? 1 : 0,
+        source_snapshot_captured_at: isBlank(payload?.source_snapshot_captured_at || payload?.snapshot?.updatedAt || payload?.updatedAt) ? 1 : 0,
+      },
+      sampleMissingRows: [],
+    };
+  });
+}
+
+function summarizeAudit(payload, reason = "") {
+  const records = Array.isArray(payload?.records) ? payload.records : [];
+  const surfaces = buildAuditSurfaces(payload, reason);
+  const blockers = [
+    ...records.flatMap((row) => Array.isArray(row.blockers) ? row.blockers.map((issue) => `${row.strategyName || row.strategy}: ${issue}`) : []),
+    ...surfaces.flatMap((surface) => Array.isArray(surface.blockers) ? surface.blockers.map((issue) => `${surface.strategyName}: ${issue}`) : []),
+  ];
+  const warnings = [
+    ...records.flatMap((row) => Array.isArray(row.warnings) ? row.warnings.map((warning) => `${row.strategyName || row.strategy}: ${warning}`) : []),
+    ...surfaces.flatMap((surface) => Array.isArray(surface.warnings) ? surface.warnings.map((warning) => `${surface.strategyName}: ${warning}`) : []),
+  ];
+  return {
+    ok: blockers.length === 0,
+    unattendedStatus: blockers.length ? "NO" : "YES",
+    needsHumanWatch: blockers.length > 0,
+    blockers,
+    warnings,
+    strategyCount: new Set(records.map((row) => cleanText(row.strategyName || row.strategy)).filter(Boolean)).size,
+    recordCount: records.length,
+    surfaces,
+  };
+}
+
+function blankCountTotal(row) {
+  if (!row?.blankCounts || typeof row.blankCounts !== "object") return 0;
+  return Object.values(row.blankCounts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+}
+
+function validateScorecardPayload(payload) {
+  const issues = [];
+  const rows = Array.isArray(payload?.records) ? payload.records : [];
+  if (payload?.ok !== true) issues.push("scorecard_ok_not_true");
+  if (cleanText(payload?.qualityStatus) !== "complete") issues.push("quality_status_not_complete");
+  if (cleanText(payload?.cacheSource) !== "supabase-snapshot") issues.push("cache_source_not_supabase_snapshot");
+  if (!rows.length) issues.push("empty_rows");
+  if (!Array.isArray(payload?.sources)) issues.push("top_level_sources_missing");
+  if (!Array.isArray(payload?.issues)) issues.push("top_level_issues_missing");
+  if (!Array.isArray(payload?.warnings)) issues.push("top_level_warnings_missing");
+  rows.forEach((row, index) => {
+    const prefix = `row_${index}`;
+    const evidenceStatus = cleanText(row.evidenceStatus).toLowerCase();
+    const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+    if (!evidenceStatus) issues.push(`${prefix}_missing_evidence_status`);
+    else if (evidenceStatus !== "complete" && evidenceStatus !== "sufficient") issues.push(`${prefix}_evidence_status_insufficient`);
+    if (isBlank(row.source_snapshot_captured_at)) issues.push(`${prefix}_missing_source_snapshot_captured_at`);
+    if (row.fallbackUsed === true) issues.push(`${prefix}_fallback_used`);
+    if (blankCountTotal(row) > 0) issues.push(`${prefix}_blank_required_field`);
+    if (blockers.length > 0 && row.publishAllowed === true) issues.push(`${prefix}_blockers_publish_allowed_conflict`);
+    if (blockers.length > 0 && isBlank(blockers[0])) issues.push(`${prefix}_missing_blocked_reason`);
+    if (row.needsHumanWatch !== false && row.publishAllowed === true) issues.push(`${prefix}_human_watch_publish_allowed_conflict`);
+    if (row.publishAllowed !== true) issues.push(`${prefix}_publish_allowed_false`);
+    if (row.unattendedStatus !== "YES") issues.push(`${prefix}_unattended_status_not_yes`);
+  });
+  return {
+    rawOk: issues.length === 0,
+    issues,
+  };
+}
+
 function historyDates(records) {
   return [...new Set((Array.isArray(records) ? records : [])
     .map((row) => cleanText(row.record_date))
@@ -373,7 +640,7 @@ function selectPayloadDate(payload, requestedDate = "") {
   const records = blockedStrategies.size
     ? selectedRecords.filter((row) => !blockedStrategies.has(cleanText(row.strategy)))
     : selectedRecords;
-  return {
+  const selected = {
     ...payload,
     latestDate: selectedDate || payload.latestDate || "",
     selectedDate: selectedDate || payload.latestDate || "",
@@ -399,6 +666,36 @@ function selectPayloadDate(payload, requestedDate = "") {
       blockedStrategies: [...blockedStrategies],
     },
   };
+  selected.records = decorateRecords(selected, selected.fallbackReason || "");
+  selected.audit = summarizeAudit(selected, selected.fallbackReason || "");
+  selected.sources = selected.sources || [{
+    name: "scorecard_snapshot",
+    cacheSource: cleanText(selected.cacheSource || ""),
+    exportSource: cleanText(selected.exportSource || ""),
+    snapshotKey: cleanText(selected.snapshot?.key || SNAPSHOT_KEY),
+    updatedAt: cleanText(selected.snapshot?.updatedAt || selected.updatedAt || ""),
+  }];
+  selected.issues = Array.isArray(selected.issues) ? selected.issues : selected.audit.blockers;
+  selected.warnings = Array.isArray(selected.warnings) ? selected.warnings : selected.audit.warnings;
+  selected.unattendedStatus = selected.audit.unattendedStatus;
+  selected.needsHumanWatch = selected.audit.needsHumanWatch;
+  return selected;
+}
+
+function buildPayloadFromSnapshotPayload(snapshotPayload, options = {}) {
+  const snapshot = options.snapshot || {};
+  return selectPayloadDate(withScorecardContract({
+    ok: snapshotPayload?.ok !== false,
+    ...snapshotPayload,
+    source: snapshotPayload?.source || "supabase:scorecard_snapshot",
+    cacheSource: snapshotPayload?.cacheSource || "supabase-snapshot",
+    snapshot: {
+      key: snapshot.key || SNAPSHOT_KEY,
+      tradeDate: snapshot.tradeDate || "",
+      updatedAt: snapshot.updatedAt || snapshotPayload?.updatedAt || "",
+      source: snapshot.source || "",
+    },
+  }, options.status || "complete", options.reason || ""), options.requestedDate || "");
 }
 
 function readStaticSnapshot(reason = "scorecard_static_snapshot") {
@@ -432,7 +729,7 @@ async function buildPayload(requestedDate = "") {
   return selectPayloadDate(await withLiveSourceReports(readStaticSnapshot("supabase_scorecard_snapshot_missing")), requestedDate);
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
@@ -449,4 +746,15 @@ module.exports = async function handler(request, response) {
   } catch (error) {
     response.status(503).json({ ok: false, error: "scorecard_unavailable", reason: error?.message || String(error), updatedAt: new Date().toISOString() });
   }
+}
+
+module.exports = handler;
+module.exports.__test = {
+  SCORECARD_REQUIRED_FIELDS,
+  buildPayloadFromSnapshotPayload,
+  validateScorecardPayload,
+  decorateRecords,
+  summarizeAudit,
+  selectPayloadDate,
+  withScorecardContract,
 };

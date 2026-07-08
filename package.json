@@ -231,7 +231,15 @@
     "verify:warrant-prewater-strict": "node scripts/verify-warrant-prewater-strict.js",
     "verify:warrant-prewater-source-plan": "node scripts/verify-warrant-prewater-source-plan.js",
     "verify:warrant-prewater-source-live": "node scripts/verify-warrant-prewater-source-live.js --live",
-    "verify:warrant-prewater-scorecard": "node scripts/write-warrant-prewater-scorecard.js"
+    "verify:warrant-prewater-scorecard": "node scripts/write-warrant-prewater-scorecard.js",
+    "verify:scorecard-page-contract": "node scripts/verify-scorecard-page-contract.js",
+    "verify:scorecard-runtime-payload": "node scripts/verify-scorecard-runtime-payload.js",
+    "verify:scorecard-mutations": "node scripts/verify-scorecard-mutations.js",
+    "verify:scorecard-daytrade-entry-sql": "node scripts/verify-scorecard-daytrade-entry-sql-contract.js",
+    "verify:scorecard-daytrade-entry-contract": "node scripts/verify-scorecard-daytrade-entry-contract.js",
+    "verify:scorecard-daytrade-entry-live": "node --use-system-ca scripts/verify-scorecard-daytrade-entry-live.js",
+    "verify:scorecard-daytrade-entry-live:strict": "node --use-system-ca scripts/verify-scorecard-daytrade-entry-live.js --require-rows",
+    "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract"
   },
   "engines": {
     "node": "24.x"
