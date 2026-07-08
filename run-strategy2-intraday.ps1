@@ -99,13 +99,17 @@ function Test-Strategy2ScanWindow {
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
-if (-not (Test-Strategy2ScanWindow)) {
-  $reason = "outside Strategy2 scan window; preserve latest and do not publish"
+$currentMinute = Get-TaipeiMinuteOfDay
+if ($currentMinute -gt [int]$env:STRATEGY2_SCAN_END_MINUTES) {
+  $reason = "after Strategy2 scan window; preserve latest and do not publish"
   "Strategy2 off-session skip: $reason" >> $log
   $verifiedPayload = Assert-Strategy2ApiPreserve
   Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
   "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
   exit 0
+}
+if ($currentMinute -lt [int]$env:STRATEGY2_SCAN_START_MINUTES) {
+  "Strategy2 before scan window; handing off to patrol wait loop until 08:45." >> $log
 }
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy2" -LogPath $log
@@ -138,9 +142,4 @@ $verifiedPayload = Assert-Strategy2ApiPreserve
 Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
-
-
-
-
-
 
