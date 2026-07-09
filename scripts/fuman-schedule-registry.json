@@ -26,6 +26,7 @@
       "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
+      "Fuman Daytrade Strategy3 Closure Verify 1410",
       "Fuman STAR Preopen Watch 0845",
       "Fuman Strategy1 Candidate Verify 2135",
       "Fuman Strategy1 Flame Gate Verify 0852",
@@ -198,6 +199,9 @@
       "Fuman Scorecard Daily Automation 1400": [
         0,
         267009
+      ],
+      "Fuman Daytrade Strategy3 Closure Verify 1410": [
+        0
       ],
       "Fuman Fugle Daytrade Watchdog Every Minute": [
         0,
@@ -814,6 +818,16 @@
       "taskName": "\\Fuman Scorecard Daily Watchdog 1410",
       "displayName": "Fuman Scorecard Daily Watchdog 1410",
       "description": "Scorecard daily automation watchdog.",
+      "time": "14:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "14:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Strategy3 Closure Verify 1410",
+      "displayName": "Fuman Daytrade Strategy3 Closure Verify 1410",
+      "description": "Post-scorecard live closure verifier for daytrade source, Strategy3, production API, desktop/mobile surfaces, and /88 receipts.",
       "time": "14:10",
       "expectedState": "Ready",
       "expectedTriggers": [
