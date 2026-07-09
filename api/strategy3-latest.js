@@ -492,6 +492,11 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const contract = buildUnattendedContract(payload, context);
   const sourceFallbackBlocked = Array.isArray(contract.fallbackScope) && contract.fallbackScope.includes("source");
+  const payloadFallbackScope = Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [];
+  const payloadFormalSourceFallbackUsed = payload.formalSourceFallbackUsed === true
+    || payloadFallbackScope.includes("source")
+    || payloadFallbackScope.includes("formal-source")
+    || payloadFallbackScope.includes("formal_source");
   const currentSourceReady = contract.status === "ready" && !sourceFallbackBlocked;
   const runQuality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
     ? payload.run_quality_at_publish
@@ -504,7 +509,7 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
     && !sourceFallbackBlocked;
   const publishEvidenceAtRunReady = runQuality.publishAllowed === true
     && sourceAtRunReady
-    && payload.fallbackUsed !== true
+    && !payloadFormalSourceFallbackUsed
     && !(Array.isArray(payload.fallbackScope) && payload.fallbackScope.includes("source"));
   const sourceCoverage = {
     ...(contract.sourceCoverage || {}),
@@ -553,6 +558,10 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
     fallbackAllowed,
     fallbackDetails: contract.fallbackDetails,
     fallbackContract: contract.fallbackContract,
+    formalSourceFallbackUsed: sourceFallbackBlocked || payloadFormalSourceFallbackUsed,
+    diagnosticFallbackUsed: contract.diagnosticFallbackUsed,
+    diagnosticFallbackScope: contract.diagnosticFallbackScope,
+    diagnosticFallbackDetails: contract.diagnosticFallbackDetails,
     evidenceStatus: sourceEvidenceStatus,
     unattendedStatus: apiPublishAllowed ? "YES" : "NO",
     blockedReason,
