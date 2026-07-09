@@ -6341,6 +6341,67 @@
     return canvas;
   }
 
+  function strategy3ReasonParts(row) {
+    const raw = String(row?.reason || row?.line || row?.signalLine || "").trim();
+    const parts = raw
+      .split(/[；;、|｜`·]/)
+      .map((part) => compactText(part.trim(), 34))
+      .filter(Boolean);
+    const tags = [];
+    const add = (label) => {
+      if (label && !tags.includes(label)) tags.push(label);
+    };
+    parts.forEach((part) => {
+      if (/13:00|13:30|12:50|12:59|尾盤|收盤/.test(part)) add("尾盤確認");
+      if (/OBV/.test(part)) add(/OBV.*(true|OK|為正)|OBV為正/i.test(part) ? "OBV 正向" : "OBV 觀察");
+      if (/近100根|100根|高/.test(part)) add("近高檢查");
+      if (/控盤/.test(part)) add(/false|未|不通過/i.test(part) ? "控盤觀察" : "控盤線");
+      if (/K線|1分K|rows|session/.test(part)) add("1分K ready");
+      if (/量|volume|close_flow/.test(part)) add("量能");
+    });
+    normalizeArray(row?.tags || row?.signalTags).slice(0, 4).forEach((tag) => add(compactText(String(tag || ""), 16)));
+    if (!tags.length) add(row?.state || row?.aiStatus || "隔日沖候選");
+    const summary = compactText(parts.filter((part) => !/^rows=|^session=|^entryWindow=/i.test(part)).slice(0, 4).join(" · ") || raw || "--", 138);
+    return { tags: tags.slice(0, 5), summary };
+  }
+
+  function strategy3RunCards(rows, payloadMeta) {
+    const tvReady = rows.filter((row) => /尾盤|OBV|近100根|控盤|TradingView|TV/i.test(String(row.reason || row.line || row.signalLine || ""))).length;
+    const motherPool = rows.filter((row) => String(row.inDaytradeMotherPool || row.daytradeMotherPoolRank || "").trim()).length;
+    const avgScore = rows.length ? Math.round(rows.reduce((sum, row) => sum + cleanNumber(row.score), 0) / rows.length) : 0;
+    return [
+      { label: "完整掃描", value: `${rows.length}`, sub: payloadMeta?.runId ? compactText(payloadMeta.runId, 28) : "run --" },
+      { label: "TV 尾盤確認", value: `${tvReady}`, sub: "13:00 後 1分K + 尾盤條件" },
+      { label: "平均分數", value: rows.length ? `${avgScore}` : "--", sub: motherPool ? `母池命中 ${motherPool}/${rows.length}` : "全市場完整掃描" },
+    ];
+  }
+
+  function strategy3SignalCard(row, index) {
+    const parts = strategy3ReasonParts(row);
+    return `
+      <article class="strategy3-signal-card">
+        <div class="strategy3-card-rank">#${index + 1}</div>
+        <div class="strategy3-card-stock">
+          <strong>${escapeHtml(row.title || row.name || "--")}</strong>
+          <span>${escapeHtml(row.code || "--")}</span>
+          ${row.inDaytradeMotherPool || row.daytradeMotherPoolRank ? `<i>母池 ${escapeHtml(String(row.daytradeMotherPoolRank || "Y"))}</i>` : ""}
+        </div>
+        <div class="strategy3-card-main">
+          <div class="strategy3-tag-row">
+            ${parts.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+          </div>
+          <p>${escapeHtml(parts.summary)}</p>
+        </div>
+        <div class="strategy3-card-metrics">
+          <div><small>尾盤價</small><strong>${escapeHtml(row.price || row.entryPrice || row.close || "--")}</strong></div>
+          <div><small>漲幅</small><strong>${escapeHtml(row.pct || row.change || row.percent || "--")}</strong></div>
+          <div><small>量比</small><strong>${escapeHtml(row.volumeRatio || "--")}</strong></div>
+          <div><small>分數</small><strong>${escapeHtml(row.score || "--")}</strong></div>
+        </div>
+      </article>
+    `;
+  }
+
   function renderStrategy3CompleteRunShell(key, meta, panel) {
     const payloadMeta = canvasPayloadMeta(key) || {};
     const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
@@ -6380,18 +6441,8 @@
         `publish=${publishAllowed ? "allowed" : "not_allowed"}`,
         `source=${canvasState.source || "api"}`
       ].filter(Boolean).join("｜");
-      const body = rows.length ? rows.map((row, index) => `
-        <article class="strategy3-table-row">
-          <div class="strategy3-rank-cell"><span class="strategy3-rank">${index + 1}</span></div>
-          <div class="strategy3-code">${escapeHtml(row.code || "--")}</div>
-          <div class="strategy3-name">${escapeHtml(row.title || row.name || "--")}</div>
-          <div class="strategy3-entry-price">
-            <strong>${escapeHtml(row.price || row.close || "--")}</strong>
-            <small>${escapeHtml(row.change || row.percent || "--")}</small>
-          </div>
-          <div class="strategy3-reason strategy3-reason-cell">${escapeHtml(row.reason || row.line || row.signalLine || "--")}</div>
-        </article>
-      `).join("") : `
+      const cards = strategy3RunCards(rows, payloadMeta);
+      const body = rows.length ? rows.map(strategy3SignalCard).join("") : `
         <div class="empty-state">
           策略3本次完整掃描已完成，0 檔符合隔日沖條件。這不是讀取失敗；終端已對齊最新 run。
         </div>
@@ -6405,14 +6456,23 @@
                   <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
                   <p>${escapeHtml(statusLine)}</p>
                 </div>
+                <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
               </div>
+              <section class="strategy3-run-cards" aria-label="策略3掃描摘要">
+                ${cards.map((card) => `
+                  <article>
+                    <span>${escapeHtml(card.label)}</span>
+                    <strong>${escapeHtml(card.value)}</strong>
+                    <small>${escapeHtml(card.sub)}</small>
+                  </article>
+                `).join("")}
+              </section>
               <section class="strategy3-table" aria-label="策略3隔日沖完整掃描結果">
                 <div class="strategy3-table-head">
-                  <span>排名</span>
-                  <span>股票代號</span>
-                  <span>股票名稱</span>
-                  <span>尾盤進場價</span>
-                  <span>原因</span>
+                  <span>Rank</span>
+                  <span>Stock</span>
+                  <span>Signal</span>
+                  <span>Metrics</span>
                 </div>
                 ${body}
               </section>
@@ -7090,6 +7150,233 @@
       }
       #strategy-view.fuman-api-only-strategy-route .desktop-route-canvas {
         margin-top: 0 !important;
+      }
+      #strategy-view.strategy3-only .strategy5-shell {
+        width: 100% !important;
+        padding: 18px 28px 28px !important;
+        box-sizing: border-box !important;
+      }
+      #strategy-view.strategy3-only .strategy5-dashboard.strategy3-clean {
+        width: 100% !important;
+        min-height: calc(100vh - 44px);
+        padding: 0 !important;
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        border-radius: 8px;
+        background:
+          linear-gradient(115deg, rgba(127, 29, 29, 0.32), rgba(15, 23, 42, 0.88) 48%, rgba(14, 116, 144, 0.18)),
+          rgba(2, 6, 23, 0.86);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+      }
+      #strategy-view.strategy3-only .strategy5-results {
+        padding: 28px 34px 34px !important;
+        display: grid;
+        gap: 18px;
+      }
+      #strategy-view.strategy3-only .strategy5-results-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 0 4px;
+      }
+      #strategy-view.strategy3-only .strategy5-results-head h3 {
+        margin: 0 0 7px;
+        color: #fff7ed;
+        font-size: 28px;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+      #strategy-view.strategy3-only .strategy5-results-head p {
+        margin: 0;
+        max-width: 980px;
+        color: #bfdbfe;
+        font-size: 14px;
+        line-height: 1.55;
+        word-break: break-word;
+      }
+      #strategy-view.strategy3-only .strategy3-count-pill {
+        flex: 0 0 auto;
+        min-width: 70px;
+        padding: 9px 13px;
+        border: 1px solid rgba(251, 146, 60, 0.42);
+        border-radius: 8px;
+        color: #fed7aa;
+        background: rgba(124, 45, 18, 0.34);
+        text-align: center;
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards article {
+        min-height: 88px;
+        padding: 15px 16px;
+        border: 1px solid rgba(148, 163, 184, 0.20);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.62);
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards span,
+      #strategy-view.strategy3-only .strategy3-run-cards small {
+        display: block;
+        color: #93c5fd;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards strong {
+        display: block;
+        margin: 5px 0;
+        color: #ffffff;
+        font-size: 30px;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+      #strategy-view.strategy3-only .strategy3-table {
+        display: grid;
+        gap: 8px;
+      }
+      #strategy-view.strategy3-only .strategy3-table-head {
+        display: grid;
+        grid-template-columns: 74px minmax(180px, 1.1fr) minmax(320px, 2fr) 360px;
+        gap: 12px;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 22px;
+        border-radius: 8px;
+        color: #bfdbfe;
+        background: rgba(15, 23, 42, 0.78);
+        font-weight: 700;
+      }
+      #strategy-view.strategy3-only .strategy3-signal-card {
+        display: grid;
+        grid-template-columns: 74px minmax(180px, 1.1fr) minmax(320px, 2fr) 360px;
+        gap: 12px;
+        align-items: stretch;
+        padding: 15px 22px;
+        border: 1px solid rgba(148, 163, 184, 0.10);
+        border-radius: 8px;
+        background: linear-gradient(90deg, rgba(59, 30, 37, 0.72), rgba(15, 23, 42, 0.78) 44%, rgba(13, 38, 71, 0.78));
+      }
+      #strategy-view.strategy3-only .strategy3-card-rank {
+        color: #fb923c;
+        font-size: 18px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+      }
+      #strategy-view.strategy3-only .strategy3-card-stock,
+      #strategy-view.strategy3-only .strategy3-card-main {
+        min-width: 0;
+      }
+      #strategy-view.strategy3-only .strategy3-card-stock {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 6px;
+      }
+      #strategy-view.strategy3-only .strategy3-card-stock strong {
+        color: #ffffff;
+        font-size: 18px;
+        line-height: 1.25;
+      }
+      #strategy-view.strategy3-only .strategy3-card-stock span {
+        color: #93c5fd;
+        font-size: 17px;
+        font-weight: 800;
+      }
+      #strategy-view.strategy3-only .strategy3-card-stock i {
+        padding: 3px 8px;
+        border: 1px solid rgba(52, 211, 153, 0.36);
+        border-radius: 999px;
+        color: #6ee7b7;
+        background: rgba(6, 78, 59, 0.24);
+        font-size: 12px;
+        font-style: normal;
+      }
+      #strategy-view.strategy3-only .strategy3-tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 8px;
+      }
+      #strategy-view.strategy3-only .strategy3-tag-row span {
+        max-width: 128px;
+        padding: 4px 9px;
+        border: 1px solid rgba(96, 165, 250, 0.30);
+        border-radius: 999px;
+        color: #bfdbfe;
+        background: rgba(30, 64, 175, 0.18);
+        font-size: 12px;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #strategy-view.strategy3-only .strategy3-card-main p {
+        margin: 0;
+        color: #c7d2fe;
+        font-size: 14px;
+        line-height: 1.52;
+        word-break: break-word;
+      }
+      #strategy-view.strategy3-only .strategy3-card-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        align-self: center;
+      }
+      #strategy-view.strategy3-only .strategy3-card-metrics div {
+        min-height: 56px;
+        padding: 8px 9px;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 8px;
+        background: rgba(2, 6, 23, 0.38);
+      }
+      #strategy-view.strategy3-only .strategy3-card-metrics small {
+        display: block;
+        color: #93c5fd;
+        font-size: 11px;
+        line-height: 1.3;
+      }
+      #strategy-view.strategy3-only .strategy3-card-metrics strong {
+        display: block;
+        margin-top: 5px;
+        color: #fff7ed;
+        font-size: 17px;
+        line-height: 1.15;
+        letter-spacing: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      @media (max-width: 980px) {
+        #strategy-view.strategy3-only .strategy5-shell {
+          padding: 12px !important;
+        }
+        #strategy-view.strategy3-only .strategy5-results {
+          padding: 18px !important;
+        }
+        #strategy-view.strategy3-only .strategy3-run-cards {
+          grid-template-columns: 1fr;
+        }
+        #strategy-view.strategy3-only .strategy3-table-head {
+          display: none;
+        }
+        #strategy-view.strategy3-only .strategy3-signal-card {
+          grid-template-columns: 42px 1fr;
+        }
+        #strategy-view.strategy3-only .strategy3-card-main {
+          grid-column: 2;
+        }
+        #strategy-view.strategy3-only .strategy3-card-stock {
+          grid-column: 2;
+        }
+        #strategy-view.strategy3-only .strategy3-card-metrics {
+          grid-column: 1 / -1;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
       }
       .fuman-theme-toggle {
         position: fixed !important;
