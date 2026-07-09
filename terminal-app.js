@@ -729,6 +729,79 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }catch(error){}
 })();
 
+;(function installAiHotStockActionRepair(){
+  if(window.__fumanAiHotStockActionRepair==="20260709-01")return;
+  window.__fumanAiHotStockActionRepair="20260709-01";
+  const codeOf=value=>String(value||"").match(/\d{4}/)?.[0]||"";
+  const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  function rowInfo(row,button){
+    const code=codeOf(button?.dataset?.aiStockCode||button?.dataset?.aiWatchCode||row?.dataset?.aiHotCode||row?.querySelector?.(".market-ai-code")?.textContent||row?.textContent);
+    const name=String(button?.dataset?.aiStockName||button?.dataset?.aiWatchName||row?.dataset?.aiHotName||row?.querySelector?.(".market-ai-name")?.textContent||code||"").trim();
+    return {code,name};
+  }
+  function ensureRowActions(root=document){
+    root.querySelectorAll?.(".market-ai-stock-row").forEach(row=>{
+      const {code,name}=rowInfo(row,null);
+      if(!code||row.querySelector(".market-ai-actions [data-ai-stock-code], .market-ai-actions [data-ai-watch-code]"))return;
+      const wrap=document.createElement("div");
+      wrap.className="market-ai-actions";
+      wrap.innerHTML=`<button type="button" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button><button type="button" data-ai-watch-code="${esc(code)}" data-ai-watch-name="${esc(name)}">加入自選</button>`;
+      row.appendChild(wrap);
+    });
+  }
+  async function shellApi(){
+    if(window.FUMAN_WATCHLIST_SHELL_INSTANCE?.ensureCode)return window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+    if(typeof ensureWatchlistModule==="function"){
+      try{return await ensureWatchlistModule()}catch(error){}
+    }
+    if(window.FUMAN_WATCHLIST_SHELL_MODULE?.install){
+      try{return window.FUMAN_WATCHLIST_SHELL_MODULE.install(window.getWatchlistContext?.()||{})}catch(error){}
+    }
+    return window.FUMAN_WATCHLIST_SHELL_INSTANCE||null;
+  }
+  async function openWatchlist(code,name,mode){
+    const target=codeOf(code);
+    if(!target)return false;
+    const api=await shellApi();
+    const seed={code:target,name:name||target,source:"market-ai-hot-stock",reason:mode==="analyze"?"AI 判讀看分析":"AI 判讀加入自選"};
+    let ok=false;
+    if(api?.ensureCode)ok=await Promise.resolve(api.ensureCode(target,seed));
+    if(api?.selectCode)api.selectCode(target);
+    if(typeof showView==="function")showView("watchlist",document.querySelector('[data-view="watchlist"]'));
+    api?.renderWatchlist?.();
+    api?.refreshSelected?.();
+    api?.refreshSelectedWatchlistQuote?.();
+    const status=document.querySelector("#watchlist-entry-status");
+    if(status)status.textContent=mode==="analyze"?`${target} ${name||""} 已載入自選股分析`:`${target} ${name||""} 已加入自選股`;
+    return ok;
+  }
+  document.addEventListener("click",event=>{
+    const button=event.target.closest?.("[data-ai-stock-code],[data-ai-watch-code],.market-ai-actions button");
+    const row=button?.closest?.(".market-ai-stock-row");
+    if(!button||!row)return;
+    const isAnalyze=button.matches("[data-ai-stock-code]")||String(button.textContent||"").includes("分析");
+    const isWatch=button.matches("[data-ai-watch-code]")||String(button.textContent||"").includes("自選");
+    if(!isAnalyze&&!isWatch)return;
+    const {code,name}=rowInfo(row,button);
+    if(!code)return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    openWatchlist(code,name,isAnalyze?"analyze":"watch").then(ok=>{
+      if(isWatch)button.textContent=ok===false?"已選中":"已加入";
+    });
+  },true);
+  const observer=new MutationObserver(records=>{
+    for(const record of records){
+      record.addedNodes?.forEach(node=>{
+        if(node.nodeType===1)ensureRowActions(node);
+      });
+    }
+  });
+  ensureRowActions();
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+})();
+
 ;(function installStrategy3DesktopFormalHeader(){
   if(window.__fumanStrategy3DesktopFormalHeader==="20260708-01")return;
   window.__fumanStrategy3DesktopFormalHeader="20260708-01";
