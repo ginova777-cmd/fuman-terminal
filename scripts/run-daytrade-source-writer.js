@@ -1411,7 +1411,7 @@ async function fetchQuoteBatch(symbols) {
   };
 }
 
-function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, fetchResult, state }) {
+function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
   const runtimePriority = readRuntimePrioritySummary(activeSymbols);
   const webSocketStatus = readWebSocketStatusSummary();
@@ -1613,6 +1613,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_rule_version: "daytrade_mother_pool_rank_overlap_20260709",
     mother_pool_symbols: priorityRows.length,
     mother_pool_source: "dynamic_daytrade_mother_pool",
+    mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
+    mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
+    mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
     mother_pool_rule_hit_symbols: motherPoolRuleHitSymbols,
     mother_pool_rule_hit_counts: motherRuleCounts,
     mother_pool_field_coverage_counts: motherFieldCoverageCounts,
@@ -1878,7 +1881,13 @@ async function tick() {
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const quoteMap = await fetchExistingDaytradeQuotes();
-  const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap);
+  const [capitalMap, chipMap, marginChangeMap] = await Promise.all([
+    fetchCapitalMap(),
+    fetchChipFlowMap(),
+    fetchMarginChangeMap(),
+  ]);
+  const supplementalMaps = { capitalMap, chipMap, marginChangeMap };
+  const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   const nonFatalWriteErrors = [];
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
   let websocketFutoptSync = { written: 0, skipped: true, cacheCount: 0 };
@@ -1962,6 +1971,7 @@ async function tick() {
     futoptRows,
     fetchResult,
     state: nextState,
+    supplementalMaps,
   });
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_candles_synced_rows = websocketCandleSync.written || 0;
