@@ -324,6 +324,8 @@ function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
 function strategy2OutOfWindowCovered(summary, peerSummary) {
   const count = cleanNumber(summary?.strategy2OutOfWindow);
   if (count <= 0) return true;
+  const ownBlocked = new Set(Array.isArray(summary?.blockedStrategies) ? summary.blockedStrategies : []);
+  if (ownBlocked.has("策略2成績單") && cleanNumber(summary?.missingRequiredFields) === 0) return true;
   const blocked = new Set(Array.isArray(peerSummary?.blockedStrategies) ? peerSummary.blockedStrategies : []);
   return blocked.has("策略2成績單") && cleanNumber(peerSummary?.suppressedRows) >= count;
 }
