@@ -6454,7 +6454,7 @@
 
   function unifiedListSummary(row) {
     return compactText(
-      row?.reason || row?.line || row?.signalLine || row?.triggerReason || row?.trigger_reason || row?.summary || row?.aiSummary || row?.analysis || row?.note || row?.state || "--",
+      row?.reason || row?.line || row?.signalLine || row?.triggerReason || row?.trigger_reason || row?.entryPlan?.reason || row?.tradableReason || row?.summary || row?.aiSummary || row?.analysis || row?.note || row?.state || "--",
       150
     );
   }
@@ -6473,9 +6473,9 @@
     }
     if (kind === "cb") {
       return [
-        unifiedListValue(row, ["price", "entryPrice", "stockPrice", "lastPrice"]),
-        unifiedListValue(row, ["pct", "change", "changePercent"]),
-        unifiedListValue(row, ["signal", "status", "subStrategy", "strategyLabel"]),
+        unifiedListValue(row, ["stockPrice", "price", "entryPrice", "lastPrice"]),
+        unifiedListValue(row, ["premium", "conversionDistancePct", "pct", "change", "changePercent"]),
+        unifiedListValue(row, ["entryLabel", "selectedEntryModel", "signal", "status", "subStrategy", "strategyLabel"]),
         unifiedListValue(row, ["score", "rankScore", "signalScore"]),
       ];
     }
@@ -6511,8 +6511,13 @@
     const tags = unifiedListTags(row, route);
     const metrics = unifiedListMetrics(row, route);
     const labels = unifiedListMetricLabels(route);
-    const code = unifiedListValue(row, ["code", "symbol", "ticker", "stockNo", "stock_no"], "--");
-    const title = unifiedListValue(row, ["title", "name", "stockName", "stock_name", "companyName"], code);
+    const kind = unifiedListKind(route);
+    const code = kind === "cb"
+      ? unifiedListValue(row, ["cbCode", "symbol", "code", "ticker", "stockNo", "stock_no"], "--")
+      : unifiedListValue(row, ["code", "symbol", "ticker", "stockNo", "stock_no"], "--");
+    const title = kind === "cb"
+      ? unifiedListValue(row, ["cbName", "title", "name", "stockName", "stock_name", "companyName"], code)
+      : unifiedListValue(row, ["title", "name", "stockName", "stock_name", "companyName"], code);
     return `
       <article class="strategy3-signal-card fuman-unified-list-card">
         <div class="strategy3-card-rank">#${index + 1}</div>
