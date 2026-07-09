@@ -992,6 +992,10 @@
     return String(route || "") === CB_DETECT_ROUTE;
   }
 
+  function isWarrantFlowRoute(route) {
+    return String(route || "") === "warrant-flow|權證走向";
+  }
+
   function isMarketViewActive() {
     const panel = document.querySelector("#market-view");
     return Boolean(panel?.classList?.contains("active") && !panel.hidden);
@@ -6396,6 +6400,236 @@
     `;
   }
 
+  function unifiedListKind(route) {
+    if (String(route || "").includes("策略1")) return "strategy1";
+    if (isStrategy3Route(route)) return "strategy3";
+    if (isStrategy4Route(route)) return "strategy4";
+    if (isStrategy5Route(route)) return "strategy5";
+    if (isChipTradeRoute(route)) return "institution";
+    if (isCbDetectRoute(route)) return "cb";
+    if (isWarrantFlowRoute(route)) return "warrant";
+    return "generic";
+  }
+
+  function unifiedListMetricLabels(route) {
+    const kind = unifiedListKind(route);
+    if (kind === "institution") return ["收盤價", "漲幅", "外資/投信", "分數"];
+    if (kind === "cb") return ["價格", "變動", "訊號", "分數"];
+    if (kind === "warrant") return ["標的價", "漲幅", "量能", "分數"];
+    if (kind === "strategy4") return ["進場價", "漲幅", "量比", "分數"];
+    if (kind === "strategy5") return ["價格", "漲幅", "籌碼", "分數"];
+    if (kind === "strategy1") return ["價格", "漲幅", "狀態", "分數"];
+    return ["價格", "漲幅", "量比", "分數"];
+  }
+
+  function unifiedListValue(row, keys, fallback = "--") {
+    for (const key of keys) {
+      const value = row?.[key];
+      if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+    }
+    return fallback;
+  }
+
+  function unifiedListTags(row, route) {
+    const tags = [];
+    const add = (value) => {
+      const text = compactText(String(value || "").trim(), 18);
+      if (text && !tags.includes(text)) tags.push(text);
+    };
+    normalizeArray(row?.signals || row?.matches || row?.strategyTags || row?.tags || row?.signalTags)
+      .slice(0, 5)
+      .forEach((signal) => add(signal?.label || signal?.short || signal?.id || signal));
+    add(row?.subStrategy || row?.strategyLabel || row?.signalLabel || row?.state || row?.status);
+    const reason = String(row?.reason || row?.line || row?.signalLine || row?.triggerReason || row?.summary || "").trim();
+    if (/外資|投信|法人|籌碼/.test(reason)) add("籌碼");
+    if (/權證|標的|單券|爆量/.test(reason)) add("權證");
+    if (/CB|可轉債|競價拍賣|轉換/.test(reason)) add("CB");
+    if (/三角|波段|A區|B區|C區/.test(reason)) add("波段");
+    if (/開盤|08:45|21:30|期貨/.test(reason)) add("開盤關卡");
+    if (/尾盤|13:00|12:59|OBV|控盤/.test(reason)) add("尾盤確認");
+    if (!tags.length) add(strategyNameLabel(row?.subStrategy || "") || strategyMeta(route).title || "候選");
+    return tags.slice(0, 5);
+  }
+
+  function unifiedListSummary(row) {
+    return compactText(
+      row?.reason || row?.line || row?.signalLine || row?.triggerReason || row?.trigger_reason || row?.summary || row?.aiSummary || row?.analysis || row?.note || row?.state || "--",
+      150
+    );
+  }
+
+  function unifiedListMetrics(row, route) {
+    const kind = unifiedListKind(route);
+    if (kind === "institution") {
+      const foreign = unifiedListValue(row, ["foreign", "foreignNet", "foreign_net"], "");
+      const trust = unifiedListValue(row, ["trust", "trustNet", "trust_net"], "");
+      return [
+        unifiedListValue(row, ["price", "close", "entryPrice", "lastPrice"]),
+        unifiedListValue(row, ["pct", "change", "changePercent"]),
+        foreign || trust ? `${formatCanvasLots(foreign)} / ${formatCanvasLots(trust)}` : unifiedListValue(row, ["total", "totalNet"]),
+        unifiedListValue(row, ["score", "rankScore", "signalScore"]),
+      ];
+    }
+    if (kind === "cb") {
+      return [
+        unifiedListValue(row, ["price", "entryPrice", "stockPrice", "lastPrice"]),
+        unifiedListValue(row, ["pct", "change", "changePercent"]),
+        unifiedListValue(row, ["signal", "status", "subStrategy", "strategyLabel"]),
+        unifiedListValue(row, ["score", "rankScore", "signalScore"]),
+      ];
+    }
+    if (kind === "warrant") {
+      return [
+        unifiedListValue(row, ["targetPrice", "underlyingPrice", "price", "lastPrice"]),
+        unifiedListValue(row, ["pct", "change", "changePercent"]),
+        unifiedListValue(row, ["volume", "volumeRatio", "tradeValue", "amount"]),
+        unifiedListValue(row, ["score", "rankScore", "signalScore"]),
+      ];
+    }
+    return [
+      unifiedListValue(row, ["price", "entryPrice", "close", "lastPrice"]),
+      unifiedListValue(row, ["pct", "change", "changePercent", "change_percent"]),
+      unifiedListValue(row, ["volumeRatio", "volume_ratio", "volume", "total"]),
+      unifiedListValue(row, ["score", "rankScore", "signalScore"]),
+    ];
+  }
+
+  function unifiedRunCards(route, rows, payloadMeta) {
+    const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
+    const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
+    const signalHits = rows.filter((row) => normalizeArray(row?.signals || row?.matches || row?.tags).length || row?.subStrategy || row?.signalLabel).length;
+    const runId = payloadMeta?.runId ? compactText(payloadMeta.runId, 32) : "run --";
+    return [
+      { label: "完整掃描", value: `${rows.length}`, sub: runId },
+      { label: "條件命中", value: `${signalHits}`, sub: "正式 API / bundle 同步" },
+      { label: "平均分數", value: rows.length ? `${avgScore || "--"}` : "--", sub: "終端榜單顯示" },
+    ];
+  }
+
+  function unifiedListCard(row, index, route) {
+    const tags = unifiedListTags(row, route);
+    const metrics = unifiedListMetrics(row, route);
+    const labels = unifiedListMetricLabels(route);
+    const code = unifiedListValue(row, ["code", "symbol", "ticker", "stockNo", "stock_no"], "--");
+    const title = unifiedListValue(row, ["title", "name", "stockName", "stock_name", "companyName"], code);
+    return `
+      <article class="strategy3-signal-card fuman-unified-list-card">
+        <div class="strategy3-card-rank">#${index + 1}</div>
+        <div class="strategy3-card-stock">
+          <strong>${escapeHtml(title || "--")}</strong>
+          <span>${escapeHtml(code || "--")}</span>
+        </div>
+        <div class="strategy3-card-main">
+          <div class="strategy3-tag-row">
+            ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
+          </div>
+          <p>${escapeHtml(unifiedListSummary(row))}</p>
+        </div>
+        <div class="strategy3-card-metrics">
+          ${metrics.map((value, metricIndex) => `
+            <div>
+              <small>${escapeHtml(labels[metricIndex] || "指標")}</small>
+              <strong>${escapeHtml(String(value || "--"))}</strong>
+            </div>
+          `).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderUnifiedListShell(route, meta, panel) {
+    const payloadMeta = canvasPayloadMeta(route) || {};
+    const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
+      .filter((row) => row && typeof row === "object")
+      .slice(0, 160);
+    const runId = payloadMeta.runId || "";
+    const evidenceStatus = payloadMeta.evidenceStatus || "";
+    const unattendedStatus = payloadMeta.unattendedStatus || "";
+    const cards = unifiedRunCards(route, rows, payloadMeta);
+    const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
+    const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
+    const headerBadge = panel.querySelector(".strategy-header .console-badge");
+    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
+    const summary = panel.querySelector("#strategy-summary");
+    const count = panel.querySelector("#strategy-match-count");
+    const avg = panel.querySelector("#strategy-avg-score");
+    const top = panel.querySelector("#strategy-top-hit");
+    const table = isStrategyRoute(route) ? panel.querySelector("#strategy-table") : null;
+    const target = table || panel;
+    panel.dataset.fumanRouteSnapshotRestoring = "1";
+    panel.dataset.fumanCanvasPersistent = "0";
+    panel.classList.add("fuman-unified-list-panel");
+    if (isStrategyRoute(route)) {
+      panel.classList.add("fuman-api-only-strategy-route");
+      panel.classList.remove("strategy5-only", "swing-only", "open-buy-only");
+      panel.classList.toggle("strategy3-only", isStrategy3Route(route));
+    } else {
+      panel.classList.add("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+      panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell").forEach((node) => node.remove());
+    }
+    if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
+    if (headerText) headerText.textContent = `${meta.summary || ""}；完整榜單直接讀正式 API。`;
+    if (headerBadge) headerBadge.textContent = meta.badge;
+    if (toolbarTitle) toolbarTitle.textContent = meta.title;
+    if (toolbarBadge) toolbarBadge.textContent = meta.badge;
+    const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
+    const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
+    if (summary) summary.textContent = `${meta.title}｜完整榜單 run=${runId || "--"}｜候選 ${rows.length} 檔`;
+    if (count) count.textContent = String(rows.length || "--");
+    if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
+    if (top) top.textContent = rows[0]?.code || rows[0]?.symbol || "--";
+    const body = rows.length ? rows.map((row, index) => unifiedListCard(row, index, route)).join("") : `
+      <div class="empty-state">
+        ${escapeHtml(meta.title)} 本次正式 API 已回讀，暫無符合條件的榜單列。
+      </div>
+    `;
+    const html = `
+      <section class="strategy5-shell fuman-unified-list-shell">
+        <section class="strategy5-dashboard strategy3-clean">
+          <section class="strategy5-results" data-run-id="${escapeHtml(runId)}" data-result-count="${rows.length}" data-evidence-status="${escapeHtml(evidenceStatus)}" data-unattended-status="${escapeHtml(unattendedStatus)}">
+            <div class="strategy5-results-head">
+              <div>
+                <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
+              </div>
+              <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
+            </div>
+            <section class="strategy3-run-cards" aria-label="${escapeHtml(meta.title)} 掃描摘要">
+              ${cards.map((card) => `
+                <article>
+                  <span>${escapeHtml(card.label)}</span>
+                  <strong>${escapeHtml(card.value)}</strong>
+                  <small>${escapeHtml(card.sub)}</small>
+                </article>
+              `).join("")}
+            </section>
+            <section class="strategy3-table" aria-label="${escapeHtml(meta.title)} 完整榜單">
+              <div class="strategy3-table-head">
+                <span>Rank</span>
+                <span>Stock</span>
+                <span>Signal</span>
+                <span>Metrics</span>
+              </div>
+              ${body}
+            </section>
+          </section>
+        </section>
+      </section>
+    `;
+    if (table) table.innerHTML = html;
+    else {
+      const existing = panel.querySelector(":scope > .fuman-unified-list-shell");
+      if (existing) existing.outerHTML = html;
+      else {
+        const header = panel.querySelector(":scope > header");
+        if (header) header.insertAdjacentHTML("afterend", html);
+        else panel.insertAdjacentHTML("afterbegin", html);
+      }
+    }
+    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    return true;
+  }
+
   function renderStrategy3CompleteRunShell(key, meta, panel) {
     const payloadMeta = canvasPayloadMeta(key) || {};
     const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
@@ -6499,6 +6733,7 @@
     }
     const meta = strategyMeta(link);
     if (isStrategy3Route(key)) return renderStrategy3CompleteRunShell(key, meta, panel);
+    if (!isStrategy2Route(key)) return renderUnifiedListShell(key, meta, panel);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-api-only-strategy-route");
@@ -6576,6 +6811,9 @@
       return rendered;
     }
     const meta = strategyMeta(link);
+    if (isChipTradeRoute(key) || isCbDetectRoute(key) || isWarrantFlowRoute(key)) {
+      return renderUnifiedListShell(key, meta, panel);
+    }
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
@@ -7409,6 +7647,244 @@
       body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-metrics strong {
         color: #0f172a;
       }
+      .fuman-unified-list-panel .fuman-unified-list-shell {
+        width: 100% !important;
+        padding: 18px 28px 28px !important;
+        box-sizing: border-box !important;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-dashboard.strategy3-clean {
+        width: 100% !important;
+        min-height: calc(100vh - 44px);
+        padding: 0 !important;
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        border-radius: 8px;
+        background:
+          linear-gradient(115deg, rgba(127, 29, 29, 0.32), rgba(15, 23, 42, 0.88) 48%, rgba(14, 116, 144, 0.18)),
+          rgba(2, 6, 23, 0.86);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-results {
+        padding: 26px 24px 32px !important;
+        display: grid;
+        gap: 18px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-results-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 0 4px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-results-head h3 {
+        margin: 0 0 7px;
+        color: #fff7ed;
+        font-size: 28px;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-count-pill {
+        flex: 0 0 auto;
+        min-width: 70px;
+        padding: 9px 13px;
+        border: 1px solid rgba(251, 146, 60, 0.42);
+        border-radius: 8px;
+        color: #fed7aa;
+        background: rgba(124, 45, 18, 0.34);
+        text-align: center;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article {
+        min-height: 88px;
+        padding: 15px 16px;
+        border: 1px solid rgba(148, 163, 184, 0.20);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.62);
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards span,
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards small {
+        display: block;
+        color: #93c5fd;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards strong {
+        display: block;
+        margin: 5px 0;
+        color: #ffffff;
+        font-size: 30px;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-table {
+        display: grid;
+        gap: 8px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-table-head,
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-signal-card {
+        display: grid;
+        grid-template-columns: 62px minmax(130px, 0.75fr) minmax(230px, 1.55fr) minmax(252px, 0.95fr);
+        gap: 10px;
+        align-items: center;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-table-head {
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 8px;
+        color: #bfdbfe;
+        background: rgba(15, 23, 42, 0.78);
+        font-weight: 700;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-signal-card {
+        align-items: stretch;
+        padding: 15px 18px;
+        border: 1px solid rgba(148, 163, 184, 0.10);
+        border-radius: 8px;
+        background: linear-gradient(90deg, rgba(59, 30, 37, 0.72), rgba(15, 23, 42, 0.78) 44%, rgba(13, 38, 71, 0.78));
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-rank {
+        color: #fb923c;
+        font-size: 18px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock,
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-main {
+        min-width: 0;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 6px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock strong {
+        color: #ffffff;
+        font-size: 18px;
+        line-height: 1.25;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock span {
+        color: #93c5fd;
+        font-size: 17px;
+        font-weight: 800;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 8px;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-tag-row span {
+        max-width: 128px;
+        padding: 4px 9px;
+        border: 1px solid rgba(96, 165, 250, 0.30);
+        border-radius: 999px;
+        color: #bfdbfe;
+        background: rgba(30, 64, 175, 0.18);
+        font-size: 12px;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-main p {
+        margin: 0;
+        color: #c7d2fe;
+        font-size: 14px;
+        line-height: 1.52;
+        word-break: break-word;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+        align-self: center;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics div {
+        min-height: 56px;
+        padding: 8px 7px;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 8px;
+        background: rgba(2, 6, 23, 0.38);
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics small {
+        display: block;
+        color: #93c5fd;
+        font-size: 11px;
+        line-height: 1.3;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics strong {
+        display: block;
+        margin-top: 5px;
+        color: #fff7ed;
+        font-size: 16px;
+        line-height: 1.15;
+        letter-spacing: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-dashboard.strategy3-clean {
+        border-color: rgba(191, 219, 254, 0.78);
+        background:
+          linear-gradient(115deg, rgba(255, 247, 237, 0.86), rgba(248, 250, 252, 0.98) 42%, rgba(239, 246, 255, 0.92)),
+          #ffffff;
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-results-head h3,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards strong,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock strong,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics strong {
+        color: #0f172a;
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics div {
+        border-color: rgba(96, 165, 250, 0.22);
+        background: linear-gradient(180deg, #ffffff, #eff6ff);
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-table-head {
+        color: #1e3a8a;
+        background: linear-gradient(90deg, #dbeafe, #e0f2fe);
+        border: 1px solid rgba(96, 165, 250, 0.22);
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-signal-card {
+        border-color: rgba(147, 197, 253, 0.38);
+        background: linear-gradient(90deg, rgba(255, 237, 213, 0.86), rgba(255, 255, 255, 0.96) 34%, rgba(239, 246, 255, 0.98));
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-rank {
+        color: #ea580c;
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock span,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards span,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards small,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics small {
+        color: #2563eb;
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-tag-row span {
+        border-color: rgba(37, 99, 235, 0.24);
+        color: #1d4ed8;
+        background: #eff6ff;
+      }
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-main p {
+        color: #334155;
+      }
+      #chip-trade-view.fuman-unified-list-panel .chip-tool,
+      #chip-trade-view.fuman-unified-list-panel .chip-table-wrap,
+      #chip-trade-view.fuman-unified-list-panel .chip-tabs,
+      #cb-detect-view.fuman-unified-list-panel .cb-detect-list,
+      #cb-detect-view.fuman-unified-list-panel .cb-detect-panel,
+      #cb-detect-view.fuman-unified-list-panel .strategy5-dashboard:not(.strategy3-clean),
+      #warrant-flow-view.fuman-unified-list-panel .warrant-flow-panel,
+      #warrant-flow-view.fuman-unified-list-panel .warrant-flow-list,
+      #warrant-flow-view.fuman-unified-list-panel .strategy5-dashboard:not(.strategy3-clean) {
+        display: none !important;
+      }
       @media (max-width: 980px) {
         #strategy-view.strategy3-only .strategy5-shell {
           padding: 12px !important;
@@ -7432,6 +7908,29 @@
           grid-column: 2;
         }
         #strategy-view.strategy3-only .strategy3-card-metrics {
+          grid-column: 1 / -1;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell {
+          padding: 12px !important;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy5-results {
+          padding: 18px !important;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards {
+          grid-template-columns: 1fr;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-table-head {
+          display: none;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-signal-card {
+          grid-template-columns: 42px 1fr;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-main,
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-stock {
+          grid-column: 2;
+        }
+        .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics {
           grid-column: 1 / -1;
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
