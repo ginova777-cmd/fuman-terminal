@@ -1058,9 +1058,9 @@
     [CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"].forEach((route) => {
       const panel = panelForRoute(route);
       if (!panel) return;
-      panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active", "fuman-unified-list-panel");
+      panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
       delete panel.dataset.fumanCanvasPersistent;
-      panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell, :scope > .fuman-unified-list-shell").forEach((node) => node.remove());
+      panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell").forEach((node) => node.remove());
     });
   }
 
@@ -1213,6 +1213,49 @@
     } finally {
       desktopFastWarrantLoading = false;
     }
+  }
+
+  function restoreNativeFixedDomRoute(key, panel) {
+    panel.querySelectorAll(":scope > .fuman-unified-list-shell").forEach((node) => node.remove());
+    panel.classList.remove("fuman-unified-list-panel", "fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+    delete panel.dataset.fumanCanvasPersistent;
+    removeFixedPageShell(key);
+    if (isWarrantFlowRoute(key)) {
+      renderDesktopFastWarrantFlow(false);
+    } else if (isCbDetectRoute(key)) {
+      window.loadCbDetectionData?.(false);
+    } else if (isChipTradeRoute(key)) {
+      window.loadInstitution?.();
+      window.renderChipTradeTable?.();
+    }
+  }
+
+  function renderFixedDomUnifiedRoute(key, link, source, panel) {
+    const meta = strategyMeta(link || key);
+    const renderRows = (rows, renderSource = source || "api") => {
+      if (!panel || panel.hidden || !panel.classList.contains("active")) return false;
+      canvasState.route = key;
+      canvasState.source = renderSource;
+      canvasState.rows = Array.isArray(rows) ? rows : [];
+      canvasState.meta = canvasStore.get(key)?.meta || canvasState.meta || null;
+      applyCanvasFilter();
+      return renderUnifiedListShell(key, meta, panel);
+    };
+    const availableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
+    if (availableRows.length) return renderRows(availableRows, source || "api-cache");
+    restoreNativeFixedDomRoute(key, panel);
+    fetchCanvasRows(key, true)
+      .then((rows) => {
+        if (rows?.length) renderRows(rows, "api");
+        else if (isWarrantFlowRoute(key) && !panel.querySelector(".warrant-flow-panel tbody tr")) renderDesktopFastWarrantFlow(true);
+      })
+      .catch(() => {
+        if (isWarrantFlowRoute(key)) renderDesktopFastWarrantFlow(true);
+      })
+      .finally(() => {
+        window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+      });
+    return true;
   }
 
   function isApiBackedSnapshotItem(item) {
@@ -6991,19 +7034,7 @@
       return rendered;
     }
     if (isFixedDomRoute(key)) {
-      removeFixedPageShell(key);
-      window.setTimeout(() => {
-        if (isWarrantFlowRoute(key)) {
-          renderDesktopFastWarrantFlow(false);
-        } else if (isCbDetectRoute(key)) {
-          window.loadCbDetectionData?.(false);
-        } else if (isChipTradeRoute(key)) {
-          window.loadInstitution?.();
-          window.renderChipTradeTable?.();
-        }
-        delete panel.dataset.fumanRouteSnapshotRestoring;
-      }, 0);
-      return true;
+      return renderFixedDomUnifiedRoute(key, link, source, panel);
     }
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
