@@ -3,6 +3,7 @@ const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { readSnapshot } = require("../lib/supabase-snapshots");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -16,6 +17,7 @@ const RUNS_TABLE = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_b
 const RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 const READY_STATUS_VIEW = process.env.SUPABASE_STRATEGY1_READY_STATUS_VIEW || "v_strategy1_ready_status";
 const STRATEGY1_GATE = "complete-run-authoritative+decision-ready";
+const STRATEGY1_STAR_PREOPEN_SNAPSHOT_KEY = process.env.STRATEGY1_STAR_PREOPEN_SNAPSHOT_KEY || "strategy1_star_preopen_latest";
 function readRuntimeJson(name, fallback = null) {
   try {
     const file = path.join(RUNTIME_DIR, "data", name);
@@ -29,12 +31,11 @@ function normalizeRuntimeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function strategy1RuntimePreopenEvidence() {
-  const payload = readRuntimeJson("star-preopen-latest.json", null);
+function normalizePreopenEvidencePayload(payload, runtimeSource = "") {
   const stageCounts = payload && typeof payload.stageCounts === "object" && payload.stageCounts ? payload.stageCounts : {};
   const stageRules = payload && typeof payload.stageRules === "object" && payload.stageRules ? payload.stageRules : {};
   return {
-    runtimeSource: payload ? "C:/fuman-runtime/data/star-preopen-latest.json" : "",
+    runtimeSource: payload ? runtimeSource : "",
     stageCounts,
     stageRules,
     futureInitialMatches: normalizeRuntimeArray(payload?.futureInitialMatches),
@@ -44,6 +45,18 @@ function strategy1RuntimePreopenEvidence() {
     futureSourceUsed: String(payload?.source?.futureSourceUsed || payload?.diagnostics?.futureSourceUsed || ""),
     historicalFutureEvidenceUsed: payload?.diagnostics?.allowHistoricalFutureEvidence === true,
   };
+}
+
+async function strategy1RuntimePreopenEvidence() {
+  const snapshot = await readSnapshot(STRATEGY1_STAR_PREOPEN_SNAPSHOT_KEY, {
+    allowLatestFallback: true,
+    timeoutMs: 2200,
+  }).catch(() => null);
+  if (snapshot?.payload) {
+    return normalizePreopenEvidencePayload(snapshot.payload, `supabase:market_snapshots:${STRATEGY1_STAR_PREOPEN_SNAPSHOT_KEY}`);
+  }
+  const payload = readRuntimeJson("star-preopen-latest.json", null);
+  return normalizePreopenEvidencePayload(payload, payload ? "C:/fuman-runtime/data/star-preopen-latest.json" : "");
 }
 
 
@@ -425,7 +438,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       : "Display the current formal candidate run while 08:45/08:55 decision gates are pending",
     reason,
   }]));
-  const runtimePreopenEvidence = strategy1RuntimePreopenEvidence();
+  const runtimePreopenEvidence = options.runtimePreopenEvidence || normalizePreopenEvidencePayload(null);
   const stageCards = strategy1StageCards(resultCount, buyCount, readyStatus, runtimePreopenEvidence);
   const futopt0845Stage = stageCards.find((card) => card.key === "future_initial_0846") || null;
   const businessFieldAudit = buildStrategy1ApiBusinessFieldAudit(normalized);
@@ -663,7 +676,8 @@ async function snapshotFriendlyPendingPayload(readyStatus, options) {
   const rows = await fetchRowsForRun(run.run_id, options.limit);
   if (!rows.length) return emptySnapshotPayload("strategy1_complete_run_empty", run.run_id);
   const previous2130CarryForward = Boolean(run.__previous2130CarryForward);
-  const payload = buildPayload(rows, run, readyStatus, { ...options, pendingCandidateDisplay: true, previous2130CarryForward });
+  const runtimePreopenEvidence = await strategy1RuntimePreopenEvidence();
+  const payload = buildPayload(rows, run, readyStatus, { ...options, pendingCandidateDisplay: true, previous2130CarryForward, runtimePreopenEvidence });
   const gate = previous2130CarryForward
     ? `${STRATEGY1_GATE}+previous-2130-carry-forward`
     : `${STRATEGY1_GATE}+decision-pending-display`;
@@ -745,7 +759,8 @@ async function handler(request, response) {
       response.status(404).json(missingPayload("strategy1_complete_run_empty", run.run_id));
       return;
     }
-    response.status(200).json(buildPayload(rows, run, readyStatus, options));
+    const runtimePreopenEvidence = await strategy1RuntimePreopenEvidence();
+    response.status(200).json(buildPayload(rows, run, readyStatus, { ...options, runtimePreopenEvidence }));
   } catch (error) {
     if (options.snapshotFriendly) {
       response.status(200).json(emptySnapshotPayload("strategy1_complete_run_fetch_failed", error?.message || String(error)));

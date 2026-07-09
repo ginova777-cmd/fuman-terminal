@@ -5,11 +5,13 @@ const path = require("path");
 
 const {
   fetchFutoptStockMappingReady,
+  fetchStockFutureLiveContracts,
   fetchPreopenFinalBlindBuyReady,
   fetchPreopenSnapshotHistory,
   fetchPreopenSnapshots,
   fetchSourceStatus,
 } = require("../lib/supabase-public-slot");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { dataPath } = require("./runtime-paths");
 
 const OUT_FILE = dataPath("star-preopen-latest.json");
@@ -26,7 +28,7 @@ const HISTORY_LOOKBACK_SECONDS = Number(process.env.STAR_HISTORY_LOOKBACK_SECOND
 const THRESHOLDS = {
   futurePct: Number(process.env.STAR_MIN_FUTURE_PCT || 2),
   futureRelativeTxf: Number(process.env.STAR_MIN_FUTURE_RELATIVE_TXF || 1),
-  futureVolume: Number(process.env.STAR_MIN_FUTURE_VOLUME || 80),
+  futureVolume: Number(process.env.STAR_MIN_FUTURE_VOLUME || 50),
   trialPct: Number(process.env.STAR_MIN_TRIAL_PCT || 2),
   bidAskRatio: Number(process.env.STAR_MIN_BID_ASK_RATIO || 1.5),
   finalSnapshotCount: Number(process.env.STAR_FINAL_MIN_SNAPSHOTS || 3),
@@ -129,20 +131,59 @@ function normalizePreopen(row) {
 
 function normalizeMapping(row) {
   const code = normalizeCode(row?.stock_symbol || row?.underlying_symbol || row?.symbol);
+  const sourceStatus = String(row?.source_status || "").trim().toLowerCase();
   return {
     code,
     name: row?.stock_name || row?.underlying_name || code,
     futureSymbol: String(row?.future_symbol || "").trim().toUpperCase(),
-    futurePct: cleanNumber(row?.fut_change_percent ?? row?.change_percent),
+    futureLastPrice: cleanNumber(row?.futopt_last_price),
+    futurePct: cleanNumber(row?.futopt_change_percent ?? row?.fut_change_percent ?? row?.change_percent),
     txfPct: cleanNumber(row?.txf_change_percent),
-    futureRelativeTxf: cleanNumber(row?.rel_to_txf),
-    futureVolume: cleanNumber(row?.total_volume),
-    quoteUpdatedAt: row?.quote_updated_at || row?.updated_at || "",
+    futureRelativeTxf: cleanNumber(row?.relative_to_txf_percent ?? row?.rel_to_txf),
+    futureVolume: cleanNumber(row?.futopt_total_volume ?? row?.total_volume),
+    quoteUpdatedAt: row?.futopt_updated_at || row?.quote_updated_at || row?.updated_at || "",
     quoteAgeSeconds: cleanNumber(row?.quote_age_seconds),
-    hasMapping: normalizeBool(row?.has_mapping),
-    hasQuote: normalizeBool(row?.has_quote),
-    quoteFresh180s: normalizeBool(row?.quote_fresh_180s),
-    futoptReady: normalizeBool(row?.futopt_ready),
+    hasMapping: normalizeBool(row?.has_mapping) || row?.source_status !== undefined,
+    hasQuote: normalizeBool(row?.has_quote) || row?.source_status !== undefined,
+    quoteFresh180s: normalizeBool(row?.quote_fresh_180s) || sourceStatus === "ready",
+    sourceStatus,
+    futoptReady: normalizeBool(row?.futopt_ready) || sourceStatus === "ready",
+    sourceTables: row?.source_status !== undefined ? ["v_stock_future_live_contract"] : ["v_futopt_stock_mapping_ready"],
+  };
+}
+
+function basisPercent(futureLastPrice, trialPrice) {
+  const future = cleanNumber(futureLastPrice);
+  const trial = cleanNumber(trialPrice);
+  return trial > 0 ? ((future - trial) / trial) * 100 : 0;
+}
+
+function compactStageItem(item = {}) {
+  return {
+    code: item.code,
+    name: item.name,
+    futureSymbol: item.futureSymbol,
+    futureLastPrice: cleanNumber(item.futureLastPrice),
+    futurePct: cleanNumber(item.futurePct),
+    txfPct: cleanNumber(item.txfPct),
+    futureRelativeTxf: cleanNumber(item.futureRelativeTxf),
+    futureVolume: cleanNumber(item.futureVolume),
+    sourceStatus: item.sourceStatus || "",
+    futureQuoteUpdatedAt: item.futureQuoteUpdatedAt || item.quoteUpdatedAt || "",
+    trialPrice: cleanNumber(item.trialPrice),
+    referencePrice: cleanNumber(item.referencePrice),
+    trialPct: cleanNumber(item.trialPct),
+    bidAskRatio: cleanNumber(item.bidAskRatio),
+    bidVolume: cleanNumber(item.bidVolume),
+    askVolume: cleanNumber(item.askVolume),
+    bestBidPrice: cleanNumber(item.bestBidPrice),
+    bestAskPrice: cleanNumber(item.bestAskPrice),
+    basisPct: cleanNumber(item.basisPct),
+    basisType: item.basisType || "",
+    isLimitUpBid: Boolean(item.isLimitUpBid),
+    score: cleanNumber(item.score),
+    reason: item.reason || "",
+    sourceTables: Array.isArray(item.sourceTables) ? item.sourceTables : [],
   };
 }
 
@@ -200,13 +241,31 @@ async function main() {
   const updatedAt = now.toISOString();
 
   const [mappingResult, preopenResult, sourceStatus] = await Promise.all([
-    fetchFutoptStockMappingReady(),
+    fetchStockFutureLiveContracts().catch(() => fetchFutoptStockMappingReady()),
     fetchPreopenSnapshots(),
     fetchSourceStatus().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
   ]);
 
   const mappings = (mappingResult.rows || []).map(normalizeMapping).filter((row) => /^\d{4}$/.test(row.code));
   const preopenByCode = new Map((preopenResult.rows || []).map(normalizePreopen).filter((row) => /^\d{4}$/.test(row.code)).map((row) => [row.code, row]));
+  const futureInitialMatches = mappings
+    .filter((mapping) => mapping.futoptReady || mapping.sourceStatus === "stale")
+    .filter((mapping) => mapping.futurePct >= THRESHOLDS.futurePct)
+    .filter((mapping) => mapping.futureRelativeTxf >= THRESHOLDS.futureRelativeTxf)
+    .filter((mapping) => mapping.futureVolume >= THRESHOLDS.futureVolume)
+    .map((mapping) => compactStageItem({
+      ...mapping,
+      futureQuoteUpdatedAt: mapping.quoteUpdatedAt,
+      reason: [
+        `期貨漲幅 ${mapping.futurePct.toFixed(2)}%`,
+        `相對 TXF ${mapping.futureRelativeTxf.toFixed(2)}%`,
+        `期貨量 ${Math.round(mapping.futureVolume)}`,
+        mapping.sourceStatus === "stale" ? "source stale 只觀察" : "source ready",
+      ].join("，"),
+    }))
+    .sort((a, b) => b.futurePct - a.futurePct
+      || b.futureRelativeTxf - a.futureRelativeTxf
+      || b.futureVolume - a.futureVolume);
   const candidates = [];
   const diagnostics = {
     futoptQuoteLiveHasStockFutures: mappings.some((row) => row.hasQuote && row.futureSymbol && row.futureSymbol !== "TXF"),
@@ -241,10 +300,12 @@ async function main() {
       name: preopen.name || mapping.name,
       market: preopen.market,
       futureSymbol: mapping.futureSymbol,
+      futureLastPrice: mapping.futureLastPrice,
       futurePct: Number(mapping.futurePct.toFixed(4)),
       txfPct: Number(mapping.txfPct.toFixed(4)),
       futureRelativeTxf: Number(mapping.futureRelativeTxf.toFixed(4)),
       futureVolume: mapping.futureVolume,
+      sourceStatus: mapping.sourceStatus,
       futureQuoteUpdatedAt: mapping.quoteUpdatedAt,
       futureQuoteAgeSeconds: mapping.quoteAgeSeconds,
       trialPrice: preopen.trialPrice,
@@ -258,6 +319,8 @@ async function main() {
       bestBidOk: preopen.bestBidOk,
       isLimitUpBid: preopen.isLimitUpBid,
       limitUpPrice: preopen.limitUpPrice,
+      basisPct: Number(basisPercent(mapping.futureLastPrice, preopen.trialPrice).toFixed(4)),
+      basisType: basisPercent(mapping.futureLastPrice, preopen.trialPrice) > 0 ? "positive" : basisPercent(mapping.futureLastPrice, preopen.trialPrice) < 0 ? "negative" : "flat",
       stockFutureOk: true,
       preopenFutureOk: true,
       preopenTrialOk: true,
@@ -266,7 +329,7 @@ async function main() {
       finalBlindBuyOk: false,
       finalReasons: [],
       updatedAt: preopen.updatedAt || updatedAt,
-      sourceTables: ["v_futopt_stock_mapping_ready", "fugle_preopen_snapshot"],
+      sourceTables: [...new Set([...(mapping.sourceTables || []), "fugle_preopen_snapshot"])],
     });
   }
 
@@ -349,6 +412,8 @@ async function main() {
     || b.futureVolume - a.futureVolume);
 
   const finalMatches = matches.filter((item) => item.finalBlindBuy);
+  const preopenConfirmMatches = matches.map(compactStageItem);
+  const finalStageMatches = finalMatches.map(compactStageItem);
   const scorecardPayload = {
     ok: true,
     source: "star-preopen-scorecard-source",
@@ -372,9 +437,10 @@ async function main() {
     thresholds: THRESHOLDS,
     source: {
       projectUrl: "https://cpmpfhbzutkiecccekfr.supabase.co",
-      primary: ["v_futopt_stock_mapping_ready", "fugle_preopen_snapshot", "v_fugle_preopen_final_blind_buy_ready"],
+      primary: ["v_stock_future_live_contract", "fugle_preopen_snapshot", "v_fugle_preopen_final_blind_buy_ready"],
       secondary: ["v_fugle_preopen_snapshot_history"],
       noDirectFugleApi: true,
+      futureSourceUsed: mappingResult.source || "v_futopt_stock_mapping_ready",
       mappingReadyRows: mappingResult.count || mappings.length,
       preopenSnapshots: preopenResult.count || preopenByCode.size,
       finalReadyRows: finalReadyResult.count || 0,
@@ -387,8 +453,21 @@ async function main() {
       "v_fugle_preopen_final_blind_buy_ready 是否在 08:58~08:59 有 snapshots_last_1m >= 3",
       "source_status.payload.futopt_ok / preopen_ok / preopen_history_ok 是否為 true",
     ],
+    stageRules: {
+      futureInitial0846: "time>=08:45; futopt_change_percent>=2; relative_to_txf_percent>=1; futopt_total_volume>=50; source_status ready preferred, stale observe only",
+      preopenConfirm0855: "future initial + trial_change_percent>=2; bid_volume/ask_volume>=1.5; best_bid_price>=trial_price; basis=(futopt_last_price-trial_price)/trial_price*100",
+      finalJudgement0858: "trial_change_percent>=6; bid/ask>=3; best_bid>=trial; is_limit_up_bid=true; futopt_total_volume>=120; relative_to_txf_percent>=2; optional 3 snapshots/1m and trial volatility<=2%",
+    },
+    stageCounts: {
+      futureInitial0846: futureInitialMatches.length,
+      preopenConfirm0855: preopenConfirmMatches.length,
+      finalJudgement0858: finalStageMatches.length,
+    },
+    futureInitialMatches,
+    preopenConfirmMatches,
+    finalMatches: finalStageMatches,
     matches,
-    finalMatches,
+    rawFinalMatches: finalMatches,
     watchCount: matches.length,
     matchCount: matches.length,
     finalMatchCount: finalMatches.length,
@@ -398,6 +477,11 @@ async function main() {
   if (previous?.matches?.length) writeJson(BACKUP_FILE, previous);
   writeJson(OUT_FILE, payload);
   writeJson(SCORECARD_SOURCE_FILE, scorecardPayload);
+  const snapshotResult = await upsertSnapshot("strategy1_star_preopen_latest", payload, {
+    tradeDate: date,
+    source: "star-preopen-latest",
+    reason: "strategy1-three-stage-preopen",
+  });
   if (finalMatches.length || process.env.STAR_SYNC_OPEN_BUY_SOURCE === "1") {
     const openBuySource = readJson(OPEN_BUY_SCORECARD_SOURCE_FILE, { ok: true, matches: [] });
     const nonStar = (openBuySource.matches || []).filter((item) => !(item?.strategyIds || []).includes("star"));
@@ -414,7 +498,7 @@ async function main() {
     });
   }
 
-  console.log(`STAR preopen ok: candidates ${matches.length}, FinalBlindBuy ${finalMatches.length}, futoptReady=${diagnostics.futoptReadyCount}, preopen=${diagnostics.preopenSnapshotCount}, finalReady=${diagnostics.finalBlindBuyReadyCount}, window=${windowActive}, finalWindow=${finalWindowActive}`);
+  console.log(`STAR preopen ok: 08:46 ${futureInitialMatches.length}, 08:55 ${preopenConfirmMatches.length}, FinalBlindBuy ${finalMatches.length}, futoptReady=${diagnostics.futoptReadyCount}, preopen=${diagnostics.preopenSnapshotCount}, finalReady=${diagnostics.finalBlindBuyReadyCount}, window=${windowActive}, finalWindow=${finalWindowActive}, snapshot=${snapshotResult.ok ? "ok" : snapshotResult.reason || snapshotResult.error || "failed"}`);
   if (!windowActive) console.log("STAR preopen note: outside 08:45~08:59, wrote Supabase diagnostics only.");
 }
 
