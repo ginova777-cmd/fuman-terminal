@@ -682,11 +682,14 @@ function topRankScore(rank, top, maxScore) {
   return Math.max(0, maxScore * (top - rank + 1) / top);
 }
 
-function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
+function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const quote = quoteMap?.get(symbol) || {};
   const payload = quote.payload || {};
   const daily = dailyVolumeMap.get(symbol) || {};
   const dailyPayload = daily.payload || {};
+  const capital = supplementalMaps.capitalMap?.get(symbol) || {};
+  const chip = supplementalMaps.chipMap?.get(symbol) || {};
+  const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
   const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
   const changePercent = firstNumber(
@@ -699,6 +702,9 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
   const tradeValue = firstNumber(quote.trade_value, payload.tradeValue, payload.trade_value, price > 0 ? price * totalVolume * 1000 : 0);
   const avgVolume5 = firstNumber(daily.avg_volume5, dailyPayload.avgVolume5, dailyPayload.avg_volume5, payload.avgVolume5, payload.avg_volume5);
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
+  const issuedShares = firstNumber(capital.issuedShares, payload.issuedShares, payload.issued_shares, dailyPayload.issuedShares, dailyPayload.issued_shares);
+  const currentTurnoverRate = issuedShares > 0 && totalVolume > 0 ? (totalVolume * 1000 / issuedShares) * 100 : 0;
+  const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
   const highPrice = firstNumber(quote.high_price, payload.highPrice, payload.high_price, price);
   const lowPrice = firstNumber(quote.low_price, payload.lowPrice, payload.low_price, price);
   const insideVolume = firstNumber(quote.cumulative_bid_volume, payload.cumulativeBidVolume, payload.cumulative_bid_volume);
@@ -717,6 +723,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
     dailyPayload.turnover_rate,
     dailyPayload.turnover_percent,
     dailyPayload.turnoverPercent,
+    currentTurnoverRate,
   );
   const turnoverRate3d = firstNumber(
     payload.turnoverRate3d,
@@ -727,6 +734,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
     dailyPayload.turnover_rate_3d,
     dailyPayload.turnover3d,
     dailyPayload.avg_turnover_rate_3d,
+    avgTurnoverRate5,
     turnoverRate,
   );
   const turnoverRate5d = firstNumber(
@@ -738,21 +746,23 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
     dailyPayload.turnover_rate_5d,
     dailyPayload.turnover5d,
     dailyPayload.avg_turnover_rate_5d,
+    avgTurnoverRate5,
     turnoverRate,
   );
   const turnoverRate3To5d = Math.max(turnoverRate3d, turnoverRate5d, turnoverRate);
-  const foreignNet = firstNumber(payload.foreignNet, payload.foreign_net, payload.foreign_buy_sell, dailyPayload.foreignNet, dailyPayload.foreign_net);
-  const trustNet = firstNumber(payload.trustNet, payload.trust_net, payload.investment_trust_net, dailyPayload.trustNet, dailyPayload.trust_net);
-  const dealerNet = firstNumber(payload.dealerNet, payload.dealer_net, dailyPayload.dealerNet, dailyPayload.dealer_net);
-  const mainForceNet = firstNumber(payload.mainForceNet, payload.main_force_net, payload.main_force, dailyPayload.mainForceNet, dailyPayload.main_force_net);
-  const marginChange = firstNumber(payload.marginBalanceChange, payload.margin_balance_change, payload.marginChange, payload.margin_change, dailyPayload.marginBalanceChange, dailyPayload.margin_balance_change);
-  const shortChange = firstNumber(payload.shortBalanceChange, payload.short_balance_change, payload.shortChange, payload.short_change, dailyPayload.shortBalanceChange, dailyPayload.short_balance_change);
+  const foreignNet = firstNumber(payload.foreignNet, payload.foreign_net, payload.foreign_buy_sell, dailyPayload.foreignNet, dailyPayload.foreign_net, chip.foreignNet);
+  const trustNet = firstNumber(payload.trustNet, payload.trust_net, payload.investment_trust_net, dailyPayload.trustNet, dailyPayload.trust_net, chip.trustNet);
+  const dealerNet = firstNumber(payload.dealerNet, payload.dealer_net, dailyPayload.dealerNet, dailyPayload.dealer_net, chip.dealerNet);
+  const mainForceNet = firstNumber(payload.mainForceNet, payload.main_force_net, payload.main_force, dailyPayload.mainForceNet, dailyPayload.main_force_net, chip.institutionTotalNet);
+  const marginChange = firstNumber(payload.marginBalanceChange, payload.margin_balance_change, payload.marginChange, payload.margin_change, dailyPayload.marginBalanceChange, dailyPayload.margin_balance_change, margin.marginChange);
+  const shortChange = firstNumber(payload.shortBalanceChange, payload.short_balance_change, payload.shortChange, payload.short_change, dailyPayload.shortBalanceChange, dailyPayload.short_balance_change, margin.shortChange);
   return {
     price,
     changePercent,
     totalVolume,
     tradeValue,
     avgVolume5,
+    issuedShares,
     volumeRatio5,
     highPrice,
     lowPrice,
@@ -778,6 +788,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
       totalVolume: totalVolume > 0,
       tradeValue: tradeValue > 0,
       avgVolume5: avgVolume5 > 0,
+      issuedShares: issuedShares > 0,
       turnover3To5d: turnoverRate3To5d > 0,
       insideOutside: sideTotal > 0,
       bidAsk: bidAskRatio > 0,
@@ -962,13 +973,13 @@ function readRuntimePrioritySeeds(activeSymbols) {
   };
 }
 
-function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map()) {
+function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), supplementalMaps = {}) {
   const activeBySymbol = new Map(activeSymbols.map((row) => [row.symbol, row]));
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
   const candidates = activeSymbols.map((row) => ({
     ...row,
-    metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap),
+    metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
   const changeRanks = rankMap(candidates, (row) => row.metrics.changePercent, { minValue: 0 });
   const volumeSurgeRanks = rankMap(candidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
@@ -1081,6 +1092,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map()) 
         totalVolume: Math.round(metrics.totalVolume),
         tradeValue: Math.round(metrics.tradeValue),
         avgVolume5: Math.round(metrics.avgVolume5),
+        issuedShares: Math.round(metrics.issuedShares),
         volumeRatio5: Number(metrics.volumeRatio5.toFixed(4)),
         changeRank,
         volumeSurgeRank,
