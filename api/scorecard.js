@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
@@ -53,6 +54,27 @@ function cleanText(value) {
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
+}
+
+function reportStatusFromBool(ok) {
+  return ok ? "complete" : "insufficient";
+}
+
+async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
+  const url = serverSupabaseUrl();
+  const key = serverSupabaseKey();
+  if (!url || !key) throw new Error("missing_supabase_credentials");
+  const response = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/${table}?${query}`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${table}_read_failed:${response.status}:${text.slice(0, 180)}`);
+  return text ? JSON.parse(text) : [];
 }
 
 function isBlank(value) {
@@ -584,6 +606,101 @@ function buildSevenStrategyDailyHistorySourceReport(result) {
   };
 }
 
+async function buildDaytradeSourceReport() {
+  try {
+    const rows = await fetchSupabaseRows(
+      "source_status",
+      [
+        "select=source_name,status,message,updated_at,payload",
+        "source_name=eq.fugle_daytrade_source",
+        "limit=1",
+      ].join("&"),
+      8000,
+    );
+    const row = Array.isArray(rows) ? rows[0] : null;
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+    const offSession = payload.off_session === true || cleanText(payload.phase) === "after_daytrade_window";
+    const gate = cleanText(payload.daytrade_gate_grade || payload.priority_gate_grade || "D").toUpperCase();
+    const formalAllowed = payload.formal_entry_allowed === true;
+    const motherPoolSymbols = cleanNumber(payload.mother_pool_symbols);
+    const priorityPoolSymbols = cleanNumber(payload.priority_pool_symbols);
+    const groupRows = cleanNumber(payload.stock_group_contract_rows);
+    const futureRows = cleanNumber(payload.stock_future_initial_0846_rows);
+    const ruleHits = payload.mother_pool_rule_hit_counts && typeof payload.mother_pool_rule_hit_counts === "object"
+      ? payload.mother_pool_rule_hit_counts
+      : {};
+    const sourceOk = Boolean(row)
+      && motherPoolSymbols >= 180
+      && priorityPoolSymbols >= 40
+      && groupRows >= 1600
+      && futureRows > 0;
+    const displayOk = sourceOk && (offSession || formalAllowed || gate === "A");
+    const reason = cleanText(row?.message)
+      || (sourceOk ? "daytrade mother pool source ready for display" : "daytrade mother pool source incomplete");
+    return {
+      key: "daytrade_source",
+      strategy: "當沖母池水源",
+      endpoint: "source_status:fugle_daytrade_source",
+      statusCode: row ? 200 : 404,
+      ok: displayOk,
+      runId: `daytrade-source-${compactDate(row?.updated_at || new Date().toISOString())}-${compactTimestamp(row?.updated_at || new Date().toISOString()).slice(8) || "latest"}`,
+      count: motherPoolSymbols,
+      emittedRows: motherPoolSymbols,
+      resultCount: motherPoolSymbols,
+      readbackCount: motherPoolSymbols,
+      date: cleanText(row?.trade_date || payload.trade_date || payload.date || ""),
+      sourceName: "fugle_daytrade_source",
+      source: "supabase:source_status",
+      table: "source_status",
+      gateGrade: gate,
+      phase: cleanText(payload.phase),
+      offSession,
+      formalEntryAllowed: formalAllowed,
+      formalScope: cleanText(payload.formal_scope || "priority_top40"),
+      motherPoolSymbols,
+      priorityPoolSymbols,
+      stockGroupContractSource: cleanText(payload.stock_group_contract_source),
+      stockGroupContractRows: groupRows,
+      stockFutureInitial0846Rows: futureRows,
+      stockFutureInitial0846ReadyRows: cleanNumber(payload.stock_future_initial_0846_ready_rows),
+      ruleHits: {
+        strong_group_limit_up_leader: cleanNumber(ruleHits.strong_group_limit_up_leader),
+        stock_future_initial_0846_observe: cleanNumber(ruleHits.stock_future_initial_0846_observe),
+        margin_down_3_5d_price_strong: cleanNumber(ruleHits.margin_down_3_5d_price_strong),
+        margin_short_both_up_3_5d_price_strong: cleanNumber(ruleHits.margin_short_both_up_3_5d_price_strong),
+        daytrade_crowded_3_5d_watch: cleanNumber(ruleHits.daytrade_crowded_3_5d_watch),
+      },
+      evidenceStatus: reportStatusFromBool(displayOk),
+      unattendedStatus: displayOk ? "YES" : "NO",
+      publishAllowed: displayOk,
+      latestOverwriteAllowed: displayOk,
+      preservePreviousGood: !displayOk,
+      fallbackUsed: false,
+      blockedReason: displayOk ? "" : reason,
+      reason,
+    };
+  } catch (error) {
+    return {
+      key: "daytrade_source",
+      strategy: "當沖母池水源",
+      endpoint: "source_status:fugle_daytrade_source",
+      statusCode: 500,
+      ok: false,
+      runId: `daytrade-source-error-${compactTimestamp(new Date().toISOString())}`,
+      count: 0,
+      emittedRows: 0,
+      evidenceStatus: "insufficient",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      preservePreviousGood: true,
+      fallbackUsed: false,
+      blockedReason: error?.message || String(error),
+      reason: error?.message || String(error),
+    };
+  }
+}
+
 function mergeSourceReport(payload, report) {
   const reports = Array.isArray(payload?.sourceReports) ? [...payload.sourceReports] : [];
   const index = reports.findIndex((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
@@ -598,7 +715,7 @@ async function withLiveStrategy3SourceReport(payload) {
 }
 
 async function withLiveSourceReports(payload) {
-  const [strategy2, strategy3, strategy5, institution, cb, warrant, sevenStrategyDailyHistory] = await Promise.all([
+  const [strategy2, strategy3, strategy5, institution, cb, warrant, sevenStrategyDailyHistory, daytradeSource] = await Promise.all([
     callStrategy2Latest(),
     callStrategy3Latest(),
     callStrategy5Latest(),
@@ -606,6 +723,7 @@ async function withLiveSourceReports(payload) {
     callCbDetectLatest(),
     callWarrantLatest(),
     callSevenStrategyDailyHistory(),
+    buildDaytradeSourceReport(),
   ]);
   return [
     buildStrategy2SourceReport(strategy2),
@@ -615,6 +733,7 @@ async function withLiveSourceReports(payload) {
     buildCbSourceReport(cb),
     buildWarrantSourceReport(warrant),
     buildSevenStrategyDailyHistorySourceReport(sevenStrategyDailyHistory),
+    daytradeSource,
   ].reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
 }
 
