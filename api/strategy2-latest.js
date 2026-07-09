@@ -576,17 +576,16 @@ function strategy2PublishedRunSnapshotAllowed(payload = {}) {
     ? payload.run_quality_at_publish
     : {};
   const resultCount = cleanNumber(quality.resultCount ?? payload.resultCount ?? payload.count);
-  const readbackCount = cleanNumber(quality.readbackCount ?? payload.readbackCount ?? payload.count);
+  const qualityStatus = quality.qualityStatus || quality.status || payload.qualityStatus;
   return Boolean(
     payload.complete === true
     && payload.runId
-    && String(payload.qualityStatus || "").toLowerCase() === "complete"
+    && strategy2LatestRunQualityReady(qualityStatus)
     && payload.cacheSource === "supabase-api"
     && payload.fallbackUsed !== true
     && payload.noTodayDetections !== true
-    && quality.publishAllowed === true
     && resultCount > 0
-    && readbackCount === resultCount
+    && strategy2RunSnapshotReady(payload)
   );
 }
 
@@ -1320,11 +1319,15 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     sourceGate?.publishAllowed === true
     && normalizedSourceCoverage.ready === true
   );
+  const runQuality = payload?.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const immutableRunQualityStatus = runQuality.qualityStatus || runQuality.status || payload?.qualityStatus;
   const publishedRunSnapshotAllowed = Boolean(
     runSnapshotReady
     && payload?.complete === true
     && payload?.runId
-    && strategy2LatestRunQualityReady(payload?.qualityStatus)
+    && strategy2LatestRunQualityReady(immutableRunQualityStatus)
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
@@ -1347,7 +1350,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     payload?.complete === true
     && payload?.runId
     && payloadTradeDate === today
-    && strategy2LatestRunQualityReady(payload?.qualityStatus)
+    && strategy2LatestRunQualityReady(immutableRunQualityStatus)
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
   );
