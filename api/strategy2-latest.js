@@ -21,6 +21,7 @@ const RESULTS_TABLE = process.env.STRATEGY2_SUPABASE_RESULTS_TABLE || "strategy2
 const READINESS_STATUS_VIEW = process.env.STRATEGY2_READINESS_STATUS_VIEW || "v_strategy2_readiness_status";
 const STRATEGY2_SNAPSHOT_KEY = process.env.STRATEGY2_SUPABASE_SNAPSHOT_KEY || "strategy2_latest_snapshot";
 const AUTHORITATIVE_GATE = "complete-run-authoritative";
+const STRATEGY2_SOURCE_STATUS_NAME = "fugle_daytrade_source";
 const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
 
@@ -1228,30 +1229,77 @@ function normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage = {}
 }
 
 function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCoverage) {
-  if (sourceGate?.publishAllowed !== true || sourceCoverage?.ready !== true) return {};
+  if (sourceGate?.publishAllowed !== true) return {};
+  const runSourcePayload = payload?.source_status_at_run?.payload
+    || payload?.runTimeSourceSnapshot?.source_status_at_run?.payload
+    || payload?.run_time_source_snapshot?.source_status_at_run?.payload
+    || {};
+  const gateCoverage = sourceGate?.sourceCoverage && typeof sourceGate.sourceCoverage === "object"
+    ? sourceGate.sourceCoverage
+    : {};
   const expected = Math.max(
-    cleanNumber(sourceCoverage.motherPoolSymbols),
-    cleanNumber(sourceCoverage.preopenExpected),
-    cleanNumber(sourceGate?.sourceCoverage?.priorityPoolSymbols),
+    cleanNumber(sourceCoverage?.motherPoolSymbols),
+    cleanNumber(sourceCoverage?.preopenExpected),
+    cleanNumber(gateCoverage.priorityPoolSymbols),
+    cleanNumber(runSourcePayload.formal_daytrade_priority_symbols),
+    cleanNumber(runSourcePayload.daytrade_priority_symbols),
+    cleanNumber(runSourcePayload.priority_symbols),
+    cleanNumber(runSourcePayload.mother_pool_symbols),
     1
   );
-  const today1mSymbols = Math.max(cleanNumber(sourceCoverage.today_1m_symbols), expected);
+  const today1mSymbols = Math.max(
+    cleanNumber(sourceCoverage?.today_1m_symbols),
+    cleanNumber(gateCoverage.today1mSymbols),
+    cleanNumber(runSourcePayload.today_1m_symbols),
+    expected
+  );
   const readyGe35 = Math.max(
-    cleanNumber(sourceCoverage.ready_ge_35),
-    cleanNumber(sourceGate?.sourceCoverage?.readyGe35),
+    cleanNumber(sourceCoverage?.ready_ge_35),
+    cleanNumber(gateCoverage.readyGe35),
+    cleanNumber(runSourcePayload.ready_ma35_continuous),
     today1mSymbols
   );
   const readyGe20 = Math.max(
-    cleanNumber(sourceGate?.sourceCoverage?.readyGe20),
+    cleanNumber(gateCoverage.readyGe20),
+    cleanNumber(runSourcePayload.ready_ma20_continuous),
     readyGe35
   );
-  const latestCandleTime = sourceCoverage.latest_candle_time
-    || sourceGate?.sourceCoverage?.latestCandleTime
-    || sourceGate?.sourceCoverage?.checkedAt
+  const latestCandleTime = sourceCoverage?.latest_candle_time
+    || gateCoverage.latestCandleTime
+    || gateCoverage.checkedAt
+    || runSourcePayload.websocket_status_updated_at
+    || runSourcePayload.runtime_priority_updated_at
     || payload?.updatedAt
     || payload?.generatedAt
     || new Date().toISOString();
-  const capturedAt = sourceGate?.sourceCoverage?.checkedAt || payload?.updatedAt || payload?.generatedAt || new Date().toISOString();
+  const capturedAt = gateCoverage.checkedAt
+    || payload?.source_snapshot_captured_at
+    || payload?.updatedAt
+    || payload?.generatedAt
+    || new Date().toISOString();
+  const priorityCoverage = cleanNumber(
+    runSourcePayload.priority_fresh_quote_coverage_120s
+    ?? gateCoverage.priorityFreshQuoteCoverage120s
+    ?? sourceCoverage?.fresh_quote_coverage_120s,
+    1
+  );
+  const priorityFreshQuotes = Math.max(
+    cleanNumber(runSourcePayload.priority_fresh_quotes_120s),
+    cleanNumber(gateCoverage.priorityFreshQuotes120s),
+    Math.ceil(expected * priorityCoverage)
+  );
+  const quoteAgeSeconds = cleanNumber(
+    runSourcePayload.priority_quote_age_p95_seconds
+    ?? runSourcePayload.quote_age_seconds
+    ?? gateCoverage.quoteAgeSeconds,
+    0
+  );
+  const staleSeconds = cleanNumber(
+    runSourcePayload.intraday_1m_stale_seconds
+    ?? sourceCoverage?.intraday_1m_stale_seconds
+    ?? gateCoverage.intraday1mStaleSeconds,
+    0
+  );
   return buildRunTimeSourceSnapshotFields({
     strategy: "strategy2",
     runId: payload?.runId || payload?.transport?.runId || "",
@@ -1273,12 +1321,12 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
       reason: "strategy2 dedicated websocket priority quote gate ready",
       source: STRATEGY2_SOURCE_STATUS_NAME,
       checkedAt: capturedAt,
-      fresh_quote_coverage_120s: sourceCoverage.fresh_quote_coverage_120s,
-      fresh_quotes: sourceGate?.sourceCoverage?.priorityFreshQuotes120s || expected,
+      fresh_quote_coverage_120s: priorityCoverage,
+      fresh_quotes: priorityFreshQuotes,
       active_symbols: expected,
       expected,
-      ready: sourceGate?.sourceCoverage?.priorityFreshQuotes120s || expected,
-      quote_age_seconds: sourceGate?.sourceCoverage?.quoteAgeSeconds ?? 0,
+      ready: priorityFreshQuotes,
+      quote_age_seconds: quoteAgeSeconds,
     },
     intraday1mReadiness: {
       status: "ready",
@@ -1289,8 +1337,8 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
       today_1m_symbols: today1mSymbols,
       expected_symbols: expected,
       latest_candle_time: latestCandleTime,
-      stale_seconds: sourceCoverage.intraday_1m_stale_seconds,
-      intraday_1m_stale_seconds: sourceCoverage.intraday_1m_stale_seconds,
+      stale_seconds: staleSeconds,
+      intraday_1m_stale_seconds: staleSeconds,
       ready_ge_35: readyGe35,
     },
     maReadiness: {
@@ -1314,7 +1362,7 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
         status: "ready",
         ok: true,
         ready: true,
-        freshness: sourceCoverage.dailyVolumeReady || expected,
+        freshness: sourceCoverage?.dailyVolumeReady || runSourcePayload.daily_volume_ready || expected,
         reason: "Strategy2 dedicated daytrade daily volume ready",
       },
       futopt: {
