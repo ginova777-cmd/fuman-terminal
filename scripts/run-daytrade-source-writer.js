@@ -474,7 +474,7 @@ function apply429State(state) {
 async function fetchActiveSymbols() {
   const rows = await supabaseGetPaged(
     "stock_tickers",
-    "select=symbol,name,market,stock_type,type,is_etf,is_suspended,payload&order=symbol.asc",
+    "select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc",
     { service: true },
   );
   const active = [];
@@ -488,6 +488,8 @@ async function fetchActiveSymbols() {
       name: row.name || symbol,
       market: row.market || "",
       stockType: row.stock_type || row.type || "",
+      industry: row.industry || row.payload?.industry || row.payload?.category || "",
+      payload: row.payload || {},
     });
   }
   active.sort((a, b) => a.symbol.localeCompare(b.symbol));
@@ -520,7 +522,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,payload&order=symbol.asc",
+      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price,payload&order=symbol.asc",
       { service: true },
     );
     for (const row of rows) {
@@ -595,7 +597,7 @@ async function fetchMarginChangeMap() {
       const symbol = normalizeCode(row.symbol);
       if (!symbol) continue;
       const list = grouped.get(symbol) || [];
-      if (list.length < 2) {
+      if (list.length < 5) {
         list.push({
           tradeDate: row.trade_date || "",
           marginBalance: numberValue(row.margin_balance),
@@ -612,12 +614,29 @@ async function fetchMarginChangeMap() {
   for (const [symbol, rows] of grouped.entries()) {
     const latest = rows[0] || {};
     const previous = rows[1] || {};
+    const previous3 = rows[Math.min(2, rows.length - 1)] || previous;
+    const previous5 = rows[Math.min(4, rows.length - 1)] || previous3 || previous;
+    const marginBalance = numberValue(latest.marginBalance);
+    const shortBalance = numberValue(latest.shortBalance);
+    const marginChange1d = rows.length >= 2 ? marginBalance - numberValue(previous.marginBalance) : 0;
+    const shortChange1d = rows.length >= 2 ? shortBalance - numberValue(previous.shortBalance) : 0;
+    const marginChange3d = rows.length >= 3 ? marginBalance - numberValue(previous3.marginBalance) : marginChange1d;
+    const shortChange3d = rows.length >= 3 ? shortBalance - numberValue(previous3.shortBalance) : shortChange1d;
+    const marginChange5d = rows.length >= 5 ? marginBalance - numberValue(previous5.marginBalance) : marginChange3d;
+    const shortChange5d = rows.length >= 5 ? shortBalance - numberValue(previous5.shortBalance) : shortChange3d;
     map.set(symbol, {
       tradeDate: latest.tradeDate || "",
-      marginBalance: numberValue(latest.marginBalance),
-      shortBalance: numberValue(latest.shortBalance),
-      marginChange: rows.length >= 2 ? numberValue(latest.marginBalance) - numberValue(previous.marginBalance) : 0,
-      shortChange: rows.length >= 2 ? numberValue(latest.shortBalance) - numberValue(previous.shortBalance) : 0,
+      sampledDays: rows.length,
+      marginBalance,
+      shortBalance,
+      marginChange: marginChange1d,
+      shortChange: shortChange1d,
+      marginChange1d,
+      shortChange1d,
+      marginChange3d,
+      shortChange3d,
+      marginChange5d,
+      shortChange5d,
       updated_at: latest.updated_at || "",
     });
   }
@@ -668,6 +687,69 @@ function firstNumber(...values) {
   return 0;
 }
 
+function firstText(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstText(...value);
+      if (nested) return nested;
+      continue;
+    }
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function taipeiDateAgeDays(value) {
+  const text = firstText(value);
+  if (!text) return null;
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+  const parsed = compact ? Date.parse(`${compact[1]}-${compact[2]}-${compact[3]}`) : Date.parse(text);
+  if (!Number.isFinite(parsed)) return null;
+  const normalized = compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : taipeiDateFrom(text);
+  const then = Date.parse(`${normalized}T00:00:00Z`);
+  const today = Date.parse(`${taipeiDate()}T00:00:00Z`);
+  if (!Number.isFinite(then) || !Number.isFinite(today)) return null;
+  return Math.floor((today - then) / (24 * 60 * 60 * 1000));
+}
+
+function isRecentTaipeiDate(value, days = 5) {
+  const ageDays = taipeiDateAgeDays(value);
+  return ageDays !== null && ageDays >= 0 && ageDays <= days;
+}
+
+function uniqueTexts(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function stockGroupKeys(row, payload = {}, dailyPayload = {}) {
+  const symbol = normalizeCode(row?.symbol || payload.symbol || dailyPayload.symbol);
+  const codeCluster = symbol ? `code_cluster_${symbol.slice(0, 3)}` : "";
+  return uniqueTexts([
+    row?.industry,
+    row?.sector,
+    row?.group,
+    row?.category,
+    row?.primaryIndustry,
+    row?.officialIndustry,
+    row?.payload?.industry,
+    row?.payload?.sector,
+    row?.payload?.group,
+    row?.payload?.category,
+    payload.industry,
+    payload.sector,
+    payload.group,
+    payload.category,
+    payload.primaryIndustry,
+    payload.officialIndustry,
+    dailyPayload.industry,
+    dailyPayload.sector,
+    dailyPayload.group,
+    dailyPayload.category,
+    codeCluster,
+  ]).filter((key) => key !== "--");
+}
+
 function rankMap(rows, valueFn, options = {}) {
   const minValue = Number.isFinite(Number(options.minValue)) ? Number(options.minValue) : -Infinity;
   const ranked = rows
@@ -687,9 +769,11 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const payload = quote.payload || {};
   const daily = dailyVolumeMap.get(symbol) || {};
   const dailyPayload = daily.payload || {};
+  const activeRow = supplementalMaps.activeBySymbol?.get(symbol) || {};
   const capital = supplementalMaps.capitalMap?.get(symbol) || {};
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
+  const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
   const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
   const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
   const changePercent = firstNumber(
@@ -707,6 +791,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
   const highPrice = firstNumber(quote.high_price, payload.highPrice, payload.high_price, price);
   const lowPrice = firstNumber(quote.low_price, payload.lowPrice, payload.low_price, price);
+  const limitUpPrice = firstNumber(quote.limit_up_price, payload.limitUpPrice, payload.limit_up_price, payload.limitUp, payload.limit_up, previousClose > 0 ? previousClose * 1.1 : 0);
   const insideVolume = firstNumber(quote.cumulative_bid_volume, payload.cumulativeBidVolume, payload.cumulative_bid_volume);
   const outsideVolume = firstNumber(quote.cumulative_ask_volume, payload.cumulativeAskVolume, payload.cumulative_ask_volume);
   const sideTotal = firstNumber(quote.cumulative_bid_ask_volume, payload.cumulativeBidAskVolume, payload.cumulative_bid_ask_volume, insideVolume + outsideVolume);
@@ -756,6 +841,78 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const mainForceNet = firstNumber(payload.mainForceNet, payload.main_force_net, payload.main_force, dailyPayload.mainForceNet, dailyPayload.main_force_net, chip.institutionTotalNet);
   const marginChange = firstNumber(payload.marginBalanceChange, payload.margin_balance_change, payload.marginChange, payload.margin_change, dailyPayload.marginBalanceChange, dailyPayload.margin_balance_change, margin.marginChange);
   const shortChange = firstNumber(payload.shortBalanceChange, payload.short_balance_change, payload.shortChange, payload.short_change, dailyPayload.shortBalanceChange, dailyPayload.short_balance_change, margin.shortChange);
+  const marginChange3d = firstNumber(payload.marginChange3d, payload.margin_change_3d, dailyPayload.marginChange3d, dailyPayload.margin_change_3d, margin.marginChange3d, margin.marginChange);
+  const shortChange3d = firstNumber(payload.shortChange3d, payload.short_change_3d, dailyPayload.shortChange3d, dailyPayload.short_change_3d, margin.shortChange3d, margin.shortChange);
+  const marginChange5d = firstNumber(payload.marginChange5d, payload.margin_change_5d, dailyPayload.marginChange5d, dailyPayload.margin_change_5d, margin.marginChange5d, margin.marginChange3d, margin.marginChange);
+  const shortChange5d = firstNumber(payload.shortChange5d, payload.short_change_5d, dailyPayload.shortChange5d, dailyPayload.short_change_5d, margin.shortChange5d, margin.shortChange3d, margin.shortChange);
+  const marginChange3To5d = Math.abs(marginChange5d) >= Math.abs(marginChange3d) ? marginChange5d : marginChange3d;
+  const shortChange3To5d = Math.abs(shortChange5d) >= Math.abs(shortChange3d) ? shortChange5d : shortChange3d;
+  const marginSampledDays = numberValue(margin.sampledDays);
+  const hasMargin3To5d = marginSampledDays >= 3
+    || payload.marginChange3d !== undefined
+    || payload.margin_change_3d !== undefined
+    || payload.marginChange5d !== undefined
+    || payload.margin_change_5d !== undefined
+    || dailyPayload.marginChange3d !== undefined
+    || dailyPayload.margin_change_3d !== undefined
+    || dailyPayload.marginChange5d !== undefined
+    || dailyPayload.margin_change_5d !== undefined;
+  const exDividendDate = firstText(
+    payload.exDividendDate,
+    payload.ex_dividend_date,
+    payload.exRightDate,
+    payload.ex_right_date,
+    payload.dividendDate,
+    payload.dividend_date,
+    payload.exDividendDates,
+    payload.ex_dividend_dates,
+    dailyPayload.exDividendDate,
+    dailyPayload.ex_dividend_date,
+    dailyPayload.exRightDate,
+    dailyPayload.ex_right_date,
+    dailyPayload.dividendDate,
+    dailyPayload.dividend_date,
+    dailyPayload.exDividendDates,
+    dailyPayload.ex_dividend_dates,
+  );
+  const exDividend3To5d = boolValue(
+    payload.isExDividend3To5d
+      || payload.exDividend3To5d
+      || payload.ex_dividend_3_5d
+      || payload.recentExDividend
+      || payload.recent_ex_dividend
+      || dailyPayload.isExDividend3To5d
+      || dailyPayload.exDividend3To5d
+      || dailyPayload.ex_dividend_3_5d
+      || dailyPayload.recentExDividend
+      || dailyPayload.recent_ex_dividend,
+  ) || isRecentTaipeiDate(exDividendDate, 5);
+  const exDividend = boolValue(payload.isExDividend || payload.is_ex_dividend || payload.exDividendToday || dailyPayload.isExDividend || dailyPayload.is_ex_dividend || dailyPayload.exDividendToday) || exDividend3To5d;
+  const marginShortBothUp3To5d = hasMargin3To5d && (
+    (marginChange3d > 0 && shortChange3d > 0)
+    || (marginChange5d > 0 && shortChange5d > 0)
+    || (marginChange3To5d > 0 && shortChange3To5d > 0)
+  );
+  const daytradeCrowdedBasis = [];
+  if (boolValue(
+    payload.daytradeCrowded3To5d
+      || payload.daytrade_crowded_3_5d
+      || payload.daytradeBigPlayer3To5d
+      || payload.overnightDaytradeCrowded3To5d
+      || payload.recentDaytradeCrowded
+      || dailyPayload.daytradeCrowded3To5d
+      || dailyPayload.daytrade_crowded_3_5d
+      || dailyPayload.daytradeBigPlayer3To5d
+      || dailyPayload.overnightDaytradeCrowded3To5d
+      || dailyPayload.recentDaytradeCrowded,
+  )) {
+    daytradeCrowdedBasis.push("payload_3_5d_flag");
+  }
+  if (turnoverRate3To5d >= 20) daytradeCrowdedBasis.push("turnover_3_5d_ge20");
+  if (turnoverRate3To5d >= 10 && marginShortBothUp3To5d) daytradeCrowdedBasis.push("turnover_margin_short_both_up_3_5d");
+  if (turnoverRate3To5d >= 8 && volumeRatio5 >= 2 && shortChange3To5d > 0) daytradeCrowdedBasis.push("volume_turnover_short_up_3_5d");
+  const daytradeCrowded3To5d = daytradeCrowdedBasis.length > 0;
+  const daytradeCrowded = boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer || dailyPayload.daytradeCrowded || dailyPayload.daytrade_crowded || dailyPayload.daytradeBigPlayer) || daytradeCrowded3To5d;
   return {
     price,
     changePercent,
@@ -766,6 +923,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     volumeRatio5,
     highPrice,
     lowPrice,
+    limitUpPrice,
+    groupKeys: stockGroupKeys(activeRow, payload, dailyPayload),
     insideVolume,
     outsideVolume,
     sideTotal,
@@ -779,8 +938,24 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     mainForceNet,
     marginChange,
     shortChange,
-    exDividend: boolValue(payload.isExDividend || payload.is_ex_dividend || payload.exDividendToday),
-    daytradeCrowded: boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer),
+    marginChange3d,
+    shortChange3d,
+    marginChange5d,
+    shortChange5d,
+    marginChange3To5d,
+    shortChange3To5d,
+    marginSampledDays,
+    hasMargin3To5d,
+    stockFutureInitial0846: stockFuture,
+    stockFutureInitial0846Ok: stockFuture.futoptChangePercent >= 2
+      && stockFuture.relativeToTxfPercent >= 1
+      && stockFuture.futoptTotalVolume >= 50,
+    exDividend,
+    exDividend3To5d,
+    exDividendDate,
+    daytradeCrowded,
+    daytradeCrowded3To5d,
+    daytradeCrowdedBasis,
     quoteFresh: ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS,
     fieldCoverage: {
       quote: Boolean(quoteMap?.has(symbol)),
@@ -793,7 +968,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
       insideOutside: sideTotal > 0,
       bidAsk: bidAskRatio > 0,
       institution: foreignNet !== 0 || trustNet !== 0 || dealerNet !== 0 || mainForceNet !== 0,
-      marginShort: marginChange !== 0 || shortChange !== 0,
+      marginShort: marginChange3To5d !== 0 || shortChange3To5d !== 0 || marginChange !== 0 || shortChange !== 0,
     },
   };
 }
@@ -930,6 +1105,36 @@ async function fetchFutoptRows() {
   return out;
 }
 
+async function fetchStockFutureInitialMap() {
+  const map = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "v_stock_future_live_contract",
+      "select=trade_date,symbol,stock_name,future_symbol,futopt_last_price,futopt_change_percent,futopt_total_volume,txf_change_percent,relative_to_txf_percent,source_status,futopt_updated_at,updated_at&futopt_change_percent=gte.2&relative_to_txf_percent=gte.1&futopt_total_volume=gte.50&order=futopt_change_percent.desc",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (!symbol) continue;
+      map.set(symbol, {
+        tradeDate: row.trade_date || "",
+        stockName: row.stock_name || "",
+        futureSymbol: String(row.future_symbol || "").trim().toUpperCase(),
+        futoptLastPrice: numberValue(row.futopt_last_price),
+        futoptChangePercent: numberValue(row.futopt_change_percent),
+        futoptTotalVolume: numberValue(row.futopt_total_volume),
+        txfChangePercent: numberValue(row.txf_change_percent),
+        relativeToTxfPercent: numberValue(row.relative_to_txf_percent),
+        sourceStatus: String(row.source_status || "").trim(),
+        futoptUpdatedAt: row.futopt_updated_at || row.updated_at || "",
+      });
+    }
+  } catch {
+    return map;
+  }
+  return map;
+}
+
 function readRuntimePrioritySeeds(activeSymbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
   const universe = new Set(activeSymbols.map((row) => row.symbol));
@@ -975,6 +1180,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
 
 function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), supplementalMaps = {}) {
   const activeBySymbol = new Map(activeSymbols.map((row) => [row.symbol, row]));
+  supplementalMaps.activeBySymbol = activeBySymbol;
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
   const candidates = activeSymbols.map((row) => ({
@@ -986,6 +1192,29 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const volumeRanks = rankMap(candidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(candidates, (row) => row.metrics.tradeValue, { minValue: 0 });
   const turnoverRanks = rankMap(candidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
+  const groupLimitUpLeaders = new Map();
+  for (const row of candidates) {
+    const metrics = row.metrics;
+    const lockedLimitUp = metrics.price > 0 && (
+      (metrics.limitUpPrice > 0 && metrics.price >= metrics.limitUpPrice * 0.995)
+      || metrics.changePercent >= 9.7
+    );
+    if (!lockedLimitUp) continue;
+    for (const key of metrics.groupKeys || []) {
+      const previous = groupLimitUpLeaders.get(key);
+      if (!previous || metrics.tradeValue > previous.tradeValue || metrics.changePercent > previous.changePercent) {
+        groupLimitUpLeaders.set(key, {
+          symbol: row.symbol,
+          name: row.name,
+          group: key,
+          price: metrics.price,
+          changePercent: metrics.changePercent,
+          tradeValue: metrics.tradeValue,
+          limitUpPrice: metrics.limitUpPrice,
+        });
+      }
+    }
+  }
   const rankedCandidates = candidates.map((row) => {
     const metrics = row.metrics;
     const changeRank = changeRanks.get(row.symbol)?.rank || 0;
@@ -993,6 +1222,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
     const valueRank = valueRanks.get(row.symbol)?.rank || 0;
     const turnoverRank = turnoverRanks.get(row.symbol)?.rank || 0;
+    const groupLeader = (metrics.groupKeys || [])
+      .map((key) => groupLimitUpLeaders.get(key))
+      .find((leader) => leader && leader.symbol !== row.symbol);
     const reasons = [];
     let score = 0;
 
@@ -1061,24 +1293,46 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       score += 680;
       reasons.push(`turnover_3_5d_rank_top${turnoverRank}`);
     }
+    if (metrics.stockFutureInitial0846Ok) {
+      score += 170;
+      reasons.push("stock_future_initial_0846_observe");
+      if (String(metrics.stockFutureInitial0846.sourceStatus || "").toLowerCase() === "ready") {
+        score += 30;
+        reasons.push("stock_future_source_ready");
+      }
+    }
+    if (groupLeader && metrics.price > 0 && (metrics.changePercent >= 1 || metrics.volumeRatio5 >= 1 || metrics.tradeValue >= 30000000)) {
+      score += 155;
+      reasons.push("strong_group_limit_up_leader");
+    }
     if (metrics.changePercent > 0 && (metrics.foreignNet > 0 || metrics.trustNet > 0 || metrics.dealerNet > 0 || metrics.mainForceNet > 0)) {
       score += 100;
       reasons.push("institution_or_main_force_buy_price_strong");
     }
-    if (metrics.changePercent > 0 && metrics.marginChange < 0) {
-      score += 70;
-      reasons.push("margin_down_price_strong");
+    if (metrics.changePercent > 0 && metrics.hasMargin3To5d && (metrics.marginChange3d < 0 || metrics.marginChange5d < 0 || metrics.marginChange3To5d < 0)) {
+      score += 95;
+      reasons.push("margin_down_3_5d_price_strong");
     }
-    if (metrics.changePercent > 0 && metrics.marginChange > 0 && metrics.shortChange > 0) {
-      score += 55;
-      reasons.push("margin_short_both_up_price_strong");
+    if (metrics.changePercent > 0 && metrics.hasMargin3To5d && (
+      (metrics.marginChange3d > 0 && metrics.shortChange3d > 0)
+      || (metrics.marginChange5d > 0 && metrics.shortChange5d > 0)
+      || (metrics.marginChange3To5d > 0 && metrics.shortChange3To5d > 0)
+    )) {
+      score += 80;
+      reasons.push("margin_short_both_up_3_5d_price_strong");
     }
-    if (metrics.exDividend) {
+    if (metrics.exDividend3To5d) {
       score -= 250;
+      reasons.push("ex_dividend_3_5d_watch");
+    } else if (metrics.exDividend) {
+      score -= 160;
       reasons.push("exclude_ex_dividend_watch");
     }
-    if (metrics.daytradeCrowded) {
-      score -= 120;
+    if (metrics.daytradeCrowded3To5d) {
+      score -= 90;
+      reasons.push("daytrade_crowded_3_5d_watch");
+    } else if (metrics.daytradeCrowded) {
+      score -= 60;
       reasons.push("daytrade_crowded_watch");
     }
 
@@ -1104,6 +1358,25 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
         turnoverRate: Number(metrics.turnoverRate.toFixed(4)),
         turnoverRate3To5d: Number(metrics.turnoverRate3To5d.toFixed(4)),
+        marginSampledDays: metrics.marginSampledDays,
+        hasMargin3To5d: metrics.hasMargin3To5d,
+        marginChange1d: Number(metrics.marginChange.toFixed(4)),
+        shortChange1d: Number(metrics.shortChange.toFixed(4)),
+        marginChange3d: Number(metrics.marginChange3d.toFixed(4)),
+        shortChange3d: Number(metrics.shortChange3d.toFixed(4)),
+        marginChange5d: Number(metrics.marginChange5d.toFixed(4)),
+        shortChange5d: Number(metrics.shortChange5d.toFixed(4)),
+        marginChange3To5d: Number(metrics.marginChange3To5d.toFixed(4)),
+        shortChange3To5d: Number(metrics.shortChange3To5d.toFixed(4)),
+        stockFutureInitial0846Ok: metrics.stockFutureInitial0846Ok,
+        stockFutureInitial0846: metrics.stockFutureInitial0846,
+        groupKeys: metrics.groupKeys,
+        groupLimitUpLeader: groupLeader || null,
+        limitUpPrice: Number(metrics.limitUpPrice.toFixed(4)),
+        exDividend3To5d: metrics.exDividend3To5d,
+        exDividendDate: metrics.exDividendDate,
+        daytradeCrowded3To5d: metrics.daytradeCrowded3To5d,
+        daytradeCrowdedBasis: metrics.daytradeCrowdedBasis,
         quoteFresh: metrics.quoteFresh,
         fieldCoverage: metrics.fieldCoverage,
         ruleHits: reasons,
@@ -1338,6 +1611,8 @@ function normalizeQuote(payload, symbol) {
   const price = numberValue(payload?.lastPrice || payload?.closePrice || payload?.lastTrial?.price);
   const previousClose = numberValue(payload?.previousClose || payload?.referencePrice);
   const changePercent = numberValue(payload?.changePercent, previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : 0);
+  const limitUpPrice = numberValue(payload?.limitUpPrice || payload?.limitUp || payload?.limit_up_price || (previousClose > 0 ? previousClose * 1.1 : 0));
+  const limitDownPrice = numberValue(payload?.limitDownPrice || payload?.limitDown || payload?.limit_down_price || (previousClose > 0 ? previousClose * 0.9 : 0));
   const quoteSeenAt = nowIso();
   const quoteTime = normalizeTimestamp(payload?.lastUpdated || payload?.lastTrade?.time, quoteSeenAt);
   const lastTradeTime = normalizeTimestamp(payload?.lastTrade?.time || payload?.lastUpdated, quoteTime);
@@ -1362,6 +1637,8 @@ function normalizeQuote(payload, symbol) {
     cumulative_bid_volume: toLots(total.tradeVolumeAtBid) || null,
     cumulative_ask_volume: toLots(total.tradeVolumeAtAsk) || null,
     cumulative_bid_ask_volume: (toLots(total.tradeVolumeAtBid) || 0) + (toLots(total.tradeVolumeAtAsk) || 0) || null,
+    limit_up_price: limitUpPrice || null,
+    limit_down_price: limitDownPrice || null,
     stock_type: payload?.type || payload?.stockType || "",
     session: payload?.session || "",
     last_trade_time: lastTradeTime,
@@ -1545,6 +1822,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     .filter((row) => (row.payload?.motherPoolRuleHits || []).length)
     .slice(0, 40)
     .map((row) => row.symbol);
+  const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
   const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : freshFull.length > 0 ? "C" : "D";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
@@ -1616,6 +1894,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
+    stock_future_initial_0846_source: "v_stock_future_live_contract",
+    stock_future_initial_0846_rows: stockFutureInitialRows.length,
+    stock_future_initial_0846_ready_rows: stockFutureInitialRows.filter((row) => String(row.sourceStatus || "").toLowerCase() === "ready").length,
     mother_pool_rule_hit_symbols: motherPoolRuleHitSymbols,
     mother_pool_rule_hit_counts: motherRuleCounts,
     mother_pool_field_coverage_counts: motherFieldCoverageCounts,
@@ -1881,12 +2162,13 @@ async function tick() {
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const quoteMap = await fetchExistingDaytradeQuotes();
-  const [capitalMap, chipMap, marginChangeMap] = await Promise.all([
+  const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap] = await Promise.all([
     fetchCapitalMap(),
     fetchChipFlowMap(),
     fetchMarginChangeMap(),
+    fetchStockFutureInitialMap(),
   ]);
-  const supplementalMaps = { capitalMap, chipMap, marginChangeMap };
+  const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap };
   const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   const nonFatalWriteErrors = [];
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };

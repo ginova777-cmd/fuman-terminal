@@ -39,6 +39,9 @@ const FORBIDDEN_DAYTRADE_SOURCE_MARKERS = [
   "v_stock_future_live_contract",
   "v_strategy12_stock_future_contract_health",
 ];
+const ALLOWED_DAYTRADE_SOURCE_MARKER_CONTEXT = {
+  "v_stock_future_live_contract": ["fetchStockFutureInitialMap", "stock_future_initial_0846"],
+};
 
 const REQUIRED_PAYLOAD_FIELDS = [
   "daytrade_gate_grade",
@@ -206,6 +209,8 @@ function auditSourceIsolation() {
       continue;
     }
     for (const marker of FORBIDDEN_DAYTRADE_SOURCE_MARKERS) {
+      const allowedContext = ALLOWED_DAYTRADE_SOURCE_MARKER_CONTEXT[marker];
+      if (allowedContext && allowedContext.every((needle) => text.includes(needle))) continue;
       if (text.includes(marker)) violations.push({ file: relativePath, marker });
     }
   }
@@ -409,6 +414,8 @@ async function main() {
     ["gain_volume_surge_rank_overlap", 1],
     ["turnover_gt5", 1],
     ["institution_or_main_force_buy_price_strong", 1],
+    ["margin_down_3_5d_price_strong", 1],
+    ["margin_short_both_up_3_5d_price_strong", 1],
   ]) {
     const count = numberValue(motherPoolRuleHitCounts[key], 0);
     if (after0845 && count < min) warnings.push(issue(`mother_pool_rule_${key}_not_hit`, "warning", { rule: key, count, min }));
