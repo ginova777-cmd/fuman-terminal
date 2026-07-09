@@ -9257,4 +9257,52 @@
     document.documentElement.classList.add("fuman-desktop-fast-shell");
     keepDesktopFastStyleLast();
   }
+
+  (function installMarketAiWatchlistActions() {
+    if (window.__fumanDesktopMarketAiWatchlistActions === "20260709-01") return;
+    window.__fumanDesktopMarketAiWatchlistActions = "20260709-01";
+    const codeOf = (value) => String(value || "").match(/\d{4}/)?.[0] || "";
+    const rowInfo = (row, button) => {
+      const code = codeOf(button?.dataset?.aiStockCode || button?.dataset?.aiWatchCode || row?.querySelector?.(".market-ai-code")?.textContent || row?.textContent);
+      const name = String(button?.dataset?.aiStockName || button?.dataset?.aiWatchName || row?.querySelector?.(".market-ai-name")?.textContent || code || "").trim();
+      return { code, name };
+    };
+    async function addAndOpen(code, name, mode) {
+      const target = codeOf(code);
+      if (!target) return false;
+      const seed = { code: target, name: name || target, source: "desktop-market-ai-hot-stock", reason: mode === "analyze" ? "AI 判讀看分析" : "AI 判讀加入自選" };
+      const shell = await ensureWatchlistShell().catch(() => null);
+      let ok = false;
+      if (shell?.ensureCode) ok = await Promise.resolve(shell.ensureCode(target, seed));
+      else if (typeof window.FUMAN_WATCHLIST_BRIDGE_ADD === "function") ok = await Promise.resolve(window.FUMAN_WATCHLIST_BRIDGE_ADD(target, seed.source));
+      shell?.selectCode?.(target);
+      const link = document.querySelector('[data-view="watchlist"]');
+      if (link) link.click();
+      window.setTimeout(() => {
+        shell?.ensureCode?.(target, seed);
+        shell?.selectCode?.(target);
+        shell?.render?.();
+        shell?.refreshSelected?.();
+        const status = document.querySelector("#watchlist-entry-status");
+        if (status) status.textContent = mode === "analyze" ? `${target} ${name || ""} 已載入自選股分析` : `${target} ${name || ""} 已加入自選股`;
+      }, 80);
+      return ok;
+    }
+    document.addEventListener("click", (event) => {
+      const button = event.target?.closest?.("[data-ai-stock-code],[data-ai-watch-code]");
+      const row = button?.closest?.(".market-ai-stock-row");
+      if (!button || !row) return;
+      const analyze = button.matches("[data-ai-stock-code]");
+      const watch = button.matches("[data-ai-watch-code]");
+      if (!analyze && !watch) return;
+      const { code, name } = rowInfo(row, button);
+      if (!code) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      addAndOpen(code, name, analyze ? "analyze" : "watch").then((ok) => {
+        if (watch) button.textContent = ok === false ? "已選中" : "已加入";
+      });
+    }, true);
+  })();
 })();
