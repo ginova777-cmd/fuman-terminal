@@ -6846,6 +6846,22 @@
       window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
       return rendered;
     }
+    if (isFixedDomRoute(key)) {
+      removeFixedPageShell(key);
+      window.setTimeout(() => {
+        if (isWarrantFlowRoute(key)) {
+          window.loadWarrantFlow?.(false);
+          window.renderWarrantFlow?.();
+        } else if (isCbDetectRoute(key)) {
+          window.loadCbDetectionData?.(false);
+        } else if (isChipTradeRoute(key)) {
+          window.loadInstitution?.();
+          window.renderChipTradeTable?.();
+        }
+        delete panel.dataset.fumanRouteSnapshotRestoring;
+      }, 0);
+      return true;
+    }
     const meta = strategyMeta(link);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
