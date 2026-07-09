@@ -21,7 +21,7 @@
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
   const FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
-  const FIXED_CANVAS_PERSIST_ROUTES = [CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const FIXED_CANVAS_PERSIST_ROUTES = [];
   const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
@@ -1044,6 +1044,10 @@
 
   function isChipTradeRoute(route) {
     return route === CHIP_TRADE_ROUTE;
+  }
+
+  function isFixedDomRoute(route) {
+    return isChipTradeRoute(route) || isCbDetectRoute(route) || isWarrantFlowRoute(route);
   }
 
   function isApiBackedSnapshotItem(item) {
@@ -6737,6 +6741,11 @@
       window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
       return rendered;
     }
+    if (isFixedDomRoute(key)) {
+      removeFixedPageShell(key);
+      window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+      return true;
+    }
     const meta = strategyMeta(link);
     if (isStrategy3Route(key)) return renderStrategy3CompleteRunShell(key, meta, panel);
     if (!isStrategy2Route(key)) return renderUnifiedListShell(key, meta, panel);
@@ -6817,9 +6826,6 @@
       return rendered;
     }
     const meta = strategyMeta(link);
-    if (isChipTradeRoute(key) || isCbDetectRoute(key) || isWarrantFlowRoute(key)) {
-      return renderUnifiedListShell(key, meta, panel);
-    }
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
@@ -7879,22 +7885,6 @@
       }
       body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-main p {
         color: #334155;
-      }
-      #chip-trade-view.fuman-unified-list-panel .chip-tool,
-      #chip-trade-view.fuman-unified-list-panel .chip-table-wrap,
-      #chip-trade-view.fuman-unified-list-panel .chip-tabs,
-      #cb-detect-view.fuman-unified-list-panel .cb-detect-list,
-      #cb-detect-view.fuman-unified-list-panel .cb-detect-panel,
-      #cb-detect-view.fuman-unified-list-panel .strategy5-dashboard:not(.strategy3-clean),
-      #warrant-flow-view.fuman-unified-list-panel .warrant-flow-panel,
-      #warrant-flow-view.fuman-unified-list-panel .warrant-flow-list,
-      #warrant-flow-view.fuman-unified-list-panel .strategy5-dashboard:not(.strategy3-clean) {
-        display: none !important;
-      }
-      #chip-trade-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell),
-      #cb-detect-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell),
-      #warrant-flow-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell) {
-        display: none !important;
       }
       @media (max-width: 980px) {
         #strategy-view.strategy3-only .strategy5-shell {
