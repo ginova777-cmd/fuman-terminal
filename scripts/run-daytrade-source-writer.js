@@ -1058,7 +1058,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       reasons.push("turnover_gt5");
     }
     if (turnoverRank && turnoverRank <= 50) {
-      score += 180;
+      score += 680;
       reasons.push(`turnover_3_5d_rank_top${turnoverRank}`);
     }
     if (metrics.changePercent > 0 && (metrics.foreignNet > 0 || metrics.trustNet > 0 || metrics.dealerNet > 0 || metrics.mainForceNet > 0)) {
