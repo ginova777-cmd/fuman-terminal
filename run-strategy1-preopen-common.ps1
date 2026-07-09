@@ -285,6 +285,14 @@ try {
     & $snapshotScript -Source "strategy1-preopen-$safeMode" -LogPath $log -AllowFailure
   }
 
+  Write-PreopenLog "strategy1 star preopen display readback start"
+  & $nodeExe "scripts\scan-star-preopen-closure.js" "--verify-only" >> $log 2>&1
+  $readbackExitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+  if ($readbackExitCode -ne 0) {
+    throw "strategy1 star preopen display readback failed exit=$readbackExitCode"
+  }
+  Write-PreopenLog "strategy1 star preopen display readback ok"
+
   if ($gate.Status -eq "failed") {
     throw "strategy1 preopen health failed: $($gate.Reason)"
   }

@@ -10,6 +10,10 @@ const OUT_FILE = path.join(RUNTIME_DIR, "data", "scan-receipts", "star-preopen-c
 const STAR_FILE = path.join(RUNTIME_DIR, "data", "star-preopen-latest.json");
 const BASE_URL = String(process.env.FUMAN_PRODUCTION_URL || process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 
+function hasArg(name) {
+  return process.argv.includes(name);
+}
+
 function mkdirp(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
 }
@@ -99,19 +103,26 @@ async function main() {
   const startedAt = new Date().toISOString();
   const steps = [];
   const issues = [];
+  const verifyOnly = hasArg("--verify-only");
+  const skipScan = verifyOnly || hasArg("--skip-scan");
+  const skipSnapshot = verifyOnly || hasArg("--skip-snapshot");
 
-  const scan = runStep("scan-star-preopen", ["--use-system-ca", "scripts/scan-star-preopen.js"], { timeoutMs: 180000 });
-  steps.push(scan);
-  if (!scan.ok) issues.push(`scan-star-preopen failed exit=${scan.exitCode}`);
+  if (!skipScan) {
+    const scan = runStep("scan-star-preopen", ["--use-system-ca", "scripts/scan-star-preopen.js"], { timeoutMs: 180000 });
+    steps.push(scan);
+    if (!scan.ok) issues.push(`scan-star-preopen failed exit=${scan.exitCode}`);
+  }
 
-  const snapshot = runStep("desktop-route-snapshot", [
-    "--use-system-ca",
-    "scripts/write-desktop-route-snapshot.js",
-    "--source=strategy1-star-preopen-post-scan",
-    "--min-endpoints=10",
-  ], { timeoutMs: 240000 });
-  steps.push(snapshot);
-  if (!snapshot.ok) issues.push(`desktop-route-snapshot failed exit=${snapshot.exitCode}`);
+  if (!skipSnapshot) {
+    const snapshot = runStep("desktop-route-snapshot", [
+      "--use-system-ca",
+      "scripts/write-desktop-route-snapshot.js",
+      "--source=strategy1-star-preopen-post-scan",
+      "--min-endpoints=10",
+    ], { timeoutMs: 240000 });
+    steps.push(snapshot);
+    if (!snapshot.ok) issues.push(`desktop-route-snapshot failed exit=${snapshot.exitCode}`);
+  }
 
   const localPayload = readJson(STAR_FILE, {});
   const localCounts = stageCounts(localPayload);
@@ -140,6 +151,7 @@ async function main() {
     ok: issues.length === 0,
     status: issues.length === 0 ? "ready" : "failed",
     contract: "strategy1_star_preopen_scan_to_display_closure",
+    mode: verifyOnly ? "verify-only" : "scan-refresh-verify",
     startedAt,
     finishedAt: new Date().toISOString(),
     local: {
