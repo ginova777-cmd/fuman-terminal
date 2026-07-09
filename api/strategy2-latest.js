@@ -1328,7 +1328,6 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
-    && payload?.run_quality_at_publish?.publishAllowed === true
   );
   const publishAllowed = Boolean(currentGatePublishAllowed || publishedRunSnapshotAllowed);
   const publishBlocked = !publishAllowed;
