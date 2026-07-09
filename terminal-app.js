@@ -802,3 +802,51 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
 
 
 ;(function installMarketAiLiveContractRenderer(){if(window.__fumanMarketAiLiveContractRenderer)return;window.__fumanMarketAiLiveContractRenderer=!0;if("function"!=typeof renderMarketAiPanel)return;const previousRenderMarketAiPanel=renderMarketAiPanel,endpoint="/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";let loading=!1,lastSignature="";const esc=value=>"function"==typeof escapeAttr?escapeAttr(value):String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])),num=value=>"function"==typeof cleanNumber?cleanNumber(value):Number(value)||0,arr=value=>"function"==typeof normalizeArray?normalizeArray(value):Array.isArray(value)?value:[],fresh=()=>`${endpoint}&t=${Date.now()}`,dateLabel=value=>{const text=String(value||"").replace(/\D/g,"");return text.length>=8?`${text.slice(4,6)}/${text.slice(6,8)}`:"--"};function stockRow(stock,index){return`<article class="market-ai-stock-row"><div class="market-ai-rank">#${index+1}</div><div><h4><span class="market-ai-code">${esc(stock.code||"--")}</span><span class="market-ai-name">${esc(stock.name||"--")}</span></h4><p>${esc(stock.source||"AI 判讀")}，分數 ${esc(stock.score??"--")}，漲幅 ${num(stock.pct??stock.percent).toFixed(2)}%。</p></div><div><span class="market-ai-chip">${esc(stock.industry||"--")}</span></div><div class="market-ai-score"><small>分數</small><strong>${esc(stock.score??"--")}</strong></div><div class="market-ai-tags">${arr(stock.tags).slice(0,5).map(tag=>`<span>${esc(tag)}</span>`).join("")}</div></article>`}function renderLivePayload(payload){if(!marketAiPanel)return;const dashboard=payload?.dashboard||{},freshness=payload?.dataFreshness||{},summary=payload?.summary||{},issues=arr(freshness.sourceIssues),stale=arr(freshness.staleSources),points=arr(payload?.todayPoints),risks=arr(payload?.riskNotes),reasoning=arr(payload?.reasoning),stocks=arr(payload?.hotStocks),tradeDate=dashboard.tradeDate||freshness.heatmapTradeDate||freshness.radarTradeDate||freshness.today||payload?.marketSession?.today,sourceStatus=issues.length?`水源異常：${issues.join("；")}`:stale.length?`舊資料已排除：${stale.join("、")}`:"今日正式水源可用",sig=JSON.stringify([payload?.updatedAt,tradeDate,dashboard.sample,dashboard.up,dashboard.down,dashboard.bias,sourceStatus,stocks.map(s=>`${s.code}:${s.score}`).join("|")]);if(sig===lastSignature&&marketAiPanel.innerHTML)return;lastSignature=sig;marketAiPanel.dataset.marketApiAi="live-contract";marketAiPanel.innerHTML=`<section class="market-ai-summary"><article class="market-ai-card hero"><small>盤中決策總覽 · 資料 ${esc(dateLabel(tradeDate))}</small><strong>${esc(dashboard.bias||"等待方向")}</strong><p>${esc(sourceStatus)}。${esc(payload?.priorityObservation?.text||"等待正式水源判讀。")}</p><div class="market-ai-metrics"><span>樣本數<b>${num(dashboard.sample||summary.sample).toLocaleString("zh-TW")}</b></span><span>上漲<b>${num(dashboard.up||summary.up).toLocaleString("zh-TW")}</b></span><span>下跌<b>${num(dashboard.down||summary.down).toLocaleString("zh-TW")}</b></span><span>信心<b>${esc(dashboard.confidence||summary.confidence||"觀察")}</b></span></div></article><article class="market-ai-card"><small>操作建議</small><strong>${esc(dashboard.action||"等待方向")}</strong><p>${esc(payload?.priorityObservation?.text||"依正式 API 判讀，不讀舊 panel JSON。")}</p></article><article class="market-ai-card ${issues.length?"warning":""}"><small>水源狀態</small><strong>${issues.length?"水源異常":"水源正常"}</strong><p>${esc(sourceStatus)}</p></article><article class="market-ai-card"><small>正式 contract</small><strong>${esc(payload?.source||payload?.cacheSource||"api/market-ai-live")}</strong><p>heatmap ${esc(freshness.heatmapTradeDate||"--")} / radar ${esc(freshness.radarTradeDate||"--")}；舊 snapshot 不作正常判讀。</p></article></section><section class="market-ai-main"><article class="market-ai-block"><h3>AI 今日重點</h3><small>${esc(dateLabel(tradeDate))} 最新資料</small><div class="market-ai-list">${(points.length?points:[sourceStatus]).slice(0,5).map((text,index)=>`<div class="market-ai-point"><b>${index+1}</b><span>${esc(text)}</span></div>`).join("")}</div></article><aside class="market-ai-block"><h3>風險提醒</h3><small>${risks.length} 則</small><div class="market-ai-risk">${(risks.length?risks:[{title:issues.length?"水源異常":"水源正常",text:sourceStatus}]).slice(0,4).map(note=>`<article><h4>${esc(note.title||"風險")}</h4><p>${esc(note.text||note.reason||"")}</p></article>`).join("")}</div></aside></section><section class="market-ai-block"><h3>AI 判讀依據</h3><small>正式 API-only contract</small><div class="market-ai-evidence">${reasoning.slice(0,5).map(item=>`<article><small>${esc(item.key||"依據")}</small><strong>${esc(item.title||"--")}</strong><p>${esc(item.text||"")}</p></article>`).join("")||`<article><small>來源</small><strong>${esc(payload?.source||"api/market-ai-live")}</strong><p>${esc(sourceStatus)}</p></article>`}</div></section><section class="market-ai-block"><h3>熱門觀察股</h3><small>依正式 API 排序</small><div class="market-ai-hot">${stocks.length?stocks.slice(0,10).map(stockRow).join(""):'<div class="empty-state">目前正式 API 尚未產生觀察股。</div>'}</div></section>`}async function loadLive(force=!1){if(loading||!marketAiPanel)return;loading=!0;try{if(!force&&!marketAiPanel.innerHTML)marketAiPanel.innerHTML='<div class="empty-state">載入最新 AI 判讀資料中...</div>';const response=await fetch(fresh(),{cache:"no-store",headers:{"Cache-Control":"no-store"}});if(!response.ok)throw new Error(`market_ai_live_http_${response.status}`);renderLivePayload(await response.json())}catch(error){marketAiPanel.innerHTML=`<div class="empty-state">AI 判讀正式水源讀取失敗：${esc(error?.message||error)}。不使用舊 panel cache 當正常資料。</div>`}finally{loading=!1}}renderMarketAiPanel=function(){if("ai"===marketMode){installMarketTabs?.();loadLive(!0);return}return previousRenderMarketAiPanel.apply(this,arguments)};setInterval(()=>{!isDocumentHidden?.()&&"ai"===marketMode&&isViewActive?.("market")&&loadLive(!1)},Math.max(3e4,num(FUMAN_TUNING_CONFIG.marketAiLivePollMs||45e3)));document.addEventListener("visibilitychange",()=>{isDocumentHidden?.()||"ai"!==marketMode||loadLive(!0)},{passive:!0});window.addEventListener("focus",()=>{"ai"===marketMode&&loadLive(!0)},{passive:!0})})();
+
+;(function installAiWatchlistBridge(){
+  if(window.__fumanAiWatchlistBridge==="20260709-01")return;
+  window.__fumanAiWatchlistBridge="20260709-01";
+  const codeOf=value=>String(value||"").match(/\d{4}/)?.[0]||"";
+  const nameOf=(button,code)=>String(button?.dataset?.aiStockName||button?.dataset?.aiWatchName||button?.closest?.(".market-ai-stock-row")?.querySelector?.(".market-ai-name")?.textContent||code||"").trim();
+  async function api(){
+    if(window.FUMAN_WATCHLIST_SHELL_INSTANCE?.ensureCode)return window.FUMAN_WATCHLIST_SHELL_INSTANCE;
+    if(window.FUMAN_WATCHLIST_SHELL_MODULE?.install){
+      try{return window.FUMAN_WATCHLIST_SHELL_MODULE.install(window.getWatchlistContext?.()||{})}catch(error){}
+    }
+    if(typeof ensureWatchlistModule==="function"){
+      try{return await ensureWatchlistModule()}catch(error){}
+    }
+    return window.FUMAN_WATCHLIST_SHELL_INSTANCE||null;
+  }
+  async function openWatchlist(code,name,mode){
+    const target=codeOf(code);
+    if(!target)return false;
+    const shell=await api();
+    const seed={code:target,name:name||target,source:"ai-hot-stock-action",reason:mode==="analyze"?"AI 判讀看分析":"AI 判讀加入自選"};
+    let ok=false;
+    if(shell?.ensureCode)ok=await Promise.resolve(shell.ensureCode(target,seed));
+    else if(window.FUMAN_WATCHLIST_FORCE_ADD_CODE)ok=await Promise.resolve(window.FUMAN_WATCHLIST_FORCE_ADD_CODE(target));
+    if(shell?.selectCode)shell.selectCode(target);
+    if(typeof showView==="function")showView("watchlist",document.querySelector('[data-view="watchlist"]'));
+    if(shell?.renderWatchlist)shell.renderWatchlist();
+    if(shell?.refreshSelected)shell.refreshSelected();
+    const status=document.querySelector("#watchlist-entry-status");
+    if(status)status.textContent=mode==="analyze"?`${target} ${name||""} 已載入自選股分析`:`${target} ${name||""} 已加入自選股`;
+    return ok;
+  }
+  document.addEventListener("click",event=>{
+    const analyze=event.target.closest?.("[data-ai-stock-code]");
+    const watch=event.target.closest?.("[data-ai-watch-code]");
+    const button=analyze||watch;
+    if(!button)return;
+    const code=codeOf(analyze?button.dataset.aiStockCode:button.dataset.aiWatchCode);
+    if(!code)return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const name=nameOf(button,code);
+    openWatchlist(code,name,analyze?"analyze":"watch").then(ok=>{
+      if(watch)button.textContent=ok===false?"已選中":"已加入";
+    });
+  },true);
+})();
