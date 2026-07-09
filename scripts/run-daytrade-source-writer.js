@@ -10,6 +10,7 @@ const {
 const {
   readFugleFutoptWebSocketQuotes,
 } = require("../lib/fugle-futopt-websocket");
+const { readSnapshot } = require("../lib/supabase-snapshots");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
@@ -17,6 +18,11 @@ const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
 const PRIORITY_SYMBOLS_FILE = cachePath("intraday", "fugle-ws-priority-symbols.json");
+const HEATMAP_LATEST_FILES = [
+  runtimePath("data", "heatmap-latest.json"),
+  repoPath("data", "heatmap-latest.json"),
+];
+const HEATMAP_API_FILE = repoPath("api", "heatmap.js");
 
 const APPLY = hasFlag("apply") || envFlag("FUMAN_DAYTRADE_WRITER_APPLY");
 const DRY_RUN = !APPLY;
@@ -722,10 +728,18 @@ function uniqueTexts(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
-function stockGroupKeys(row, payload = {}, dailyPayload = {}) {
+function stockGroupKeys(row, payload = {}, dailyPayload = {}, groupRow = {}) {
   const symbol = normalizeCode(row?.symbol || payload.symbol || dailyPayload.symbol);
   const codeCluster = symbol ? `code_cluster_${symbol.slice(0, 3)}` : "";
   return uniqueTexts([
+    groupRow?.sector,
+    groupRow?.heatmapSector,
+    groupRow?.primaryIndustry,
+    groupRow?.officialIndustry,
+    groupRow?.industry,
+    groupRow?.group,
+    groupRow?.theme,
+    groupRow?.themes,
     row?.industry,
     row?.sector,
     row?.group,
@@ -774,6 +788,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
+  const groupContract = supplementalMaps.stockGroupContractMap?.get(symbol) || {};
   const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
   const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
   const changePercent = firstNumber(
@@ -924,7 +939,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     highPrice,
     lowPrice,
     limitUpPrice,
-    groupKeys: stockGroupKeys(activeRow, payload, dailyPayload),
+    groupKeys: stockGroupKeys(activeRow, payload, dailyPayload, groupContract),
+    groupContract,
     insideVolume,
     outsideVolume,
     sideTotal,
@@ -1135,6 +1151,166 @@ async function fetchStockFutureInitialMap() {
   return map;
 }
 
+function addGroupContractRow(map, row, source) {
+  const symbol = normalizeCode(row?.symbol || row?.code);
+  if (!symbol) return;
+  const themes = Array.isArray(row?.themes)
+    ? row.themes
+    : String(row?.themes || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const previous = map.get(symbol) || {};
+  map.set(symbol, {
+    ...previous,
+    symbol,
+    name: row?.name || previous.name || "",
+    industry: row?.industry || row?.officialIndustry || previous.industry || "",
+    sector: row?.sector || row?.heatmapSector || row?.primaryIndustry || previous.sector || "",
+    heatmapSector: row?.heatmapSector || row?.sector || previous.heatmapSector || "",
+    primaryIndustry: row?.primaryIndustry || row?.sector || row?.heatmapSector || previous.primaryIndustry || "",
+    officialIndustry: row?.officialIndustry || row?.industry || previous.officialIndustry || "",
+    group: row?.group || previous.group || "",
+    themes: uniqueTexts([...(previous.themes || []), ...themes]),
+    source: row?.source || source || previous.source || "unknown",
+    confidence: row?.confidence || previous.confidence || "",
+    updatedAt: row?.updated_at || row?.updatedAt || previous.updatedAt || "",
+  });
+}
+
+function extractConstObjectLiteral(source, name) {
+  const marker = `const ${name} =`;
+  const start = source.indexOf(marker);
+  if (start < 0) return null;
+  const braceStart = source.indexOf("{", start + marker.length);
+  if (braceStart < 0) return null;
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+  for (let index = braceStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(braceStart, index + 1);
+    }
+  }
+  return null;
+}
+
+function readHeatmapStaticGroupMap() {
+  const map = new Map();
+  const source = readText(HEATMAP_API_FILE);
+  if (!source) {
+    map.meta = { source: "missing", rows: 0 };
+    return map;
+  }
+  const literal = extractConstObjectLiteral(source, "BB_HEATMAP_GROUPS");
+  if (!literal) {
+    map.meta = { source: "missing_heatmap_static_groups", rows: 0 };
+    return map;
+  }
+  let groups = {};
+  try {
+    groups = Function(`"use strict"; return (${literal});`)();
+  } catch (error) {
+    map.meta = { source: "invalid_heatmap_static_groups", rows: 0, error: error?.message || String(error) };
+    return map;
+  }
+  for (const [group, symbols] of Object.entries(groups || {})) {
+    for (const symbol of Array.isArray(symbols) ? symbols : []) {
+      addGroupContractRow(map, {
+        symbol,
+        sector: group,
+        heatmapSector: group,
+        primaryIndustry: group,
+        themes: [group],
+        source: "api/heatmap.js:BB_HEATMAP_GROUPS",
+        confidence: "medium",
+        updatedAt: "2026-07-09T00:00:00+08:00",
+      }, "api/heatmap.js:BB_HEATMAP_GROUPS");
+    }
+  }
+  map.meta = { source: "api/heatmap.js:BB_HEATMAP_GROUPS", rows: map.size, updatedAt: "2026-07-09T00:00:00+08:00" };
+  return map;
+}
+
+async function fetchStockGroupContractMap() {
+  const map = new Map();
+  const meta = { source: "missing", rows: 0 };
+  try {
+    const rows = await supabaseGetPaged(
+      "v_daytrade_stock_group_contract",
+      "select=symbol,name,industry,sector,heatmap_sector,primary_industry,official_industry,themes,source,confidence,updated_at&order=symbol.asc",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of rows) {
+      addGroupContractRow(map, {
+        symbol: row.symbol,
+        name: row.name,
+        industry: row.industry,
+        sector: row.sector,
+        heatmapSector: row.heatmap_sector,
+        primaryIndustry: row.primary_industry,
+        officialIndustry: row.official_industry,
+        themes: row.themes,
+        source: row.source,
+        confidence: row.confidence,
+        updated_at: row.updated_at,
+      }, "v_daytrade_stock_group_contract");
+    }
+    if (map.size) {
+      map.meta = { source: "v_daytrade_stock_group_contract", rows: map.size };
+      return map;
+    }
+  } catch (error) {
+    meta.error = error?.message || String(error);
+  }
+
+  try {
+    const snapshot = await readSnapshot("heatmap_latest", {
+      tradeDate: taipeiDate().replace(/\D/g, ""),
+      allowLatestFallback: true,
+      timeoutMs: 1800,
+    });
+    const master = Array.isArray(snapshot?.payload?.industryMaster) ? snapshot.payload.industryMaster : [];
+    for (const row of master) addGroupContractRow(map, row, "market_snapshots:heatmap_latest.industryMaster");
+    if (map.size) {
+      map.meta = { source: "market_snapshots:heatmap_latest.industryMaster", rows: map.size, updatedAt: snapshot.updatedAt || "" };
+      return map;
+    }
+  } catch (error) {
+    meta.snapshotError = error?.message || String(error);
+  }
+
+  for (const file of HEATMAP_LATEST_FILES) {
+    const payload = readJson(file, null);
+    const master = Array.isArray(payload?.industryMaster) ? payload.industryMaster : [];
+    for (const row of master) addGroupContractRow(map, row, `file:${file}`);
+    if (map.size) {
+      map.meta = { source: `file:${file}`, rows: map.size, updatedAt: payload.updatedAt || "" };
+      return map;
+    }
+  }
+
+  const staticMap = readHeatmapStaticGroupMap();
+  if (staticMap.size) return staticMap;
+
+  map.meta = meta;
+  return map;
+}
+
 function readRuntimePrioritySeeds(activeSymbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
   const universe = new Set(activeSymbols.map((row) => row.symbol));
@@ -1196,7 +1372,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   for (const row of candidates) {
     const metrics = row.metrics;
     const lockedLimitUp = metrics.price > 0 && (
-      (metrics.limitUpPrice > 0 && metrics.price >= metrics.limitUpPrice * 0.995)
+      (metrics.limitUpPrice > 0 && metrics.price >= metrics.limitUpPrice * 0.995 && metrics.changePercent >= 9.5)
       || metrics.changePercent >= 9.7
     );
     if (!lockedLimitUp) continue;
@@ -1370,6 +1546,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         shortChange3To5d: Number(metrics.shortChange3To5d.toFixed(4)),
         stockFutureInitial0846Ok: metrics.stockFutureInitial0846Ok,
         stockFutureInitial0846: metrics.stockFutureInitial0846,
+        stockGroupContract: metrics.groupContract,
         groupKeys: metrics.groupKeys,
         groupLimitUpLeader: groupLeader || null,
         limitUpPrice: Number(metrics.limitUpPrice.toFixed(4)),
@@ -1823,6 +2000,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     .slice(0, 40)
     .map((row) => row.symbol);
   const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
+  const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
   const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : freshFull.length > 0 ? "C" : "D";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
@@ -1894,6 +2072,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
+    stock_group_contract_source: stockGroupMeta.source || "missing",
+    stock_group_contract_rows: stockGroupMeta.rows || supplementalMaps.stockGroupContractMap?.size || 0,
+    stock_group_contract_updated_at: stockGroupMeta.updatedAt || "",
     stock_future_initial_0846_source: "v_stock_future_live_contract",
     stock_future_initial_0846_rows: stockFutureInitialRows.length,
     stock_future_initial_0846_ready_rows: stockFutureInitialRows.filter((row) => String(row.sourceStatus || "").toLowerCase() === "ready").length,
@@ -2162,13 +2343,14 @@ async function tick() {
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const quoteMap = await fetchExistingDaytradeQuotes();
-  const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap] = await Promise.all([
+  const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = await Promise.all([
     fetchCapitalMap(),
     fetchChipFlowMap(),
     fetchMarginChangeMap(),
     fetchStockFutureInitialMap(),
+    fetchStockGroupContractMap(),
   ]);
-  const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap };
+  const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap };
   const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   const nonFatalWriteErrors = [];
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
@@ -2280,6 +2462,10 @@ async function tick() {
     motherPoolMaxSymbols: MOTHER_POOL_MAX_SYMBOLS,
     motherPoolRuleVersion: result.payload.mother_pool_rule_version,
     motherPoolRuleHitCounts: result.payload.mother_pool_rule_hit_counts,
+    stockGroupContractSource: result.payload.stock_group_contract_source,
+    stockGroupContractRows: result.payload.stock_group_contract_rows,
+    stockFutureInitial0846Rows: result.payload.stock_future_initial_0846_rows,
+    stockFutureInitial0846ReadyRows: result.payload.stock_future_initial_0846_ready_rows,
     priorityFreshQuoteCoverage120s: result.payload.priority_fresh_quote_coverage_120s,
     freshQuotes120s: result.payload.fresh_quotes_120s,
     freshQuoteCoverage120s: result.payload.fresh_quote_coverage_120s,
