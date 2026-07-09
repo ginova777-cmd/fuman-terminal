@@ -567,6 +567,7 @@ function attachStrategy2SelfCheck(payload, options = {}) {
     },
   };
   if (strategy2PublishedRunSnapshotAllowed(checkedPayload)) return checkedPayload;
+  if (options.deferHardA === true) return checkedPayload;
   return applyStrategy2HardAFailClosed(checkedPayload);
 }
 
@@ -917,7 +918,7 @@ function strategy2RunSnapshotReady(payload = {}) {
     && snapshot.run_quality_at_publish?.fallbackUsed !== true;
 }
 function compactStrategy2Payload(payload, options) {
-  if (!options?.compact) return attachStrategy2SelfCheck(payload);
+  if (!options?.compact) return attachStrategy2SelfCheck(payload, { deferHardA: options?.deferHardA === true });
   const limit = options.limit || 60;
   const battleMode = Boolean(options.today || options.live);
   const payloadRows = rankStrategy2Rows(payload?.rows);
@@ -1003,7 +1004,7 @@ function compactStrategy2Payload(payload, options) {
       fetchedAt: new Date().toISOString(),
     },
   };
-  return attachStrategy2SelfCheck(compactPayload);
+  return attachStrategy2SelfCheck(compactPayload, { deferHardA: options?.deferHardA === true });
 }
 
 async function fetchRows(base, table, query) {
@@ -1814,9 +1815,13 @@ module.exports = async function handler(request, response) {
       response.status(503).json(apiOnlyError("strategy2_supabase_not_configured"));
       return;
     }
+    const completeRunOptions = {
+      ...options,
+      deferHardA: true,
+    };
     const readinessPromise = fetchStrategy2Readiness(base);
     const [completeRun, readiness, tradingDay, sourceGate] = await Promise.all([
-      readinessPromise.then((ready) => fetchCompleteRunPayload(base, marketSession, options, ready)),
+      readinessPromise.then((ready) => fetchCompleteRunPayload(base, marketSession, completeRunOptions, ready)),
       readinessPromise,
       strategy2TradingDayState(),
       fetchStrategy2SourceGate(),

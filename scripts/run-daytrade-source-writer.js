@@ -75,9 +75,19 @@ const SELECTED_SYMBOL_MAX_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.sele
 const MIN_PRIORITY_POOL_SYMBOLS = positiveNumber(CONFIG.priorityPool?.targetSymbolsMin, 300);
 const MAX_PRIORITY_POOL_SYMBOLS = positiveNumber(CONFIG.priorityPool?.targetSymbolsMax, 500);
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.95);
-const BATCH_SIZE = positiveNumber(CONFIG.collector?.quoteBatchSize, 40);
-const CONCURRENCY = Math.max(1, Math.min(4, positiveNumber(CONFIG.collector?.quoteConcurrency, 1)));
-const TARGET_BATCH_INTERVAL_SECONDS = positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 3.2);
+const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT, 40));
+const MOTHER_POOL_MIN_SYMBOLS = Math.max(
+  FORMAL_DAYTRADE_PRIORITY_LIMIT,
+  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 180),
+);
+const MOTHER_POOL_MAX_SYMBOLS = Math.max(
+  MOTHER_POOL_MIN_SYMBOLS,
+  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 300),
+);
+const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 20));
+const BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT, REST_PRIORITY_BATCH_LIMIT, positiveNumber(CONFIG.collector?.quoteBatchSize, 40)));
+const CONCURRENCY = 1;
+const TARGET_BATCH_INTERVAL_SECONDS = Math.max(30, positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 30));
 const REQUEST_DELAY_MS = Math.max(0, Math.floor((TARGET_BATCH_INTERVAL_SECONDS * 1000) / Math.max(1, BATCH_SIZE)));
 const COOLDOWN_INITIAL_SECONDS = positiveNumber(CONFIG.collector?.cooldownInitialSeconds, 90);
 const COOLDOWN_MAX_SECONDS = positiveNumber(CONFIG.collector?.cooldownMaxSeconds, 900);
@@ -91,7 +101,6 @@ const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_W
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
 const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
-const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT, 40));
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
@@ -369,6 +378,24 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
   return { written };
 }
 
+async function supabaseDelete(resource, query = "") {
+  if (DRY_RUN) return { deleted: 0, skipped: true, dryRun: true };
+  const key = requireSupabaseKey(true);
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`, {
+    method: "DELETE",
+    headers: {
+      ...headers(key),
+      Prefer: "return=minimal",
+    },
+    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`${resource} delete HTTP ${response.status}: ${text.slice(0, 240)}`);
+  }
+  return { deleted: 0 };
+}
+
 async function supabaseInsert(resource, rows, options = {}) {
   if (!rows.length) return { written: 0, skipped: true };
   if (DRY_RUN) return { written: 0, skipped: true, dryRun: true };
@@ -493,7 +520,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,quote_seen_at,updated_at,last_trade_time,price,total_volume,trade_value&order=symbol.asc",
+      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,payload&order=symbol.asc",
       { service: true },
     );
     for (const row of rows) {
@@ -506,6 +533,95 @@ async function fetchExistingDaytradeQuotes() {
   }
   mergeWebSocketQuoteCache(quoteMap);
   return quoteMap;
+}
+
+async function fetchCapitalMap() {
+  const map = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "stock_capital_latest",
+      "select=symbol,code,issued_shares,capital_shares,common_shares,shares,updated_at&order=updated_at.desc",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol || row.code);
+      const issuedShares = firstNumber(row.issued_shares, row.capital_shares, row.common_shares, row.shares);
+      if (symbol && issuedShares > 0 && !map.has(symbol)) map.set(symbol, { issuedShares, updated_at: row.updated_at || "" });
+    }
+  } catch {
+    // Capital is an enrichment input for turnover ranking; missing rows must not stop the source writer.
+  }
+  return map;
+}
+
+async function fetchChipFlowMap() {
+  const map = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "v_chip_flows_latest",
+      "select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_balance,short_balance,source,updated_at&order=symbol.asc",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (!symbol) continue;
+      map.set(symbol, {
+        tradeDate: row.trade_date || "",
+        foreignNet: numberValue(row.foreign_net),
+        trustNet: numberValue(row.investment_trust_net),
+        dealerNet: numberValue(row.dealer_net),
+        institutionTotalNet: numberValue(row.institution_total_net),
+        marginBalance: numberValue(row.margin_balance),
+        shortBalance: numberValue(row.short_balance),
+        source: row.source || "v_chip_flows_latest",
+        updated_at: row.updated_at || "",
+      });
+    }
+  } catch {
+    // Optional enrichment. Field coverage is reported in source_status when unavailable.
+  }
+  return map;
+}
+
+async function fetchMarginChangeMap() {
+  const grouped = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "finmind_margin_short",
+      "select=symbol,trade_date,margin_balance,short_balance,updated_at&order=trade_date.desc",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (!symbol) continue;
+      const list = grouped.get(symbol) || [];
+      if (list.length < 2) {
+        list.push({
+          tradeDate: row.trade_date || "",
+          marginBalance: numberValue(row.margin_balance),
+          shortBalance: numberValue(row.short_balance),
+          updated_at: row.updated_at || "",
+        });
+        grouped.set(symbol, list);
+      }
+    }
+  } catch {
+    return new Map();
+  }
+  const map = new Map();
+  for (const [symbol, rows] of grouped.entries()) {
+    const latest = rows[0] || {};
+    const previous = rows[1] || {};
+    map.set(symbol, {
+      tradeDate: latest.tradeDate || "",
+      marginBalance: numberValue(latest.marginBalance),
+      shortBalance: numberValue(latest.shortBalance),
+      marginChange: rows.length >= 2 ? numberValue(latest.marginBalance) - numberValue(previous.marginBalance) : 0,
+      shortChange: rows.length >= 2 ? numberValue(latest.shortBalance) - numberValue(previous.shortBalance) : 0,
+      updated_at: latest.updated_at || "",
+    });
+  }
+  return map;
 }
 
 function mergeWebSocketQuoteCache(quoteMap) {
@@ -522,8 +638,18 @@ function mergeWebSocketQuoteCache(quoteMap) {
       updated_at: seenAt,
       last_trade_time: row.lastTradeTime || row.quoteTime || row.time || seenAt,
       price: numberValue(row.close ?? row.price),
+      open_price: numberValue(row.open ?? row.openPrice),
+      high_price: numberValue(row.high ?? row.highPrice),
+      low_price: numberValue(row.low ?? row.lowPrice),
+      previous_close: numberValue(row.previousClose ?? row.previous_close ?? row.referencePrice),
+      change_percent: numberValue(row.changePercent ?? row.change_percent ?? row.percent),
       total_volume: numberValue(row.tradeVolume ?? row.total_volume),
       trade_value: numberValue(row.tradeValue ?? row.trade_value),
+      bid_volume: numberValue(row.bidVolume ?? row.bid_volume),
+      ask_volume: numberValue(row.askVolume ?? row.ask_volume),
+      cumulative_bid_volume: numberValue(row.cumulativeBidVolume ?? row.cumulative_bid_volume),
+      cumulative_ask_volume: numberValue(row.cumulativeAskVolume ?? row.cumulative_ask_volume),
+      cumulative_bid_ask_volume: numberValue(row.cumulativeBidAskVolume ?? row.cumulative_bid_ask_volume),
       payload: {
         ...(row.payload || {}),
         source: "fugle-websocket-cache",
@@ -532,6 +658,133 @@ function mergeWebSocketQuoteCache(quoteMap) {
       },
     });
   }
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    const number = numberValue(value, NaN);
+    if (Number.isFinite(number)) return number;
+  }
+  return 0;
+}
+
+function rankMap(rows, valueFn, options = {}) {
+  const minValue = Number.isFinite(Number(options.minValue)) ? Number(options.minValue) : -Infinity;
+  const ranked = rows
+    .map((row) => ({ symbol: row.symbol, value: Number(valueFn(row)) }))
+    .filter((row) => row.symbol && Number.isFinite(row.value) && row.value > minValue)
+    .sort((a, b) => b.value - a.value || a.symbol.localeCompare(b.symbol));
+  return new Map(ranked.map((row, index) => [row.symbol, { rank: index + 1, value: row.value }]));
+}
+
+function topRankScore(rank, top, maxScore) {
+  if (!rank || rank > top) return 0;
+  return Math.max(0, maxScore * (top - rank + 1) / top);
+}
+
+function quoteMetrics(symbol, dailyVolumeMap, quoteMap) {
+  const quote = quoteMap?.get(symbol) || {};
+  const payload = quote.payload || {};
+  const daily = dailyVolumeMap.get(symbol) || {};
+  const dailyPayload = daily.payload || {};
+  const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
+  const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
+  const changePercent = firstNumber(
+    quote.change_percent,
+    payload.changePercent,
+    payload.change_percent,
+    previousClose > 0 && price > 0 ? ((price - previousClose) / previousClose) * 100 : 0,
+  );
+  const totalVolume = firstNumber(quote.total_volume, quote.trade_volume, payload.totalVolume, payload.tradeVolume);
+  const tradeValue = firstNumber(quote.trade_value, payload.tradeValue, payload.trade_value, price > 0 ? price * totalVolume * 1000 : 0);
+  const avgVolume5 = firstNumber(daily.avg_volume5, dailyPayload.avgVolume5, dailyPayload.avg_volume5, payload.avgVolume5, payload.avg_volume5);
+  const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
+  const highPrice = firstNumber(quote.high_price, payload.highPrice, payload.high_price, price);
+  const lowPrice = firstNumber(quote.low_price, payload.lowPrice, payload.low_price, price);
+  const insideVolume = firstNumber(quote.cumulative_bid_volume, payload.cumulativeBidVolume, payload.cumulative_bid_volume);
+  const outsideVolume = firstNumber(quote.cumulative_ask_volume, payload.cumulativeAskVolume, payload.cumulative_ask_volume);
+  const sideTotal = firstNumber(quote.cumulative_bid_ask_volume, payload.cumulativeBidAskVolume, payload.cumulative_bid_ask_volume, insideVolume + outsideVolume);
+  const outsideInsideRatio = insideVolume > 0 ? outsideVolume / insideVolume : outsideVolume > 0 ? 99 : 0;
+  const bidVolume = firstNumber(quote.bid_volume, payload.bidVolume, payload.bid_volume);
+  const askVolume = firstNumber(quote.ask_volume, payload.askVolume, payload.ask_volume);
+  const bidAskRatio = askVolume > 0 ? bidVolume / askVolume : bidVolume > 0 ? 99 : 0;
+  const turnoverRate = firstNumber(
+    payload.turnoverRate,
+    payload.turnover_rate,
+    payload.turnover_percent,
+    payload.turnoverPercent,
+    dailyPayload.turnoverRate,
+    dailyPayload.turnover_rate,
+    dailyPayload.turnover_percent,
+    dailyPayload.turnoverPercent,
+  );
+  const turnoverRate3d = firstNumber(
+    payload.turnoverRate3d,
+    payload.turnover_rate_3d,
+    payload.turnover3d,
+    payload.avg_turnover_rate_3d,
+    dailyPayload.turnoverRate3d,
+    dailyPayload.turnover_rate_3d,
+    dailyPayload.turnover3d,
+    dailyPayload.avg_turnover_rate_3d,
+    turnoverRate,
+  );
+  const turnoverRate5d = firstNumber(
+    payload.turnoverRate5d,
+    payload.turnover_rate_5d,
+    payload.turnover5d,
+    payload.avg_turnover_rate_5d,
+    dailyPayload.turnoverRate5d,
+    dailyPayload.turnover_rate_5d,
+    dailyPayload.turnover5d,
+    dailyPayload.avg_turnover_rate_5d,
+    turnoverRate,
+  );
+  const turnoverRate3To5d = Math.max(turnoverRate3d, turnoverRate5d, turnoverRate);
+  const foreignNet = firstNumber(payload.foreignNet, payload.foreign_net, payload.foreign_buy_sell, dailyPayload.foreignNet, dailyPayload.foreign_net);
+  const trustNet = firstNumber(payload.trustNet, payload.trust_net, payload.investment_trust_net, dailyPayload.trustNet, dailyPayload.trust_net);
+  const dealerNet = firstNumber(payload.dealerNet, payload.dealer_net, dailyPayload.dealerNet, dailyPayload.dealer_net);
+  const mainForceNet = firstNumber(payload.mainForceNet, payload.main_force_net, payload.main_force, dailyPayload.mainForceNet, dailyPayload.main_force_net);
+  const marginChange = firstNumber(payload.marginBalanceChange, payload.margin_balance_change, payload.marginChange, payload.margin_change, dailyPayload.marginBalanceChange, dailyPayload.margin_balance_change);
+  const shortChange = firstNumber(payload.shortBalanceChange, payload.short_balance_change, payload.shortChange, payload.short_change, dailyPayload.shortBalanceChange, dailyPayload.short_balance_change);
+  return {
+    price,
+    changePercent,
+    totalVolume,
+    tradeValue,
+    avgVolume5,
+    volumeRatio5,
+    highPrice,
+    lowPrice,
+    insideVolume,
+    outsideVolume,
+    sideTotal,
+    outsideInsideRatio,
+    bidAskRatio,
+    turnoverRate,
+    turnoverRate3To5d,
+    foreignNet,
+    trustNet,
+    dealerNet,
+    mainForceNet,
+    marginChange,
+    shortChange,
+    exDividend: boolValue(payload.isExDividend || payload.is_ex_dividend || payload.exDividendToday),
+    daytradeCrowded: boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer),
+    quoteFresh: ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS,
+    fieldCoverage: {
+      quote: Boolean(quoteMap?.has(symbol)),
+      changePercent: changePercent !== 0,
+      totalVolume: totalVolume > 0,
+      tradeValue: tradeValue > 0,
+      avgVolume5: avgVolume5 > 0,
+      turnover3To5d: turnoverRate3To5d > 0,
+      insideOutside: sideTotal > 0,
+      bidAsk: bidAskRatio > 0,
+      institution: foreignNet !== 0 || trustNet !== 0 || dealerNet !== 0 || mainForceNet !== 0,
+      marginShort: marginChange !== 0 || shortChange !== 0,
+    },
+  };
 }
 
 function isFinMindDiagnosticQuote(row) {
@@ -709,24 +962,150 @@ function readRuntimePrioritySeeds(activeSymbols) {
   };
 }
 
-function buildPriorityPool(activeSymbols, dailyVolumeMap) {
+function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map()) {
   const activeBySymbol = new Map(activeSymbols.map((row) => [row.symbol, row]));
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
-  const volumeRanked = [...activeSymbols]
-    .map((row) => ({
-      ...row,
-      avgVolume5: dailyVolumeMap.get(row.symbol)?.avg_volume5 || 0,
-    }))
-    .sort((a, b) => b.avgVolume5 - a.avgVolume5 || a.symbol.localeCompare(b.symbol));
+  const candidates = activeSymbols.map((row) => ({
+    ...row,
+    metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap),
+  }));
+  const changeRanks = rankMap(candidates, (row) => row.metrics.changePercent, { minValue: 0 });
+  const volumeSurgeRanks = rankMap(candidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
+  const volumeRanks = rankMap(candidates, (row) => row.metrics.totalVolume, { minValue: 0 });
+  const valueRanks = rankMap(candidates, (row) => row.metrics.tradeValue, { minValue: 0 });
+  const turnoverRanks = rankMap(candidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
+  const rankedCandidates = candidates.map((row) => {
+    const metrics = row.metrics;
+    const changeRank = changeRanks.get(row.symbol)?.rank || 0;
+    const volumeSurgeRank = volumeSurgeRanks.get(row.symbol)?.rank || 0;
+    const volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
+    const valueRank = valueRanks.get(row.symbol)?.rank || 0;
+    const turnoverRank = turnoverRanks.get(row.symbol)?.rank || 0;
+    const reasons = [];
+    let score = 0;
 
-  for (const row of volumeRanked) {
-    if (bySymbol.size >= MAX_PRIORITY_POOL_SYMBOLS) break;
+    score += Math.min(130, Math.log10(Math.max(1, metrics.avgVolume5)) * 30);
+    score += topRankScore(changeRank, 120, 190);
+    score += topRankScore(volumeSurgeRank, 120, 180);
+    score += topRankScore(volumeRank, 150, 130);
+    score += topRankScore(valueRank, 150, 130);
+    score += topRankScore(turnoverRank, 50, 160);
+    if (metrics.quoteFresh) score += 40;
+    if (metrics.price > 0) score += 20;
+
+    if (metrics.changePercent >= 3) {
+      score += 170;
+      reasons.push("gain_rank_gt3");
+    } else if (metrics.changePercent >= 2) {
+      score += 95;
+      reasons.push("gain_rank_gt2");
+    }
+    if (metrics.volumeRatio5 >= 2) {
+      score += 160;
+      reasons.push("volume_surge_vs_5d_gt2");
+    } else if (metrics.volumeRatio5 > 1) {
+      score += 80;
+      reasons.push("volume_ratio_gt1");
+    }
+    if (changeRank && changeRank <= 100) reasons.push(`gain_rank_top${changeRank}`);
+    if (volumeSurgeRank && volumeSurgeRank <= 100) reasons.push(`volume_surge_rank_top${volumeSurgeRank}`);
+    if (changeRank && changeRank <= 120 && volumeSurgeRank && volumeSurgeRank <= 120) {
+      score += 230;
+      reasons.push("gain_volume_surge_rank_overlap");
+    }
+    if (metrics.changePercent >= 2 && metrics.totalVolume >= 10000) {
+      score += 140;
+      reasons.push("intraday_gain_gt2_volume_gt10000");
+    }
+    if (metrics.volumeRatio5 >= 2 && metrics.totalVolume >= 10000 && volumeRank && volumeRank <= 100) {
+      score += 210;
+      reasons.push("volume_ratio_gt2_volume_rank_top100");
+    }
+    if (metrics.tradeValue >= 30000000) {
+      score += 80;
+      reasons.push("trade_value_gt3000w");
+    }
+    if (metrics.highPrice > 0 && metrics.price > 0 && metrics.price / metrics.highPrice >= 0.985) {
+      score += 90;
+      reasons.push("near_day_high");
+    }
+    if (metrics.lowPrice > 0 && metrics.price > 0 && ((metrics.price - metrics.lowPrice) / metrics.lowPrice) * 100 >= 2 && metrics.changePercent >= 2) {
+      score += 80;
+      reasons.push("rebound_from_low");
+    }
+    if (metrics.outsideVolume > metrics.insideVolume && metrics.sideTotal >= 1000) {
+      score += 90;
+      reasons.push("mitake_outside_gt_inside");
+    }
+    if (metrics.bidAskRatio >= 1.5) {
+      score += 45;
+      reasons.push("bid_ask_ratio_gt1_5");
+    }
+    if (metrics.turnoverRate >= 5) {
+      score += 120;
+      reasons.push("turnover_gt5");
+    }
+    if (turnoverRank && turnoverRank <= 50) {
+      score += 180;
+      reasons.push(`turnover_3_5d_rank_top${turnoverRank}`);
+    }
+    if (metrics.changePercent > 0 && (metrics.foreignNet > 0 || metrics.trustNet > 0 || metrics.dealerNet > 0 || metrics.mainForceNet > 0)) {
+      score += 100;
+      reasons.push("institution_or_main_force_buy_price_strong");
+    }
+    if (metrics.changePercent > 0 && metrics.marginChange < 0) {
+      score += 70;
+      reasons.push("margin_down_price_strong");
+    }
+    if (metrics.changePercent > 0 && metrics.marginChange > 0 && metrics.shortChange > 0) {
+      score += 55;
+      reasons.push("margin_short_both_up_price_strong");
+    }
+    if (metrics.exDividend) {
+      score -= 250;
+      reasons.push("exclude_ex_dividend_watch");
+    }
+    if (metrics.daytradeCrowded) {
+      score -= 120;
+      reasons.push("daytrade_crowded_watch");
+    }
+
+    return {
+      ...row,
+      score,
+      prioritySource: "dynamic_daytrade_mother_pool",
+      priorityReason: reasons.length ? reasons.join("+") : "dynamic_liquidity_fill",
+      priorityMetrics: {
+        changePercent: Number(metrics.changePercent.toFixed(4)),
+        totalVolume: Math.round(metrics.totalVolume),
+        tradeValue: Math.round(metrics.tradeValue),
+        avgVolume5: Math.round(metrics.avgVolume5),
+        volumeRatio5: Number(metrics.volumeRatio5.toFixed(4)),
+        changeRank,
+        volumeSurgeRank,
+        volumeRank,
+        valueRank,
+        turnoverRank,
+        outsideVolume: Math.round(metrics.outsideVolume),
+        insideVolume: Math.round(metrics.insideVolume),
+        outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
+        turnoverRate: Number(metrics.turnoverRate.toFixed(4)),
+        turnoverRate3To5d: Number(metrics.turnoverRate3To5d.toFixed(4)),
+        quoteFresh: metrics.quoteFresh,
+        fieldCoverage: metrics.fieldCoverage,
+        ruleHits: reasons,
+      },
+    };
+  }).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol));
+
+  for (const row of rankedCandidates) {
+    if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) break;
     bySymbol.set(row.symbol, {
       ...row,
-      score: (row.avgVolume5 || 1) * 1000,
-      prioritySource: row.avgVolume5 > 0 ? "avg_volume5_fill" : "active_symbol_fill",
-      priorityReason: row.avgVolume5 > 0 ? "fill_priority_pool_by_avg_volume5" : "fill_priority_pool_by_active_symbol",
+      score: row.score,
+      prioritySource: row.prioritySource,
+      priorityReason: row.priorityReason,
     });
   }
   for (const seed of seeds.symbols) {
@@ -739,7 +1118,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap) {
       prev.priorityReason = `${prev.priorityReason}+runtime_priority`;
       continue;
     }
-    if (bySymbol.size >= MAX_PRIORITY_POOL_SYMBOLS) continue;
+    if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) continue;
     bySymbol.set(seed.symbol, {
       ...row,
       score: seed.score,
@@ -750,25 +1129,28 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap) {
 
   const rows = [...bySymbol.values()]
     .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    .slice(0, MAX_PRIORITY_POOL_SYMBOLS)
-    .map((row, index) => ({
+    .slice(0, MOTHER_POOL_MAX_SYMBOLS)
+  const priorityUpdatedAt = nowIso();
+  return rows.map((row, index) => ({
       symbol: row.symbol,
       name: row.name || row.symbol,
       market: row.market || "",
       priority_rank: index + 1,
       priority_reason: row.priorityReason || "",
       source: row.prioritySource || "unknown",
-      updated_at: nowIso(),
+      updated_at: priorityUpdatedAt,
       payload: {
         score: numberValue(row.score),
         selected: true,
         consumerScope: ["daytrade", "strategy1", "strategy3"],
+        motherPoolRuleVersion: "daytrade_mother_pool_rank_overlap_20260709",
+        motherPoolMetrics: row.priorityMetrics || {},
+        motherPoolRuleHits: row.priorityMetrics?.ruleHits || [],
         runtimePrioritySource: seeds.source,
         runtimePriorityUpdatedAt: seeds.updatedAt,
         runtimePriorityCounts: seeds.counts,
       },
     }));
-  return rows;
 }
 
 function publishDaytradePrioritySymbols(priorityRows) {
@@ -1137,6 +1519,20 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     minPriorityPoolSymbols: minFormalPrioritySymbols,
   });
   const fullMarketGateA = freshFull.length >= TARGET_FRESH_QUOTES && freshQuoteCoverage >= MIN_FRESH_QUOTE_COVERAGE;
+  const motherRuleCounts = {};
+  const motherFieldCoverageCounts = {};
+  for (const row of priorityRows) {
+    const hits = Array.isArray(row.payload?.motherPoolRuleHits) ? row.payload.motherPoolRuleHits : [];
+    for (const hit of hits) motherRuleCounts[hit] = (motherRuleCounts[hit] || 0) + 1;
+    const coverage = row.payload?.motherPoolMetrics?.fieldCoverage || {};
+    for (const [field, ok] of Object.entries(coverage)) {
+      if (ok) motherFieldCoverageCounts[field] = (motherFieldCoverageCounts[field] || 0) + 1;
+    }
+  }
+  const motherPoolRuleHitSymbols = priorityRows
+    .filter((row) => (row.payload?.motherPoolRuleHits || []).length)
+    .slice(0, 40)
+    .map((row) => row.symbol);
   const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : freshFull.length > 0 ? "C" : "D";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
@@ -1201,6 +1597,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
+    formal_scope: "priority_top40",
+    mother_pool_rule_version: "daytrade_mother_pool_rank_overlap_20260709",
+    mother_pool_symbols: priorityRows.length,
+    mother_pool_source: "dynamic_daytrade_mother_pool",
+    mother_pool_rule_hit_symbols: motherPoolRuleHitSymbols,
+    mother_pool_rule_hit_counts: motherRuleCounts,
+    mother_pool_field_coverage_counts: motherFieldCoverageCounts,
     formal_daytrade_priority_limit: FORMAL_DAYTRADE_PRIORITY_LIMIT,
     formal_daytrade_priority_symbols: priorityPoolSymbols,
     priority_fresh_quotes_120s: freshPriority.length,
@@ -1462,8 +1865,8 @@ async function tick() {
   const fetchPriorityOnlyForPhase = quoteFetchPriorityOnlyForPhase(phase);
   const activeSymbols = await fetchActiveSymbols();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
-  const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap);
   const quoteMap = await fetchExistingDaytradeQuotes();
+  const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap);
   const nonFatalWriteErrors = [];
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
   let websocketFutoptSync = { written: 0, skipped: true, cacheCount: 0 };
@@ -1479,6 +1882,10 @@ async function tick() {
     }
     try {
       await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol");
+      await supabaseDelete(
+        "fugle_daytrade_priority_pool",
+        `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
+      );
     } catch (error) {
       nonFatalWriteErrors.push({
         target: "fugle_daytrade_priority_pool",
@@ -1517,7 +1924,7 @@ async function tick() {
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
   const selected = cooldownActive || !fetchAllowedForPhase
     ? { symbols: [], priorityOnly: true }
-    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase });
+    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: true });
   const fetchResult = fetchAllowedForPhase
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
@@ -1564,6 +1971,11 @@ async function tick() {
     offSession,
     formalEntryAllowed: Boolean(result.payload.formal_entry_allowed),
     priorityPoolSymbols: result.payload.priority_pool_symbols,
+    motherPoolSymbols: result.payload.mother_pool_symbols,
+    motherPoolMinSymbols: MOTHER_POOL_MIN_SYMBOLS,
+    motherPoolMaxSymbols: MOTHER_POOL_MAX_SYMBOLS,
+    motherPoolRuleVersion: result.payload.mother_pool_rule_version,
+    motherPoolRuleHitCounts: result.payload.mother_pool_rule_hit_counts,
     priorityFreshQuoteCoverage120s: result.payload.priority_fresh_quote_coverage_120s,
     freshQuotes120s: result.payload.fresh_quotes_120s,
     freshQuoteCoverage120s: result.payload.fresh_quote_coverage_120s,
@@ -1601,6 +2013,9 @@ async function main() {
       maxRunSeconds: MAX_RUN_SECONDS,
       minPriorityPoolSymbols: MIN_PRIORITY_POOL_SYMBOLS,
       maxPriorityPoolSymbols: MAX_PRIORITY_POOL_SYMBOLS,
+      formalDaytradePriorityLimit: FORMAL_DAYTRADE_PRIORITY_LIMIT,
+      motherPoolMinSymbols: MOTHER_POOL_MIN_SYMBOLS,
+      motherPoolMaxSymbols: MOTHER_POOL_MAX_SYMBOLS,
     }, null, 2));
     return;
   }

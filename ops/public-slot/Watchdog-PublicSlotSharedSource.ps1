@@ -485,11 +485,11 @@ function Restart-FugleQuoteCollector {
     $psi.Environment["FUMAN_RUNTIME_DIR"] = $RuntimeDir
     # Shared-source full-market quote surfaces need complete quote snapshots.
     # Daytrade latency-sensitive trades stay in the dedicated daytrade writer.
-    $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "aggregates"
+    $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "trades,aggregates,candles"
     $psi.Environment["FUGLE_STREAMING_MAX_SYMBOLS"] = "1800"
     $psi.Environment["FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "1800"
     [System.Diagnostics.Process]::Start($psi) | Out-Null
-    Write-WatchdogLog "已啟動 collector：$CollectorScript channels=aggregates"
+    Write-WatchdogLog "已啟動 collector：$CollectorScript channels=trades,aggregates,candles"
   } catch {
     Write-WatchdogLog "重啟 collector 失敗：$($_.Exception.Message)"
   }

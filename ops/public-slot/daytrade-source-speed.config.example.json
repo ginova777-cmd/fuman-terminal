@@ -41,9 +41,9 @@
     "missingGateModeGateGrade": "D"
   },
   "collector": {
-    "quoteBatchSize": 40,
+    "quoteBatchSize": 20,
     "quoteConcurrency": 1,
-    "targetBatchIntervalSeconds": 60,
+    "targetBatchIntervalSeconds": 30,
     "restFallbackEnabled": false,
     "priorityOnlyAfter429": true,
     "cooldownStrategy": "exponential",
@@ -58,11 +58,28 @@
     "minFreshQuoteCoverageForA": 0.95,
     "targetFreshQuoteCoverage": 1,
     "selectedSymbolsFreshOkRequiredForA": true,
-    "quoteBatchSize": 40,
-    "batchIntervalSecondsMin": 60,
-    "batchIntervalSecondsMax": 60,
+    "quoteBatchSize": 20,
+    "batchIntervalSecondsMin": 30,
+    "batchIntervalSecondsMax": 30,
     "readyBefore": "09:00",
     "protectedAfter429": true
+  },
+  "motherPool": {
+    "targetSymbolsMin": 180,
+    "targetSymbolsMax": 300,
+    "ruleVersion": "daytrade_mother_pool_rank_overlap_20260709",
+    "priorityRules": [
+      "漲跌幅排行前段",
+      "成交量增幅排行前段",
+      "漲跌幅排行與成交量增幅排行交集",
+      "成交金額 >= 3000萬",
+      "接近日高 / 從低點反彈",
+      "三竹外盤大於內盤",
+      "近3-5日周轉率排行前50",
+      "法人/主力買超且價強",
+      "融資減少價強或資券同步增加價強",
+      "除權息與隔日沖大戶標的降權觀察"
+    ]
   },
   "fullMarketRolling": {
     "approxSymbols": 1662,

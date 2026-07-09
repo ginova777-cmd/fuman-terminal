@@ -3106,7 +3106,7 @@ function Start-FugleWebSocketCollector {
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $psi.Environment["FUMAN_RUNTIME_DIR"] = $RuntimeDir
-  $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "aggregates"
+  $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "trades,aggregates,candles"
   $psi.Environment["FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "1800"
   $psi.Environment["STRATEGY2_FUGLE_WS_MAX_SYMBOLS"] = [string]$SeedSymbolCount
   $psi.Environment["STRATEGY2_FUGLE_WS_QUOTE_KEEP_MS"] = [string]($QuoteKeepMinutes * 60 * 1000)

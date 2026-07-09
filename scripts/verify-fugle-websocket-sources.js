@@ -193,8 +193,15 @@ function main() {
     }
   }
 
-  addIssue(issues, Number(daytrade.collector?.quoteBatchSize) === 40, "daytrade_quote_batch_not_stable_40", {
-    value: daytrade.collector?.quoteBatchSize,
+  const daytradeQuoteBatchSize = Number(daytrade.collector?.quoteBatchSize || 0);
+  const daytradeBatchIntervalSeconds = Number(daytrade.collector?.targetBatchIntervalSeconds || 0);
+  const daytradeQuotesPerMinute = daytradeBatchIntervalSeconds > 0
+    ? (daytradeQuoteBatchSize * 60) / daytradeBatchIntervalSeconds
+    : 0;
+  addIssue(issues, daytradeQuoteBatchSize >= 1 && daytradeQuotesPerMinute >= 40, "daytrade_quote_refresh_rate_below_40_per_minute", {
+    quoteBatchSize: daytrade.collector?.quoteBatchSize,
+    targetBatchIntervalSeconds: daytrade.collector?.targetBatchIntervalSeconds,
+    quotesPerMinute: daytradeQuotesPerMinute,
   });
   addIssue(issues, Number(daytrade.collector?.quoteConcurrency) === 1, "daytrade_quote_concurrency_not_1", {
     value: daytrade.collector?.quoteConcurrency,
@@ -231,7 +238,7 @@ function main() {
   ];
   for (const task of tasks) {
     addIssue(issues, task.exists, "required_task_missing", task);
-    addIssue(issues, String(task.state).toLowerCase() === "ready", "required_task_not_ready", task);
+    addIssue(issues, /^(ready|running)$/i.test(String(task.state)), "required_task_not_ready_or_running", task);
     addIssue(issues, task.lastResult === 0, "required_task_last_result_nonzero", task);
   }
 
@@ -247,6 +254,7 @@ function main() {
       quoteBatchSize: daytrade.collector?.quoteBatchSize,
       quoteConcurrency: daytrade.collector?.quoteConcurrency,
       targetBatchIntervalSeconds: daytrade.collector?.targetBatchIntervalSeconds,
+      effectiveQuotesPerMinute: daytradeQuotesPerMinute,
       selectedSymbolMaxQuoteAgeSeconds: daytrade.speedTargets?.selectedSymbolMaxQuoteAgeSeconds,
       priorityTargetMin: daytrade.priorityPool?.targetSymbolsMin,
       priorityTargetMax: daytrade.priorityPool?.targetSymbolsMax,
