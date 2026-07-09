@@ -361,6 +361,14 @@ function strategy2SourceGateIssues(sourceStatus) {
   const staleSeconds = cleanNumber(payload.intraday_1m_stale_seconds);
   const scannerCanRunOpening = boolValue(payload.scanner_can_run_opening);
   const formalEntryAllowed = boolValue(payload.formal_entry_allowed);
+  const daytradeGateGrade = String(payload.daytrade_gate_grade || payload.priority_gate_grade || "").toUpperCase();
+  const selectedSymbolsFreshOk = boolValue(payload.selected_symbols_fresh_ok);
+  const dailyVolumeStatus = String(payload.daily_volume_status || "").toLowerCase();
+  const priorityFreshMaxQuoteAge = cleanNumber(payload.priority_fresh_max_quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.quote_age_seconds, 999999);
+  const dedicatedPriorityReady = freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S
+    && priorityFreshMaxQuoteAge <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
+    && selectedSymbolsFreshOk
+    && (!dailyVolumeStatus || dailyVolumeStatus === "ready");
   const hardSeconds = cleanNumber(payload.intraday_1m_fresh_hard_seconds) || STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS;
   const hasCandidateLimit = Object.prototype.hasOwnProperty.call(payload, "quote_derived_1m_candidate_limit");
   const fullUniverse = boolValue(payload.quote_derived_1m_full_universe)
@@ -380,8 +388,11 @@ function strategy2SourceGateIssues(sourceStatus) {
     issues.push(`quote fresh 120s coverage ${freshQuoteCoverage120s.toFixed(4)} < ${STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S}`);
   }
   if (regularNow) {
-    if (!scannerCanRunOpening) issues.push("scanner_can_run_opening=false");
-    if (!formalEntryAllowed) issues.push("formal_entry_allowed=false");
+    if (!dedicatedPriorityReady && !scannerCanRunOpening) issues.push("scanner_can_run_opening=false");
+    if (!dedicatedPriorityReady && !formalEntryAllowed) issues.push("formal_entry_allowed=false");
+    if (!dedicatedPriorityReady && daytradeGateGrade && daytradeGateGrade !== "A") issues.push(`daytrade_gate_grade=${daytradeGateGrade}`);
+    if (!selectedSymbolsFreshOk) issues.push("selected_symbols_fresh_ok=false");
+    if (dailyVolumeStatus && dailyVolumeStatus !== "ready") issues.push(`daily_volume_status=${payload.daily_volume_status}`);
     if (!fullUniverse && !scannerCanRunOpening) issues.push("quote_derived_1m_full_universe=false");
     if (!scannerCanRunOpening && activeSymbols >= 1000 && today1mSymbols < activeSymbols) {
       issues.push(`today_1m_symbols ${today1mSymbols}/${activeSymbols} not full universe`);
@@ -394,6 +405,23 @@ function strategy2SourceGateIssues(sourceStatus) {
     }
   }
   return issues;
+}
+
+function isStrategy2DedicatedPayloadReady(sourceStatus) {
+  if (!sourceStatus) return false;
+  const payload = sourceStatus.payload || {};
+  const activeSymbols = cleanNumber(payload.priority_pool_symbols) || cleanNumber(payload.active_symbols);
+  const freshQuotes120s = cleanNumber(payload.priority_fresh_quotes_120s) || cleanNumber(payload.fresh_quotes_120s);
+  const freshQuoteCoverage120s = cleanNumber(payload.priority_fresh_quote_coverage_120s)
+    || cleanNumber(payload.fresh_quote_coverage_120s)
+    || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
+  const quoteAge = cleanNumber(payload.priority_fresh_max_quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.quote_age_seconds, 999999);
+  const daytradeGateGrade = String(payload.daytrade_gate_grade || payload.priority_gate_grade || "").toUpperCase();
+  const dailyVolumeStatus = String(payload.daily_volume_status || "").toLowerCase();
+  return freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S
+    && quoteAge <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
+    && boolValue(payload.selected_symbols_fresh_ok)
+    && (!dailyVolumeStatus || dailyVolumeStatus === "ready");
 }
 
 function normalizeStrategy(value) {
@@ -455,11 +483,8 @@ async function main() {
     try {
       sourceStatus = await fetchSourceStatusPayload("fugle_daytrade_source");
       sourceGateIssues = strategy2SourceGateIssues(sourceStatus);
-      const sourcePayload = sourceStatus?.payload || {};
       const dedicatedSourceReady = sourceGateIssues.length === 0
-        && String(sourceStatus?.status || "").toLowerCase() === "ok"
-        && boolValue(sourcePayload.scanner_can_run_opening)
-        && boolValue(sourcePayload.formal_entry_allowed);
+        && isStrategy2DedicatedPayloadReady(sourceStatus);
       if (dedicatedSourceReady) {
         effectiveStatus = READY_STATUS;
       } else if (sourceGateIssues.length > 0 && effectiveStatus === READY_STATUS) {
@@ -520,10 +545,8 @@ async function main() {
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
   const strategy2DedicatedSourceReady = String(row.strategy || "").toLowerCase() === "strategy2"
     && sourceStatus
-    && String(sourceStatus.status || "").toLowerCase() === "ok"
     && sourceGateIssues.length === 0
-    && boolValue(sourceStatus.payload?.scanner_can_run_opening)
-    && boolValue(sourceStatus.payload?.formal_entry_allowed);
+    && isStrategy2DedicatedPayloadReady(sourceStatus);
   const readinessDiagnostic = strategy2DedicatedSourceReady && readinessReason
     ? `diagnostic_only:${readinessReason}`
     : readinessReason;

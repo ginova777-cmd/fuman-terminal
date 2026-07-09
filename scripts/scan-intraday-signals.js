@@ -50,6 +50,10 @@ const REALTIME_RETRY_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_RETRY_BA
 const REALTIME_BATCH_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_BATCH_CONCURRENCY || 4));
 const REALTIME_FUGLE_ONLY = process.env.STRATEGY2_REALTIME_FUGLE_ONLY === "1";
 const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEGY2_REALTIME_FALLBACK_CANDIDATE_LIMIT || 1200));
+const FORMAL_DAYTRADE_POOL_ONLY = process.env.STRATEGY2_FORMAL_DAYTRADE_POOL_ONLY === "1";
+const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, Number(process.env.STRATEGY2_FORMAL_DAYTRADE_PRIORITY_LIMIT || process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT || 40));
+const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE
+  || path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "cache", "intraday", "fugle-ws-priority-symbols.json");
 const REALTIME_YAHOO_FALLBACK_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_YAHOO_FALLBACK_CONCURRENCY || 6));
 const ENABLE_FINMIND_REALTIME = process.env.STRATEGY2_ENABLE_FINMIND_REALTIME === "1";
 const ENABLE_FINMIND_RESCUE = process.env.STRATEGY2_ENABLE_FINMIND_RESCUE !== "0";
@@ -125,6 +129,29 @@ function noteMa35ProviderFailure(provider, reason) {
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
+}
+
+function formalDaytradePrioritySet() {
+  if (!FORMAL_DAYTRADE_POOL_ONLY) return null;
+  const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const source = Array.isArray(payload.daytradePrioritySymbols)
+    ? payload.daytradePrioritySymbols
+    : Array.isArray(payload.daytradeSymbols)
+      ? payload.daytradeSymbols
+      : Array.isArray(payload.symbols)
+        ? payload.symbols
+        : [];
+  const codes = source
+    .map((item) => String(item?.symbol || item?.code || item || "").trim())
+    .filter((code) => /^\d{4}$/.test(code))
+    .slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT);
+  return new Set(codes);
+}
+
+function filterFormalDaytradePool(stocks) {
+  const formalSet = formalDaytradePrioritySet();
+  if (!formalSet || !formalSet.size) return stocks;
+  return (stocks || []).filter((stock) => formalSet.has(String(stock.code || stock.symbol || "")));
 }
 
 function pickDefined(value) {
@@ -3560,7 +3587,7 @@ async function main() {
     maxQuoteAgeSeconds: QUOTE_CACHE_MAX_AGE_SECONDS,
     minQuotes: 1,
   } : {}));
-  const realtimeSourceStocks = rawStocks.filter(isIntradayTradable);
+  const realtimeSourceStocks = filterFormalDaytradePool(rawStocks.filter(isIntradayTradable));
   if (!entryWindow) {
     const warmed = await warmStrategy2MinuteCandles(realtimeSourceStocks, timestamp, cache, key);
     cache.updatedAt = new Date().toISOString();

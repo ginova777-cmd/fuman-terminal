@@ -1575,7 +1575,9 @@ function setStrategy2LiveShellCache(response, options = {}) {
 }
 
 async function fetchCompleteRunPayload(base, marketSession = null, options = null, readiness = null) {
-  const readinessRunId = String(readiness?.latestRunId || "").trim();
+  // Readiness is a diagnostic gate. It can lag behind the authoritative
+  // complete-run publish path, so it must not override the latest complete run.
+  const readinessRunId = "";
   if (readiness?.ready === true && readinessRunId) {
     const readinessRun = await hydrateRunPayloadRows(base, {
       run_id: readinessRunId,
