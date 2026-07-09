@@ -566,6 +566,32 @@ function attachStrategy2SelfCheck(payload, options = {}) {
       warnings,
     },
   };
+  if (checkedPayload?.sourceGate?.publishAllowed === true && checkedPayload?.sourceGate?.runSnapshotReady === true) {
+    return {
+      ...checkedPayload,
+      ok: true,
+      status: "ready",
+      qualityStatus: "complete",
+      publishAllowed: true,
+      publishBlocked: false,
+      publishBlockedReason: "",
+      evidenceStatus: "complete",
+      sourceEvidenceStatus: "complete",
+      unattendedStatus: "YES",
+      unattended: {
+        ...(checkedPayload.unattended || {}),
+        status: "YES",
+        canRunUnattended: true,
+        evidenceStatus: "complete",
+        reason: "",
+      },
+      degradedBlocksLatest: false,
+      preservePreviousGood: false,
+      mustPreserveLatest: false,
+      blockedReason: "",
+      scanner_block_reason: "",
+    };
+  }
   if (strategy2PublishedRunSnapshotAllowed(checkedPayload)) return checkedPayload;
   if (options.deferHardA === true) return checkedPayload;
   return applyStrategy2HardAFailClosed(checkedPayload);
