@@ -160,6 +160,7 @@
   installAutoLatencySampler();
   installPerformanceLogExport();
   installPersistentFixedCanvases();
+  installFixedDomRouteCleanup();
   installMarketApiOnlyHydrator();
   installMarketColdPayloadPrime();
   installStrategy2SnapshotFirstPrime();
@@ -1048,6 +1049,26 @@
 
   function isFixedDomRoute(route) {
     return isChipTradeRoute(route) || isCbDetectRoute(route) || isWarrantFlowRoute(route);
+  }
+
+  function cleanupFixedDomRouteShells() {
+    [CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"].forEach((route) => {
+      const panel = panelForRoute(route);
+      if (!panel) return;
+      panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active", "fuman-unified-list-panel");
+      delete panel.dataset.fumanCanvasPersistent;
+      panel.querySelectorAll(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell, :scope > .fuman-unified-list-shell").forEach((node) => node.remove());
+    });
+  }
+
+  function installFixedDomRouteCleanup() {
+    if (document.documentElement.dataset.fumanFixedDomRouteCleanupReady === "1") return;
+    document.documentElement.dataset.fumanFixedDomRouteCleanupReady = "1";
+    const run = () => cleanupFixedDomRouteShells();
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run, { once: true });
+    else run();
+    [400, 1200, 2600].forEach((delay) => window.setTimeout(run, delay));
+    new MutationObserver(run).observe(document.documentElement, { childList: true, subtree: true });
   }
 
   function isApiBackedSnapshotItem(item) {
