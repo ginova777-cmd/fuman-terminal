@@ -540,12 +540,12 @@ async function fetchCapitalMap() {
   try {
     const rows = await supabaseGetPaged(
       "stock_capital_latest",
-      "select=symbol,code,issued_shares,capital_shares,common_shares,shares,updated_at&order=updated_at.desc",
+      "select=code,issued_shares,capital,updated_at&order=updated_at.desc",
       { service: true, pageSize: 1000 },
     );
     for (const row of rows) {
-      const symbol = normalizeCode(row.symbol || row.code);
-      const issuedShares = firstNumber(row.issued_shares, row.capital_shares, row.common_shares, row.shares);
+      const symbol = normalizeCode(row.code);
+      const issuedShares = firstNumber(row.issued_shares, row.capital);
       if (symbol && issuedShares > 0 && !map.has(symbol)) map.set(symbol, { issuedShares, updated_at: row.updated_at || "" });
     }
   } catch {
