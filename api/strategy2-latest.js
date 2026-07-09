@@ -917,6 +917,10 @@ function strategy2RunSnapshotReady(payload = {}) {
   ].every(strategy2SnapshotResourceReady)
     && snapshot.run_quality_at_publish?.fallbackUsed !== true;
 }
+
+function strategy2LatestRunQualityReady(value) {
+  return /^(complete|ok|ready|fresh)$/i.test(String(value || "").trim());
+}
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return attachStrategy2SelfCheck(payload, { deferHardA: options?.deferHardA === true });
   const limit = options.limit || 60;
@@ -1320,7 +1324,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     runSnapshotReady
     && payload?.complete === true
     && payload?.runId
-    && String(payload?.qualityStatus || "").toLowerCase() === "complete"
+    && strategy2LatestRunQualityReady(payload?.qualityStatus)
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
@@ -1344,7 +1348,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     payload?.complete === true
     && payload?.runId
     && payloadTradeDate === today
-    && String(payload?.qualityStatus || "").toLowerCase() === "complete"
+    && strategy2LatestRunQualityReady(payload?.qualityStatus)
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
   );
