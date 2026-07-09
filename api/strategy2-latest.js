@@ -1015,7 +1015,7 @@ function compactStrategy2Payload(payload, options) {
       fetchedAt: new Date().toISOString(),
     },
   };
-  return attachStrategy2SelfCheck(compactPayload, { deferHardA: options?.deferHardA === true });
+  return attachStrategy2SelfCheck(compactPayload, { deferHardA: true });
 }
 
 async function fetchRows(base, table, query) {
