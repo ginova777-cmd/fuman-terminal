@@ -6434,13 +6434,6 @@
     if (avg) avg.textContent = rows.length ? String(Math.round(rows.reduce((sum, row) => sum + cleanNumber(row.score), 0) / rows.length)) : "--";
     if (top) top.textContent = rows[0]?.code || "--";
     if (table) {
-      const statusLine = [
-        runId ? `runId=${runId}` : "runId=--",
-        evidenceStatus ? `evidence=${evidenceStatus}` : "",
-        unattendedStatus ? `unattended=${unattendedStatus}` : "",
-        `publish=${publishAllowed ? "allowed" : "not_allowed"}`,
-        `source=${canvasState.source || "api"}`
-      ].filter(Boolean).join("｜");
       const cards = strategy3RunCards(rows, payloadMeta);
       const body = rows.length ? rows.map(strategy3SignalCard).join("") : `
         <div class="empty-state">
@@ -6454,7 +6447,6 @@
               <div class="strategy5-results-head">
                 <div>
                   <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
-                  <p>${escapeHtml(statusLine)}</p>
                 </div>
                 <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
               </div>
