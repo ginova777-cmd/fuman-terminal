@@ -292,7 +292,8 @@ try {
   if ($gate.Status -ne "ready") {
     $warnings += "controlled health=$($gate.Status): $($gate.Reason)"
     if ($Mode -eq "Final") {
-      throw "strategy1 preopen final health not ready: $($gate.Reason)"
+      $warnings += "final_not_ready_preserve_latest: $($gate.Reason)"
+      Write-PreopenLog "strategy1 preopen final not ready; preserve latest complete run; health=$($gate.Status); reason=$($gate.Reason)"
     }
   }
 
@@ -305,3 +306,4 @@ try {
   Write-PreopenReceipt "failed" 1 $healthStatus $message $refreshResult $iterations @($warnings + $message)
   exit 1
 }
+
