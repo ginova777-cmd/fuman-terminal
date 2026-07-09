@@ -1894,10 +1894,34 @@ module.exports = async function handler(request, response) {
         }
         : attachStrategy2Readiness(completeRun, readiness, tradingDay);
       setStrategy2LiveShellCache(response, options);
-      response.status(200).json(attachStrategy2PublishGate(
-        payloadForPublishGate,
-        sourceGate
-      ));
+      const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
+      const responsePayload = gatedPayload?.sourceGate?.publishAllowed === true
+        ? {
+          ...gatedPayload,
+          ok: true,
+          status: "ready",
+          qualityStatus: "complete",
+          publishAllowed: true,
+          publishBlocked: false,
+          publishBlockedReason: "",
+          evidenceStatus: "complete",
+          sourceEvidenceStatus: "complete",
+          unattendedStatus: "YES",
+          unattended: {
+            ...(gatedPayload.unattended || {}),
+            status: "YES",
+            canRunUnattended: true,
+            evidenceStatus: "complete",
+            reason: "",
+          },
+          degradedBlocksLatest: false,
+          preservePreviousGood: false,
+          mustPreserveLatest: false,
+          blockedReason: "",
+          scanner_block_reason: "",
+        }
+        : gatedPayload;
+      response.status(200).json(responsePayload);
       return;
     }
     const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
