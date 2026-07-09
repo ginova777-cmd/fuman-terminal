@@ -947,6 +947,15 @@ function compactStrategy2Payload(payload, options) {
   const reason = hasRows && payload?.reason === "today-complete-run-empty"
     ? "complete-run-authoritative"
     : payload?.reason || "complete-run-authoritative";
+  const compactPublishAllowed = payload?.sourceGate?.publishAllowed === true
+    || payload?.publishAllowed !== false;
+  const compactPublishBlocked = compactPublishAllowed ? false : payload?.publishBlocked === true;
+  const compactEvidenceStatus = compactPublishAllowed
+    ? "complete"
+    : payload?.evidenceStatus || payload?.sourceEvidenceStatus || "insufficient";
+  const compactUnattendedStatus = compactPublishAllowed
+    ? "YES"
+    : payload?.unattendedStatus || payload?.unattended?.status || "NO";
   const compactPayload = {
     ok: payload?.ok !== false,
     compact: true,
@@ -979,16 +988,16 @@ function compactStrategy2Payload(payload, options) {
     writeBudget: payload?.writeBudget || null,
     retentionOk: payload?.retentionOk ?? true,
     ...runTimeSourceSnapshotResponseFields(payload),
-    publishAllowed: payload?.publishAllowed !== false,
-    publishBlocked: payload?.publishBlocked === true,
-    publishBlockedReason: payload?.publishBlockedReason || "",
-    evidenceStatus: payload?.evidenceStatus || payload?.sourceEvidenceStatus || "complete",
-    sourceEvidenceStatus: payload?.sourceEvidenceStatus || payload?.evidenceStatus || "complete",
-    unattendedStatus: payload?.unattendedStatus || payload?.unattended?.status || "YES",
+    publishAllowed: compactPublishAllowed,
+    publishBlocked: compactPublishBlocked,
+    publishBlockedReason: compactPublishBlocked ? payload?.publishBlockedReason || "" : "",
+    evidenceStatus: compactEvidenceStatus,
+    sourceEvidenceStatus: compactEvidenceStatus,
+    unattendedStatus: compactUnattendedStatus,
     unattended: payload?.unattended || {
-      status: payload?.unattendedStatus || "YES",
-      canRunUnattended: payload?.unattendedStatus !== "NO",
-      evidenceStatus: payload?.evidenceStatus || "complete",
+      status: compactUnattendedStatus,
+      canRunUnattended: compactUnattendedStatus !== "NO",
+      evidenceStatus: compactEvidenceStatus,
     },
     scanWindow: payload?.scanWindow || null,
     marketSession: payload?.marketSession || null,
