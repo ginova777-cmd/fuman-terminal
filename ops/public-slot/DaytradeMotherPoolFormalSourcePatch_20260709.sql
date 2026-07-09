@@ -100,7 +100,9 @@ stock_future as (
 txf as (
   select
     future_symbol as txf_future_symbol,
+    last_price as txf_last_price,
     change_percent as txf_change_percent,
+    total_volume as txf_total_volume,
     updated_at as txf_updated_at
   from raw
   where upper(future_symbol) like 'TXF%'
@@ -118,13 +120,15 @@ select
   sf.futopt_last_price,
   sf.futopt_change_percent,
   sf.futopt_total_volume,
+  sf.futopt_updated_at,
   txf.txf_future_symbol,
+  txf.txf_last_price,
   txf.txf_change_percent,
+  txf.txf_total_volume,
   txf.txf_updated_at,
   sf.futopt_change_percent - coalesce(txf.txf_change_percent, 0) as relative_to_txf_percent,
-  sf.futopt_updated_at,
-  extract(epoch from (now() - sf.futopt_updated_at)) <= 120 as futopt_fresh_120s,
-  extract(epoch from (now() - txf.txf_updated_at)) <= 120 as txf_fresh_120s,
+  extract(epoch from (now() - sf.futopt_updated_at)) <= 60 as futopt_fresh_60s,
+  extract(epoch from (now() - txf.txf_updated_at)) <= 60 as txf_fresh_60s,
   case
     when sf.futopt_updated_at is null then 'missing'
     when (sf.futopt_updated_at at time zone 'Asia/Taipei')::date <> (now() at time zone 'Asia/Taipei')::date then 'stale'
@@ -137,6 +141,17 @@ select
     when extract(epoch from (now() - sf.futopt_updated_at)) <= 120 then 'stock future quote ready'
     else 'stock future quote stale'
   end as reason,
+  (
+    sf.futopt_change_percent >= 2
+    and (sf.futopt_change_percent - coalesce(txf.txf_change_percent, 0)) >= 1
+    and sf.futopt_total_volume >= 50
+  ) as star_precheck_ok,
+  (
+    sf.futopt_change_percent >= 2
+    and (sf.futopt_change_percent - coalesce(txf.txf_change_percent, 0)) >= 1
+    and sf.futopt_total_volume >= 50
+    and extract(epoch from (now() - sf.futopt_updated_at)) <= 120
+  ) as strategy2_futopt_gate_ok,
   sf.futopt_updated_at as updated_at
 from stock_future sf
 left join txf on true
@@ -144,32 +159,30 @@ left join public.stock_tickers st on st.symbol = sf.symbol;
 
 create or replace view public.v_strategy12_stock_future_contract_health as
 select
-  count(*)::integer as contract_rows,
-  count(*) filter (where source_status = 'ready')::integer as ready_rows,
-  count(*) filter (where source_status = 'stale')::integer as stale_rows,
-  count(*) filter (where source_status <> 'ready')::integer as not_ready_rows,
-  count(*) filter (
-    where futopt_change_percent >= 2
-      and relative_to_txf_percent >= 1
-      and futopt_total_volume >= 50
-  )::integer as star_precheck_rows,
-  count(*) filter (
-    where futopt_change_percent >= 2
-      and relative_to_txf_percent >= 1
-      and futopt_total_volume >= 50
-      and source_status = 'ready'
-  )::integer as strategy2_futopt_gate_rows,
+  max(trade_date) as trade_date,
+  count(*) as contract_rows,
+  count(distinct symbol) as symbol_rows,
+  count(distinct future_symbol) as future_symbol_rows,
+  count(*) filter (where futopt_last_price > 0) as last_price_rows,
+  count(*) filter (where futopt_change_percent is not null) as change_percent_rows,
+  count(*) filter (where futopt_total_volume > 0) as total_volume_rows,
+  count(*) filter (where source_status = 'ready') as ready_rows,
+  count(*) filter (where source_status = 'stale') as stale_rows,
+  count(*) filter (where source_status <> 'ready') as not_ready_rows,
+  count(*) filter (where star_precheck_ok) as star_precheck_rows,
+  count(*) filter (where strategy2_futopt_gate_ok) as strategy2_futopt_gate_rows,
   max(futopt_updated_at) as latest_futopt_updated_at,
   max(txf_updated_at) as latest_txf_updated_at,
+  max(updated_at) as latest_updated_at,
   case
     when count(*) = 0 then 'missing'
     when count(*) filter (where source_status = 'ready') > 0 then 'ready'
-    else 'stale'
+    else 'not_ready'
   end as source_status,
   case
     when count(*) = 0 then 'stock future contract rows missing'
     when count(*) filter (where source_status = 'ready') > 0 then 'stock future contract ready'
-    else 'stock future contract stale'
+    else 'ready_rows_zero'
   end as reason,
   now() as checked_at
 from public.v_stock_future_live_contract;
