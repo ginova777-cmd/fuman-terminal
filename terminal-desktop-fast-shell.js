@@ -5970,7 +5970,7 @@
           <div>
             <span class="strategy2-battle-kicker">${escapeHtml(meta.icon)} 策略2</span>
             <h2 data-canvas-meta-title>${escapeHtml(meta.title)}</h2>
-            <p data-canvas-meta-summary>當沖即時偵測，今日進場與歷史紀錄分區顯示。</p>
+            <p data-canvas-meta-summary hidden aria-hidden="true"></p>
           </div>
           <div class="strategy2-battle-stats">
             <strong class="desktop-canvas-count">${escapeHtml(`${canvasState.filtered.length}筆`)}</strong>
@@ -6042,15 +6042,9 @@
     }
     if (title) title.textContent = meta.title;
     if (summary) {
-      const metaLine = [
-        routeMeta.runId ? `run=${routeMeta.runId}` : "run=--",
-        routeMeta.evidenceStatus ? `evidence=${routeMeta.evidenceStatus}` : "",
-        routeMeta.publishAllowed === true ? "publish=allowed" : routeMeta.publishAllowed === false ? "publish=not_allowed" : "",
-      ].filter(Boolean).join("｜");
-      const baseLine = afterhoursHold
-        ? "今日策略2圖卡收盤後保留顯示，24:00 自動重置。"
-        : "當沖即時偵測，今日進場與歷史紀錄分區顯示。";
-      summary.textContent = [baseLine, metaLine].filter(Boolean).join("｜");
+      summary.textContent = "";
+      summary.hidden = true;
+      summary.setAttribute("aria-hidden", "true");
     }
     if (count) count.textContent = `${rows.length}筆`;
     if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
