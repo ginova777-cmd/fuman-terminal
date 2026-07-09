@@ -6275,6 +6275,7 @@
     if (!FIXED_CANVAS_PERSIST_ROUTES.includes(route)) return false;
     const panel = panelForRoute(route);
     if (!panel) return false;
+    if (panel.classList.contains("fuman-unified-list-panel")) return true;
     if (panel.querySelector(":scope > .desktop-route-shell.desktop-canvas-app.desktop-fixed-page-shell")) return true;
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-fixed-shell-panel");
@@ -7883,6 +7884,11 @@
       #warrant-flow-view.fuman-unified-list-panel .warrant-flow-panel,
       #warrant-flow-view.fuman-unified-list-panel .warrant-flow-list,
       #warrant-flow-view.fuman-unified-list-panel .strategy5-dashboard:not(.strategy3-clean) {
+        display: none !important;
+      }
+      #chip-trade-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell),
+      #cb-detect-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell),
+      #warrant-flow-view.fuman-unified-list-panel > .desktop-route-shell:not(.fuman-unified-list-shell) {
         display: none !important;
       }
       @media (max-width: 980px) {
