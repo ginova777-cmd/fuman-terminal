@@ -7,13 +7,45 @@ begin;
 
 drop view if exists public.v_fugle_daytrade_mother_pool_contract_health;
 drop view if exists public.v_fugle_daytrade_formal_priority_top40;
+drop view if exists public.v_fugle_daytrade_priority_top40;
 drop view if exists public.v_fugle_daytrade_mother_pool;
 
 create or replace view public.v_fugle_daytrade_mother_pool as
 select
+  coalesce(d.trade_date, (q.quote_seen_at at time zone 'Asia/Taipei')::date, (p.updated_at at time zone 'Asia/Taipei')::date) as trade_date,
   p.symbol,
-  p.name,
-  p.market,
+  coalesce(q.name, p.name) as name,
+  coalesce(q.market, p.market) as market,
+  q.price,
+  q.open_price,
+  q.previous_close,
+  q.change_percent,
+  case
+    when q.open_price is not null and q.open_price <> 0 and q.price is not null
+      then round(((q.price - q.open_price) / q.open_price) * 100, 4)
+    else 0::numeric
+  end as amplitude_from_open,
+  coalesce(q.total_volume, 0) as total_volume,
+  coalesce(q.trade_value, 0) as trade_value,
+  coalesce(d.avg_volume5, 0) as avg5_volume,
+  coalesce(nullif(p.payload ->> 'score', '')::numeric, 0) as mother_pool_score,
+  coalesce(nullif(p.payload ->> 'priorityScore', '')::numeric, nullif(p.payload ->> 'score', '')::numeric, 0) as priority_score,
+  p.priority_rank,
+  p.priority_rank as mother_pool_rank,
+  coalesce(nullif(p.payload ->> 'isStrongGroupLeader', '')::boolean, false) as is_strong_group_leader,
+  coalesce(nullif(p.payload ->> 'strongGroupLeaderScore', '')::numeric, 0) as strong_group_leader_score,
+  coalesce(nullif(p.payload ->> 'futopt0846Ready', '')::boolean, false) as futopt_0846_ready,
+  coalesce(nullif(p.payload ->> 'futopt0846Score', '')::numeric, 0) as futopt_0846_score,
+  coalesce(nullif(p.payload ->> 'turnoverRate3d', '')::numeric, 0) as turnover_rate_3d,
+  coalesce(nullif(p.payload ->> 'turnoverRate5d', '')::numeric, 0) as turnover_rate_5d,
+  coalesce(nullif(p.payload ->> 'turnoverScore', '')::numeric, 0) as turnover_score,
+  coalesce(nullif(p.payload ->> 'marginDecreasePriceStrong', '')::boolean, false) as margin_decrease_price_strong,
+  coalesce(nullif(p.payload ->> 'marginDecreasePriceStrongScore', '')::numeric, 0) as margin_decrease_price_strong_score,
+  coalesce(nullif(p.payload ->> 'marginShortSyncPriceStrong', '')::boolean, false) as margin_short_sync_price_strong,
+  coalesce(nullif(p.payload ->> 'marginShortSyncPriceStrongScore', '')::numeric, 0) as margin_short_sync_price_strong_score,
+  coalesce(nullif(p.payload ->> 'exDividendRisk', '')::boolean, false) as ex_dividend_risk,
+  coalesce(nullif(p.payload ->> 'nextDaySellRisk', '')::boolean, false) as next_day_sell_risk,
+  coalesce(nullif(p.payload ->> 'daytradeRiskPenalty', '')::numeric, 0) as daytrade_risk_penalty,
   p.priority_rank as mother_rank,
   p.priority_reason as mother_reason,
   p.source as mother_source,
@@ -22,16 +54,15 @@ select
   coalesce(p.payload ->> 'motherPoolRuleVersion', 'daytrade_mother_pool_rank_overlap_20260709') as mother_pool_rule_version,
   coalesce(p.payload -> 'motherPoolRuleHits', '[]'::jsonb) as mother_pool_rule_hits,
   coalesce(p.payload -> 'motherPoolMetrics', '{}'::jsonb) as mother_pool_metrics,
-  coalesce(nullif(p.payload #>> '{motherPoolMetrics,tradeValue}', '')::numeric, 0) as trade_value,
-  coalesce(nullif(p.payload #>> '{motherPoolMetrics,totalVolume}', '')::numeric, 0) as total_volume,
-  coalesce(nullif(p.payload #>> '{motherPoolMetrics,changePercent}', '')::numeric, 0) as change_percent,
-  coalesce(nullif(p.payload #>> '{motherPoolMetrics,avgVolume5}', '')::numeric, 0) as avg_volume5,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,tradeValue}', '')::numeric, 0) as mother_metric_trade_value,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,totalVolume}', '')::numeric, 0) as mother_metric_total_volume,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,changePercent}', '')::numeric, 0) as mother_metric_change_percent,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,avgVolume5}', '')::numeric, 0) as mother_metric_avg_volume5,
   coalesce(nullif(p.payload #>> '{motherPoolMetrics,turnoverRate}', '')::numeric, 0) as turnover_rate,
   coalesce(nullif(p.payload #>> '{motherPoolMetrics,quoteFresh}', '')::boolean, false) as quote_fresh_at_rank,
   q.quote_seen_at,
   q.updated_at as quote_updated_at,
   coalesce(extract(epoch from (now() - q.quote_seen_at))::integer, 999999) as quote_age_seconds,
-  q.price,
   q.change_percent as live_change_percent,
   q.total_volume as live_total_volume,
   q.trade_value as live_trade_value,
@@ -47,6 +78,14 @@ select
     when coalesce(d.avg_volume5, 0) <= 0 then 'daily_volume_missing'
     else 'ready'
   end as mother_readiness_status,
+  (
+    p.priority_rank <= coalesce(nullif(ss.payload ->> 'formal_daytrade_priority_limit', '')::integer, 40)
+    and q.symbol is not null
+    and coalesce(extract(epoch from (now() - q.quote_seen_at))::integer, 999999) <= 120
+    and coalesce(d.avg_volume5, 0) > 0
+  ) as is_formal_entry_eligible,
+  'fugle_daytrade_source'::text as source_name,
+  greatest(p.updated_at, coalesce(q.updated_at, p.updated_at), coalesce(d.updated_at, p.updated_at)) as updated_at,
   p.payload
 from public.fugle_daytrade_priority_pool p
 left join public.fugle_daytrade_quotes_live q on q.symbol = p.symbol
@@ -58,6 +97,12 @@ select *
 from public.v_fugle_daytrade_mother_pool
 where in_formal_priority_top40 is true
 order by mother_rank asc, symbol asc;
+
+create or replace view public.v_fugle_daytrade_priority_top40 as
+select *
+from public.v_fugle_daytrade_mother_pool
+where in_formal_priority_top40 is true
+order by mother_pool_rank asc, symbol asc;
 
 create or replace view public.v_fugle_daytrade_mother_pool_contract_health as
 with status_row as (
@@ -146,6 +191,7 @@ cross join formal f;
 
 grant select on public.v_fugle_daytrade_mother_pool to anon, authenticated, service_role;
 grant select on public.v_fugle_daytrade_formal_priority_top40 to anon, authenticated, service_role;
+grant select on public.v_fugle_daytrade_priority_top40 to anon, authenticated, service_role;
 grant select on public.v_fugle_daytrade_mother_pool_contract_health to anon, authenticated, service_role;
 
 commit;

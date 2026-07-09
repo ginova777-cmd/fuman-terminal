@@ -49,23 +49,71 @@ async function main() {
   const anonKey = process.env.SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
   if (!anonKey) throw new Error("missing Supabase anon key");
 
-  const [motherRows, formalRows, healthRows] = await Promise.all([
+  const requiredContractFields = [
+    "trade_date",
+    "symbol",
+    "name",
+    "market",
+    "price",
+    "open_price",
+    "previous_close",
+    "change_percent",
+    "amplitude_from_open",
+    "total_volume",
+    "trade_value",
+    "avg5_volume",
+    "mother_pool_score",
+    "priority_score",
+    "priority_rank",
+    "mother_pool_rank",
+    "is_strong_group_leader",
+    "strong_group_leader_score",
+    "futopt_0846_ready",
+    "futopt_0846_score",
+    "turnover_rate_3d",
+    "turnover_rate_5d",
+    "turnover_score",
+    "margin_decrease_price_strong",
+    "margin_decrease_price_strong_score",
+    "margin_short_sync_price_strong",
+    "margin_short_sync_price_strong_score",
+    "ex_dividend_risk",
+    "next_day_sell_risk",
+    "daytrade_risk_penalty",
+    "is_formal_entry_eligible",
+    "source_name",
+    "updated_at",
+  ];
+
+  const [motherRows, formalRows, priorityRows, motherStarRows, priorityStarRows, healthRows] = await Promise.all([
     restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,mother_rank,mother_source,mother_pool_rule_version,mother_readiness_status,quote_age_seconds,in_formal_priority_top40&order=mother_rank.asc&limit=5"),
     restGet(anonKey, "v_fugle_daytrade_formal_priority_top40?select=symbol,mother_rank,mother_readiness_status,quote_age_seconds&order=mother_rank.asc&limit=5"),
+    restGet(anonKey, "v_fugle_daytrade_priority_top40?select=symbol,mother_pool_rank,mother_readiness_status,quote_age_seconds&order=mother_pool_rank.asc&limit=5"),
+    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=*&limit=1"),
+    restGet(anonKey, "v_fugle_daytrade_priority_top40?select=*&limit=1"),
     restGet(anonKey, "v_fugle_daytrade_mother_pool_contract_health?select=*&limit=1"),
   ]);
 
   const health = Array.isArray(healthRows) ? healthRows[0] || {} : {};
+  const motherContractRow = Array.isArray(motherStarRows) ? motherStarRows[0] || {} : {};
+  const priorityContractRow = Array.isArray(priorityStarRows) ? priorityStarRows[0] || {} : {};
   const motherPoolSymbols = numberValue(health.mother_pool_symbols);
   const formalPrioritySymbols = numberValue(health.formal_priority_symbols);
   const formalPriorityLimit = numberValue(health.formal_priority_limit, 40);
   const issues = [];
   if (!Array.isArray(motherRows) || motherRows.length === 0) issues.push("mother_pool_view_empty_or_missing");
   if (!Array.isArray(formalRows) || formalRows.length === 0) issues.push("formal_priority_top40_view_empty_or_missing");
+  if (!Array.isArray(priorityRows) || priorityRows.length === 0) issues.push("priority_top40_view_empty_or_missing");
+  if (!motherContractRow || Object.keys(motherContractRow).length === 0) issues.push("mother_pool_star_contract_empty_or_missing");
+  if (!priorityContractRow || Object.keys(priorityContractRow).length === 0) issues.push("priority_top40_star_contract_empty_or_missing");
   if (!health || Object.keys(health).length === 0) issues.push("mother_pool_contract_health_empty_or_missing");
   if (motherPoolSymbols < 180) issues.push(`mother_pool_symbols_${motherPoolSymbols}_below_min_180`);
   if (formalPrioritySymbols < Math.min(40, formalPriorityLimit)) {
     issues.push(`formal_priority_symbols_${formalPrioritySymbols}_below_${Math.min(40, formalPriorityLimit)}`);
+  }
+  for (const field of requiredContractFields) {
+    if (!Object.prototype.hasOwnProperty.call(motherContractRow, field)) issues.push(`mother_pool_missing_field:${field}`);
+    if (!Object.prototype.hasOwnProperty.call(priorityContractRow, field)) issues.push(`priority_top40_missing_field:${field}`);
   }
   if (String(health.mother_pool_source || "") !== "dynamic_daytrade_mother_pool") {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
@@ -79,6 +127,7 @@ async function main() {
     checkedAt: new Date().toISOString(),
     views: {
       motherPool: "v_fugle_daytrade_mother_pool",
+      priorityTop40: "v_fugle_daytrade_priority_top40",
       formalPriorityTop40: "v_fugle_daytrade_formal_priority_top40",
       contractHealth: "v_fugle_daytrade_mother_pool_contract_health",
     },
@@ -99,7 +148,10 @@ async function main() {
     },
     samples: {
       motherPool: motherRows,
+      priorityTop40: priorityRows,
       formalPriorityTop40: formalRows,
+      motherPoolContractFields: Object.keys(motherContractRow),
+      priorityTop40ContractFields: Object.keys(priorityContractRow),
     },
     issues,
   };
