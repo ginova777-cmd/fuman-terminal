@@ -7169,7 +7169,7 @@
         overflow: hidden;
       }
       #strategy-view.strategy3-only .strategy5-results {
-        padding: 28px 34px 34px !important;
+        padding: 26px 24px 32px !important;
         display: grid;
         gap: 18px;
       }
@@ -7238,11 +7238,11 @@
       }
       #strategy-view.strategy3-only .strategy3-table-head {
         display: grid;
-        grid-template-columns: 74px minmax(180px, 1.1fr) minmax(320px, 2fr) 360px;
-        gap: 12px;
+        grid-template-columns: 62px minmax(130px, 0.75fr) minmax(230px, 1.55fr) minmax(252px, 0.95fr);
+        gap: 10px;
         align-items: center;
         min-height: 48px;
-        padding: 0 22px;
+        padding: 0 18px;
         border-radius: 8px;
         color: #bfdbfe;
         background: rgba(15, 23, 42, 0.78);
@@ -7250,10 +7250,10 @@
       }
       #strategy-view.strategy3-only .strategy3-signal-card {
         display: grid;
-        grid-template-columns: 74px minmax(180px, 1.1fr) minmax(320px, 2fr) 360px;
-        gap: 12px;
+        grid-template-columns: 62px minmax(130px, 0.75fr) minmax(230px, 1.55fr) minmax(252px, 0.95fr);
+        gap: 10px;
         align-items: stretch;
-        padding: 15px 22px;
+        padding: 15px 18px;
         border: 1px solid rgba(148, 163, 184, 0.10);
         border-radius: 8px;
         background: linear-gradient(90deg, rgba(59, 30, 37, 0.72), rgba(15, 23, 42, 0.78) 44%, rgba(13, 38, 71, 0.78));
@@ -7324,12 +7324,12 @@
       #strategy-view.strategy3-only .strategy3-card-metrics {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 8px;
+        gap: 7px;
         align-self: center;
       }
       #strategy-view.strategy3-only .strategy3-card-metrics div {
         min-height: 56px;
-        padding: 8px 9px;
+        padding: 8px 7px;
         border: 1px solid rgba(148, 163, 184, 0.16);
         border-radius: 8px;
         background: rgba(2, 6, 23, 0.38);
@@ -7344,7 +7344,7 @@
         display: block;
         margin-top: 5px;
         color: #fff7ed;
-        font-size: 17px;
+        font-size: 16px;
         line-height: 1.15;
         letter-spacing: 0;
         overflow: hidden;
