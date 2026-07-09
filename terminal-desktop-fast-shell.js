@@ -8060,6 +8060,187 @@
       .strategy2-card-line.action b {
         color: #43d986;
       }
+      body.fuman-light-theme .strategy2-battle-shell {
+        background:
+          linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(59, 130, 246, 0.08)),
+          #f7fafc !important;
+        color: #172033 !important;
+      }
+      body.fuman-light-theme .strategy2-battle-header {
+        border-bottom-color: #d8e3ef !important;
+      }
+      body.fuman-light-theme .strategy2-battle-kicker {
+        color: #ea580c !important;
+      }
+      body.fuman-light-theme .strategy2-battle-header h2 {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme .strategy2-battle-header p {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .strategy2-battle-refresh {
+        border-color: #f6c453 !important;
+        background: #fff7d6 !important;
+        color: #92400e !important;
+      }
+      body.fuman-light-theme .strategy2-health-banner {
+        border-color: #f2c94c !important;
+        background: #fff8db !important;
+        color: #7c4a03 !important;
+      }
+      body.fuman-light-theme .strategy2-health-banner.blocked {
+        border-color: #f4a3a3 !important;
+        background: #fff1f2 !important;
+        color: #7f1d1d !important;
+      }
+      body.fuman-light-theme .strategy2-health-banner strong {
+        color: #a16207 !important;
+      }
+      body.fuman-light-theme .strategy2-health-banner.blocked strong {
+        color: #be123c !important;
+      }
+      body.fuman-light-theme .strategy2-health-banner small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .strategy2-battle-panel {
+        border-color: #cfdae8 !important;
+        background: #ffffff !important;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .strategy2-entry-panel {
+        border-color: #e6c85e !important;
+        background:
+          linear-gradient(90deg, rgba(250, 204, 21, 0.18), rgba(59, 130, 246, 0.08)),
+          #ffffff !important;
+      }
+      body.fuman-light-theme .strategy2-history-panel {
+        border-color: #bdd2ee !important;
+      }
+      body.fuman-light-theme .strategy2-battle-panel header {
+        border-bottom-color: #dbe5f0 !important;
+        background: #f8fbff !important;
+      }
+      body.fuman-light-theme .strategy2-battle-panel header span {
+        color: #a16207 !important;
+      }
+      body.fuman-light-theme .strategy2-battle-panel header strong {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .strategy2-battle-panel header small {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .strategy2-entry-cards,
+      body.fuman-light-theme .strategy2-top-table {
+        background: #f1f5f9 !important;
+      }
+      body.fuman-light-theme .strategy2-entry-card,
+      body.fuman-light-theme .strategy2-top-table .strategy2-battle-row {
+        border-color: #cbd8e6 !important;
+        background: #ffffff !important;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08) !important;
+      }
+      body.fuman-light-theme .strategy2-card-time,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-rank {
+        border-right-color: #d6e0ec !important;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%) !important;
+        color: #a16207 !important;
+      }
+      body.fuman-light-theme .strategy2-card-time small,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-rank::before {
+        color: #334155 !important;
+      }
+      body.fuman-light-theme .strategy2-card-time strong,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-rank {
+        color: #b45309 !important;
+      }
+      body.fuman-light-theme .strategy2-card-time em,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-rank::after {
+        color: #64748b !important;
+      }
+      body.fuman-light-theme .strategy2-card-name,
+      body.fuman-light-theme .strategy2-card-metric,
+      body.fuman-light-theme .strategy2-card-line,
+      body.fuman-light-theme .strategy2-top-table .strategy2-battle-row td {
+        border-bottom-color: #dbe5f0 !important;
+        background: #ffffff !important;
+        color: #1f2937 !important;
+      }
+      body.fuman-light-theme .strategy2-card-name,
+      body.fuman-light-theme .strategy2-card-metric,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-time,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-symbol,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-price,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-score,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-change {
+        background: #fbfdff !important;
+      }
+      body.fuman-light-theme .strategy2-card-name strong,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-symbol strong {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme .strategy2-card-name span,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-symbol span {
+        color: #475569 !important;
+      }
+      body.fuman-light-theme .strategy2-card-metric small,
+      body.fuman-light-theme .strategy2-card-line b,
+      body.fuman-light-theme .strategy2-top-table .strategy2-battle-row td::before {
+        color: #a16207 !important;
+      }
+      body.fuman-light-theme .strategy2-card-metric strong,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-price,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-score,
+      body.fuman-light-theme .strategy2-top-table .strategy2-col-change {
+        color: #0f172a !important;
+      }
+      body.fuman-light-theme .strategy2-card-metric.hot strong,
+      body.fuman-light-theme .strategy2-col-rank {
+        color: #b45309 !important;
+      }
+      body.fuman-light-theme .strategy2-card-line.risk {
+        border-top-color: #fda4af !important;
+        border-bottom-color: #fda4af !important;
+        background: #fff1f2 !important;
+        color: #7f1d1d !important;
+      }
+      body.fuman-light-theme .strategy2-card-line.risk b {
+        color: #be123c !important;
+      }
+      body.fuman-light-theme .strategy2-card-line.action {
+        background: #ecfdf5 !important;
+        color: #064e3b !important;
+      }
+      body.fuman-light-theme .strategy2-card-line.action b {
+        color: #047857 !important;
+      }
+      body.fuman-light-theme .strategy2-terminal-table th {
+        background: #edf4fb !important;
+        color: #334155 !important;
+        border-bottom-color: #cbd8e6 !important;
+      }
+      body.fuman-light-theme .strategy2-terminal-table td {
+        color: #1f2937 !important;
+        border-bottom-color: #dbe5f0 !important;
+      }
+      body.fuman-light-theme .strategy2-terminal-table tbody tr:nth-child(even) {
+        background: #f8fbff !important;
+      }
+      body.fuman-light-theme .strategy2-tone-entry td,
+      body.fuman-light-theme .strategy2-tone-entry .strategy2-col-symbol strong {
+        color: #92400e !important;
+      }
+      body.fuman-light-theme .strategy2-tone-prepare {
+        background: #eff6ff !important;
+      }
+      body.fuman-light-theme .strategy2-tone-prepare td,
+      body.fuman-light-theme .strategy2-tone-prepare .strategy2-col-symbol strong {
+        color: #1d4ed8 !important;
+      }
+      body.fuman-light-theme .strategy2-tone-prepare .strategy2-col-note span {
+        border-color: #93c5fd !important;
+        background: #dbeafe !important;
+        color: #1e3a8a !important;
+      }
       .strategy2-entry-panel .strategy2-battle-scroll {
         max-height: none;
       }
