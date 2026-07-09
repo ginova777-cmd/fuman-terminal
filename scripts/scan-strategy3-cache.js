@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const {
   fetchStrategy3CapitalMap,
+  fetchStrategy3DaytradeMotherPoolMap,
   fetchStrategy3Intraday1mStatus,
   fetchStrategy3Intraday1mLatestN,
   fetchStrategy3LiveSideVolumeMap,
@@ -799,7 +800,7 @@ function strategy3BusinessValue(row = {}, key, index = 0, output = {}) {
   if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
   if (key === "ma20") return cleanNumber(row.ma20 ?? entry.ma20);
   if (key === "ma35") return cleanNumber(row.ma35 ?? entry.ma35);
-  if (key === "maTrend") return String(row.maTrend || (cleanNumber(row.ma20 ?? entry.ma20) >= cleanNumber(row.ma35 ?? entry.ma35) ? "ma20>=ma35" : "")).trim();
+  if (key === "maTrend") return String(row.maTrend || strategy3MaTrend(row.ma20 ?? entry.ma20, row.ma35 ?? entry.ma35)).trim();
   if (key === "rsi") return cleanNumber(row.rsi ?? entry.rsi);
   if (key === "macd") return cleanNumber(row.macd);
   if (key === "volumeRatio") return cleanNumber(row.volumeRatio);
@@ -1603,7 +1604,25 @@ async function fetchSupabaseStrategy3Universe() {
   const warnings = [];
   const quoteResult = await fetchStrategy3QuoteLatestReady({ minQuotes: 500 });
   if (!quoteResult.ok) throw new Error(quoteResult.error || "strategy3 latest quotes unavailable");
+  let motherPoolResult = { ok: false, byCode: new Map(), rows: 0, source: "fugle_daytrade_priority_pool", updatedAt: "" };
+  try {
+    motherPoolResult = await fetchStrategy3DaytradeMotherPoolMap({ limit: 500 });
+  } catch (error) {
+    warnings.push(`strategy3 daytrade mother pool overlay skipped: ${error?.message || String(error)}`);
+  }
   const stocks = quoteResult.quotes.map((quote) => ({
+    ...(motherPoolResult.byCode.get(quote.code)
+      ? {
+          inDaytradeMotherPool: true,
+          daytradeMotherPoolRank: motherPoolResult.byCode.get(quote.code).rank,
+          daytradeMotherPoolReason: motherPoolResult.byCode.get(quote.code).reason,
+          daytradeMotherPoolSource: motherPoolResult.byCode.get(quote.code).source,
+          daytradeMotherPoolUpdatedAt: motherPoolResult.byCode.get(quote.code).updatedAt,
+          daytradeMotherPoolRuleVersion: motherPoolResult.byCode.get(quote.code).ruleVersion,
+          daytradeMotherPoolRuleHits: motherPoolResult.byCode.get(quote.code).ruleHits,
+          daytradeMotherPoolMetrics: motherPoolResult.byCode.get(quote.code).metrics,
+        }
+      : { inDaytradeMotherPool: false }),
     code: quote.code,
     name: quote.name,
     close: quote.close,
@@ -1657,6 +1676,12 @@ async function fetchSupabaseStrategy3Universe() {
     volumeAverageMap,
     warnings,
     source: "supabase-strategy3",
+    daytradeMotherPool: {
+      ok: motherPoolResult.ok,
+      source: motherPoolResult.source,
+      symbols: motherPoolResult.rows,
+      updatedAt: motherPoolResult.updatedAt,
+    },
   };
 }
 
@@ -1767,6 +1792,13 @@ function strategy3FieldGate(stock, volumeRatio, volumeLots) {
   const ok = Object.values(checks).every(Boolean);
   const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (${STRATEGY3_MIN_CHANGE_PERCENT}-${STRATEGY3_MAX_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
   return { ok, checks, reason, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
+}
+
+function strategy3MaTrend(ma20, ma35) {
+  const ma20Value = cleanNumber(ma20);
+  const ma35Value = cleanNumber(ma35);
+  if (ma20Value > 0 && ma35Value > 0) return ma20Value >= ma35Value ? "ma20>=ma35" : "ma20<ma35";
+  return "unknown";
 }
 
 function incrementStrategy3Reason(map, key) {
@@ -1926,6 +1958,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
         tvOvernightEntry: tvEntry,
         ma20: cleanNumber(tvEntry.ma20),
         ma35: cleanNumber(tvEntry.ma35),
+        maTrend: strategy3MaTrend(tvEntry.ma20, tvEntry.ma35),
         rsi: cleanNumber(tvEntry.rsi),
         synthetic: false,
         judgment: tvEntry.ok ? "通過" : "觀察",
@@ -2152,6 +2185,7 @@ async function main() {
   let volumeAverageMap = new Map();
   let sourceWarnings = [];
   let exclusionStats = {};
+  let daytradeMotherPool = { ok: false, source: "not_loaded", symbols: 0, updatedAt: "" };
   if (STRATEGY3_USE_SUPABASE) {
     try {
       const supabase = await fetchSupabaseStrategy3Universe();
@@ -2160,6 +2194,7 @@ async function main() {
       issuedSharesMap = supabase.issuedSharesMap;
       volumeAverageMap = supabase.volumeAverageMap;
       sourceWarnings = supabase.warnings;
+      daytradeMotherPool = supabase.daytradeMotherPool || daytradeMotherPool;
     } catch (error) {
       sourceWarnings.push(`strategy3 supabase fallback: ${error?.message || String(error)}`);
     }
@@ -2240,12 +2275,21 @@ async function main() {
     completeScan: true,
     sourceUniverseCount: stocks.length,
     scannedCount: stocks.length,
+    daytradeMotherPoolSource: daytradeMotherPool.source,
+    daytradeMotherPoolSymbols: cleanNumber(daytradeMotherPool.symbols),
+    daytradeMotherPoolUpdatedAt: daytradeMotherPool.updatedAt || "",
+    daytradeMotherPoolOverlayOk: daytradeMotherPool.ok === true,
+    daytradeMotherPoolUniverseOverlap: stocks.filter((stock) => stock.inDaytradeMotherPool === true).length,
     sessionReadyCandidates: cleanNumber(matchDiagnostics.sessionReadyCandidates),
     hardFieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
+    hardFieldGateInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FieldGate?.ok).length,
     fieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
     fixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    fixedPassInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FixedPass).length,
     tvAnalyzedCount: cleanNumber(matchDiagnostics.tvAnalyzedCount),
+    tvAnalyzedInMotherPool: matches.filter((stock) => stock.inDaytradeMotherPool === true).length,
     tvPassCount: cleanNumber(matchDiagnostics.tvPassCount),
+    resultInMotherPool: matches.filter((stock) => stock.inDaytradeMotherPool === true).length,
     resultCount: matches.length,
     candidateLimit: STRATEGY3_TV_CANDIDATE_LIMIT,
     candidateLimitApplied: STRATEGY3_TV_CANDIDATE_LIMIT > 0
