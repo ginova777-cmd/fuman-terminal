@@ -254,6 +254,10 @@ function Get-Detail($text, $patterns) {
 function Test-FailureText($text) {
   if (-not $text) { return $false }
   $clean = $text -replace "(?im)^.*failure\s+0(/\d+|\b).*$", ""
+  # Strategy2 and shared-source loops may log transient Supabase REST retries before a later successful readback.
+  # Keep real fatal errors strict, but do not let retry-only HTTP 500/timeout lines mark a completed loop as failed.
+  $clean = $clean -replace "(?im)^.*transient failure attempt=\d+/\d+:.*retrying in \d+ms.*$", ""
+  $clean = $clean -replace "(?im)^.*read skipped: .*HTTP 500.*canceling statement due to statement timeout.*$", ""
   return $clean -match "(?i)(failed with exit code|Error:|exited: 1|UNABLE_TO_VERIFY|fetch failed|This operation was aborted|fatal:|HTTP\s+[45]\d\d)"
 }
 

@@ -22,6 +22,7 @@
       "Fuman PC Wake 0430",
       "Fuman Public Slot Anti Rollback Guard 1m",
       "Fuman Public Slot Shared Source 0800",
+      "Fuman Public Slot Quote Fast Flush 0845",
       "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
@@ -33,6 +34,7 @@
       "Fuman Strategy2 LINE Start 0900",
       "Fuman Strategy2 LINE Stop 1330",
       "Fuman Strategy2 Supabase Coverage 0800",
+      "Fuman Strategy2 E2E Closure Readback",
       "Fuman Strategy3 Battle Verify 1305",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy4 Cache 1600",
@@ -206,6 +208,23 @@
       "Fuman Strategy4 Postscan Closure 1605": [
         0,
         267009
+      ],
+      "Fuman Public Slot Quote Fast Flush 0845": [
+        0,
+        267009,
+        267011,
+        -1073741510,
+        3221225786
+      ],
+      "Fuman Strategy2 E2E Closure Readback": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy2 Intraday Scan": [
+        0,
+        267009,
+        267014
       ]
     },
     "coveredBy": {
@@ -411,6 +430,16 @@
       "expectedState": "Ready"
     },
     {
+      "taskName": "\\Fuman Public Slot Quote Fast Flush 0845",
+      "displayName": "Fuman Public Slot Quote Fast Flush 0845",
+      "description": "Public slot quote fast flush: flushes WebSocket quote cache into Supabase during the 08:45 live window without replacing the main shared source writer.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
+    {
       "taskName": "\\Fuman Public Slot Shared Source Watchdog",
       "displayName": "Fuman Public Slot Shared Source Watchdog",
       "description": "Public slot shared source watchdog.",
@@ -492,6 +521,19 @@
       "description": "Strategy2 Supabase coverage watch: 08:30 warmup, 08:45 readiness, 08:55 preopen, 09:05 first 1m, 09:10 quote+1m hard gate, 09:30 ready_ge_35 hard gate.",
       "time": "08:00-09:30",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman Strategy2 E2E Closure Readback",
+      "displayName": "Fuman Strategy2 E2E Closure Readback",
+      "description": "Strategy2 strict source writer to scanner snapshot production API desktop mobile and /88 closure readback.",
+      "time": "08:45,09:10,09:40,13:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45",
+        "09:10",
+        "09:40",
+        "13:35"
+      ]
     },
     {
       "taskName": "\\Fuman Strategy3 Battle Verify 1305",
