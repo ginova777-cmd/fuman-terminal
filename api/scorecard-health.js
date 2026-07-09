@@ -321,13 +321,16 @@ function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
   return missing.every((strategy) => covered.has(strategy) || blocked.has(strategy));
 }
 
+function hasBlockedStrategy2(summary) {
+  return (Array.isArray(summary?.blockedStrategies) ? summary.blockedStrategies : [])
+    .some((strategy) => /^策略2/.test(cleanText(strategy)));
+}
+
 function strategy2OutOfWindowCovered(summary, peerSummary) {
   const count = cleanNumber(summary?.strategy2OutOfWindow);
   if (count <= 0) return true;
-  const ownBlocked = new Set(Array.isArray(summary?.blockedStrategies) ? summary.blockedStrategies : []);
-  if (ownBlocked.has("策略2成績單") && cleanNumber(summary?.missingRequiredFields) === 0) return true;
-  const blocked = new Set(Array.isArray(peerSummary?.blockedStrategies) ? peerSummary.blockedStrategies : []);
-  return blocked.has("策略2成績單") && cleanNumber(peerSummary?.suppressedRows) >= count;
+  if (hasBlockedStrategy2(summary) && cleanNumber(summary?.missingRequiredFields) === 0) return true;
+  return hasBlockedStrategy2(peerSummary) && cleanNumber(peerSummary?.suppressedRows) >= count;
 }
 
 async function fetchSupabaseTable(table) {
