@@ -330,6 +330,7 @@ function strategy2OutOfWindowCovered(summary, peerSummary) {
   const count = cleanNumber(summary?.strategy2OutOfWindow);
   if (count <= 0) return true;
   if (hasBlockedStrategy2(summary) && cleanNumber(summary?.missingRequiredFields) === 0) return true;
+  if (hasBlockedStrategy2(peerSummary) && cleanNumber(peerSummary?.strategy2OutOfWindow) >= count) return true;
   return hasBlockedStrategy2(peerSummary) && cleanNumber(peerSummary?.suppressedRows) >= count;
 }
 
