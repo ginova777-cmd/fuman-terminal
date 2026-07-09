@@ -178,8 +178,9 @@ function verifyStaticUiEndpoints(matrix) {
     }
   }
   const desktop = files["terminal-open-buy-view.js"] || "";
-  if (!desktop.includes("candidate_2130_futopt_0845")) issues.push("desktop_missing_0845_futopt_stage_card");
-  if (!desktop.includes("openBuyStageCards")) issues.push("desktop_missing_stage_cards_source");
+  for (const marker of ["open-buy-stage-grid", "08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"]) {
+    if (!desktop.includes(marker)) issues.push(`desktop_missing_${marker}`);
+  }
   const fastBundle = files["api/terminal-fast-bundle.js"] || "";
   if (!fastBundle.includes("previous_2130_carry_forward")) issues.push("fast_bundle_missing_previous_good_marker");
   if (!fastBundle.includes("fastBundleRepair")) issues.push("fast_bundle_missing_repair_disclosure");
@@ -198,8 +199,9 @@ function verifyFormalPayloadForDisplay() {
   if (!payload.runId) issues.push("runId_missing");
   if (!payload.usedDate && !payload.tradeDate) issues.push("tradeDate_missing");
   if (cleanNumber(payload.count ?? payload.resultCount ?? rows.length) <= 0) issues.push("count_missing");
-  if (!Array.isArray(payload.stageCards) || !payload.stageCards.some((card) => card.key === "candidate_2130_futopt_0845")) {
-    issues.push("stageCards_missing_candidate_2130_futopt_0845");
+  const stageKeys = Array.isArray(payload.stageCards) ? payload.stageCards.map((card) => card.key) : [];
+  for (const required of ["future_initial_0846", "preopen_confirm_0855", "final_judgement_0858"]) {
+    if (!stageKeys.includes(required)) issues.push(`stageCards_missing_${required}`);
   }
   if (!hasCompleteWriteBudget(payload.writeBudget)) issues.push("writeBudget_incomplete");
   if (payload.retentionOk !== true) issues.push("retentionOk_not_true");
@@ -214,9 +216,10 @@ function verifyFormalPayloadForDisplay() {
 }
 
 function verifyNegativeDegradedPayloadBlocksLatest() {
-  const blankRows = [{ code: "2330", name: "", decision: "BUY", reason: "contract sample", score: 98 }];
+  const blankRows = [{ code: "", name: "", decision: "BUY", reason: "contract sample", score: 98 }];
   const scannerOutput = baseScannerOutput(blankRows);
-  const payload = buildFormalPayload({ scannerOutput });
+  const rows = sampleRows().map((row) => ({ ...row, code: "", name: "", payload: { ...(row.payload || {}), code: "", name: "" } }));
+  const payload = buildFormalPayload({ scannerOutput, rows });
   const issues = [];
   if (payload.evidenceStatus !== "source_quality_fail" && payload.evidenceStatus !== "insufficient") issues.push("evidenceStatus_not_insufficient");
   if (payload.unattendedStatus !== "NO") issues.push("unattendedStatus_not_NO");
@@ -225,7 +228,7 @@ function verifyNegativeDegradedPayloadBlocksLatest() {
   if (payload.preservePreviousGood !== true) issues.push("preservePreviousGood_not_true");
   if (payload.updatesLatestPointer === true || payload.latestPointerUpdated === true) issues.push("latest_pointer_updated");
   return result("ui_negative_degraded_payload_blocks_latest", issues.length === 0, {
-    field: "name",
+    field: "identity",
     blankCount: payload.blankCounts?.name ?? 0,
     evidenceStatus: payload.evidenceStatus,
     unattendedStatus: payload.unattendedStatus,

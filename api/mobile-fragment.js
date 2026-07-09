@@ -15,7 +15,7 @@ const TAB_CONFIG = {
     title: "策略1 開盤入",
     subtitle: "Supabase complete run",
     endpoint: "/api/open-buy-latest",
-    points: ["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"],
+    points: ["08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"],
   },
   strategy2: {
     title: "策略2 當沖",

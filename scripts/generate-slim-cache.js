@@ -1569,7 +1569,7 @@ function mobileStrategyFragments() {
   const institution = readOptional("data/institution-mobile-top.json", {});
   const warrant = readOptional("data/warrant-flow-mobile-top.json", {});
   const definitions = [
-    ["strategy1", "策略1 開盤入", "21:30 初篩 + 08:45 個股期貨 / 08:55 搓合", openBuy, ["rows", "matches"], ["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"]],
+    ["strategy1", "策略1 開盤入", "08:46 期貨初動 / 08:55 期現試撮 / 08:58 終判", openBuy, ["rows", "matches"], ["08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"]],
     ["strategy2", "策略2 當沖", "2 分 K 即時偵測摘要", strategy2, ["events", "records"], ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"]],
     ["strategy3", "策略3 日線", "日線條件掃描摘要", strategy3, ["rows", "matches"], ["日線結構", "低頻確認", "不追盤中雜訊"]],
     ["strategy4", "策略4 波段", "主力籌碼與波段分數", strategy4, ["rows", "matches"], ["波段分區", "主力籌碼", "分數排序"]],

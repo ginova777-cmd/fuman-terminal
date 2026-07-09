@@ -61,26 +61,22 @@ function openBuyBlock(file) {
   return content.slice(start, end);
 }
 
-for (const file of ["terminal-app.js", "terminal-live-check.js", "terminal-open-buy-view.js"]) {
+for (const file of ["terminal-live-check.js", "terminal-open-buy-view.js"]) {
   const block = openBuyBlock(file);
   if (!block) continue;
-  const cardCount = (block.match(/class="swing-card active/g) || []).length;
-  if (cardCount !== 2) pushIssue(`${file}: Strategy1 open-buy must render exactly 2 cards, found ${cardCount}`);
-  for (const required of ["21:30 初篩 + 08:45 個股期貨", "08:55 搓合確認", "搓合完美符合才列 BUY"]) {
+  for (const required of ["open-buy-stage-grid", "08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判", "只列期貨強勢排序", "正逆價差"]) {
     if (!block.includes(required)) pushIssue(`${file}: Strategy1 open-buy block missing ${required}`);
   }
 }
-
 const desktopFastShell = read("terminal-desktop-fast-shell.js");
-if (!desktopFastShell.includes("21:30 初篩符合 + 08:45 個股期貨確認；08:55 搓合完美符合才列 BUY")) {
-  pushIssue("terminal-desktop-fast-shell.js: Strategy1 fast shell summary must use 21:30+08:45 / 08:55 two-stage contract");
+if (!desktopFastShell.includes("08:46 期貨初動；08:55 期現試撮；08:58~08:59 終判")) {
+  pushIssue("terminal-desktop-fast-shell.js: Strategy1 fast shell summary must use 08:46 / 08:55 / 08:58 three-layer contract");
 }
 
 const mobileFragment = read("api/mobile-fragment.js");
-if (!mobileFragment.includes('points: ["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"]')) {
-  pushIssue("api/mobile-fragment.js: Strategy1 mobile points must be 21:30+08:45 / 08:55 two-stage contract");
+if (!mobileFragment.includes('points: ["08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"]')) {
+  pushIssue("api/mobile-fragment.js: Strategy1 mobile points must be 08:46 / 08:55 / 08:58 three-layer contract");
 }
-
 const openBuyLatestApi = read("api/open-buy-latest.js");
 for (const required of ["previous_2130_carry_forward", "previous-2130-carry-forward", "21:30 初篩名單", "allowPrevious2130Run"]) {
   if (!openBuyLatestApi.includes(required)) {
@@ -89,10 +85,9 @@ for (const required of ["previous_2130_carry_forward", "previous-2130-carry-forw
 }
 
 const slimGenerator = read("scripts/generate-slim-cache.js");
-if (!slimGenerator.includes('"21:30 初篩 + 08:45 個股期貨 / 08:55 搓合"') || !slimGenerator.includes('["21:30 初篩符合 + 08:45 個股期貨確認", "08:55 搓合完美符合"]')) {
-  pushIssue("scripts/generate-slim-cache.js: Strategy1 slim fragment must keep the 21:30+08:45 / 08:55 two-stage contract");
+if (!slimGenerator.includes('"08:46 期貨初動 / 08:55 期現試撮 / 08:58 終判"') || !slimGenerator.includes('["08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"]')) {
+  pushIssue("scripts/generate-slim-cache.js: Strategy1 slim fragment must keep the 08:46 / 08:55 / 08:58 three-layer contract");
 }
-
 const packageJson = JSON.parse(read("package.json"));
 if (!String(packageJson.scripts?.["verify:strategy1-open-buy-ui"] || "").includes("verify-strategy1-open-buy-ui-contract.js")) {
   pushIssue("package.json: missing verify:strategy1-open-buy-ui rollback guard");

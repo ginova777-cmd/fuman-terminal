@@ -734,7 +734,7 @@
         icon: "⚡",
         title: "策略1-明日開盤入",
         badge: "FMN://strategy.open-buy",
-        summary: "21:30 初篩符合 + 08:45 個股期貨確認；08:55 搓合完美符合才列 BUY。",
+        summary: "08:46 期貨初動；08:55 期現試撮；08:58~08:59 終判，分層顯示不混成單一 BUY。",
       };
     }
     if (text.includes("策略2")) {

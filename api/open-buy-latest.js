@@ -16,6 +16,36 @@ const RUNS_TABLE = process.env.SUPABASE_OPEN_BUY_RUNS_TABLE || "strategy1_open_b
 const RESULTS_TABLE = process.env.SUPABASE_OPEN_BUY_RESULTS_TABLE || "strategy1_open_buy_results";
 const READY_STATUS_VIEW = process.env.SUPABASE_STRATEGY1_READY_STATUS_VIEW || "v_strategy1_ready_status";
 const STRATEGY1_GATE = "complete-run-authoritative+decision-ready";
+function readRuntimeJson(name, fallback = null) {
+  try {
+    const file = path.join(RUNTIME_DIR, "data", name);
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeRuntimeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function strategy1RuntimePreopenEvidence() {
+  const payload = readRuntimeJson("star-preopen-latest.json", null);
+  const stageCounts = payload && typeof payload.stageCounts === "object" && payload.stageCounts ? payload.stageCounts : {};
+  const stageRules = payload && typeof payload.stageRules === "object" && payload.stageRules ? payload.stageRules : {};
+  return {
+    runtimeSource: payload ? "C:/fuman-runtime/data/star-preopen-latest.json" : "",
+    stageCounts,
+    stageRules,
+    futureInitialMatches: normalizeRuntimeArray(payload?.futureInitialMatches),
+    preopenConfirmMatches: normalizeRuntimeArray(payload?.preopenConfirmMatches),
+    finalMatches: normalizeRuntimeArray(payload?.finalMatches),
+    finalReadyRows: cleanNumber(payload?.source?.finalReadyRows || payload?.diagnostics?.finalReadyRows),
+    futureSourceUsed: String(payload?.source?.futureSourceUsed || payload?.diagnostics?.futureSourceUsed || ""),
+    historicalFutureEvidenceUsed: payload?.diagnostics?.allowHistoricalFutureEvidence === true,
+  };
+}
+
 
 function taipeiDateKey(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -69,6 +99,14 @@ function isEmptySnapshotRestore(payload = {}) {
   return /snapshot-friendly-empty|snapshot-soft-fallback/i.test(sourceText)
     || (!runId && cleanNumber(payload.count) === 0 && rows === 0);
 }
+function hasStrategy1ThreeLayerPayload(payload = {}) {
+  const cards = Array.isArray(payload.stageCards) ? payload.stageCards : [];
+  return cards.some((card) => card?.key === "future_initial_0846")
+    && Array.isArray(payload.futureInitialMatches)
+    && Array.isArray(payload.preopenConfirmMatches)
+    && Array.isArray(payload.finalMatches);
+}
+
 
 function parseRequestOptions(request) {
   try {
@@ -114,7 +152,7 @@ function normalizeRow(row) {
   return {
     ...payload,
     code: String(payload.code || row.code || "").trim(),
-    name: String(payload.name || row.name || row.code || "").trim(),
+    name: String(payload.name || row.name || "").trim(),
     close: cleanNumber(payload.close || payload.price || row.close || row.price),
     price: cleanNumber(payload.price || payload.close || row.price || row.close),
     percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
@@ -260,36 +298,45 @@ function selectPendingDisplayRows(rows) {
   return nonBlocked.length ? nonBlocked : rows;
 }
 
-function strategy1StageCards(resultCount, buyCount, readyStatus = {}) {
+function strategy1StageCards(resultCount, buyCount, readyStatus = {}, runtimeEvidence = {}) {
   const futoptCount = cleanNumber(
     readyStatus.futopt_ready_count
     || readyStatus.futopt_count
     || readyStatus.individual_futures_count
     || readyStatus.futures_ready_count
   );
-  const futoptReady = readyStatus.futopt_ready === true || futoptCount > 0;
   const decisionReady = readyStatus.decision_ready === true;
+  const futureInitialCount = cleanNumber(runtimeEvidence.stageCounts?.futureInitial0846) || runtimeEvidence.futureInitialMatches?.length || 0;
+  const preopenConfirmCount = cleanNumber(runtimeEvidence.stageCounts?.preopenConfirm0855) || runtimeEvidence.preopenConfirmMatches?.length || 0;
+  const finalJudgementCount = cleanNumber(runtimeEvidence.stageCounts?.finalJudgement0858) || runtimeEvidence.finalMatches?.length || 0;
   return [
     {
-      key: "candidate_2130_futopt_0845",
-      time: "21:30 + 08:45",
-      title: "初篩 + 個股期貨",
-      label: "21:30 初篩符合 + 08:45 個股期貨確認",
-      count: resultCount,
+      key: "future_initial_0846",
+      time: "08:46",
+      title: "期貨初動",
+      label: "08:46 期貨初動",
+      count: futureInitialCount,
       secondaryCount: futoptCount,
-      status: resultCount > 0 && futoptReady ? "ready" : resultCount > 0 ? "waiting_futopt" : "waiting",
+      status: futureInitialCount > 0 ? "ready" : "waiting",
     },
     {
-      key: "auction_0855",
+      key: "preopen_confirm_0855",
       time: "08:55",
-      title: "搓合確認",
-      label: "08:55 搓合完美符合",
-      count: buyCount,
-      status: decisionReady ? "ready" : "waiting",
+      title: "期現試撮",
+      label: "08:55 期現試撮",
+      count: preopenConfirmCount,
+      status: preopenConfirmCount > 0 ? "ready" : "waiting",
+    },
+    {
+      key: "final_judgement_0858",
+      time: "08:58~08:59",
+      title: "終判",
+      label: "08:58~08:59 終判",
+      count: finalJudgementCount,
+      status: decisionReady && finalJudgementCount > 0 ? "ready" : finalJudgementCount > 0 ? "watch" : "waiting",
     },
   ];
 }
-
 function strategy1SourceCoverage({ usedDate, readyStatus, expectedTotal, scannedCount, carryForward2130, displayMode }) {
   const today = compactDateKey(taipeiDateKey());
   const decisionReady = readyStatus?.decision_ready === true;
@@ -378,13 +425,14 @@ function buildPayload(rows, run, readyStatus, options = {}) {
       : "Display the current formal candidate run while 08:45/08:55 decision gates are pending",
     reason,
   }]));
-  const stageCards = strategy1StageCards(resultCount, buyCount, readyStatus);
-  const futopt0845Stage = stageCards.find((card) => card.key === "candidate_2130_futopt_0845") || null;
+  const runtimePreopenEvidence = strategy1RuntimePreopenEvidence();
+  const stageCards = strategy1StageCards(resultCount, buyCount, readyStatus, runtimePreopenEvidence);
+  const futopt0845Stage = stageCards.find((card) => card.key === "future_initial_0846") || null;
   const businessFieldAudit = buildStrategy1ApiBusinessFieldAudit(normalized);
   const stageBlankCounts = {
     ...(runtimeRunQuality.blankCounts || run?.payload?.blankCounts || {}),
     ...businessFieldAudit.blankCounts,
-    futopt0845StageKey: futopt0845Stage?.key === "candidate_2130_futopt_0845" ? 0 : 1,
+    futopt0845StageKey: futopt0845Stage?.key === "future_initial_0846" ? 0 : 1,
     futopt0845SecondaryCount: Number.isFinite(Number(futopt0845Stage?.secondaryCount)) ? 0 : 1,
     futopt0845StageStatus: String(futopt0845Stage?.status || "").trim() ? 0 : 1,
   };
@@ -393,7 +441,7 @@ function buildPayload(rows, run, readyStatus, options = {}) {
   if (stageBlankCounts.futopt0845StageKey > 0) missingFutopt0845.push("futopt0845StageKey");
   if (stageBlankCounts.futopt0845SecondaryCount > 0) missingFutopt0845.push("futopt0845SecondaryCount");
   if (stageBlankCounts.futopt0845StageStatus > 0) missingFutopt0845.push("futopt0845StageStatus");
-  if (missingFutopt0845.length) stageSampleMissingRows.push({ runId, stageKey: "candidate_2130_futopt_0845", missing: missingFutopt0845 });
+  if (missingFutopt0845.length) stageSampleMissingRows.push({ runId, stageKey: "future_initial_0846", missing: missingFutopt0845 });
 
   return {
     ok: true,
@@ -454,6 +502,17 @@ function buildPayload(rows, run, readyStatus, options = {}) {
     watchCount,
     blockCount,
     stageCards,
+    stageCounts: runtimePreopenEvidence.stageCounts,
+    stageRules: runtimePreopenEvidence.stageRules,
+    runtimePreopenEvidence: {
+      runtimeSource: runtimePreopenEvidence.runtimeSource,
+      futureSourceUsed: runtimePreopenEvidence.futureSourceUsed,
+      finalReadyRows: runtimePreopenEvidence.finalReadyRows,
+      historicalFutureEvidenceUsed: runtimePreopenEvidence.historicalFutureEvidenceUsed,
+    },
+    futureInitialMatches: runtimePreopenEvidence.futureInitialMatches,
+    preopenConfirmMatches: runtimePreopenEvidence.preopenConfirmMatches,
+    finalMatches: runtimePreopenEvidence.finalMatches,
     rows: displayRows,
     matches: displayRows,
     buyMatches: matches,
@@ -643,7 +702,7 @@ async function handler(request, response) {
     timeoutMs: 2500,
     via: "api/open-buy-latest",
   });
-  if (cached && !isEmptySnapshotRestore(cached)) {
+  if (cached && !isEmptySnapshotRestore(cached) && hasStrategy1ThreeLayerPayload(cached)) {
     response.status(200).json(cached);
     return;
   }

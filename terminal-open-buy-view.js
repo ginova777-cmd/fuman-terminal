@@ -97,98 +97,120 @@
     return `<div class="open-buy-tactical-trigger"><p>${escapeAttr(parts || reasonText(stock))}</p><div class="open-buy-reason-tags">${tags}</div></div>`;
   }
 
+function stageNumber(value, digits = 2) {
+  const number = cleanNumber(value);
+  if (!number) return "--";
+  return number.toLocaleString("zh-TW", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function stageVolume(value) {
+  const number = cleanNumber(value);
+  return number ? Math.round(number).toLocaleString("zh-TW") : "--";
+}
+
+function stagePercent(value) {
+  const number = cleanNumber(value);
+  return number ? `${number >= 0 ? "+" : ""}${stageNumber(number, 2)}%` : "--";
+}
+
+function stageName(row) {
+  return `${escapeAttr(row?.name || row?.stock_name || row?.code || row?.symbol || "--")} <b>${escapeAttr(row?.code || row?.symbol || "")}</b>`;
+}
+
+function renderStageCards() {
+  const definitions = [
+    ["08:46", "期貨初動", "期貨強勢排序", openBuyFutureInitialMatches.length || cleanNumber(openBuyStageCounts.futureInitial0846)],
+    ["08:55", "期現試撮", "主要觀察名單", openBuyPreopenConfirmMatches.length || cleanNumber(openBuyStageCounts.preopenConfirm0855)],
+    ["08:58~08:59", "終判", "STAR / 開盤可衝", openBuyFinalMatches.length || cleanNumber(openBuyStageCounts.finalJudgement0858)],
+  ];
+  return `<div class="open-buy-stage-cards" aria-label="策略1分層狀態">${definitions.map(([time, title, hint, count]) => {
+    const ready = cleanNumber(count) > 0;
+    return `<div class="open-buy-stage-card ${ready ? "is-ready" : "is-empty"}"><div><strong>${time} ${title}</strong><small>${hint}</small></div><em>${cleanNumber(count).toLocaleString("zh-TW")}</em></div>`;
+  }).join("")}</div>`;
+}
+
+function renderFutureStageRows(rows) {
+  if (!rows.length) return `<div class="open-buy-empty">目前沒有期貨初動名單</div>`;
+  return rows.slice(0, 18).map((row, index) => `<article class="open-buy-stage-item">
+    <div class="open-buy-stage-item-top"><strong>#${index + 1} ${stageName(row)}</strong><span>${stagePercent(row.futoptChangePercent ?? row.futopt_change_percent)}</span></div>
+    <div class="open-buy-stage-metrics"><div>RelTXF <mark>${stagePercent(row.relativeToTxfPercent ?? row.relative_to_txf_percent)}</mark></div><div>期貨量 <mark>${stageVolume(row.futureVolume ?? row.futopt_total_volume)}</mark></div><div>期貨價 <mark>${stageNumber(row.futurePrice ?? row.futopt_last_price, 2)}</mark></div><div>狀態 <mark>${escapeAttr(row.futureSourceStatus || row.source_status || "--")}</mark></div></div>
+  </article>`).join("");
+}
+
+function renderPreopenStageRows(rows) {
+  if (!rows.length) return `<div class="open-buy-empty">目前沒有期現試撮確認名單</div>`;
+  return rows.slice(0, 18).map((row, index) => `<article class="open-buy-stage-item">
+    <div class="open-buy-stage-item-top"><strong>#${index + 1} ${stageName(row)}</strong><span>${escapeAttr(row.basisState || "")} ${stagePercent(row.basisPct)}</span></div>
+    <div class="open-buy-stage-metrics"><div>期貨 <mark>${stagePercent(row.futoptChangePercent ?? row.futopt_change_percent)}</mark></div><div>試撮 <mark>${stagePercent(row.trialPct)}</mark></div><div>委買賣比 <mark>${stageNumber(row.bidAskRatio, 2)}</mark></div><div>買/試 <mark>${stageNumber(row.bestBidPrice, 2)} / ${stageNumber(row.trialPrice, 2)}</mark></div></div>
+  </article>`).join("");
+}
+
+function renderStagePanel(title, hint, count, body) {
+  return `<section class="open-buy-stage-panel"><div class="open-buy-stage-panel-head"><div><strong>${title}</strong><small>${hint}</small></div><em>${cleanNumber(count).toLocaleString("zh-TW")}</em></div><div class="open-buy-stage-list">${body}</div></section>`;
+}
   window.renderOpenBuyRadar = function renderOpenBuyRadar() {
-    setStrategyChrome("openBuy");
-    if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) loadOpenBuyCache();
-    const scannedCount = openBuyScannedCodes.size;
-    const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
-    const keyword = strategyKeyword.trim().toLowerCase();
-    const rows = Object.values(openBuyScanMatches)
-      .filter((stock) => !keyword || String(stock.code || "").includes(keyword) || String(stock.name || "").toLowerCase().includes(keyword))
-      .sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(b.percent) - cleanNumber(a.percent) || tradeValue(b) - tradeValue(a))
-      .slice(0, 80);
-    const scanCount = rows.length;
-    const openBuyPaged = paginateTerminalRows(rows, openBuyPage, "openBuy");
-    openBuyPage = openBuyPaged.page;
-    const pageRows = openBuyPaged.rows;
-    const scanText = openBuyScanLastAt
-      ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
-      : `等待後端掃描 0/${totalCount}`;
-    const freshnessDate = openBuyDataDateKey || marketAiDataDateKey(Object.values(openBuyScanMatches));
-    const freshnessToday = marketAiTodayKey();
-    const freshnessIsToday = freshnessDate === freshnessToday;
-    const freshness = freshnessDate
-      ? `<div class="data-freshness-bar open-buy-freshness-bar ${freshnessIsToday ? "is-live" : "is-stale"}" data-open-buy-freshness-bar="1">模式：<strong>策略1｜最新可用收盤資料</strong>｜資料日期：<strong>${escapeAttr(formatMarketAiDateKey(freshnessDate))}</strong>｜今日：<strong>${escapeAttr(formatMarketAiDateKey(freshnessToday))}</strong>${freshnessIsToday ? "" : "｜狀態：<strong>快取/最新可用</strong>"}</div>`
-      : renderDataFreshnessLoadingHtml(`open-buy:${freshnessDate}:${freshnessToday}`);
-    const stageCards = typeof openBuyStageCards !== "undefined" && Array.isArray(openBuyStageCards) ? openBuyStageCards : [];
-    const stageOne = stageCards.find((card) => card.key === "candidate_2130_futopt_0845") || {};
-    const stageTwo = stageCards.find((card) => card.key === "auction_0855") || {};
-    const buyCount = typeof openBuyBuyCount !== "undefined" ? cleanNumber(openBuyBuyCount) : 0;
-    const decisionPending = typeof openBuyDecisionPending !== "undefined" ? Boolean(openBuyDecisionPending) : false;
-    const futoptText = stageOne.status === "ready" ? "個股期貨已確認" : stageOne.status === "waiting" ? "等待 08:45 個股期貨" : "盤前資源檢查";
-    const stageScanCount = cleanNumber(stageOne.count) || scanCount;
-    const readyBuyText = decisionPending && !buyCount ? "待確認" : (cleanNumber(stageTwo.count) || buyCount || 0);
+  setStrategyChrome("openBuy");
+  if (!openBuyCacheLoading && shouldLoadOpenBuyRemote()) {
+    loadOpenBuyCache();
+  }
+  const scannedCount = openBuyScannedCodes.size;
+  const totalCount = openBuyScanTotal || latestStocks.filter((stock) => !/^00/.test(stock.code)).length || latestStocks.length;
 
-    if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜21:30初篩+08:45個股期貨｜08:55搓合確認｜${scanText}`;
-    if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
-    if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + cleanNumber(stock.score), 0) / rows.length) : "--";
-    if (strategyTopHit) strategyTopHit.textContent = rows.length ? `${Math.max(...rows.map((stock) => cleanNumber(stock.score))).toFixed(0)}` : "--";
+  const keyword = strategyKeyword.trim().toLowerCase();
+  const rows = Object.values(openBuyScanMatches)
+    .filter((stock) => !keyword || String(stock.code || "").includes(keyword) || String(stock.name || "").toLowerCase().includes(keyword))
+    .sort((a, b) => b.score - a.score || b.percent - a.percent || b.value - a.value)
+    .slice(0, 80);
+  const scanCount = rows.length;
+  const openBuyPaged = paginateTerminalRows(rows, openBuyPage);
+  openBuyPage = openBuyPaged.page;
+  const pageRows = openBuyPaged.rows;
+  const futureRows = (typeof openBuyFutureInitialMatches !== "undefined" ? openBuyFutureInitialMatches : []).slice().sort((a, b) =>
+    cleanNumber(b.futoptChangePercent ?? b.futopt_change_percent) - cleanNumber(a.futoptChangePercent ?? a.futopt_change_percent)
+    || cleanNumber(b.relativeToTxfPercent ?? b.relative_to_txf_percent) - cleanNumber(a.relativeToTxfPercent ?? a.relative_to_txf_percent)
+    || cleanNumber(b.futureVolume ?? b.futopt_total_volume) - cleanNumber(a.futureVolume ?? a.futopt_total_volume)
+  );
+  const preopenRows = typeof openBuyPreopenConfirmMatches !== "undefined" ? openBuyPreopenConfirmMatches : [];
+  const finalRows = typeof openBuyFinalMatches !== "undefined" ? openBuyFinalMatches : [];
 
-    const offset = (openBuyPaged.page - 1) * openBuyPaged.pageSize;
-    const tableRows = pageRows.length ? pageRows.map((stock, index) => {
-      const rank = offset + index + 1;
-      const price = num(stock, ["close", "price", "ClosingPrice"]);
-      const pct = cleanNumber(stock.percent);
-      const pctClass = pctToneClass(pct);
-      const sign = pct >= 0 ? "+" : "";
-      const volume = num(stock, ["tradeVolume", "volume", "trade_volume", "TradeVolume"]);
-      const volRatio = ratio(stock);
-      const value = tradeValue(stock);
-      const legal = legal5d(stock);
-      const score = cleanNumber(stock.score);
-      return `
-        <tr class="open-buy-tactical-row">
-          <td data-label="排名"><span class="open-buy-rank">#${rank}</span></td>
-          <td data-label="股票"><div class="open-buy-stock"><strong>${escapeAttr(stock.name || stock.code)}</strong><small>${escapeAttr(stock.code || "")}</small></div></td>
-          <td data-label="多空"><span class="open-buy-side long">多</span></td>
-          <td data-label="價格" class="price">${price ? formatNumber(price, 2) : "--"}</td>
-          <td data-label="漲幅" class="pct ${pctClass}">${sign}${formatNumber(pct, 2)}%</td>
-          <td data-label="量">${volumeText(volume)}</td>
-          <td data-label="推估量比"><strong>${volRatio ? formatNumber(volRatio, 1) + "x" : "--"}</strong></td>
-          <td data-label="成交額" class="price">${moneyText(value)}</td>
-          <td data-label="法人5D">${legal ? formatInstitution(legal) : "--"}</td>
-          <td data-label="分數"><span class="swing-score">${score ? formatNumber(score, 1) : "--"}</span></td>
-          <td data-label="AI分析" class="open-buy-analysis-cell">${renderAi(stock)}</td>
-          <td data-label="觸發原因" class="open-buy-trigger-cell">${renderTrigger(stock)}</td>
-        </tr>`;
-    }).join("") : '<tr><td colspan="12">策略1後端掃描中。21:30 先篩選符合，08:45 確認個股期貨，08:55 看搓合完美符合。</td></tr>';
-    const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
-    strategyTable.innerHTML = `
-      <section class="swing-dashboard open-buy-tactical-dashboard">
-        <div class="swing-topbar">
-          <div>
-            <h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2>
-            <p>21:30 先篩選符合；08:45 看個股期貨；08:55 搓合完美符合才進 BUY。${scanText}</p>
-          </div>
-        </div>
-        ${freshness}
-        <div class="swing-signal-grid">
-          <button class="swing-card active selected" type="button">
-            <div><strong>21:30 初篩 + 08:45 個股期貨</strong><small>先篩符合，再確認個股期貨｜${escapeAttr(futoptText)}</small></div><em>${escapeAttr(stageScanCount)}</em>
-          </button>
-          <button class="swing-card active" type="button">
-            <div><strong>08:55 搓合確認</strong><small>搓合完美符合才列 BUY</small></div><em>${escapeAttr(readyBuyText)}</em>
-          </button>
-        </div>
-        <section class="swing-panel open-buy-tactical-panel">
-          <table class="swing-table open-buy-tactical-table">
-            <thead><tr><th>排名</th><th>股票</th><th>多空</th><th>價格</th><th>漲幅</th><th>量</th><th>推估量比</th><th>成交額</th><th>法人5D</th><th>分數</th><th>AI分析</th><th>觸發原因</th></tr></thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-          ${pager}
-        </section>
-      </section>`;
+  const scanText = openBuyScanLastAt
+    ? `已掃描 ${scannedCount}/${totalCount}｜候選 ${scanCount}｜${new Date(openBuyScanLastAt).toLocaleTimeString("zh-TW", { hour12: false })}`
+    : `等待後端掃描 0/${totalCount}`;
+
+  if (strategySummary) strategySummary.textContent = `策略1-明日開盤入｜08:46期貨初動｜08:55期現試撮｜08:58終判｜${scanText}`;
+  if (strategyMatchCount) strategyMatchCount.textContent = rows.length.toLocaleString("zh-TW");
+  if (strategyAvgScore) strategyAvgScore.textContent = rows.length ? Math.round(rows.reduce((sum, stock) => sum + stock.score, 0) / rows.length) : "--";
+  if (strategyTopHit) strategyTopHit.textContent = finalRows.length ? finalRows.length.toLocaleString("zh-TW") : "--";
+
+  const getOpenBuyDisplayStatus = (stock) => {
+    const reasonTag = String(stock.reason || "").split("：")[0].trim();
+    if (reasonTag === "開盤無腦入") return "開盤入";
+    if (reasonTag && reasonTag.length <= 8) return reasonTag;
+    if (stock.status === "開盤無腦入") return "開盤入";
+    return stock.status || "開盤入";
   };
+
+  const tableRows = pageRows.length ? pageRows.map((stock) => {
+    const sign = stock.percent >= 0 ? "+" : "";
+    const displayStatus = getOpenBuyDisplayStatus(stock);
+    return `<tr><td><span class="code">${stock.code}</span></td><td>${stock.name}</td><td><b class="swing-stage mid">${displayStatus}</b></td><td class="price">${formatNumber(stock.close, stock.close >= 100 ? 0 : 2)}</td><td class="pct">${sign}${stock.percent.toFixed(2)}%</td><td>${stock.entry || "09:00 開盤價"}</td><td class="price">${formatNumber(stock.takeProfit, stock.takeProfit >= 100 ? 1 : 2)}</td><td class="price">${formatNumber(stock.stopLoss, stock.stopLoss >= 100 ? 1 : 2)}</td><td><span class="swing-score">${stock.score}</span></td><td>${stock.reason || "昨日強勢，列入開盤入候選。"}</td></tr>`;
+  }).join("") : `<tr><td colspan="10">策略1後端掃描中。等待 08:46 期貨初動、08:55 期現試撮與 08:58 終判資料。</td></tr>`;
+  const pager = buildTerminalPagination("openBuy", openBuyPage, openBuyPaged.totalPages, rows.length);
+
+  strategyTable.innerHTML = `
+    <section class="swing-dashboard open-buy-tactical-dashboard">
+      <div class="swing-topbar">
+        <div><h2>${titleWithSchedule("⚡", "策略1-明日開盤入", "openBuy")}</h2><p>08:46 看誰先強；08:55 看期貨強是否被試撮確認；08:58~08:59 做終判。${scanText}</p></div>
+        ${renderStageCards()}
+      </div>
+      <div class="open-buy-stage-grid">
+        ${renderStagePanel("08:46 期貨初動", "只列期貨強勢排序，不代表可買。", futureRows.length || cleanNumber(openBuyStageCounts.futureInitial0846), renderFutureStageRows(futureRows))}
+        ${renderStagePanel("08:55 期現試撮", "列期貨 + 試撮 + 正逆價差，主要觀察名單。", preopenRows.length || cleanNumber(openBuyStageCounts.preopenConfirm0855), renderPreopenStageRows(preopenRows))}
+        ${renderStagePanel("08:58~08:59 終判", "最接近 STAR / 開盤可衝，沒過不硬列。", finalRows.length || cleanNumber(openBuyStageCounts.finalJudgement0858), finalRows.length ? renderPreopenStageRows(finalRows) : `<div class="open-buy-empty">目前沒有終判通過名單</div>`)}
+      </div>
+      <section class="swing-panel open-buy-final-table-wrap"><div class="swing-tabs"><button class="active" type="button">正式名單(${rows.length})</button><div class="swing-actions"><input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search><button type="button" data-export-action>匯出</button><button type="button" data-export-settings>設定</button></div></div><table class="swing-table"><thead><tr><th>股票代號</th><th>股票名稱</th><th>狀態</th><th>收盤價</th><th>昨日漲幅</th><th>買入</th><th>停利</th><th>停損</th><th>分數</th><th>原因</th></tr></thead><tbody>${tableRows}</tbody></table>${pager}</section>
+    </section>`;
+}
 
   try {
     const activeStrategy = document.querySelector("#strategy-view.active");

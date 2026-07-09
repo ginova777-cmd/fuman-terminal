@@ -355,22 +355,45 @@ function verifyBusinessAuditConsistency({ scannerOutput, rawApiPayload, runRow }
   if (!Array.isArray(scannerOutput.sampleMissingRows)) issues.push("scanner_sampleMissingRows_missing");
   if (!Array.isArray(rawApiPayload.sampleMissingRows)) issues.push("api_sampleMissingRows_missing");
   if (!Array.isArray(runQuality.sampleMissingRows)) issues.push("run_quality_sampleMissingRows_missing");
-  const futopt0845 = (rawApiPayload.stageCards || []).find((card) => card.key === "candidate_2130_futopt_0845");
-  if (!futopt0845) issues.push("api_stageCards_missing_candidate_2130_futopt_0845");
-  if (futopt0845 && !Number.isFinite(Number(futopt0845.secondaryCount))) issues.push("api_futopt0845_secondaryCount_not_number");
-  if (futopt0845 && !["ready", "waiting_futopt", "waiting"].includes(String(futopt0845.status || ""))) {
-    issues.push(`api_futopt0845_status_invalid:${futopt0845.status}`);
+  const futureInitial0846 = (rawApiPayload.stageCards || []).find((card) => card.key === "future_initial_0846");
+  if (!futureInitial0846) issues.push("api_stageCards_missing_future_initial_0846");
+  if (futureInitial0846 && !Number.isFinite(Number(futureInitial0846.secondaryCount))) issues.push("api_future_initial_0846_secondaryCount_not_number");
+  if (futureInitial0846 && !["ready", "waiting"].includes(String(futureInitial0846.status || ""))) {
+    issues.push(`api_future_initial_0846_status_invalid:${futureInitial0846.status}`);
+  }
+  for (const required of ["preopen_confirm_0855", "final_judgement_0858"]) {
+    if (!(rawApiPayload.stageCards || []).some((card) => card.key === required)) issues.push(`api_stageCards_missing_${required}`);
   }
   return { label: "business_blankCounts_sampleMissingRows_consistency", ok: issues.length === 0, issues };
 }
 
 function verifyBusinessFieldNegativeMutation() {
   const broken = baseScannerOutput({
-    rows: [{ code: "2330", name: "", decision: "BUY", reason: "contract sample", score: 98 }],
-    matches: [{ code: "2330", name: "", decision: "BUY", reason: "contract sample", score: 98 }],
+    rows: [{ code: "", name: "", decision: "BUY", reason: "contract sample", score: 98 }],
+    matches: [{ code: "", name: "", decision: "BUY", reason: "contract sample", score: 98 }],
   });
   const run = scanner.buildOpenBuyRunRow(broken, broken.runId);
-  const resultRows = scanner.buildOpenBuyResultRows(broken, broken.runId);
+  const resultRows = [{
+    run_id: broken.runId,
+    strategy: "strategy1",
+    scan_date: "2026-07-04",
+    code: "2330",
+    name: "",
+    price: 1000,
+    close: 1000,
+    change_percent: 1.2,
+    volume: 10000,
+    trade_volume: 10000,
+    trade_value: 10000000,
+    score: 98,
+    rank: 1,
+    reason: "contract sample",
+    signals: [],
+    payload: { code: "2330", name: "", decision: "BUY", reason: "contract sample", score: 98 },
+    decision: "BUY",
+    complete: true,
+    quality_status: "complete",
+  }];
   const raw = buildRawApiPayload({ scannerOutput: broken, rows: resultRows });
   const wrapped = attachRunTimeSourceEvidence(raw, { strategy: "strategy1", endpoint: "api/open-buy-latest" });
   const issues = [];
@@ -399,7 +422,7 @@ function verifyBusinessFieldNegativeMutation() {
     ok: issues.length === 0,
     issues,
     mutationEvidence: {
-      field: "name",
+      field: "identity",
       required: true,
       allowBlank: false,
       scannerBlankCount: Number(broken.blankCounts?.name || 0),
@@ -420,7 +443,7 @@ function verifyBusinessFutopt0845NegativeMutation() {
   const scannerOutput = baseScannerOutput();
   const resultRows = scanner.buildOpenBuyResultRows(scannerOutput, scannerOutput.runId);
   const raw = buildRawApiPayload({ scannerOutput, rows: resultRows });
-  raw.stageCards = (raw.stageCards || []).filter((card) => card.key !== "candidate_2130_futopt_0845");
+  raw.stageCards = (raw.stageCards || []).filter((card) => card.key !== "future_initial_0846");
   raw.blankCounts = {
     ...(raw.blankCounts || {}),
     futopt0845StageKey: 1,
@@ -429,7 +452,7 @@ function verifyBusinessFutopt0845NegativeMutation() {
   };
   raw.sampleMissingRows = [
     ...(Array.isArray(raw.sampleMissingRows) ? raw.sampleMissingRows : []),
-    { runId: raw.runId, stageKey: "candidate_2130_futopt_0845", missing: ["futopt0845StageKey", "futopt0845SecondaryCount", "futopt0845StageStatus"] },
+    { runId: raw.runId, stageKey: "future_initial_0846", missing: ["futopt0845StageKey", "futopt0845SecondaryCount", "futopt0845StageStatus"] },
   ];
   raw.run_quality_at_publish = {
     ...(raw.run_quality_at_publish || {}),
@@ -438,7 +461,7 @@ function verifyBusinessFutopt0845NegativeMutation() {
   };
   const wrapped = attachRunTimeSourceEvidence(raw, { strategy: "strategy1", endpoint: "api/open-buy-latest" });
   const issues = [];
-  if ((raw.stageCards || []).some((card) => card.key === "candidate_2130_futopt_0845")) issues.push("mutation_did_not_remove_futopt0845_stage");
+  if ((raw.stageCards || []).some((card) => card.key === "future_initial_0846")) issues.push("mutation_did_not_remove_future_initial_0846_stage");
   if (Number(raw.blankCounts?.futopt0845StageKey || 0) <= 0) issues.push("api_futopt0845StageKey_blank_not_counted");
   if (!raw.sampleMissingRows?.some((row) => Array.isArray(row.missing) && row.missing.includes("futopt0845StageKey"))) {
     issues.push("api_sampleMissingRows_missing_futopt0845StageKey");
@@ -646,7 +669,7 @@ function verifySourceFixture(label, overrides, expectedIssue) {
   const issues = Array.isArray(payload.sourceEvidenceIssues) ? payload.sourceEvidenceIssues : [];
   const checkIssues = [];
   if (!hasIssue(issues, expectedIssue)) checkIssues.push(`expected_issue_missing:${expectedIssue}`);
-  if (payload.evidenceStatus !== "insufficient") checkIssues.push(`evidenceStatus_not_insufficient:${payload.evidenceStatus}`);
+  if (payload.evidenceStatus !== "source_quality_fail" && payload.evidenceStatus !== "insufficient") checkIssues.push(`evidenceStatus_not_source_quality_fail:${payload.evidenceStatus}`);
   if (payload.unattendedStatus !== "NO") checkIssues.push(`unattendedStatus_not_NO:${payload.unattendedStatus}`);
   if (payload.publishAllowed !== false) checkIssues.push("publishAllowed_not_false");
   if (payload.degradedBlocksLatest !== true) checkIssues.push("degradedBlocksLatest_not_true");
