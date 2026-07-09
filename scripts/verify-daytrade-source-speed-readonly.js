@@ -13,7 +13,9 @@ const MAX_INTRADAY_1M_STALE_SECONDS = Number(process.env.DAYTRADE_MAX_INTRADAY_1
 const MIN_READY_MA20_CONTINUOUS = Number(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS || 1500);
 const MIN_READY_MA35_CONTINUOUS = Number(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS || 1500);
 const MIN_PRIORITY_SYMBOLS = Number(process.env.DAYTRADE_MIN_PRIORITY_SYMBOLS || 1);
-const MIN_PRIORITY_POOL_SYMBOLS = Number(process.env.DAYTRADE_MIN_PRIORITY_POOL_SYMBOLS || 300);
+const MIN_FORMAL_PRIORITY_SYMBOLS = Number(process.env.DAYTRADE_MIN_FORMAL_PRIORITY_SYMBOLS || 40);
+const MIN_MOTHER_POOL_SYMBOLS = Number(process.env.DAYTRADE_MIN_MOTHER_POOL_SYMBOLS || 300);
+const MIN_MOTHER_FIELD_COVERAGE_RATIO = Number(process.env.DAYTRADE_MIN_MOTHER_FIELD_COVERAGE_RATIO || 0.8);
 const MIN_PRIORITY_FRESH_QUOTE_COVERAGE = Number(process.env.DAYTRADE_MIN_PRIORITY_FRESH_QUOTE_COVERAGE || 0.95);
 const TARGET_PRIORITY_FRESH_QUOTE_COVERAGE = Number(process.env.DAYTRADE_TARGET_PRIORITY_FRESH_QUOTE_COVERAGE || 1);
 const SELECTED_SYMBOL_MAX_QUOTE_AGE_SECONDS = Number(process.env.DAYTRADE_SELECTED_SYMBOL_MAX_QUOTE_AGE_SECONDS || 60);
@@ -56,6 +58,15 @@ const REQUIRED_PAYLOAD_FIELDS = [
   "full_market_gate_grade",
   "selected_symbols_fresh_ok",
   "priority_pool_symbols",
+  "formal_scope",
+  "mother_pool_symbols",
+  "mother_pool_source",
+  "mother_pool_rule_version",
+  "mother_pool_rule_hit_counts",
+  "mother_pool_field_coverage_counts",
+  "mother_pool_capital_rows",
+  "mother_pool_chip_rows",
+  "mother_pool_margin_change_rows",
   "priority_fresh_quotes_120s",
   "priority_fresh_quote_coverage_120s",
   "eligible_quote_rows",
@@ -297,11 +308,19 @@ async function main() {
   const batchIntervalSecondsPayload = numberValue(payloadValue(payload, ["batch_interval_seconds"], 0));
   const lastQuoteAt = stringValue(payloadValue(payload, ["last_quote_at"], ""));
   const gateMode = stringValue(payloadValue(payload, ["gate_mode"], "priority_first"));
+  const formalScope = stringValue(payloadValue(payload, ["formal_scope"], ""));
   const writerPriorityGateGrade = normalizeGateGrade(payloadValue(payload, ["priority_gate_grade"], ""));
   const writerFullMarketGateGrade = normalizeGateGrade(payloadValue(payload, ["full_market_gate_grade"], ""));
   const selectedSymbolsFreshOk = boolValue(payloadValue(payload, ["selected_symbols_fresh_ok"], false));
   const prioritySymbols = numberValue(payloadValue(payload, ["priority_symbols"], 0));
   const priorityPoolSymbols = numberValue(payloadValue(payload, ["priority_pool_symbols", "priority_symbols"], 0));
+  const motherPoolSource = stringValue(payloadValue(payload, ["mother_pool_source"], ""));
+  const motherPoolRuleVersion = stringValue(payloadValue(payload, ["mother_pool_rule_version"], ""));
+  const motherPoolRuleHitCounts = payloadValue(payload, ["mother_pool_rule_hit_counts"], {}) || {};
+  const motherPoolFieldCoverageCounts = payloadValue(payload, ["mother_pool_field_coverage_counts"], {}) || {};
+  const motherPoolCapitalRows = numberValue(payloadValue(payload, ["mother_pool_capital_rows"], 0));
+  const motherPoolChipRows = numberValue(payloadValue(payload, ["mother_pool_chip_rows"], 0));
+  const motherPoolMarginChangeRows = numberValue(payloadValue(payload, ["mother_pool_margin_change_rows"], 0));
   const priorityFreshQuotes120 = numberValue(payloadValue(payload, ["priority_fresh_quotes_120s"], 0));
   const priorityFreshQuoteCoverage120 = numberValue(payloadValue(payload, ["priority_fresh_quote_coverage_120s"], 0));
   const eligibleQuoteRows = numberValue(payloadValue(payload, ["eligible_quote_rows"], freshQuotes120), freshQuotes120);
@@ -365,13 +384,35 @@ async function main() {
   if (!writerGateGrade) issues.push(issue("daytrade_gate_grade_missing_or_invalid", "critical", { value: stringValue(writerGateGradeRaw), rule: "missing or invalid daytrade_gate_grade => D" }));
   if (!daytradeSourceSpeedOk) issues.push(issue("daytrade_source_speed_ok_false", "critical", { daytradeSourceSpeedOk }));
   if (gateMode !== "priority_first") issues.push(issue("daytrade_gate_mode_not_priority_first", "critical", { gateMode, required: "priority_first" }));
+  if (formalScope && formalScope !== "priority_top40") issues.push(issue("formal_scope_not_priority_top40", "critical", { formalScope, required: "priority_top40" }));
   if (freshQuoteCoverage120 < MIN_FRESH_QUOTE_COVERAGE) warnings.push(issue("daytrade_full_market_fresh_quote_coverage_low_nonblocking", "warning", { coverage: freshQuoteCoverage120, min: MIN_FRESH_QUOTE_COVERAGE, freshQuotes120, targetFreshQuotes: TARGET_FRESH_QUOTES, rule: "full market is scorecard-only for priority-first daytrade gate" }));
   if (freshQuotes120 < TARGET_FRESH_QUOTES) warnings.push(issue("daytrade_full_market_fresh_quote_speed_low_nonblocking", "warning", { freshQuotes120, targetFreshQuotes: TARGET_FRESH_QUOTES, measuredSymbolsPerSecond, requiredSymbolsPerSecond, rule: "full market is scorecard-only for priority-first daytrade gate" }));
   if (quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS) issues.push(issue("daytrade_quote_age_too_old", "critical", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
   if (prioritySymbols < MIN_PRIORITY_SYMBOLS) {
     (after0830 ? issues : warnings).push(issue("priority_symbols_empty", after0830 ? "critical" : "warning", { prioritySymbols, min: MIN_PRIORITY_SYMBOLS, phase }));
   }
-  if (after0845 && priorityPoolSymbols < MIN_PRIORITY_POOL_SYMBOLS) issues.push(issue("priority_pool_too_small_for_daytrade", "critical", { priorityPoolSymbols, min: MIN_PRIORITY_POOL_SYMBOLS, targetRange: "300-500" }));
+  if (after0845 && priorityPoolSymbols < MIN_FORMAL_PRIORITY_SYMBOLS) issues.push(issue("formal_priority_top40_too_small_for_daytrade", "critical", { priorityPoolSymbols, min: MIN_FORMAL_PRIORITY_SYMBOLS, scope: "formal_entry_top40" }));
+  if (after0845 && motherPoolSymbols < MIN_MOTHER_POOL_SYMBOLS) issues.push(issue("mother_pool_too_small_for_daytrade_radar", "critical", { motherPoolSymbols, min: MIN_MOTHER_POOL_SYMBOLS, targetRange: "300+" }));
+  if (after0845 && motherPoolSource !== "dynamic_daytrade_mother_pool") issues.push(issue("mother_pool_source_not_dynamic", "critical", { motherPoolSource, required: "dynamic_daytrade_mother_pool" }));
+  if (after0845 && !motherPoolRuleVersion) issues.push(issue("mother_pool_rule_version_missing", "critical", { motherPoolRuleVersion }));
+  if (after0845 && motherPoolCapitalRows < MIN_MOTHER_POOL_SYMBOLS) issues.push(issue("mother_pool_capital_rows_low", "critical", { motherPoolCapitalRows, min: MIN_MOTHER_POOL_SYMBOLS, requiredFor: "turnover_3_5d_rank_top50" }));
+  if (after0845 && motherPoolChipRows < MIN_MOTHER_POOL_SYMBOLS) warnings.push(issue("mother_pool_chip_rows_low", "warning", { motherPoolChipRows, min: MIN_MOTHER_POOL_SYMBOLS, requiredFor: "institution_or_main_force_buy_price_strong" }));
+  if (after0845 && motherPoolMarginChangeRows < MIN_MOTHER_POOL_SYMBOLS) warnings.push(issue("mother_pool_margin_change_rows_low", "warning", { motherPoolMarginChangeRows, min: MIN_MOTHER_POOL_SYMBOLS, requiredFor: "margin_short_rules" }));
+  const motherCoverageMin = Math.ceil(Math.max(1, motherPoolSymbols) * MIN_MOTHER_FIELD_COVERAGE_RATIO);
+  for (const field of ["quote", "avgVolume5", "issuedShares", "turnover3To5d", "totalVolume", "changePercent", "tradeValue"]) {
+    const count = numberValue(motherPoolFieldCoverageCounts[field], 0);
+    if (after0845 && count < motherCoverageMin) issues.push(issue(`mother_pool_${field}_coverage_low`, "critical", { field, count, min: motherCoverageMin, motherPoolSymbols }));
+  }
+  for (const [key, min] of [
+    ["gain_rank_gt3", 1],
+    ["volume_surge_vs_5d_gt2", 1],
+    ["gain_volume_surge_rank_overlap", 1],
+    ["turnover_gt5", 1],
+    ["institution_or_main_force_buy_price_strong", 1],
+  ]) {
+    const count = numberValue(motherPoolRuleHitCounts[key], 0);
+    if (after0845 && count < min) warnings.push(issue(`mother_pool_rule_${key}_not_hit`, "warning", { rule: key, count, min }));
+  }
   if (after0845 && priorityFreshQuoteCoverage120 < MIN_PRIORITY_FRESH_QUOTE_COVERAGE) issues.push(issue("priority_pool_fresh_coverage_low", "critical", { priorityFreshQuoteCoverage120s: priorityFreshQuoteCoverage120, min: MIN_PRIORITY_FRESH_QUOTE_COVERAGE, priorityFreshQuotes120s: priorityFreshQuotes120, priorityPoolSymbols }));
   if (after0845 && priorityFreshQuoteCoverage120 < TARGET_PRIORITY_FRESH_QUOTE_COVERAGE) warnings.push(issue("priority_pool_not_100_percent_fresh", "warning", { priorityFreshQuoteCoverage120s: priorityFreshQuoteCoverage120, target: TARGET_PRIORITY_FRESH_QUOTE_COVERAGE, note: "A gate accepts 95%, but production tuning should target 100% for the priority pool." }));
   if (after0845 && !selectedSymbolsFreshOk) issues.push(issue("selected_symbols_not_fresh_for_daytrade", "critical", { selectedSymbolsFreshOk, maxQuoteAgeSeconds: SELECTED_SYMBOL_MAX_QUOTE_AGE_SECONDS }));
@@ -396,7 +437,8 @@ async function main() {
     && gateMode === "priority_first"
     && quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
     && prioritySymbols >= MIN_PRIORITY_SYMBOLS
-    && priorityPoolSymbols >= MIN_PRIORITY_POOL_SYMBOLS
+    && priorityPoolSymbols >= MIN_FORMAL_PRIORITY_SYMBOLS
+    && motherPoolSymbols >= MIN_MOTHER_POOL_SYMBOLS
     && priorityFreshQuoteCoverage120 >= MIN_PRIORITY_FRESH_QUOTE_COVERAGE
     && selectedSymbolsFreshOk
     && cooldownRemainingSeconds <= 0
