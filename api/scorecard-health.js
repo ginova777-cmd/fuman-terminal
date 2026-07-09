@@ -278,7 +278,7 @@ function summarizeScorecard(payload) {
     .filter((row) => cleanText(row.strategy) === "策略2成績單")
     .filter((row) => {
       const minutes = timeMinutes(row.entry_time);
-      return minutes === null || minutes < 9 * 60 || minutes > 12 * 60;
+      return minutes === null || minutes < 9 * 60 || minutes > 13 * 60 + 30;
     }).length;
   const strategy3BadEntry = selectedRows
     .filter((row) => cleanText(row.strategy) === "策略3隔日沖成績單")
