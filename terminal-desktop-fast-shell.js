@@ -6883,6 +6883,7 @@
         if (header) header.insertAdjacentHTML("afterend", html);
         else panel.insertAdjacentHTML("afterbegin", html);
       }
+      panel.querySelectorAll(":scope > .chip-tool, :scope > .chip-table-wrap, :scope > .cb-detect-page, :scope > .chip-empty").forEach((node) => node.remove());
     }
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
