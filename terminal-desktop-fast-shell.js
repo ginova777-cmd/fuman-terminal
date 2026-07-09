@@ -1188,6 +1188,25 @@
     return true;
   }
 
+  async function fetchFixedDomRouteRows(route) {
+    const endpoint = compactCanvasUrlForRoute(route, true);
+    if (!endpoint) return { rows: [], meta: null, payload: null };
+    const response = await fetch(endpoint, { cache: "no-store" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const rows = normalizeCanvasRowsFromPayload(payload, route);
+    const meta = routePayloadMeta(route, payload);
+    if (rows.length) {
+      canvasStore.set(route, { rows, source: "api", at: Date.now(), meta });
+      routeSnapshots.set(route, { ...(routeSnapshots.get(route) || {}), at: Date.now(), rows, html: "", meta: meta || undefined });
+      canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
+      canvasPreRenderedRoutes.delete(route);
+    } else {
+      rememberCanvasEmptyPayload(route, "api-empty", Date.now(), meta);
+    }
+    return { rows, meta, payload };
+  }
+
   async function renderDesktopFastWarrantFlow(force = false) {
     const panel = panelForRoute("warrant-flow|權證走向");
     if (!panel) return false;
@@ -1244,8 +1263,8 @@
     const availableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (availableRows.length) return renderRows(availableRows, source || "api-cache");
     restoreNativeFixedDomRoute(key, panel);
-    fetchCanvasRows(key, true)
-      .then((rows) => {
+    fetchFixedDomRouteRows(key)
+      .then(({ rows }) => {
         if (rows?.length) renderRows(rows, "api");
         else if (isWarrantFlowRoute(key) && !panel.querySelector(".warrant-flow-panel tbody tr")) renderDesktopFastWarrantFlow(true);
       })
@@ -1954,6 +1973,25 @@
         ? payload.run_quality_at_publish
         : {};
       const resultCount = cleanNumber(payload.resultCount || payload.count || payload.rows?.length || payload.matches?.length);
+      return {
+        ok: payload.ok,
+        runId: payload.runId || payload.latestRunId || payload.transport?.runId || payload.meta?.runId || "",
+        updatedAt: payload.updatedAt || payload.generatedAt || payload.source_snapshot_captured_at || "",
+        resultCount,
+        evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || "",
+        unattendedStatus: payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "",
+        qualityStatus: payload.qualityStatus || payload.status || "",
+        publishAllowed: payload.publishAllowed ?? quality.publishAllowed,
+        latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
+        sourceStatus: payload.source_status_at_run?.status || payload.sourceCoverage?.status || payload.sourceHealth?.status || "",
+        cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      };
+    }
+    if (isChipTradeRoute(route) || isWarrantFlowRoute(route)) {
+      const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+        ? payload.run_quality_at_publish
+        : {};
+      const resultCount = cleanNumber(payload.resultCount || payload.count || payload.returnedCount || payload.rows?.length || payload.matches?.length || payload.volumeMatches?.length);
       return {
         ok: payload.ok,
         runId: payload.runId || payload.latestRunId || payload.transport?.runId || payload.meta?.runId || "",
@@ -6766,6 +6804,7 @@
     const cards = unifiedRunCards(route, rows, payloadMeta);
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
     const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
+    const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
     const headerBadge = panel.querySelector(".strategy-header .console-badge");
     const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
     const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
@@ -6788,6 +6827,7 @@
     }
     if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
     if (headerText) headerText.textContent = `${meta.summary || ""}；完整榜單直接讀正式 API。`;
+    if (headerLine) headerLine.textContent = `完整榜單直接讀正式 API${runId ? `｜run=${runId}` : ""}${evidenceStatus ? `｜evidence=${evidenceStatus}` : ""}`;
     if (headerBadge) headerBadge.textContent = meta.badge;
     if (toolbarTitle) toolbarTitle.textContent = meta.title;
     if (toolbarBadge) toolbarBadge.textContent = meta.badge;
