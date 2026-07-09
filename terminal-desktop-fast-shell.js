@@ -7351,6 +7351,78 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy5-dashboard.strategy3-clean {
+        border-color: rgba(191, 219, 254, 0.78);
+        background:
+          linear-gradient(115deg, rgba(255, 247, 237, 0.86), rgba(248, 250, 252, 0.98) 42%, rgba(239, 246, 255, 0.92)),
+          #ffffff;
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy5-results-head h3 {
+        color: #0f172a;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy5-results-head p {
+        color: #2563eb;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-count-pill {
+        border-color: rgba(234, 88, 12, 0.26);
+        color: #9a3412;
+        background: #fed7aa;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards article {
+        border-color: rgba(96, 165, 250, 0.28);
+        background: linear-gradient(180deg, #ffffff, #eff6ff);
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards span,
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards small {
+        color: #2563eb;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards strong {
+        color: #0f172a;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-table-head {
+        color: #1e3a8a;
+        background: linear-gradient(90deg, #dbeafe, #e0f2fe);
+        border: 1px solid rgba(96, 165, 250, 0.22);
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-signal-card {
+        border-color: rgba(147, 197, 253, 0.38);
+        background: linear-gradient(90deg, rgba(255, 237, 213, 0.86), rgba(255, 255, 255, 0.96) 34%, rgba(239, 246, 255, 0.98));
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-rank {
+        color: #ea580c;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-stock strong {
+        color: #0f172a;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-stock span {
+        color: #2563eb;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-stock i {
+        border-color: rgba(5, 150, 105, 0.25);
+        color: #047857;
+        background: #ecfdf5;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-tag-row span {
+        border-color: rgba(37, 99, 235, 0.24);
+        color: #1d4ed8;
+        background: #eff6ff;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-main p {
+        color: #334155;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-metrics div {
+        border-color: rgba(148, 163, 184, 0.20);
+        background: #f8fafc;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-metrics small {
+        color: #2563eb;
+      }
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-card-metrics strong {
+        color: #0f172a;
+      }
       @media (max-width: 980px) {
         #strategy-view.strategy3-only .strategy5-shell {
           padding: 12px !important;
