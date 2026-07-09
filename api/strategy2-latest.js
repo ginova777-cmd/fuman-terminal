@@ -1943,9 +1943,17 @@ module.exports = async function handler(request, response) {
         : attachStrategy2Readiness(completeRun, readiness, tradingDay);
       setStrategy2LiveShellCache(response, options);
       const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
+      const approvedSnapshotFields = gatedPayload?.sourceGate?.publishAllowed === true
+        ? buildStrategy2SourceGateSnapshotFields(gatedPayload, gatedPayload.sourceGate, {
+          ...(gatedPayload.sourceCoverage || {}),
+          ready: true,
+          status: "ready",
+        })
+        : {};
       const responsePayload = gatedPayload?.sourceGate?.publishAllowed === true
         ? {
           ...gatedPayload,
+          ...approvedSnapshotFields,
           ok: true,
           status: "ready",
           qualityStatus: "complete",
@@ -1965,6 +1973,9 @@ module.exports = async function handler(request, response) {
           degradedBlocksLatest: false,
           preservePreviousGood: false,
           mustPreserveLatest: false,
+          runTimeSourceSnapshot: approvedSnapshotFields.runTimeSourceSnapshot || gatedPayload.runTimeSourceSnapshot,
+          run_time_source_snapshot: approvedSnapshotFields.run_time_source_snapshot || gatedPayload.run_time_source_snapshot,
+          run_quality_at_publish: approvedSnapshotFields.run_quality_at_publish || gatedPayload.run_quality_at_publish,
           blockedReason: "",
           scanner_block_reason: "",
         }
