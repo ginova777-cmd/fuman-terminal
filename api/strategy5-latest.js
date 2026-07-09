@@ -288,7 +288,7 @@ const STRATEGY5_REQUIRED_FIELD_GROUPS = {
   volume: ["tradeVolume", "volume", "trade_volume"],
   score: ["score"],
   reason: ["reason", "activeMatch.reason", "matches.0.reason"],
-  signals: ["matches", "signals"],
+  signals: ["matches", "signals", "sourceSignals", "activeMatch"],
 };
 
 function strategy5DeepValue(object, key) {
@@ -630,6 +630,7 @@ function normalizePayload(row) {
     ...payload,
     inst,
     matches,
+    sourceSignals: rawMatches.filter((match) => match && typeof match === "object"),
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || "").trim(),
     close: cleanNumber(payload.close || payload.price || row.close || row.price),

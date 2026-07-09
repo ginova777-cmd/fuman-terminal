@@ -93,7 +93,7 @@ const STRATEGY5_REQUIRED_FIELD_GROUPS = {
   volume: ["tradeVolume", "volume", "trade_volume"],
   score: ["score"],
   reason: ["reason", "activeMatch.reason", "matches.0.reason"],
-  signals: ["matches", "signals"],
+  signals: ["matches", "signals", "sourceSignals", "activeMatch"],
 };
 
 function deepValue(object, key) {
