@@ -25,6 +25,17 @@ const EXPECTED_STRATEGIES = [
   "CB成績單",
   "即時雷達成績單",
 ];
+const SOURCE_REPORT_STRATEGY_BY_KEY = {
+  strategy1: "策略1開盤入成績單",
+  strategy2: "策略2成績單",
+  strategy3: "策略3隔日沖成績單",
+  strategy4: "策略4成績單",
+  strategy5: "策略5成績單",
+  institution: "買賣超成績單",
+  warrant: "權證成績單",
+  cb: "CB成績單",
+  "realtime-radar": "即時雷達成績單",
+};
 const REQUIRED_SCORECARD_UI_MARKERS = [
   "scorecard-history-date",
   "scorecard-theme-toggle",
@@ -136,12 +147,31 @@ function rowsByStrategy(rows, payload = {}, latestDate = "") {
     byStrategy[strategy] = (byStrategy[strategy] || 0) + 1;
   }
   for (const report of Array.isArray(payload?.sourceReports) ? payload.sourceReports : []) {
-    const strategy = cleanText(report?.strategy || "");
+    const key = cleanText(report?.key || "");
+    const strategy = cleanText(report?.strategy || SOURCE_REPORT_STRATEGY_BY_KEY[key] || "");
     if (!strategy || sourceReportDate(report) !== latestDate) continue;
     byStrategy[strategy] = Math.max(byStrategy[strategy] || 0, 1, cleanNumber(report?.emittedRows ?? report?.count ?? 0));
   }
   return byStrategy;
 }
+
+function blockedStrategyCoverage(payload = {}) {
+  const covered = new Set();
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  for (const report of reports) {
+    const key = cleanText(report?.key || "");
+    const strategy = cleanText(SOURCE_REPORT_STRATEGY_BY_KEY[key] || report?.strategy || "");
+    const evidenceStatus = cleanText(report?.evidenceStatus).toLowerCase();
+    const blockedReason = cleanText(report?.blockedReason || report?.reason || "");
+    const publishBlocked = report?.publishAllowed === false || report?.latestOverwriteAllowed === false;
+    const qualityBlocked = ["source_quality_fail", "insufficient", "blocked"].includes(evidenceStatus);
+    if (strategy && (publishBlocked || qualityBlocked) && blockedReason) {
+      covered.add(strategy);
+    }
+  }
+  return covered;
+}
+
 function uniqueDates(payload) {
   const records = Array.isArray(payload?.records) ? payload.records : [];
   return [...new Set(records.map((row) => cleanText(row.record_date)).filter(Boolean))].sort().reverse();
@@ -151,6 +181,8 @@ function verifyPayload(checks, payload, source, baseline = null) {
   const { records, latestDate, rows } = latestRows(payload);
   const byStrategy = rowsByStrategy(rows, payload, latestDate);
   const missingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
+  const blockedCoverage = blockedStrategyCoverage(payload);
+  const hardMissingStrategies = missingStrategies.filter((strategy) => !blockedCoverage.has(strategy));
   const summaryRows = cleanNumber(payload?.summary?.rows);
   const cacheSource = cleanText(payload?.cacheSource || payload?.sourceFields?.cacheSource);
   const sourceText = JSON.stringify({
@@ -213,7 +245,12 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, cacheSource === "supabase-snapshot", `${source}-cache-source`, `${source} cacheSource must be supabase-snapshot`, { cacheSource });
   addCheck(checks, !/google|sheet|streamlit|duckdb|retired/i.test(sourceText), `${source}-no-retired-source`, `${source} must not point to retired source`, { sourceText });
   addCheck(checks, Boolean(latestDate), `${source}-latest-date`, `${source} latestDate exists`, { latestDate });
-  addCheck(checks, missingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all 9 strategies`, { byStrategy, missingStrategies });
+  addCheck(checks, hardMissingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all 9 strategies or formally blocked source reports`, {
+    byStrategy,
+    missingStrategies,
+    blockedCoveredStrategies: [...blockedCoverage],
+    hardMissingStrategies,
+  });
   addCheck(checks, requiredFieldMissing.length === 0, `${source}-required-fields`, `${source} required fields must be filled`, { missingCount: requiredFieldMissing.length, samples: requiredFieldMissing.slice(0, 20) });
   addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-window`, `${source} strategy2 rows must stay within 09:00-13:30`, { strategy2OutOfWindow });
   addCheck(checks, (strategy3Rows.length === 0 || strategy3BadEntry.length === 0), `${source}-strategy3-entry`, `${source} strategy3 rows must use 13:00 entry`, { strategy3Rows: strategy3Rows.length, strategy3BadEntry });
