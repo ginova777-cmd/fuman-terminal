@@ -60,6 +60,7 @@
     "apply:daytrade-mother-pool-contract": "node --use-system-ca scripts/apply-daytrade-mother-pool-contract.js",
     "verify:daytrade-mother-pool-contract": "node --use-system-ca scripts/verify-daytrade-mother-pool-contract.js",
     "verify:daytrade-strategy3-closure-live": "node --use-system-ca scripts/verify-daytrade-strategy3-closure-live.js",
+    "verify:daytrade-strategy3-closure:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daytrade-strategy3-closure-verify.ps1",
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",
     "daytrade-source:writer": "node --use-system-ca scripts/run-daytrade-source-writer.js --apply",
     "daytrade-source:writer:dry-run": "node --use-system-ca scripts/run-daytrade-source-writer.js --dry-run --no-fetch --once",

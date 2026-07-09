@@ -222,6 +222,7 @@ const FILES = [
   "refresh-desktop-route-snapshot.ps1",
   "run-post-scan-snapshot-refresh-verify.ps1",
   "run-scorecard-daily-automation.ps1",
+  "run-daytrade-strategy3-closure-verify.ps1",
   "run-scorecard-snapshot.ps1",
   "run-api-only-retired-cleanup.ps1",
   "run-full-scan.ps1",
