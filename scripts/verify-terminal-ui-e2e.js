@@ -1238,6 +1238,8 @@ function collectDesktopStats(route) {
     "#strategy-table [data-stock-code]",
     ".desktop-route-shell tbody tr",
     ".desktop-route-shell [data-stock-code]",
+    ".fuman-unified-list-card",
+    ".fuman-unified-list-shell article",
     ".strategy5-stock-card",
     ".intraday-table tbody tr",
     ".swing-table tbody tr",
