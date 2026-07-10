@@ -265,11 +265,18 @@ function verifyHtmlContract(checks, html, source = "88.html") {
     && /maximumFractionDigits:\s*2/.test(html)
     && /pnlText\(row\.pnl\)/.test(html)
     && !/(money|count)\(row\.pnl\)/.test(html);
-  const hasRuleColumns = /策略項目/.test(html)
-    && /策略細項/.test(html)
+  const hidesPrivateRuleColumns = !/data-testid="scorecard-rule-group"/.test(html)
+    && !/data-testid="scorecard-rule-tags"/.test(html)
+    && !/>策略項目</.test(html)
+    && !/>策略細項</.test(html)
+    && !/>原因</.test(html)
+    && !/class="rule-group"/.test(html)
+    && !/class="rule-tags"/.test(html)
+    && !/class="reason"/.test(html)
     && /7日追蹤/.test(html)
     && /rowRuleGroup/.test(html)
     && /rowRuleTags/.test(html)
+    && /cleanReason/.test(html)
     && /rowFollowup/.test(html);
   const cleansMachineMarkers = /cleanReason/.test(html)
     && /規則版本=/.test(html)
@@ -286,7 +293,7 @@ function verifyHtmlContract(checks, html, source = "88.html") {
   addCheck(checks, hasThemeToggle, `${source}-theme-toggle`, `${source} has night/sun theme toggle`, { hasThemeToggle });
   addCheck(checks, preservesDecimalPnl, `${source}-decimal-pnl`, `${source} preserves decimal pnl instead of rounding table values to integers`, { preservesDecimalPnl });
   addCheck(checks, displaysLotPnl, `${source}-lot-pnl`, `${source} displays pnl as price spread multiplied by 1000 shares`, { displaysLotPnl });
-  addCheck(checks, hasRuleColumns, `${source}-rule-columns`, `${source} displays strategy item, strategy details, and 7-day followup as dedicated columns`, { hasRuleColumns });
+  addCheck(checks, hidesPrivateRuleColumns, `${source}-private-rule-columns-hidden`, `${source} hides strategy item/detail/reason audit columns while keeping 7-day followup and private rule helpers`, { hidesPrivateRuleColumns });
   addCheck(checks, cleansMachineMarkers, `${source}-clean-rule-markers`, `${source} removes rule machine markers from the reason column`, { cleansMachineMarkers });
 }
 

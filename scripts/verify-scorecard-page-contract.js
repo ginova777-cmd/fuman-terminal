@@ -62,10 +62,14 @@ if (page.includes("scorecard-evidence") || page.includes(">實戰證據<") || pa
   issues.push("/88 public table must not render strategy evidence column");
 }
 
+if (page.includes("scorecard-rule-group") || page.includes("scorecard-rule-tags") || page.includes(">策略項目<") || page.includes(">策略細項<") || page.includes(">原因<") || page.includes('class="rule-group"') || page.includes('class="rule-tags"') || page.includes('class="reason"')) {
+  issues.push("/88 public table must not render private strategy rule/reason columns");
+}
+
 if (issues.length) {
   console.error("[scorecard-page-contract] failed");
   for (const issue of issues) console.error(`- ${issue}`);
   process.exit(1);
 }
 
-console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, private evidence gate, hidden public evidence column, runtime builder, and validator");
+console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, private evidence gate, hidden public evidence/rule/reason columns, runtime builder, and validator");
