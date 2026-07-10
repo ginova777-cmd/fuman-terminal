@@ -2216,12 +2216,6 @@
       ].join(" ").toLowerCase().includes(query);
     });
     canvasState.filtered = filterRows(chipFilter);
-    if (isChipTradeRoute(canvasState.route) && chipFilter && !canvasState.filtered.length && canvasState.rows.length) {
-      const fallbackFilter = [CHIP_TRADE_DEFAULT_FILTER, "foreignStreak", "trustStreak", "jointStreak", ""]
-        .find((key) => !key || filterRows(key).length);
-      canvasState.signalFilter = fallbackFilter || "";
-      canvasState.filtered = filterRows(canvasState.signalFilter);
-    }
     const pageSize = canvasPageSizeForRoute();
     const maxOffset = pageSize
       ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
