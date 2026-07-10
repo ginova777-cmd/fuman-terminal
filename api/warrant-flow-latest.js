@@ -1,3 +1,4 @@
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
@@ -819,6 +820,8 @@ function withMarketSession(payload, marketSession) {
 }
 
 async function handler(request, response) {
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "warrant-flow", endpoint: "api/warrant-flow-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");

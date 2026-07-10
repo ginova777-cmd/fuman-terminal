@@ -1,3 +1,4 @@
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const { serviceRoleKey, terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
@@ -412,6 +413,8 @@ async function readLatestCompleteRun(options) {
 }
 
 module.exports = async function handler(request, response) {
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "cb-detect", endpoint: "api/cb-detect-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");

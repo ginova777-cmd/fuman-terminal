@@ -1,3 +1,4 @@
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
 const { isTwseTradingDay } = require("../scripts/twse-trading-day");
@@ -763,6 +764,8 @@ function staleTradingDayPayload(payload, marketSession, reason = "trading_day_ra
 }
 
 module.exports = async function handler(request, response) {
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "realtime-radar", endpoint: "api/realtime-radar-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");

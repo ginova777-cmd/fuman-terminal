@@ -1,3 +1,4 @@
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 "use strict";
 
 function createCaptureResponse(resolve) {
@@ -51,6 +52,8 @@ async function callScorecard(request) {
 }
 
 module.exports = async function handler(request, response) {
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");

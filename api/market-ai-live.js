@@ -1,3 +1,4 @@
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
 
@@ -960,6 +961,8 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 }
 
 module.exports = async function handler(request, response) {
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
