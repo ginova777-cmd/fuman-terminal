@@ -1503,6 +1503,8 @@
       score: score === "" || score == null ? "" : String(Math.round(cleanNumber(score) * 100) / 100),
       reason: compactText(reason || state || line, 180),
       state: compactText(state, 32),
+      stageKey: compactText(merged.stageKey || merged.stage_key || "", 48),
+      stageLabel: compactText(merged.stageLabel || merged.stage_label || "", 48),
       stateId: compactText(stateId, 40),
       intent: compactText(intent, 40),
       timestamp: compactText(merged.timestamp || merged.scanTime || merged.scan_time || "", 32),
@@ -1638,6 +1640,32 @@
         .map((row, index) => normalizeCanvasRow(row, index, route))
         .filter((row) => row.code || row.title)
         .sort(strategy2SortRows)
+        .slice(0, Math.max(minLimit, Math.min(240, limit)));
+    }
+    if (String(route || "").includes("策略1")) {
+      const stageRows = [];
+      const addStageRows = (sourceRows, stageKey, stageLabel) => {
+        normalizeArray(sourceRows).forEach((row) => {
+          if (!row || typeof row !== "object") return;
+          stageRows.push({ ...row, stageKey, stageLabel });
+        });
+      };
+      addStageRows(payload?.matches || payload?.rows || payload?.buyMatches, "s1_2130", "21:30 初篩");
+      addStageRows(payload?.futureInitialMatches, "s1_0845", "08:45 個股期貨");
+      addStageRows(payload?.preopenConfirmMatches, "s1_0855", "08:55 搓合確認");
+      addStageRows(payload?.finalMatches || payload?.buyMatches || payload?.rows, "s1_buy", "BUY 候選");
+      const unique = [];
+      const seen = new Set();
+      stageRows.forEach((row) => {
+        const key = `${row.stageKey || ""}:${row.code || row.symbol || row.stockNo || row.name || ""}:${row.rank || ""}:${row.reason || row.status || ""}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        unique.push(row);
+      });
+      return unique
+        .map((row, index) => normalizeCanvasRow(row, index, route))
+        .filter((row) => row.code || row.title)
+        .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.stageKey).localeCompare(String(b.stageKey), "zh-Hant") || String(a.code).localeCompare(String(b.code), "zh-Hant"))
         .slice(0, Math.max(minLimit, Math.min(240, limit)));
     }
     const best = arrays
@@ -6799,6 +6827,8 @@
       row?.title,
       row?.name,
       row?.decision,
+      row?.stageKey,
+      row?.stageLabel,
       row?.setupType,
       row?.setup_type,
       row?.subStrategyId,
@@ -6824,10 +6854,10 @@
 
   function optionPatternsForKey(key) {
     return ({
-      s1_2130: [/21:30|初篩|candidate|開盤/i],
-      s1_0845: [/08:45|0845|個股期貨|futopt|future/i],
-      s1_0855: [/08:55|0855|搓合|preopen|auction/i],
-      s1_buy: [/\bBUY\b|買進|開盤入|無腦入/i],
+      s1_2130: [/s1_2130|21:30|初篩|candidate|開盤/i],
+      s1_0845: [/s1_0845|08:45|0845|個股期貨|futopt|future/i],
+      s1_0855: [/s1_0855|08:55|0855|搓合|preopen|auction/i],
+      s1_buy: [/s1_buy|\bBUY\b|買進|開盤入|無腦入/i],
       s3_tail: [/尾盤|13:00|12:59|帶量/],
       s3_base: [/基態|base/i],
       s3_control: [/控盤|control/i],
@@ -6882,12 +6912,16 @@
 
   function strategy1OptionCards(rows) {
     const defs = [
-      { key: "s1_2130", label: "21:30 初篩", patterns: [/21:30|初篩|candidate/i] },
-      { key: "s1_0845", label: "08:45 個股期貨", patterns: [/08:45|個股期貨|futopt/i] },
-      { key: "s1_0855", label: "08:55 搓合確認", patterns: [/08:55|搓合|preopen/i] },
-      { key: "s1_buy", label: "BUY 候選", patterns: [/BUY|買進|開盤入|無腦入/i] },
+      { key: "s1_2130", label: "21:30 初篩", patterns: [/s1_2130|21:30|初篩|candidate/i] },
+      { key: "s1_0845", label: "08:45 個股期貨", patterns: [/s1_0845|08:45|個股期貨|futopt/i] },
+      { key: "s1_0855", label: "08:55 搓合確認", patterns: [/s1_0855|08:55|搓合|preopen/i] },
+      { key: "s1_buy", label: "BUY 候選", patterns: [/s1_buy|\bBUY\b|買進|開盤入|無腦入/i] },
     ];
-    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) || rows.length })), "Strategy1 關卡");
+    const list = Array.isArray(rows) ? rows : [];
+    return cardsFromCounts(defs.map((item) => {
+      const stageCount = list.filter((row) => row?.stageKey === item.key).length;
+      return { ...item, count: stageCount || countRowsByText(rows, item.patterns) };
+    }), "Strategy1 關卡");
   }
 
   function strategy3OptionCards(rows) {
