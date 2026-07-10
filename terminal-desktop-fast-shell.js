@@ -4930,7 +4930,7 @@
     const dashboard = aiPayload?.dashboard || {};
     const base = {
       aiReady,
-      updatedAt: aiPayload?.updatedAt || aiPayload?.servedAt || aiPayload?.snapshot?.updatedAt || "",
+      updatedAtBucket: String(aiPayload?.updatedAt || aiPayload?.servedAt || aiPayload?.snapshot?.updatedAt || "").slice(0, 16),
       tradeDate: dashboard.tradeDate || aiPayload?.snapshot?.tradeDate || "",
       sample: dashboard.sample || aiPayload?.summary?.sample || "",
       up: dashboard.up || aiPayload?.summary?.up || "",
@@ -5049,7 +5049,8 @@
         state.ai = payload || {};
         if (hasMarketAiPayload(state.ai)) {
           marketAiBundlePayload = state.ai;
-          if (isMarketViewActive() && marketDesktopMode === "ai") {
+          const aiPanelReady = Boolean(document.querySelector("#market-view .market-ai-hero-board"));
+          if (!aiPanelReady && isMarketViewActive() && marketDesktopMode === "ai") {
             renderMarketApiAi(state.heatmap || {}, state.radar || {}, state.ai);
           }
         }
