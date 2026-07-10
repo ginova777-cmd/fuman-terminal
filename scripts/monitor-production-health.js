@@ -2,6 +2,7 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 const {
   issue: terminalIssue,
   notifyIfNeeded,
@@ -118,7 +119,7 @@ function compactDate(value) {
   return text.replace(/\D/g, "").slice(0, 8);
 }
 
-async function checkHeatmapLiveContract(clock) {
+async function checkHeatmapLiveContract(clock, marketCalendar = null) {
   const result = await requestJson("/api/heatmap?limit=999&stocks=999&source=desktop-live-contract", 120000).catch((error) => ({
     status: 0,
     body: { ok: false, error: error.message },
@@ -131,7 +132,7 @@ async function checkHeatmapLiveContract(clock) {
   const stockCount = num(body.stockCount || health.stockCount);
   const badDate = num(health.badDate ?? health.badDateCount ?? body.meta?.badDateCount);
   const fallbackUsed = body.fallbackUsed === true || health.formalSourceFallbackUsed === true || contract.fallbackUsed === true;
-  const todayRequired = shouldRequireToday(clock, false);
+  const todayRequired = marketCalendar?.marketOpen === false ? false : shouldRequireToday(clock, false);
   const issues = [];
   const warnings = [];
   const liveMessages = todayRequired ? issues : warnings;
@@ -164,7 +165,7 @@ async function checkHeatmapLiveContract(clock) {
   };
 }
 
-async function checkMarketAiLiveContract(clock) {
+async function checkMarketAiLiveContract(clock, marketCalendar = null) {
   const result = await requestJson("/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40", 120000).catch((error) => ({
     status: 0,
     body: { ok: false, error: error.message },
@@ -174,7 +175,7 @@ async function checkMarketAiLiveContract(clock) {
   const sourceIssues = Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : [];
   const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
   const payloadClosed = body.marketSession?.closed === true;
-  const todayRequired = shouldRequireToday(clock, payloadClosed);
+  const todayRequired = marketCalendar?.marketOpen === false ? false : shouldRequireToday(clock, payloadClosed);
   const dashboardTradeDate = compactDate(body.dashboard?.tradeDate);
   const heatmapTradeDate = compactDate(freshness.heatmapTradeDate);
   const radarTradeDate = compactDate(freshness.radarTradeDate);
@@ -222,6 +223,13 @@ async function main() {
   const warnings = [];
   const strictGit = process.env.FUMAN_PRODUCTION_MONITOR_STRICT_GIT === "1";
   const clock = taipeiClock();
+  let marketCalendar = null;
+  try {
+    marketCalendar = await buildMarketCalendarContract({ now: new Date() });
+  } catch (error) {
+    warnings.push(`market calendar unavailable: ${error?.message || error}`);
+  }
+  const marketClosed = marketCalendar?.marketOpen === false;
   const version = detectVersion();
   const localHead = git(["rev-parse", "HEAD"]);
   const originHead = git(["ls-remote", "origin", "refs/heads/main"]);
@@ -243,8 +251,8 @@ async function main() {
     status: 0,
     body: { ok: false, error: error.message },
   }));
-  const heatmapLive = await checkHeatmapLiveContract(clock);
-  const marketAiLive = await checkMarketAiLiveContract(clock);
+  const heatmapLive = await checkHeatmapLiveContract(clock, marketCalendar);
+  const marketAiLive = await checkMarketAiLiveContract(clock, marketCalendar);
 
   if (!localHead.ok) (strictGit ? issues : warnings).push(`local git head unavailable: ${localHead.stderr}`);
   if (originHead.ok && originSha && localHead.stdout && originSha !== localHead.stdout) {
@@ -304,9 +312,10 @@ async function main() {
     monitorWindow: {
       taipeiDate: clock.ymd,
       taipeiTime: clock.time,
-      detectToday: shouldDetectToday(clock, false),
-      alertCritical: shouldRequireToday(clock, false),
-      rule: "detect_today_from_0900_alert_critical_from_0905",
+      detectToday: marketClosed ? false : shouldDetectToday(clock, false),
+      alertCritical: marketClosed ? false : shouldRequireToday(clock, false),
+      rule: marketClosed ? "market_closed_no_live_freshness_alert" : "detect_today_from_0900_alert_critical_from_0905",
+      marketCalendar,
     },
     notification,
     releaseManifest: {
@@ -349,3 +358,5 @@ main().catch((error) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exit(1);
 });
+
+
