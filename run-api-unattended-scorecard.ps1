@@ -49,6 +49,12 @@ $env:FUMAN_API_UNATTENDED_SCORECARD_FILE = $jsonOut
 $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdOut
 $env:FUMAN_RELEASE_SHA = $ReleaseSha
 
+# FUMAN_API_UNATTENDED_SCORECARD_MARKET_GUARD_V1
+$scheduleGuard = Join-Path $repoRoot "schedule-guard.ps1"
+if (Test-Path -LiteralPath $scheduleGuard) {
+  . $scheduleGuard
+  Invoke-FumanWeekdayGuard -Label "API unattended scorecard" -LogPath $logFile
+}
 $incidentGuard = Join-Path $repoRoot "scripts\supabase-incident-guard.js"
 if (Test-Path -LiteralPath $incidentGuard) {
   $node = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -104,3 +110,4 @@ try {
 finally {
   Pop-Location
 }
+
