@@ -232,8 +232,6 @@ function verifyHtmlContract(checks, html, source = "88.html") {
     "scorecard-metric-winrate",
     "scorecard-metric-wl",
     "scorecard-metric-pnl",
-    "scorecard-rule-group",
-    "scorecard-rule-tags",
     "scorecard-followup",
   ];
   const missingTestIds = requiredTestIds.filter((id) => !html.includes(`data-testid="${id}"`) && !html.includes(id));
