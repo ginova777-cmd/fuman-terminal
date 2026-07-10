@@ -24,7 +24,6 @@ const issues = [];
 assertMarker(issues, page, "/api/scorecard?live=1", "/88 live scorecard API");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "scorecard-audit-panel", "/88 audit panel");
-assertMarker(issues, page, "scorecard-evidence", "/88 evidence column");
 assertMarker(issues, page, "rowEvidenceOk", "/88 YES gate");
 assertMarker(issues, page, "fallbackDetails", "/88 fallback disclosure");
 assertMarker(issues, page, "source_snapshot_captured_at", "/88 source snapshot disclosure");
@@ -59,10 +58,14 @@ if (/\/data\/scorecard[^"'\s]*\.json/.test(page)) {
   issues.push("/88 must not reference /data/scorecard*.json");
 }
 
+if (page.includes("scorecard-evidence") || page.includes(">實戰證據<") || page.includes('class="evidence"')) {
+  issues.push("/88 public table must not render strategy evidence column");
+}
+
 if (issues.length) {
   console.error("[scorecard-page-contract] failed");
   for (const issue of issues) console.error(`- ${issue}`);
   process.exit(1);
 }
 
-console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, evidence display, runtime builder, and validator");
+console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, private evidence gate, hidden public evidence column, runtime builder, and validator");

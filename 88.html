@@ -414,12 +414,11 @@
             <th data-testid="scorecard-rule-group">策略項目</th>
             <th data-testid="scorecard-rule-tags">策略細項</th>
             <th data-testid="scorecard-followup">7日追蹤</th>
-            <th data-testid="scorecard-evidence">實戰證據</th>
             <th>原因</th>
           </tr>
         </thead>
         <tbody id="rows" data-testid="scorecard-rows">
-          <tr><td colspan="13" class="empty">載入中...</td></tr>
+          <tr><td colspan="12" class="empty">載入中...</td></tr>
         </tbody>
       </table>
     </div>
@@ -615,10 +614,9 @@ function renderTableRows(rows, emptyText = "沒有符合條件的資料") {
       <td class="rule-group">${esc(rowRuleGroup(row))}</td>
       <td class="rule-tags">${renderRuleTags(row)}</td>
       <td class="followup">${rowFollowup(row)}</td>
-      <td class="evidence">${row.supplementalSource ? supplementalEvidence(row) : renderEvidence(row)}</td>
       <td class="reason">${esc(cleanReason(row))}</td>
     </tr>
-  `).join("") : `<tr><td colspan="13" class="empty">${esc(emptyText)}</td></tr>`;
+  `).join("") : `<tr><td colspan="12" class="empty">${esc(emptyText)}</td></tr>`;
 }
 
 function daytradeRowsForTable() {
