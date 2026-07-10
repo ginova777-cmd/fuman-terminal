@@ -202,7 +202,7 @@ function verifyPayload(checks, payload, source = "payload") {
   addCheck(checks, marketClosedProtection || cleanNumber(latestStats.byStrategy["策略3隔日沖成績單"]?.rows) > 0, `${source}-strategy3`, `${source} includes 策略3隔日沖成績單 rows`, { ...(latestStats.byStrategy["策略3隔日沖成績單"] || {}), marketClosedProtection });
   addCheck(checks, strategy3WrongEntryTime.length === 0, `${source}-strategy3-entry-time`, `${source} 策略3 full-scan entry_time is 13:00`, { strategy3Rows: strategy3Rows.length, strategy3WrongEntryTime });
   addCheck(checks, strategy3BadSourceDate.length === 0, `${source}-strategy3-source-date`, `${source} 策略3 scorecard source_date is present and matches the Strategy3 source report date`, { latestDate, strategy3Rows: strategy3Rows.length, strategy3ReportDates: [...strategy3ReportDates], strategy3BadSourceDate });
-  addCheck(checks, cleanNumber(latestStats.byStrategy["權證成績單"]?.rows) > 0, `${source}-warrant`, `${source} includes 權證成績單 rows`, latestStats.byStrategy["權證成績單"] || {});
+  addCheck(checks, marketClosedProtection || cleanNumber(latestStats.byStrategy["權證成績單"]?.rows) > 0, `${source}-warrant`, `${source} includes 權證成績單 rows`, { ...(latestStats.byStrategy["權證成績單"] || {}), marketClosedProtection });
   addCheck(checks, nonCbEntryMissing === 0, `${source}-entry-filled`, `${source} non-CB rows have entry_price`, { nonCbEntryMissing });
   addCheck(checks, nonCbHighMissing === 0, `${source}-high-filled`, `${source} non-CB rows have high_price`, { nonCbHighMissing });
   addCheck(checks, cbRows.length === 0 || cbEntryMissing === 0, `${source}-cb-entry-filled`, `${source} CB rows use detected stockPrice as entry_price`, { cbRows: cbRows.length, cbEntryMissing });
