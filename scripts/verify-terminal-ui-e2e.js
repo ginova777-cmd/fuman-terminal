@@ -1240,6 +1240,7 @@ function collectDesktopStats(route) {
     ".desktop-route-shell [data-stock-code]",
     ".fuman-unified-list-card",
     ".fuman-unified-list-shell article",
+    ".strategy3-signal-card",
     ".strategy5-stock-card",
     ".intraday-table tbody tr",
     ".swing-table tbody tr",
