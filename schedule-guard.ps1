@@ -45,6 +45,8 @@ function Invoke-FumanWeekdayGuard {
     return
   }
 
+  Invoke-FumanMarketCalendarGuard -Label $Label -LogPath $LogPath
+
   $now = Get-FumanTaipeiNow
   if ($now.DayOfWeek -eq [DayOfWeek]::Saturday -or $now.DayOfWeek -eq [DayOfWeek]::Sunday) {
     $message = "$Label skipped on weekend: $($now.ToString('yyyy/MM/dd HH:mm:ss')) Taipei"
@@ -64,6 +66,47 @@ function Invoke-FumanWeekdayGuard {
     } else {
       Write-Host $message
     }
+    exit 0
+  }
+}
+
+
+# FUMAN_MARKET_CLOSED_PROTECTION_V1
+function Invoke-FumanMarketCalendarGuard {
+  param(
+    [Parameter(Mandatory = $true)][string]$Label,
+    [string]$LogPath
+  )
+
+  if ($env:FUMAN_FORCE_RUN -eq "1") {
+    if ($LogPath) { "Market calendar guard bypassed by FUMAN_FORCE_RUN=1 for $Label" >> $LogPath }
+    return
+  }
+
+  $nodeCandidates = @(
+    "C:\Program Files\nodejs\node.exe",
+    "node"
+  )
+  $nodeExe = $nodeCandidates | Where-Object { $_ -eq "node" -or (Test-Path -LiteralPath $_) } | Select-Object -First 1
+  $scriptPath = Join-Path $PSScriptRoot "scripts\check-market-calendar-action.js"
+  if (!(Test-Path -LiteralPath $scriptPath)) {
+    $message = "market calendar guard missing script: $scriptPath; fail closed and preserve previous good"
+    if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
+    exit 0
+  }
+
+  $output = & $nodeExe $scriptPath "--label=$Label" "--receipt=1" 2>&1
+  $exitCode = $LASTEXITCODE
+  if ($LogPath) { $output | ForEach-Object { "market-calendar-guard: $_" >> $LogPath } }
+
+  if ($exitCode -eq 10) {
+    $message = "$Label skipped on market_closed by market calendar contract; preserve previous good; do not write latest or empty result"
+    if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
+    exit 0
+  }
+  if ($exitCode -ne 0) {
+    $message = "$Label market calendar guard failed exit=$exitCode; fail closed and preserve previous good"
+    if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
     exit 0
   }
 }

@@ -47,6 +47,8 @@ function Invoke-LoggedCommand([scriptblock]$Command) {
 }
 
 Add-LogLine "=== Realtime radar cache start $(Get-Date) ==="
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Realtime radar cache" -LogPath $log
 
 $exitCode = Invoke-LoggedCommand { & $nodeExe "scripts\patrol-realtime-radar-cache.js" }
 if ($exitCode -ne 0) {

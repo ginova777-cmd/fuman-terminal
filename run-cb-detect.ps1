@@ -61,6 +61,8 @@ function Assert-CbDetectApi {
 }
 
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "CB detect full scan" -LogPath $log
 $codeRepo = "${PSScriptRoot}"
 Push-Location $codeRepo
 try {
