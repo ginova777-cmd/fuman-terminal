@@ -6061,8 +6061,6 @@
       const nextSignature = signature();
       if (!allowSame && !force && nextSignature === marketApiOnlySignature) return;
       marketApiOnlySignature = nextSignature;
-      renderMarketOverviewApi(state.market || {}, state.heatmap || {});
-      if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
       if (isMarketDesktopAiModeActive()) {
         scheduleMarketApiAiRender(
           state.heatmap || marketSnapshotFirstPayload || {},
@@ -6071,7 +6069,10 @@
           { delay: hasMarketAiPayload(state.ai || marketAiBundlePayload) ? 110 : 240 },
         );
         renderMarketApiRadar(state.radar || {});
+        return;
       }
+      renderMarketOverviewApi(state.market || {}, state.heatmap || {});
+      if (state.heatmap?.sectors?.length) renderMarketHeatmapApi(state.heatmap.sectors, state.heatmap);
     };
     fetchMarketJson("/api/market", 24, force, 6500)
       .then((payload) => {
@@ -7524,6 +7525,7 @@
   function activateFixedPageRoute(link, source) {
     const key = fixedRouteKey(link);
     if (!key || isStrategyLink(link)) return false;
+    activeSnapshotRoute = key;
     const now = Date.now();
     if (source === "click" && key === fixedClickRoute && now - fixedClickAt < 360) return true;
     fixedClickRoute = key;
