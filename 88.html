@@ -105,47 +105,31 @@
       color: #facc15;
     }
     .device-switcher {
-      position: relative;
       display: inline-flex;
       align-items: center;
-    }
-    .device-switcher button {
-      background: var(--soft);
-      border: 1px solid var(--line);
-      color: var(--text);
-      min-width: 48px;
-      padding: 10px 12px;
-    }
-    .device-menu {
-      position: absolute;
-      right: 0;
-      top: calc(100% + 8px);
-      z-index: 30;
-      display: none;
-      min-width: 128px;
-      padding: 6px;
+      gap: 6px;
+      padding: 4px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
-      box-shadow: 0 18px 38px rgba(0, 0, 0, .25);
     }
-    .device-switcher[data-open="true"] .device-menu {
-      display: grid;
-      gap: 4px;
-    }
-    .device-menu a {
-      display: block;
+    .device-switcher a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
       border-radius: 6px;
-      padding: 10px 12px;
+      padding: 8px 11px;
+      background: var(--soft);
       color: var(--text);
       font-weight: 800;
       text-decoration: none;
       white-space: nowrap;
     }
-    .device-menu a:hover,
-    .device-menu a:focus-visible {
-      background: var(--soft);
-      outline: none;
+    .device-switcher a:hover,
+    .device-switcher a:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 1px;
     }
     .grid {
       display: grid;
@@ -404,12 +388,8 @@
       .device-switcher {
         width: 100%;
       }
-      .device-switcher button {
-        width: 100%;
-      }
-      .device-menu {
-        left: 0;
-        right: 0;
+      .device-switcher a {
+        flex: 1;
       }
       .grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -435,13 +415,10 @@
         <option value="">最新日期</option>
       </select>
       <input id="search" type="search" placeholder="搜尋代號 / 名稱" aria-label="搜尋代號或名稱">
-      <div class="device-switcher" id="deviceSwitcher" data-testid="scorecard-device-switcher">
-        <button id="deviceMenuToggle" class="ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-label="開啟版本選單" title="版本選單">裝置</button>
-        <div class="device-menu" id="deviceMenu" role="menu" aria-label="選擇網頁版本">
-          <a role="menuitem" href="/api/mobile-page" data-testid="scorecard-mobile-link">手機版</a>
-          <a role="menuitem" href="/?desktop=1" data-testid="scorecard-desktop-link">電腦版</a>
-        </div>
-      </div>
+      <nav class="device-switcher" id="deviceSwitcher" data-testid="scorecard-device-switcher" aria-label="切換網頁版本">
+        <a href="/api/mobile-page" data-testid="scorecard-mobile-link">手機版</a>
+        <a href="/?desktop=1" data-testid="scorecard-desktop-link">電腦版</a>
+      </nav>
       <button id="themeToggle" class="ghost" type="button" data-testid="scorecard-theme-toggle" aria-pressed="false" aria-label="切換至陽光模式" title="切換至陽光模式">☀</button>
       <button id="reload" type="button">重新整理</button>
     </div>
@@ -1267,28 +1244,6 @@ byId("historyDate").addEventListener("change", (event) => {
   activeSupplement = "";
   activeResult = "all";
   load(activeDate);
-});
-function closeDeviceMenu() {
-  const switcher = byId("deviceSwitcher");
-  const toggle = byId("deviceMenuToggle");
-  if (!switcher || !toggle) return;
-  switcher.dataset.open = "false";
-  toggle.setAttribute("aria-expanded", "false");
-}
-byId("deviceMenuToggle")?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  const switcher = byId("deviceSwitcher");
-  const toggle = byId("deviceMenuToggle");
-  if (!switcher || !toggle) return;
-  const open = switcher.dataset.open === "true";
-  switcher.dataset.open = String(!open);
-  toggle.setAttribute("aria-expanded", String(!open));
-});
-document.addEventListener("click", (event) => {
-  if (!event.target.closest?.("#deviceSwitcher")) closeDeviceMenu();
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeDeviceMenu();
 });
 byId("themeToggle").addEventListener("click", () => {
   applyTheme(document.body.dataset.theme === "sun" ? "night" : "sun");
