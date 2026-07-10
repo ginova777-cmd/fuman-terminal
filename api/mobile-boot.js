@@ -231,6 +231,9 @@ async function buildBoot(request) {
     displayTradeDate: marketCalendar?.displayTradeDate || "",
     formalScanSkipped: marketCalendar?.formalScanSkipped === true,
     sourceFreshnessRequired: marketCalendar?.sourceFreshnessRequired !== false,
+    preservePreviousGood: marketCalendar?.preservePreviousGood === true,
+    latestPointerUpdated: marketCalendar?.latestPointerUpdated === true,
+    emptyResultWritten: marketCalendar?.emptyResultWritten === true,
     lowPower: {
       defaultVariant: "lite",
       lowEndVariant: "ultra",
