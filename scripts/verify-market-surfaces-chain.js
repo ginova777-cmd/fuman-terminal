@@ -131,8 +131,11 @@ async function main() {
     hasDataFreshness: /dataFreshness/.test(marketAiApiSource),
     hasPriorityStaleBlock: /priorityStaleBlocked/.test(marketAiApiSource),
     hasOpenDetectGate: /requiresTodayDetection/.test(marketAiApiSource)
-      && /allowLatestFallback:\s*!mustDetectToday/.test(marketAiApiSource)
-      && /canServeCachedPayload\(request,\s*detectWindowActive,\s*mustDetectToday\)/.test(marketAiApiSource),
+      && (
+        /allowLatestFallback:\s*!mustDetectToday/.test(marketAiApiSource)
+        || /allowLatestFallback:\s*!requireTodayLiveSource/.test(marketAiApiSource)
+      )
+      && /canServeCachedPayload\(\s*request,\s*detectWindowActive,\s*mustDetectToday\s*\)/.test(marketAiApiSource),
   };
   addCheck(
     checks,
@@ -239,9 +242,18 @@ async function main() {
     displayWindow: realtime.json?.displayWindow || "",
     date: realtime.json?.date || realtime.json?.tradeDate || "",
     marketSession: realtime.json?.marketSession || {},
+    evidenceStatus: realtime.json?.evidenceStatus || realtime.json?.sourceEvidenceStatus || "",
+    unattendedStatus: realtime.json?.unattendedStatus || realtime.json?.unattended?.status || "",
+    reason: realtime.json?.reason || realtime.json?.scanner_block_reason || realtime.json?.blockedReason || "",
   };
+  details.realtime.marketClosedProtected = Boolean(
+    details.realtime.marketSession?.closed === true
+      && /holiday|closed|休市|typhoon/i.test(`${details.realtime.marketSession?.reason || ""} ${details.realtime.reason}`)
+      && details.realtime.rows === 0
+      && /NO|source_quality_fail|insufficient|market_closed/i.test(`${details.realtime.unattendedStatus} ${details.realtime.evidenceStatus} ${details.realtime.reason}`)
+  );
   addCheck(checks, realtime.ok && realtime.json?.ok !== false, "realtime-api-ok", "即時雷達 /api/realtime-radar-latest?full=1&limit=1200 must return ok 2xx", details.realtime);
-  addCheck(checks, details.realtime.rows > 0, "realtime-api-content", "即時雷達 must expose rows/cards", details.realtime);
+  addCheck(checks, details.realtime.rows > 0 || details.realtime.marketClosedProtected, "realtime-api-content", "即時雷達 must expose rows/cards during trading, or explicit market-closed protection after休市", details.realtime);
   addCheck(checks, details.realtime.displayWindow === "09:00-13:30", "realtime-full-session-window", "即時雷達 full mode must expose 09:00-13:30 displayWindow", details.realtime);
   addCheck(checks, details.realtime.totalCount >= details.realtime.rows, "realtime-full-session-count", "即時雷達 full mode totalCount must cover returned rows", details.realtime);
   addCheck(checks, /supabase/i.test(`${details.realtime.cacheSource} ${details.realtime.transport?.source || ""}`), "realtime-supabase-source", "即時雷達 must read Supabase cache/quote source", details.realtime);
@@ -284,7 +296,7 @@ async function main() {
   };
   if (CHECK_UI_REPORT) {
     addCheck(checks, details.uiE2E.desktopMarket.pass > 0 && details.uiE2E.desktopMarket.rowsVisible > 0, "ui-e2e-market", "UI E2E must have visible desktop market overview rows/cards", details.uiE2E.desktopMarket);
-    addCheck(checks, details.uiE2E.desktopRealtime.pass > 0 && details.uiE2E.desktopRealtime.rowsVisible > 0, "ui-e2e-realtime", "UI E2E must have visible desktop realtime radar rows/cards", details.uiE2E.desktopRealtime);
+    addCheck(checks, (details.uiE2E.desktopRealtime.pass > 0 && details.uiE2E.desktopRealtime.rowsVisible > 0) || (details.realtime.marketClosedProtected && details.uiE2E.desktopRealtime.checked > 0), "ui-e2e-realtime", "UI E2E must have visible desktop realtime radar rows/cards, or checked market-closed protection", details.uiE2E.desktopRealtime);
     addCheck(checks, details.uiE2E.mobileAi.pass > 0 && details.uiE2E.mobileAi.rowsVisible > 0, "ui-e2e-ai", "UI E2E must have visible mobile AI rows/cards", details.uiE2E.mobileAi);
     addCheck(checks, details.uiE2E.mobileWatch.pass > 0, "ui-e2e-watch", "UI E2E must cover mobile watchlist surface; empty watchlist is allowed", details.uiE2E.mobileWatch);
   }
