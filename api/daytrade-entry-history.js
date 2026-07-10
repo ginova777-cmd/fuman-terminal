@@ -15,9 +15,11 @@ const ENTRY_FIELDS = [
   "signal_type",
   "note",
   "source",
+  "run_id",
+  "evidence",
   "created_at",
 ];
-const LEGACY_ENTRY_FIELDS = ENTRY_FIELDS.filter((field) => field !== "signal_type");
+const LEGACY_ENTRY_FIELDS = ENTRY_FIELDS.filter((field) => !["signal_type", "run_id", "evidence"].includes(field));
 
 function text(value) {
   return String(value ?? "").trim();
@@ -82,6 +84,8 @@ function normalizeEntry(row) {
     signal_type: text(row.signal_type || "formal"),
     note: text(row.note),
     source: text(row.source),
+    run_id: text(row.run_id),
+    evidence: row.evidence && typeof row.evidence === "object" ? row.evidence : null,
     created_at: text(row.created_at),
   };
 }
@@ -123,30 +127,59 @@ function normalizeRows(rows, today = todayTaipeiDate()) {
   return { rows: kept, filtered };
 }
 
-async function fetchSupabaseEntries(today) {
+function parseLimit(value, fallback = 300) {
+  const limit = Number(value);
+  if (!Number.isFinite(limit)) return fallback;
+  return Math.min(Math.max(Math.trunc(limit), 1), 500);
+}
+
+function requestedTradeDateFromQuery(query = {}) {
+  return normalizeTradeDate(query.tradeDate || query.date || query.trade_date);
+}
+
+async function fetchSupabaseEntries(tradeDate, options = {}) {
   const url = serverSupabaseUrl();
   const key = serverSupabaseKey();
+  const limit = parseLimit(options.limit);
   if (!url || !key) {
     return { ok: false, status: 503, reason: "missing_supabase_credentials", rawRows: [] };
   }
-  async function query(fields) {
-  const params = new URLSearchParams();
-  params.set("select", fields.join(","));
-  params.set("trade_date", `eq.${today}`);
-  params.append("entry_time", "gte.09:00:00");
-  params.append("entry_time", "lte.13:30:00");
-  params.set("order", "entry_time.desc,created_at.desc");
-  params.set("limit", "200");
-  const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
-  const response = await fetch(endpoint, {
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      accept: "application/json",
-      "cache-control": "no-store",
-    },
-  });
+  async function query(fields, cleanAggregationOnly = false) {
+    const params = new URLSearchParams();
+    params.set("select", fields.join(","));
+    params.set("trade_date", `eq.${tradeDate}`);
+    params.append("entry_time", "gte.09:00:00");
+    params.append("entry_time", "lte.13:30:00");
+    if (cleanAggregationOnly) {
+      params.set("source", "eq.ps1_afternoon_aggregation");
+      params.set("signal_type", "eq.formal");
+      params.set("run_id", "not.is.null");
+    }
+    params.set("order", "entry_time.desc,created_at.desc");
+    params.set("limit", String(limit));
+    const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        accept: "application/json",
+        "cache-control": "no-store",
+      },
+    });
     return response;
+  }
+  if (options.preferCleanAggregation) {
+    const cleanResponse = await query(ENTRY_FIELDS, true);
+    const cleanText = await cleanResponse.text();
+    let cleanData = null;
+    try {
+      cleanData = cleanText ? JSON.parse(cleanText) : null;
+    } catch {
+      cleanData = null;
+    }
+    if (cleanResponse.ok && Array.isArray(cleanData) && cleanData.length) {
+      return { ok: true, status: cleanResponse.status, reason: "clean_aggregation", rawRows: cleanData };
+    }
   }
   let response = await query(ENTRY_FIELDS);
   const rawText = await response.text();
@@ -189,25 +222,33 @@ async function fetchLatestAvailableTradeDate(maxDate) {
   const url = serverSupabaseUrl();
   const key = serverSupabaseKey();
   if (!url || !key) return "";
-  const params = new URLSearchParams();
-  params.set("select", "trade_date");
-  params.append("trade_date", `lte.${maxDate}`);
-  params.append("entry_time", "gte.09:00:00");
-  params.append("entry_time", "lte.13:30:00");
-  params.set("order", "trade_date.desc,entry_time.desc,created_at.desc");
-  params.set("limit", "1");
-  const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
-  const result = await fetch(endpoint, {
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      accept: "application/json",
-      "cache-control": "no-store",
-    },
-  });
-  if (!result.ok) return "";
-  const rows = await result.json().catch(() => []);
-  return normalizeTradeDate(Array.isArray(rows) ? rows[0]?.trade_date : "");
+  async function query(cleanAggregationOnly = false) {
+    const params = new URLSearchParams();
+    params.set("select", "trade_date");
+    params.append("trade_date", `lte.${maxDate}`);
+    params.append("entry_time", "gte.09:00:00");
+    params.append("entry_time", "lte.13:30:00");
+    if (cleanAggregationOnly) {
+      params.set("source", "eq.ps1_afternoon_aggregation");
+      params.set("signal_type", "eq.formal");
+      params.set("run_id", "not.is.null");
+    }
+    params.set("order", "trade_date.desc,entry_time.desc,created_at.desc");
+    params.set("limit", "1");
+    const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
+    const result = await fetch(endpoint, {
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        accept: "application/json",
+        "cache-control": "no-store",
+      },
+    });
+    if (!result.ok) return "";
+    const rows = await result.json().catch(() => []);
+    return normalizeTradeDate(Array.isArray(rows) ? rows[0]?.trade_date : "");
+  }
+  return await query(true) || await query(false);
 }
 
 function noStore(response) {
@@ -217,17 +258,22 @@ function noStore(response) {
 
 async function handler(request, response) {
   noStore(response);
-  const requestedDate = todayTaipeiDate();
+  const explicitTradeDate = requestedTradeDateFromQuery(request.query || "");
+  const requestedDate = explicitTradeDate || todayTaipeiDate();
+  const limit = parseLimit(request.query?.limit);
   let tradeDate = requestedDate;
   try {
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    let fetched = await fetchSupabaseEntries(tradeDate);
+    let fetched = await fetchSupabaseEntries(tradeDate, {
+      limit,
+      preferCleanAggregation: Boolean(explicitTradeDate) || marketCalendar?.marketOpen === false,
+    });
     let marketClosedPreviousGood = false;
-    if (marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
+    if (!explicitTradeDate && marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
       const latestTradeDate = await fetchLatestAvailableTradeDate(requestedDate);
       if (latestTradeDate && latestTradeDate !== requestedDate) {
         tradeDate = latestTradeDate;
-        fetched = await fetchSupabaseEntries(tradeDate);
+        fetched = await fetchSupabaseEntries(tradeDate, { limit, preferCleanAggregation: true });
         marketClosedPreviousGood = true;
       }
     }
@@ -247,6 +293,7 @@ async function handler(request, response) {
       marketClosedPreviousGood,
       timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
       order: "entry_time.desc,created_at.desc",
+      limit,
       count: normalized.rows.length,
       rows: normalized.rows,
       filtered: normalized.filtered,

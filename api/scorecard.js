@@ -493,6 +493,40 @@ function callSevenStrategyDailyHistory(timeoutMs = 12000) {
   });
 }
 
+function callDaytradeEntryHistory(timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let timer = null;
+    try {
+      const handler = require("./daytrade-entry-history");
+      timer = setTimeout(() => resolve({
+        statusCode: 504,
+        payload: { ok: false, error: "daytrade_entry_history_timeout" },
+      }), timeoutMs);
+      const finish = (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      };
+      Promise.resolve(handler({
+        method: "GET",
+        url: "/api/daytrade-entry-history?limit=300",
+        headers: { host: "localhost", "x-scorecard-source": "1" },
+        query: { limit: "300" },
+      }, createCaptureResponse(finish))).catch((error) => {
+        finish({
+          statusCode: 500,
+          payload: { ok: false, error: "daytrade_entry_history_failed", reason: error?.message || String(error) },
+        });
+      });
+    } catch (error) {
+      if (timer) clearTimeout(timer);
+      resolve({
+        statusCode: 500,
+        payload: { ok: false, error: "daytrade_entry_history_failed", reason: error?.message || String(error) },
+      });
+    }
+  });
+}
+
 function buildStrategy5SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
@@ -751,6 +785,46 @@ function buildSevenStrategyDailyHistorySourceReport(result) {
   };
 }
 
+function buildDaytradeEntryHistorySourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const firstRunId = cleanText(rows.find((row) => cleanText(row?.run_id))?.run_id);
+  const runDate = cleanText(payload.tradeDate || payload.requestedDate || "unknown");
+  return {
+    key: "daytrade_entry_history",
+    strategy: "當沖 PS1 今日進場紀錄",
+    endpoint: "/api/daytrade-entry-history",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: firstRunId || cleanText(payload.runId || `daytrade-entry-history-${runDate}`),
+    count: cleanNumber(payload.count ?? rows.length),
+    emittedRows: rows.length,
+    resultCount: cleanNumber(payload.count ?? rows.length),
+    readbackCount: cleanNumber(payload.count ?? rows.length),
+    date: cleanText(payload.tradeDate),
+    requestedDate: cleanText(payload.requestedDate),
+    displayTradeDate: cleanText(payload.displayTradeDate),
+    sourceName: "daytrade_entry_history",
+    source: cleanText(payload.source || "supabase:public.fugle_daytrade_entry_history"),
+    table: cleanText(payload.table || "public.fugle_daytrade_entry_history"),
+    timeWindow: payload.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+    formalCount: cleanNumber(payload.count ?? rows.length),
+    detectedCount: 0,
+    marketOpen: payload.marketOpen,
+    marketStatus: cleanText(payload.marketStatus),
+    closedReason: cleanText(payload.closedReason),
+    marketClosedPreviousGood: payload.marketClosedPreviousGood === true,
+    evidenceStatus: payload.ok === false ? "insufficient" : "complete",
+    unattendedStatus: payload.ok === false ? "NO" : "YES",
+    publishAllowed: payload.ok !== false,
+    latestOverwriteAllowed: payload.ok !== false,
+    preservePreviousGood: payload.marketClosedPreviousGood === true || payload.ok === false,
+    fallbackUsed: false,
+    blockedReason: payload.ok === false ? cleanText(payload.reason || payload.error || "daytrade_entry_history_unavailable") : "",
+    reason: cleanText(payload.reason || payload.error || ""),
+  };
+}
+
 async function buildDaytradeSourceReport() {
   try {
     const rows = await fetchSupabaseRows(
@@ -860,7 +934,7 @@ async function withLiveStrategy3SourceReport(payload) {
 }
 
 async function withLiveSourceReports(payload) {
-  const [strategy1, strategy2, strategy3, strategy4, strategy5, institution, cb, warrant, sevenStrategyDailyHistory, daytradeSource] = await Promise.all([
+  const [strategy1, strategy2, strategy3, strategy4, strategy5, institution, cb, warrant, sevenStrategyDailyHistory, daytradeEntryHistory, daytradeSource] = await Promise.all([
     callStrategy1Latest(),
     callStrategy2Latest(),
     callStrategy3Latest(),
@@ -870,6 +944,7 @@ async function withLiveSourceReports(payload) {
     callCbDetectLatest(),
     callWarrantLatest(),
     callSevenStrategyDailyHistory(),
+    callDaytradeEntryHistory(),
     buildDaytradeSourceReport(),
   ]);
   return [
@@ -882,6 +957,7 @@ async function withLiveSourceReports(payload) {
     buildCbSourceReport(cb),
     buildWarrantSourceReport(warrant),
     buildSevenStrategyDailyHistorySourceReport(sevenStrategyDailyHistory),
+    buildDaytradeEntryHistorySourceReport(daytradeEntryHistory),
     daytradeSource,
   ].reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
 }
