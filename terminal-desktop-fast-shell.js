@@ -6745,16 +6745,136 @@
     ];
   }
 
-  function unifiedRunCards(route, rows, payloadMeta) {
-    const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
-    const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
-    const signalHits = rows.filter((row) => normalizeArray(row?.signals || row?.matches || row?.tags).length || row?.subStrategy || row?.signalLabel).length;
-    const runId = payloadMeta?.runId ? compactText(payloadMeta.runId, 32) : "run --";
+  function rowSearchText(row) {
     return [
-      { label: "完整掃描", value: `${rows.length}`, sub: runId },
-      { label: "條件命中", value: `${signalHits}`, sub: "正式 API / bundle 同步" },
-      { label: "平均分數", value: rows.length ? `${avgScore || "--"}` : "--", sub: "終端榜單顯示" },
+      row?.reason,
+      row?.line,
+      row?.signalLine,
+      row?.triggerReason,
+      row?.trigger_reason,
+      row?.entryPlan?.reason,
+      row?.tradableReason,
+      row?.summary,
+      row?.aiSummary,
+      row?.analysis,
+      row?.note,
+      row?.state,
+      row?.status,
+      row?.subStrategy,
+      row?.strategyLabel,
+      row?.signalLabel,
+      ...normalizeArray(row?.signals || row?.matches || row?.strategyTags || row?.tags || row?.signalTags).map((item) => typeof item === "object" ? [item.id, item.key, item.label, item.short, item.title, item.name, item.reason].filter(Boolean).join(" ") : item),
+    ].filter(Boolean).join(" ");
+  }
+
+  function countRowsByText(rows, patterns) {
+    return (Array.isArray(rows) ? rows : []).filter((row) => {
+      const text = rowSearchText(row);
+      return patterns.some((pattern) => pattern.test(text));
+    }).length;
+  }
+
+  function cardsFromCounts(counts, sub = "細分策略選項") {
+    return (Array.isArray(counts) ? counts : [])
+      .filter((item) => item && item.label)
+      .map((item) => ({
+        label: compactText(item.label, 18),
+        value: String(cleanNumber(item.count)),
+        sub: item.sub || sub,
+      }));
+  }
+
+  function strategy1OptionCards(rows) {
+    const defs = [
+      { label: "21:30 初篩", patterns: [/21:30|初篩|candidate/i] },
+      { label: "08:45 個股期貨", patterns: [/08:45|個股期貨|futopt/i] },
+      { label: "08:55 搓合確認", patterns: [/08:55|搓合|preopen/i] },
+      { label: "BUY 候選", patterns: [/BUY|買進|開盤入|無腦入/i] },
     ];
+    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) || rows.length })), "Strategy1 關卡");
+  }
+
+  function strategy3OptionCards(rows) {
+    const defs = [
+      { label: "尾盤帶量", patterns: [/尾盤|13:00|12:59|帶量/] },
+      { label: "基態", patterns: [/基態|base/i] },
+      { label: "控盤強", patterns: [/控盤|control/i] },
+      { label: "OBV 正向", patterns: [/OBV|obv/i] },
+      { label: "近高檢查", patterns: [/近高|高檢查|near.*high/i] },
+      { label: "母池命中", patterns: [/母池|mother/i] },
+    ];
+    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "Strategy3 條件");
+  }
+
+  function strategy4OptionCards(rows) {
+    return cardsFromCounts(strategy4SignalCounts(rows), "Strategy4 細分訊號");
+  }
+
+  function strategy5OptionCards(rows) {
+    const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
+    const order = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
+    const liveCounts = new Map(strategy5SignalCounts(rows).map((item) => [item.key, item]));
+    const ids = order.filter((id) => id && id !== "multi_strategy_confluence");
+    const counts = ids.length ? ids.map((id) => ({
+      key: id,
+      label: defs[id]?.short || defs[id]?.label || liveCounts.get(id)?.label || id,
+      count: cleanNumber(liveCounts.get(id)?.count),
+    })) : [...liveCounts.values()];
+    const confluence = rows.filter((row) => normalizeArray(row?.strategy5ConfluenceMatches || row?.matches || row?.signals).length >= 2).length;
+    return cardsFromCounts([{ key: "multi_strategy_confluence", label: "多策略共振", count: confluence }, ...counts], "Strategy5 細分策略");
+  }
+
+  function institutionOptionCards(rows) {
+    return cardsFromCounts(CHIP_TRADE_FILTERS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      count: chipTradeFilterCount(rows, item.key),
+    })), "買賣超細分策略");
+  }
+
+  function cbOptionCards(rows) {
+    const defs = [
+      { label: "CBAS 三層", patterns: [/CBAS|三層|cbas/i] },
+      { label: "60分K阻檔", patterns: [/60分|60m|阻檔/i] },
+      { label: "富果現股價", patterns: [/富果|現股價|stockPrice|price/i] },
+      { label: "轉換距離", patterns: [/轉換|conversion|premium/i] },
+      { label: "訊號候選", patterns: [/訊號|signal|entry/i] },
+    ];
+    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "CB 細分檢查");
+  }
+
+  function warrantOptionCards(rows) {
+    const defs = [
+      { label: "資金異動", patterns: [/資金|flow|money/i] },
+      { label: "標的強弱", patterns: [/標的|underlying|強弱/i] },
+      { label: "爆量權證", patterns: [/爆量|volume|量/i] },
+      { label: "單券異常", patterns: [/單券|異常|single/i] },
+      { label: "買盤集中", patterns: [/買盤|集中|bid/i] },
+      { label: "風險排除", patterns: [/風險|risk|排除/i] },
+    ];
+    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "權證走向細分");
+  }
+
+  function unifiedRunCards(route, rows, payloadMeta) {
+    if (isStrategy2Route(route)) {
+      const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
+      const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
+      const signalHits = rows.filter((row) => normalizeArray(row?.signals || row?.matches || row?.tags).length || row?.subStrategy || row?.signalLabel).length;
+      const runId = payloadMeta?.runId ? compactText(payloadMeta.runId, 32) : "run --";
+      return [
+        { label: "完整掃描", value: `${rows.length}`, sub: runId },
+        { label: "條件命中", value: `${signalHits}`, sub: "正式 API / bundle 同步" },
+        { label: "平均分數", value: rows.length ? `${avgScore || "--"}` : "--", sub: "終端榜單顯示" },
+      ];
+    }
+    if (isStrategy4Route(route)) return strategy4OptionCards(rows);
+    if (isStrategy5Route(route)) return strategy5OptionCards(rows);
+    if (isStrategy3Route(route)) return strategy3OptionCards(rows);
+    if (String(route || "").includes("策略1")) return strategy1OptionCards(rows);
+    if (isChipTradeRoute(route)) return institutionOptionCards(rows);
+    if (isCbDetectRoute(route)) return cbOptionCards(rows);
+    if (isWarrantFlowRoute(route)) return warrantOptionCards(rows);
+    return cardsFromCounts(unifiedListTags(rows[0] || {}, route).map((label) => ({ label, count: rows.length })), "細分策略選項");
   }
 
   function unifiedListCard(row, index, route) {
@@ -7959,12 +8079,12 @@
       }
       .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+        gap: 10px;
       }
       .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article {
-        min-height: 88px;
-        padding: 15px 16px;
+        min-height: 72px;
+        padding: 12px 13px;
         border: 1px solid rgba(148, 163, 184, 0.20);
         border-radius: 8px;
         background: rgba(15, 23, 42, 0.62);
@@ -7978,9 +8098,9 @@
       }
       .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards strong {
         display: block;
-        margin: 5px 0;
+        margin: 4px 0;
         color: #ffffff;
-        font-size: 30px;
+        font-size: 22px;
         line-height: 1.05;
         letter-spacing: 0;
       }
