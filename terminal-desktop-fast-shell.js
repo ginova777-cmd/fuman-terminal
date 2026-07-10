@@ -7549,9 +7549,9 @@
       renderFixedPageShell(link, source || "realtime", rows);
       markLatency("shell", key);
       window.setTimeout(() => {
-        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
         fetchCanvasRows(key, false).then((apiRows) => {
-          if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+          if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
           if (apiRows?.length) {
             scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, "api", apiRows), "api");
           } else {
@@ -7585,9 +7585,9 @@
     markLatency("shell", key);
     if (!isChipTradeRoute(key) && !isApiOnlySnapshotRoute(key)) restoreFixedPageSnapshot(link);
     window.setTimeout(() => {
-      if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+      if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
       fetchCanvasRows(key, false).then((apiRows) => {
-        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
         if (apiRows?.length) {
           scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, "api", apiRows), "api");
         } else {
