@@ -1033,6 +1033,35 @@ async function afterDesktopRouteActivate(cdp, route) {
     }
     if (!active?.ok) await sleep(1200);
   }
+  if (route.key === "realtime-radar") {
+    await evaluate(cdp, () => {
+      const visible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 2 && rect.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+      };
+      const panel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document;
+      const refresh = [...panel.querySelectorAll("[data-radar-dom-refresh],[data-radar-refresh]")].find(visible);
+      refresh?.dispatchEvent?.(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      if (typeof window.renderRealtimeRadar === "function") window.renderRealtimeRadar();
+      return true;
+    }).catch(() => null);
+    await waitFor(cdp, () => {
+      const visible = (el) => {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 2 && rect.height > 2 && style.display !== "none" && style.visibility !== "hidden";
+      };
+      const panel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document;
+      const cards = [...panel.querySelectorAll(".radar-signal-card")].filter(visible);
+      const text = String(panel.textContent || "").replace(/\s+/g, " ");
+      const protectedClosed = /休市保護|颱風假|市場休市|market closed|non-trading-day|保留/.test(text);
+      return { ok: cards.length > 0 || protectedClosed, cards: cards.length, protectedClosed };
+    }, null, 18000, 350).catch(() => null);
+    await sleep(700);
+  }
   if (route.key === "watchlist") {
     const submitWatchlistCode = async (code) => {
       await evaluate(cdp, (code) => {

@@ -6464,6 +6464,25 @@
     `;
   }
 
+  function radarDomProtectionCard(activeLabel, sourceLabel, sessionRows) {
+    const dateLabel = radarDomDateLabel(sessionRows);
+    return `
+      <article class="radar-signal-card radar-protection-card" data-stock-code="market-closed-protection">
+        <div class="radar-jump">
+          <span>保護</span>
+          <strong>${escapeHtml(dateLabel)}</strong>
+        </div>
+        <div class="radar-signal-main">
+          <div class="radar-signal-name">休市保護 / ${escapeHtml(activeLabel)}暫無訊號 <small>previous-good</small></div>
+          <div class="radar-signal-meta">資料來源 ${escapeHtml(sourceLabel)} · 未產生正式新訊號 · 不覆蓋 previous good</div>
+          <div class="radar-signal-chips"><span>market closed</span><span>preserve previous good</span><span>no fake signal</span></div>
+        </div>
+        <div class="radar-condition-list"><span>休市或無訊號時顯示保護卡，避免終端空白或誤顯。</span></div>
+        <div class="radar-chip-list"><span>等待下一個交易日自動恢復</span></div>
+      </article>
+    `;
+  }
+
   function ensureRealtimeRadarDomStyle() {
     if (document.querySelector("#fuman-realtime-radar-dom-style")) return;
     const link = document.createElement("link");
@@ -6525,7 +6544,7 @@
           <span>最新在上</span>
         </div>
         <section class="radar-board-list" data-radar-dom-list>
-          ${activeRows.length ? activeRows.map(radarDomSignalCard).join("") : `<div class="radar-empty">目前沒有${escapeHtml(activeLabel)}訊號</div>`}
+          ${activeRows.length ? activeRows.map(radarDomSignalCard).join("") : radarDomProtectionCard(activeLabel, sourceLabel, sessionRows)}
         </section>
       </section>
     `;
