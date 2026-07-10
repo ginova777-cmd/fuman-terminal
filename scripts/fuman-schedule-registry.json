@@ -62,7 +62,8 @@
       "Fuman Daytrade Source Gate 0935",
       "Fuman Daytrade Source Final Verdict 0912",
       "Fuman Fugle Daytrade Watchdog Every Minute",
-      "Fuman Scorecard Daily Watchdog 1410"
+      "Fuman Scorecard Daily Watchdog 1410",
+      "Fuman Market Calendar Auto Update 1900-0830"
     ],
     "expectedDisabledTasks": [],
     "retiredTasks": [
@@ -231,6 +232,10 @@
         267014
       ],
       "Fuman Terminal Local Freshness Verify 0830-2230": [
+        0,
+        267009
+      ],
+      "Fuman Market Calendar Auto Update 1900-0830": [
         0,
         267009
       ]
@@ -836,6 +841,16 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "14:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Market Calendar Auto Update 1900-0830",
+      "displayName": "Fuman Market Calendar Auto Update 1900-0830",
+      "description": "Auto-detect DGPA Taipei stop-work announcements and write runtime market calendar override.",
+      "time": "19:00-08:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "19:00"
       ]
     }
   ]
