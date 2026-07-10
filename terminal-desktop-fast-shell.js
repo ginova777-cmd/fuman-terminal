@@ -22,7 +22,7 @@
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
   const FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = [];
-  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE];
+  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
@@ -1379,23 +1379,35 @@
     return Object.keys(CANVAS_ENDPOINTS).find((route) => CANVAS_ENDPOINTS[route] === pathname) || "";
   }
 
+  function isEvidenceArrayKey(key = "") {
+    return /^(requiredFields|blankCounts|sampleMissingRows|fallbackScope|fallbackDetails|issues|warnings|blockers|sourceErrors|sources)$/i.test(String(key || ""));
+  }
+
+  function arrayLooksLikeStockRows(rows) {
+    return Array.isArray(rows) && rows.some((item) => item && typeof item === "object" && (
+      item.code || item.Code || item.stockNo || item.StockNo || item.stock_no || item.symbol || item.Symbol || item.stockId || item.stock_id
+      || item.name || item.Name || item.stockName || item.StockName || item.stock_name
+    ));
+  }
+
   function flattenApiArrays(payload, depth = 0, out = []) {
-    if (!payload || depth > 3 || out.length > 12) return out;
+    if (!payload || depth > 7 || out.length > 40) return out;
     if (Array.isArray(payload)) {
-      if (payload.some((item) => item && typeof item === "object")) out.push(payload);
+      if (arrayLooksLikeStockRows(payload)) out.push(payload);
       return out;
     }
     if (typeof payload !== "object") return out;
-    ["matches", "events", "records", "rows", "signals", "items", "results", "stocks", "data"].forEach((key) => {
+    ["matches", "rows", "data", "results", "items", "stocks", "records", "signals", "events", "volumeMatches", "singleSignals", "top"].forEach((key) => {
       const value = payload[key];
-      if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) out.push(value);
+      if (arrayLooksLikeStockRows(value)) out.push(value);
     });
     const values = Object.values(payload);
     if (values.length >= 3 && values.some((item) => item && typeof item === "object" && !Array.isArray(item))) {
       const objectRows = values.filter((item) => item && typeof item === "object" && !Array.isArray(item));
       if (objectRows.some((item) => item.code || item.Code || item.name || item.Name || item.stockNo || item.stock_id || item.payload)) out.push(objectRows);
     }
-    Object.keys(payload).slice(0, 18).forEach((key) => {
+    Object.keys(payload).slice(0, 60).forEach((key) => {
+      if (isEvidenceArrayKey(key)) return;
       const value = payload[key];
       if (value && typeof value === "object" && !Array.isArray(value)) flattenApiArrays(value, depth + 1, out);
     });
