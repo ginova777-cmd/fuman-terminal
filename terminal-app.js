@@ -923,3 +923,5 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     });
   },true);
 })();
+
+;(()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;function text(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function show(p){if(!p||p.marketOpen!==false)return;let n=document.querySelector("#fuman-market-closed-banner");if(!n){n=document.createElement("aside");n.id="fuman-market-closed-banner";n.setAttribute("role","status");n.style.cssText="position:sticky;top:0;z-index:9999;margin:8px;border:1px solid #f59e0b;border-radius:8px;background:rgba(120,53,15,.94);color:#fff7ed;padding:10px 12px;font:700 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans TC',sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.28)";document.body.prepend(n)}n.textContent=text(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();
