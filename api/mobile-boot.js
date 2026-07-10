@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
@@ -165,6 +166,7 @@ function normalizeMarketCore(payload) {
 
 async function buildBoot(request) {
   const origin = originFrom(request);
+  const marketCalendarPromise = buildMarketCalendarContract().catch(() => null);
   const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
   const marketPromise = (async () => {
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, MARKET_CORE_ENDPOINT)
@@ -215,11 +217,20 @@ async function buildBoot(request) {
   const bootHash = crypto.createHash("sha1").update(JSON.stringify(fragments)).digest("hex").slice(0, 12);
   const updatedAt = new Date().toISOString();
   const marketCore = await marketPromise;
+  const marketCalendar = await marketCalendarPromise;
   return {
     ok: true,
     source: "mobile-boot-api-only",
     updatedAt,
     bootHash,
+    marketCalendar,
+    marketOpen: marketCalendar?.marketOpen,
+    marketStatus: marketCalendar?.marketStatus,
+    closedReason: marketCalendar?.closedReason || "",
+    closedReasonText: marketCalendar?.closedReasonText || "",
+    displayTradeDate: marketCalendar?.displayTradeDate || "",
+    formalScanSkipped: marketCalendar?.formalScanSkipped === true,
+    sourceFreshnessRequired: marketCalendar?.sourceFreshnessRequired !== false,
     lowPower: {
       defaultVariant: "lite",
       lowEndVariant: "ultra",
@@ -235,7 +246,7 @@ async function buildBoot(request) {
     marketCore,
     digest: {
       fragmentVersion: "mobile-api-only-v1",
-      freshness: "fresh",
+      freshness: marketCalendar?.marketOpen === false ? "market_closed" : "fresh",
       aiUpdatedAt: updatedAt,
       aiHash: bootHash,
       liteHash: bootHash,

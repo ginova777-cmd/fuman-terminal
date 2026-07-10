@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
@@ -1290,7 +1291,8 @@ async function handler(request, response) {
   }
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
-    const payload = await buildPayload(requestedDate);
+    const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+    const payload = attachMarketCalendar(await buildPayload(requestedDate), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {

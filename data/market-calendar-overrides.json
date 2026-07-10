@@ -1,0 +1,15 @@
+{
+  "contract": "market-calendar-overrides-v1",
+  "updatedAt": "2026-07-10T01:35:39.080Z",
+  "overrides": [
+    {
+      "date": "2026-07-10",
+      "marketOpen": false,
+      "closedReason": "typhoon_holiday",
+      "name": "颱風假休市",
+      "description": "臨時颱風假不是水源失敗；終端保留最後交易日資料，下一個交易日自動恢復。",
+      "source": "manual_override",
+      "lockedBy": "ginov"
+    }
+  ]
+}

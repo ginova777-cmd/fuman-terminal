@@ -260,7 +260,8 @@
     "verify:daytrade-ps1-entry-writer": "node scripts/verify-daytrade-ps1-entry-writer-contract.js",
     "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract && npm run verify:scorecard-seven-strategy-daily-history && npm run verify:daytrade-ps1-entry-writer && npm run verify:seven-strategy-daily-history-writer",
     "verify:cb-e2e-closure": "node --use-system-ca scripts/verify-cb-e2e-closure.js",
-    "verify:warrant-e2e-closure": "node --use-system-ca scripts/verify-warrant-e2e-closure.js"
+    "verify:warrant-e2e-closure": "node --use-system-ca scripts/verify-warrant-e2e-closure.js",
+    "verify:market-calendar-contract": "node scripts/verify-market-calendar-contract.js"
   },
   "engines": {
     "node": "24.x"

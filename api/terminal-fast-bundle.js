@@ -1,4 +1,5 @@
 const market = require("./market");
+const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const stocks = require("./stocks");
 const terminalHome = require("./terminal-home");
 const openBuyLatest = require("./open-buy-latest");
@@ -567,6 +568,8 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+
   const wantsLive = request.query?.live === "1"
     || request.query?.refresh === "1"
     || request.query?.force === "1";
@@ -610,7 +613,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(sanitizeStrategy2BundlePayload(payload, endpoints));
+      response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar));
       return;
     }
     if (!liveFallbackEnabled(request)) {
@@ -628,7 +631,7 @@ module.exports = async function handler(request, response) {
         misses: Object.keys(endpoints).length ? [] : ["desktop_route_snapshot"],
         snapshotRepairs: Object.keys(endpoints).length ? { strategy3: "live-repair-on-snapshot-miss" } : {},
       };
-      response.status(200).json(sanitizeStrategy2BundlePayload(missPayload, endpoints));
+      response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar));
       return;
     }
   }
@@ -685,6 +688,6 @@ module.exports = async function handler(request, response) {
     response.status(200).end("");
     return;
   }
-  response.status(200).json(sanitizeStrategy2BundlePayload(payload, endpoints));
+  response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar));
 };
 

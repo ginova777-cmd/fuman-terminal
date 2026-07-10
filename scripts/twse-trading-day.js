@@ -60,6 +60,58 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function overrideFiles(stateDir) {
+  return [
+    process.env.FUMAN_MARKET_CALENDAR_OVERRIDE_FILE,
+    path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "data", "market-calendar-overrides.json"),
+    path.resolve(__dirname, "..", "data", "market-calendar-overrides.json"),
+    path.join(stateDir, "market-calendar-overrides.json"),
+  ].filter(Boolean);
+}
+
+function normalizeOverride(row, key) {
+  if (!row || typeof row !== "object") return null;
+  const marketOpen = row.marketOpen === true || row.isTradingDay === true
+    ? true
+    : row.marketOpen === false || row.isTradingDay === false
+      ? false
+      : null;
+  if (marketOpen === null) return null;
+  const reason = String(row.closedReason || row.reason || (marketOpen ? "manual_trading_day" : "manual_market_closed")).trim();
+  return {
+    isTradingDay: marketOpen,
+    date: key,
+    rocDate: String(row.rocDate || "").trim(),
+    reason,
+    source: String(row.source || "manual_override").trim(),
+    row: {
+      ...row,
+      Date: row.Date || key.replace(/\D/g, ""),
+      Name: row.Name || row.name || reason,
+      Description: row.Description || row.description || reason,
+    },
+    override: true,
+    lockedBy: String(row.lockedBy || row.owner || "").trim(),
+  };
+}
+
+function readTradingDayOverride(stateDir, key) {
+  for (const file of overrideFiles(stateDir)) {
+    const payload = readJson(file);
+    if (!payload) continue;
+    const rows = Array.isArray(payload) ? payload : (Array.isArray(payload.days) ? payload.days : payload.overrides);
+    if (Array.isArray(rows)) {
+      const row = rows.find((item) => String(item?.date || item?.tradeDate || item?.marketDate || "").slice(0, 10) === key);
+      const normalized = normalizeOverride(row, key);
+      if (normalized) return { ...normalized, overrideFile: file };
+    } else if (payload[key]) {
+      const normalized = normalizeOverride(payload[key], key);
+      if (normalized) return { ...normalized, overrideFile: file };
+    }
+  }
+  return null;
+}
+
 async function fetchHolidayRows(stateDir, year) {
   const cacheFile = cacheFileForYear(stateDir, year);
   const cached = readJson(cacheFile);
@@ -89,6 +141,8 @@ async function isTwseTradingDay(date = new Date(), options = {}) {
   const stateDir = options.stateDir || process.env.FUMAN_STATE_DIR || path.resolve(__dirname, "..", "state");
   const parts = taipeiDateParts(date);
   const key = dateKey(parts);
+  const override = readTradingDayOverride(stateDir, key);
+  if (override && options.ignoreOverrides !== true) return override;
   const rocKey = rocDateKey(parts);
   const weekend = isWeekend(parts);
   const { rows, source, error } = await fetchHolidayRows(stateDir, parts.year);
