@@ -42,6 +42,19 @@ function secondsFromTime(value) {
   return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
 }
 
+function marketClosedEvidence(healthPayload = {}) {
+  const freshness = healthPayload?.stages?.scorecardFreshness || {};
+  const evidence = freshness.marketClosedEvidence || {};
+  if (freshness.marketClosed === true || evidence.marketClosed === true) {
+    return {
+      marketClosed: true,
+      reason: String(evidence.reason || freshness.reason || "market_closed"),
+      source: String(evidence.source || "scorecard-health"),
+    };
+  }
+  return { marketClosed: false, reason: "", source: "" };
+}
+
 function daytradeIssues(payload, expectedDate) {
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const issues = [];
@@ -106,18 +119,26 @@ async function main() {
   const daytradeResult = daytradeIssues(daytrade.json || {}, expectedDate);
   const sevenResult = sevenStrategyIssues(seven.json || {}, expectedDate, reports.json || {});
   issues.push(...daytradeResult.issues, ...sevenResult.issues);
-  const rawOk = issues.length === 0;
+  const closed = marketClosedEvidence(health.json || {});
+  const effectiveIssues = closed.marketClosed
+    ? issues.filter((issue) => issue !== "daytrade_empty_rows" && issue !== "seven_strategy_empty_rows")
+    : issues;
+  const closedOk = closed.marketClosed && effectiveIssues.length === 0;
+  const rawOk = effectiveIssues.length === 0;
   const summary = [
     `rawOk=${rawOk}`,
     `base=${BASE_URL}`,
     `scorecardHealth=${health.status}`,
     `scorecardRunId=${page.json?.runId || ""}`,
+    `marketClosed=${closed.marketClosed}`,
+    `closedOk=${closedOk}`,
+    `closedReason=${closed.reason || "none"}`,
     `daytradeRows=${daytradeResult.rows}`,
     `sevenRows=${sevenResult.rows}`,
     `sevenFormal=${sevenResult.formal}`,
     `sevenDetected=${sevenResult.detected}`,
     `sevenSourceReport=${sevenResult.sourceReport}`,
-    `issues=${issues.join(",") || "none"}`,
+    `issues=${effectiveIssues.join(",") || "none"}`,
   ].join(" ");
   console[rawOk ? "log" : "error"](`[scorecard-a-readiness] ${summary}`);
   process.exit(rawOk ? 0 : 1);
