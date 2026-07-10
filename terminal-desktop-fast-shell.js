@@ -5912,6 +5912,19 @@
       ["intraday", "當沖熱", "market-ai-radio-tab market-ai-radio-tab-intraday", groups.intraday],
       ["risk", "風險高", "market-ai-radio-tab market-ai-radio-tab-risk", groups.risk],
     ];
+    const previousFilter = panels.ai.querySelector("[data-market-ai-filter].active")?.dataset?.marketAiFilter
+      || panels.ai.dataset.marketAiFilter
+      || "all";
+    const activeFilter = tabs.some(([key]) => key === previousFilter) ? previousFilter : "all";
+    const activeTab = tabs.find(([key]) => key === activeFilter) || tabs[0];
+    const filterNotes = {
+      all: ["綜合分數", "綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。"],
+      momentum: ["動能強", "依動能與漲幅排序，觀察價量是否延續。"],
+      legal: ["法人買超", "依法人/資金訊號排序，用來觀察籌碼集中方向。"],
+      intraday: ["當沖熱", "依即時雷達與當沖熱度排序。"],
+      risk: ["風險高", "依風險訊號排序，先列需要控管追價的標的。"],
+    };
+    const [activeFilterTitle, activeFilterNote] = filterNotes[activeFilter] || filterNotes.all;
     const rowHtml = (stocks, key) => stocks.length ? stocks.slice(0, 10).map((stock, index) => `
       <article class="market-ai-stock-row">
         <div class="market-ai-rank">#${index + 1}</div>
@@ -5935,6 +5948,7 @@
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = aiPayload?.source || aiPayload?.cacheSource || "desktop-fast-shell";
+    panels.ai.dataset.marketAiFilter = activeFilter;
     panels.ai.innerHTML = `
         <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">
@@ -5974,28 +5988,22 @@
         <section class="market-ai-block market-ai-hot-section">
           <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API · ${escapeHtml(dateLabel)}</span></header>
           <div class="market-ai-filter-row">
-            ${tabs.map(([key, label, klass, rows], index) => `<button type="button" class="${index === 0 ? "active" : ""}" data-market-ai-filter="${escapeHtml(key)}">${escapeHtml(label)} <b>${rows.length}</b></button>`).join("")}
+            ${tabs.map(([key, label, klass, rows]) => `<button type="button" class="${key === activeFilter ? "active" : ""}" data-market-ai-filter="${escapeHtml(key)}">${escapeHtml(label)} <b>${rows.length}</b></button>`).join("")}
           </div>
-          <div class="market-ai-current-rule"><small>目前排序</small><strong>綜合分數</strong><span>綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。</span></div>
-          <div class="market-ai-hot">${rowHtml(groups.all, "all")}</div>
+          <div class="market-ai-current-rule"><small>目前排序</small><strong>${escapeHtml(activeFilterTitle)}</strong><span>${escapeHtml(activeFilterNote)}</span></div>
+          <div class="market-ai-hot">${rowHtml(activeTab[3] || [], activeFilter)}</div>
         </section>
     `;
     const hotSection = panels.ai.querySelector(".market-ai-hot-section");
     if (hotSection) {
       const hotList = hotSection.querySelector(".market-ai-hot");
       const currentRule = hotSection.querySelector(".market-ai-current-rule");
-      const filterNotes = {
-        all: ["綜合分數", "綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。"],
-        momentum: ["動能強", "依動能與漲幅排序，觀察價量是否延續。"],
-        legal: ["法人買超", "依法人/資金訊號排序，用來觀察籌碼集中方向。"],
-        intraday: ["當沖熱", "依即時雷達與當沖熱度排序。"],
-        risk: ["風險高", "依風險訊號排序，先列需要控管追價的標的。"],
-      };
       hotSection.addEventListener("click", (event) => {
         const button = event.target.closest?.("[data-market-ai-filter]");
         if (!button || !hotSection.contains(button)) return;
         const key = button.dataset.marketAiFilter || "all";
         const tab = tabs.find(([tabKey]) => tabKey === key) || tabs[0];
+        panels.ai.dataset.marketAiFilter = key;
         hotSection.querySelectorAll("[data-market-ai-filter]").forEach((item) => item.classList.toggle("active", item === button));
         if (hotList) hotList.innerHTML = rowHtml(tab[3] || [], key);
         if (currentRule) {
