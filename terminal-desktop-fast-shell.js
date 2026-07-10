@@ -5172,6 +5172,26 @@
     }, 1500);
   }
 
+  function installMarketAiPanelSelfHeal() {
+    if (document.documentElement.dataset.fumanMarketAiPanelSelfHeal === "1") return;
+    document.documentElement.dataset.fumanMarketAiPanelSelfHeal = "1";
+    window.setInterval(() => {
+      if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+      const market = document.querySelector("#market-view");
+      if (!market?.classList?.contains("market-ai-mode")) return;
+      if (market.querySelector(".market-ai-hero-board")) return;
+      const aiPanel = market.querySelector("[data-market-api-ai], #market-ai-panel");
+      if (!aiPanel || aiPanel.hidden) return;
+      fetchMarketJson("/api/market-ai-live", 40, true, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
+        .then((payload) => {
+          if (!hasMarketAiPayload(payload)) return;
+          marketAiBundlePayload = payload;
+          if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+          renderMarketApiAi(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, payload);
+        });
+    }, 900);
+  }
+
   function selectMarketDesktopMode(mode, source = "market-mode") {
     const nextMode = mode === "ai" ? "ai" : "overview";
     document.documentElement.dataset.fumanMarketDesktopMode = nextMode;
@@ -5187,6 +5207,7 @@
     scheduleMarketDesktopModeHydrate(nextMode, true);
   }
   window.FUMAN_SELECT_MARKET_DESKTOP_MODE = selectMarketDesktopMode;
+  installMarketAiPanelSelfHeal();
 
   function installMarketDesktopModeHandlers(tabs) {
     if (!tabs || tabs.dataset.fumanFastMarketModeReady === "1") return;
