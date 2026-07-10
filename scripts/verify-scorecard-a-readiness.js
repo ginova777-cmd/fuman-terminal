@@ -106,7 +106,8 @@ function sevenStrategyIssues(payload, expectedDate, sourceReportsPayload) {
 
 async function main() {
   const expectedDate = todayTaipeiDate();
-  const [health, daytrade, seven, reports, page] = await Promise.all([
+  const [marketCalendar, health, daytrade, seven, reports, page] = await Promise.all([
+    fetchJson("/api/market-calendar"),
     fetchJson("/api/scorecard-health"),
     fetchJson("/api/daytrade-entry-history"),
     fetchJson("/api/seven-strategy-daily-history?limit=100"),
@@ -114,31 +115,38 @@ async function main() {
     fetchJson("/api/scorecard?live=1"),
   ]);
   const issues = [];
+  const marketClosed = marketCalendar.status >= 200 && marketCalendar.status < 300
+    && marketCalendar.json?.ok === true
+    && marketCalendar.json?.marketOpen === false
+    && marketCalendar.json?.formalScanSkipped === true
+    && marketCalendar.json?.preservePreviousGood === true
+    && marketCalendar.json?.latestPointerUpdated === false
+    && marketCalendar.json?.emptyResultWritten === false;
+  if (marketCalendar.status < 200 || marketCalendar.status >= 300 || marketCalendar.json?.ok !== true) issues.push(`market_calendar_${marketCalendar.status}_${marketCalendar.json?.ok}`);
   if (health.status < 200 || health.status >= 300 || health.json?.ok !== true) issues.push(`scorecard_health_${health.status}_${health.json?.ok}`);
   if (page.status < 200 || page.status >= 300 || page.json?.ok !== true) issues.push(`scorecard_api_${page.status}_${page.json?.ok}`);
   const daytradeResult = daytradeIssues(daytrade.json || {}, expectedDate);
   const sevenResult = sevenStrategyIssues(seven.json || {}, expectedDate, reports.json || {});
-  issues.push(...daytradeResult.issues, ...sevenResult.issues);
-  const closed = marketClosedEvidence(health.json || {});
-  const effectiveIssues = closed.marketClosed
-    ? issues.filter((issue) => issue !== "daytrade_empty_rows" && issue !== "seven_strategy_empty_rows")
-    : issues;
-  const closedOk = closed.marketClosed && effectiveIssues.length === 0;
-  const rawOk = effectiveIssues.length === 0;
+  const healthClosed = marketClosedEvidence(health.json || {});
+  const combinedMarketClosed = marketClosed || healthClosed.marketClosed;
+  if (!combinedMarketClosed) issues.push(...daytradeResult.issues, ...sevenResult.issues);
+  const rawOk = issues.length === 0;
   const summary = [
     `rawOk=${rawOk}`,
     `base=${BASE_URL}`,
+    `marketClosed=${combinedMarketClosed}`,
+    `calendarClosed=${marketClosed}`,
+    `healthClosed=${healthClosed.marketClosed}`,
+    `closedReason=${marketCalendar.json?.closedReason || healthClosed.reason || ""}`,
+    `displayTradeDate=${marketCalendar.json?.displayTradeDate || ""}`,
     `scorecardHealth=${health.status}`,
     `scorecardRunId=${page.json?.runId || ""}`,
-    `marketClosed=${closed.marketClosed}`,
-    `closedOk=${closedOk}`,
-    `closedReason=${closed.reason || "none"}`,
     `daytradeRows=${daytradeResult.rows}`,
     `sevenRows=${sevenResult.rows}`,
     `sevenFormal=${sevenResult.formal}`,
     `sevenDetected=${sevenResult.detected}`,
     `sevenSourceReport=${sevenResult.sourceReport}`,
-    `issues=${effectiveIssues.join(",") || "none"}`,
+    `issues=${issues.join(",") || "none"}`,
   ].join(" ");
   console[rawOk ? "log" : "error"](`[scorecard-a-readiness] ${summary}`);
   process.exit(rawOk ? 0 : 1);

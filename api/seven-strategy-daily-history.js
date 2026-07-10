@@ -1,4 +1,5 @@
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const SOURCE_NAME = "seven_strategy_daily_history";
 const TABLE_NAME = "public.seven_strategy_daily_history";
@@ -238,17 +239,51 @@ async function fetchSupabaseRows(tradeDate, limit) {
   return { ok: true, status: response.status, reason: "", rawRows: Array.isArray(data) ? data : [] };
 }
 
+async function fetchLatestAvailableTradeDate(maxDate) {
+  const url = serverSupabaseUrl();
+  const key = serverSupabaseKey();
+  if (!url || !key) return "";
+  const params = new URLSearchParams();
+  params.set("select", "trade_date");
+  params.append("trade_date", `lte.${maxDate}`);
+  params.set("order", "trade_date.desc,updated_at.desc");
+  params.set("limit", "1");
+  const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
+  const result = await fetch(endpoint, {
+    headers: {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+      accept: "application/json",
+      "cache-control": "no-store",
+    },
+  });
+  if (!result.ok) return "";
+  const rows = await result.json().catch(() => []);
+  return normalizeTradeDate(Array.isArray(rows) ? rows[0]?.trade_date : "");
+}
+
 function noStore(response) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
   response.setHeader("Pragma", "no-cache");
 }
 
 async function buildPayload(options = {}) {
-  const tradeDate = normalizeTradeDate(options.tradeDate) || todayTaipeiDate();
+  const requestedDate = normalizeTradeDate(options.tradeDate) || todayTaipeiDate();
+  let tradeDate = requestedDate;
   const limit = Math.min(Math.max(Number(options.limit) || 100, 1), 200);
-  const fetched = options.rawRows
+  const marketCalendar = options.rawRows ? null : await buildMarketCalendarContract().catch(() => null);
+  let fetched = options.rawRows
     ? { ok: true, status: 200, reason: "", rawRows: options.rawRows }
     : await fetchSupabaseRows(tradeDate, limit);
+  let marketClosedPreviousGood = false;
+  if (!options.rawRows && marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
+    const latestTradeDate = await fetchLatestAvailableTradeDate(requestedDate);
+    if (latestTradeDate && latestTradeDate !== requestedDate) {
+      tradeDate = latestTradeDate;
+      fetched = await fetchSupabaseRows(tradeDate, limit);
+      marketClosedPreviousGood = true;
+    }
+  }
   const normalized = normalizeRows(fetched.rawRows, tradeDate, limit);
   const summary = summarizeRows(normalized.rows);
   return {
@@ -256,7 +291,15 @@ async function buildPayload(options = {}) {
     sourceName: SOURCE_NAME,
     source: `supabase:${TABLE_NAME}`,
     table: TABLE_NAME,
+    requestedDate,
     tradeDate,
+    displayTradeDate: marketClosedPreviousGood ? tradeDate : undefined,
+    marketOpen: marketCalendar?.marketOpen,
+    marketStatus: marketCalendar?.marketStatus,
+    closedReason: marketCalendar?.closedReason,
+    formalScanSkipped: marketCalendar?.formalScanSkipped,
+    preservePreviousGood: marketClosedPreviousGood || marketCalendar?.preservePreviousGood,
+    marketClosedPreviousGood,
     timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
     order: "coalesce(detect_time,entry_time).desc,updated_at.desc",
     limit,
@@ -267,7 +310,7 @@ async function buildPayload(options = {}) {
     strategyDistribution: summary.strategyDistribution,
     rows: normalized.rows,
     filtered: normalized.filtered,
-    reason: fetched.reason || "",
+    reason: marketClosedPreviousGood ? "market_closed_previous_good" : (fetched.reason || ""),
     error: fetched.error || "",
     updatedAt: new Date().toISOString(),
   };

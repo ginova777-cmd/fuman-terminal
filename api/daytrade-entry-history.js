@@ -1,4 +1,5 @@
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const TABLE_NAME = "public.fugle_daytrade_entry_history";
 const REST_TABLE_NAME = "fugle_daytrade_entry_history";
@@ -184,6 +185,31 @@ async function fetchSupabaseEntries(today) {
   return { ok: true, status: response.status, reason: "", rawRows: Array.isArray(data) ? data : [] };
 }
 
+async function fetchLatestAvailableTradeDate(maxDate) {
+  const url = serverSupabaseUrl();
+  const key = serverSupabaseKey();
+  if (!url || !key) return "";
+  const params = new URLSearchParams();
+  params.set("select", "trade_date");
+  params.append("trade_date", `lte.${maxDate}`);
+  params.append("entry_time", "gte.09:00:00");
+  params.append("entry_time", "lte.13:30:00");
+  params.set("order", "trade_date.desc,entry_time.desc,created_at.desc");
+  params.set("limit", "1");
+  const endpoint = `${url.replace(/\/+$/, "")}/rest/v1/${REST_TABLE_NAME}?${params.toString()}`;
+  const result = await fetch(endpoint, {
+    headers: {
+      apikey: key,
+      authorization: `Bearer ${key}`,
+      accept: "application/json",
+      "cache-control": "no-store",
+    },
+  });
+  if (!result.ok) return "";
+  const rows = await result.json().catch(() => []);
+  return normalizeTradeDate(Array.isArray(rows) ? rows[0]?.trade_date : "");
+}
+
 function noStore(response) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
   response.setHeader("Pragma", "no-cache");
@@ -191,21 +217,40 @@ function noStore(response) {
 
 async function handler(request, response) {
   noStore(response);
-  const tradeDate = todayTaipeiDate();
+  const requestedDate = todayTaipeiDate();
+  let tradeDate = requestedDate;
   try {
-    const fetched = await fetchSupabaseEntries(tradeDate);
+    const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+    let fetched = await fetchSupabaseEntries(tradeDate);
+    let marketClosedPreviousGood = false;
+    if (marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
+      const latestTradeDate = await fetchLatestAvailableTradeDate(requestedDate);
+      if (latestTradeDate && latestTradeDate !== requestedDate) {
+        tradeDate = latestTradeDate;
+        fetched = await fetchSupabaseEntries(tradeDate);
+        marketClosedPreviousGood = true;
+      }
+    }
     const normalized = normalizeRows(fetched.rawRows, tradeDate);
     response.status(fetched.ok ? 200 : fetched.status || 500).json({
       ok: fetched.ok,
       source: `supabase:${TABLE_NAME}`,
       table: TABLE_NAME,
+      requestedDate,
       tradeDate,
+      displayTradeDate: marketClosedPreviousGood ? tradeDate : undefined,
+      marketOpen: marketCalendar?.marketOpen,
+      marketStatus: marketCalendar?.marketStatus,
+      closedReason: marketCalendar?.closedReason,
+      formalScanSkipped: marketCalendar?.formalScanSkipped,
+      preservePreviousGood: marketClosedPreviousGood || marketCalendar?.preservePreviousGood,
+      marketClosedPreviousGood,
       timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
       order: "entry_time.desc,created_at.desc",
       count: normalized.rows.length,
       rows: normalized.rows,
       filtered: normalized.filtered,
-      reason: fetched.reason || "",
+      reason: marketClosedPreviousGood ? "market_closed_previous_good" : (fetched.reason || ""),
       error: fetched.error || "",
       updatedAt: new Date().toISOString(),
     });
@@ -214,6 +259,7 @@ async function handler(request, response) {
       ok: false,
       source: `supabase:${TABLE_NAME}`,
       table: TABLE_NAME,
+      requestedDate,
       tradeDate,
       timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
       count: 0,
