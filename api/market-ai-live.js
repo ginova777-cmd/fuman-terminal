@@ -844,7 +844,7 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
   const embeddedHeatmap = !requireLiveHeatmap && Array.isArray(payload?.heatmap?.sectors) ? payload.heatmap : null;
   const heatmapPayload = deps.heatmapPayload || embeddedHeatmap || await withTimeout(
     capture(heatmap, req).then((result) => result.payload || null),
-    requireLiveHeatmap ? HEATMAP_LIVE_TIMEOUT_MS : 1900,
+    marketClosedDisplay ? 25000 : (requireLiveHeatmap ? HEATMAP_LIVE_TIMEOUT_MS : 1900),
     null
   );
   const radarPayload = deps.radarPayload || payload?.realtimeRadar || await withTimeout(
