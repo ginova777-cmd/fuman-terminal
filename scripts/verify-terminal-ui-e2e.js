@@ -1311,9 +1311,38 @@ function collectDesktopStats(route) {
   const canvasCountText = text(activePanel.querySelector(".desktop-canvas-count"));
   const countMatch = canvasCountText.match(/(\d+)\s*\/\s*(\d+)/) || canvasCountText.match(/(\d+)\s*筆/);
   const canvasRows = countMatch ? Number(countMatch[1]) || 0 : 0;
-  const filterCounts = [...activePanel.querySelectorAll("[data-chip-canvas-filter] b,[data-strategy4-signal-filter] b,[data-warrant-flow-tab] b,[data-market-ai-filter] b")]
+  const filterCounts = [...activePanel.querySelectorAll("[data-chip-canvas-filter] b,[data-strategy4-signal-filter] b,[data-warrant-flow-tab] b,[data-market-ai-filter] b,[data-unified-strategy-filter] strong")]
     .map((el) => Number(text(el).replace(/\D/g, "")) || 0)
     .filter((value) => value > 0);
+  const unifiedFilterContract = (() => {
+    const buttons = [...activePanel.querySelectorAll("[data-unified-strategy-filter]")].filter(visible);
+    if (!buttons.length) return { buttonCount: 0, checked: false };
+    const rowCount = () => [...activePanel.querySelectorAll(".fuman-unified-list-card,.fuman-unified-list-shell article")]
+      .filter((el) => visible(el) && !emptyPattern.test(text(el)))
+      .length;
+    const beforeRows = rowCount();
+    const target = buttons.find((button) => !button.classList.contains("active")) || buttons[0];
+    const key = target?.dataset?.unifiedStrategyFilter || "";
+    const label = text(target).slice(0, 80);
+    const expectedCount = Number(text(target.querySelector("strong")).replace(/\D/g, "")) || 0;
+    target?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const currentButtons = [...activePanel.querySelectorAll("[data-unified-strategy-filter]")].filter(visible);
+    const activeButtons = currentButtons.filter((button) => button.classList.contains("active"));
+    const activeKey = activeButtons[0]?.dataset?.unifiedStrategyFilter || "";
+    const afterRows = rowCount();
+    return {
+      buttonCount: buttons.length,
+      checked: true,
+      clickedKey: key,
+      clickedLabel: label,
+      expectedCount,
+      beforeRows,
+      afterRows,
+      activeCount: activeButtons.length,
+      activeKey,
+      activated: activeButtons.length === 1 && activeKey === key,
+    };
+  })();
   const marketAiDashboard = route.key === "market-ai" ? (() => {
     const filterButtons = [...activePanel.querySelectorAll("[data-market-ai-filter]")];
     const labels = filterButtons.map((button) => text(button).replace(/\s+\d+$/, "").trim());
@@ -1452,6 +1481,20 @@ function collectDesktopStats(route) {
     if (actionControls < 3) contractBlockers.push(`watchlist analysis action controls below 3 actual=${actionControls}`);
     if (/尚未同步/.test(status)) contractBlockers.push(`watchlist status still shows unsynced: ${status}`);
   }
+  const unifiedFilterRequiredRoutes = new Set(["strategy1", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+  const unifiedFilterBlockers = [];
+  if (unifiedFilterRequiredRoutes.has(route.key)) {
+    if (!unifiedFilterContract.buttonCount) {
+      unifiedFilterBlockers.push("unified strategy detail filter buttons missing");
+    } else {
+      if (!unifiedFilterContract.activated) {
+        unifiedFilterBlockers.push(`unified strategy detail filter did not activate clicked=${unifiedFilterContract.clickedKey || "<missing>"} active=${unifiedFilterContract.activeKey || "<missing>"} activeCount=${unifiedFilterContract.activeCount || 0}`);
+      }
+      if (unifiedFilterContract.expectedCount > 0 && unifiedFilterContract.afterRows < 1) {
+        unifiedFilterBlockers.push(`unified strategy detail filter emptied rows clicked=${unifiedFilterContract.clickedKey || "<missing>"} expected=${unifiedFilterContract.expectedCount}`);
+      }
+    }
+  }
   const marketAiBlockers = [];
   const marketOverviewBlockers = [];
   const marketAiStaleWaiting = route.key === "market-ai"
@@ -1495,7 +1538,7 @@ function collectDesktopStats(route) {
     if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
     if ((marketAiDashboard?.horizontalOverflow || 0) > 8) marketAiBlockers.push(`market AI desktop horizontal overflow ${marketAiDashboard.horizontalOverflow}px`);
   }
-  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...marketOverviewBlockers, ...marketAiBlockers])]
+  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...unifiedFilterBlockers, ...marketOverviewBlockers, ...marketAiBlockers])]
     .filter((item) => !(marketAiStaleWaiting && /^(fallback|等待資料|沒有資料)$/.test(String(item || ""))));
   return {
     kind: "desktop",
@@ -1516,6 +1559,7 @@ function collectDesktopStats(route) {
     canvasSize,
     sampleRows: domRows.slice(0, 3),
     filterCounts,
+    unifiedFilterContract,
     freshnessText,
     emptyStateText,
     waitingEmptyOk,

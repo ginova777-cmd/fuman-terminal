@@ -7138,7 +7138,7 @@
     if (avg) avg.textContent = rows.length ? String(Math.round(rows.reduce((sum, row) => sum + cleanNumber(row.score), 0) / rows.length)) : "--";
     if (top) top.textContent = rows[0]?.code || "--";
     if (table) {
-      const cards = strategy3RunCards(rows, payloadMeta);
+      const cards = strategy3OptionCards(rows);
       const body = rows.length ? rows.map(strategy3SignalCard).join("") : `
         <div class="empty-state">
           策略3本次完整掃描已完成，0 檔符合隔日沖條件。這不是讀取失敗；終端已對齊最新 run。
@@ -7154,13 +7154,13 @@
                 </div>
                 <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
               </div>
-              <section class="strategy3-run-cards" aria-label="策略3掃描摘要">
+              <section class="strategy3-run-cards" aria-label="策略3細分策略選項">
                 ${cards.map((card) => `
-                  <article>
+                  <button type="button" data-unified-strategy-filter="${escapeHtml(card.key || card.label)}" class="${canvasState.signalFilter === (card.key || card.label) ? "active" : ""}" aria-pressed="${canvasState.signalFilter === (card.key || card.label) ? "true" : "false"}">
                     <span>${escapeHtml(card.label)}</span>
                     <strong>${escapeHtml(card.value)}</strong>
                     <small>${escapeHtml(card.sub)}</small>
-                  </article>
+                  </button>
                 `).join("")}
               </section>
               <section class="strategy3-table" aria-label="策略3隔日沖完整掃描結果">
