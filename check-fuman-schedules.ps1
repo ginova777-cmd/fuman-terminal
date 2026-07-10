@@ -371,6 +371,41 @@ function Get-FirstTriggerBoundary($task) {
   return $null
 }
 
+function Get-MarketCalendarContract {
+  try {
+    $script = "require('./lib/market-calendar-contract').buildMarketCalendarContract().then(c=>console.log(JSON.stringify({marketOpen:c.marketOpen,finalMarketOpen:c.finalMarketOpen,marketStatus:c.marketStatus,formalScanSkipped:c.formalScanSkipped,scannerAction:c.scannerAction,closedReasonText:c.closedReasonText,displayTradeDate:c.displayTradeDate,closedReason:c.closedReason}))).catch(e=>{console.error(e.message||String(e));process.exit(1)})"
+    $json = & node -e $script 2>$null
+    if ($LASTEXITCODE -eq 0 -and $json) {
+      return ($json -join [Environment]::NewLine) | ConvertFrom-Json -ErrorAction Stop
+    }
+  } catch {}
+  return $null
+}
+
+function Test-MarketClosedAllowedFailure($TaskName, $Result, $MarketCalendar) {
+  if (-not $MarketCalendar) { return $false }
+
+  $marketOpenText = ([string]$MarketCalendar.marketOpen).Trim().ToLowerInvariant()
+  $finalMarketOpenText = ([string]$MarketCalendar.finalMarketOpen).Trim().ToLowerInvariant()
+  $marketStatusText = ([string]$MarketCalendar.marketStatus).Trim().ToLowerInvariant()
+  $formalScanSkippedText = ([string]$MarketCalendar.formalScanSkipped).Trim().ToLowerInvariant()
+  $scannerActionText = ([string]$MarketCalendar.scannerAction).Trim().ToLowerInvariant()
+  $isClosed = (
+    $marketOpenText -in @("false", "0") -or
+    $finalMarketOpenText -in @("false", "0") -or
+    $marketStatusText -eq "closed" -or
+    $formalScanSkippedText -in @("true", "1") -or
+    $scannerActionText -eq "skip_formal_scan"
+  )
+  if (-not $isClosed) { return $false }
+
+  $normalized = (Normalize-TaskName $TaskName).Trim()
+  $closedAllowedTasks = @(
+    "Fuman Freshness Gate Fast 0845-1645"
+  )
+  return ($closedAllowedTasks -contains $normalized -and [int64]$Result -eq 1)
+}
+
 try {
   $registry = Read-Registry
   $policy = Build-Policy $registry
@@ -391,6 +426,7 @@ foreach ($task in $scheduledTasks) {
 }
 
 $rows = @()
+$marketCalendar = Get-MarketCalendarContract
 
 foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
   $name = Normalize-TaskName $task.TaskName
@@ -455,6 +491,11 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
     $status = "OK_WAITING"
   } elseif ($result -eq 267014 -and ($allowed -contains 267014) -and -not $logFailed) {
     $status = "OK_STOPPED"
+  } elseif (Test-MarketClosedAllowedFailure $name $result $marketCalendar) {
+    $status = "OK_MARKET_CLOSED"
+    $closedText = if ($marketCalendar.closedReasonText) { [string]$marketCalendar.closedReasonText } else { "market closed" }
+    $displayDate = if ($marketCalendar.displayTradeDate) { [string]$marketCalendar.displayTradeDate } else { "previous trading day" }
+    $detail = "$closedText; freshness gate skipped/failed closed; display previous good $displayDate"
   } elseif ($allowed -notcontains $result) {
     if ($receiptCovered) {
       $status = "OK_RECEIPT_COVERED"
