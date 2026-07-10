@@ -257,11 +257,21 @@ async function assertLiveState(version) {
     try {
       const payload = JSON.parse(bundle.body);
       const endpointKeys = Object.keys(payload.endpoints || {});
+      const marketClosed = payload.marketOpen === false && payload.marketStatus === "closed" && payload.formalScanSkipped === true;
       if (payload.ok === false) issues.push("terminal-fast-bundle ok=false");
-      if (payload.snapshotHit !== true) issues.push("terminal-fast-bundle snapshotHit must be true");
-      if (payload.snapshotFresh !== true) issues.push("terminal-fast-bundle snapshotFresh must be true");
-      if (payload.partial !== false) issues.push("terminal-fast-bundle partial must be false");
-      if (endpointKeys.length < 10) issues.push(`terminal-fast-bundle endpoint count too low: ${endpointKeys.length}`);
+      if (marketClosed) {
+        if (payload.sourceFreshnessRequired !== false) issues.push("terminal-fast-bundle market closed must not require source freshness");
+        if (payload.preservePreviousGood !== true) issues.push("terminal-fast-bundle market closed must preserve previous good");
+        if (payload.latestPointerUpdated !== false) issues.push("terminal-fast-bundle market closed must not update latest pointer");
+        if (payload.emptyResultWritten !== false) issues.push("terminal-fast-bundle market closed must not write empty result");
+        if (!payload.closedReason) issues.push("terminal-fast-bundle market closed must disclose closedReason");
+        if (!payload.displayTradeDate) issues.push("terminal-fast-bundle market closed must disclose displayTradeDate");
+      } else {
+        if (payload.snapshotHit !== true) issues.push("terminal-fast-bundle snapshotHit must be true");
+        if (payload.snapshotFresh !== true) issues.push("terminal-fast-bundle snapshotFresh must be true");
+        if (payload.partial !== false) issues.push("terminal-fast-bundle partial must be false");
+        if (endpointKeys.length < 10) issues.push(`terminal-fast-bundle endpoint count too low: ${endpointKeys.length}`);
+      }
       if (endpointKeys.some((endpoint) => /strategy2-latest/i.test(endpoint))) {
         issues.push("terminal-fast-bundle must not include strategy2-latest cold endpoint");
       }
