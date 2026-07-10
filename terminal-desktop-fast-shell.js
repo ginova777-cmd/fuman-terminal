@@ -2154,7 +2154,7 @@
 
   function applyCanvasFilter() {
     const query = compactText(canvasState.query, 80).toLowerCase();
-    const signalFilter = (isStrategy4Route(canvasState.route) || isStrategy5Route(canvasState.route)) ? compactText(canvasState.signalFilter, 80).toLowerCase() : "";
+    const signalFilter = (!isStrategy2Route(canvasState.route) && !isChipTradeRoute(canvasState.route)) ? compactText(canvasState.signalFilter, 80) : "";
     const chipFilter = isChipTradeRoute(canvasState.route) ? compactText(canvasState.signalFilter || "", 80) : "";
     const zoneFilter = isStrategy4Route(canvasState.route) ? compactText(canvasState.zoneFilter, 2).toUpperCase() : "";
     const filterRows = (activeChipFilter = chipFilter) => canvasState.rows.filter((row) => {
@@ -2170,7 +2170,7 @@
         triangle?.status,
         triangle?.reason,
       ].join(" ").toLowerCase();
-      if (signalFilter && !signalText.includes(signalFilter)) return false;
+      if (signalFilter && !matchesUnifiedStrategyFilter(row, signalFilter, canvasState.route, signalText)) return false;
       if (activeChipFilter && !matchesChipTradeFilter(row, activeChipFilter)) return false;
       if (!query) return true;
       return [
@@ -3348,6 +3348,22 @@
             scheduleCanvasDraw();
           }
         }).catch(() => setCanvasStatus("沿用快照"));
+        return;
+      }
+      const unifiedFilter = event.target.closest?.("[data-unified-strategy-filter]");
+      if (unifiedFilter) {
+        event.preventDefault();
+        if (isStrategy2Route(canvasState.route)) return;
+        const next = unifiedFilter.dataset.unifiedStrategyFilter || "";
+        canvasState.signalFilter = canvasState.signalFilter === next ? "" : next;
+        canvasState.offset = 0;
+        canvasState.hoverIndex = -1;
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        applyCanvasFilter();
+        const panel = panelForRoute(canvasState.route) || document.querySelector(".view-panel.active");
+        if (panel) renderUnifiedListShell(canvasState.route, strategyMeta(canvasState.route), panel);
+        setCanvasStatus(canvasState.signalFilter ? "細項篩選" : "全部細項");
         return;
       }
       const signalFilter = event.target.closest?.("[data-strategy4-signal-filter],[data-strategy5-signal-filter]");
@@ -6778,6 +6794,14 @@
 
   function rowSearchText(row) {
     return [
+      row?.code,
+      row?.symbol,
+      row?.title,
+      row?.name,
+      row?.decision,
+      row?.setupType,
+      row?.setup_type,
+      row?.subStrategyId,
       row?.reason,
       row?.line,
       row?.signalLine,
@@ -6798,6 +6822,46 @@
     ].filter(Boolean).join(" ");
   }
 
+  function optionPatternsForKey(key) {
+    return ({
+      s1_2130: [/21:30|初篩|candidate|開盤/i],
+      s1_0845: [/08:45|0845|個股期貨|futopt|future/i],
+      s1_0855: [/08:55|0855|搓合|preopen|auction/i],
+      s1_buy: [/\bBUY\b|買進|開盤入|無腦入/i],
+      s3_tail: [/尾盤|13:00|12:59|帶量/],
+      s3_base: [/基態|base/i],
+      s3_control: [/控盤|control/i],
+      s3_obv: [/OBV|obv/i],
+      s3_near_high: [/近高|高檢查|near.*high/i],
+      s3_mother: [/母池|mother/i],
+      cb_cbas: [/CBAS|三層|cbas/i],
+      cb_60m: [/60分|60m|阻檔/i],
+      cb_stock_price: [/富果|現股價|stockPrice|price/i],
+      cb_conversion: [/轉換|conversion|premium/i],
+      cb_signal: [/訊號|signal|entry/i],
+      warrant_flow: [/資金|flow|money/i],
+      warrant_underlying: [/標的|underlying|強弱/i],
+      warrant_volume: [/爆量|volume|量/i],
+      warrant_single: [/單券|異常|single/i],
+      warrant_bid: [/買盤|集中|bid/i],
+      warrant_risk: [/風險|risk|排除/i],
+    })[key] || [];
+  }
+
+  function matchesUnifiedStrategyFilter(row, key, route, preparedText = "") {
+    const filter = String(key || "").trim();
+    if (!filter) return true;
+    if (isChipTradeRoute(route)) return matchesChipTradeFilter(row, filter);
+    const text = [preparedText, rowSearchText(row)].filter(Boolean).join(" ");
+    if (filter === "multi_strategy_confluence") return normalizeArray(row?.strategy5ConfluenceMatches || row?.matches || row?.signals).length >= 2;
+    const patterns = optionPatternsForKey(filter);
+    if (patterns.length) return patterns.some((pattern) => pattern.test(text));
+    const haystack = [text, row?.subStrategyId, row?.subStrategy, row?.strategyLabel, row?.signalLabel]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(filter.toLowerCase());
+  }
   function countRowsByText(rows, patterns) {
     return (Array.isArray(rows) ? rows : []).filter((row) => {
       const text = rowSearchText(row);
@@ -6809,6 +6873,7 @@
     return (Array.isArray(counts) ? counts : [])
       .filter((item) => item && item.label)
       .map((item) => ({
+        key: item.key || item.id || item.label,
         label: compactText(item.label, 18),
         value: String(cleanNumber(item.count)),
         sub: item.sub || sub,
@@ -6817,22 +6882,22 @@
 
   function strategy1OptionCards(rows) {
     const defs = [
-      { label: "21:30 初篩", patterns: [/21:30|初篩|candidate/i] },
-      { label: "08:45 個股期貨", patterns: [/08:45|個股期貨|futopt/i] },
-      { label: "08:55 搓合確認", patterns: [/08:55|搓合|preopen/i] },
-      { label: "BUY 候選", patterns: [/BUY|買進|開盤入|無腦入/i] },
+      { key: "s1_2130", label: "21:30 初篩", patterns: [/21:30|初篩|candidate/i] },
+      { key: "s1_0845", label: "08:45 個股期貨", patterns: [/08:45|個股期貨|futopt/i] },
+      { key: "s1_0855", label: "08:55 搓合確認", patterns: [/08:55|搓合|preopen/i] },
+      { key: "s1_buy", label: "BUY 候選", patterns: [/BUY|買進|開盤入|無腦入/i] },
     ];
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) || rows.length })), "Strategy1 關卡");
   }
 
   function strategy3OptionCards(rows) {
     const defs = [
-      { label: "尾盤帶量", patterns: [/尾盤|13:00|12:59|帶量/] },
-      { label: "基態", patterns: [/基態|base/i] },
-      { label: "控盤強", patterns: [/控盤|control/i] },
-      { label: "OBV 正向", patterns: [/OBV|obv/i] },
-      { label: "近高檢查", patterns: [/近高|高檢查|near.*high/i] },
-      { label: "母池命中", patterns: [/母池|mother/i] },
+      { key: "s3_tail", label: "尾盤帶量", patterns: [/尾盤|13:00|12:59|帶量/] },
+      { key: "s3_base", label: "基態", patterns: [/基態|base/i] },
+      { key: "s3_control", label: "控盤強", patterns: [/控盤|control/i] },
+      { key: "s3_obv", label: "OBV 正向", patterns: [/OBV|obv/i] },
+      { key: "s3_near_high", label: "近高檢查", patterns: [/近高|高檢查|near.*high/i] },
+      { key: "s3_mother", label: "母池命中", patterns: [/母池|mother/i] },
     ];
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "Strategy3 條件");
   }
@@ -6865,23 +6930,23 @@
 
   function cbOptionCards(rows) {
     const defs = [
-      { label: "CBAS 三層", patterns: [/CBAS|三層|cbas/i] },
-      { label: "60分K阻檔", patterns: [/60分|60m|阻檔/i] },
-      { label: "富果現股價", patterns: [/富果|現股價|stockPrice|price/i] },
-      { label: "轉換距離", patterns: [/轉換|conversion|premium/i] },
-      { label: "訊號候選", patterns: [/訊號|signal|entry/i] },
+      { key: "cb_cbas", label: "CBAS 三層", patterns: [/CBAS|三層|cbas/i] },
+      { key: "cb_60m", label: "60分K阻檔", patterns: [/60分|60m|阻檔/i] },
+      { key: "cb_stock_price", label: "富果現股價", patterns: [/富果|現股價|stockPrice|price/i] },
+      { key: "cb_conversion", label: "轉換距離", patterns: [/轉換|conversion|premium/i] },
+      { key: "cb_signal", label: "訊號候選", patterns: [/訊號|signal|entry/i] },
     ];
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "CB 細分檢查");
   }
 
   function warrantOptionCards(rows) {
     const defs = [
-      { label: "資金異動", patterns: [/資金|flow|money/i] },
-      { label: "標的強弱", patterns: [/標的|underlying|強弱/i] },
-      { label: "爆量權證", patterns: [/爆量|volume|量/i] },
-      { label: "單券異常", patterns: [/單券|異常|single/i] },
-      { label: "買盤集中", patterns: [/買盤|集中|bid/i] },
-      { label: "風險排除", patterns: [/風險|risk|排除/i] },
+      { key: "warrant_flow", label: "資金異動", patterns: [/資金|flow|money/i] },
+      { key: "warrant_underlying", label: "標的強弱", patterns: [/標的|underlying|強弱/i] },
+      { key: "warrant_volume", label: "爆量權證", patterns: [/爆量|volume|量/i] },
+      { key: "warrant_single", label: "單券異常", patterns: [/單券|異常|single/i] },
+      { key: "warrant_bid", label: "買盤集中", patterns: [/買盤|集中|bid/i] },
+      { key: "warrant_risk", label: "風險排除", patterns: [/風險|risk|排除/i] },
     ];
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "權證走向細分");
   }
@@ -6946,13 +7011,14 @@
 
   function renderUnifiedListShell(route, meta, panel) {
     const payloadMeta = canvasPayloadMeta(route) || {};
+    const allRows = (Array.isArray(canvasState.rows) ? canvasState.rows : []).filter((row) => row && typeof row === "object");
     const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
       .slice(0, 160);
     const runId = payloadMeta.runId || "";
     const evidenceStatus = payloadMeta.evidenceStatus || "";
     const unattendedStatus = payloadMeta.unattendedStatus || "";
-    const cards = unifiedRunCards(route, rows, payloadMeta);
+    const cards = unifiedRunCards(route, allRows, payloadMeta);
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
     const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
     const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
@@ -7003,13 +7069,13 @@
               </div>
               <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
             </div>
-            <section class="strategy3-run-cards" aria-label="${escapeHtml(meta.title)} 掃描摘要">
+            <section class="strategy3-run-cards" aria-label="${escapeHtml(meta.title)} 細分策略選項">
               ${cards.map((card) => `
-                <article>
+                <button type="button" data-unified-strategy-filter="${escapeHtml(card.key || card.label)}" class="${canvasState.signalFilter === (card.key || card.label) ? "active" : ""}" aria-pressed="${canvasState.signalFilter === (card.key || card.label) ? "true" : "false"}">
                   <span>${escapeHtml(card.label)}</span>
                   <strong>${escapeHtml(card.value)}</strong>
                   <small>${escapeHtml(card.sub)}</small>
-                </article>
+                </button>
               `).join("")}
             </section>
             <section class="strategy3-table" aria-label="${escapeHtml(meta.title)} 完整榜單">
@@ -8113,12 +8179,27 @@
         grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
         gap: 10px;
       }
-      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article {
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article,
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards button {
         min-height: 72px;
         padding: 12px 13px;
         border: 1px solid rgba(148, 163, 184, 0.20);
         border-radius: 8px;
         background: rgba(15, 23, 42, 0.62);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards button:hover,
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards button:focus-visible {
+        border-color: rgba(251, 191, 36, 0.72);
+        box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
+        outline: none;
+      }
+      .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards button.active {
+        border-color: #f59e0b;
+        background: linear-gradient(135deg, rgba(124, 45, 18, 0.58), rgba(30, 64, 175, 0.34));
       }
       .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards span,
       .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards small {
@@ -8257,7 +8338,7 @@
       body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics strong {
         color: #0f172a;
       }
-      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article,
+      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards article,\n      body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-run-cards button,
       body.fuman-light-theme .fuman-unified-list-panel .fuman-unified-list-shell .strategy3-card-metrics div {
         border-color: rgba(96, 165, 250, 0.22);
         background: linear-gradient(180deg, #ffffff, #eff6ff);
