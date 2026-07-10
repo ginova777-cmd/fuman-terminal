@@ -15,6 +15,7 @@ const DEFAULT_RUN_KEEP = Number(process.env.FUMAN_SUPABASE_HISTORY_KEEP_RUNS || 
 const DEFAULT_BATCH_SIZE = Number(process.env.FUMAN_HISTORY_CLEANUP_BATCH_SIZE || 80);
 const DEFAULT_VERCEL_RETENTION_DAYS = Number(process.env.FUMAN_VERCEL_DEPLOYMENT_RETENTION_DAYS || 30);
 const DEFAULT_VERCEL_KEEP_PER_TARGET = Number(process.env.FUMAN_VERCEL_DEPLOYMENT_KEEP_PER_TARGET || 10);
+const DEFAULT_DAILY_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_SUPABASE_DAILY_HISTORY_RETENTION_DAYS || 37);
 
 const RUN_TABLES = [
   { key: "strategy1", runsTable: "strategy1_open_buy_runs", resultsTable: "strategy1_open_buy_results", strategy: "strategy1", dateColumn: "finished_at" },
@@ -41,6 +42,11 @@ const SNAPSHOT_TABLES = [
   },
 ];
 
+const DATE_RETENTION_TABLES = [
+  { key: "daytrade_entry_history_37d", table: "fugle_daytrade_entry_history", dateColumn: "trade_date", retentionDays: DEFAULT_DAILY_HISTORY_RETENTION_DAYS },
+  { key: "seven_strategy_daily_history_37d", table: "seven_strategy_daily_history", dateColumn: "trade_date", retentionDays: DEFAULT_DAILY_HISTORY_RETENTION_DAYS },
+];
+
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -62,6 +68,7 @@ function parseArgs(argv) {
     batchSize: DEFAULT_BATCH_SIZE,
     vercelRetentionDays: DEFAULT_VERCEL_RETENTION_DAYS,
     vercelKeepPerTarget: DEFAULT_VERCEL_KEEP_PER_TARGET,
+    dailyHistoryRetentionDays: DEFAULT_DAILY_HISTORY_RETENTION_DAYS,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -84,16 +91,42 @@ function parseArgs(argv) {
     else if (arg.startsWith("--vercel-retention-days=")) args.vercelRetentionDays = Number(arg.split("=")[1]);
     else if (arg === "--vercel-keep-per-target") args.vercelKeepPerTarget = Number(value());
     else if (arg.startsWith("--vercel-keep-per-target=")) args.vercelKeepPerTarget = Number(arg.split("=")[1]);
+    else if (arg === "--daily-history-retention-days") args.dailyHistoryRetentionDays = Number(value());
+    else if (arg.startsWith("--daily-history-retention-days=")) args.dailyHistoryRetentionDays = Number(arg.split("=")[1]);
     else if (arg === "--help" || arg === "-h") {
       console.log("Usage: node scripts/cleanup-supabase-vercel-history.js [--dry-run|--apply] [--skip-supabase] [--skip-vercel] [--json]");
       process.exit(0);
     }
   }
-  for (const key of ["supabaseRetentionDays", "eventRetentionDays", "keepRuns", "batchSize", "vercelRetentionDays", "vercelKeepPerTarget"]) {
+  for (const key of ["supabaseRetentionDays", "eventRetentionDays", "keepRuns", "batchSize", "vercelRetentionDays", "vercelKeepPerTarget", "dailyHistoryRetentionDays"]) {
     if (!Number.isFinite(args[key]) || args[key] < 0) throw new Error(`invalid ${key}: ${args[key]}`);
   }
   if (args.batchSize < 1) args.batchSize = 1;
+  if (args.dailyHistoryRetentionDays < 1) args.dailyHistoryRetentionDays = 1;
   return args;
+}
+
+function dateCutoff(days) {
+  return new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+}
+
+async function cleanupDateRetentionTable(config, args) {
+  const retentionDays = config.retentionDays ?? args.dailyHistoryRetentionDays;
+  const cutoff = dateCutoff(retentionDays);
+  const query = `${config.dateColumn}=lt.${cutoff}`;
+  const count = await countRows(config.table, query);
+  const deletion = await deleteRows(config.table, query, args.apply);
+  return {
+    key: config.key,
+    table: config.table,
+    dateColumn: config.dateColumn,
+    retentionMode: "rolling_days",
+    retentionDays,
+    cutoff,
+    keepPolicy: `keep latest ${retentionDays} days for monthly accumulation plus 7-day follow-up`,
+    candidates: count,
+    ...deletion,
+  };
 }
 
 function isoCutoff(days) {
@@ -402,6 +435,9 @@ async function cleanupSupabase(args) {
   }
   for (const config of SNAPSHOT_TABLES) {
     sections.push(await cleanupSnapshotTable(config, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
+  }
+  for (const config of DATE_RETENTION_TABLES) {
+    sections.push(await cleanupDateRetentionTable({ ...config, retentionDays: args.dailyHistoryRetentionDays }, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
   }
   for (const config of RUN_TABLES) {
     sections.push(await cleanupRunPair(config, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
