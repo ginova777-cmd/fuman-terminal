@@ -40,16 +40,25 @@ function Get-TradingDayStatus($Root) {
   }
   $script = @"
 const { isTwseTradingDay } = require(process.argv[1]);
+const compact = (result) => ({
+  isTradingDay: !!result.isTradingDay,
+  date: String(result.date || ''),
+  reason: String(result.reason || result.closedReason || ''),
+  source: String(result.source || ''),
+  override: !!result.override,
+  lockedBy: String(result.lockedBy || ''),
+  overrideFile: String(result.overrideFile || '')
+});
 isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuman-runtime/state' })
-  .then((result) => console.log(JSON.stringify(result)))
+  .then((result) => console.log(Buffer.from(JSON.stringify(compact(result)), 'utf8').toString('base64')))
   .catch((error) => {
-    console.log(JSON.stringify({
+    console.log(Buffer.from(JSON.stringify({
       isTradingDay: true,
       date: '',
       reason: 'trading_day_check_failed',
       source: 'scorecard-watchdog',
       error: error && error.message ? error.message : String(error)
-    }));
+    }), 'utf8').toString('base64'));
   });
 "@
   $output = & node -e $script $checker
@@ -57,23 +66,42 @@ isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuma
     $parts = Get-TaipeiParts
     return [pscustomobject]@{ isTradingDay = $true; date = $parts.Date; reason = "checker_exit_$LASTEXITCODE"; source = "watchdog" }
   }
-  return ($output | Out-String | ConvertFrom-Json)
+  $encoded = ($output | Out-String).Trim()
+  $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded))
+  return ($json | ConvertFrom-Json)
 }
 
 function Read-ScorecardApi($BaseUrl) {
-  $url = ("{0}/api/scorecard?live=1&watchdog={1}" -f $BaseUrl.TrimEnd("/"), [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
-  $response = Invoke-WebRequest -Uri $url -Headers @{ "cache-control" = "no-cache" } -TimeoutSec 60 -UseBasicParsing
-  $payload = $response.Content | ConvertFrom-Json
-  return [pscustomobject]@{
-    status = [int]$response.StatusCode
-    ok = [bool]$payload.ok
-    latestDate = [string]$payload.latestDate
-    marketDate = [string]$payload.marketDate
-    runId = [string]$payload.runId
-    qualityStatus = [string]$payload.qualityStatus
-    cacheSource = [string]$payload.cacheSource
-    records = @($payload.records).Count
+  $script = @"
+const base = process.argv[1].replace(/\/+$/, '');
+const url = base + '/api/scorecard?live=1&watchdog=' + Date.now();
+(async () => {
+  const response = await fetch(url, { headers: { 'cache-control': 'no-cache', accept: 'application/json' } });
+  const payload = await response.json();
+  const summary = {
+    status: response.status,
+    ok: payload && payload.ok === true,
+    latestDate: String((payload && payload.latestDate) || ''),
+    marketDate: String((payload && payload.marketDate) || ''),
+    runId: String((payload && payload.runId) || ''),
+    qualityStatus: String((payload && payload.qualityStatus) || ''),
+    cacheSource: String((payload && payload.cacheSource) || ''),
+    records: Array.isArray(payload && payload.records) ? payload.records.length : 0
+  };
+  console.log(Buffer.from(JSON.stringify(summary), 'utf8').toString('base64'));
+})().catch((error) => {
+  const summary = { status: 0, ok: false, latestDate: '', marketDate: '', runId: '', qualityStatus: '', cacheSource: '', records: 0, error: error && error.message ? error.message : String(error) };
+  console.log(Buffer.from(JSON.stringify(summary), 'utf8').toString('base64'));
+  process.exit(1);
+});
+"@
+  $output = & node --use-system-ca -e $script $BaseUrl
+  if ($LASTEXITCODE -ne 0) {
+    throw "scorecard api read failed"
   }
+  $encoded = ($output | Out-String).Trim()
+  $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded))
+  return ($json | ConvertFrom-Json)
 }
 
 $parts = Get-TaipeiParts

@@ -47,16 +47,25 @@ function Get-TradingDayStatus($ProjectRoot) {
 
   $script = @"
 const { isTwseTradingDay } = require(process.argv[1]);
+const compact = (result) => ({
+  isTradingDay: !!result.isTradingDay,
+  date: String(result.date || ''),
+  reason: String(result.reason || result.closedReason || ''),
+  source: String(result.source || ''),
+  override: !!result.override,
+  lockedBy: String(result.lockedBy || ''),
+  overrideFile: String(result.overrideFile || '')
+});
 isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuman-runtime/state' })
-  .then((result) => console.log(JSON.stringify(result)))
+  .then((result) => console.log(Buffer.from(JSON.stringify(compact(result)), 'utf8').toString('base64')))
   .catch((error) => {
-    console.log(JSON.stringify({
+    console.log(Buffer.from(JSON.stringify({
       isTradingDay: true,
       date: '',
       reason: 'trading_day_check_failed',
       source: 'scorecard-daily',
       error: error && error.message ? error.message : String(error)
-    }));
+    }), 'utf8').toString('base64'));
   });
 "@
 
@@ -69,7 +78,9 @@ isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuma
       source = "scorecard-daily"
     }
   }
-  return ($output | Out-String | ConvertFrom-Json)
+  $encoded = ($output | Out-String).Trim()
+  $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded))
+  return ($json | ConvertFrom-Json)
 }
 
 function Read-JsonFile($Path) {

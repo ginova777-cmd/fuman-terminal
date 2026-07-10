@@ -114,6 +114,59 @@ function scorecardDateMatches(summary, payload, requirement) {
   return dates.includes(requirement.expectedDate);
 }
 
+function scorecardMarketClosedEvidence(payload, expectedDate) {
+  const expected = normalizedDate(expectedDate);
+  if (!payload || typeof payload !== "object" || !expected) return null;
+  const candidates = [
+    payload.marketCalendar,
+    payload.marketSession,
+    payload.transport?.tradingDay,
+    payload.resourceReadiness?.tradingDay,
+    payload.tradingDay,
+  ].filter(Boolean);
+  for (const item of candidates) {
+    const date = normalizedDate(item.date || item.marketDate || item.requestedDate || expected);
+    if (item.isTradingDay === false && (!date || date === expected)) {
+      return {
+        marketClosed: true,
+        expectedDate: expected,
+        reason: cleanText(item.reason || item.closedReason || "market_closed"),
+        source: cleanText(item.source || "scorecard_payload"),
+      };
+    }
+  }
+  const reports = Array.isArray(payload.sourceReports) ? payload.sourceReports : [];
+  for (const report of reports) {
+    const text = JSON.stringify({
+      reason: report.reason,
+      blockedReason: report.blockedReason,
+      fallbackDetails: report.fallbackDetails,
+      evidenceStatus: report.evidenceStatus,
+      marketStatus: report.marketStatus,
+    });
+    if (text.includes(expected) && /market_closed|non.trading|not a TWSE trading day|typhoon_holiday|颱風假休市/i.test(text)) {
+      return {
+        marketClosed: true,
+        expectedDate: expected,
+        reason: /typhoon_holiday|颱風/.test(text) ? "typhoon_holiday" : "market_closed",
+        source: cleanText(report.key || report.sourceName || "sourceReports"),
+      };
+    }
+  }
+  return null;
+}
+
+function applyMarketClosedFreshness(requirement, evidence) {
+  if (!evidence?.marketClosed) return requirement;
+  return {
+    ...requirement,
+    required: false,
+    marketClosed: true,
+    marketClosedEvidence: evidence,
+    reason: "market_closed_previous_good_allowed",
+  };
+}
+
 function absoluteBaseUrl(request) {
   const configured = process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "";
   if (configured) return configured.replace(/\/+$/, "");
@@ -415,7 +468,10 @@ module.exports = async function handler(request, response) {
   const apiMissingCovered = missingStrategiesCoveredByEmptyComplete(scorecardSummary, snapshotSummary);
   const snapshotStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(snapshotSummary, scorecardSummary);
   const apiStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(scorecardSummary, snapshotSummary);
-  const freshnessRequirement = scorecardFreshnessRequirement(request);
+  const baseFreshnessRequirement = scorecardFreshnessRequirement(request);
+  const marketClosedEvidence = scorecardMarketClosedEvidence(scorecardApi.json || {}, baseFreshnessRequirement.expectedDate)
+    || scorecardMarketClosedEvidence(snapshotPayload || {}, baseFreshnessRequirement.expectedDate);
+  const freshnessRequirement = applyMarketClosedFreshness(baseFreshnessRequirement, marketClosedEvidence);
   const sourceDatesOk = !freshnessRequirement.required
     || (
       normalizedDate(tradeRecords.latestDate) === freshnessRequirement.expectedDate
