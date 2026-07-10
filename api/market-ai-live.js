@@ -563,6 +563,20 @@ function groupPayload(label, source, rows, note = "") {
   };
 }
 
+function applyMarketCalendarToSession(session, marketCalendar = null) {
+  if (!marketCalendar || marketCalendar.marketOpen !== false) return session;
+  return {
+    ...(session || {}),
+    status: "closed",
+    closed: true,
+    reason: marketCalendar.reason || "market_closed",
+    marketStatus: "closed",
+    marketOpen: false,
+    displayTradeDate: marketCalendar.displayTradeDate || session?.displayTradeDate || "",
+    marketCalendar,
+  };
+}
+
 function heatmapSourceIssue(payload, heatmapIsToday, session = {}, clock = taipeiClock()) {
   if (!payload || !Object.keys(payload).length) return "熱力圖水源無回應";
   const health = payload.health || {};
@@ -595,17 +609,18 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const radarIsToday = isTodayDate(radarTradeDate, clock);
   const baseIsToday = isTodayDate(baseTradeDate, clock);
   const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday, session, clock);
-  const heatmapUsable = heatmapIsToday && !heatmapIssue;
+  const marketClosedDisplay = session?.marketOpen === false || session?.marketCalendar?.marketOpen === false || session?.closed === true;
+  const heatmapUsable = (marketClosedDisplay ? normalizeArray(heatmapPayload?.sectors).length > 0 : heatmapIsToday) && !heatmapIssue;
   const heatmapQuoteCoverage = buildHeatmapQuoteCoverage(heatmapPayload || {});
   const sourceIssues = [
     heatmapIssue,
-    radarTradeDate && !radarIsToday ? `即時雷達非今日資料：${radarTradeDate}` : "",
-    baseTradeDate && !baseIsToday ? `AI cache 非今日資料：${baseTradeDate}` : "",
+    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時雷達非今日資料：${radarTradeDate}` : "",
+    !marketClosedDisplay && baseTradeDate && !baseIsToday ? `AI cache 非今日資料：${baseTradeDate}` : "",
   ].filter(Boolean);
   const staleSources = [
-    heatmapTradeDate && !heatmapIsToday ? `熱力圖 ${heatmapTradeDate}` : "",
-    radarTradeDate && !radarIsToday ? `即時雷達 ${radarTradeDate}` : "",
-    baseTradeDate && !baseIsToday ? `AI cache ${baseTradeDate}` : "",
+    !marketClosedDisplay && heatmapTradeDate && !heatmapIsToday ? `熱力圖 ${heatmapTradeDate}` : "",
+    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時雷達 ${radarTradeDate}` : "",
+    !marketClosedDisplay && baseTradeDate && !baseIsToday ? `AI cache ${baseTradeDate}` : "",
   ].filter(Boolean);
 
   const sectors = heatmapUsable ? normalizeArray(heatmapPayload?.sectors) : [];
@@ -816,7 +831,9 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
 
 async function enrichMarketAiPayload(payload, request, clock, session, deps = {}) {
   const mustDetectToday = session?.requiresTodayDetection === true;
-  const requireLiveHeatmap = session?.requiresTodayLiveSource === true
+  const marketClosedDisplay = session?.marketOpen === false || session?.marketCalendar?.marketOpen === false;
+  const requireLiveHeatmap = marketClosedDisplay
+    || session?.requiresTodayLiveSource === true
     || mustDetectToday
     || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
   const req = {
@@ -896,7 +913,7 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
     || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
   const quoteFreshnessReason = quoteFreshnessRequired
     ? ""
-    : "post_close_quote_age_not_required";
+    : (session?.marketOpen === false || session?.marketCalendar?.marketOpen === false ? "market_closed_quote_age_not_required" : "post_close_quote_age_not_required");
   const sourceStatus = sourceIssues.length ? "degraded" : "ready";
   return attachRunTimeSourceEvidence({
     ...payload,
@@ -978,9 +995,10 @@ module.exports = async function handler(request, response) {
   const breadth = readCachedBreadth();
   const marketSummary = readCachedMarketSummary();
   const stocksSlim = readCachedStocksSlim();
-  const session = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
-  const requireTodayLiveSource = requiresTodayLiveSource(clock, session);
-  const mustDetectToday = requiresTodayDetection(clock, session);
+  const rawSession = marketSessionState(clock, breadth, marketSummary, stocksSlim, cached);
+  const session = applyMarketCalendarToSession(rawSession, marketCalendar);
+  const requireTodayLiveSource = marketCalendar?.marketOpen === false ? false : requiresTodayLiveSource(clock, session);
+  const mustDetectToday = marketCalendar?.marketOpen === false ? false : requiresTodayDetection(clock, session);
   const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
 
   if (cached && isWeekendClosedSession(session) && !shouldRefresh(request)) {
@@ -1036,7 +1054,8 @@ module.exports = async function handler(request, response) {
   }
 
   const req = { ...request, method: "GET", query: request.query || {} };
-  const requireLiveHeatmap = requireTodayLiveSource || mustDetectToday || Boolean(detectWindowActive && !session.closed);
+  const marketClosedDisplay = sessionForPayload.marketOpen === false || sessionForPayload.marketCalendar?.marketOpen === false;
+  const requireLiveHeatmap = marketClosedDisplay || requireTodayLiveSource || mustDetectToday || Boolean(detectWindowActive && !session.closed);
   const heatmapQuery = heatmapQueryForMarketAi(request.query, requireLiveHeatmap);
   const [marketResult, strategy2Result, radarResult, heatmapResult] = await Promise.all([
     capture(market, req),

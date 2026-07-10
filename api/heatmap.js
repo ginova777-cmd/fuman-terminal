@@ -281,24 +281,31 @@ function buildHeatmapHealth(sectors, quoteMap, sourceInfo = {}) {
   };
 }
 
-function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason = "") {
+function isMarketCalendarClosed(marketCalendar) {
+  return marketCalendar && marketCalendar.marketOpen === false;
+}
+
+function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason = "", marketCalendar = null) {
   const sourceInfo = payload?.strictQuoteContract || {};
   const health = payload?.health || {};
   const stockCount = cleanNumber(health.stockCount || payload?.stockCount);
   const realtimeCount = cleanNumber(payload?.realtimeStockCount || health.realtimeStockCount || sourceInfo.rows);
   const quoteCoverageRatio = stockCount ? Math.min(1, realtimeCount / stockCount) : null;
-  const fallbackUsed = sourceInfo.fallbackUsed === true || payload?.fallbackUsed === true;
-  const quoteFreshnessRequired = isHeatmapDetectWindow(clock);
-  const quoteFreshnessReason = quoteFreshnessRequired
-    ? ""
-    : "post_close_quote_age_not_required";
+  const marketClosed = isMarketCalendarClosed(marketCalendar);
+  const fallbackUsed = marketClosed ? false : (sourceInfo.fallbackUsed === true || payload?.fallbackUsed === true);
+  const quoteFreshnessRequired = marketClosed ? false : isHeatmapDetectWindow(clock);
+  const quoteFreshnessReason = marketClosed
+    ? "market_closed_quote_age_not_required"
+    : quoteFreshnessRequired
+      ? ""
+      : "post_close_quote_age_not_required";
   const fallbackDetails = fallbackUsed ? [{
     fallbackSource: sourceInfo.fallbackSource || "unknown",
     fallbackReason: sourceInfo.fallbackReason || sourceInfo.issue || reason || "formal_source_not_healthy",
     fallbackRows: cleanNumber(sourceInfo.fallbackRows),
   }] : [];
-  const quoteReady = sourceInfo.ok === true || health.formalSourceOk === true || realtimeCount >= HEATMAP_QUOTE_MIN_ROWS;
-  const sourceReady = payload?.ok !== false && quoteReady && !fallbackUsed;
+  const quoteReady = marketClosed ? true : (sourceInfo.ok === true || health.formalSourceOk === true || realtimeCount >= HEATMAP_QUOTE_MIN_ROWS);
+  const sourceReady = marketClosed ? payload?.ok !== false && stockCount > 0 : (payload?.ok !== false && quoteReady && !fallbackUsed);
   return attachRunTimeSourceEvidence({
     ...payload,
     issues: retainedNonSourceEvidenceIssues(payload?.issues),
@@ -311,9 +318,9 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
       runId: `heatmap-${String(clock?.date || taipeiDateKey()).replace(/\D/g, "")}-${Date.now()}`,
       payload,
       sourceStatus: {
-        status: sourceReady ? "ready" : "degraded",
+        status: marketClosed ? "market_closed" : (sourceReady ? "ready" : "degraded"),
         ok: sourceReady,
-        reason: sourceInfo.issue || sourceInfo.fallbackReason || reason || "",
+        reason: marketClosed ? "market_closed_previous_good_display" : (sourceInfo.issue || sourceInfo.fallbackReason || reason || ""),
         source: sourceInfo.source || payload?.formalSource || payload?.source || "",
       },
       quoteCoverage: {
@@ -338,10 +345,10 @@ function withHeatmapRunTimeSourceSnapshot(payload, clock = taipeiClock(), reason
       intraday1mReadiness: { status: "not_applicable", ok: true, reason: "heatmap uses quote contract, not intraday 1m" },
       maReadiness: { status: "not_applicable", ok: true, reason: "heatmap does not calculate MA readiness" },
       preopenFutoptDailyReadiness: { status: "not_applicable", ok: true, reason: "heatmap does not require preopen/futopt/daily volume" },
-      publishAllowed: sourceReady,
-      degradedBlocksLatest: !sourceReady,
-      preservePreviousGood: !sourceReady,
-      qualityStatus: sourceReady ? "ready" : "degraded",
+      publishAllowed: marketClosed ? false : sourceReady,
+      degradedBlocksLatest: marketClosed ? false : !sourceReady,
+      preservePreviousGood: marketClosed ? true : !sourceReady,
+      qualityStatus: marketClosed ? "market_closed_previous_good" : (sourceReady ? "ready" : "degraded"),
       fallbackUsed,
       fallbackScope: fallbackUsed ? ["quote"] : [],
       fallbackAllowed: false,
@@ -3382,8 +3389,15 @@ module.exports = async function handler(request, response) {
     );
 
     const health = buildHeatmapHealth(sectors, quoteMap, sourceInfo);
+    const marketClosed = isMarketCalendarClosed(marketCalendar);
+    if (marketClosed && sectors.length > 0) {
+      health.isHealthy = true;
+      health.marketClosed = true;
+      health.marketClosedReason = marketCalendar?.closedReason || marketCalendar?.reason || "market_closed";
+      health.formalSourceIssue = "";
+    }
     const payload = {
-      ok: sectors.length > 0 && health.isHealthy,
+      ok: sectors.length > 0 && (marketClosed || health.isHealthy),
       source: sourceInfo.fallbackUsed
         ? "Supabase fugle_quotes_live strict live quotes + degraded TWSE/TPEx MIS fallback"
         : "Supabase fugle_quotes_live strict live quotes",
@@ -3401,7 +3415,7 @@ module.exports = async function handler(request, response) {
         twse: twseResult.status === "rejected" ? twseResult.reason.message : null,
         tpex: tpexResult.status === "rejected" ? tpexResult.reason.message : null,
         profiles: profileResult.status === "rejected" ? profileResult.reason.message : null,
-        quotes: sourceInfo.ok ? null : (sourceInfo.issue || sourceInfo.fallbackReason || "formal_quote_source_unhealthy"),
+        quotes: marketClosed ? null : (sourceInfo.ok ? null : (sourceInfo.issue || sourceInfo.fallbackReason || "formal_quote_source_unhealthy")),
       },
     };
     heatmapCache = isUsableHeatmapMemoryPayload(payload, clock)
@@ -3409,9 +3423,11 @@ module.exports = async function handler(request, response) {
       : null;
 
     response.status(200).json(withHeatmapRunTimeSourceSnapshot({
-      ...attachHeatmapDetectWindow(payload, clock, "live-detect-window"),
+      ...attachHeatmapDetectWindow(payload, clock, marketClosed ? "market-closed-display" : "live-detect-window"),
       cache: { hit: false, ageMs: 0, ttlMs: HEATMAP_CACHE_MS },
-    }, clock, "live-detect-window"));
+      marketClosedDisplay: marketClosed,
+      marketCalendar,
+    }, clock, marketClosed ? "market-closed-display" : "live-detect-window", marketCalendar));
   } catch (error) {
     response.status(502).json({ ok: false, error: error.message });
   }
