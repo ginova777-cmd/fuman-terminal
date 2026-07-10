@@ -4955,15 +4955,18 @@
 
   function scheduleMarketApiAiRender(heatmapPayload, radarPayload, aiPayload = {}, options = {}) {
     if (!isMarketViewActive() || marketDesktopMode !== "ai") return;
+    const aiReady = hasMarketAiPayload(aiPayload);
+    const panelNow = document.querySelector("#market-view [data-market-api-ai], #market-view .market-ai-panel");
+    const currentRenderer = String(panelNow?.dataset?.marketApiAi || "");
     const request = {
       heatmap: heatmapPayload || {},
       radar: radarPayload || {},
       ai: aiPayload || {},
-      force: Boolean(options.force),
+      force: Boolean(options.force) || (aiReady && currentRenderer !== "live-api-bundle"),
     };
     marketAiRenderRequest = request;
     window.clearTimeout(marketAiRenderTimer);
-    const delay = Number.isFinite(Number(options.delay)) ? Number(options.delay) : (hasMarketAiPayload(aiPayload) ? 90 : 220);
+    const delay = Number.isFinite(Number(options.delay)) ? Number(options.delay) : (aiReady ? 90 : 220);
     marketAiRenderTimer = window.setTimeout(() => {
       const next = marketAiRenderRequest || request;
       marketAiRenderRequest = null;
@@ -5045,11 +5048,16 @@
       .then((payload) => {
         state.ai = payload || {};
         if (hasMarketAiPayload(state.ai)) marketAiBundlePayload = state.ai;
-        paint(false, 70);
+        paint(hasMarketAiPayload(state.ai), 70);
       })
       .finally(done);
     fetchMarketJson("/api/heatmap", 60, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
       .then((payload) => {
+        if (payload && typeof payload === "object" && marketPayloadBlockedForFormalDisplay(payload)) {
+          state.heatmap = { ...(payload || {}), firstPaint: false };
+          marketSnapshotFirstPayload = state.heatmap;
+          return;
+        }
         if (payload?.sectors?.length) {
           state.heatmap = { ...(payload || {}), firstPaint: false };
           if (!hasMarketAiPayload(state.ai)) paint(false, 120);
@@ -5478,6 +5486,11 @@
     };
     const useSnapshotPayload = () => {
       if (!marketSnapshotFirstPayload?.sectors?.length) return false;
+      if (!force && marketPayloadBlockedForFormalDisplay(marketSnapshotFirstPayload)) {
+        state.heatmap = marketSnapshotFirstPayload;
+        paintMarketSnapshotFirstPayload(state.heatmap, state.market || {});
+        return true;
+      }
       state.heatmap = marketSnapshotFirstPayload;
       paintMarketSnapshotFirstPayload(state.heatmap, state.market || {});
       return true;
@@ -5496,7 +5509,11 @@
       }
       fetchMarketJson(marketHeatmapContractPath(), 36, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
         .then((payload) => {
-          if (payload?.sectors?.length) {
+          if (payload && typeof payload === "object" && marketPayloadBlockedForFormalDisplay(payload)) {
+            state.heatmap = { ...(payload || {}), firstPaint: false };
+            marketSnapshotFirstPayload = state.heatmap;
+            paint();
+          } else if (payload?.sectors?.length) {
             state.heatmap = {
               ...payload,
               snapshotFirst: !isMarketHeatmapLiveWindow(),
@@ -5512,7 +5529,10 @@
     if (!force) {
       window.setTimeout(() => {
         fetchMarketJson(marketHeatmapContractPath(), 60, false, MARKET_HEATMAP_FETCH_TIMEOUT_MS).then((payload) => {
-          if (payload?.sectors?.length && isMarketViewActive()) {
+          if (payload && typeof payload === "object" && marketPayloadBlockedForFormalDisplay(payload) && isMarketViewActive()) {
+            marketSnapshotFirstPayload = { ...payload, firstPaint: false };
+            paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload, state.market || {});
+          } else if (payload?.sectors?.length && isMarketViewActive()) {
             marketSnapshotFirstPayload = { ...payload, snapshotFirst: !isMarketHeatmapLiveWindow(), firstPaint: false };
             paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload, state.market || {});
           }
