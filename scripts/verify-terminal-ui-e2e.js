@@ -1429,6 +1429,7 @@ function collectDesktopStats(route) {
     && (marketAiDashboard?.keyCards || 0) >= 3
     && (marketAiDashboard?.evidenceCards || 0) >= 4
     && /等待今日|已排除|舊 snapshot|等待方向/.test(panelText);
+  const marketClosedProtection = /休市保護啟動|颱風假休市|市場休市/.test(String(document.body?.textContent || ""));
   if (route.key === "heatmap" || route.key === "market") {
     const metricText = normalizeArray(marketOverviewContract?.metricTexts).join(" | ");
     const requiredMetrics = ["加權指數", "櫃買指數", "台指期夜"];
@@ -1443,9 +1444,9 @@ function collectDesktopStats(route) {
     }
     for (const check of normalizeArray(marketOverviewContract?.heatmapModeChecks)) {
       if (!check.active) marketOverviewBlockers.push(`market overview heatmap tab did not activate ${check.label || check.mode}`);
-      if ((check.sectorCards || 0) < 1) marketOverviewBlockers.push(`market overview heatmap tab ${check.label || check.mode} has no sector cards`);
+      if (!marketClosedProtection && (check.sectorCards || 0) < 1) marketOverviewBlockers.push(`market overview heatmap tab ${check.label || check.mode} has no sector cards`);
     }
-    if ((marketOverviewContract?.sectorCards || 0) < 8) marketOverviewBlockers.push(`market overview heatmap sector cards ${marketOverviewContract?.sectorCards || 0}<8`);
+    if (!marketClosedProtection && (marketOverviewContract?.sectorCards || 0) < 8) marketOverviewBlockers.push(`market overview heatmap sector cards ${marketOverviewContract?.sectorCards || 0}<8`);
     if (marketOverviewContract?.aiVisible) marketOverviewBlockers.push("market overview must not show AI dashboard");
     if (marketOverviewContract?.tickerVisible) marketOverviewBlockers.push("market overview must not show ticker strip");
     if (marketOverviewContract?.strengthVisible) marketOverviewBlockers.push("market overview must not show strength panel");
@@ -1871,6 +1872,7 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
       return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden" && el.hidden !== true;
     };
     const market = document.querySelector("#market-view");
+    const marketClosedProtection = /休市保護啟動|颱風假休市|市場休市/.test(String(document.body?.textContent || ""));
     if (!market) return { ok: false, blocker: "market view missing for mode toggle contract", steps: [] };
     const read = (expectedMode, label) => {
       const activeButton = market.querySelector(".market-mode-tabs [data-market-mode].active");
@@ -1895,7 +1897,7 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
       const metricText = metricTexts.join(" | ");
       state.ok = expectedMode === "ai"
         ? state.activeButton === "ai" && /market-ai-mode/.test(state.className) && state.aiVisible && /AI 判讀/.test(state.title)
-        : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 3 && /加權指數/.test(metricText) && /櫃買指數/.test(metricText) && /台指期夜/.test(metricText) && state.sectorCards >= 8;
+        : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 3 && /加權指數/.test(metricText) && /櫃買指數/.test(metricText) && /台指期夜/.test(metricText) && (marketClosedProtection || state.sectorCards >= 8);
       return state;
     };
     const clickMode = async (mode, label) => {
