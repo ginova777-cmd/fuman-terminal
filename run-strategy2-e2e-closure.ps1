@@ -3,6 +3,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy2 E2E closure readback"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 

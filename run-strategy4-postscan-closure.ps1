@@ -8,6 +8,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+
+# FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy4 postscan closure"
 function Get-TaipeiNow() {
   $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
   return [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)

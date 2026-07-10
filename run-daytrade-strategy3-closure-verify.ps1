@@ -5,6 +5,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Daytrade Strategy3 closure verify"
+
 function Get-TaipeiStamp() {
   $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
   return [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString("yyyyMMdd-HHmmss")

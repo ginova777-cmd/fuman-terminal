@@ -7,6 +7,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy2 Supabase coverage watch"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repoRoot = $PSScriptRoot
