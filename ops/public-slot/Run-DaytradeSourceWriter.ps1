@@ -70,8 +70,8 @@ if (-not (Test-Path -LiteralPath $WriterScript)) {
 $env:FUMAN_RUNTIME_DIR = $RuntimeDir
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
-. "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $log
+. "$RepoRoot\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 
 $node = "node"
 $args = @("--use-system-ca", $WriterScript)
