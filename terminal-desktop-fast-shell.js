@@ -5913,7 +5913,7 @@
       ["risk", "風險高", "market-ai-radio-tab market-ai-radio-tab-risk", groups.risk],
     ];
     const previousFilter = panels.ai.querySelector("[data-market-ai-filter].active")?.dataset?.marketAiFilter
-      || panels.ai.dataset.marketAiFilter
+      || panels.ai.dataset.marketAiActiveFilter
       || "all";
     const activeFilter = tabs.some(([key]) => key === previousFilter) ? previousFilter : "all";
     const activeTab = tabs.find(([key]) => key === activeFilter) || tabs[0];
@@ -5948,7 +5948,7 @@
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = aiPayload?.source || aiPayload?.cacheSource || "desktop-fast-shell";
-    panels.ai.dataset.marketAiFilter = activeFilter;
+    panels.ai.dataset.marketAiActiveFilter = activeFilter;
     panels.ai.innerHTML = `
         <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">
@@ -6003,7 +6003,7 @@
         if (!button || !hotSection.contains(button)) return;
         const key = button.dataset.marketAiFilter || "all";
         const tab = tabs.find(([tabKey]) => tabKey === key) || tabs[0];
-        panels.ai.dataset.marketAiFilter = key;
+        panels.ai.dataset.marketAiActiveFilter = key;
         hotSection.querySelectorAll("[data-market-ai-filter]").forEach((item) => item.classList.toggle("active", item === button));
         if (hotList) hotList.innerHTML = rowHtml(tab[3] || [], key);
         if (currentRule) {
