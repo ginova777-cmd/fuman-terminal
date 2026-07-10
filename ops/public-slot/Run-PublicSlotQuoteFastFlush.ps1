@@ -10,6 +10,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$ScheduleGuard = Join-Path $RepoRoot "schedule-guard.ps1"
+if (Test-Path -LiteralPath $ScheduleGuard) {
+  . $ScheduleGuard
+  $GuardLogDir = Join-Path $RuntimeDir "logs"
+  New-Item -ItemType Directory -Force -Path $GuardLogDir | Out-Null
+  $GuardLog = Join-Path $GuardLogDir ("public-slot-quote-fast-flush-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+  Invoke-FumanWeekdayGuard -Label "Public Slot Quote Fast Flush" -LogPath $GuardLog
+}
 $SourceHelper = Join-Path $ScriptDir "SupabasePublicSlotSource.ps1"
 if (-not (Test-Path -LiteralPath $SourceHelper)) {
   throw "Missing Supabase public slot helper: $SourceHelper"
@@ -309,3 +318,4 @@ do {
 } while ((Get-Date) -lt $stopAt)
 
 Write-Log "quote fast flush stopped"
+
