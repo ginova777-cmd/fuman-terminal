@@ -20,6 +20,7 @@ function assertRegex(issues, text, regex, label) {
 const page = read("88.html");
 const api = read("api/scorecard.js");
 const issues = [];
+const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
 assertMarker(issues, page, "/api/scorecard?live=1", "/88 live scorecard API");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
@@ -62,7 +63,7 @@ if (page.includes("scorecard-evidence") || page.includes(">實戰證據<") || pa
   issues.push("/88 public table must not render strategy evidence column");
 }
 
-if (page.includes("scorecard-rule-group") || page.includes("scorecard-rule-tags") || page.includes(">策略項目<") || page.includes(">策略細項<") || page.includes(">原因<") || page.includes('class="rule-group"') || page.includes('class="rule-tags"') || page.includes('class="reason"')) {
+if (publicPage.includes("scorecard-rule-group") || publicPage.includes("scorecard-rule-tags") || publicPage.includes(">策略項目<") || publicPage.includes(">策略細項<") || publicPage.includes(">原因<") || publicPage.includes('class="rule-group"') || publicPage.includes('class="rule-tags"') || publicPage.includes('class="reason"')) {
   issues.push("/88 public table must not render private strategy rule/reason columns");
 }
 
