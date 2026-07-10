@@ -393,14 +393,6 @@
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status"></section>
   <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports">sourceReports 讀取中...</section>
   <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status">策略4 latest run 讀取中...</section>
-  <section class="entry-panel" id="daytradeEntryPanel" data-testid="daytrade-ps1-entry-panel">
-    <h2>當沖 PS1 今日進場紀錄</h2>
-    <div class="empty">載入 Supabase 今日正式紀錄...</div>
-  </section>
-  <section class="entry-panel" id="sevenStrategyDailyHistoryPanel" data-testid="seven-strategy-daily-history-panel">
-    <h2>七策略每日紀錄</h2>
-    <div class="empty">載入 Supabase 今日七策略紀錄...</div>
-  </section>
   <section class="audit-panel" id="auditPanel" data-testid="scorecard-audit-panel"></section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
   <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
@@ -743,6 +735,7 @@ function renderAuditPanel(rows) {
 
 function renderDaytradeEntries() {
   const panel = byId("daytradeEntryPanel");
+  if (!panel) return;
   const data = daytradeEntryPayload || {};
   const rows = Array.isArray(data.rows) ? data.rows : [];
   const filtered = data.filtered || {};
@@ -809,6 +802,7 @@ function renderDaytradeEntries() {
 
 function renderSevenStrategyDailyHistory() {
   const panel = byId("sevenStrategyDailyHistoryPanel");
+  if (!panel) return;
   const data = sevenStrategyDailyHistoryPayload || {};
   const rows = Array.isArray(data.rows) ? data.rows : [];
   const filtered = data.filtered || {};
@@ -1156,7 +1150,6 @@ async function loadDaytradeEntries() {
     reason: "loading",
     rows: [],
   };
-  renderDaytradeEntries();
   try {
     const response = await fetch(`/api/daytrade-entry-history?t=${Date.now()}`, { cache: "no-store" });
     daytradeEntryPayload = await response.json();
@@ -1169,7 +1162,6 @@ async function loadDaytradeEntries() {
       rows: [],
     };
   }
-  renderDaytradeEntries();
   if (activeSupplement === "daytradeEntryPanel") render();
 }
 
@@ -1181,7 +1173,6 @@ async function loadSevenStrategyDailyHistory() {
     reason: "loading",
     rows: [],
   };
-  renderSevenStrategyDailyHistory();
   try {
     const response = await fetch(`/api/seven-strategy-daily-history?limit=100&t=${Date.now()}`, { cache: "no-store" });
     sevenStrategyDailyHistoryPayload = await response.json();
@@ -1195,7 +1186,6 @@ async function loadSevenStrategyDailyHistory() {
       rows: [],
     };
   }
-  renderSevenStrategyDailyHistory();
   if (activeSupplement === "sevenStrategyDailyHistoryPanel") render();
 }
 

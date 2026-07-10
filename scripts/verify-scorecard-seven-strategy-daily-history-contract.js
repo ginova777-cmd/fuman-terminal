@@ -58,7 +58,7 @@ const normalized = hooks.normalizeRows(fixture, today, 100);
 const summary = hooks.summarizeRows(normalized.rows);
 const checks = [
   ["source_name_fixed", hooks.SOURCE_NAME === "seven_strategy_daily_history"],
-  ["html_section_marker", html.includes("seven-strategy-daily-history-panel")],
+  ["html_no_upper_panel", !html.includes("seven-strategy-daily-history-panel") && !html.includes('id="sevenStrategyDailyHistoryPanel"')],
   ["html_tab_marker", html.includes("scorecard-seven-strategy-daily-history-tab") && html.includes("七策略每日紀錄") && html.includes("data-supplement")],
   ["html_fetches_supabase_api", html.includes("/api/seven-strategy-daily-history")],
   ["html_has_no_qutie_local_json_fetch", !html.includes("fugle-entry-history.json") && !html.includes("fugle-detected-history.json")],

@@ -52,7 +52,7 @@ const fixture = [
 
 const normalized = hooks.normalizeRows(fixture, today);
 const issueChecks = [
-  ["html_section_marker", html.includes("daytrade-ps1-entry-panel")],
+  ["html_no_upper_panel", !html.includes("daytrade-ps1-entry-panel") && !html.includes('id="daytradeEntryPanel"')],
   ["html_tab_marker", html.includes("scorecard-daytrade-ps1-tab") && html.includes("data-supplement") && html.includes("當沖 PS1")],
   ["html_fetches_supabase_api", html.includes("/api/daytrade-entry-history")],
   ["html_has_no_local_entry_file_fetch", !/\/data\/.*entry/i.test(html)],
