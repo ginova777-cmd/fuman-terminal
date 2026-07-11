@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260711-02";
+  const VERSION = "watchlist-rich-shell-20260711-03";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -560,7 +560,7 @@
           </div>
         </div>
         <div class="watch-card-price">
-          <strong>${formatPrice(row.close)}</strong>
+          <strong class="${up ? "watch-up" : "watch-down"}">${formatPrice(row.close)}</strong>
           <small class="${up ? "watch-up" : "watch-down"}">${formatPct(pct)}</small>
         </div>
         <button class="watch-alert" type="button" aria-label="提醒 ${escapeText(row.code)}">♧</button>
@@ -597,12 +597,12 @@
         <section class="watch-summary-grid">
           <article class="watch-metric"><span>標的</span><strong>${escapeText(row.code)} ${escapeText(row.name || row.code)}</strong></article>
           <article class="watch-metric"><span>趨勢判讀</span><strong>${trend}</strong></article>
-          <article class="watch-metric"><span>漲跌幅</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPct(pct)}</strong><em>前收 ${formatPrice(prev)} → 現價 ${formatPrice(close)}</em></article>
+          <article class="watch-metric"><span>漲跌幅</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPct(pct)}</strong><em>前收 ${formatPrice(prev)} → 現價 <b class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPrice(close)}</b></em></article>
           <article class="watch-metric watch-match-metric"><span>符合策略</span><strong>${matchSummary.labels.length ? matchSummary.labels.map((label) => `<b>${escapeText(label)}</b>`).join("") : "無"}</strong><em>${escapeText(matchSummary.detail)}</em></article>
         </section>
         <section class="watch-detail-sections">
           <article class="watch-detail-section-card trend"><span>趨勢</span><strong>${trend}</strong><b>${formatPct(pct)}</b><em>收盤位於日內區間參考。</em></article>
-          <article class="watch-detail-section-card price"><span>價位</span><strong>現價 ${formatPrice(close)}</strong><b>${formatPrice(support)} / ${formatPrice(pressure1)}</b><em>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</em></article>
+          <article class="watch-detail-section-card price"><span>價位</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">現價 ${formatPrice(close)}</strong><b>${formatPrice(support)} / ${formatPrice(pressure1)}</b><em>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</em></article>
           <article class="watch-detail-section-card chip"><span>籌碼</span><strong>籌碼待確認</strong><b>籌碼 ${Math.max(0, score - 37)} / 主力 ${Math.max(0, score - 41)}</b><em>法人 10 日淨買賣需搭配盤後資料確認。</em></article>
           <article class="watch-detail-section-card risk"><span>風險</span><strong>風險可控</strong><b>0 則</b><em>目前沒有明顯短線風險旗標，仍需搭配大盤與成交量確認。</em></article>
           <article class="watch-detail-section-card action"><span>操作提醒</span><strong>${action}</strong><b>支撐 ${formatPrice(support)}</b><em>先等待量價或籌碼轉強，再把它放進主觀察清單。</em></article>
@@ -717,8 +717,9 @@
       #watchlist-view .watch-market-badge { border:1px solid rgba(239,106,35,.35); border-radius:4px; color:#ff8f4c; background:rgba(239,106,35,.12); padding:1px 5px; font-size:11px; font-weight:900; white-space:nowrap; }
       #watchlist-view .watch-card-flow { display:flex; gap:10px; color:#7ce9b4; font-size:12px; font-weight:900; }
       #watchlist-view .watch-card-price { text-align:right; }
-      #watchlist-view .watch-card-price strong { display:block; color:#1ee887; font-size:17px; }
-      #watchlist-view .watch-card-price small, #watchlist-view .watch-down { color:#21e390; }
+      #watchlist-view .watch-card-price strong { display:block; font-size:17px; }
+      #watchlist-view .watch-card-price small { color:inherit; }
+      #watchlist-view .watch-down { color:#21e390; }
       #watchlist-view .watch-up { color:#ff4f5f; }
       #watchlist-view .watch-alert, #watchlist-view .watch-remove { border:0; background:transparent; color:#b7a27d; cursor:pointer; font-size:18px; }
       #watchlist-view .watch-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; margin-bottom:18px; }

@@ -143,7 +143,7 @@ async function main() {
   requireMarker("terminal-hotfix.js", "finishShellAdd", "watchlist async shell add bridge");
   requireMarker("terminal-hotfix.js", "watchlist-storage-guard-20260628-03", "watchlist placeholder storage blocker");
   requireMarker("terminal-hotfix.js", "scheduleShellValidation", "watchlist storage validation handoff");
-  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260711-02", "watchlist redesigned shell 20260711-02");
+  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260711-03", "watchlist redesigned shell 20260711-03");
   requireMarker("terminal-watchlist-shell.js", "memoryRows", "watchlist memory-backed rows");
   requireMarker("terminal-watchlist-shell.js", "validateTaiwanStockCode", "watchlist Taiwan stock validation");
   requireMarker("terminal-watchlist-shell.js", "不是有效上市/上櫃台股代號", "watchlist invalid stock blocker");
