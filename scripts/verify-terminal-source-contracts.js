@@ -48,6 +48,7 @@ const COMMON_RESULT_FIELDS = [
 ];
 
 let expectedQuoteDatePromise = null;
+let currentTradingDayPromise = null;
 
 const CONTRACTS = [
   {
@@ -371,6 +372,18 @@ async function expectedQuoteDateKey() {
   return expectedQuoteDatePromise;
 }
 
+async function currentTradingDayStatus() {
+  if (!currentTradingDayPromise) {
+    currentTradingDayPromise = isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
+  }
+  return currentTradingDayPromise;
+}
+
+function isMarketClosedLiveSourceCheck(check, tradingDay) {
+  if (tradingDay?.isTradingDay !== false) return false;
+  return Boolean(check.requireToday || check.kind === "realtime-radar-cache");
+}
+
 function compactDate(value) {
   const text = String(value || "");
   const direct = text.replace(/\D/g, "");
@@ -577,11 +590,13 @@ async function checkOne(strategy, check) {
     };
   }
   const result = await fetchRows(check.table, check.select, check.query);
+  const tradingDay = await currentTradingDayStatus();
+  const marketClosedLiveSource = isMarketClosedLiveSourceCheck(check, tradingDay);
   const issues = [];
   if (!result.ok) {
     issues.push(`${check.table} ${check.kind} unreadable: HTTP ${result.status} ${result.error}`);
   }
-  if (result.ok && check.minRows && result.rows.length < check.minRows) {
+  if (result.ok && check.minRows && result.rows.length < check.minRows && !marketClosedLiveSource) {
     issues.push(`${check.table} ${check.kind} rows ${result.rows.length}<${check.minRows}`);
   }
   if (result.ok && check.kind.startsWith("latest-run") && !result.rows[0]?.run_id) {
@@ -590,7 +605,7 @@ async function checkOne(strategy, check) {
   if (result.ok && check.kind.startsWith("latest-run") && Number(result.rows[0]?.result_count || 0) <= 0 && strategy.key !== "strategy2") {
     issues.push(`${check.table} latest complete run result_count<=0`);
   }
-  if (result.ok && check.requireToday) {
+  if (result.ok && check.requireToday && !marketClosedLiveSource) {
     const expected = await expectedQuoteDateKey();
     const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const today = taipeiDateKey();
@@ -615,7 +630,7 @@ async function checkOne(strategy, check) {
       issues.push(`${check.table} ${check.healthStatusField}=${status}${reason ? ` (${reason})` : ""}`);
     }
   }
-  if (result.ok && check.kind === "realtime-radar-cache") {
+  if (result.ok && check.kind === "realtime-radar-cache" && !marketClosedLiveSource) {
     const row = result.rows[0] || {};
     const payload = row.payload && typeof row.payload === "object" ? row.payload : null;
     const payloadRows = Array.isArray(payload?.rows) ? payload.rows : [];
@@ -644,6 +659,7 @@ async function checkOne(strategy, check) {
       ? realtimeRadarPayloadDate(result.rows[0]?.payload || {}) || rowDate(result.rows[0] || {})
       : result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "",
     issues,
+    skippedReason: marketClosedLiveSource ? `market_closed:${tradingDay.reason || "closed"}` : "",
   };
 }
 
