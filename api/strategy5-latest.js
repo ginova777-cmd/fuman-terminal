@@ -879,6 +879,7 @@ async function handler(request, response) {
 module.exports = withEntitlementRequired(handler, "strategy5");
 module.exports._test = {
   buildPayload,
+  fetchLatestCompleteRows,
   buildStrategy5ApiState,
   buildStrategy5FieldCompleteness,
   strategy5RunTimeSourceEvidence,

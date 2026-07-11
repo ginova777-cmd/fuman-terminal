@@ -363,20 +363,37 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
     live: "1",
   }, 8000);
   const replacement = result?.payload;
-  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
-  const replacementRows = Array.isArray(replacement?.matches) ? replacement.matches
-    : Array.isArray(replacement?.rows) ? replacement.rows
+  let finalReplacement = replacement;
+  let directReplacementUsed = false;
+  let replacementRunId = String(finalReplacement?.runId || finalReplacement?.transport?.runId || "").trim();
+  if (typeof strategy5Latest._test?.fetchLatestCompleteRows === "function") {
+    const direct = await strategy5Latest._test.fetchLatestCompleteRows(140).catch(() => null);
+    if (direct?.rows?.length && direct?.run?.run_id && String(direct.run.run_id) !== replacementRunId) {
+      finalReplacement = strategy5Latest._test.buildPayload(direct.rows, direct.run, {
+        canvas: true,
+        compact: true,
+        shell: true,
+        live: true,
+        limit: 140,
+        chipSourceHealth: null,
+      });
+      directReplacementUsed = true;
+      replacementRunId = String(finalReplacement?.runId || finalReplacement?.transport?.runId || "").trim();
+    }
+  }
+  const replacementRows = Array.isArray(finalReplacement?.matches) ? finalReplacement.matches
+    : Array.isArray(finalReplacement?.rows) ? finalReplacement.rows
       : [];
-  const replacementCount = Number(replacement?.resultCount ?? replacement?.count ?? replacementRows.length) || 0;
-  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || !replacementRows.length || replacementRows.length < replacementCount) return;
+  const replacementCount = Number(finalReplacement?.resultCount ?? finalReplacement?.count ?? replacementRows.length) || 0;
+  if ((!directReplacementUsed && Number(result?.statusCode || 0) >= 400) || finalReplacement?.ok === false || !replacementRows.length || !replacementRunId) return;
   if (currentEndpoint.includes("limit=140") && (!resultCount || currentRows.length >= resultCount) && replacementRunId === currentRunId) return;
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
   });
   endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1"] = {
-    ...replacement,
+    ...finalReplacement,
     transport: {
-      ...(replacement.transport || {}),
+      ...(finalReplacement.transport || {}),
       fastBundleRepair: "strategy5-full-140",
       staleSnapshotEndpoint: currentEndpoint,
       fetchedAt: new Date().toISOString(),
