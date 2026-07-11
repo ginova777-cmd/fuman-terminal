@@ -46,6 +46,8 @@ const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_M
 const STRATEGY5_BOLLINGER_NARROW_PCT = Number(process.env.STRATEGY5_BOLLINGER_NARROW_PCT || 5);
 const STRATEGY5_BOLLINGER_NORMAL_PCT = Number(process.env.STRATEGY5_BOLLINGER_NORMAL_PCT || 10);
 const STRATEGY5_BOLLINGER_WIDE_PCT = Number(process.env.STRATEGY5_BOLLINGER_WIDE_PCT || 20);
+const STRATEGY5_KD_RSV_PERIOD = Number(process.env.STRATEGY5_KD_RSV_PERIOD || 5);
+const STRATEGY5_KD_SMOOTHING = Number(process.env.STRATEGY5_KD_SMOOTHING || 3);
 let universeSourceHealth = {};
 
 function readJson(file, fallback) {
@@ -1790,7 +1792,7 @@ function bollingerAt(rows, index) {
   };
 }
 
-function calculateKdj(rows, period = 9) {
+function calculateKdj(rows, period = STRATEGY5_KD_RSV_PERIOD, smoothing = STRATEGY5_KD_SMOOTHING) {
   let k = 50;
   let d = 50;
   return rows.map((row, index) => {
@@ -1800,8 +1802,8 @@ function calculateKdj(rows, period = 9) {
     const low = Math.min(...window.map((item) => cleanNumber(item.low)).filter(Boolean));
     const close = cleanNumber(row.close);
     const rsv = high > low ? ((close - low) / (high - low)) * 100 : 50;
-    k = (2 / 3) * k + (1 / 3) * rsv;
-    d = (2 / 3) * d + (1 / 3) * k;
+    k = ((smoothing - 1) / smoothing) * k + (1 / smoothing) * rsv;
+    d = ((smoothing - 1) / smoothing) * d + (1 / smoothing) * k;
     return { k, d, j: 3 * k - 2 * d };
   });
 }
@@ -1847,7 +1849,7 @@ function bollingerKdjPatternFromRows(rows) {
   const lastVolume = cleanNumber(last?.volume);
   if (!lastClose || !prevClose) return null;
 
-  const kdj = calculateKdj(rows);
+  const kdj = calculateKdj(rows, STRATEGY5_KD_RSV_PERIOD, STRATEGY5_KD_SMOOTHING);
   const lastKdj = kdj.at(-1);
   const prevKdj = kdj.at(-2);
   const crossed = prevKdj.k <= prevKdj.d && lastKdj.k > lastKdj.d;
@@ -2023,6 +2025,8 @@ function buildBollingerKdjMatch({ stock, inst = {}, valueRank, volumeRank, rows 
     upperDistancePct: roundNumber(pattern.upperDistancePct, 2),
     middleSlopePct: roundNumber(pattern.middleSlopePct, 2),
     lowerSlopePct: roundNumber(pattern.lowerSlopePct, 2),
+    kdPeriod: STRATEGY5_KD_RSV_PERIOD,
+    kdSmoothing: STRATEGY5_KD_SMOOTHING,
     kdjK: Number(pattern.k.toFixed(1)),
     kdjD: Number(pattern.d.toFixed(1)),
     kdjJ: Number(pattern.j.toFixed(1)),
