@@ -757,11 +757,14 @@ async function fetchHistoricalVolumes() {
     }
   }
   const averages = new Map();
+  const previous = new Map();
   bucket.forEach((values, code) => {
     const usable = values.slice(0, 5);
     if (usable.length) averages.set(code, usable.reduce((sum, value) => sum + value, 0) / usable.length);
+    const previousValue = values.length > 1 && shouldIncludeTodayVolume() ? values[1] : values[0];
+    if (previousValue > 0) previous.set(code, previousValue);
   });
-  return { map: averages, warnings };
+  return { map: averages, previousMap: previous, warnings };
 }
 
 function rankMap(stocks, key) {
@@ -1188,7 +1191,7 @@ function marginShortSameIncrease(inst = {}) {
   };
 }
 
-function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageMap, pctOrdinalRank, volumeIncreaseOrdinalRank }) {
+function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageMap, previousVolumeMap, pctOrdinalRank, volumeIncreaseOrdinalRank }) {
   const pct = cleanNumber(stock.percent);
   const volumeUnits = normalizeTradeVolumeUnits(stock);
   const volumeLots = volumeUnits.lots;
@@ -1197,18 +1200,20 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
   const turnoverRate = issuedShares ? (volumeShares / issuedShares) * 100 : 0;
   const avgVolume = volumeAverageMap.get(stock.code) || 0;
   const volumeRatio = avgVolume ? volumeShares / avgVolume : 0;
+  const previousVolumeShares = previousVolumeMap.get(stock.code) || 0;
+  const previousVolumeExpansionRatio = previousVolumeShares ? volumeShares / previousVolumeShares : 0;
+  const previousVolumeExpanded = previousVolumeExpansionRatio >= 1.5;
   const marginShort = marginShortSameIncrease(inst);
   if (!(
     pct >= 3 &&
-    pct <= 8 &&
-    volumeLots >= 1000 &&
     turnoverRate > 5 &&
     volumeRatio >= 1 &&
     pctOrdinalRank > 0 &&
     pctOrdinalRank <= 100 &&
     volumeIncreaseOrdinalRank > 0 &&
     volumeIncreaseOrdinalRank <= 100 &&
-    marginShort.ok
+    marginShort.ok &&
+    previousVolumeExpanded
   )) return null;
   const score = clamp(Math.round(
     48 +
@@ -1217,7 +1222,7 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     Math.min(turnoverRate * 4, 28) +
     Math.min(volumeRatio * 10, 22)
   ), 0, 100);
-  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；漲跌排行 ${pctOrdinalRank}、成交量增幅排行 ${volumeIncreaseOrdinalRank}，資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}）。`;
+  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；漲跌排行 ${pctOrdinalRank}、成交量增幅排行 ${volumeIncreaseOrdinalRank}，資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}），成交量較前一日放大 ${previousVolumeExpansionRatio.toFixed(2)} 倍。`;
   return {
     id: "volume_turnover_breakout",
     short: "量價周轉",
@@ -1234,6 +1239,9 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     marginNetIncrease: Math.round(marginShort.marginNetIncrease),
     shortNetIncrease: Math.round(marginShort.shortNetIncrease),
     marginShortSameIncrease: true,
+    previousVolumeShares: Math.round(previousVolumeShares),
+    previousVolumeExpansionRatio: Number(previousVolumeExpansionRatio.toFixed(2)),
+    previousVolumeExpanded: true,
   };
 }
 
@@ -1491,7 +1499,7 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
   };
 }
 
-async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map()) {
+async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map(), previousVolumeMap = new Map()) {
   const stocksWithVolumeUnits = stocks.map((stock) => {
     const volumeUnits = normalizeTradeVolumeUnits(stock);
     return {
@@ -1545,6 +1553,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
         inst: normalizedInst,
         issuedSharesMap,
         volumeAverageMap,
+        previousVolumeMap,
         pctOrdinalRank: pctOrdinalRanks.get(stock.code) || 0,
         volumeIncreaseOrdinalRank: volumeIncreaseOrdinalRanks.get(stock.code) || 0,
       }),
@@ -1641,7 +1650,7 @@ async function main() {
   ];
   if (finmindChipMap.size) console.log(`strategy5 FinMind chip supplement rows=${finmindChipMap.size}`);
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
-  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map);
+  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map, volumeAverageResult.previousMap);
   const quoteDate = compactDateKey(stocks.find((stock) => stock.quoteDate)?.quoteDate);
   const institutionDate = compactDateKey(institution.usedDate || institution.date);
   const chipLatestTradeDate = latestDateKey([

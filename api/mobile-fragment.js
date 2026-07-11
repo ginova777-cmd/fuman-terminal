@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const strategy5Latest = require("./strategy5-latest");
 const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
@@ -116,6 +117,55 @@ async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function createCaptureResponse(resolve) {
+  let statusCode = 200;
+  return {
+    setHeader() {},
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(payload) {
+      resolve({ statusCode, payload });
+      return this;
+    },
+    send(payload) {
+      resolve({ statusCode, payload });
+      return this;
+    },
+    end(payload) {
+      resolve({ statusCode, payload });
+      return this;
+    },
+  };
+}
+
+function fetchStrategy5Internal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = Object.fromEntries(url.searchParams.entries());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("strategy5_internal_timeout")), 12000);
+    const finish = (result) => {
+      clearTimeout(timer);
+      if (Number(result.statusCode || 0) >= 400 || result.payload?.ok === false) {
+        reject(new Error(result.payload?.detail || result.payload?.error || `HTTP ${result.statusCode}`));
+        return;
+      }
+      resolve(result.payload);
+    };
+    Promise.resolve(strategy5Latest({
+      ...request,
+      method: "GET",
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish))).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
 
 function esc(value) {
@@ -593,12 +643,14 @@ module.exports = async function handler(request, response) {
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab === "strategy3";
+    const forceLivePayload = tab === "strategy3" || tab === "strategy5";
     const payload = forceLivePayload
       || !snapshotPayload
       || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
-      ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000)
+      ? (tab === "strategy5"
+        ? await fetchStrategy5Internal(request, endpoint)
+        : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
