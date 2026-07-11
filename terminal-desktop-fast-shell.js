@@ -29,7 +29,7 @@
   const PERF_LOG_KEY = "fuman-desktop-fast-perf-log-v1";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const STRATEGY2_SNAPSHOT_FIRST_PARAM = "strategy2SnapshotFirst";
-  const DEFAULT_DESKTOP_ROUTE_KEY = "strategy|策略5";
+  const DEFAULT_DESKTOP_ROUTE_KEY = MARKET_ROUTE;
   const CANVAS_ROW_HEIGHT = 46;
   const CANVAS_HEADER_HEIGHT = 128;
   const STRATEGY4_PAGE_SIZE = 10;

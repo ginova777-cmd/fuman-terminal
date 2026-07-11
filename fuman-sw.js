@@ -19,6 +19,7 @@ const STATIC_ASSETS = [
   "/terminal-worker.js?v=public-terminal-fast-20260630-20",
   "/terminal.js?v=public-terminal-fast-20260630-20",
   "/terminal-app.js?v=public-terminal-fast-20260630-20",
+  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260630-20",
   "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260630-20",
   "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-20",
   `/terminal-market-overview-restore.css?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,

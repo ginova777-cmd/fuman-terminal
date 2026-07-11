@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>輔滿會員登入</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef8f8;
+      --grid: rgba(30, 88, 112, .08);
+      --text: #152231;
+      --muted: #64748b;
+      --brand: #0f8f86;
+      --brand-2: #0b766e;
+      --line: #d4e2ea;
+      --input: #e8f1ff;
+      --danger: #be123c;
+      --soft: #f7fbfd;
+      --shadow: 0 28px 80px rgba(15, 35, 50, .16);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 48px 48px,
+        linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 48px 48px,
+        radial-gradient(circle at 18% 10%, rgba(255, 139, 72, .16), transparent 28%),
+        radial-gradient(circle at 82% 12%, rgba(20, 184, 166, .22), transparent 34%),
+        var(--bg);
+    }
+    main {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(360px, 520px);
+      gap: clamp(28px, 7vw, 100px);
+      align-items: center;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 52px 0 84px;
+    }
+    .brand-panel {
+      display: grid;
+      justify-items: center;
+      text-align: center;
+      gap: 18px;
+    }
+    .brand-mark {
+      width: 58px;
+      height: 58px;
+      border-radius: 12px;
+      background: #111827;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, .24);
+    }
+    .brand-mark span {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: #f97316;
+      color: #fff;
+      font-size: 24px;
+      font-weight: 900;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(56px, 8vw, 92px);
+      line-height: .95;
+      letter-spacing: 0;
+    }
+    .brand-panel p {
+      margin: 0;
+      color: #008f9a;
+      font-size: 24px;
+      font-weight: 900;
+    }
+    .auth-card {
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 26px;
+    }
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .auth-tabs button,
+    .auth-form button,
+    .quick-action {
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 900;
+    }
+    .auth-tabs button {
+      padding: 10px 12px;
+      background: #edf4f8;
+      color: #52677a;
+    }
+    .auth-tabs button.active {
+      background: var(--brand);
+      color: white;
+    }
+    label {
+      display: block;
+      color: #0f172a;
+      font-weight: 900;
+      margin: 0 0 14px;
+    }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .label-row a {
+      color: var(--brand);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .field {
+      display: grid;
+      grid-template-columns: 34px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      background: var(--input);
+      border: 1px solid #c8d8eb;
+      border-radius: 9px;
+      min-height: 62px;
+      padding: 0 10px;
+    }
+    .field input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+    }
+    .field button {
+      border: 1px solid #c9d8ea;
+      background: rgba(255, 255, 255, .42);
+      border-radius: 14px;
+      width: 42px;
+      height: 42px;
+      cursor: pointer;
+    }
+    .captcha {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      min-height: 78px;
+      padding: 10px 14px;
+      margin: 14px 0;
+      background: #fff;
+    }
+    .captcha-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .captcha-box input {
+      width: 28px;
+      height: 28px;
+      accent-color: var(--brand);
+    }
+    .cloudflare {
+      text-align: right;
+      font-size: 11px;
+      color: #111827;
+      font-weight: 900;
+    }
+    .submit {
+      width: 100%;
+      min-height: 64px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 28px;
+      box-shadow: 0 18px 36px rgba(15, 143, 134, .22);
+    }
+    .submit:disabled {
+      opacity: .62;
+      cursor: wait;
+    }
+    .divider {
+      text-align: center;
+      margin: 18px 0;
+      color: #94a3b8;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .quick-action {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 48px 1fr 24px;
+      align-items: center;
+      gap: 16px;
+      min-height: 78px;
+      margin: 12px 0;
+      padding: 12px 20px;
+      text-align: left;
+      text-decoration: none;
+    }
+    .quick-action.primary {
+      background: var(--brand-2);
+      color: white;
+    }
+    .quick-action.secondary {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    .quick-icon {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .86);
+      color: var(--brand-2);
+      font-weight: 900;
+    }
+    .quick-action small {
+      display: block;
+      margin-top: 4px;
+      color: rgba(255, 255, 255, .86);
+      font-size: 14px;
+    }
+    .quick-action.secondary small { color: var(--muted); }
+    .status {
+      min-height: 22px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-weight: 800;
+      line-height: 1.5;
+    }
+    .status.error { color: var(--danger); }
+    .status.good { color: var(--brand); }
+    .footer-switch {
+      border-top: 1px solid var(--line);
+      margin: 18px -26px -26px;
+      padding: 18px 26px;
+      text-align: center;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .footer-switch button {
+      border: 0;
+      background: transparent;
+      color: var(--brand);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 900;
+    }
+    footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 18px;
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      color: #64748b;
+      font-weight: 900;
+      letter-spacing: .08em;
+      font-size: 13px;
+    }
+    footer nav {
+      display: flex;
+      gap: 20px;
+      letter-spacing: 0;
+    }
+    footer a { color: #64748b; text-decoration: none; }
+    @media (max-width: 860px) {
+      main {
+        grid-template-columns: 1fr;
+        padding-top: 32px;
+      }
+      h1 { font-size: 56px; }
+      footer { position: static; padding: 0 20px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="brand-panel" aria-label="輔滿品牌">
+      <div class="brand-mark" aria-hidden="true"><span>∴</span></div>
+      <h1>Fuman</h1>
+      <p>選股小終端</p>
+    </section>
+
+    <section class="auth-card" aria-label="會員登入註冊">
+      <div class="auth-tabs" role="tablist">
+        <button class="active" type="button" data-auth-mode="login">登入</button>
+        <button type="button" data-auth-mode="signup">註冊</button>
+      </div>
+
+      <form id="authForm" class="auth-form">
+        <label>
+          <span class="label-row"><span>電子郵件 / 帳號</span></span>
+          <span class="field">
+            <span aria-hidden="true">✉</span>
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+            <span></span>
+          </span>
+        </label>
+
+        <label>
+          <span class="label-row"><span>密碼</span><a href="#" id="forgotPassword">忘記密碼？</a></span>
+          <span class="field">
+            <span aria-hidden="true">▢</span>
+            <input id="password" type="password" autocomplete="current-password" placeholder="請輸入密碼" minlength="6" required>
+            <button id="togglePassword" type="button" aria-label="顯示或隱藏密碼">◎</button>
+          </span>
+        </label>
+
+        <div class="captcha" aria-label="人機驗證占位">
+          <label class="captcha-box"><input id="captcha" type="checkbox" required>驗證您是人類</label>
+          <div class="cloudflare">CLOUDFLARE<br><small>隱私權 · 條款</small></div>
+        </div>
+
+        <button id="submitButton" class="submit" type="submit">登入</button>
+        <div id="status" class="status" role="status" aria-live="polite">請登入；未開通權限時仍可用訪客模式查看公開市場總覽。</div>
+      </form>
+
+      <div class="divider">或</div>
+
+      <a class="quick-action primary" href="/?desktop=1" id="guestLogin">
+        <span class="quick-icon">♙</span>
+        <span><strong>遊客登入</strong><small>先看今日訊號輪廓</small></span>
+        <span>›</span>
+      </a>
+
+      <button class="quick-action secondary" type="button" id="googleLogin">
+        <span class="quick-icon">G</span>
+        <span><strong>使用 Google 登入</strong><small>準備中；目前請使用 Email 登入</small></span>
+        <span>›</span>
+      </button>
+
+      <div class="footer-switch">
+        <span id="switchText">還沒有帳號？</span>
+        <button type="button" id="switchMode">立即註冊帳號</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <strong>Fuman © 2026 FUMAN QUANT TERMINAL. ALL RIGHTS RESERVED.</strong>
+    <nav><a href="#">服務條款</a><a href="#">隱私權政策</a><a href="#">風險揭露</a><a href="#">聯絡我們</a></nav>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/terminal-runtime-config.js?v=public-terminal-fast-20260630-20"></script>
+  <script>
+    (() => {
+      const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
+      const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
+      const config = window.FUMAN_RUNTIME_CONFIG || {};
+      const client = config.supabaseUrl && config.supabaseKey && window.supabase
+        ? window.supabase.createClient(config.supabaseUrl, config.supabaseKey)
+        : null;
+      const form = document.querySelector("#authForm");
+      const email = document.querySelector("#email");
+      const password = document.querySelector("#password");
+      const captcha = document.querySelector("#captcha");
+      const status = document.querySelector("#status");
+      const submit = document.querySelector("#submitButton");
+      const tabs = [...document.querySelectorAll("[data-auth-mode]")];
+      const switchText = document.querySelector("#switchText");
+      const switchMode = document.querySelector("#switchMode");
+      const nextUrl = new URLSearchParams(location.search).get("next") || "/?desktop=1";
+      let mode = "login";
+
+      function setStatus(message, type = "") {
+        status.textContent = message;
+        status.className = `status ${type}`.trim();
+      }
+
+      function applyMode(next) {
+        mode = next;
+        tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
+        submit.textContent = mode === "signup" ? "註冊" : "登入";
+        switchText.textContent = mode === "signup" ? "已經有帳號？" : "還沒有帳號？";
+        switchMode.textContent = mode === "signup" ? "立即登入" : "立即註冊帳號";
+        password.autocomplete = mode === "signup" ? "new-password" : "current-password";
+        setStatus(mode === "signup" ? "註冊後需開通權限，才會解鎖策略與成績單。" : "請登入；未開通權限時仍可用訪客模式查看公開市場總覽。");
+      }
+
+      async function readAccess(session) {
+        const user = session?.user;
+        if (!user) return { status: "anonymous", allowed: false };
+        if ((config.adminEmails || []).map((item) => String(item).toLowerCase()).includes(String(user.email || "").toLowerCase())) {
+          return { status: "admin", allowed: true, source: "admin_email" };
+        }
+        if (!client) return { status: "auth_client_missing", allowed: false };
+        try {
+          const table = config.accessTable || "fuman_user_access";
+          const byUser = await client.from(table).select("*").eq("user_id", user.id).maybeSingle();
+          let row = byUser.data;
+          if (!row && user.email) {
+            const byEmail = await client.from(table).select("*").eq("email", user.email).maybeSingle();
+            row = byEmail.data;
+          }
+          const rawStatus = String(row?.status || row?.plan_status || row?.member_status || "").toLowerCase();
+          const rawPlan = String(row?.plan || row?.plan_code || row?.tier || "").toLowerCase();
+          const allowed = row?.allowed === true || ALLOWED_STATUSES.has(rawStatus) || ALLOWED_STATUSES.has(rawPlan);
+          return { ...(row || {}), status: rawStatus || "pending", plan: rawPlan, allowed, source: row ? table : "missing_access_row" };
+        } catch (error) {
+          return { status: "access_check_error", allowed: false, error: error?.message || String(error) };
+        }
+      }
+
+      async function persistSession(session) {
+        const access = await readAccess(session);
+        const statusValue = access.allowed ? (access.status || "active") : (access.status || "pending");
+        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+          at: Date.now(),
+          status: statusValue,
+          email: session?.user?.email || "",
+          userId: session?.user?.id || "",
+          allowed: access.allowed === true,
+          access
+        }));
+        return access;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
+        if (!captcha.checked) return setStatus("請先完成您是人類的驗證。", "error");
+        submit.disabled = true;
+        setStatus(mode === "signup" ? "註冊中..." : "登入中...");
+        try {
+          const credentials = { email: email.value.trim(), password: password.value };
+          const result = mode === "signup"
+            ? await client.auth.signUp(credentials)
+            : await client.auth.signInWithPassword(credentials);
+          if (result.error) throw result.error;
+          const session = result.data?.session || (await client.auth.getSession()).data?.session;
+          if (!session && mode === "signup") {
+            setStatus("註冊完成，請先完成 Email 驗證；權限開通後即可解鎖策略與成績單。", "good");
+            return;
+          }
+          const access = await persistSession(session);
+          if (access.allowed) {
+            setStatus("登入成功，會員權限已開通，正在進入終端。", "good");
+            location.href = nextUrl;
+          } else {
+            setStatus("登入成功，但此帳號尚未開通策略權限；目前只能查看市場總覽、AI 判讀與學習方案。", "error");
+          }
+        } catch (error) {
+          setStatus(error?.message || "登入失敗，請確認帳號密碼。", "error");
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      tabs.forEach((tab) => tab.addEventListener("click", () => applyMode(tab.dataset.authMode)));
+      switchMode.addEventListener("click", () => applyMode(mode === "login" ? "signup" : "login"));
+      document.querySelector("#togglePassword").addEventListener("click", () => {
+        password.type = password.type === "password" ? "text" : "password";
+      });
+      document.querySelector("#forgotPassword").addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (!client || !email.value.trim()) return setStatus("請先輸入 Email，再點忘記密碼。", "error");
+        const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + "/auth.html" });
+        setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
+      });
+      document.querySelector("#googleLogin").addEventListener("click", () => setStatus("Google 登入入口已預留；目前請先使用 Email 登入。"));
+      applyMode("login");
+    })();
+  </script>
+</body>
+</html>

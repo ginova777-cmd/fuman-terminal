@@ -26,6 +26,8 @@ function requireIncludes(file, needle) {
 
 requireIncludes("index.html", `styles.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
+requireIncludes("index.html", `terminal-entitlement-guard.js?v=${VERSION}`);
+requireIncludes("88.html", `terminal-entitlement-guard.js?v=${VERSION}`);
 requireIncludes("index.html", `terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
 requireIncludes("terminal-modules.js", `const VERSION = "${VERSION}"`);
@@ -35,6 +37,7 @@ requireIncludes("terminal-modules.js", "terminal-chip-snapshot-module.js");
 requireIncludes("terminal.js", "FUMAN_TERMINAL_LOAD_FEATURE_MODULE");
 requireIncludes("fuman-sw.js", `?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-app.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-entitlement-guard.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-member-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-snapshot-module.js?v=${VERSION}`);

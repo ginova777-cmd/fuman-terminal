@@ -37,6 +37,7 @@
     "bump:version": "node scripts/bump-version.js",
     "sync:source": "node scripts/sync-main-deploy-source.js",
     "verify:version": "node scripts/verify-version-consistency.js",
+    "verify:entitlement-guard": "node scripts/verify-entitlement-guard.js",
     "predeploy": "node scripts/prepare-deploy.js",
     "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
     "guard:source": "node scripts/guard-source-tree.js",
