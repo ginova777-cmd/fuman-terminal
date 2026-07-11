@@ -1425,14 +1425,20 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     marginShort.ok &&
     previousVolumeExpanded
   )) return null;
+  const volumeIncreaseTop100 = volumeIncreaseOrdinalRank > 0 && volumeIncreaseOrdinalRank <= 100;
+  const volumeIncreaseBonus = volumeIncreaseTop100 ? 8 : 0;
+  const volumeIncreaseRankText = volumeIncreaseOrdinalRank > 0
+    ? `成交量增幅排行第 ${volumeIncreaseOrdinalRank} 名${volumeIncreaseTop100 ? "（前100加分）" : ""}`
+    : "成交量增幅排行無資料";
   const score = clamp(Math.round(
     48 +
     Math.min((pct - 3) * 8, 32) +
     Math.min(volumeLots / 120, 18) +
     Math.min(turnoverRate * 4, 28) +
-    Math.min(volumeRatio * 10, 22)
+    Math.min(volumeRatio * 10, 22) +
+    volumeIncreaseBonus
   ), 0, 100);
-  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}），成交量較前一日放大 ${previousVolumeExpansionRatio.toFixed(2)} 倍。`;
+  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}），成交量較前一日放大 ${previousVolumeExpansionRatio.toFixed(2)} 倍；${volumeIncreaseRankText}。`;
   return {
     id: "volume_turnover_breakout",
     short: "量價周轉",
@@ -1446,6 +1452,8 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     volumeRatio: Number(volumeRatio.toFixed(2)),
     pctOrdinalRank,
     volumeIncreaseOrdinalRank,
+    volumeIncreaseTop100,
+    volumeIncreaseBonus,
     marginNetIncrease: Math.round(marginShort.marginNetIncrease),
     shortNetIncrease: Math.round(marginShort.shortNetIncrease),
     marginShortSameIncrease: true,
