@@ -4,8 +4,10 @@ const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
+const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 
 const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+const PUBLIC_FRAGMENT_TABS = [];
 const TAB_ENDPOINTS = {
   strategy1: "/api/open-buy-latest",
   strategy2: "/api/strategy2-latest",
@@ -166,6 +168,8 @@ function normalizeMarketCore(payload) {
 
 async function buildBoot(request) {
   const origin = originFrom(request);
+  const entitlement = await verifyRequestEntitlement(request, { scope: "mobile-boot" });
+  const fragmentTabs = entitlement.ok ? FRAGMENT_TABS : PUBLIC_FRAGMENT_TABS;
   const marketCalendarPromise = buildMarketCalendarContract().catch(() => null);
   const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
   const marketPromise = (async () => {
@@ -178,7 +182,7 @@ async function buildBoot(request) {
     }
     return normalizeMarketCore(payload);
   })();
-  const results = await Promise.all(FRAGMENT_TABS.map(async (tab) => {
+  const results = await Promise.all(fragmentTabs.map(async (tab) => {
     const endpoint = appendQuery(TAB_ENDPOINTS[tab], {
       mobileBoot: 1,
       canvas: 1,
@@ -221,6 +225,10 @@ async function buildBoot(request) {
   return {
     ok: true,
     source: "mobile-boot-api-only",
+    protected: !entitlement.ok,
+    membershipRequired: !entitlement.ok,
+    protectedReason: entitlement.ok ? "" : entitlement.reason || "missing_bearer_token",
+    publicSurfaces: ["market-overview", "market-ai", "learning-plan"],
     updatedAt,
     bootHash,
     marketCalendar,

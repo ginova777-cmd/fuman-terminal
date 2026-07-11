@@ -18,6 +18,71 @@ const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
+const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+
+function isPublicBundleEndpoint(endpoint) {
+  const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+  return path === "/api/market"
+    || path === "/api/heatmap"
+    || path === "/api/market-ai-live";
+}
+
+function sanitizePublicEndpointPayload(value) {
+  const protectedPattern = /strategy[1-5]|open-buy|institution|cb-detect|warrant-flow|latest-strategy|latest-signals/i;
+  if (typeof value === "string") {
+    return protectedPattern.test(value) ? value.replace(protectedPattern, "protected-source") : value;
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizePublicEndpointPayload(item));
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (protectedPattern.test(key)) continue;
+      next[key] = sanitizePublicEndpointPayload(item);
+    }
+    return next;
+  }
+  return value;
+}
+
+function filterPublicBundlePayload(payload, entitlement) {
+  if (entitlement?.ok) return payload;
+  const endpoints = {};
+  for (const [endpoint, endpointPayload] of Object.entries(payload?.endpoints || {})) {
+    if (isPublicBundleEndpoint(endpoint)) endpoints[endpoint] = sanitizePublicEndpointPayload(endpointPayload);
+  }
+  const timings = {};
+  for (const [endpoint, elapsedMs] of Object.entries(payload?.timings || {})) {
+    if (isPublicBundleEndpoint(endpoint)) timings[endpoint] = elapsedMs;
+  }
+  return {
+    ok: payload?.ok !== false,
+    partial: Boolean(payload?.partial),
+    source: payload?.source || "terminal-fast-bundle",
+    cacheSource: payload?.cacheSource || "",
+    updatedAt: payload?.updatedAt || new Date().toISOString(),
+    elapsedMs: Number(payload?.elapsedMs || 0) || 0,
+    protected: true,
+    membershipRequired: true,
+    protectedReason: entitlement?.reason || "missing_bearer_token",
+    publicSurfaces: ["market-overview", "market-ai", "learning-plan"],
+    endpoints,
+    summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
+    misses: Array.isArray(payload?.misses) ? payload.misses.filter((endpoint) => isPublicBundleEndpoint(endpoint)) : [],
+    timings,
+    marketCalendar: payload?.marketCalendar || null,
+    marketOpen: payload?.marketOpen,
+    marketStatus: payload?.marketStatus || "",
+    closedReason: payload?.closedReason || "",
+    closedReasonText: payload?.closedReasonText || "",
+    requestedDate: payload?.requestedDate || "",
+    displayTradeDate: payload?.displayTradeDate || "",
+    formalScanSkipped: payload?.formalScanSkipped === true,
+    sourceFreshnessRequired: payload?.sourceFreshnessRequired !== false,
+    preservePreviousGood: payload?.preservePreviousGood === true,
+    latestPointerUpdated: payload?.latestPointerUpdated === true,
+    emptyResultWritten: payload?.emptyResultWritten === true,
+  };
+}
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
@@ -588,6 +653,7 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
 
   const wantsLive = request.query?.live === "1"
@@ -633,7 +699,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar));
+      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
       return;
     }
     if (!liveFallbackEnabled(request)) {
@@ -651,7 +717,7 @@ module.exports = async function handler(request, response) {
         misses: Object.keys(endpoints).length ? [] : ["desktop_route_snapshot"],
         snapshotRepairs: Object.keys(endpoints).length ? { strategy3: "live-repair-on-snapshot-miss" } : {},
       };
-      response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar));
+      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar), entitlement));
       return;
     }
   }
@@ -675,7 +741,8 @@ module.exports = async function handler(request, response) {
     ["/api/warrant-flow-latest", warrantFlowLatest, compactQuery(60), 7000],
   ];
 
-  const rows = await Promise.all(tasks.map(([endpoint, handlerFn, query, timeout]) => (
+  const runnableTasks = entitlement.ok ? tasks : tasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
+  const rows = await Promise.all(runnableTasks.map(([endpoint, handlerFn, query, timeout]) => (
     callJson(endpoint, handlerFn, request, query, timeout)
   )));
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
@@ -708,6 +775,6 @@ module.exports = async function handler(request, response) {
     response.status(200).end("");
     return;
   }
-  response.status(200).json(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar));
+  response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
 

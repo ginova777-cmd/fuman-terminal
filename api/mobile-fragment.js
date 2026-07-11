@@ -4,6 +4,7 @@ const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
+const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 
 const TAB_CONFIG = {
   ai: {
@@ -100,6 +101,17 @@ function sendHtml(request, response, statusCode, html, extra = {}) {
     return;
   }
   response.status(statusCode).send(request.method === "HEAD" ? "" : html);
+}
+
+function lockedFragment(tab) {
+  return `<section class="mobile-terminal-fragment mobile-terminal-locked" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-membership-required="1">
+    <article class="mobile-terminal-head">
+      <small>會員權限</small>
+      <strong>此分頁需要開通權限</strong>
+      <p>市場總覽、AI 判讀與學習方案可公開瀏覽；策略、籌碼、CB、權證與成績單需登入並開通。</p>
+    </article>
+    <div class="empty-state">請登入已開通帳號。</div>
+  </section>`;
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
@@ -630,6 +642,18 @@ module.exports = async function handler(request, response) {
   if (!config) {
     sendHtml(request, response, 404, '<div class="empty-state">未知分頁。</div>', { tab });
     return;
+  }
+  if (tab !== "ai") {
+    const entitlement = await verifyRequestEntitlement(request, { scope: `mobile-fragment:${tab}` });
+    if (!entitlement.ok) {
+      sendHtml(request, response, 401, lockedFragment(tab), {
+        tab,
+        protected: true,
+        error: entitlement.error || "membership_required",
+        reason: entitlement.reason || "missing_bearer_token",
+      });
+      return;
+    }
   }
   try {
     const endpoint = appendQuery(config.endpoint, {

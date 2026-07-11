@@ -86,7 +86,53 @@ async function verifyProductionProtection() {
     publicRows.push({ path: apiPath, status: result.status });
     if (result.status !== 200) issues.push(`${apiPath} must remain public HTTP 200; status=${result.status}`);
   }
-  return { protectedRows, publicRows };
+
+  const bundle = await fetchJson(`${PRODUCTION_URL}/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70&membership_probe=${Date.now()}`);
+  const bundleText = bundle.text || JSON.stringify(bundle.json || {});
+  const forbiddenBundleMarkers = [
+    "strategy1-",
+    "strategy2-",
+    "strategy3-",
+    "strategy4-",
+    "strategy5-",
+    "institution-",
+    "cb-detect-",
+    "warrant-flow-",
+    "/api/open-buy-latest",
+    "/api/strategy2-latest",
+    "/api/strategy3-latest",
+    "/api/strategy4-latest",
+    "/api/strategy5-latest",
+    "/api/institution-latest",
+    "/api/cb-detect-latest",
+    "/api/warrant-flow-latest"
+  ];
+  const bundleLeaks = forbiddenBundleMarkers.filter((marker) => bundleText.includes(marker));
+  if (bundle.status !== 200 || bundle.json?.membershipRequired !== true || bundleLeaks.length) {
+    issues.push(`terminal-fast-bundle unauthenticated payload must be public-only redacted; status=${bundle.status} membershipRequired=${bundle.json?.membershipRequired} leaks=${bundleLeaks.join(",")}`);
+  }
+
+  const mobileBoot = await fetchJson(`${PRODUCTION_URL}/api/mobile-boot?membership_probe=${Date.now()}`);
+  const mobileBootText = mobileBoot.text || JSON.stringify(mobileBoot.json || {});
+  const mobileBootLeaks = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"].filter((marker) => mobileBootText.includes(`"${marker}"`));
+  if (mobileBoot.status !== 200 || mobileBoot.json?.membershipRequired !== true || mobileBootLeaks.length) {
+    issues.push(`mobile-boot unauthenticated payload must expose public tabs only; status=${mobileBoot.status} membershipRequired=${mobileBoot.json?.membershipRequired} leaks=${mobileBootLeaks.join(",")}`);
+  }
+
+  const mobileStrategy2 = await fetchJson(`${PRODUCTION_URL}/api/mobile-fragment?tab=strategy2&membership_probe=${Date.now()}`);
+  if (mobileStrategy2.status !== 401 || !String(mobileStrategy2.text || "").includes("data-membership-required=\"1\"")) {
+    issues.push(`mobile-fragment strategy2 unauthenticated must return locked fragment HTTP 401; status=${mobileStrategy2.status}`);
+  }
+
+  return {
+    protectedRows,
+    publicRows,
+    redactedSurfaces: {
+      terminalFastBundle: { status: bundle.status, membershipRequired: bundle.json?.membershipRequired === true, leaks: bundleLeaks },
+      mobileBoot: { status: mobileBoot.status, membershipRequired: mobileBoot.json?.membershipRequired === true, leaks: mobileBootLeaks },
+      mobileStrategy2Fragment: { status: mobileStrategy2.status, locked: String(mobileStrategy2.text || "").includes("data-membership-required=\"1\"") },
+    }
+  };
 }
 
 async function verifyLocalEntitlementMatrix() {
@@ -149,6 +195,10 @@ async function main() {
   requireIncludes("auth.html", `const table = config.accessTable || "${ACCESS_TABLE}"`);
   requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
   requireIncludes("terminal-entitlement-guard.js", "authorization");
+  requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
+  requireIncludes("api/terminal-fast-bundle.js", "verifyRequestEntitlement");
+  requireIncludes("api/mobile-boot.js", "PUBLIC_FRAGMENT_TABS");
+  requireIncludes("api/mobile-fragment.js", "lockedFragment");
   requireIncludes("lib/server-entitlement-guard.js", "DEFAULT_AUTH_SUPABASE_URL");
   requireIncludes("lib/server-entitlement-guard.js", "DEFAULT_AUTH_SUPABASE_KEY");
   requireIncludes("lib/server-entitlement-guard.js", ACCESS_TABLE);
