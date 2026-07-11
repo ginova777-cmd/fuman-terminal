@@ -1975,13 +1975,13 @@ function buildBollingerKdjMatch({ stock, inst = {}, valueRank, volumeRank, rows 
     (buyPoint2Ok ? 12 : 0) +
     (kdGoldenCrossOk ? 6 : 0)
   ), 0, 100);
-  const kdText = kdGoldenCrossOk ? `KD 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}` : `KD 未黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}`;
+  const kdText = kdGoldenCrossOk ? `KD 黃金交叉火焰加分 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}` : `KD 未黃金交叉，無火焰加分 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}`;
   const branchText = mainForceBuyOk ? `主力/關鍵分點買超 ${Math.round(mainForceBranchNetBuy || topBranchNetBuy - topBranchNetSell)}` : "主力/關鍵分點未買超";
   const reason = `${flameOnBuyPoint ? "🔥 " : ""}${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；帶寬 ${pattern.bollingerBandwidthPct.toFixed(2)}%（${pattern.bollingerBandwidthLabel}），上軌斜率 ${roundNumber(pattern.upperRailSlopePct, 2)}%，${kdText}，${branchText}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
   return {
     id: "bollinger_kdj_buy",
-    short: flameOnBuyPoint ? "🔥布林買點" : "布林買點",
-    icon: flameOnBuyPoint ? "🔥" : "K",
+    short: flameOnBuyPoint ? "🔥布林通道" : "布林通道",
+    icon: flameOnBuyPoint ? "🔥" : "布",
     score,
     reason,
     bollingerMode: pattern.mode,
@@ -2302,9 +2302,3 @@ module.exports = {
   buildWriteBudget,
   normalizeTradeVolumeUnits,
 };
-
-
-
-
-
-

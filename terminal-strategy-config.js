@@ -3,7 +3,7 @@ const STRATEGY_DEFS = [
   { id: "chip_k_confluence", label: "籌碼共振", short: "籌碼共振", icon: "籌" },
   { id: "multi_strategy_confluence", label: "🔥 多策略共振", short: "共振", icon: "🔥" },
   { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉", icon: "量" },
-  { id: "bollinger_kdj_buy", label: "布林隨機買點", short: "布林隨機", icon: "布" },
+  { id: "bollinger_kdj_buy", label: "布林通道", short: "布林通道", icon: "布" },
   { id: "momentum", label: "動能分數 75+", short: "動能", icon: "⚡" },
   { id: "main_force_chip", label: "主力籌碼盤整", short: "主力", icon: "♣" },
   { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字", icon: "十" },
@@ -60,7 +60,7 @@ const STRATEGY5_CARD_META = {
     description: "漲幅 3%-8%、成交量 1000 張以上、周轉率大於 5%、量比大於等於 1%。",
   },
   bollinger_kdj_buy: {
-    description: "日K布林通道 20MA/2σ，搭配 KDJ 黃金交叉；三線向上買在中軌，三線走平買在下軌。",
+    description: "日K布林通道 20MA/2σ；買點1為窄帶突破站上軌並沿上軌，買點2為大帶寬回下軌且主力/關鍵分點買超。KD 黃金交叉只作火焰加分。",
   },
 };
 const INTRADAY_EXCLUDED_CODES = new Set([
@@ -95,4 +95,3 @@ const SWING_SIGNAL_DEFS = [
     SWING_SIGNAL_DEFS,
   };
 })();
-
