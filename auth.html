@@ -389,10 +389,53 @@
   <script>
     (() => {
       const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
+      const AUTH_STORAGE_KEY = "sb-jxnqyqnigsppqsxinlrq-auth-token";
       const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
+      const PRESERVE_STORAGE_KEYS = new Set(["fuman_watchlist", "fuman_mobile_watchlist_v1", AUTH_CACHE_KEY, AUTH_STORAGE_KEY]);
       const config = window.FUMAN_RUNTIME_CONFIG || {};
+
+      function pruneAuthStorage(reason = "auth_quota") {
+        try {
+          const remove = [];
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index) || "";
+            if (PRESERVE_STORAGE_KEYS.has(key)) continue;
+            if (key.startsWith("sb-") && key.endsWith("-auth-token")) remove.push(key);
+            else if (key.includes("terminal") && key.includes("cache")) remove.push(key);
+            else if (key.includes("strategy5") && key.includes("cache")) remove.push(key);
+            else if (key.includes("market-ai") && key.includes("cache")) remove.push(key);
+            else if (key.includes("heatmap") && key.includes("cache")) remove.push(key);
+          }
+          remove.forEach((key) => localStorage.removeItem(key));
+          sessionStorage.setItem("fuman-auth-storage-pruned", JSON.stringify({ at: Date.now(), reason, removed: remove.length }));
+        } catch {}
+      }
+
+      function safeSetStorage(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (error) {
+          pruneAuthStorage(error?.name || "quota_error");
+          localStorage.setItem(key, value);
+        }
+      }
+
+      const authStorage = {
+        getItem: (key) => localStorage.getItem(key),
+        removeItem: (key) => localStorage.removeItem(key),
+        setItem: (key, value) => safeSetStorage(key, value),
+      };
+      pruneAuthStorage("auth_page_open");
       const client = config.supabaseUrl && config.supabaseKey && window.supabase
-        ? window.supabase.createClient(config.supabaseUrl, config.supabaseKey)
+        ? window.supabase.createClient(config.supabaseUrl, config.supabaseKey, {
+            auth: {
+              storageKey: AUTH_STORAGE_KEY,
+              storage: authStorage,
+              persistSession: true,
+              autoRefreshToken: true,
+              detectSessionInUrl: true,
+            },
+          })
         : null;
       const form = document.querySelector("#authForm");
       const email = document.querySelector("#email");
@@ -448,7 +491,7 @@
       async function persistSession(session) {
         const access = await readAccess(session);
         const statusValue = access.allowed ? (access.status || "active") : (access.status || "pending");
-        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+        safeSetStorage(AUTH_CACHE_KEY, JSON.stringify({
           at: Date.now(),
           status: statusValue,
           email: session?.user?.email || "",

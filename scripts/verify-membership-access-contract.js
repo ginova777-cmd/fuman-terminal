@@ -196,6 +196,11 @@ async function main() {
   requireIncludes("auth.html", "finishOAuthRedirect()");
   requireIncludes("auth.html", "exchangeCodeForSession(code)");
   requireIncludes("auth.html", "googleFallbackLink");
+  requireIncludes("auth.html", "AUTH_STORAGE_KEY");
+  requireIncludes("auth.html", "pruneAuthStorage");
+  requireIncludes("auth.html", "safeSetStorage");
+  requireIncludes("auth.html", "storageKey: AUTH_STORAGE_KEY");
+  requireIncludes("auth.html", "PRESERVE_STORAGE_KEYS");
   requireIncludes("auth.html", `const table = config.accessTable || "${ACCESS_TABLE}"`);
   requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
   requireIncludes("terminal-entitlement-guard.js", "authorization");
