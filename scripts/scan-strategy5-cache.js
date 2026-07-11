@@ -833,10 +833,13 @@ function shouldIncludeTodayVolume() {
   return minutes >= 14 * 60 + 30;
 }
 
-function recentTradingDates(limit = 8) {
+function recentTradingDates(limit = 8, anchorDateKey = "") {
   const dates = [];
-  const date = new Date();
-  if (!shouldIncludeTodayVolume()) date.setDate(date.getDate() - 1);
+  const anchor = compactDateKey(anchorDateKey);
+  const date = anchor
+    ? new Date(`${anchor.slice(0, 4)}-${anchor.slice(4, 6)}-${anchor.slice(6, 8)}T12:00:00+08:00`)
+    : new Date();
+  if (!anchor && !shouldIncludeTodayVolume()) date.setDate(date.getDate() - 1);
   for (let i = 0; dates.length < limit && i < 18; i++) {
     const day = date.getDay();
     if (day !== 0 && day !== 6) dates.push(new Date(date));
@@ -852,10 +855,11 @@ function collectVolume(bucket, code, volume) {
   bucket.set(code, list);
 }
 
-async function fetchHistoricalVolumes() {
+async function fetchHistoricalVolumes(anchorDateKey = "") {
   const bucket = new Map();
   const warnings = [];
-  for (const date of recentTradingDates()) {
+  const anchor = compactDateKey(anchorDateKey);
+  for (const date of recentTradingDates(8, anchor)) {
     try {
       const payload = await fetchJson(`https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date=${formatTwseDate(date)}&type=ALLBUT0999&response=json`, 25000);
       const table = (payload.tables || []).find((item) => String(item.title || "").includes("每日收盤行情"));
@@ -869,6 +873,8 @@ async function fetchHistoricalVolumes() {
     }
     try {
       const payload = await fetchJson(`https://www.tpex.org.tw/web/stock/aftertrading/daily_close_quotes/stk_quote_result.php?l=zh-tw&o=json&d=${encodeURIComponent(formatTpexDate(date))}&s=0,asc,0`, 25000);
+      const responseDate = compactDateKey(payload.date || payload.reportDate || payload.Date);
+      if (responseDate && responseDate !== formatTwseDate(date)) continue;
       const table = (payload.tables || []).find((item) => (item.data || []).length);
       const fields = table?.fields || [];
       const data = table?.data || [];
@@ -884,10 +890,10 @@ async function fetchHistoricalVolumes() {
   bucket.forEach((values, code) => {
     const usable = values.slice(0, 5);
     if (usable.length) averages.set(code, usable.reduce((sum, value) => sum + value, 0) / usable.length);
-    const previousValue = values.length > 1 && shouldIncludeTodayVolume() ? values[1] : values[0];
+    const previousValue = (anchor || shouldIncludeTodayVolume()) ? (values[1] || 0) : values[0];
     if (previousValue > 0) previous.set(code, previousValue);
   });
-  return { map: averages, previousMap: previous, warnings };
+  return { map: averages, previousMap: previous, warnings, anchorDate: anchor };
 }
 
 function rankMap(stocks, key) {
@@ -1103,26 +1109,35 @@ function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) 
     const foreign = firstNullableNumber(current.foreign);
     const trust = firstNullableNumber(current.trust);
     const dealer = firstNullableNumber(current.dealer);
+    const currentMarginTradeDate = current.marginTradeDate || current.margin_trade_date || "";
+    const currentMarginSource = current.marginShortSource || current.margin_short_source || "";
+    const useFinmindMargin = shouldReplaceChipSource(
+      currentMarginTradeDate,
+      currentMarginSource,
+      finmind.marginTradeDate,
+      finmind.marginShortSource,
+    );
     merged[code] = {
       ...current,
       foreign: foreign ?? finmind.foreign,
       trust: trust ?? finmind.trust,
       dealer: dealer ?? finmind.dealer,
       total: firstNullableNumber(current.total) ?? finmind.total,
-      marginBuy: firstNullableNumber(current.marginBuy, current.margin_buy) ?? finmind.marginBuy,
-      marginSell: firstNullableNumber(current.marginSell, current.margin_sell) ?? finmind.marginSell,
-      marginCashRepayment: firstNullableNumber(current.marginCashRepayment, current.margin_cash_repayment) ?? finmind.marginCashRepayment,
-      marginBalance: firstNullableNumber(current.marginBalance, current.margin_balance) ?? finmind.marginBalance,
-      shortSell: firstNullableNumber(current.shortSell, current.short_sell) ?? finmind.shortSell,
-      shortBuy: firstNullableNumber(current.shortBuy, current.short_buy) ?? finmind.shortBuy,
-      shortCashRepayment: firstNullableNumber(current.shortCashRepayment, current.short_cash_repayment) ?? finmind.shortCashRepayment,
-      shortBalance: firstNullableNumber(current.shortBalance, current.short_balance) ?? finmind.shortBalance,
+      marginBuy: useFinmindMargin ? finmind.marginBuy : (firstNullableNumber(current.marginBuy, current.margin_buy) ?? finmind.marginBuy),
+      marginSell: useFinmindMargin ? finmind.marginSell : (firstNullableNumber(current.marginSell, current.margin_sell) ?? finmind.marginSell),
+      marginCashRepayment: useFinmindMargin ? finmind.marginCashRepayment : (firstNullableNumber(current.marginCashRepayment, current.margin_cash_repayment) ?? finmind.marginCashRepayment),
+      marginBalance: useFinmindMargin ? finmind.marginBalance : (firstNullableNumber(current.marginBalance, current.margin_balance) ?? finmind.marginBalance),
+      shortSell: useFinmindMargin ? finmind.shortSell : (firstNullableNumber(current.shortSell, current.short_sell) ?? finmind.shortSell),
+      shortBuy: useFinmindMargin ? finmind.shortBuy : (firstNullableNumber(current.shortBuy, current.short_buy) ?? finmind.shortBuy),
+      shortCashRepayment: useFinmindMargin ? finmind.shortCashRepayment : (firstNullableNumber(current.shortCashRepayment, current.short_cash_repayment) ?? finmind.shortCashRepayment),
+      shortBalance: useFinmindMargin ? finmind.shortBalance : (firstNullableNumber(current.shortBalance, current.short_balance) ?? finmind.shortBalance),
       institutionTradeDate: current.institutionTradeDate || current.tradeDate || current.trade_date || finmind.institutionTradeDate || "",
       institutionSource: current.institutionSource || current.source || finmind.institutionSource || "",
-      marginTradeDate: current.marginTradeDate || current.margin_trade_date || finmind.marginTradeDate || "",
-      marginShortSource: current.marginShortSource || current.margin_short_source || finmind.marginShortSource || "",
+      marginTradeDate: useFinmindMargin ? finmind.marginTradeDate : (current.marginTradeDate || current.margin_trade_date || finmind.marginTradeDate || ""),
+      marginShortSource: useFinmindMargin ? finmind.marginShortSource : (current.marginShortSource || current.margin_short_source || finmind.marginShortSource || ""),
       tradeDate: latestDateKey([current.tradeDate, current.trade_date, finmind.tradeDate]),
       finmindChip: finmind,
+      marginShortMergeSource: useFinmindMargin ? "finmind_margin_short_priority" : "base_institution_source",
     };
   });
   return merged;
@@ -1843,18 +1858,9 @@ async function main() {
     return new Map();
   });
   const institutionData = mergeInstitutionDataWithFinMind(institution.data || {}, finmindChipMap);
-  const [stocks, issuedSharesResult, volumeAverageResult] = await Promise.all([
-    fetchUniverse(),
-    fetchIssuedShares(),
-    fetchHistoricalVolumes(),
-  ]);
+  const stocks = await fetchUniverse();
   if (!stocks.length) throw new Error("No stock universe");
-  const sourceWarnings = [
-    ...issuedSharesResult.warnings,
-    ...volumeAverageResult.warnings,
-  ];
   if (finmindChipMap.size) console.log(`strategy5 FinMind chip supplement rows=${finmindChipMap.size}`);
-  sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const quoteDate = compactDateKey(stocks.find((stock) => stock.quoteDate)?.quoteDate);
   const institutionDate = compactDateKey(institution.usedDate || institution.date);
   const chipLatestTradeDate = latestDateKey([
@@ -1863,6 +1869,15 @@ async function main() {
     institutionDate,
   ]);
   const sourceDate = chipLatestTradeDate || institutionDate || quoteDate || taipeiDateKey();
+  const [issuedSharesResult, volumeAverageResult] = await Promise.all([
+    fetchIssuedShares(),
+    fetchHistoricalVolumes(sourceDate),
+  ]);
+  const sourceWarnings = [
+    ...issuedSharesResult.warnings,
+    ...volumeAverageResult.warnings,
+  ];
+  sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
   const now = new Date();
   const runMarketDate = sourceDate;
   const marginShortSourceDate = compactDateKey(chipSourceHealth.marginLatestTradeDate || "");
@@ -1889,6 +1904,7 @@ async function main() {
       ...universeSourceHealth,
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
+      volumeAverageAnchorDate: volumeAverageResult.anchorDate,
       finmindChipCount: finmindChipMap.size,
       chipLatestTradeDate,
       institutionLatestDate: institutionDate,
