@@ -381,7 +381,12 @@ async function currentTradingDayStatus() {
 
 function isMarketClosedLiveSourceCheck(check, tradingDay) {
   if (tradingDay?.isTradingDay !== false) return false;
-  return Boolean(check.requireToday || check.kind === "realtime-radar-cache");
+  return Boolean(
+    check.requireToday
+    || check.kind === "realtime-radar-cache"
+    || check.table === "v_strategy2_readiness_status"
+    || check.table === "v_strategy2_readiness_missing"
+  );
 }
 
 function compactDate(value) {
@@ -619,7 +624,7 @@ async function checkOne(strategy, check) {
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
     if (ageDays != null && ageDays > check.maxAgeDays) issues.push(`${check.table} newest date ${newest} age ${ageDays}d > ${check.maxAgeDays}d`);
   }
-  if (result.ok && check.healthStatusField) {
+  if (result.ok && check.healthStatusField && !marketClosedLiveSource) {
     const row = result.rows[0] || {};
     const status = String(row[check.healthStatusField] || "").trim().toLowerCase();
     const accepted = new Set((check.acceptedHealthStatuses || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean));
