@@ -10,6 +10,9 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_FILE = process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length)
   || path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json");
+const DEFAULT_OUT_FILE = path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json");
+const BLOCKED_RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
+const MIN_CURRENT_RETAIN_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_CURRENT_RETAIN_RATIO || 0.75);
 
 const TASKS = [
   {
@@ -761,6 +764,92 @@ function summarize(records) {
   });
 }
 
+function readJsonSafe(file) {
+  try {
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function recordsOf(payload) {
+  return Array.isArray(payload?.records) ? payload.records : [];
+}
+
+function strategySetOf(records) {
+  return new Set(records.map((row) => cleanText(row.strategy)).filter(Boolean));
+}
+
+function scorecardCurrentWriteDecision(nextPayload, outFile) {
+  if (path.resolve(outFile) !== path.resolve(DEFAULT_OUT_FILE)) {
+    return { allow: true, reason: "non_default_out_file" };
+  }
+  if (process.env.FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK === "1") {
+    return { allow: true, reason: "explicit_allow_current_shrink" };
+  }
+  const previous = readJsonSafe(outFile);
+  const previousRecords = recordsOf(previous);
+  const nextRecords = recordsOf(nextPayload);
+  if (!previousRecords.length || !nextRecords.length) {
+    return { allow: Boolean(nextRecords.length), reason: nextRecords.length ? "no_previous_good" : "next_empty" };
+  }
+  const previousStrategies = strategySetOf(previousRecords);
+  const nextStrategies = strategySetOf(nextRecords);
+  const retainRatio = previousRecords.length ? nextRecords.length / previousRecords.length : 1;
+  const missingStrategies = [...previousStrategies].filter((strategy) => !nextStrategies.has(strategy));
+  const suspiciousShrink = nextRecords.length < previousRecords.length && (
+    retainRatio < MIN_CURRENT_RETAIN_RATIO ||
+    missingStrategies.length > 0 ||
+    nextStrategies.size < previousStrategies.size
+  );
+  if (!suspiciousShrink) {
+    return {
+      allow: true,
+      reason: "current_write_safe",
+      previousRows: previousRecords.length,
+      nextRows: nextRecords.length,
+      previousStrategies: previousStrategies.size,
+      nextStrategies: nextStrategies.size,
+      retainRatio,
+    };
+  }
+  return {
+    allow: false,
+    reason: "blocked_current_shrink_preserve_previous_good",
+    previousRows: previousRecords.length,
+    nextRows: nextRecords.length,
+    previousStrategies: previousStrategies.size,
+    nextStrategies: nextStrategies.size,
+    retainRatio,
+    missingStrategies,
+    previousRunId: cleanText(previous.runId || previous.scorecardRunId),
+    nextRunId: cleanText(nextPayload.runId || nextPayload.scorecardRunId),
+  };
+}
+
+function writeBlockedCurrentReceipt(decision, nextPayload) {
+  fs.mkdirSync(BLOCKED_RECEIPT_DIR, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const receiptFile = path.join(BLOCKED_RECEIPT_DIR, `scorecard-current-shrink-blocked-${stamp}.json`);
+  const payload = {
+    ok: false,
+    contract: "scorecard-current-preserve-previous-good-v1",
+    blocked: true,
+    previousGoodPreserved: true,
+    checkedAt: new Date().toISOString(),
+    out: OUT_FILE,
+    decision,
+    nextSummary: {
+      latestDate: nextPayload.latestDate,
+      rows: recordsOf(nextPayload).length,
+      sourceReports: Array.isArray(nextPayload.sourceReports) ? nextPayload.sourceReports : [],
+    },
+  };
+  fs.writeFileSync(receiptFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  return receiptFile;
+}
+
 function alignRecordDate(row, recordDate) {
   if (!recordDate || row.record_date === recordDate) return row;
   const sourceDate = normalizeDate(row.source_date || row.scan_date || "");
@@ -889,6 +978,24 @@ async function main() {
     sourceReports: reports,
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
+  const writeDecision = scorecardCurrentWriteDecision(payload, OUT_FILE);
+  if (!writeDecision.allow) {
+    const receiptFile = writeBlockedCurrentReceipt(writeDecision, payload);
+    console.log(JSON.stringify({
+      ok: true,
+      out: OUT_FILE,
+      latestDate,
+      rows: filtered.length,
+      dailyRows: daily.length,
+      reports,
+      currentWriteAllowed: false,
+      previousGoodPreserved: true,
+      reason: writeDecision.reason,
+      writeDecision,
+      receiptFile,
+    }, null, 2));
+    return;
+  }
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   console.log(JSON.stringify({
     ok: true,
@@ -897,6 +1004,8 @@ async function main() {
     rows: filtered.length,
     dailyRows: daily.length,
     reports,
+    currentWriteAllowed: true,
+    writeDecision,
   }, null, 2));
   if (!filtered.length) process.exit(2);
 }
@@ -905,4 +1014,3 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
-
