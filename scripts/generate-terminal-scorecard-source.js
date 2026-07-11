@@ -658,6 +658,68 @@ function normalizeRecord(task, payload, row, index) {
   });
 }
 
+async function fetchStrategy5LatestCompletePayload() {
+  const runRows = await fetchSupabaseRows(
+    process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs",
+    [
+      "select=run_id,scan_date,finished_at,status,complete,result_count,updated_at,payload",
+      "strategy=eq.strategy5",
+      "status=eq.complete",
+      "complete=eq.true",
+      "order=updated_at.desc",
+      "limit=1",
+    ].join("&"),
+  );
+  const run = runRows[0];
+  if (!run?.run_id) return null;
+  const resultRows = await fetchSupabaseRows(
+    process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results",
+    [
+      "select=run_id,scan_date,code,name,price,close,change_percent,volume,trade_volume,trade_value,score,rank,reason,signals,payload,complete,quality_status,generated_at,updated_at",
+      "strategy=eq.strategy5",
+      `run_id=eq.${encodeURIComponent(run.run_id)}`,
+      "order=rank.asc",
+      "limit=120",
+    ].join("&"),
+  );
+  const rows = resultRows.map((row, index) => {
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+    const signals = Array.isArray(payload.matches) ? payload.matches : Array.isArray(payload.signals) ? payload.signals : row.signals;
+    return {
+      ...payload,
+      code: cleanText(payload.code || row.code),
+      name: cleanText(payload.rawName || payload.name || row.name || row.code),
+      rawName: cleanText(payload.rawName || payload.name || row.name || row.code),
+      close: cleanNumber(payload.close || payload.price || row.close || row.price),
+      price: cleanNumber(payload.price || payload.close || row.price || row.close),
+      percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
+      tradeVolume: cleanNumber(payload.tradeVolume || payload.volume || row.trade_volume || row.volume),
+      volume: cleanNumber(payload.volume || payload.tradeVolume || row.volume || row.trade_volume),
+      value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
+      tradeValue: cleanNumber(payload.tradeValue || payload.value || row.trade_value),
+      score: cleanNumber(payload.score || row.score),
+      rank: cleanNumber(payload.rank || row.rank) || index + 1,
+      matches: Array.isArray(signals) ? signals : [],
+      reason: cleanText(payload.reason || payload.activeMatch?.reason || row.reason || (Array.isArray(signals) ? signals.map((signal) => signal.reason).filter(Boolean).join("；") : "")),
+      scan_date: row.scan_date || run.scan_date,
+      usedDate: row.scan_date || run.scan_date,
+      _strategy5ScorecardSourceDate: row.scan_date || run.scan_date,
+    };
+  });
+  return {
+    ok: true,
+    source: "supabase:strategy5_scan_results",
+    runId: cleanText(run.run_id),
+    usedDate: run.scan_date,
+    date: run.scan_date,
+    updatedAt: cleanText(run.finished_at || run.updated_at),
+    count: Math.max(rows.length, cleanNumber(run.result_count)),
+    matches: rows,
+    rows,
+    reason: "scorecard_source_supabase_latest",
+  };
+}
+
 function summarize(records) {
   const map = new Map();
   for (const row of records) {
@@ -746,6 +808,26 @@ async function main() {
       report.emittedRows = strategy3Payload.matches.length;
       report.date = strategy3SourceDate;
       report.reason = strategy3Payload.reason;
+    }
+    rawRecords = records.filter((row) => row.record_date && row.ticker);
+  }
+  const strategy5Task = TASKS.find((task) => task.key === "strategy5");
+  const strategy5Report = reports.find((item) => item.key === "strategy5");
+  const strategy5NeedsFallback = strategy5Report && (!strategy5Report.ok || !strategy5Report.emittedRows);
+  const strategy5Payload = strategy5NeedsFallback ? await fetchStrategy5LatestCompletePayload() : null;
+  if (strategy5Task && strategy5Payload?.matches?.length) {
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      if (records[index]?.strategy === strategy5Task.strategy) records.splice(index, 1);
+    }
+    strategy5Payload.matches.forEach((row, index) => records.push(normalizeRecord(strategy5Task, strategy5Payload, row, index)));
+    if (strategy5Report) {
+      strategy5Report.statusCode = 200;
+      strategy5Report.ok = true;
+      strategy5Report.runId = cleanText(strategy5Payload.runId);
+      strategy5Report.count = cleanNumber(strategy5Payload.count);
+      strategy5Report.emittedRows = strategy5Payload.matches.length;
+      strategy5Report.date = cleanText(strategy5Payload.usedDate || strategy5Payload.date);
+      strategy5Report.reason = strategy5Payload.reason;
     }
     rawRecords = records.filter((row) => row.record_date && row.ticker);
   }

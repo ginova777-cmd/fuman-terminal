@@ -42,6 +42,8 @@ const STRATEGY4_RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strat
 const STRATEGY4_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const STRATEGY5_API_ONLY = true;
 const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
+const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS || 4);
+let universeSourceHealth = {};
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -644,11 +646,84 @@ function normalizeStock(row) {
   };
 }
 
+function payloadTradeDate(payload = {}) {
+  const direct = compactDateKey(
+    payload.sourceTradeDate ||
+    payload.resolvedTradeDate ||
+    payload.tradeDate ||
+    payload.usedDate ||
+    payload.generatedDate ||
+    payload.today
+  );
+  if (direct) return direct;
+  const sample = Array.isArray(payload.stocks) ? payload.stocks.find(Boolean) : null;
+  return compactDateKey(sample?.quoteDate || sample?.TradeDate || sample?.tradeDate || sample?.Date || sample?.date);
+}
+
+function describeStocksPayload(payload = {}, source = "") {
+  const tradeDate = payloadTradeDate(payload);
+  const ageDays = tradeDate ? dateAgeDays(tradeDate) : null;
+  return {
+    source,
+    count: cleanNumber(payload.count) || (Array.isArray(payload.stocks) ? payload.stocks.length : 0),
+    sourceTradeDate: compactDateKey(payload.sourceTradeDate),
+    resolvedTradeDate: compactDateKey(payload.resolvedTradeDate),
+    tradeDate,
+    ageDays,
+  };
+}
+
+function payloadHasUsableStocks(payload = {}) {
+  return cleanNumber(payload.count) >= 1000 && Array.isArray(payload.stocks) && payload.stocks.length >= 1000;
+}
+
 async function fetchUniverse() {
   const localPayload = readJson(dataPath("stocks-slim.json"), null);
-  const payload = cleanNumber(localPayload?.count) >= 1000 && Array.isArray(localPayload?.stocks)
-    ? localPayload
-    : await fetchJson(STOCK_URL);
+  const localHealth = describeStocksPayload(localPayload || {}, "local:stocks-slim.json");
+  let remotePayload = null;
+  let remoteError = "";
+  try {
+    remotePayload = await fetchJson(STOCK_URL);
+  } catch (error) {
+    remoteError = error.message;
+  }
+  const remoteHealth = describeStocksPayload(remotePayload || {}, STOCK_URL);
+  const remoteUsable = payloadHasUsableStocks(remotePayload);
+  const localFreshEnough =
+    payloadHasUsableStocks(localPayload) &&
+    localHealth.tradeDate &&
+    localHealth.ageDays != null &&
+    localHealth.ageDays >= 0 &&
+    localHealth.ageDays <= STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS;
+
+  let payload = null;
+  let localStocksCacheReason = "";
+  if (remoteUsable) {
+    payload = remotePayload;
+    localStocksCacheReason = localHealth.tradeDate && localHealth.tradeDate !== remoteHealth.tradeDate
+      ? "stale_cache_ignored"
+      : "remote_primary";
+  } else if (localFreshEnough) {
+    payload = localPayload;
+    localStocksCacheReason = "remote_failed_local_cache_fresh";
+  } else {
+    localStocksCacheReason = localHealth.tradeDate ? "stale_cache_ignored" : "local_cache_missing";
+    throw new Error(`strategy5 stock universe unavailable: remote=${remoteError || "unusable"} local=${localStocksCacheReason} localTradeDate=${localHealth.tradeDate || "--"}`);
+  }
+
+  universeSourceHealth = {
+    stockUniverseSource: remoteUsable ? STOCK_URL : "local:stocks-slim.json",
+    stockUniverseRemoteOk: remoteUsable,
+    stockUniverseRemoteError: remoteError,
+    stockUniverseRemoteTradeDate: remoteHealth.tradeDate,
+    stockUniverseRemoteCount: remoteHealth.count,
+    localStocksCacheDate: localHealth.tradeDate,
+    localStocksCacheAgeDays: localHealth.ageDays,
+    localStocksCacheCount: localHealth.count,
+    localStocksCacheUsed: !remoteUsable && localFreshEnough,
+    localStocksCacheReason,
+    localStocksCacheMaxAgeDays: STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS,
+  };
   const rows = Array.isArray(payload) ? payload : (payload.stocks || []);
   const base = rows.map(normalizeStock).filter(Boolean);
   const fugle = overlayFugleWebSocketQuotes(base, { source: "strategy5-universe" });
@@ -1811,6 +1886,7 @@ async function main() {
     scannedCodes: stocks.map((stock) => stock.code),
     sourceHealth: {
       ...chipSourceHealth,
+      ...universeSourceHealth,
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
       finmindChipCount: finmindChipMap.size,
