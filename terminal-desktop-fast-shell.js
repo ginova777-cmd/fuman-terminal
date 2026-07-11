@@ -4387,7 +4387,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = "watchlist-rich-shell-20260711-01";
+    const version = "watchlist-rich-shell-20260711-02";
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);
@@ -4436,10 +4436,6 @@
       const first = rows[0];
       analysis.innerHTML = first ? `
         <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
-          <section class="watch-action-row">
-            <label>股票代碼<input type="text" value="${escapeHtml(first.code)}" readonly></label>
-            <label>名稱<input type="text" value="${escapeHtml(first.name || first.code)}" readonly></label>
-          </section>
           <section class="watch-analysis-grid">
             <article><small>狀態</small><strong>快取先顯示</strong><p>rich shell 背景接手後會補完整技術、籌碼與提醒。</p></article>
           </section>

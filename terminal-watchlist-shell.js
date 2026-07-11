@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260711-01";
+  const VERSION = "watchlist-rich-shell-20260711-02";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -313,7 +313,6 @@
           <h1>自選股分析</h1>
           <p id="watchlist-refresh" class="watchlist-refresh-line">-- 最新收盤 ｜ 更新 --</p>
         </div>
-        <button class="watchlist-refresh-button" type="button" data-watchlist-refresh aria-label="重新整理自選股">↻</button>
       </header>
       <section class="watchlist-rich-shell" aria-label="自選股個股分析">
         <header class="watchlist-rich-shell-head">
@@ -578,7 +577,7 @@
     const panel = document.querySelector("#watchlist-analysis");
     if (!panel) return;
     if (!row) {
-      panel.innerHTML = `<div class="watch-mobile-empty"><section class="watch-feature-strip empty" aria-label="自選股功能開通狀態">${featureStatusHtml()}</section><p>點選股票查看 AI 個股判讀</p></div>`;
+      panel.innerHTML = `<div class="watch-mobile-empty"><p>點選股票查看 AI 個股判讀</p></div>`;
       return;
     }
     const close = number(row.close);
@@ -595,14 +594,6 @@
     ensureMatchIndexForAnalysis(row.code);
     panel.innerHTML = `
       <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
-        <section class="watch-feature-strip" aria-label="自選股功能開通狀態">${featureStatusHtml()}</section>
-        <section class="watch-action-row">
-          <label>股票代碼
-            <input type="text" value="${escapeText(row.code)}" readonly>
-          </label>
-          <button class="primary" type="button" data-watch-load>⌁ 載入資料</button>
-          <button type="button" data-watch-analyze>☊ 分析 <b>${Math.max(1, Math.round(score / 10))}/10</b></button>
-        </section>
         <section class="watch-summary-grid">
           <article class="watch-metric"><span>標的</span><strong>${escapeText(row.code)} ${escapeText(row.name || row.code)}</strong></article>
           <article class="watch-metric"><span>趨勢判讀</span><strong>${trend}</strong></article>
@@ -619,12 +610,6 @@
         <section class="watch-note-row">
           <article><b>1</b><small>${escapeText(row.code)} ${escapeText(row.name || row.code)}：${trend}，漲跌幅 ${formatPct(pct)}。</small></article>
           <article><b>2</b><small>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</small></article>
-          <article><b>3</b><small>卡片已通過台股代號驗證，名稱與行情會在資料回來後自動補上。</small></article>
-        </section>
-        <section class="ta-period-panel">
-          <nav class="ta-timeframes" aria-label="技術分析週期">
-            <button class="ta-timeframe ta-dashboard-tab active" type="button">等待策略入選</button>
-          </nav>
         </section>
       </div>
     `;
@@ -705,7 +690,6 @@
       #watchlist-view .watchlist-rich-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:22px; }
       #watchlist-view .watchlist-rich-header h1 { margin:0; color:#f7f7f8; font-size:24px; font-weight:950; }
       #watchlist-view .watchlist-refresh-line { margin:6px 0 0; color:#36a9ff; font-size:12px; font-weight:800; }
-      #watchlist-view .watchlist-refresh-button { width:42px; height:42px; border-radius:12px; border:1px solid rgba(226,178,87,.32); background:rgba(8,16,27,.9); color:#9fb2cf; font-size:20px; cursor:pointer; }
       #watchlist-view .watchlist-rich-shell { border:1px solid rgba(226,178,87,.28); border-radius:8px; background:linear-gradient(115deg,rgba(32,17,17,.92),rgba(8,22,39,.96)); overflow:hidden; }
       #watchlist-view .watchlist-rich-shell-head { padding:18px 20px; border-bottom:1px solid rgba(226,178,87,.18); }
       #watchlist-view .watchlist-rich-shell-head h2 { margin:0 0 8px; color:#f7f7f8; font-size:18px; }
@@ -737,14 +721,6 @@
       #watchlist-view .watch-card-price small, #watchlist-view .watch-down { color:#21e390; }
       #watchlist-view .watch-up { color:#ff4f5f; }
       #watchlist-view .watch-alert, #watchlist-view .watch-remove { border:0; background:transparent; color:#b7a27d; cursor:pointer; font-size:18px; }
-      #watchlist-view .watch-feature-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(142px,1fr)); gap:8px; margin-bottom:14px; }
-      #watchlist-view .watch-feature-pill { min-height:42px; border:1px solid rgba(46,213,142,.32); border-radius:8px; background:rgba(14,60,46,.34); display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; color:#d8fff0; font-size:12px; font-weight:900; min-width:0; }
-      #watchlist-view .watch-feature-pill b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-      #watchlist-view .watch-feature-pill em { color:#25e891; font-style:normal; white-space:nowrap; }
-      #watchlist-view .watch-action-row { display:grid; grid-template-columns:200px minmax(180px,1fr) minmax(180px,1fr); gap:12px; align-items:end; margin-bottom:18px; }
-      #watchlist-view .watch-action-row label { display:grid; gap:6px; color:#9aa8bd; font-size:12px; }
-      #watchlist-view .watch-action-row input, #watchlist-view .watch-action-row button { height:42px; border-radius:8px; border:1px solid rgba(226,178,87,.3); background:rgba(9,18,29,.92); color:#eef6ff; padding:0 14px; font-weight:900; }
-      #watchlist-view .watch-action-row .primary { background:linear-gradient(90deg,#f0c760,#bb8428); color:#16130c; }
       #watchlist-view .watch-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; margin-bottom:18px; }
       #watchlist-view .watch-metric, #watchlist-view .watch-detail-section-card, #watchlist-view .watch-note-row article { border:1px solid rgba(226,178,87,.28); border-radius:8px; background:rgba(11,22,34,.92); padding:18px; }
       #watchlist-view .watch-metric span, #watchlist-view .watch-detail-section-card span { display:block; color:#9aa8bd; font-size:12px; margin-bottom:10px; }
@@ -767,7 +743,7 @@
       #watchlist-view .watch-mobile-empty { display:grid; place-items:center; min-height:220px; color:#91a0bb; font-weight:900; text-align:center; }
       @media (max-width: 980px) {
         #watchlist-view .watchlist-layout { grid-template-columns:1fr; }
-        #watchlist-view .watch-summary-grid, #watchlist-view .watch-detail-sections, #watchlist-view .watch-action-row, #watchlist-view .watch-feature-strip { grid-template-columns:1fr; }
+        #watchlist-view .watch-summary-grid, #watchlist-view .watch-detail-sections { grid-template-columns:1fr; }
       }
     `;
     document.head.appendChild(style);
