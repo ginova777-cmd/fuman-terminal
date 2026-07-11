@@ -125,6 +125,7 @@
   let marketSnapshotFirstPayload = null;
   let marketAiBundlePayload = null;
   let marketRadarBundlePayload = null;
+  let strategy5WatchlistMatchIndexPayload = null;
   let marketHeatmapMode = "all";
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
@@ -1526,6 +1527,9 @@
       signalLabel: subStrategy,
       signalLine,
       signals,
+      confluenceCount: pickFirstValue(merged.confluenceCount, merged.totalConfluence, merged.terminalConfluenceCount, merged.sourceCount, merged.hitCount, merged.matchCount),
+      terminalConfluenceCount: pickFirstValue(merged.terminalConfluenceCount, merged.confluenceCount, merged.sourceCount, merged.totalConfluence, merged.hitCount, merged.matchCount),
+      strategy5InternalCount: pickFirstValue(merged.strategy5InternalCount, merged.internalCount),
       tags: uniqueTags,
       signalTags: uniqueTags,
       price: price === "" || price == null ? "" : String(price),
@@ -1919,6 +1923,10 @@
       if (isMarketViewActive() && isMarketDesktopAiModeActive()) {
         scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {}, { delay: 160 });
       }
+      return;
+    }
+    if (pathname === "/api/watchlist-match-index") {
+      strategy5WatchlistMatchIndexPayload = payload;
     }
   }
 
@@ -3375,6 +3383,7 @@
       const unifiedFilter = event.target.closest?.("[data-unified-strategy-filter]");
       if (unifiedFilter) {
         event.preventDefault();
+        if (unifiedFilter.disabled || unifiedFilter.getAttribute("aria-disabled") === "true") return;
         if (isStrategy2Route(canvasState.route)) return;
         const next = unifiedFilter.dataset.unifiedStrategyFilter || "";
         canvasState.signalFilter = canvasState.signalFilter === next ? "" : next;
@@ -6958,12 +6967,119 @@
     })[key] || [];
   }
 
+  function strategy5ConfluenceCode(row) {
+    return String(row?.code || row?.symbol || row?.stockNo || row?.stock_no || "").match(/\d{4}/)?.[0] || "";
+  }
+
+  function strategy5ExplicitConfluenceCount(row) {
+    return cleanNumber(row?.terminalConfluenceCount ?? row?.confluenceCount ?? row?.sourceCount ?? row?.totalConfluence ?? row?.hitCount ?? row?.matchCount);
+  }
+
+  function strategy5LocalConfluenceCounts(rows = []) {
+    const map = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const code = strategy5ConfluenceCode(row);
+      if (!code) return;
+      const current = map.get(code) || { count: 0, explicit: 0 };
+      current.count += 1;
+      current.explicit = Math.max(current.explicit, strategy5ExplicitConfluenceCount(row));
+      map.set(code, current);
+    });
+    return map;
+  }
+
+  function strategy5WatchlistEntriesByCode() {
+    const byCode = strategy5WatchlistMatchIndexPayload?.byCode;
+    return byCode && typeof byCode === "object" ? byCode : null;
+  }
+
+  function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
+    const safeCode = String(code || "").match(/\d{4}/)?.[0] || "";
+    if (!safeCode) return 0;
+    const byCode = strategy5WatchlistEntriesByCode();
+    if (byCode) return normalizeArray(byCode[safeCode]).length;
+    const local = strategy5LocalConfluenceCounts(rows).get(safeCode);
+    return Math.max(cleanNumber(local?.count), cleanNumber(local?.explicit));
+  }
+
+  function strategy5TerminalConfluenceRows(fallbackRows = []) {
+    const byCode = strategy5WatchlistEntriesByCode();
+    if (byCode) {
+      const names = strategy5WatchlistMatchIndexPayload?.namesByCode || {};
+      const quotes = strategy5WatchlistMatchIndexPayload?.quoteByCode || {};
+      return Object.entries(byCode).map(([code, rawEntries]) => {
+        const entries = normalizeArray(rawEntries);
+        const quote = quotes?.[code] || {};
+        const strategy5InternalCount = entries.reduce((max, item) => Math.max(max, cleanNumber(item?.internalCount)), 0);
+        const labels = [...new Set(entries.map((item) => item?.label || item?.key).filter(Boolean))];
+        const details = [...new Set(entries.flatMap((item) => normalizeArray(item?.details)).filter(Boolean))];
+        return {
+          rank: 0,
+          code,
+          title: compactText(names?.[code] || code, 64),
+          pct: cleanNumber(quote.percent) ? `${cleanNumber(quote.percent).toFixed(2)}%` : "",
+          price: cleanNumber(quote.price || quote.close) ? String(cleanNumber(quote.price || quote.close)) : "",
+          volume: cleanNumber(quote.tradeVolume || quote.volume) ? String(cleanNumber(quote.tradeVolume || quote.volume)) : "",
+          tradeValue: cleanNumber(quote.tradeValue || quote.value) ? String(cleanNumber(quote.tradeValue || quote.value)) : "",
+          score: String(Math.round((entries.length * 100) + strategy5InternalCount)),
+          reason: compactText(`${labels.join("、")}｜${details.slice(0, 4).join("、")}`, 180),
+          subStrategy: "多策略共振",
+          subStrategyId: "multi_strategy_confluence",
+          strategyDisplay: "多策略共振",
+          signalLabel: "多策略共振",
+          signalLine: labels.join("、"),
+          signals: entries.slice(0, 6).map((item) => ({
+            id: item?.key || item?.label || "terminal_confluence",
+            label: item?.label || item?.key || "終端策略",
+            reason: normalizeArray(item?.details).slice(0, 3).join("、"),
+          })),
+          tags: labels.slice(0, 6),
+          signalTags: labels.slice(0, 6),
+          confluenceCount: entries.length,
+          terminalConfluenceCount: entries.length,
+          strategy5InternalCount,
+          aiSummary: compactText(`${labels.join("、")}｜全終端出現 ${entries.length} 次`, 180),
+          triggerReason: compactText(details.slice(0, 6).join("、") || labels.join("、"), 160),
+          line: compactText(`${code} ｜${names?.[code] || code}｜全終端出現 ${entries.length} 次｜${labels.join("、")}`, 180),
+        };
+      }).filter((row) => cleanNumber(row.terminalConfluenceCount) >= 2)
+        .sort((a, b) => cleanNumber(b.terminalConfluenceCount) - cleanNumber(a.terminalConfluenceCount)
+          || cleanNumber(b.strategy5InternalCount) - cleanNumber(a.strategy5InternalCount)
+          || cleanNumber(b.score) - cleanNumber(a.score)
+          || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+        .map((row, index) => ({ ...row, rank: index + 1 }));
+    }
+    const grouped = strategy5LocalConfluenceCounts(fallbackRows);
+    const firstByCode = new Map();
+    (Array.isArray(fallbackRows) ? fallbackRows : []).forEach((row) => {
+      const code = strategy5ConfluenceCode(row);
+      if (code && !firstByCode.has(code)) firstByCode.set(code, row);
+    });
+    return [...grouped.entries()].map(([code, item]) => {
+      const source = firstByCode.get(code) || {};
+      const count = Math.max(cleanNumber(item.count), cleanNumber(item.explicit));
+      return {
+        ...source,
+        code,
+        confluenceCount: count,
+        terminalConfluenceCount: count,
+        subStrategy: source.subStrategy || "多策略共振",
+        subStrategyId: "multi_strategy_confluence",
+        signalLabel: source.signalLabel || "多策略共振",
+      };
+    }).filter((row) => strategy5ExplicitConfluenceCount(row) >= 2)
+      .sort((a, b) => strategy5ExplicitConfluenceCount(b) - strategy5ExplicitConfluenceCount(a)
+        || cleanNumber(b.score) - cleanNumber(a.score)
+        || String(a.code).localeCompare(String(b.code), "zh-Hant"))
+      .map((row, index) => ({ ...row, rank: index + 1 }));
+  }
+
   function matchesUnifiedStrategyFilter(row, key, route, preparedText = "") {
     const filter = String(key || "").trim();
     if (!filter) return true;
     if (isChipTradeRoute(route)) return matchesChipTradeFilter(row, filter);
     const text = [preparedText, rowSearchText(row)].filter(Boolean).join(" ");
-    if (filter === "multi_strategy_confluence") return normalizeArray(row?.strategy5ConfluenceMatches || row?.matches || row?.signals).length >= 2;
+    if (filter === "multi_strategy_confluence") return strategy5TerminalConfluenceCountForCode(strategy5ConfluenceCode(row)) >= 2;
     const patterns = optionPatternsForKey(filter);
     if (patterns.length) return patterns.some((pattern) => pattern.test(text));
     const haystack = [text, row?.subStrategyId, row?.subStrategy, row?.strategyLabel, row?.signalLabel]
@@ -6988,6 +7104,51 @@
         value: String(cleanNumber(item.count)),
         sub: item.sub || sub,
       }));
+  }
+
+  function unifiedCardCount(card) {
+    if (!card) return 0;
+    return cleanNumber(card.count ?? card.value);
+  }
+
+  function isDisabledUnifiedFilterCard(route, card) {
+    return isStrategy5Route(route) && unifiedCardCount(card) <= 0;
+  }
+
+  function clearEmptyUnifiedFilter(route, cards) {
+    const active = canvasState.signalFilter || "";
+    if (!active || !isStrategy5Route(route)) return false;
+    const activeCard = (Array.isArray(cards) ? cards : [])
+      .find((card) => String(card?.key || card?.label || "") === String(active));
+    if (!activeCard || unifiedCardCount(activeCard) > 0) return false;
+    canvasState.signalFilter = "";
+    canvasState.offset = 0;
+    canvasState.hoverIndex = -1;
+    canvasState.selectedIndex = -1;
+    applyCanvasFilter();
+    return true;
+  }
+
+  function unifiedDisplayCount(route, rows, allRows, payloadMeta) {
+    if (canvasState.signalFilter) return rows.length;
+    if (isStrategy5Route(route)) {
+      const resultCount = cleanNumber(payloadMeta?.resultCount ?? payloadMeta?.readbackCount ?? payloadMeta?.count);
+      if (resultCount > 0) return resultCount;
+    }
+    return allRows.length || rows.length;
+  }
+
+  function renderUnifiedFilterCard(route, card) {
+    const cardKey = card.key || card.label;
+    const disabled = isDisabledUnifiedFilterCard(route, card);
+    const active = !disabled && canvasState.signalFilter === cardKey;
+    return `
+      <button type="button" data-unified-strategy-filter="${escapeHtml(cardKey)}" class="${active ? "active" : ""}" aria-pressed="${active ? "true" : "false"}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
+        <span>${escapeHtml(card.label)}</span>
+        <strong>${escapeHtml(card.value)}</strong>
+        <small>${escapeHtml(card.sub)}</small>
+      </button>
+    `;
   }
 
   function strategy1OptionCards(rows) {
@@ -7030,7 +7191,7 @@
       label: defs[id]?.short || defs[id]?.label || liveCounts.get(id)?.label || id,
       count: cleanNumber(liveCounts.get(id)?.count),
     })) : [...liveCounts.values()];
-    const confluence = rows.filter((row) => normalizeArray(row?.strategy5ConfluenceMatches || row?.matches || row?.signals).length >= 2).length;
+    const confluence = strategy5TerminalConfluenceRows(rows).length;
     return cardsFromCounts([{ key: "multi_strategy_confluence", label: "多策略共振", count: confluence }, ...counts], "Strategy5 細分策略");
   }
 
@@ -7126,13 +7287,18 @@
   function renderUnifiedListShell(route, meta, panel) {
     const payloadMeta = canvasPayloadMeta(route) || {};
     const allRows = (Array.isArray(canvasState.rows) ? canvasState.rows : []).filter((row) => row && typeof row === "object");
-    const rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
+    let cards = unifiedRunCards(route, allRows, payloadMeta);
+    if (clearEmptyUnifiedFilter(route, cards)) cards = unifiedRunCards(route, allRows, payloadMeta);
+    let rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
       .slice(0, 160);
+    if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
+      rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
+    }
+    const displayCount = unifiedDisplayCount(route, rows, allRows, payloadMeta);
     const runId = payloadMeta.runId || "";
     const evidenceStatus = payloadMeta.evidenceStatus || "";
     const unattendedStatus = payloadMeta.unattendedStatus || "";
-    const cards = unifiedRunCards(route, allRows, payloadMeta);
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
     const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
     const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
@@ -7164,8 +7330,8 @@
     if (toolbarBadge) toolbarBadge.textContent = meta.badge;
     const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
     const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
-    if (summary) summary.textContent = `${meta.title}｜完整榜單 run=${runId || "--"}｜候選 ${rows.length} 檔`;
-    if (count) count.textContent = String(rows.length || "--");
+    if (summary) summary.textContent = `${meta.title}｜完整榜單 run=${runId || "--"}｜候選 ${displayCount} 檔`;
+    if (count) count.textContent = String(displayCount || "--");
     if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
     if (top) top.textContent = rows[0]?.code || rows[0]?.symbol || "--";
     const body = rows.length ? rows.map((row, index) => unifiedListCard(row, index, route)).join("") : `
@@ -7176,21 +7342,15 @@
     const html = `
       <section class="strategy5-shell fuman-unified-list-shell">
         <section class="strategy5-dashboard strategy3-clean">
-          <section class="strategy5-results" data-run-id="${escapeHtml(runId)}" data-result-count="${rows.length}" data-evidence-status="${escapeHtml(evidenceStatus)}" data-unattended-status="${escapeHtml(unattendedStatus)}">
+          <section class="strategy5-results" data-run-id="${escapeHtml(runId)}" data-result-count="${displayCount}" data-evidence-status="${escapeHtml(evidenceStatus)}" data-unattended-status="${escapeHtml(unattendedStatus)}">
             <div class="strategy5-results-head">
               <div>
                 <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
               </div>
-              <strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong>
+              <strong class="strategy3-count-pill">${escapeHtml(String(displayCount))} 檔</strong>
             </div>
             <section class="strategy3-run-cards" aria-label="${escapeHtml(meta.title)} 細分策略選項">
-              ${cards.map((card) => `
-                <button type="button" data-unified-strategy-filter="${escapeHtml(card.key || card.label)}" class="${canvasState.signalFilter === (card.key || card.label) ? "active" : ""}" aria-pressed="${canvasState.signalFilter === (card.key || card.label) ? "true" : "false"}">
-                  <span>${escapeHtml(card.label)}</span>
-                  <strong>${escapeHtml(card.value)}</strong>
-                  <small>${escapeHtml(card.sub)}</small>
-                </button>
-              `).join("")}
+              ${cards.map((card) => renderUnifiedFilterCard(route, card)).join("")}
             </section>
             <section class="strategy3-table" aria-label="${escapeHtml(meta.title)} 完整榜單">
               <div class="strategy3-table-head">
