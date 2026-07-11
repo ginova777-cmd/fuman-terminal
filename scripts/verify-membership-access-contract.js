@@ -124,6 +124,11 @@ async function verifyProductionProtection() {
     issues.push(`mobile-fragment strategy2 unauthenticated must return locked fragment HTTP 401; status=${mobileStrategy2.status}`);
   }
 
+  const scorecardPage = await fetchJson(`${PRODUCTION_URL}/88?membership_probe=${Date.now()}`);
+  if (scorecardPage.status !== 200) {
+    issues.push(`/88 page shell must remain HTTP 200 so visitors can see the page shell/login gate; status=${scorecardPage.status}`);
+  }
+
   return {
     protectedRows,
     publicRows,
@@ -131,6 +136,7 @@ async function verifyProductionProtection() {
       terminalFastBundle: { status: bundle.status, membershipRequired: bundle.json?.membershipRequired === true, leaks: bundleLeaks },
       mobileBoot: { status: mobileBoot.status, membershipRequired: mobileBoot.json?.membershipRequired === true, leaks: mobileBootLeaks },
       mobileStrategy2Fragment: { status: mobileStrategy2.status, locked: String(mobileStrategy2.text || "").includes("data-membership-required=\"1\"") },
+      scorecardPage88: { status: scorecardPage.status, shellVisible: scorecardPage.status === 200 },
     }
   };
 }
@@ -202,6 +208,9 @@ async function main() {
   requireIncludes("auth.html", "storageKey: AUTH_STORAGE_KEY");
   requireIncludes("auth.html", "PRESERVE_STORAGE_KEYS");
   requireIncludes("auth.html", `const table = config.accessTable || "${ACCESS_TABLE}"`);
+  requireIncludes("index.html", "<span class=\"strategy-nav learning-plan-disabled\"");
+  requireIncludes("index.html", "data-learning-plan-disabled=\"1\"");
+  requireIncludes("index.html", "學習方案建置中，暫不開放連結");
   requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
   requireIncludes("terminal-entitlement-guard.js", "authorization");
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
