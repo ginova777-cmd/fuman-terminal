@@ -31,6 +31,7 @@ requireIncludes("lib/server-entitlement-guard.js", "fuman_user_access");
 requireIncludes("lib/server-entitlement-guard.js", "missing_bearer_token");
 requireIncludes("lib/server-entitlement-guard.js", "invalid_or_expired_token");
 requireIncludes("lib/server-entitlement-guard.js", "membership_not_enabled");
+requireIncludes("lib/server-entitlement-guard.js", "fumanInternalVerify");
 
 for (const [file, scope] of Object.entries(protectedApis)) {
   requireIncludes(file, "server-entitlement-guard");

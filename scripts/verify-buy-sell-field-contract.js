@@ -42,6 +42,7 @@ async function captureInstitutionApi() {
     method: "GET",
     url: `https://verify.local/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&fieldContract=${encodeURIComponent(EXPECTED_FIELD_CONTRACT_VERSION)}`,
     headers: { host: "verify.local" },
+    fumanInternalVerify: true,
   };
   return new Promise((resolve, reject) => {
     const response = {
