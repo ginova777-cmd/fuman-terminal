@@ -267,7 +267,8 @@
     "market-calendar:auto-update": "node --use-system-ca scripts/update-market-calendar-auto-override.js --apply",
     "verify:market-calendar-auto-update": "node scripts/verify-market-calendar-auto-update.js",
     "verify:market-closed-terminal-readback": "node --use-system-ca scripts/verify-market-closed-terminal-readback.js",
-    "verify:server-entitlement-guard": "node scripts/verify-server-entitlement-guard.js"
+    "verify:server-entitlement-guard": "node scripts/verify-server-entitlement-guard.js",
+    "verify:membership-access-contract": "node --use-system-ca scripts/verify-membership-access-contract.js"
   },
   "engines": {
     "node": "24.x"
