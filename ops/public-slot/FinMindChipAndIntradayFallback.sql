@@ -162,6 +162,90 @@ from (
 ) ranked
 where rn = 1;
 
+create or replace view public.v_finmind_branch_flows_latest as
+with branch_rows as (
+  select
+    symbol,
+    trade_date,
+    actor,
+    coalesce(nullif(payload ->> 'securities_trader', ''), actor) as branch_name,
+    buy,
+    sell,
+    coalesce(net, buy - sell) as net,
+    source,
+    updated_at
+  from public.finmind_chip_raw
+  where dataset = 'TaiwanStockTradingDailyReport'
+    and symbol ~ '^[0-9]{4}$'
+),
+latest_date as (
+  select symbol, max(trade_date) as trade_date
+  from branch_rows
+  group by symbol
+),
+latest_rows as (
+  select b.*
+  from branch_rows b
+  join latest_date d
+    on d.symbol = b.symbol
+   and d.trade_date = b.trade_date
+),
+ranked as (
+  select
+    *,
+    row_number() over (partition by symbol order by net desc, buy desc) as buy_rank,
+    row_number() over (partition by symbol order by net asc, sell desc) as sell_rank
+  from latest_rows
+)
+select
+  symbol,
+  trade_date,
+  sum(buy) as branch_buy,
+  sum(sell) as branch_sell,
+  sum(net) as branch_net_buy,
+  coalesce(sum(net) filter (where buy_rank <= 15 and net > 0), 0)
+    - abs(coalesce(sum(net) filter (where sell_rank <= 15 and net < 0), 0)) as main_force_branch_net_buy,
+  count(*) filter (where buy > 0) as branch_buy_count,
+  count(*) filter (where sell > 0) as branch_sell_count,
+  coalesce(sum(net) filter (where buy_rank <= 15 and net > 0), 0) as top_branch_net_buy,
+  abs(coalesce(sum(net) filter (where sell_rank <= 15 and net < 0), 0)) as top_branch_net_sell,
+  count(*) filter (where buy_rank <= 15 and net > 0) as top_branch_count,
+  case
+    when sum(buy) > 0 then coalesce(sum(net) filter (where buy_rank <= 15 and net > 0), 0) / sum(buy)
+    else 0
+  end as branch_concentration_ratio,
+  least(100, greatest(0,
+    round(
+      coalesce(sum(net) filter (where buy_rank <= 15 and net > 0), 0) / greatest(sum(buy), 1) * 70
+      + least(count(*) filter (where buy_rank <= 15 and net > 0), 15) * 2
+    )
+  )) as branch_power_score,
+  case
+    when coalesce(sum(net) filter (where buy_rank <= 15 and net > 0), 0) > abs(coalesce(sum(net) filter (where sell_rank <= 15 and net < 0), 0))
+      and sum(net) > 0 then 'branch_net_buy'
+    when sum(net) > 0 then 'branch_mild_buy'
+    when sum(net) < 0 then 'branch_net_sell'
+    else 'branch_neutral'
+  end as branch_status,
+  'finmind:TaiwanStockTradingDailyReport'::text as source,
+  max(updated_at) as updated_at,
+  jsonb_agg(
+    jsonb_build_object(
+      'rank', buy_rank,
+      'branchId', actor,
+      'branchName', branch_name,
+      'buy', buy,
+      'sell', sell,
+      'net', net
+    )
+    order by buy_rank
+  ) filter (where buy_rank <= 15) as top_buy_branches
+from ranked
+group by symbol, trade_date;
+
+grant select on public.v_finmind_branch_flows_latest to anon;
+grant select on public.v_finmind_branch_flows_latest to service_role;
+
 create or replace view public.v_intraday_1m_unified as
 with candidates as (
   select

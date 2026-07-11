@@ -71,12 +71,13 @@ function normalizeSymbol(value) {
   return /^\d{4}$/.test(symbol) ? symbol : "";
 }
 
-async function fetchFinMindData(dataset, startDate, endDate) {
+async function fetchFinMindData(dataset, startDate, endDate, dataId = "") {
   if (!FINMIND_TOKEN) throw new Error("missing FinMind token");
   const url = new URL("https://api.finmindtrade.com/api/v4/data");
   url.searchParams.set("dataset", dataset);
   url.searchParams.set("start_date", startDate);
   url.searchParams.set("end_date", endDate);
+  if (dataId) url.searchParams.set("data_id", dataId);
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${FINMIND_TOKEN}`, "User-Agent": "FumanFinMindChip/1.0" },
     signal: timeoutSignal(120000),
@@ -183,12 +184,30 @@ function normalizeMarginRows(rows, dataset) {
   }).filter(Boolean);
 }
 
+function mergeDuplicateRawRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = [row.dataset, row.symbol, row.trade_date, row.actor].join(":");
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, { ...row, payload: { rows: [row.payload] } });
+      continue;
+    }
+    current.buy += row.buy;
+    current.sell += row.sell;
+    current.net += row.net;
+    current.payload.rows.push(row.payload);
+    current.updated_at = row.updated_at;
+  }
+  return [...byKey.values()];
+}
+
 function normalizeRawRows(rows, dataset) {
-  return rows.map((row) => {
+  const normalized = rows.map((row) => {
     const symbol = normalizeSymbol(row.stock_id || row.code || row.symbol);
     const tradeDate = normalizeDate(row.date || row.trade_date);
     if (!symbol || !tradeDate) return null;
-    const actor = text(row, ["name", "securities_trader", "branch_name", "institutional_investors", "type"]);
+    const actor = text(row, ["securities_trader_id", "broker_id", "name", "securities_trader", "branch_name", "institutional_investors", "type"]);
     const buy = value(row, ["buy", "Buy", "buy_volume", "buy_amount"]);
     const sell = value(row, ["sell", "Sell", "sell_volume", "sell_amount"]);
     return {
@@ -205,6 +224,23 @@ function normalizeRawRows(rows, dataset) {
       updated_at: new Date().toISOString(),
     };
   }).filter(Boolean);
+  return mergeDuplicateRawRows(normalized);
+}
+
+async function fetchBranchRawRows(dataset, startDate, endDate, symbols) {
+  const codes = [...new Set(symbols.map(normalizeSymbol).filter(Boolean))];
+  if (!codes.length) return [];
+  const rows = [];
+  const delayMs = Math.max(0, Number(process.env.FINMIND_BRANCH_REQUEST_DELAY_MS || 220));
+  for (const code of codes) {
+    const rawRows = await fetchFinMindData(dataset, startDate, endDate, code).catch((error) => {
+      console.warn(`FinMind ${dataset} ${code} skipped: ${error.message}`);
+      return [];
+    });
+    rows.push(...normalizeRawRows(rawRows, dataset));
+    if (delayMs) await sleep(delayMs);
+  }
+  return rows;
 }
 
 async function upsertTable(table, rows, onConflict) {
@@ -255,10 +291,14 @@ async function main() {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const branchSymbols = String(argValue("--symbols", process.env.FINMIND_BRANCH_SYMBOLS || ""))
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const institutionalDatasets = ["TaiwanStockInstitutionalInvestorsBuySellWide", "TaiwanStockInstitutionalInvestorsBuySell"];
   const marginDatasets = ["TaiwanStockMarginPurchaseShortSale"];
-  const rawDatasets = extraDatasets;
+  const rawDatasets = [...new Set([...extraDatasets, ...(branchSymbols.length ? ["TaiwanStockTradingDailyReport"] : [])])];
 
   const summary = { institutional: {}, margin: {}, raw: {} };
   let institutionRows = [];
@@ -286,12 +326,13 @@ async function main() {
 
   let rawRowsForSupabase = [];
   for (const dataset of rawDatasets) {
-    const rawRows = await fetchFinMindData(dataset, startDate, endDate).catch((error) => {
-      console.warn(`FinMind ${dataset} skipped: ${error.message}`);
-      return [];
-    });
-    const rows = normalizeRawRows(rawRows, dataset);
-    summary.raw[dataset] = { rawRows: rawRows.length, normalizedRows: rows.length };
+    const rows = dataset === "TaiwanStockTradingDailyReport"
+      ? await fetchBranchRawRows(dataset, startDate, endDate, branchSymbols)
+      : normalizeRawRows(await fetchFinMindData(dataset, startDate, endDate).catch((error) => {
+        console.warn(`FinMind ${dataset} skipped: ${error.message}`);
+        return [];
+      }), dataset);
+    summary.raw[dataset] = { normalizedRows: rows.length, requestedSymbols: dataset === "TaiwanStockTradingDailyReport" ? branchSymbols.length : undefined };
     rawRowsForSupabase = rawRowsForSupabase.concat(rows);
   }
 

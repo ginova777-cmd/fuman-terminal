@@ -43,6 +43,8 @@ const STRATEGY4_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || 
 const STRATEGY5_API_ONLY = true;
 const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS || 4);
+const STRATEGY5_BOLLINGER_NARROW_PCT = Number(process.env.STRATEGY5_BOLLINGER_NARROW_PCT || 5);
+const STRATEGY5_BOLLINGER_WIDE_PCT = Number(process.env.STRATEGY5_BOLLINGER_WIDE_PCT || 20);
 let universeSourceHealth = {};
 
 function readJson(file, fallback) {
@@ -95,6 +97,13 @@ function firstNullableNumber(...values) {
     if (number !== null) return number;
   }
   return null;
+}
+
+function roundNumber(value, digits = 2) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  const factor = 10 ** digits;
+  return Math.round(number * factor) / factor;
 }
 
 const STRATEGY5_REQUIRED_FIELD_GROUPS = {
@@ -1090,6 +1099,39 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     entry.source = [entry.institutionSource, entry.marginShortSource].filter(Boolean).join("+") || source;
     map.set(code, entry);
   });
+  const branchRows = await fetchSupabaseRowsPaged(
+    "v_finmind_branch_flows_latest",
+    [
+      "select=symbol,trade_date,branch_buy,branch_sell,branch_net_buy,branch_buy_count,branch_sell_count,main_force_branch_net_buy,top_branch_net_buy,top_branch_net_sell,top_branch_count,branch_concentration_ratio,branch_power_score,branch_status,source",
+      "order=trade_date.desc",
+    ].join("&"),
+    Number(limit || 5000)
+  ).catch(() => []);
+  branchRows.forEach((row) => {
+    const code = normalizeCode(row.symbol);
+    if (!/^\d{4}$/.test(code)) return;
+    const tradeDate = row.trade_date || "";
+    const ageDays = dateAgeDays(tradeDate);
+    if (ageDays == null || ageDays > STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS) return;
+    const entry = map.get(code) || {};
+    entry.branchTradeDate = tradeDate;
+    entry.branchSource = row.source || "finmind:TaiwanStockTradingDailyReport";
+    entry.branchBuy = firstNullableNumber(row.branch_buy) ?? 0;
+    entry.branchSell = firstNullableNumber(row.branch_sell) ?? 0;
+    entry.branchNetBuy = firstNullableNumber(row.branch_net_buy) ?? 0;
+    entry.branchBuyCount = firstNullableNumber(row.branch_buy_count) ?? 0;
+    entry.branchSellCount = firstNullableNumber(row.branch_sell_count) ?? 0;
+    entry.mainForceBranchNetBuy = firstNullableNumber(row.main_force_branch_net_buy) ?? 0;
+    entry.topBranchNetBuy = firstNullableNumber(row.top_branch_net_buy) ?? 0;
+    entry.topBranchNetSell = firstNullableNumber(row.top_branch_net_sell) ?? 0;
+    entry.topBranchCount = firstNullableNumber(row.top_branch_count) ?? 0;
+    entry.branchConcentrationRatio = firstNullableNumber(row.branch_concentration_ratio) ?? 0;
+    entry.branchPowerScore = firstNullableNumber(row.branch_power_score) ?? 0;
+    entry.branchStatus = row.branch_status || (entry.branchNetBuy > 0 ? "branch_net_buy" : "branch_neutral");
+    entry.tradeDate = latestDateKey([entry.tradeDate, tradeDate]);
+    entry.source = [entry.source, entry.branchSource].filter(Boolean).join("+");
+    map.set(code, entry);
+  });
   return map;
 }
 
@@ -1098,6 +1140,7 @@ function latestFinMindChipTradeDate(finmindMap = new Map()) {
     row.tradeDate,
     row.institutionTradeDate,
     row.marginTradeDate,
+    row.branchTradeDate,
   ]));
 }
 
@@ -1135,7 +1178,21 @@ function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) 
       institutionSource: current.institutionSource || current.source || finmind.institutionSource || "",
       marginTradeDate: useFinmindMargin ? finmind.marginTradeDate : (current.marginTradeDate || current.margin_trade_date || finmind.marginTradeDate || ""),
       marginShortSource: useFinmindMargin ? finmind.marginShortSource : (current.marginShortSource || current.margin_short_source || finmind.marginShortSource || ""),
-      tradeDate: latestDateKey([current.tradeDate, current.trade_date, finmind.tradeDate]),
+      branchTradeDate: current.branchTradeDate || current.branch_trade_date || finmind.branchTradeDate || "",
+      branchSource: current.branchSource || current.branch_source || finmind.branchSource || "",
+      branchBuy: firstNullableNumber(current.branchBuy, current.branch_buy) ?? finmind.branchBuy,
+      branchSell: firstNullableNumber(current.branchSell, current.branch_sell) ?? finmind.branchSell,
+      branchNetBuy: firstNullableNumber(current.branchNetBuy, current.branch_net_buy) ?? finmind.branchNetBuy,
+      branchBuyCount: firstNullableNumber(current.branchBuyCount, current.branch_buy_count) ?? finmind.branchBuyCount,
+      branchSellCount: firstNullableNumber(current.branchSellCount, current.branch_sell_count) ?? finmind.branchSellCount,
+      mainForceBranchNetBuy: firstNullableNumber(current.mainForceBranchNetBuy, current.main_force_branch_net_buy) ?? finmind.mainForceBranchNetBuy,
+      topBranchNetBuy: firstNullableNumber(current.topBranchNetBuy, current.top_branch_net_buy) ?? finmind.topBranchNetBuy,
+      topBranchNetSell: firstNullableNumber(current.topBranchNetSell, current.top_branch_net_sell) ?? finmind.topBranchNetSell,
+      topBranchCount: firstNullableNumber(current.topBranchCount, current.top_branch_count) ?? finmind.topBranchCount,
+      branchConcentrationRatio: firstNullableNumber(current.branchConcentrationRatio, current.branch_concentration_ratio) ?? finmind.branchConcentrationRatio,
+      branchPowerScore: firstNullableNumber(current.branchPowerScore, current.branch_power_score) ?? finmind.branchPowerScore,
+      branchStatus: current.branchStatus || current.branch_status || finmind.branchStatus || "",
+      tradeDate: latestDateKey([current.tradeDate, current.trade_date, finmind.tradeDate, finmind.branchTradeDate]),
       finmindChip: finmind,
       marginShortMergeSource: useFinmindMargin ? "finmind_margin_short_priority" : "base_institution_source",
     };
@@ -1481,6 +1538,21 @@ function stddev(values) {
   return Math.sqrt(variance);
 }
 
+function bollingerBandwidth(upper, lower) {
+  const up = cleanNumber(upper);
+  const low = cleanNumber(lower);
+  if (up <= 0 || low <= 0) return { ratio: 0, pct: 0, state: "unknown", label: "未知" };
+  const ratio = (up / low) - 1;
+  const pct = ratio * 100;
+  const state = pct <= STRATEGY5_BOLLINGER_NARROW_PCT
+    ? "narrow"
+    : pct >= STRATEGY5_BOLLINGER_WIDE_PCT
+      ? "wide"
+      : "normal";
+  const label = state === "narrow" ? "窄" : state === "wide" ? "寬" : "正常";
+  return { ratio, pct, state, label };
+}
+
 function yahooSuffix(stock) {
   const market = String(stock.market || "").toUpperCase();
   return market === "TPEX" || market === "OTC" || market === "TWO" ? "TWO" : "TW";
@@ -1603,10 +1675,17 @@ function bollingerAt(rows, index) {
   if (closes.length < 20 || closes.some((value) => value <= 0)) return null;
   const middle = avg(closes);
   const deviation = stddev(closes);
+  const upper = middle + deviation * 2;
+  const lower = middle - deviation * 2;
+  const bandwidth = bollingerBandwidth(upper, lower);
   return {
-    upper: middle + deviation * 2,
+    upper,
     middle,
-    lower: middle - deviation * 2,
+    lower,
+    bandwidthRatio: bandwidth.ratio,
+    bandwidthPct: bandwidth.pct,
+    bandwidthState: bandwidth.state,
+    bandwidthLabel: bandwidth.label,
   };
 }
 
@@ -1639,7 +1718,22 @@ function bollingerSlopeMode(rows) {
   const expanding = widthPct >= prevWidthPct * 0.96;
   const rising = middleSlopePct >= 0.35 && upperSlopePct >= 0 && lowerSlopePct >= -0.35;
   const flat = Math.abs(middleSlopePct) <= 1.0 && Math.abs(upperSlopePct) <= 1.4 && Math.abs(lowerSlopePct) <= 1.4;
-  return { current, prev3, prev5, middleSlopePct, upperSlopePct, lowerSlopePct, widthPct, expanding, rising, flat };
+  return {
+    current,
+    prev3,
+    prev5,
+    middleSlopePct,
+    upperSlopePct,
+    lowerSlopePct,
+    widthPct,
+    channelBandwidthPct: current.bandwidthPct,
+    channelBandwidthRatio: current.bandwidthRatio,
+    channelBandwidthState: current.bandwidthState,
+    channelBandwidthLabel: current.bandwidthLabel,
+    expanding,
+    rising,
+    flat,
+  };
 }
 
 function bollingerKdjPatternFromRows(rows) {
@@ -1685,6 +1779,10 @@ function bollingerKdjPatternFromRows(rows) {
     middle: current.middle,
     upper: current.upper,
     lower: current.lower,
+    bollingerBandwidthRatio: slope.channelBandwidthRatio,
+    bollingerBandwidthPct: slope.channelBandwidthPct,
+    bollingerBandwidthState: slope.channelBandwidthState,
+    bollingerBandwidthLabel: slope.channelBandwidthLabel,
     midDistancePct,
     lowerDistancePct,
     fromLowerPct,
@@ -1704,7 +1802,7 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
     Math.min(pattern.volumeRatio * 6, 16) +
     (pattern.mode.includes("中軌") ? 8 : 5)
   ), 0, 100);
-  const reason = `${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；KDJ 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
+  const reason = `${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；帶寬 ${pattern.bollingerBandwidthPct.toFixed(2)}%（${pattern.bollingerBandwidthLabel}），KDJ 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
   return {
     id: "bollinger_kdj_buy",
     short: "布林KDJ",
@@ -1715,6 +1813,11 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
     bollingerMiddle: Number(pattern.middle.toFixed(2)),
     bollingerUpper: Number(pattern.upper.toFixed(2)),
     bollingerLower: Number(pattern.lower.toFixed(2)),
+    bollingerBandwidthFormula: "(upper/lower)-1",
+    bollingerBandwidthRatio: roundNumber(pattern.bollingerBandwidthRatio, 4),
+    bollingerBandwidthPct: roundNumber(pattern.bollingerBandwidthPct, 2),
+    bollingerBandwidthState: pattern.bollingerBandwidthState,
+    bollingerBandwidthLabel: pattern.bollingerBandwidthLabel,
     kdjK: Number(pattern.k.toFixed(1)),
     kdjD: Number(pattern.d.toFixed(1)),
     kdjJ: Number(pattern.j.toFixed(1)),
@@ -1772,6 +1875,20 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       institutionSource: inst.institutionSource || inst.institution_source || inst.source || "",
       marginTradeDate: inst.marginTradeDate || inst.margin_trade_date || "",
       marginShortSource: inst.marginShortSource || inst.margin_short_source || "",
+      branchTradeDate: inst.branchTradeDate || inst.branch_trade_date || "",
+      branchSource: inst.branchSource || inst.branch_source || "",
+      branchBuy: cleanNumber(inst.branchBuy || inst.branch_buy),
+      branchSell: cleanNumber(inst.branchSell || inst.branch_sell),
+      branchNetBuy: cleanNumber(inst.branchNetBuy || inst.branch_net_buy),
+      branchBuyCount: cleanNumber(inst.branchBuyCount || inst.branch_buy_count),
+      branchSellCount: cleanNumber(inst.branchSellCount || inst.branch_sell_count),
+      mainForceBranchNetBuy: cleanNumber(inst.mainForceBranchNetBuy || inst.main_force_branch_net_buy),
+      topBranchNetBuy: cleanNumber(inst.topBranchNetBuy || inst.top_branch_net_buy),
+      topBranchNetSell: cleanNumber(inst.topBranchNetSell || inst.top_branch_net_sell),
+      topBranchCount: cleanNumber(inst.topBranchCount || inst.top_branch_count),
+      branchConcentrationRatio: cleanNumber(inst.branchConcentrationRatio || inst.branch_concentration_ratio),
+      branchPowerScore: cleanNumber(inst.branchPowerScore || inst.branch_power_score),
+      branchStatus: inst.branchStatus || inst.branch_status || "",
     };
     const matches = [
       buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
@@ -1797,6 +1914,12 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       turnoverRate: volumeTurnover?.turnoverRate,
       volumeRatio: volumeTurnover?.volumeRatio,
       inst: normalizedInst,
+      branchTradeDate: normalizedInst.branchTradeDate,
+      branchSource: normalizedInst.branchSource,
+      branchNetBuy: normalizedInst.branchNetBuy,
+      topBranchNetBuy: normalizedInst.topBranchNetBuy,
+      branchPowerScore: normalizedInst.branchPowerScore,
+      branchStatus: normalizedInst.branchStatus,
       matches,
     };
   });
@@ -1914,6 +2037,7 @@ async function main() {
       volumeAverageCount: volumeAverageResult.map.size,
       volumeAverageAnchorDate: volumeAverageResult.anchorDate,
       finmindChipCount: finmindChipMap.size,
+      branchFlowCount: [...finmindChipMap.values()].filter((row) => row.branchTradeDate).length,
       chipLatestTradeDate,
       institutionLatestDate: institutionDate,
       marginShortSourceDate,
