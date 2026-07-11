@@ -370,7 +370,7 @@
       </a>
       <p class="status good" style="margin:8px 0 0">
         若上方沒有跳轉，請點
-        <a target="_top" href="https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html">這裡直接開啟 Google 申請</a>
+        <a id="googleFallbackLink" target="_top" href="https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html">這裡直接開啟 Google 申請</a>
       </p>
       <div class="footer-switch">
         <span id="switchText">還沒有帳號？</span>
@@ -461,6 +461,53 @@
         return access;
       }
 
+      function googleAuthorizeUrl() {
+        const redirect = new URL("/auth.html", location.origin);
+        if (nextUrl && nextUrl !== "/?desktop=1") redirect.searchParams.set("next", nextUrl);
+        const url = new URL("https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize");
+        url.searchParams.set("provider", "google");
+        url.searchParams.set("redirect_to", redirect.toString());
+        return url.toString();
+      }
+
+      async function finishOAuthRedirect() {
+        if (!client) return;
+        const params = new URLSearchParams(location.search);
+        const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+        const errorMessage = params.get("error_description") || hash.get("error_description") || params.get("error") || hash.get("error");
+        if (errorMessage) {
+          setStatus("Google 登入未完成：" + errorMessage, "error");
+          return;
+        }
+        const code = params.get("code");
+        const hasTokenHash = hash.has("access_token") || hash.has("refresh_token");
+        if (!code && !hasTokenHash) return;
+        setStatus("正在完成 Google 登入...");
+        try {
+          if (code && client.auth.exchangeCodeForSession) {
+            const exchanged = await client.auth.exchangeCodeForSession(code);
+            if (exchanged.error) throw exchanged.error;
+          }
+          const session = (await client.auth.getSession()).data?.session;
+          if (!session) throw new Error("Google 已回來，但沒有取得登入 session");
+          const access = await persistSession(session);
+          const cleanUrl = new URL(location.href);
+          cleanUrl.searchParams.delete("code");
+          cleanUrl.searchParams.delete("error");
+          cleanUrl.searchParams.delete("error_description");
+          cleanUrl.hash = "";
+          history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+          if (access.allowed) {
+            setStatus("Google 登入成功，正在進入終端...", "good");
+            location.href = nextUrl;
+            return;
+          }
+          setStatus("Google 登入成功，但尚未開通策略權限。請等待管理員開通。", "good");
+        } catch (error) {
+          setStatus(error?.message || "Google 登入回傳處理失敗。", "error");
+        }
+      }
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
@@ -505,14 +552,17 @@
       });
       document.querySelector("#googleLogin").addEventListener("click", (event) => {
         event.preventDefault();
-        const href = event.currentTarget?.href || "https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html";
+        const href = googleAuthorizeUrl();
         setStatus("正在開啟 Google 帳號申請...");
         window.setTimeout(() => {
           if (window.top && window.top !== window) window.top.location.href = href;
           else window.location.href = href;
         }, 80);
       });
+      document.querySelector("#googleLogin").href = googleAuthorizeUrl();
+      document.querySelector("#googleFallbackLink").href = googleAuthorizeUrl();
       applyMode("login");
+      void finishOAuthRedirect();
     })();
   </script>
 </body>

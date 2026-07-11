@@ -192,6 +192,10 @@ async function main() {
   requireIncludes("terminal-runtime-config.js", `adminEmails: ["ginova777@gmail.com"]`);
   requireIncludes("auth.html", "accessToken: session?.access_token");
   requireIncludes("auth.html", "expiresAt: session?.expires_at");
+  requireIncludes("auth.html", "googleAuthorizeUrl()");
+  requireIncludes("auth.html", "finishOAuthRedirect()");
+  requireIncludes("auth.html", "exchangeCodeForSession(code)");
+  requireIncludes("auth.html", "googleFallbackLink");
   requireIncludes("auth.html", `const table = config.accessTable || "${ACCESS_TABLE}"`);
   requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
   requireIncludes("terminal-entitlement-guard.js", "authorization");
