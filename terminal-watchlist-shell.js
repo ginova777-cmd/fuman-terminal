@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260628-07";
+  const VERSION = "watchlist-rich-shell-20260711-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -24,6 +24,9 @@
   const metaHydratingCodes = new Set();
   const pendingAddCodes = new Set();
   let storedValidationPromise = null;
+  let matchIndexPromise = null;
+  let matchIndexLoaded = false;
+  const matchIndexByCode = new Map();
 
   function normalizeCode(value) {
     return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
@@ -203,6 +206,62 @@
   function formatPct(value) {
     const n = number(value);
     return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+  }
+  function normalizeMatchLabel(match) {
+    if (!match) return "";
+    if (typeof match === "string") return match.trim();
+    return String(match.label || match.name || match.title || match.short || match.reason || match.id || "").trim();
+  }
+
+  function fallbackStrategyLabels(score, pct) {
+    const labels = [];
+    if (score >= 70 || pct >= 3) labels.push("強勢整理");
+    else if (score >= 58 || pct >= 1) labels.push("偏多整理");
+    if (score >= 58) labels.push("籌碼待確認");
+    return labels;
+  }
+
+  function strategyMatchSummary(row, score, pct) {
+    const code = normalizeCode(row?.code);
+    const matches = code ? (matchIndexByCode.get(code) || []) : [];
+    const labels = [...new Set(matches.map(normalizeMatchLabel).filter(Boolean))].slice(0, 4);
+    const fallback = fallbackStrategyLabels(score, pct);
+    const displayLabels = labels.length ? labels : fallback;
+    return {
+      labels: displayLabels,
+      detail: labels.length ? `${labels.length} 項命中` : (matchIndexLoaded ? "目前未在策略/籌碼名單" : "讀取策略/籌碼名單中"),
+    };
+  }
+
+  async function loadMatchIndex() {
+    if (matchIndexPromise) return matchIndexPromise;
+    matchIndexPromise = (async () => {
+      try {
+        const response = await fetch(`/api/watchlist-match-index?compact=1&t=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`watchlist-match-index ${response.status}`);
+        const payload = await response.json();
+        matchIndexByCode.clear();
+        const byCode = payload?.byCode && typeof payload.byCode === "object" ? payload.byCode : {};
+        for (const [code, matches] of Object.entries(byCode)) {
+          matchIndexByCode.set(normalizeCode(code), Array.isArray(matches) ? matches : []);
+        }
+        matchIndexLoaded = true;
+        return matchIndexByCode;
+      } catch {
+        matchIndexLoaded = true;
+        return matchIndexByCode;
+      } finally {
+        matchIndexPromise = null;
+      }
+    })();
+    return matchIndexPromise;
+  }
+
+  function ensureMatchIndexForAnalysis(code) {
+    if (matchIndexLoaded || matchIndexPromise) return;
+    loadMatchIndex().then(() => {
+      if (normalizeCode(code) === selectedCode) renderAnalysis(readRows().find((row) => row.code === selectedCode) || readRows()[0]);
+    });
   }
 
   function fallbackRow(code) {
@@ -532,6 +591,8 @@
     const trend = pct >= 3 ? "強勢整理" : pct >= 0 ? "偏多整理" : "弱勢整理";
     const action = pct >= 3 ? "等待拉回" : "等待轉強";
     const score = Math.max(0, Math.min(100, Math.round(50 + pct * 8)));
+    const matchSummary = strategyMatchSummary(row, score, pct);
+    ensureMatchIndexForAnalysis(row.code);
     panel.innerHTML = `
       <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
         <section class="watch-feature-strip" aria-label="自選股功能開通狀態">${featureStatusHtml()}</section>
@@ -546,7 +607,7 @@
           <article class="watch-metric"><span>標的</span><strong>${escapeText(row.code)} ${escapeText(row.name || row.code)}</strong></article>
           <article class="watch-metric"><span>趨勢判讀</span><strong>${trend}</strong></article>
           <article class="watch-metric"><span>漲跌幅</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPct(pct)}</strong><em>前收 ${formatPrice(prev)} → 現價 ${formatPrice(close)}</em></article>
-          <article class="watch-metric"><span>符合策略</span><strong>${score >= 70 ? "2" : score >= 58 ? "1" : "0"}</strong><em>待策略確認</em></article>
+          <article class="watch-metric watch-match-metric"><span>符合策略</span><strong>${matchSummary.labels.length ? matchSummary.labels.map((label) => `<b>${escapeText(label)}</b>`).join("") : "無"}</strong><em>${escapeText(matchSummary.detail)}</em></article>
         </section>
         <section class="watch-detail-sections">
           <article class="watch-detail-section-card trend"><span>趨勢</span><strong>${trend}</strong><b>${formatPct(pct)}</b><em>收盤位於日內區間參考。</em></article>
@@ -688,6 +749,8 @@
       #watchlist-view .watch-metric, #watchlist-view .watch-detail-section-card, #watchlist-view .watch-note-row article { border:1px solid rgba(226,178,87,.28); border-radius:8px; background:rgba(11,22,34,.92); padding:18px; }
       #watchlist-view .watch-metric span, #watchlist-view .watch-detail-section-card span { display:block; color:#9aa8bd; font-size:12px; margin-bottom:10px; }
       #watchlist-view .watch-metric strong { display:block; color:#f7f7f8; font-size:25px; line-height:1.1; }
+      #watchlist-view .watch-match-metric strong { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:14px; line-height:1.25; }
+      #watchlist-view .watch-match-metric strong b { display:inline-flex; align-items:center; min-height:24px; border:1px solid rgba(48,211,162,.35); border-radius:999px; padding:3px 8px; background:rgba(48,211,162,.12); color:#e8fff7; font-size:12px; line-height:1.2; white-space:normal; }
       #watchlist-view .watch-metric em, #watchlist-view .watch-detail-section-card em { display:block; margin-top:8px; color:#91a0bb; font-size:12px; line-height:1.6; font-style:normal; }
       #watchlist-view .watch-detail-sections { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
       #watchlist-view .watch-detail-section-card { min-height:160px; border-top:4px solid #f24b62; }
