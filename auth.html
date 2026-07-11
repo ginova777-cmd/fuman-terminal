@@ -503,8 +503,14 @@
         const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + "/auth.html" });
         setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
       });
-      document.querySelector("#googleLogin").addEventListener("click", () => {
+      document.querySelector("#googleLogin").addEventListener("click", (event) => {
+        event.preventDefault();
+        const href = event.currentTarget?.href || "https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html";
         setStatus("正在開啟 Google 帳號申請...");
+        window.setTimeout(() => {
+          if (window.top && window.top !== window) window.top.location.href = href;
+          else window.location.href = href;
+        }, 80);
       });
       applyMode("login");
     })();
