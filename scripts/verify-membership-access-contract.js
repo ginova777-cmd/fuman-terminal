@@ -213,6 +213,10 @@ async function main() {
   requireIncludes("index.html", "學習方案建置中，暫不開放連結");
   requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
   requireIncludes("terminal-entitlement-guard.js", "authorization");
+  requireIncludes("terminal-entitlement-guard.js", "terminal-fast-bundle");
+  requireIncludes("terminal-entitlement-guard.js", "mobile-boot");
+  requireIncludes("terminal-entitlement-guard.js", "mobile-fragment");
+  requireIncludes("terminal-entitlement-guard.js", "學習方案建置中");
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
   requireIncludes("api/terminal-fast-bundle.js", "verifyRequestEntitlement");
   requireIncludes("api/mobile-boot.js", "PUBLIC_FRAGMENT_TABS");

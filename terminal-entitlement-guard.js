@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260711-02";
+  const VERSION = "membership-entitlement-guard-20260711-03";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -80,7 +80,7 @@
 
   function isProtectedApiUrl(url) {
     if (!url || url.origin !== location.origin) return false;
-    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports)(?:$|[/?#])/i.test(url.pathname);
+    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports|terminal-fast-bundle|mobile-boot|mobile-fragment)(?:$|[/?#])/i.test(url.pathname);
   }
 
   function readAccessToken() {
@@ -161,7 +161,7 @@
         <div class="fuman-entitlement-actions">
           <button class="primary" type="button" data-entitlement-action="member">登入 / 開通權限</button>
           <button type="button" data-entitlement-action="market">回市場總覽</button>
-          <a href="/88#learning-plan" data-entitlement-action="learning">學習方案</a>
+          <button type="button" data-entitlement-action="learning" aria-disabled="true" title="學習方案建置中，暫不開放連結">學習方案建置中</button>
           <button type="button" data-entitlement-action="close">關閉</button>
         </div>
       </section>
@@ -278,7 +278,7 @@
           <div class="fuman-entitlement-actions">
             <a class="primary" href="/auth.html?next=%2F88">登入 / 開通權限</a>
             <a href="/?desktop=1">回市場總覽</a>
-            <a href="/88#learning-plan">學習方案</a>
+            <span aria-disabled="true" title="學習方案建置中，暫不開放連結">學習方案建置中</span>
           </div>
         </section>
       `;
