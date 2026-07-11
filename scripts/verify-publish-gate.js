@@ -83,6 +83,13 @@ const buySellFieldContractGuard = spawnSync(process.execPath, ["--use-system-ca"
 if (buySellFieldContractGuard.status !== 0) {
   issues.push(`verify-buy-sell-field-contract failed: ${(buySellFieldContractGuard.stderr || buySellFieldContractGuard.stdout || "").trim()}`);
 }
+const membershipE2ELayeringGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-membership-e2e-layering.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (membershipE2ELayeringGuard.status !== 0) {
+  issues.push(`verify-membership-e2e-layering failed: ${(membershipE2ELayeringGuard.stderr || membershipE2ELayeringGuard.stdout || "").trim()}`);
+}
 
 const fugleSourceContractGuard = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "verify-fugle-source-contract.js"), "--static-only"], {
   cwd: ROOT,
@@ -2375,6 +2382,7 @@ for (const file of [
   "scripts/verify-mobile-health.js",
   "scripts/verify-mobile-api-only.js",
   "scripts/verify-mobile-ai-fragment.js",
+      "scripts/verify-membership-e2e-layering.js",
   "scripts/publish-mobile-update-event.js",
   "api/market.js",
   "api/heatmap.js",
@@ -3319,6 +3327,7 @@ if (fetchResult.status !== 0) {
       "scripts/verify-terminal-ui-e2e.js",
       "scripts/verify-mobile-api-only.js",
       "scripts/verify-mobile-ai-fragment.js",
+      "scripts/verify-membership-e2e-layering.js",
       "install-api-only-cleanup-task.ps1",
       "run-scorecard-daily-automation.ps1",
       "run-scorecard-snapshot.ps1",

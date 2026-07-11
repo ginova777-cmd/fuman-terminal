@@ -271,7 +271,8 @@
     "verify:membership-access-contract": "node --use-system-ca scripts/verify-membership-access-contract.js",
     "verify:membership-live-login": "node --use-system-ca scripts/verify-membership-live-login.js",
     "verify:strategy5-volume-turnover": "node --use-system-ca scripts/verify-strategy5-volume-turnover.js",
-    "verify:strategy5-protected-e2e-closure": "node --use-system-ca scripts/verify-strategy5-protected-e2e-closure.js"
+    "verify:strategy5-protected-e2e-closure": "node --use-system-ca scripts/verify-strategy5-protected-e2e-closure.js",
+    "verify:membership-e2e-layering": "node scripts/verify-membership-e2e-layering.js"
   },
   "engines": {
     "node": "24.x"
