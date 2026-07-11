@@ -14,6 +14,7 @@ const STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK = Number(process.env.STRATEGY4_THREE
 const STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT || 2);
 const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.5);
 const STRATEGY4_THREE_INSIDE_VOLUME_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_VOLUME_RATIO || 1.2);
+const STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE = Number(process.env.STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE || 30000000);
 const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
 const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
 const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
@@ -1033,9 +1034,12 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const priorClose = priorIndex >= 0 ? daily.rows[priorIndex].close : 0;
     const priorDropPct = priorClose > 0 ? ((a.close - priorClose) / priorClose) * 100 : 0;
     const aVolMa20 = sma(daily.rows.slice(0, -2).map((row) => row.volume), 20);
+    const avgTradeValue5 = avg(daily.rows.slice(-5).map((row) => cleanNumber(row.value) || cleanNumber(row.close) * cleanNumber(row.volume) * 1000));
+    const liquidEnough = avgTradeValue5 >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE;
     const previousTrendDown = priorClose > 0 &&
       priorDropPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
-    return previousTrendDown &&
+    return liquidEnough &&
+      previousTrendDown &&
       a.close < a.open &&
       aRange > 0 &&
       Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
