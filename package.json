@@ -270,7 +270,8 @@
     "verify:server-entitlement-guard": "node scripts/verify-server-entitlement-guard.js",
     "verify:membership-access-contract": "node --use-system-ca scripts/verify-membership-access-contract.js",
     "verify:membership-live-login": "node --use-system-ca scripts/verify-membership-live-login.js",
-    "verify:strategy5-volume-turnover": "node --use-system-ca scripts/verify-strategy5-volume-turnover.js"
+    "verify:strategy5-volume-turnover": "node --use-system-ca scripts/verify-strategy5-volume-turnover.js",
+    "verify:strategy5-protected-e2e-closure": "node --use-system-ca scripts/verify-strategy5-protected-e2e-closure.js"
   },
   "engines": {
     "node": "24.x"
