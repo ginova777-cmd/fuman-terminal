@@ -44,6 +44,7 @@ const STRATEGY5_API_ONLY = true;
 const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS || 4);
 const STRATEGY5_BOLLINGER_NARROW_PCT = Number(process.env.STRATEGY5_BOLLINGER_NARROW_PCT || 5);
+const STRATEGY5_BOLLINGER_NORMAL_PCT = Number(process.env.STRATEGY5_BOLLINGER_NORMAL_PCT || 10);
 const STRATEGY5_BOLLINGER_WIDE_PCT = Number(process.env.STRATEGY5_BOLLINGER_WIDE_PCT || 20);
 let universeSourceHealth = {};
 
@@ -1162,7 +1163,7 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     Number(limit || 5000)
   ).catch(() => []);
   if (!branchRows.length) {
-    const rawLimit = Math.max(1000, Number(process.env.STRATEGY5_BRANCH_RAW_LIMIT || 20000));
+    const rawLimit = Math.max(1000, Number(process.env.STRATEGY5_BRANCH_RAW_LIMIT || 80000));
     const rawBranchRows = await fetchSupabaseRowsPaged(
       "finmind_chip_raw",
       "select=symbol,trade_date,actor,buy,sell,net,source,payload&dataset=eq.TaiwanStockTradingDailyReport&order=trade_date.desc",
@@ -1647,19 +1648,56 @@ async function fetchYahooHistory(stock, suffix = yahooSuffix(stock)) {
   return normalizeYahooRows(payload).slice(-180);
 }
 
+function normalizeSupabaseDailyHistoryRows(rows, source) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const tradeDate = String(row.trade_date || row.date || "").slice(0, 10);
+      const volumeShares = cleanNumber(row.volume_shares) || cleanNumber(row.volume_lots) * 1000 || cleanNumber(row.volume) * 1000;
+      return { date: tradeDate, open: cleanNumber(row.open), high: cleanNumber(row.high), low: cleanNumber(row.low), close: cleanNumber(row.close), volume: volumeShares, source };
+    })
+    .filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.date) && row.open > 0 && row.high > 0 && row.low > 0 && row.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function historyCoversExpectedDate(rows, expectedDate = "") {
+  const expected = compactDateKey(expectedDate);
+  if (!expected) return true;
+  const latest = compactDateKey((Array.isArray(rows) && rows.length ? rows[rows.length - 1]?.date : "") || "");
+  return Boolean(latest && latest >= expected);
+}
+
+async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
+  const symbol = String(stock?.code || stock?.symbol || "").trim();
+  if (!/^\d{4}$/.test(symbol)) return [];
+  const sources = [
+    { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
+    { table: "strategy4_daily_ohlcv_view", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:strategy4_daily_ohlcv_view", timeout: 20000 },
+    { table: "stock_daily_volume", select: "symbol,code,trade_date,open,high,low,close,volume_shares,volume_lots,volume", source: "supabase:stock_daily_volume", timeout: 20000 },
+  ];
+  for (const item of sources) {
+    try {
+      const query = "select=" + item.select + "&symbol=eq." + encodeURIComponent(symbol) + "&order=trade_date.desc&limit=220";
+      const normalized = normalizeSupabaseDailyHistoryRows(await fetchSupabaseRows(item.table, query, item.timeout), item.source);
+      if (normalized.length >= 35 && historyCoversExpectedDate(normalized, expectedDate)) return normalized.slice(-180);
+    } catch {}
+  }
+  return [];
+}
+
 async function fetchDailyHistory(stock) {
+  const supabaseRows = await fetchSupabaseDailyHistory(stock);
+  if (supabaseRows.length >= 35) return supabaseRows;
   try {
     const rows = await fetchYahooHistory(stock);
-    if (rows.length >= 30) return rows;
+    if (rows.length >= 30) return rows.map((row) => ({ ...row, source: "yahoo:daily" }));
   } catch {}
   try {
     const fallbackSuffix = yahooSuffix(stock) === "TW" ? "TWO" : "TW";
     const rows = await fetchYahooHistory(stock, fallbackSuffix);
-    if (rows.length >= 30) return rows;
+    if (rows.length >= 30) return rows.map((row) => ({ ...row, source: "yahoo:daily:" + fallbackSuffix }));
   } catch {}
   return [];
 }
-
 async function mapLimit(items, limit, iteratee) {
   const results = new Array(items.length);
   let next = 0;
@@ -1815,7 +1853,7 @@ function bollingerKdjPatternFromRows(rows) {
   const crossed = prevKdj.k <= prevKdj.d && lastKdj.k > lastKdj.d;
   const freshCross = crossed || (lastKdj.k > lastKdj.d && kdj.slice(-4, -1).some((item) => item.k <= item.d));
   const kdjTurningUp = lastKdj.k > prevKdj.k && lastKdj.d >= prevKdj.d * 0.98 && lastKdj.k <= 88;
-  if (!freshCross || !kdjTurningUp) return null;
+  const kdGoldenCrossOk = Boolean(freshCross && kdjTurningUp);
 
   const slope = bollingerSlopeMode(rows);
   if (!slope) return null;
@@ -1828,19 +1866,58 @@ function bollingerKdjPatternFromRows(rows) {
   const midDistancePct = current.middle ? ((lastClose - current.middle) / current.middle) * 100 : 99;
   const lowerDistancePct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
   const fromLowerPct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
+  const wideBandLowerRailCandidate = Boolean(current.lower && current.bandwidthPct >= STRATEGY5_BOLLINGER_WIDE_PCT && lastClose >= current.lower * 0.98 && lastClose <= current.lower * 1.06);
   const upperDistancePct = current.upper ? ((lastClose - current.upper) / current.upper) * 100 : 99;
-  const belowUpper = current.upper && lastClose <= current.upper * 1.035;
-  const upperRailCurlOk = Boolean(current.upper && slope.upperSlopePct >= 0.35 && lastClose >= current.upper * 0.965 && lastClose <= current.upper * 1.04 && slope.expanding);
+  const upperRailSeries = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const point = bollingerAt(rows, rows.length - 1 - offset);
+    if (point?.upper && point?.lower) upperRailSeries.push({
+      upper: point.upper,
+      lower: point.lower,
+      bandwidthPct: point.bandwidthPct,
+    });
+  }
+  const upperRailSlopeSeries = upperRailSeries.slice(1).map((point, index) => {
+    const prevPoint = upperRailSeries[index];
+    return prevPoint?.upper ? ((point.upper / prevPoint.upper) - 1) * 100 : 0;
+  });
+  const bandwidthSeriesPct = upperRailSeries.map((point) => point.bandwidthPct);
+  const upperRailSlopePct = upperRailSlopeSeries.at(-1) || 0;
+  const upperRailSlopeAvg3Pct = avg(upperRailSlopeSeries.slice(-3));
+  const bandwidthSlopePct = bandwidthSeriesPct.length >= 2
+    ? bandwidthSeriesPct.at(-1) - bandwidthSeriesPct.at(-2)
+    : 0;
+  const recentMinBandwidthPct = Math.min(...bandwidthSeriesPct.slice(-5).filter((value) => Number.isFinite(value) && value > 0));
+  const narrowBandSetup = Number.isFinite(recentMinBandwidthPct) && recentMinBandwidthPct <= STRATEGY5_BOLLINGER_NORMAL_PCT;
+  const bandwidthBreakout = narrowBandSetup && current.bandwidthPct >= recentMinBandwidthPct && (bandwidthSlopePct >= 0 || slope.expanding);
+  const standsOnUpperRail = Boolean(current.upper && lastClose >= current.upper * 0.995);
+  const alongUpperRail = Boolean(current.upper && lastClose >= current.upper * 0.985 && lastClose <= current.upper * 1.06);
+  const belowUpper = current.upper && lastClose <= current.upper * 1.06;
+  const upperRailCurlOk = Boolean(
+    current.upper &&
+    bandwidthBreakout &&
+    standsOnUpperRail &&
+    alongUpperRail &&
+    upperRailSlopePct > 0 &&
+    upperRailSlopeAvg3Pct > 0
+  );
   const midBuy = slope.rising && belowUpper && lastClose >= current.middle * 0.985 && lastClose <= current.middle * 1.09;
   const lowerBuy = slope.flat && lastClose >= current.lower * 0.985 && lastClose <= current.middle * 1.04;
-  if (!redK || volumeRatio < 0.75 || (!midBuy && !lowerBuy)) return null;
+  const buyPoint1UpperRailOk = upperRailCurlOk;
+  const buyPoint2WideLowerCandidate = wideBandLowerRailCandidate;
+  if (!redK || volumeRatio < 0.75 || (!buyPoint1UpperRailOk && !buyPoint2WideLowerCandidate && !midBuy && !lowerBuy)) return null;
 
   return {
-    mode: midBuy ? "三線向上中軌買點" : "三線走平下軌買點",
+    mode: buyPoint1UpperRailOk
+      ? "買點1 窄帶突破沿上軌"
+      : buyPoint2WideLowerCandidate
+        ? "買點2 大帶寬下軌主力觀察"
+        : (midBuy ? "三線向上中軌買點" : "三線走平下軌買點"),
     pct,
     k: lastKdj.k,
     d: lastKdj.d,
     j: lastKdj.j,
+    kdGoldenCrossOk,
     middle: current.middle,
     upper: current.upper,
     lower: current.lower,
@@ -1851,43 +1928,97 @@ function bollingerKdjPatternFromRows(rows) {
     midDistancePct,
     lowerDistancePct,
     fromLowerPct,
+    wideBandLowerRailCandidate,
     upperDistancePct,
     middleSlopePct: slope.middleSlopePct,
     upperSlopePct: slope.upperSlopePct,
     lowerSlopePct: slope.lowerSlopePct,
+    upperRailSlopePct,
+    upperRailSlopeAvg3Pct,
+    upperRailSlopeSeries,
+    bandwidthSeriesPct,
+    bandwidthSlopePct,
+    recentMinBandwidthPct,
+    narrowBandSetup,
+    bandwidthBreakout,
+    standsOnUpperRail,
+    alongUpperRail,
     upperRailCurlOk,
+    buyPoint1UpperRailOk,
+    buyPoint2WideLowerCandidate,
     volumeRatio,
   };
 }
 
-function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
+function buildBollingerKdjMatch({ stock, inst = {}, valueRank, volumeRank, rows }) {
   const pattern = bollingerKdjPatternFromRows(rows);
-  if (!pattern || cleanNumber(stock.close) < 10 || valueRank < 30) return null;
+  if (!pattern || cleanNumber(stock.close) < 10) return null;
+  const mainForceBranchNetBuy = cleanNumber(inst.mainForceBranchNetBuy || inst.main_force_branch_net_buy);
+  const topBranchNetBuy = cleanNumber(inst.topBranchNetBuy || inst.top_branch_net_buy);
+  const topBranchNetSell = cleanNumber(inst.topBranchNetSell || inst.top_branch_net_sell);
+  const branchPowerScore = cleanNumber(inst.branchPowerScore || inst.branch_power_score);
+  const branchStatus = String(inst.branchStatus || inst.branch_status || "");
+  const mainForceBuyOk = mainForceBranchNetBuy > 0 || branchStatus === "branch_net_buy" || (topBranchNetBuy > topBranchNetSell && branchPowerScore >= 40);
+  const wideBandMainBuyLowerRailOk = pattern.wideBandLowerRailCandidate === true && mainForceBuyOk;
+  const buyPoint1Ok = pattern.buyPoint1UpperRailOk === true;
+  const buyPoint2Ok = wideBandMainBuyLowerRailOk;
+  if (!buyPoint1Ok && !buyPoint2Ok) return null;
+  const kdGoldenCrossOk = pattern.kdGoldenCrossOk === true;
+  const flameOnBuyPoint = (buyPoint1Ok || buyPoint2Ok) && kdGoldenCrossOk;
   const score = clamp(Math.round(
     42 +
     valueRank * 0.18 +
     volumeRank * 0.12 +
     Math.min(Math.max(pattern.pct, 0) * 5, 18) +
     Math.min(pattern.volumeRatio * 6, 16) +
-    (pattern.mode.includes("中軌") ? 8 : 5)
+    (buyPoint1Ok ? 12 : 0) +
+    (buyPoint2Ok ? 12 : 0) +
+    (kdGoldenCrossOk ? 6 : 0)
   ), 0, 100);
-  const reason = `${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；帶寬 ${pattern.bollingerBandwidthPct.toFixed(2)}%（${pattern.bollingerBandwidthLabel}），KDJ 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
+  const kdText = kdGoldenCrossOk ? `KD 黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}` : `KD 未黃金交叉 K ${pattern.k.toFixed(1)} / D ${pattern.d.toFixed(1)}`;
+  const branchText = mainForceBuyOk ? `主力/關鍵分點買超 ${Math.round(mainForceBranchNetBuy || topBranchNetBuy - topBranchNetSell)}` : "主力/關鍵分點未買超";
+  const reason = `${flameOnBuyPoint ? "🔥 " : ""}${pattern.mode}：20MA ${pattern.middle.toFixed(2)}、上軌 ${pattern.upper.toFixed(2)}、下軌 ${pattern.lower.toFixed(2)}；帶寬 ${pattern.bollingerBandwidthPct.toFixed(2)}%（${pattern.bollingerBandwidthLabel}），上軌斜率 ${roundNumber(pattern.upperRailSlopePct, 2)}%，${kdText}，${branchText}，量比 ${pattern.volumeRatio.toFixed(2)}。`;
   return {
     id: "bollinger_kdj_buy",
-    short: "布林KDJ",
-    icon: "K",
+    short: flameOnBuyPoint ? "🔥布林買點" : "布林買點",
+    icon: flameOnBuyPoint ? "🔥" : "K",
     score,
     reason,
     bollingerMode: pattern.mode,
+    buyPointType: buyPoint1Ok ? "buy_point_1_narrow_upper_rail" : "buy_point_2_wide_lower_rail_main_buy",
+    buyPoint1UpperRailOk: buyPoint1Ok,
+    buyPoint2WideLowerRailMainBuyOk: buyPoint2Ok,
+    kdGoldenCrossOk,
+    flameOnBuyPoint,
     bollingerMiddle: Number(pattern.middle.toFixed(2)),
     bollingerUpper: Number(pattern.upper.toFixed(2)),
     bollingerLower: Number(pattern.lower.toFixed(2)),
+    wideBandLowerRailCandidate: pattern.wideBandLowerRailCandidate === true,
+    wideBandMainBuyLowerRailOk,
+    mainForceBuyOk,
+    mainForceBranchNetBuy: Math.round(mainForceBranchNetBuy),
+    topBranchNetBuy: Math.round(topBranchNetBuy),
+    topBranchNetSell: Math.round(topBranchNetSell),
+    branchPowerScore: Math.round(branchPowerScore),
+    branchStatus,
     bollingerBandwidthFormula: "(upper/lower)-1",
     bollingerBandwidthRatio: roundNumber(pattern.bollingerBandwidthRatio, 4),
     bollingerBandwidthPct: roundNumber(pattern.bollingerBandwidthPct, 2),
     bollingerBandwidthState: pattern.bollingerBandwidthState,
     bollingerBandwidthLabel: pattern.bollingerBandwidthLabel,
     upperRailCurlOk: pattern.upperRailCurlOk === true,
+    upperRailBuyPointContract: "narrow_band_breakout_stand_on_upper_rail_then_follow_upper_rail",
+    bandwidthSeriesPct: Array.isArray(pattern.bandwidthSeriesPct) ? pattern.bandwidthSeriesPct.map((value) => roundNumber(value, 2)) : [],
+    upperRailSlopeFormula: "upper[t]/upper[t-1]-1",
+    upperRailSlopePct: roundNumber(pattern.upperRailSlopePct, 2),
+    upperRailSlopeAvg3Pct: roundNumber(pattern.upperRailSlopeAvg3Pct, 2),
+    upperRailSlopeSeriesPct: Array.isArray(pattern.upperRailSlopeSeries) ? pattern.upperRailSlopeSeries.map((value) => roundNumber(value, 2)) : [],
+    bandwidthSlopePct: roundNumber(pattern.bandwidthSlopePct, 2),
+    recentMinBandwidthPct: roundNumber(pattern.recentMinBandwidthPct, 2),
+    narrowBandSetup: pattern.narrowBandSetup === true,
+    bandwidthBreakout: pattern.bandwidthBreakout === true,
+    standsOnUpperRail: pattern.standsOnUpperRail === true,
+    alongUpperRail: pattern.alongUpperRail === true,
     upperSlopePct: roundNumber(pattern.upperSlopePct, 2),
     upperDistancePct: roundNumber(pattern.upperDistancePct, 2),
     middleSlopePct: roundNumber(pattern.middleSlopePct, 2),
@@ -2003,9 +2134,17 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
   const historyCandidates = baseRows
     .filter((stock) => {
       const jointBuying = stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.inst.total > 0;
-      return cleanNumber(stock.close) >= 10 && (stock.valueRank >= 35 || jointBuying);
+      const hasBaseMatch = Array.isArray(stock.matches) && stock.matches.length > 0;
+      return cleanNumber(stock.close) >= 10 && (
+        stock.valueRank >= 20
+        || stock.volumeRank >= 20
+        || cleanNumber(stock.percent) >= 3
+        || jointBuying
+        || hasBaseMatch
+      );
     })
-    .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent));
+    .sort((a, b) => b.valueRank - a.valueRank || b.volumeRank - a.volumeRank || cleanNumber(b.percent) - cleanNumber(a.percent))
+    .slice(0, Number(process.env.STRATEGY5_HISTORY_CANDIDATE_LIMIT || 900));
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
     const rows = await fetchDailyHistory(stock);
@@ -2038,6 +2177,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     });
     const bollingerKdj = buildBollingerKdjMatch({
       stock: mergedStock,
+      inst: stock.inst,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
       rows: historyByCode.get(stock.code) || [],
@@ -2162,6 +2302,8 @@ module.exports = {
   buildWriteBudget,
   normalizeTradeVolumeUnits,
 };
+
+
 
 
 

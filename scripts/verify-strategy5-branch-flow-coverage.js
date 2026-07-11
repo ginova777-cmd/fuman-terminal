@@ -47,9 +47,9 @@ function branchCovered(row, runDate) {
   const source = String(p.branchSource || p.branch_source || "");
   return branchDate === runDate && Boolean(source) && (topBuy !== 0 || topSell !== 0 || power !== 0);
 }
-function bollingerUpperRailMatch(row) {
+function bollingerBranchCandidateMatch(row) {
   const matches = arrayValue(payloadOf(row).matches);
-  return matches.find((match) => match && match.id === "bollinger_kdj_buy" && match.upperRailCurlOk === true) || null;
+  return matches.find((match) => match && match.id === "bollinger_kdj_buy" && (match.buyPoint1UpperRailOk === true || match.buyPoint2WideLowerRailMainBuyOk === true)) || null;
 }
 async function main() {
   const checks = [];
@@ -68,7 +68,7 @@ async function main() {
   if (!result.ok) fail("strategy5_results_read_failed", { status: result.status, body: result.body });
   const rows = Array.isArray(result.rows) ? result.rows : [];
 
-  const candidates = rows.map((row) => ({ row, match: bollingerUpperRailMatch(row) })).filter((item) => item.match);
+  const candidates = rows.map((row) => ({ row, match: bollingerBranchCandidateMatch(row) })).filter((item) => item.match);
   const covered = candidates.filter((item) => branchCovered(item.row, runDate));
   const missing = candidates.filter((item) => !branchCovered(item.row, runDate));
   const allBranchRows = rows.filter((row) => branchCovered(row, runDate));
@@ -76,9 +76,9 @@ async function main() {
   push(/^strategy5-\d{8}-\d+/.test(runId), "latest_strategy5_run_id_present", { runId, runDate, resultCount });
   push(rows.length === resultCount, "strategy5_rows_match_run_count", { rows: rows.length, resultCount });
   push(viewProbe.ok || viewProbe.status === 404 || viewProbe.status === 400, "branch_flow_view_probe_non_blocking", { viewOk: viewProbe.ok, status: viewProbe.status });
-  push(true, "branch_flow_scope_is_bollinger_upper_rail_only", { candidateCount: candidates.length, fullRows: rows.length, allBranchCoveredRows: allBranchRows.length });
-  push(candidates.every((item) => item.match.upperRailCurlOk === true), "upper_rail_candidates_have_explicit_flag", { candidateCount: candidates.length });
-  push(missing.length === 0, "upper_rail_candidates_have_branch_flow_when_present", { missing: missing.map((item) => item.row.code) });
+  push(true, "branch_flow_scope_is_bollinger_candidate_only", { candidateCount: candidates.length, fullRows: rows.length, allBranchCoveredRows: allBranchRows.length });
+  push(candidates.every((item) => item.match.buyPoint1UpperRailOk === true || item.match.buyPoint2WideLowerRailMainBuyOk === true), "bollinger_branch_candidates_have_explicit_buy_point_flag", { candidateCount: candidates.length });
+  push(missing.length === 0, "bollinger_branch_candidates_have_branch_flow_when_present", { missing: missing.map((item) => item.row.code) });
 
   const summary = {
     ok: checks.every((check) => check.ok),
@@ -91,16 +91,24 @@ async function main() {
     branchFlowViewStatus: viewProbe.status,
     fullRows: rows.length,
     fullRowsWithBranchFlow: allBranchRows.length,
-    upperRailCandidateCount: candidates.length,
-    upperRailCoveredCount: covered.length,
-    upperRailMissingCodes: missing.map((item) => String(item.row.code || "")),
-    upperRailCandidates: candidates.map((item) => {
+    bollingerBranchCandidateCount: candidates.length,
+    bollingerBranchCoveredCount: covered.length,
+    bollingerBranchMissingCodes: missing.map((item) => String(item.row.code || "")),
+    bollingerBranchCandidates: candidates.map((item) => {
       const p = payloadOf(item.row);
       return {
         code: String(item.row.code || ""),
         name: item.row.name || p.name || "",
+        candidateType: item.match.buyPoint1UpperRailOk === true ? "buy_point_1_narrow_upper_rail" : "buy_point_2_wide_lower_rail_main_buy",
+        buyPoint1UpperRailOk: item.match.buyPoint1UpperRailOk === true,
+        buyPoint2WideLowerRailMainBuyOk: item.match.buyPoint2WideLowerRailMainBuyOk === true,
+        kdGoldenCrossOk: item.match.kdGoldenCrossOk === true,
+        flameOnBuyPoint: item.match.flameOnBuyPoint === true,
         upperSlopePct: cleanNumber(item.match.upperSlopePct),
         upperDistancePct: cleanNumber(item.match.upperDistancePct),
+        wideBandLowerRailCandidate: item.match.wideBandLowerRailCandidate === true,
+        wideBandMainBuyLowerRailOk: item.match.wideBandMainBuyLowerRailOk === true,
+        mainForceBuyOk: item.match.mainForceBuyOk === true,
         branchTradeDate: compactDate(p.branchTradeDate || p.branch_trade_date),
         topBranchNetBuy: cleanNumber(p.topBranchNetBuy || p.top_branch_net_buy),
         topBranchNetSell: cleanNumber(p.topBranchNetSell || p.top_branch_net_sell),
@@ -115,3 +123,4 @@ async function main() {
   if (!summary.ok) process.exit(1);
 }
 main().catch((error) => fail("verify_strategy5_branch_flow_coverage_failed", { error: error?.stack || String(error) }));
+

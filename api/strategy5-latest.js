@@ -604,8 +604,8 @@ function normalizeMatch(match) {
   return {
     ...match,
     id,
-    label: meta.label || match.label || match.title || match.name || id,
-    short: meta.short || match.short || meta.label || match.label || id,
+    label: match.label || match.title || match.name || meta.label || id,
+    short: match.short || meta.short || meta.label || match.label || id,
   };
 }
 
@@ -884,3 +884,4 @@ module.exports._test = {
   buildStrategy5FieldCompleteness,
   strategy5RunTimeSourceEvidence,
 };
+
