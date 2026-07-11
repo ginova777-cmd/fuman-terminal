@@ -683,6 +683,7 @@ function describeStocksPayload(payload = {}, source = "") {
 }
 
 function payloadHasUsableStocks(payload = {}) {
+  if (!payload || typeof payload !== "object") return false;
   return cleanNumber(payload.count) >= 1000 && Array.isArray(payload.stocks) && payload.stocks.length >= 1000;
 }
 
@@ -825,6 +826,59 @@ function shouldReplaceChipSource(currentDate = "", currentSource = "", nextDate 
   if (!currentKey) return true;
   if (nextKey !== currentKey) return nextKey > currentKey;
   return chipSourcePriority(nextSource) > chipSourcePriority(currentSource);
+}
+
+function aggregateBranchFlowRows(rows = []) {
+  const latestDateBySymbol = new Map();
+  const normalized = rows.map((row) => {
+    const symbol = normalizeCode(row.symbol);
+    const tradeDate = compactDateKey(row.trade_date);
+    if (!/^\d{4}$/.test(symbol) || !tradeDate) return null;
+    const buy = cleanNumber(row.buy);
+    const sell = cleanNumber(row.sell);
+    const net = firstNullableNumber(row.net) ?? (buy - sell);
+    latestDateBySymbol.set(symbol, latestDateKey([latestDateBySymbol.get(symbol), tradeDate]));
+    return {
+      symbol,
+      tradeDate,
+      buy,
+      sell,
+      net,
+      actor: row.actor || "",
+      source: row.source || "finmind:TaiwanStockTradingDailyReport",
+    };
+  }).filter(Boolean);
+  const output = [];
+  for (const [symbol, latestDate] of latestDateBySymbol.entries()) {
+    const sameDate = normalized.filter((row) => row.symbol === symbol && row.tradeDate === latestDate);
+    const totalBuy = sameDate.reduce((sum, row) => sum + row.buy, 0);
+    const totalSell = sameDate.reduce((sum, row) => sum + row.sell, 0);
+    const totalNet = sameDate.reduce((sum, row) => sum + row.net, 0);
+    const topBuy = sameDate.filter((row) => row.net > 0).sort((a, b) => b.net - a.net || b.buy - a.buy).slice(0, 15);
+    const topSell = sameDate.filter((row) => row.net < 0).sort((a, b) => a.net - b.net || b.sell - a.sell).slice(0, 15);
+    const topBranchNetBuy = topBuy.reduce((sum, row) => sum + row.net, 0);
+    const topBranchNetSell = Math.abs(topSell.reduce((sum, row) => sum + row.net, 0));
+    const concentration = totalBuy > 0 ? topBranchNetBuy / totalBuy : 0;
+    const mainForceBranchNetBuy = topBranchNetBuy - topBranchNetSell;
+    output.push({
+      symbol,
+      trade_date: latestDate.slice(0, 4) + "-" + latestDate.slice(4, 6) + "-" + latestDate.slice(6, 8),
+      branch_buy: totalBuy,
+      branch_sell: totalSell,
+      branch_net_buy: totalNet,
+      main_force_branch_net_buy: mainForceBranchNetBuy,
+      branch_buy_count: sameDate.filter((row) => row.buy > 0).length,
+      branch_sell_count: sameDate.filter((row) => row.sell > 0).length,
+      top_branch_net_buy: topBranchNetBuy,
+      top_branch_net_sell: topBranchNetSell,
+      top_branch_count: topBuy.length,
+      branch_concentration_ratio: concentration,
+      branch_power_score: clamp(Math.round(concentration * 70 + Math.min(topBuy.length, 15) * 2), 0, 100),
+      branch_status: mainForceBranchNetBuy > 0 ? "branch_net_buy" : (mainForceBranchNetBuy < 0 ? "branch_net_sell" : "branch_neutral"),
+      source: "finmind:TaiwanStockTradingDailyReport",
+    });
+  }
+  return output;
 }
 
 function taipeiParts(date = new Date()) {
@@ -1099,7 +1153,7 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     entry.source = [entry.institutionSource, entry.marginShortSource].filter(Boolean).join("+") || source;
     map.set(code, entry);
   });
-  const branchRows = await fetchSupabaseRowsPaged(
+  let branchRows = await fetchSupabaseRowsPaged(
     "v_finmind_branch_flows_latest",
     [
       "select=symbol,trade_date,branch_buy,branch_sell,branch_net_buy,branch_buy_count,branch_sell_count,main_force_branch_net_buy,top_branch_net_buy,top_branch_net_sell,top_branch_count,branch_concentration_ratio,branch_power_score,branch_status,source",
@@ -1107,6 +1161,15 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
     ].join("&"),
     Number(limit || 5000)
   ).catch(() => []);
+  if (!branchRows.length) {
+    const rawLimit = Math.max(1000, Number(process.env.STRATEGY5_BRANCH_RAW_LIMIT || 20000));
+    const rawBranchRows = await fetchSupabaseRowsPaged(
+      "finmind_chip_raw",
+      "select=symbol,trade_date,actor,buy,sell,net,source,payload&dataset=eq.TaiwanStockTradingDailyReport&order=trade_date.desc",
+      rawLimit
+    ).catch(() => []);
+    branchRows = aggregateBranchFlowRows(rawBranchRows);
+  }
   branchRows.forEach((row) => {
     const code = normalizeCode(row.symbol);
     if (!/^\d{4}$/.test(code)) return;
