@@ -209,13 +209,14 @@ function normalizeCode(value) {
 }
 
 function strategy5RunIdFromOutput(output) {
-  const stamp = String(output.generatedDate || output.sourceDate || output.usedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
-  const time = String(output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 14).padEnd(14, "0");
+  const stamp = String(output.runMarketDate || output.sourceDate || output.usedDate || output.generatedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
+  const timeSource = output.runTimestamp || output.updatedAt || new Date().toISOString();
+  const time = `${stamp}${String(timeSource).replace(/\D/g, "").slice(8, 14).padEnd(6, "0")}`;
   return String(output.runId || process.env.STRATEGY5_RUN_ID || `strategy5-${stamp}-${time}`).replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
 function strategy5ScanDate(output) {
-  const raw = String(output.generatedDate || output.sourceDate || output.usedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
+  const raw = String(output.runMarketDate || output.sourceDate || output.usedDate || output.generatedDate || output.updatedAt || new Date().toISOString()).replace(/\D/g, "").slice(0, 8);
   if (raw.length === 8) return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
   return new Date().toISOString().slice(0, 10);
 }
@@ -1660,11 +1661,15 @@ async function main() {
   ]);
   const sourceDate = chipLatestTradeDate || institutionDate || quoteDate || taipeiDateKey();
   const now = new Date();
+  const runMarketDate = sourceDate;
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
     updatedAt: now.toISOString(),
-    generatedDate: taipeiDateKey(now),
+    generatedAt: now.toISOString(),
+    runTimestamp: now.toISOString(),
+    generatedDate: runMarketDate,
+    runMarketDate,
     usedDate: sourceDate,
     sourceDate,
     schedule: "daily complete scan",
