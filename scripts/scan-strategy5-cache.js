@@ -41,6 +41,8 @@ const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || 
 const STRATEGY4_RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
 const STRATEGY4_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const STRATEGY5_API_ONLY = true;
+const STRATEGY5_MIN_ISSUED_SHARES_COVERAGE = Number(process.env.STRATEGY5_MIN_ISSUED_SHARES_COVERAGE || 1500);
+const STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE = Number(process.env.STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE || 1500);
 const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS || 4);
 const STRATEGY5_BOLLINGER_NARROW_PCT = Number(process.env.STRATEGY5_BOLLINGER_NARROW_PCT || 5);
@@ -247,17 +249,56 @@ function strategy5Signals(item) {
   return Array.isArray(item?.matches) ? item.matches.filter((match) => match && typeof match === "object") : [];
 }
 
+function strategy5MatchCounts(matches = []) {
+  const counts = {};
+  for (const item of Array.isArray(matches) ? matches : []) {
+    for (const signal of strategy5Signals(item)) {
+      const id = String(signal.id || signal.key || signal.type || "").trim();
+      if (id) counts[id] = (counts[id] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function buildStrategy5CorePublishQuality(output = {}) {
+  const sourceHealth = output.sourceHealth && typeof output.sourceHealth === "object" ? output.sourceHealth : {};
+  const matchCounts = strategy5MatchCounts(output.matches || []);
+  const issuedSharesCount = cleanNumber(sourceHealth.issuedSharesCount || sourceHealth.issued_shares_count);
+  const volumeAverageCount = cleanNumber(sourceHealth.volumeAverageCount || sourceHealth.volume_average_count);
+  const marginShortAlignmentOk = sourceHealth.marginShortAlignmentOk !== false;
+  const volumeTurnoverCount = cleanNumber(matchCounts.volume_turnover_breakout);
+  const issues = [];
+  if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) issues.push(`issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`);
+  if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) issues.push(`volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`);
+  if (!marginShortAlignmentOk) issues.push("margin_short_source_date_mismatch");
+  if (volumeTurnoverCount <= 0) issues.push("volume_turnover_breakout_empty");
+  return {
+    ok: issues.length === 0,
+    reason: issues.join(";"),
+    issues,
+    matchCounts,
+    requirements: {
+      issuedSharesCount,
+      minIssuedSharesCoverage: STRATEGY5_MIN_ISSUED_SHARES_COVERAGE,
+      volumeAverageCount,
+      minVolumeAverageCoverage: STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE,
+      marginShortAlignmentOk,
+      volumeTurnoverCount,
+    },
+  };
+}
 function buildStrategy5RunRow(output, runId, status = "complete") {
   const complete = status === "complete";
   const scanTime = String(output.updatedAt || new Date().toISOString());
   const chipSourceStatusAtRun = buildChipSourceStatusAtRun(output.sourceHealth || {}, output.dataFreshness || {});
-  const publishAllowed = complete && chipSourceStatusAtRun.ok;
+  const corePublishQuality = buildStrategy5CorePublishQuality(output);
+  const publishAllowed = complete && chipSourceStatusAtRun.ok && corePublishQuality.ok;
   const resultCount = complete ? (Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)) : 0;
   const fieldCompleteness = output.fieldCompleteness || buildStrategy5FieldCompleteness(output.matches || []);
   const writeBudget = output.writeBudget || buildWriteBudget(output, resultCount, complete ? "complete" : status);
   const blockedReason = publishAllowed
     ? ""
-    : (chipSourceStatusAtRun.reason || chipSourceStatusAtRun.status || "strategy5_publish_blocked");
+    : (corePublishQuality.reason || chipSourceStatusAtRun.reason || chipSourceStatusAtRun.status || "strategy5_publish_blocked");
   const notRequired = (reason) => ({ ok: true, status: "not_required", reason });
   const runtimeSourceFields = buildRunTimeSourceSnapshotFields({
     strategy: "strategy5",
@@ -322,6 +363,8 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
         blankRate: fieldCompleteness.blankRate,
         sampleMissingRows: fieldCompleteness.sampleMissingRows,
         writeBudget,
+        corePublishQuality,
+        matchCounts: corePublishQuality.matchCounts,
         retentionOk: publishAllowed,
         fallbackUsed: false,
         fallbackScope: [],
@@ -342,6 +385,8 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
       degradedBlocksLatest: true,
       preservePreviousGood: true,
       writeBudget,
+      corePublishQuality,
+      matchCounts: corePublishQuality.matchCounts,
       retentionOk: publishAllowed,
       requiredFields: fieldCompleteness.requiredFields,
       blankCounts: fieldCompleteness.blankCounts,
@@ -460,8 +505,14 @@ async function publishStrategy5CompleteRunToSupabase(output) {
   output.requiredFields = output.fieldCompleteness.requiredFields;
   output.blankCounts = output.fieldCompleteness.blankCounts;
   output.sampleMissingRows = output.fieldCompleteness.sampleMissingRows;
-  output.blockedReason = "";
-  output.scanner_block_reason = "";
+  output.corePublishQuality = buildStrategy5CorePublishQuality(output);
+  output.matchCounts = output.corePublishQuality.matchCounts;
+  output.blockedReason = output.corePublishQuality.ok ? "" : output.corePublishQuality.reason;
+  output.scanner_block_reason = output.blockedReason;
+  if (!output.corePublishQuality.ok) {
+    console.warn(`strategy5 complete run blocked: ${output.corePublishQuality.reason}`);
+    return false;
+  }
   const runningRow = buildStrategy5RunRow(output, runId, "running");
   const resultRows = buildStrategy5ResultRows(output, runId);
   const completeRow = buildStrategy5RunRow({ ...output, runId }, runId, "complete");
@@ -2302,6 +2353,8 @@ if (require.main === module) {
 module.exports = {
   buildStrategy5RunRow,
   buildStrategy5ResultRows,
+  buildStrategy5CorePublishQuality,
+  strategy5MatchCounts,
   buildStrategy5FieldCompleteness,
   buildWriteBudget,
   normalizeTradeVolumeUnits,

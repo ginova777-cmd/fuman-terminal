@@ -15,12 +15,16 @@ const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
+const RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs";
 const LATEST_RUN_VIEW = process.env.STRATEGY5_SUPABASE_LATEST_RUN_VIEW || "v_strategy5_latest_complete_run";
 const COMPLETE_RUN_GATE = "complete-run-authoritative+result-readback";
 const UNATTENDED_CONTRACT = "strategy5-unattended-api-20260630-01";
 const MAX_CHIP_SOURCE_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 const WRITE_BUDGET_LIMIT_ROWS = Number(process.env.STRATEGY5_WRITE_BUDGET_LIMIT_ROWS || 3000);
 const RAW_RETENTION_DAYS = Number(process.env.STRATEGY5_RAW_RETENTION_DAYS || 7);
+const STRATEGY5_MIN_ISSUED_SHARES_COVERAGE = Number(process.env.STRATEGY5_MIN_ISSUED_SHARES_COVERAGE || 1500);
+const STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE = Number(process.env.STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE || 1500);
+const STRATEGY5_RUN_FALLBACK_LIMIT = Number(process.env.STRATEGY5_RUN_FALLBACK_LIMIT || 8);
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 const STRATEGY5_UI_MATCH_META = {
   chip_k_confluence: { label: "籌碼共振", short: "籌碼共振" },
@@ -773,12 +777,42 @@ function buildPayload(rows, run, options = {}) {
       gate: COMPLETE_RUN_GATE,
       runId: String(first.run_id || run?.run_id || ""),
       resultReadbackCount: cleanNumber(run?.readback_count),
+      fallbackUsed: Boolean(run?.fallback_used),
+      fallbackFromRunId: run?.fallback_from_run_id || "",
+      fallbackReason: run?.fallback_reason || "",
       via: "api/strategy5-latest",
       fetchedAt: new Date().toISOString(),
     },
   };
 }
 
+function strategy5RowMatchCounts(rows = []) {
+  const counts = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+    const rawMatches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
+    for (const match of rawMatches) {
+      const id = String(match?.id || match?.key || match?.type || "").trim();
+      if (id && !FORBIDDEN_UI_MATCH_IDS.has(id)) counts[id] = (counts[id] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function strategy5PublishableRunIssue(run, rows = []) {
+  const baseIssue = validateCompleteRun(run, run?.readback_count);
+  if (baseIssue) return baseIssue;
+  const sourceHealth = run?.payload?.sourceHealth && typeof run.payload.sourceHealth === "object" ? run.payload.sourceHealth : {};
+  const issuedSharesCount = cleanNumber(sourceHealth.issuedSharesCount || sourceHealth.issued_shares_count);
+  const volumeAverageCount = cleanNumber(sourceHealth.volumeAverageCount || sourceHealth.volume_average_count);
+  const marginShortAlignmentOk = sourceHealth.marginShortAlignmentOk !== false;
+  const matchCounts = strategy5RowMatchCounts(rows);
+  if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) return `issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`;
+  if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) return `volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`;
+  if (!marginShortAlignmentOk) return "margin_short_source_date_mismatch";
+  if (cleanNumber(matchCounts.volume_turnover_breakout) <= 0) return "volume_turnover_breakout_empty";
+  return "";
+}
 function validateCompleteRun(run, readbackCount, options = {}) {
   const requireReadback = options.requireReadback !== false;
   if (!run?.run_id) return "strategy5_complete_run_missing";
@@ -810,8 +844,7 @@ async function fetchLatestCompleteRun() {
   return rows[0]?.run_id ? rows[0] : null;
 }
 
-async function fetchLatestCompleteRows(limit = 2000) {
-  const run = await fetchLatestCompleteRun();
+async function fetchCompleteRowsForRun(run, limit = 2000) {
   const runIssue = validateCompleteRun(run, null, { requireReadback: false });
   if (runIssue) return { rows: [], run, gate: runIssue };
   const result = await fetchRowsWithCount(
@@ -826,9 +859,57 @@ async function fetchLatestCompleteRows(limit = 2000) {
     ].join("&")
   );
   const readbackCount = result.exactCount;
-  const readbackIssue = validateCompleteRun(run, readbackCount);
-  if (readbackIssue) return { rows: [], run: { ...run, readback_count: readbackCount }, gate: readbackIssue };
-  return { rows: result.rows, run: { ...run, readback_count: readbackCount }, gate: COMPLETE_RUN_GATE };
+  const runWithReadback = { ...run, readback_count: readbackCount };
+  const readbackIssue = validateCompleteRun(runWithReadback, readbackCount);
+  if (readbackIssue) return { rows: [], run: runWithReadback, gate: readbackIssue };
+  return { rows: result.rows, run: runWithReadback, gate: COMPLETE_RUN_GATE };
+}
+
+async function fetchRecentCompleteRuns(limit = STRATEGY5_RUN_FALLBACK_LIMIT) {
+  return await fetchRowsFrom(
+    RUNS_TABLE,
+    [
+      "select=*",
+      "strategy=eq.strategy5",
+      "status=eq.complete",
+      "complete=eq.true",
+      "order=updated_at.desc",
+      `limit=${Math.max(1, Math.min(20, cleanNumber(limit) || STRATEGY5_RUN_FALLBACK_LIMIT))}`,
+    ].join("&")
+  );
+}
+
+async function fetchLatestCompleteRows(limit = 2000) {
+  const latestRun = await fetchLatestCompleteRun();
+  const latest = await fetchCompleteRowsForRun(latestRun, limit);
+  if (latest.rows.length) {
+    const latestIssue = strategy5PublishableRunIssue(latest.run, latest.rows);
+    if (!latestIssue) return latest;
+    const recentRuns = await fetchRecentCompleteRuns();
+    const latestScanDate = compactDateKey(latest.run?.scan_date || latest.run?.payload?.sourceDate || latest.run?.payload?.usedDate);
+    for (const run of recentRuns) {
+      if (!run?.run_id || run.run_id === latest.run?.run_id) continue;
+      const runScanDate = compactDateKey(run.scan_date || run.payload?.sourceDate || run.payload?.usedDate);
+      if (latestScanDate && runScanDate && runScanDate !== latestScanDate) continue;
+      const candidate = await fetchCompleteRowsForRun(run, limit);
+      if (!candidate.rows.length) continue;
+      const candidateIssue = strategy5PublishableRunIssue(candidate.run, candidate.rows);
+      if (!candidateIssue) {
+        return {
+          ...candidate,
+          gate: `${COMPLETE_RUN_GATE}+fallback_previous_publishable_run`,
+          run: {
+            ...candidate.run,
+            fallback_used: true,
+            fallback_from_run_id: latest.run?.run_id || "",
+            fallback_reason: latestIssue,
+          },
+        };
+      }
+    }
+    return { rows: [], run: latest.run, gate: latestIssue };
+  }
+  return latest;
 }
 
 async function handler(request, response) {
@@ -880,6 +961,8 @@ module.exports = withEntitlementRequired(handler, "strategy5");
 module.exports._test = {
   buildPayload,
   fetchLatestCompleteRows,
+  strategy5PublishableRunIssue,
+  strategy5RowMatchCounts,
   buildStrategy5ApiState,
   buildStrategy5FieldCompleteness,
   strategy5RunTimeSourceEvidence,
