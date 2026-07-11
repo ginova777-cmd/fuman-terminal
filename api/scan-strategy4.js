@@ -10,6 +10,8 @@ const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_D
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
+const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.4);
+const STRATEGY4_THREE_INSIDE_VOLUME_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_VOLUME_RATIO || 0.8);
 const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
 const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
 const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
@@ -998,6 +1000,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const isRed = last.close > last.open;
   const volStrong = daily.volumeRatio >= 1.2;
   const trendConfirmed = daily.ema21 > daily.ma20;
+  const threeInsideTrendConfirmed = trendConfirmed || daily.ema21 > daily.ema21Prev || last.close > daily.ema21;
   const signals = [];
   const bullAttack = daily.bullTrend && isRed && volStrong && daily.realBody &&
     (daily.gapUp || (prev && last.volume > prev.volume * 1.2) || last.high > daily.highest2Prev) &&
@@ -1029,15 +1032,15 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const aRange = a.high - a.low;
     return a.close < a.open &&
       aRange > 0 &&
-      Math.abs(a.close - a.open) / aRange > 0.5 &&
+      Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
       b.close > b.open &&
       b.close < a.open &&
       b.open > a.close &&
       c.close > c.open &&
       c.close > a.open &&
-      c.volume > daily.volMa20 * 1.2 &&
+      c.volume > daily.volMa20 * STRATEGY4_THREE_INSIDE_VOLUME_RATIO &&
       c.close > daily.ma20 &&
-      trendConfirmed;
+      threeInsideTrendConfirmed;
   })();
   const deepFallFib = daily.deepFall && isRed;
 
@@ -1068,7 +1071,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢確認。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢轉強。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({
