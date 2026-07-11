@@ -148,14 +148,10 @@ function scorecardRecordDate(task, payload, row) {
   const explicit = isoDate(row.record_date || row.scorecardDate || payload.scorecardDate || payload.recordDate || "", "");
   if (explicit) return explicit;
 
-  const runDate = latestRunIdDate(row.runId || row.run_id || payload.runId || payload.transport?.runId || payload.transport?.snapshotId);
-  if (runDate) return runDate;
-
-  const updatedDate = taipeiDateFromTimestamp(row.updatedAt || row.updated_at || payload.updatedAt || payload.generatedAt || payload.timestamp);
-  if (updatedDate) return updatedDate;
-
-  return isoDate(
+  const sourceDate = isoDate(
     row.scan_date
+      || row._strategy3ScorecardSourceDate
+      || row._strategy5ScorecardSourceDate
       || row.tradeDate
       || row.usedDate
       || row.date
@@ -164,8 +160,17 @@ function scorecardRecordDate(task, payload, row) {
       || payload.usedDate
       || payload.sourceDate
       || payload.date,
-    taipeiDate(),
+    "",
   );
+  if (sourceDate) return sourceDate;
+
+  const runDate = latestRunIdDate(row.runId || row.run_id || payload.runId || payload.transport?.runId || payload.transport?.snapshotId);
+  if (runDate) return runDate;
+
+  const updatedDate = taipeiDateFromTimestamp(row.updatedAt || row.updated_at || payload.updatedAt || payload.generatedAt || payload.timestamp);
+  if (updatedDate) return updatedDate;
+
+  return taipeiDate();
 }
 
 function buildEndpoint(endpoint, query = {}) {
@@ -633,7 +638,7 @@ function normalizeRecord(task, payload, row, index) {
   const code = codeOf(row, `${task.key}-${index + 1}`);
   const entryPrice = priceOf(row);
   const highPrice = highOf(row, entryPrice);
-  const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
+  const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row._strategy5ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
   const source = "terminal-complete-run-scorecard";
   const reason = reasonOf(row, task);
   return applyScorecardRuleMetadata({
@@ -758,6 +763,8 @@ function summarize(records) {
 
 function alignRecordDate(row, recordDate) {
   if (!recordDate || row.record_date === recordDate) return row;
+  const sourceDate = normalizeDate(row.source_date || row.scan_date || "");
+  if (sourceDate) return row;
   const recordId = cleanText(row.record_id);
   return {
     ...row,
@@ -790,9 +797,9 @@ async function main() {
   }
   let rawRecords = records.filter((row) => row.record_date && row.ticker);
   const tradingDay = await isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
-  const sourceLatestDate = reports.map(dateFromReport).filter(Boolean).sort().at(-1) || "";
+  const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
-  const latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
+  let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
   const strategy3SourceDate = await previousTwseTradingDate(latestDate);
   const strategy3Task = TASKS.find((task) => task.key === "strategy3");
   const strategy3Payload = strategy3SourceDate ? await fetchStrategy3PayloadForScanDate(strategy3SourceDate) : null;
@@ -832,6 +839,8 @@ async function main() {
     rawRecords = records.filter((row) => row.record_date && row.ticker);
   }
   const scorecardRecords = rawRecords.filter(includeInScorecard);
+  const finalBatchLatestDate = scorecardRecords.map((row) => row.record_date).filter(Boolean).sort().at(-1) || latestDate;
+  latestDate = tradingDay.isTradingDay ? finalBatchLatestDate : (sourceLatestDate || finalBatchLatestDate);
   const filtered = await enrichWithQuoteHighs(scorecardRecords.map((row) => alignRecordDate(row, latestDate)));
   const daily = summarize(filtered);
   const payload = {
