@@ -212,7 +212,18 @@ async function assertLiveState(version) {
   }
 
   const scorecardApi = await fetchText("/api/scorecard", 35000);
-  if (scorecardApi.status < 200 || scorecardApi.status >= 300) {
+  if (scorecardApi.status === 401) {
+    try {
+      const protectedPayload = JSON.parse(scorecardApi.body || "{}");
+      if (protectedPayload.error !== "membership_required" || protectedPayload.protected !== true) {
+        issues.push(`scorecard API protected response invalid: error=${protectedPayload.error || "(missing)"}`);
+      } else {
+        warnings.push("scorecard API is protected by membership entitlement; unauthenticated production guard accepts 401 membership_required");
+      }
+    } catch (error) {
+      issues.push(`scorecard API protected response invalid JSON: ${error.message}`);
+    }
+  } else if (scorecardApi.status < 200 || scorecardApi.status >= 300) {
     issues.push(`scorecard API HTTP ${scorecardApi.status}`);
   } else {
     try {
