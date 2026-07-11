@@ -87,6 +87,14 @@ function cleanNullableNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function firstNullableNumber(...values) {
+  for (const value of values) {
+    const number = cleanNullableNumber(value);
+    if (number !== null) return number;
+  }
+  return null;
+}
+
 const STRATEGY5_REQUIRED_FIELD_GROUPS = {
   code: ["code"],
   name: ["name"],
@@ -512,6 +520,22 @@ async function fetchSupabaseRows(table, query, timeout = 20000) {
   }
 }
 
+async function fetchSupabaseRowsPaged(table, query, limit = 5000, pageSize = 1000) {
+  const rows = [];
+  const maxRows = Math.max(1, Number(limit || 5000));
+  const size = Math.max(1, Math.min(1000, Number(pageSize || 1000)));
+  for (let offset = 0; offset < maxRows; offset += size) {
+    const separator = query ? "&" : "";
+    const page = await fetchSupabaseRows(
+      table,
+      `${query}${separator}limit=${size}&offset=${offset}`
+    );
+    rows.push(...page);
+    if (page.length < size) break;
+  }
+  return rows.slice(0, maxRows);
+}
+
 async function fetchInstitutionSourceHealth() {
   const rows = await fetchSupabaseRows(
     "v_institution_source_health",
@@ -696,6 +720,29 @@ function latestDateKey(values = []) {
     .pop() || "";
 }
 
+function chipSourcePriority(source = "") {
+  const text = String(source || "").toLowerCase();
+  if (text.startsWith("twse:") || text.startsWith("tpex:")) return 3;
+  if (text.startsWith("finmind:")) return 2;
+  return 1;
+}
+
+function chipSourceTier(source = "") {
+  const priority = chipSourcePriority(source);
+  if (priority >= 3) return "official";
+  if (priority === 2) return "finmind_fallback";
+  return source ? "other" : "missing";
+}
+
+function shouldReplaceChipSource(currentDate = "", currentSource = "", nextDate = "", nextSource = "") {
+  const currentKey = compactDateKey(currentDate);
+  const nextKey = compactDateKey(nextDate);
+  if (!nextKey) return false;
+  if (!currentKey) return true;
+  if (nextKey !== currentKey) return nextKey > currentKey;
+  return chipSourcePriority(nextSource) > chipSourcePriority(currentSource);
+}
+
 function taipeiParts(date = new Date()) {
   return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -872,43 +919,105 @@ function readChipKConfluenceSources(institutionData = {}) {
 
 async function fetchFinMindChipLatestMap(limit = 5000) {
   if (process.env.STRATEGY5_USE_FINMIND_CHIP === "0") return new Map();
-  const rows = await fetchSupabaseRows(
+  const rows = await fetchSupabaseRowsPaged(
     "v_chip_flows_latest",
-    `select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_buy,margin_sell,margin_cash_repayment,margin_balance,short_sell,short_buy,short_cash_repayment,short_balance,source&limit=${Number(limit || 5000)}`
+    "select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_buy,margin_sell,margin_cash_repayment,margin_balance,short_sell,short_buy,short_cash_repayment,short_balance,source&order=trade_date.desc",
+    Number(limit || 5000)
   ).catch(() => []);
   const map = new Map();
   rows.forEach((row) => {
     const code = normalizeCode(row.symbol);
     if (!/^\d{4}$/.test(code)) return;
-    const foreign = cleanNumber(row.foreign_net);
-    const trust = cleanNumber(row.investment_trust_net);
-    const dealer = cleanNumber(row.dealer_net);
-    const total = cleanNumber(row.institution_total_net || foreign + trust + dealer);
     const tradeDate = row.trade_date || "";
     const ageDays = dateAgeDays(tradeDate);
     if (ageDays == null || ageDays > STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS) return;
-    map.set(code, {
-      foreign,
-      trust,
-      dealer,
-      total,
-      marginBuy: cleanNumber(row.margin_buy),
-      marginSell: cleanNumber(row.margin_sell),
-      marginCashRepayment: cleanNumber(row.margin_cash_repayment),
-      marginBalance: cleanNumber(row.margin_balance),
-      shortSell: cleanNumber(row.short_sell),
-      shortBuy: cleanNumber(row.short_buy),
-      shortCashRepayment: cleanNumber(row.short_cash_repayment),
-      shortBalance: cleanNumber(row.short_balance),
-      source: row.source || "finmind-chip",
-      tradeDate,
-    });
+    const entry = map.get(code) || {};
+    const source = row.source || "finmind-chip";
+    const foreign = firstNullableNumber(row.foreign_net);
+    const trust = firstNullableNumber(row.investment_trust_net);
+    const dealer = firstNullableNumber(row.dealer_net);
+    const total = firstNullableNumber(row.institution_total_net);
+    const hasInstitution = [foreign, trust, dealer, total].some((value) => value !== null);
+    const marginBuy = firstNullableNumber(row.margin_buy);
+    const marginSell = firstNullableNumber(row.margin_sell);
+    const marginCashRepayment = firstNullableNumber(row.margin_cash_repayment);
+    const marginBalance = firstNullableNumber(row.margin_balance);
+    const shortSell = firstNullableNumber(row.short_sell);
+    const shortBuy = firstNullableNumber(row.short_buy);
+    const shortCashRepayment = firstNullableNumber(row.short_cash_repayment);
+    const shortBalance = firstNullableNumber(row.short_balance);
+    const hasMarginShort = [
+      marginBuy,
+      marginSell,
+      marginCashRepayment,
+      marginBalance,
+      shortSell,
+      shortBuy,
+      shortCashRepayment,
+      shortBalance,
+    ].some((value) => value !== null);
+    if (hasInstitution && shouldReplaceChipSource(entry.institutionTradeDate, entry.institutionSource, tradeDate, source)) {
+      entry.foreign = foreign ?? 0;
+      entry.trust = trust ?? 0;
+      entry.dealer = dealer ?? 0;
+      entry.total = total ?? ((foreign ?? 0) + (trust ?? 0) + (dealer ?? 0));
+      entry.institutionTradeDate = tradeDate;
+      entry.institutionSource = source;
+    }
+    if (hasMarginShort && shouldReplaceChipSource(entry.marginTradeDate, entry.marginShortSource, tradeDate, source)) {
+      entry.marginBuy = marginBuy ?? 0;
+      entry.marginSell = marginSell ?? 0;
+      entry.marginCashRepayment = marginCashRepayment ?? 0;
+      entry.marginBalance = marginBalance ?? 0;
+      entry.shortSell = shortSell ?? 0;
+      entry.shortBuy = shortBuy ?? 0;
+      entry.shortCashRepayment = shortCashRepayment ?? 0;
+      entry.shortBalance = shortBalance ?? 0;
+      entry.marginTradeDate = tradeDate;
+      entry.marginShortSource = source;
+    }
+    if (!hasInstitution && !hasMarginShort) return;
+    entry.tradeDate = latestDateKey([entry.tradeDate, entry.institutionTradeDate, entry.marginTradeDate, tradeDate]);
+    entry.source = [entry.institutionSource, entry.marginShortSource].filter(Boolean).join("+") || source;
+    map.set(code, entry);
+  });
+  const marginRows = await fetchSupabaseRowsPaged(
+    "finmind_margin_short",
+    "select=symbol,trade_date,margin_buy,margin_sell,margin_cash_repayment,margin_balance,short_sell,short_buy,short_cash_repayment,short_balance,source&order=trade_date.desc",
+    Number(limit || 5000)
+  ).catch(() => []);
+  marginRows.forEach((row) => {
+    const code = normalizeCode(row.symbol);
+    if (!/^\d{4}$/.test(code)) return;
+    const tradeDate = row.trade_date || "";
+    const ageDays = dateAgeDays(tradeDate);
+    if (ageDays == null || ageDays > STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS) return;
+    const entry = map.get(code) || {};
+    const source = row.source || "finmind-margin-short";
+    if (!shouldReplaceChipSource(entry.marginTradeDate, entry.marginShortSource, tradeDate, source)) return;
+    entry.marginBuy = firstNullableNumber(row.margin_buy) ?? 0;
+    entry.marginSell = firstNullableNumber(row.margin_sell) ?? 0;
+    entry.marginCashRepayment = firstNullableNumber(row.margin_cash_repayment) ?? 0;
+    entry.marginBalance = firstNullableNumber(row.margin_balance) ?? 0;
+    entry.shortSell = firstNullableNumber(row.short_sell) ?? 0;
+    entry.shortBuy = firstNullableNumber(row.short_buy) ?? 0;
+    entry.shortCashRepayment = firstNullableNumber(row.short_cash_repayment) ?? 0;
+    entry.shortBalance = firstNullableNumber(row.short_balance) ?? 0;
+    entry.marginTradeDate = tradeDate;
+    entry.marginShortSource = source;
+    entry.tradeDate = latestDateKey([entry.tradeDate, entry.institutionTradeDate, entry.marginTradeDate, tradeDate]);
+    entry.source = [entry.institutionSource, entry.marginShortSource].filter(Boolean).join("+") || source;
+    map.set(code, entry);
   });
   return map;
 }
 
 function latestFinMindChipTradeDate(finmindMap = new Map()) {
-  return latestDateKey(Array.from(finmindMap.values()).map((row) => row.tradeDate));
+  return latestDateKey(Array.from(finmindMap.values()).flatMap((row) => [
+    row.tradeDate,
+    row.institutionTradeDate,
+    row.marginTradeDate,
+  ]));
 }
 
 function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) {
@@ -916,23 +1025,28 @@ function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) 
   const merged = { ...(baseData || {}) };
   finmindMap.forEach((finmind, code) => {
     const current = merged[code] || {};
-    const foreign = cleanNumber(current.foreign);
-    const trust = cleanNumber(current.trust);
-    const dealer = cleanNumber(current.dealer);
+    const foreign = firstNullableNumber(current.foreign);
+    const trust = firstNullableNumber(current.trust);
+    const dealer = firstNullableNumber(current.dealer);
     merged[code] = {
       ...current,
-      foreign: foreign || finmind.foreign,
-      trust: trust || finmind.trust,
-      dealer: dealer || finmind.dealer,
-      total: cleanNumber(current.total) || finmind.total,
-      marginBuy: cleanNumber(current.marginBuy || current.margin_buy) || finmind.marginBuy,
-      marginSell: cleanNumber(current.marginSell || current.margin_sell) || finmind.marginSell,
-      marginCashRepayment: cleanNumber(current.marginCashRepayment || current.margin_cash_repayment) || finmind.marginCashRepayment,
-      marginBalance: cleanNumber(current.marginBalance || current.margin_balance) || finmind.marginBalance,
-      shortSell: cleanNumber(current.shortSell || current.short_sell) || finmind.shortSell,
-      shortBuy: cleanNumber(current.shortBuy || current.short_buy) || finmind.shortBuy,
-      shortCashRepayment: cleanNumber(current.shortCashRepayment || current.short_cash_repayment) || finmind.shortCashRepayment,
-      shortBalance: cleanNumber(current.shortBalance || current.short_balance) || finmind.shortBalance,
+      foreign: foreign ?? finmind.foreign,
+      trust: trust ?? finmind.trust,
+      dealer: dealer ?? finmind.dealer,
+      total: firstNullableNumber(current.total) ?? finmind.total,
+      marginBuy: firstNullableNumber(current.marginBuy, current.margin_buy) ?? finmind.marginBuy,
+      marginSell: firstNullableNumber(current.marginSell, current.margin_sell) ?? finmind.marginSell,
+      marginCashRepayment: firstNullableNumber(current.marginCashRepayment, current.margin_cash_repayment) ?? finmind.marginCashRepayment,
+      marginBalance: firstNullableNumber(current.marginBalance, current.margin_balance) ?? finmind.marginBalance,
+      shortSell: firstNullableNumber(current.shortSell, current.short_sell) ?? finmind.shortSell,
+      shortBuy: firstNullableNumber(current.shortBuy, current.short_buy) ?? finmind.shortBuy,
+      shortCashRepayment: firstNullableNumber(current.shortCashRepayment, current.short_cash_repayment) ?? finmind.shortCashRepayment,
+      shortBalance: firstNullableNumber(current.shortBalance, current.short_balance) ?? finmind.shortBalance,
+      institutionTradeDate: current.institutionTradeDate || current.tradeDate || current.trade_date || finmind.institutionTradeDate || "",
+      institutionSource: current.institutionSource || current.source || finmind.institutionSource || "",
+      marginTradeDate: current.marginTradeDate || current.margin_trade_date || finmind.marginTradeDate || "",
+      marginShortSource: current.marginShortSource || current.margin_short_source || finmind.marginShortSource || "",
+      tradeDate: latestDateKey([current.tradeDate, current.trade_date, finmind.tradeDate]),
       finmindChip: finmind,
     };
   });
@@ -1176,23 +1290,32 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
   };
 }
 
-function marginShortSameIncrease(inst = {}) {
+function marginShortSameIncrease(inst = {}, expectedTradeDate = "") {
+  const expectedDate = compactDateKey(expectedTradeDate);
+  const marginTradeDate = compactDateKey(inst.marginTradeDate || inst.margin_trade_date || inst.tradeDate || inst.trade_date);
+  const alignmentOk = Boolean(expectedDate && marginTradeDate && expectedDate === marginTradeDate);
   const marginNetIncrease =
-    cleanNumber(inst.marginBuy || inst.margin_buy) -
-    cleanNumber(inst.marginSell || inst.margin_sell) -
-    cleanNumber(inst.marginCashRepayment || inst.margin_cash_repayment);
+    cleanNumber(firstNullableNumber(inst.marginBuy, inst.margin_buy)) -
+    cleanNumber(firstNullableNumber(inst.marginSell, inst.margin_sell)) -
+    cleanNumber(firstNullableNumber(inst.marginCashRepayment, inst.margin_cash_repayment));
   const shortNetIncrease =
-    cleanNumber(inst.shortSell || inst.short_sell) -
-    cleanNumber(inst.shortBuy || inst.short_buy) -
-    cleanNumber(inst.shortCashRepayment || inst.short_cash_repayment);
+    cleanNumber(firstNullableNumber(inst.shortSell, inst.short_sell)) -
+    cleanNumber(firstNullableNumber(inst.shortBuy, inst.short_buy)) -
+    cleanNumber(firstNullableNumber(inst.shortCashRepayment, inst.short_cash_repayment));
   return {
-    ok: marginNetIncrease > 0 && shortNetIncrease > 0,
+    ok: alignmentOk && marginNetIncrease > 0 && shortNetIncrease > 0,
     marginNetIncrease,
     shortNetIncrease,
+    marginTradeDate,
+    expectedTradeDate: expectedDate,
+    alignmentOk,
+    source: inst.marginShortSource || inst.margin_short_source || "",
+    sourceTier: chipSourceTier(inst.marginShortSource || inst.margin_short_source || ""),
+    reason: alignmentOk ? "" : "margin_short_source_date_mismatch",
   };
 }
 
-function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageMap, previousVolumeMap, pctOrdinalRank, volumeIncreaseOrdinalRank }) {
+function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageMap, previousVolumeMap, pctOrdinalRank, volumeIncreaseOrdinalRank, runMarketDate }) {
   const pct = cleanNumber(stock.percent);
   const volumeUnits = normalizeTradeVolumeUnits(stock);
   const volumeLots = volumeUnits.lots;
@@ -1204,15 +1327,11 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
   const previousVolumeShares = previousVolumeMap.get(stock.code) || 0;
   const previousVolumeExpansionRatio = previousVolumeShares ? volumeShares / previousVolumeShares : 0;
   const previousVolumeExpanded = previousVolumeExpansionRatio >= 1.5;
-  const marginShort = marginShortSameIncrease(inst);
+  const marginShort = marginShortSameIncrease(inst, runMarketDate);
   if (!(
     pct >= 3 &&
     turnoverRate > 5 &&
     volumeRatio >= 1 &&
-    pctOrdinalRank > 0 &&
-    pctOrdinalRank <= 100 &&
-    volumeIncreaseOrdinalRank > 0 &&
-    volumeIncreaseOrdinalRank <= 100 &&
     marginShort.ok &&
     previousVolumeExpanded
   )) return null;
@@ -1223,7 +1342,7 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     Math.min(turnoverRate * 4, 28) +
     Math.min(volumeRatio * 10, 22)
   ), 0, 100);
-  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；漲跌排行 ${pctOrdinalRank}、成交量增幅排行 ${volumeIncreaseOrdinalRank}，資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}），成交量較前一日放大 ${previousVolumeExpansionRatio.toFixed(2)} 倍。`;
+  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}），成交量較前一日放大 ${previousVolumeExpansionRatio.toFixed(2)} 倍。`;
   return {
     id: "volume_turnover_breakout",
     short: "量價周轉",
@@ -1240,6 +1359,11 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
     marginNetIncrease: Math.round(marginShort.marginNetIncrease),
     shortNetIncrease: Math.round(marginShort.shortNetIncrease),
     marginShortSameIncrease: true,
+    marginShortSourceDate: marginShort.marginTradeDate,
+    marginShortExpectedDate: marginShort.expectedTradeDate,
+    marginShortAlignmentOk: marginShort.alignmentOk,
+    marginShortSource: marginShort.source,
+    marginShortSourceTier: marginShort.sourceTier,
     previousVolumeShares: Math.round(previousVolumeShares),
     previousVolumeExpansionRatio: Number(previousVolumeExpansionRatio.toFixed(2)),
     previousVolumeExpanded: true,
@@ -1500,7 +1624,7 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
   };
 }
 
-async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map(), previousVolumeMap = new Map()) {
+async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map(), previousVolumeMap = new Map(), runMarketDate = "") {
   const stocksWithVolumeUnits = stocks.map((stock) => {
     const volumeUnits = normalizeTradeVolumeUnits(stock);
     return {
@@ -1538,14 +1662,18 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       jointStreak: cleanNumber(inst.jointStreak || inst.joint_streak),
       tradeVolume: cleanNumber(inst.tradeVolume || inst.trade_volume),
       value: cleanNumber(inst.value || inst.trade_value),
-      marginBuy: cleanNumber(inst.marginBuy || inst.margin_buy),
-      marginSell: cleanNumber(inst.marginSell || inst.margin_sell),
-      marginCashRepayment: cleanNumber(inst.marginCashRepayment || inst.margin_cash_repayment),
-      marginBalance: cleanNumber(inst.marginBalance || inst.margin_balance),
-      shortSell: cleanNumber(inst.shortSell || inst.short_sell),
-      shortBuy: cleanNumber(inst.shortBuy || inst.short_buy),
-      shortCashRepayment: cleanNumber(inst.shortCashRepayment || inst.short_cash_repayment),
-      shortBalance: cleanNumber(inst.shortBalance || inst.short_balance),
+      marginBuy: cleanNumber(firstNullableNumber(inst.marginBuy, inst.margin_buy)),
+      marginSell: cleanNumber(firstNullableNumber(inst.marginSell, inst.margin_sell)),
+      marginCashRepayment: cleanNumber(firstNullableNumber(inst.marginCashRepayment, inst.margin_cash_repayment)),
+      marginBalance: cleanNumber(firstNullableNumber(inst.marginBalance, inst.margin_balance)),
+      shortSell: cleanNumber(firstNullableNumber(inst.shortSell, inst.short_sell)),
+      shortBuy: cleanNumber(firstNullableNumber(inst.shortBuy, inst.short_buy)),
+      shortCashRepayment: cleanNumber(firstNullableNumber(inst.shortCashRepayment, inst.short_cash_repayment)),
+      shortBalance: cleanNumber(firstNullableNumber(inst.shortBalance, inst.short_balance)),
+      institutionTradeDate: inst.institutionTradeDate || inst.institution_trade_date || inst.tradeDate || inst.trade_date || "",
+      institutionSource: inst.institutionSource || inst.institution_source || inst.source || "",
+      marginTradeDate: inst.marginTradeDate || inst.margin_trade_date || "",
+      marginShortSource: inst.marginShortSource || inst.margin_short_source || "",
     };
     const matches = [
       buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
@@ -1557,6 +1685,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
         previousVolumeMap,
         pctOrdinalRank: pctOrdinalRanks.get(stock.code) || 0,
         volumeIncreaseOrdinalRank: volumeIncreaseOrdinalRanks.get(stock.code) || 0,
+        runMarketDate,
       }),
     ].filter(Boolean);
     const volumeTurnover = matches.find((match) => match.id === "volume_turnover_breakout");
@@ -1651,7 +1780,6 @@ async function main() {
   ];
   if (finmindChipMap.size) console.log(`strategy5 FinMind chip supplement rows=${finmindChipMap.size}`);
   sourceWarnings.forEach((warning) => console.warn(`strategy5 source warning: ${warning}`));
-  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map, volumeAverageResult.previousMap);
   const quoteDate = compactDateKey(stocks.find((stock) => stock.quoteDate)?.quoteDate);
   const institutionDate = compactDateKey(institution.usedDate || institution.date);
   const chipLatestTradeDate = latestDateKey([
@@ -1662,6 +1790,9 @@ async function main() {
   const sourceDate = chipLatestTradeDate || institutionDate || quoteDate || taipeiDateKey();
   const now = new Date();
   const runMarketDate = sourceDate;
+  const marginShortSourceDate = compactDateKey(chipSourceHealth.marginLatestTradeDate || "");
+  const marginShortAlignmentOk = Boolean(marginShortSourceDate && marginShortSourceDate === runMarketDate);
+  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map, volumeAverageResult.previousMap, runMarketDate);
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
@@ -1685,6 +1816,9 @@ async function main() {
       finmindChipCount: finmindChipMap.size,
       chipLatestTradeDate,
       institutionLatestDate: institutionDate,
+      marginShortSourceDate,
+      marginShortExpectedDate: runMarketDate,
+      marginShortAlignmentOk,
       marketQuoteDate: quoteDate,
       warningCount: sourceWarnings.length,
       warnings: sourceWarnings.slice(0, 8),
