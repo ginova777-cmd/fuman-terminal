@@ -350,8 +350,8 @@ function buildStrategy5ResultRows(output, runId) {
     price: cleanNumber(stock.close || stock.price),
     close: cleanNumber(stock.close || stock.price),
     change_percent: cleanNullableNumber(stock.percent ?? stock.changePercent),
-    volume: cleanNumber(stock.volume || stock.tradeVolume),
-    trade_volume: cleanNumber(stock.tradeVolume || stock.volume),
+    volume: cleanNumber(stock.volumeShares || (cleanNumber(stock.volumeLots) * 1000) || stock.volume || stock.tradeVolume),
+    trade_volume: cleanNumber(stock.volumeLots || stock.tradeVolume || stock.volume),
     trade_value: cleanNumber(stock.value || stock.tradeValue),
     score: cleanNumber(stock.score),
     rank: index + 1,
@@ -946,6 +946,55 @@ function averageRows(rows, field, count, endOffset = 0) {
   return avg(rows.slice(Math.max(0, end - count), end).map((row) => cleanNumber(row?.[field])));
 }
 
+function normalizeTradeVolumeUnits(stock = {}) {
+  const explicitShares = cleanNumber(
+    stock.volumeShares ??
+    stock.volume_shares ??
+    stock.tradeVolumeShares ??
+    stock.trade_volume_shares
+  );
+  if (explicitShares > 0) {
+    return { shares: explicitShares, lots: explicitShares / 1000, source: "explicit_shares" };
+  }
+
+  const explicitLots = cleanNumber(
+    stock.volumeLots ??
+    stock.volume_lots ??
+    stock.tradeVolumeLots ??
+    stock.trade_volume_lots ??
+    stock.totalVolumeLots ??
+    stock.total_volume_lots
+  );
+  if (explicitLots > 0) {
+    return { shares: explicitLots * 1000, lots: explicitLots, source: "explicit_lots" };
+  }
+
+  const rawVolume = cleanNumber(
+    stock.tradeVolume ??
+    stock.trade_volume ??
+    stock.totalVolume ??
+    stock.total_volume ??
+    stock.volume
+  );
+  if (rawVolume <= 0) return { shares: 0, lots: 0, source: "missing" };
+
+  const price = cleanNumber(stock.close ?? stock.price ?? stock.lastPrice ?? stock.last_price);
+  const tradeValue = cleanNumber(stock.value ?? stock.tradeValue ?? stock.trade_value);
+  if (price > 0 && tradeValue > 0) {
+    const sharesValueDiff = Math.abs((rawVolume * price) - tradeValue) / Math.max(tradeValue, 1);
+    const lotsValueDiff = Math.abs((rawVolume * 1000 * price) - tradeValue) / Math.max(tradeValue, 1);
+    if (sharesValueDiff <= lotsValueDiff) {
+      return { shares: rawVolume, lots: rawVolume / 1000, source: "trade_value_inferred_shares" };
+    }
+    return { shares: rawVolume * 1000, lots: rawVolume, source: "trade_value_inferred_lots" };
+  }
+
+  if (rawVolume >= 1000000) {
+    return { shares: rawVolume, lots: rawVolume / 1000, source: "size_inferred_shares" };
+  }
+  return { shares: rawVolume * 1000, lots: rawVolume, source: "default_lots" };
+}
+
 function maxRows(rows, field, count, endOffset = 0) {
   const end = endOffset ? rows.length - endOffset : rows.length;
   const values = rows.slice(Math.max(0, end - count), end).map((row) => cleanNumber(row?.[field])).filter(Boolean);
@@ -960,7 +1009,8 @@ function analyzeBreakoutSetup(rows, stock) {
   const open = cleanNumber(last?.open || stock.open || close);
   const high = cleanNumber(last?.high || stock.high || close);
   const low = cleanNumber(last?.low || stock.low || close);
-  const volume = cleanNumber(stock.tradeVolume || last?.volume);
+  const volumeUnits = normalizeTradeVolumeUnits({ ...stock, close, price: close });
+  const volume = volumeUnits.shares || cleanNumber(last?.volume);
   const ma5 = averageRows(rows, "close", 5);
   const ma10 = averageRows(rows, "close", 10);
   const avgVolume5 = averageRows(rows, "volume", 5, 1);
@@ -987,6 +1037,8 @@ function analyzeBreakoutSetup(rows, stock) {
     fiveDayPct,
     threeDayPct,
     volume,
+    volumeLots: volumeUnits.lots,
+    volumeUnitSource: volumeUnits.source,
     volumeRatio5,
     volumeRatio20,
     upperShadowRatio,
@@ -1005,9 +1057,10 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
   const jointBuying = total > 0 && foreign > 0 && trust > 0;
   if (!jointBuying || !setup || todayPct <= -2.5 || todayPct > 10.2) return null;
 
-  const volumeLots = cleanNumber(stock.tradeVolume);
+  const volumeUnits = normalizeTradeVolumeUnits({ ...stock, close: setup.close, price: setup.close });
+  const volumeLots = volumeUnits.lots;
   const historyVolume = cleanNumber(setup.volume);
-  const volumeShares = volumeLots ? volumeLots * 1000 : historyVolume;
+  const volumeShares = volumeUnits.shares || historyVolume;
   const legalBuyRatio = volumeShares ? (total / volumeShares) * 100 : 0;
   const foreignBuyRatio = volumeShares ? (foreign / volumeShares) * 100 : 0;
   const trustBuyRatio = volumeShares ? (trust / volumeShares) * 100 : 0;
@@ -1082,8 +1135,9 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
 
 function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) {
   const pct = cleanNumber(stock.percent);
-  const volumeLots = cleanNumber(stock.tradeVolume);
-  const volumeShares = volumeLots * 1000;
+  const volumeUnits = normalizeTradeVolumeUnits(stock);
+  const volumeLots = volumeUnits.lots;
+  const volumeShares = volumeUnits.shares;
   const issuedShares = issuedSharesMap.get(stock.code) || 0;
   const turnoverRate = issuedShares ? (volumeShares / issuedShares) * 100 : 0;
   const avgVolume = volumeAverageMap.get(stock.code) || 0;
@@ -1104,6 +1158,8 @@ function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) 
     score,
     reason,
     volumeLots: Math.round(volumeLots),
+    volumeShares: Math.round(volumeShares),
+    volumeUnitSource: volumeUnits.source,
     turnoverRate: Number(turnoverRate.toFixed(2)),
     volumeRatio: Number(volumeRatio.toFixed(2)),
   };
@@ -1364,10 +1420,20 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
 }
 
 async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map()) {
-  const valueRanks = rankMap(stocks, "value");
-  const volumeRanks = rankMap(stocks, "tradeVolume");
+  const stocksWithVolumeUnits = stocks.map((stock) => {
+    const volumeUnits = normalizeTradeVolumeUnits(stock);
+    return {
+      ...stock,
+      volumeShares: Math.round(volumeUnits.shares),
+      volumeLots: volumeUnits.lots,
+      volumeUnitSource: volumeUnits.source,
+      normalizedTradeVolume: volumeUnits.shares,
+    };
+  });
+  const valueRanks = rankMap(stocksWithVolumeUnits, "value");
+  const volumeRanks = rankMap(stocksWithVolumeUnits, "normalizedTradeVolume");
   const confluenceSources = readChipKConfluenceSources(institutionData);
-  const baseRows = stocks.map((stock) => {
+  const baseRows = stocksWithVolumeUnits.map((stock) => {
     const inst = institutionData[stock.code] || {};
     const valueRank = valueRanks.get(stock.code) || 0;
     const volumeRank = volumeRanks.get(stock.code) || 0;
@@ -1396,7 +1462,9 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       ...stock,
       valueRank,
       volumeRank,
-      volumeLots: volumeTurnover?.volumeLots,
+      volumeLots: volumeTurnover?.volumeLots ?? Math.round(stock.volumeLots || 0),
+      volumeShares: volumeTurnover?.volumeShares ?? Math.round(stock.volumeShares || 0),
+      volumeUnitSource: volumeTurnover?.volumeUnitSource || stock.volumeUnitSource,
       turnoverRate: volumeTurnover?.turnoverRate,
       volumeRatio: volumeTurnover?.volumeRatio,
       inst: normalizedInst,
@@ -1552,6 +1620,7 @@ module.exports = {
   buildStrategy5ResultRows,
   buildStrategy5FieldCompleteness,
   buildWriteBudget,
+  normalizeTradeVolumeUnits,
 };
 
 
