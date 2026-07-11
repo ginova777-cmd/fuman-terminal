@@ -10,8 +10,10 @@ const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_D
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
-const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.4);
-const STRATEGY4_THREE_INSIDE_VOLUME_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_VOLUME_RATIO || 0.8);
+const STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK || 5);
+const STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT || 2);
+const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.5);
+const STRATEGY4_THREE_INSIDE_VOLUME_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_VOLUME_RATIO || 1.2);
 const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
 const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
 const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
@@ -993,14 +995,11 @@ function calcBuyStreak(rows, ma20, volMa20) {
 function scanStrategy4(code, market, rows, priceSource = "") {
   const daily = analyzeRows(rows);
   if (!daily) return null;
-  if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5) return null;
-
   const last = daily.last;
   const prev = daily.prev;
   const isRed = last.close > last.open;
   const volStrong = daily.volumeRatio >= 1.2;
   const trendConfirmed = daily.ema21 > daily.ma20;
-  const threeInsideTrendConfirmed = trendConfirmed || daily.ema21 > daily.ema21Prev || last.close > daily.ema21;
   const signals = [];
   const bullAttack = daily.bullTrend && isRed && volStrong && daily.realBody &&
     (daily.gapUp || (prev && last.volume > prev.volume * 1.2) || last.high > daily.highest2Prev) &&
@@ -1030,18 +1029,22 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const b = daily.rows.at(-2);
     const c = daily.rows.at(-1);
     const aRange = a.high - a.low;
-    return a.close < a.open &&
+    const priorIndex = daily.rows.length - 3 - STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK;
+    const priorClose = priorIndex >= 0 ? daily.rows[priorIndex].close : 0;
+    const priorDropPct = priorClose > 0 ? ((a.close - priorClose) / priorClose) * 100 : 0;
+    const aVolMa20 = sma(daily.rows.slice(0, -2).map((row) => row.volume), 20);
+    const previousTrendDown = priorClose > 0 &&
+      priorDropPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
+    return previousTrendDown &&
+      a.close < a.open &&
       aRange > 0 &&
       Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
+      a.volume > aVolMa20 * STRATEGY4_THREE_INSIDE_VOLUME_RATIO &&
       b.close > b.open &&
-      b.close < a.open &&
-      b.open > a.close &&
       c.close > c.open &&
-      c.close > a.open &&
-      c.volume > daily.volMa20 * STRATEGY4_THREE_INSIDE_VOLUME_RATIO &&
-      c.close > daily.ma20 &&
-      threeInsideTrendConfirmed;
+      c.close > a.high;
   })();
+  if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5 && !threeInside) return null;
   const deepFallFib = daily.deepFall && isRed;
 
   if (bullAttack) signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `站上MA20/EMA21，MACD多頭，量比 ${daily.volumeRatio.toFixed(2)}，日K多頭攻擊。` });
@@ -1071,7 +1074,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "三內翻紅結構成立，站上MA20且趨勢轉強。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段下跌後長黑帶量，連兩紅且第二根紅K收盤站上長黑高點。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({
