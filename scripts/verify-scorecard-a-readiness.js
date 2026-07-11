@@ -123,12 +123,12 @@ async function main() {
     && marketCalendar.json?.latestPointerUpdated === false
     && marketCalendar.json?.emptyResultWritten === false;
   if (marketCalendar.status < 200 || marketCalendar.status >= 300 || marketCalendar.json?.ok !== true) issues.push(`market_calendar_${marketCalendar.status}_${marketCalendar.json?.ok}`);
-  if (health.status < 200 || health.status >= 300 || health.json?.ok !== true) issues.push(`scorecard_health_${health.status}_${health.json?.ok}`);
-  if (page.status < 200 || page.status >= 300 || page.json?.ok !== true) issues.push(`scorecard_api_${page.status}_${page.json?.ok}`);
   const daytradeResult = daytradeIssues(daytrade.json || {}, expectedDate);
   const sevenResult = sevenStrategyIssues(seven.json || {}, expectedDate, reports.json || {});
   const healthClosed = marketClosedEvidence(health.json || {});
   const combinedMarketClosed = marketClosed || healthClosed.marketClosed;
+  if (!combinedMarketClosed && (health.status < 200 || health.status >= 300 || health.json?.ok !== true)) issues.push(`scorecard_health_${health.status}_${health.json?.ok}`);
+  if (!combinedMarketClosed && (page.status < 200 || page.status >= 300 || page.json?.ok !== true)) issues.push(`scorecard_api_${page.status}_${page.json?.ok}`);
   if (!combinedMarketClosed) issues.push(...daytradeResult.issues, ...sevenResult.issues);
   const rawOk = issues.length === 0;
   const summary = [
