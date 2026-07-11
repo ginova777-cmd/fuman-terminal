@@ -1828,7 +1828,9 @@ function bollingerKdjPatternFromRows(rows) {
   const midDistancePct = current.middle ? ((lastClose - current.middle) / current.middle) * 100 : 99;
   const lowerDistancePct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
   const fromLowerPct = current.lower ? ((lastClose - current.lower) / current.lower) * 100 : 99;
+  const upperDistancePct = current.upper ? ((lastClose - current.upper) / current.upper) * 100 : 99;
   const belowUpper = current.upper && lastClose <= current.upper * 1.035;
+  const upperRailCurlOk = Boolean(current.upper && slope.upperSlopePct >= 0.35 && lastClose >= current.upper * 0.965 && lastClose <= current.upper * 1.04 && slope.expanding);
   const midBuy = slope.rising && belowUpper && lastClose >= current.middle * 0.985 && lastClose <= current.middle * 1.09;
   const lowerBuy = slope.flat && lastClose >= current.lower * 0.985 && lastClose <= current.middle * 1.04;
   if (!redK || volumeRatio < 0.75 || (!midBuy && !lowerBuy)) return null;
@@ -1849,7 +1851,11 @@ function bollingerKdjPatternFromRows(rows) {
     midDistancePct,
     lowerDistancePct,
     fromLowerPct,
+    upperDistancePct,
     middleSlopePct: slope.middleSlopePct,
+    upperSlopePct: slope.upperSlopePct,
+    lowerSlopePct: slope.lowerSlopePct,
+    upperRailCurlOk,
     volumeRatio,
   };
 }
@@ -1881,6 +1887,11 @@ function buildBollingerKdjMatch({ stock, valueRank, volumeRank, rows }) {
     bollingerBandwidthPct: roundNumber(pattern.bollingerBandwidthPct, 2),
     bollingerBandwidthState: pattern.bollingerBandwidthState,
     bollingerBandwidthLabel: pattern.bollingerBandwidthLabel,
+    upperRailCurlOk: pattern.upperRailCurlOk === true,
+    upperSlopePct: roundNumber(pattern.upperSlopePct, 2),
+    upperDistancePct: roundNumber(pattern.upperDistancePct, 2),
+    middleSlopePct: roundNumber(pattern.middleSlopePct, 2),
+    lowerSlopePct: roundNumber(pattern.lowerSlopePct, 2),
     kdjK: Number(pattern.k.toFixed(1)),
     kdjD: Number(pattern.d.toFixed(1)),
     kdjJ: Number(pattern.j.toFixed(1)),
