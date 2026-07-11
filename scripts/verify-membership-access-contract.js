@@ -89,6 +89,57 @@ async function verifyProductionProtection() {
   return { protectedRows, publicRows };
 }
 
+async function verifyLocalEntitlementMatrix() {
+  const { isAccessAllowed, withEntitlementRequired } = require("../lib/server-entitlement-guard");
+  const user = { id: "user-1", email: "member@example.com" };
+  const cases = [
+    { name: "admin_email", row: null, user: { email: "ginova777@gmail.com" }, expected: true },
+    { name: "active_status", row: { status: "active" }, user, expected: true },
+    { name: "paid_plan", row: { plan: "paid" }, user, expected: true },
+    { name: "explicit_allowed", row: { allowed: true, status: "pending" }, user, expected: true },
+    { name: "strategy_terminal_permission", row: { permissions: { strategyTerminal: true } }, user, expected: true },
+    { name: "pending_without_permission", row: { status: "pending" }, user, expected: false },
+    { name: "missing_row_non_admin", row: null, user, expected: false },
+  ];
+  const results = cases.map((item) => {
+    const allowed = isAccessAllowed(item.row, item.user);
+    if (allowed !== item.expected) issues.push(`local entitlement matrix ${item.name} expected=${item.expected} actual=${allowed}`);
+    return { name: item.name, expected: item.expected, actual: allowed };
+  });
+
+  let opened = false;
+  const protectedHandler = withEntitlementRequired(async (request, response) => {
+    opened = true;
+    return response.status(200).json({ ok: true, scope: request.fumanEntitlement?.scope || "" });
+  }, "membership-open-path-test");
+  let statusCode = 200;
+  let payload = null;
+  const response = {
+    status(code) { statusCode = Number(code) || 200; return this; },
+    setHeader() {},
+    json(value) { payload = value; return this; },
+    end(value) { payload = value; return this; },
+  };
+  await protectedHandler({ method: "GET", headers: {}, fumanInternalVerify: true }, response);
+  if (statusCode !== 200 || payload?.ok !== true || opened !== true) {
+    issues.push(`internal verified open path must reach wrapped handler; status=${statusCode} payload=${JSON.stringify(payload)}`);
+  }
+
+  return { results, internalVerifiedOpenPath: { status: statusCode, ok: payload?.ok === true, opened } };
+}
+
+async function verifyOptionalLiveMemberToken() {
+  const token = String(process.env.FUMAN_TEST_MEMBER_TOKEN || "").trim();
+  if (!token) return { configured: false, status: "not_configured" };
+  const result = await fetchJson(`${PRODUCTION_URL}/api/strategy2-latest?live=1&verify_member=${Date.now()}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (result.status !== 200 || result.json?.ok === false) {
+    issues.push(`FUMAN_TEST_MEMBER_TOKEN live readback must return protected API 200 ok!=false; status=${result.status} error=${result.json?.error || ""}`);
+  }
+  return { configured: true, status: result.status, ok: result.json?.ok !== false, runId: result.json?.runId || "" };
+}
+
 async function main() {
   requireIncludes("terminal-runtime-config.js", `supabaseUrl: "${AUTH_URL}"`);
   requireIncludes("terminal-runtime-config.js", `accessTable: "${ACCESS_TABLE}"`);
@@ -104,11 +155,13 @@ async function main() {
   requireIncludes("lib/server-entitlement-guard.js", "missing_bearer_token");
   requireIncludes("lib/server-entitlement-guard.js", "membership_not_enabled");
 
+  const localEntitlementMatrix = await verifyLocalEntitlementMatrix();
   const accessTableProbe = await verifyAuthAccessTableProbe();
   const production = await verifyProductionProtection();
+  const liveMemberToken = await verifyOptionalLiveMemberToken();
 
   if (issues.length) {
-    console.error(JSON.stringify({ ok: false, issues, warnings, accessTableProbe, production }, null, 2));
+    console.error(JSON.stringify({ ok: false, issues, warnings, localEntitlementMatrix, accessTableProbe, production, liveMemberToken }, null, 2));
     process.exit(1);
   }
 
@@ -117,8 +170,10 @@ async function main() {
     contract: "membership-access-contract-v1",
     authProject: AUTH_URL,
     accessTable: ACCESS_TABLE,
+    localEntitlementMatrix,
     accessTableProbe,
     production,
+    liveMemberToken,
     warnings
   }, null, 2));
 }
