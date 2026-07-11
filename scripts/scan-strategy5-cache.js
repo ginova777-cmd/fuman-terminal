@@ -64,7 +64,7 @@ function createCaptureResponse() {
 
 async function loadInstitutionLatestPayload() {
   const response = createCaptureResponse();
-  await institutionLatestHandler({ method: "GET" }, response);
+  await institutionLatestHandler({ method: "GET", fumanInternalVerify: true }, response);
   const payload = response.payload;
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
   if (response.statusCode >= 400 || !payload?.ok || !payload?.complete || !Object.keys(data).length) {
