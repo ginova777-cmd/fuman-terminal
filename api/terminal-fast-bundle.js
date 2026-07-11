@@ -357,17 +357,19 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
     : Array.isArray(currentPayload.rows) ? currentPayload.rows
       : [];
   const resultCount = Number(currentPayload.resultCount ?? currentPayload.count ?? currentRows.length) || 0;
-  if (currentEndpoint.includes("limit=140") && (!resultCount || currentRows.length >= resultCount)) return;
+  const currentRunId = String(currentPayload.runId || currentPayload.transport?.runId || "").trim();
   const result = await callJson("/api/strategy5-latest", strategy5Latest, request, {
     ...compactQuery(140),
     live: "1",
   }, 8000);
   const replacement = result?.payload;
+  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
   const replacementRows = Array.isArray(replacement?.matches) ? replacement.matches
     : Array.isArray(replacement?.rows) ? replacement.rows
       : [];
   const replacementCount = Number(replacement?.resultCount ?? replacement?.count ?? replacementRows.length) || 0;
   if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || !replacementRows.length || replacementRows.length < replacementCount) return;
+  if (currentEndpoint.includes("limit=140") && (!resultCount || currentRows.length >= resultCount) && replacementRunId === currentRunId) return;
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
   });
