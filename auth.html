@@ -363,11 +363,11 @@
         <span>›</span>
       </a>
 
-      <button class="quick-action secondary" type="button" id="googleLogin">
+      <a class="quick-action secondary" id="googleLogin" href="https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html">
         <span class="quick-icon">G</span>
         <span><strong>使用 Google 申請開通</strong><small>可用 Google 帳號申請；完成後依會員權限啟用</small></span>
         <span>›</span>
-      </button>
+      </a>
 
       <div class="footer-switch">
         <span id="switchText">還沒有帳號？</span>
@@ -500,16 +500,8 @@
         const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + "/auth.html" });
         setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
       });
-      document.querySelector("#googleLogin").addEventListener("click", async () => {
-        if (!client) return setStatus("Google 申請服務尚未載入，請重新整理後再試。", "error");
+      document.querySelector("#googleLogin").addEventListener("click", () => {
         setStatus("正在開啟 Google 帳號申請...");
-        const result = await client.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: `${location.origin}/auth.html?next=${encodeURIComponent(nextUrl)}` }
-        });
-        if (result.error) {
-          setStatus(`Google 申請尚未啟用：${result.error.message}`, "error");
-        }
       });
       applyMode("login");
     })();
