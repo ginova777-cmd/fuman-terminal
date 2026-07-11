@@ -11,7 +11,7 @@ const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(R
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 const STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK || 5);
-const STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT || 2);
+const STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT || 5);
 const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.5);
 const STRATEGY4_THREE_INSIDE_VOLUME_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_VOLUME_RATIO || 1.2);
 const STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE = Number(process.env.STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE || 30000000);
@@ -1030,22 +1030,21 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const b = daily.rows.at(-2);
     const c = daily.rows.at(-1);
     const aRange = a.high - a.low;
-    const priorIndex = daily.rows.length - 3 - STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK;
-    const priorClose = priorIndex >= 0 ? daily.rows[priorIndex].close : 0;
-    const priorDropPct = priorClose > 0 ? ((a.close - priorClose) / priorClose) * 100 : 0;
-    const aVolMa20 = sma(daily.rows.slice(0, -2).map((row) => row.volume), 20);
+    const priorRows = daily.rows.slice(Math.max(0, daily.rows.length - 3 - STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK), daily.rows.length - 2);
+    const priorHigh = priorRows.length ? Math.max(...priorRows.map((row) => row.high).filter(Number.isFinite)) : 0;
+    const dropFromPriorHighPct = priorHigh > 0 ? ((a.close - priorHigh) / priorHigh) * 100 : 0;
+    const aTradeValue = cleanNumber(a.value) || cleanNumber(a.close) * cleanNumber(a.volume) * 1000;
     const avgTradeValue5 = avg(daily.rows.slice(-5).map((row) => cleanNumber(row.value) || cleanNumber(row.close) * cleanNumber(row.volume) * 1000));
-    const liquidEnough = avgTradeValue5 >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE;
-    const previousTrendDown = priorClose > 0 &&
-      priorDropPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
+    const liquidEnough = avgTradeValue5 >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE && aTradeValue >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE;
+    const previousTrendDown = priorHigh > 0 &&
+      dropFromPriorHighPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
     return liquidEnough &&
       previousTrendDown &&
       a.close < a.open &&
       aRange > 0 &&
       Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
-      a.volume > aVolMa20 * STRATEGY4_THREE_INSIDE_VOLUME_RATIO &&
-      b.close > b.open &&
-      c.close > c.open &&
+      b.close > a.close &&
+      c.close > b.close &&
       c.close > a.high;
   })();
   if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5 && !threeInside) return null;
@@ -1078,7 +1077,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段下跌後長黑帶量，連兩紅且第二根紅K收盤站上長黑高點。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段自高點回落後長黑帶量，連兩日翻紅且第二根收盤站上長黑高點。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({
