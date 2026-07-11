@@ -1326,7 +1326,7 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
   const volumeRatio = avgVolume ? volumeShares / avgVolume : 0;
   const previousVolumeShares = previousVolumeMap.get(stock.code) || 0;
   const previousVolumeExpansionRatio = previousVolumeShares ? volumeShares / previousVolumeShares : 0;
-  const previousVolumeExpanded = previousVolumeExpansionRatio >= 1.5;
+  const previousVolumeExpanded = previousVolumeExpansionRatio >= 1;
   const marginShort = marginShortSameIncrease(inst, runMarketDate);
   if (!(
     pct >= 3 &&
