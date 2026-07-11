@@ -1,3 +1,4 @@
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 "use strict";
 
@@ -51,7 +52,7 @@ async function callScorecard(request) {
   });
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   installMarketCalendarResponse(response, marketCalendar);
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -80,3 +81,5 @@ module.exports = async function handler(request, response) {
     reason: payload.reason || payload.fallbackReason || undefined,
   });
 };
+
+module.exports = withEntitlementRequired(handler, "source-reports");

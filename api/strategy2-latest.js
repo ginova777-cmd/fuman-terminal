@@ -1,3 +1,4 @@
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
@@ -1886,7 +1887,7 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
   return emptyTodayRun ? buildStrategy2RunPayload(emptyTodayRun, { marketSession: runAwareMarketSession, options, emptyToday: true }) : null;
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
@@ -1998,5 +1999,4 @@ module.exports = async function handler(request, response) {
   }
 };
 
-
-
+module.exports = withEntitlementRequired(handler, "strategy2");

@@ -266,7 +266,8 @@
     "verify:market-closed-schedule": "node scripts/verify-market-closed-schedule-contract.js",
     "market-calendar:auto-update": "node --use-system-ca scripts/update-market-calendar-auto-override.js --apply",
     "verify:market-calendar-auto-update": "node scripts/verify-market-calendar-auto-update.js",
-    "verify:market-closed-terminal-readback": "node --use-system-ca scripts/verify-market-closed-terminal-readback.js"
+    "verify:market-closed-terminal-readback": "node --use-system-ca scripts/verify-market-closed-terminal-readback.js",
+    "verify:server-entitlement-guard": "node scripts/verify-server-entitlement-guard.js"
   },
   "engines": {
     "node": "24.x"

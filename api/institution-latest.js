@@ -1,3 +1,4 @@
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
@@ -477,7 +478,7 @@ async function handler(request, response) {
   }
 }
 
-module.exports = handler;
+module.exports = withEntitlementRequired(handler, "institution");
 module.exports._test = {
   buildPayload,
   normalizeRow,

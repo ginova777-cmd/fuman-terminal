@@ -437,6 +437,8 @@
           status: statusValue,
           email: session?.user?.email || "",
           userId: session?.user?.id || "",
+          accessToken: session?.access_token || "",
+          expiresAt: session?.expires_at || 0,
           allowed: access.allowed === true,
           access
         }));

@@ -1,3 +1,4 @@
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const { serviceRoleKey, terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
@@ -412,7 +413,7 @@ async function readLatestCompleteRun(options) {
   };
 }
 
-module.exports = async function handler(request, response) {
+async function handler(request, response) {
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "cb-detect", endpoint: "api/cb-detect-latest" });
@@ -439,5 +440,4 @@ module.exports = async function handler(request, response) {
   }
 };
 
-
-
+module.exports = withEntitlementRequired(handler, "cb-detect");

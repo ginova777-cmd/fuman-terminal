@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260711-01";
+  const VERSION = "membership-entitlement-guard-20260711-02";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -76,6 +76,43 @@
     if (PUBLIC_VIEWS.has(viewName)) return false;
     if (PROTECTED_VIEWS.has(viewName)) return true;
     return isProtectedLink(link);
+  }
+
+  function isProtectedApiUrl(url) {
+    if (!url || url.origin !== location.origin) return false;
+    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports)(?:$|[/?#])/i.test(url.pathname);
+  }
+
+  function readAccessToken() {
+    const access = readAccess();
+    const token = String(access.cached?.accessToken || access.cached?.session?.access_token || "").trim();
+    const expiresAt = Number(access.cached?.expiresAt || 0);
+    if (!token) return "";
+    if (expiresAt && expiresAt * 1000 < Date.now() - 30000) return "";
+    return token;
+  }
+
+  function installProtectedApiBearer() {
+    const originalFetch = window.fetch?.bind(window);
+    if (!originalFetch || originalFetch.__fumanEntitlementBearer) return;
+    function entitlementFetch(input, init) {
+      const raw = typeof input === "string" ? input : input?.url || "";
+      let url = null;
+      try {
+        url = new URL(raw, location.href);
+      } catch {}
+      if (!url || !isProtectedApiUrl(url)) return originalFetch(input, init);
+      const token = readAccessToken();
+      if (!token) return originalFetch(input, init);
+      const nextInit = { ...(init || {}) };
+      const headers = new Headers(nextInit.headers || (typeof input !== "string" ? input.headers : undefined) || {});
+      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
+      headers.set("x-fuman-member-session", "1");
+      nextInit.headers = headers;
+      return originalFetch(input, nextInit);
+    }
+    entitlementFetch.__fumanEntitlementBearer = true;
+    window.fetch = entitlementFetch;
   }
 
   function ensureStyles() {
@@ -251,6 +288,7 @@
   }
 
   sanitizeSavedRoute();
+  installProtectedApiBearer();
   installRouteHook();
   installInteractionGuard();
   installScorecardLock();
