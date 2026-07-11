@@ -126,6 +126,7 @@
   let marketAiBundlePayload = null;
   let marketRadarBundlePayload = null;
   let strategy5WatchlistMatchIndexPayload = null;
+  let strategy5WatchlistMatchIndexPromise = null;
   let marketHeatmapMode = "all";
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
@@ -6993,7 +6994,25 @@
     return byCode && typeof byCode === "object" ? byCode : null;
   }
 
-  function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
+  function fetchStrategy5WatchlistMatchIndexIfNeeded() {
+    if (strategy5WatchlistEntriesByCode() || strategy5WatchlistMatchIndexPromise) return;
+    strategy5WatchlistMatchIndexPromise = fetch("/api/watchlist-match-index?compact=1&shell=1&limit=320", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (payload?.byCode && typeof payload.byCode === "object") {
+          strategy5WatchlistMatchIndexPayload = payload;
+          if (isStrategy5Route(canvasState.route)) {
+            canvasPreRenderedRoutes.delete(canvasState.route);
+            scheduleCanvasDraw();
+          }
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        strategy5WatchlistMatchIndexPromise = null;
+      });
+  }
+function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
     const safeCode = String(code || "").match(/\d{4}/)?.[0] || "";
     if (!safeCode) return 0;
     const byCode = strategy5WatchlistEntriesByCode();
@@ -7184,6 +7203,7 @@
   function strategy5OptionCards(rows) {
     const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
     const order = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
+    fetchStrategy5WatchlistMatchIndexIfNeeded();
     const liveCounts = new Map(strategy5SignalCounts(rows).map((item) => [item.key, item]));
     const ids = order.filter((id) => id && id !== "multi_strategy_confluence");
     const counts = ids.length ? ids.map((id) => ({
