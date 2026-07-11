@@ -415,6 +415,14 @@ async function fetchSupabaseTable(table) {
   }
 }
 
+function scorecardApiProtectedByMembership(result = {}) {
+  const payload = result.json || {};
+  return result.status === 401
+    && payload.protected === true
+    && payload.error === "membership_required"
+    && payload.reason === "missing_bearer_token";
+}
+
 function stage(ok, detail = {}) {
   return { ok: Boolean(ok), ...detail };
 }
@@ -463,7 +471,8 @@ module.exports = async function handler(request, response) {
   const snapshotPayload = snapshot?.payload || null;
   const snapshotSummary = summarizeScorecard(snapshotPayload || {});
   const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 30000);
-  const scorecardSummary = summarizeScorecard(scorecardApi.json || {});
+  const scorecardApiProtected = scorecardApiProtectedByMembership(scorecardApi);
+  const scorecardSummary = summarizeScorecard(scorecardApiProtected ? (snapshotPayload || {}) : (scorecardApi.json || {}));
   const snapshotMissingCovered = missingStrategiesCoveredByEmptyComplete(snapshotSummary, scorecardSummary);
   const apiMissingCovered = missingStrategiesCoveredByEmptyComplete(scorecardSummary, snapshotSummary);
   const snapshotStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(snapshotSummary, scorecardSummary);
@@ -504,7 +513,7 @@ module.exports = async function handler(request, response) {
     && snapshotSummary.strategy3BadEntry === 0
     && snapshotSummary.cbBad === 0
     && snapshotSummary.strategyRules.ok;
-  const apiOk = scorecardApi.ok
+  const apiOk = (scorecardApi.ok || scorecardApiProtected)
     && scorecardSummary.cacheSource === "supabase-snapshot"
     && scorecardSummary.rows > 0
     && apiDateOk
@@ -548,7 +557,7 @@ module.exports = async function handler(request, response) {
       strategy2OutOfWindowCoveredByApiSuppression: snapshotStrategy2OutOfWindowCovered,
       summary: snapshotSummary,
     }),
-    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, missingStrategiesCoveredBySnapshotSourceReports: apiMissingCovered, strategy2OutOfWindowCoveredBySnapshotSuppression: apiStrategy2OutOfWindowCovered, summary: scorecardSummary }),
+    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, protectedByMembership: scorecardApiProtected, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, missingStrategiesCoveredBySnapshotSourceReports: apiMissingCovered, strategy2OutOfWindowCoveredBySnapshotSuppression: apiStrategy2OutOfWindowCovered, summary: scorecardSummary }),
     scorecardFreshness: stage(snapshotDateOk && apiDateOk, {
       ...freshnessRequirement,
       snapshotLatestDate: snapshotSummary.latestDate,
