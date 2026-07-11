@@ -102,6 +102,7 @@ function callJson(label, handler, request, query = {}, timeoutMs = 5500) {
     const req = {
       ...request,
       method: "GET",
+      fumanInternalVerify: true,
       url: buildEndpoint(endpoint, { fastBundle: "1", snapshotBuild: "1" }),
       query: mergedQuery,
     };

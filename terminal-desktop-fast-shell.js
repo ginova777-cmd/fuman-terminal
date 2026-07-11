@@ -1422,6 +1422,8 @@
     const rawCode = merged.code || merged.Code || merged.stockNo || merged.StockNo || merged.stock_no || merged.symbol || merged.Symbol || merged.ticker || merged.stockId || merged.stock_id || "";
     const code = String(rawCode).match(/\d{4}/)?.[0] || String(rawCode || "").trim();
     const name = String(merged.name || merged.Name || merged.stockName || merged.StockName || merged.stock_name || merged.companyName || merged.company_name || code || "").trim();
+    const strategy4Matched = Boolean(merged.strategy4Matched || merged.strategy4_matched || merged.strategy4RunId || merged.strategy4_run_id);
+    const displayTitle = isStrategy5Route(route) && strategy4Matched ? `🔥 ${name}` : name;
     const pct = merged.percent ?? merged.Percent ?? merged.changePct ?? merged.changePercent ?? merged.ChangePercent ?? merged.change_percent ?? merged.change ?? merged.Change ?? merged.pct ?? "";
     const score = merged.score ?? merged.Score ?? merged.rankScore ?? merged.RankScore ?? merged.swingScore ?? active.score ?? merged.signalScore ?? "";
     const reason = String(merged.reason || active.reason || merged.message || merged.note || "").trim();
@@ -1499,7 +1501,7 @@
     return {
       rank: cleanNumber(merged.rank) || index + 1,
       code,
-      title: compactText(name || reason || state || code || `訊號 ${index + 1}`, 64),
+      title: compactText(displayTitle || reason || state || code || `訊號 ${index + 1}`, 64),
       pct: pct === "" || pct == null ? "" : String(pct).includes("%") ? String(pct) : `${cleanNumber(pct).toFixed(2)}%`,
       score: score === "" || score == null ? "" : String(Math.round(cleanNumber(score) * 100) / 100),
       reason: compactText(reason || state || line, 180),
@@ -1530,6 +1532,8 @@
       confluenceCount: pickFirstValue(merged.confluenceCount, merged.totalConfluence, merged.terminalConfluenceCount, merged.sourceCount, merged.hitCount, merged.matchCount),
       terminalConfluenceCount: pickFirstValue(merged.terminalConfluenceCount, merged.confluenceCount, merged.sourceCount, merged.totalConfluence, merged.hitCount, merged.matchCount),
       strategy5InternalCount: pickFirstValue(merged.strategy5InternalCount, merged.internalCount),
+      strategy4Matched,
+      strategy4RunId: pickFirstValue(merged.strategy4RunId, merged.strategy4_run_id),
       tags: uniqueTags,
       signalTags: uniqueTags,
       price: price === "" || price == null ? "" : String(price),

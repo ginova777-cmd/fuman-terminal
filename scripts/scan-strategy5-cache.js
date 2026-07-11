@@ -38,6 +38,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecretText(path.join(RUNTIME_DIR, "secrets", "supabase-service-role-key.txt"));
 const STRATEGY5_RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs";
 const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
+const STRATEGY4_RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
+const STRATEGY4_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const STRATEGY5_API_ONLY = true;
 const STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS = Number(process.env.STRATEGY5_MAX_FINMIND_CHIP_AGE_DAYS || 3);
 
@@ -772,14 +774,37 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
+function ordinalRankMap(stocks, scoreFn) {
+  const sorted = [...stocks].sort((a, b) => cleanNumber(scoreFn(b)) - cleanNumber(scoreFn(a)));
+  const ranks = new Map();
+  sorted.forEach((stock, index) => {
+    if (/^\d{4}$/.test(String(stock.code || ""))) ranks.set(stock.code, index + 1);
+  });
+  return ranks;
+}
+
 function formatInstitution(value) {
   const amount = cleanNumber(value);
   const sign = amount >= 0 ? "+" : "";
   return `${sign}${Math.round(amount).toLocaleString("zh-TW")}`;
 }
 
-function readStrategy4Candidates() {
-  return [];
+async function readStrategy4Candidates() {
+  const latestRuns = await fetchSupabaseRows(
+    STRATEGY4_RUNS_TABLE,
+    "select=run_id,status,complete,result_count,updated_at&status=eq.complete&complete=eq.true&order=updated_at.desc&limit=1"
+  ).catch(() => []);
+  const runId = latestRuns[0]?.run_id || "";
+  if (!runId) return [];
+  return fetchSupabaseRows(
+    STRATEGY4_RESULTS_TABLE,
+    `select=code,name,score,rank,reason,signals,payload&run_id=eq.${encodeURIComponent(runId)}&order=rank.asc&limit=500`
+  ).then((rows) => rows.map((row) => ({
+    ...row,
+    ...(row.payload && typeof row.payload === "object" ? row.payload : {}),
+    strategy4RunId: runId,
+    strategy4Matched: true,
+  }))).catch(() => []);
 }
 
 function pickRows(payload, keys = []) {
@@ -845,7 +870,7 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
   if (process.env.STRATEGY5_USE_FINMIND_CHIP === "0") return new Map();
   const rows = await fetchSupabaseRows(
     "v_chip_flows_latest",
-    `select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_balance,short_balance,source&limit=${Number(limit || 5000)}`
+    `select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,institution_total_net,margin_buy,margin_sell,margin_cash_repayment,margin_balance,short_sell,short_buy,short_cash_repayment,short_balance,source&limit=${Number(limit || 5000)}`
   ).catch(() => []);
   const map = new Map();
   rows.forEach((row) => {
@@ -863,7 +888,13 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
       trust,
       dealer,
       total,
+      marginBuy: cleanNumber(row.margin_buy),
+      marginSell: cleanNumber(row.margin_sell),
+      marginCashRepayment: cleanNumber(row.margin_cash_repayment),
       marginBalance: cleanNumber(row.margin_balance),
+      shortSell: cleanNumber(row.short_sell),
+      shortBuy: cleanNumber(row.short_buy),
+      shortCashRepayment: cleanNumber(row.short_cash_repayment),
       shortBalance: cleanNumber(row.short_balance),
       source: row.source || "finmind-chip",
       tradeDate,
@@ -890,6 +921,14 @@ function mergeInstitutionDataWithFinMind(baseData = {}, finmindMap = new Map()) 
       trust: trust || finmind.trust,
       dealer: dealer || finmind.dealer,
       total: cleanNumber(current.total) || finmind.total,
+      marginBuy: cleanNumber(current.marginBuy || current.margin_buy) || finmind.marginBuy,
+      marginSell: cleanNumber(current.marginSell || current.margin_sell) || finmind.marginSell,
+      marginCashRepayment: cleanNumber(current.marginCashRepayment || current.margin_cash_repayment) || finmind.marginCashRepayment,
+      marginBalance: cleanNumber(current.marginBalance || current.margin_balance) || finmind.marginBalance,
+      shortSell: cleanNumber(current.shortSell || current.short_sell) || finmind.shortSell,
+      shortBuy: cleanNumber(current.shortBuy || current.short_buy) || finmind.shortBuy,
+      shortCashRepayment: cleanNumber(current.shortCashRepayment || current.short_cash_repayment) || finmind.shortCashRepayment,
+      shortBalance: cleanNumber(current.shortBalance || current.short_balance) || finmind.shortBalance,
       finmindChip: finmind,
     };
   });
@@ -1133,7 +1172,23 @@ function buildStrategy5Match({ stock, inst, valueRank, volumeRank, rows, conflue
   };
 }
 
-function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) {
+function marginShortSameIncrease(inst = {}) {
+  const marginNetIncrease =
+    cleanNumber(inst.marginBuy || inst.margin_buy) -
+    cleanNumber(inst.marginSell || inst.margin_sell) -
+    cleanNumber(inst.marginCashRepayment || inst.margin_cash_repayment);
+  const shortNetIncrease =
+    cleanNumber(inst.shortSell || inst.short_sell) -
+    cleanNumber(inst.shortBuy || inst.short_buy) -
+    cleanNumber(inst.shortCashRepayment || inst.short_cash_repayment);
+  return {
+    ok: marginNetIncrease > 0 && shortNetIncrease > 0,
+    marginNetIncrease,
+    shortNetIncrease,
+  };
+}
+
+function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageMap, pctOrdinalRank, volumeIncreaseOrdinalRank }) {
   const pct = cleanNumber(stock.percent);
   const volumeUnits = normalizeTradeVolumeUnits(stock);
   const volumeLots = volumeUnits.lots;
@@ -1142,7 +1197,19 @@ function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) 
   const turnoverRate = issuedShares ? (volumeShares / issuedShares) * 100 : 0;
   const avgVolume = volumeAverageMap.get(stock.code) || 0;
   const volumeRatio = avgVolume ? volumeShares / avgVolume : 0;
-  if (!(pct >= 3 && pct <= 8 && volumeLots >= 1000 && turnoverRate > 5 && volumeRatio >= 1)) return null;
+  const marginShort = marginShortSameIncrease(inst);
+  if (!(
+    pct >= 3 &&
+    pct <= 8 &&
+    volumeLots >= 1000 &&
+    turnoverRate > 5 &&
+    volumeRatio >= 1 &&
+    pctOrdinalRank > 0 &&
+    pctOrdinalRank <= 100 &&
+    volumeIncreaseOrdinalRank > 0 &&
+    volumeIncreaseOrdinalRank <= 100 &&
+    marginShort.ok
+  )) return null;
   const score = clamp(Math.round(
     48 +
     Math.min((pct - 3) * 8, 32) +
@@ -1150,7 +1217,7 @@ function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) 
     Math.min(turnoverRate * 4, 28) +
     Math.min(volumeRatio * 10, 22)
   ), 0, 100);
-  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}。`;
+  const reason = `符合固定條件：漲幅 ${pct.toFixed(2)}%、成交量 ${Math.round(volumeLots).toLocaleString("zh-TW")} 張、周轉率 ${turnoverRate.toFixed(2)}%、量比 ${volumeRatio.toFixed(2)}；漲跌排行 ${pctOrdinalRank}、成交量增幅排行 ${volumeIncreaseOrdinalRank}，資券同增（融資淨增 ${Math.round(marginShort.marginNetIncrease).toLocaleString("zh-TW")}、融券淨增 ${Math.round(marginShort.shortNetIncrease).toLocaleString("zh-TW")}）。`;
   return {
     id: "volume_turnover_breakout",
     short: "量價周轉",
@@ -1162,6 +1229,11 @@ function buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }) 
     volumeUnitSource: volumeUnits.source,
     turnoverRate: Number(turnoverRate.toFixed(2)),
     volumeRatio: Number(volumeRatio.toFixed(2)),
+    pctOrdinalRank,
+    volumeIncreaseOrdinalRank,
+    marginNetIncrease: Math.round(marginShort.marginNetIncrease),
+    shortNetIncrease: Math.round(marginShort.shortNetIncrease),
+    marginShortSameIncrease: true,
   };
 }
 
@@ -1432,6 +1504,11 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
   });
   const valueRanks = rankMap(stocksWithVolumeUnits, "value");
   const volumeRanks = rankMap(stocksWithVolumeUnits, "normalizedTradeVolume");
+  const pctOrdinalRanks = ordinalRankMap(stocksWithVolumeUnits, (stock) => stock.percent);
+  const volumeIncreaseOrdinalRanks = ordinalRankMap(stocksWithVolumeUnits, (stock) => {
+    const avgVolume = volumeAverageMap.get(stock.code) || 0;
+    return avgVolume ? cleanNumber(stock.volumeShares) / avgVolume : 0;
+  });
   const confluenceSources = readChipKConfluenceSources(institutionData);
   const baseRows = stocksWithVolumeUnits.map((stock) => {
     const inst = institutionData[stock.code] || {};
@@ -1452,10 +1529,25 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       jointStreak: cleanNumber(inst.jointStreak || inst.joint_streak),
       tradeVolume: cleanNumber(inst.tradeVolume || inst.trade_volume),
       value: cleanNumber(inst.value || inst.trade_value),
+      marginBuy: cleanNumber(inst.marginBuy || inst.margin_buy),
+      marginSell: cleanNumber(inst.marginSell || inst.margin_sell),
+      marginCashRepayment: cleanNumber(inst.marginCashRepayment || inst.margin_cash_repayment),
+      marginBalance: cleanNumber(inst.marginBalance || inst.margin_balance),
+      shortSell: cleanNumber(inst.shortSell || inst.short_sell),
+      shortBuy: cleanNumber(inst.shortBuy || inst.short_buy),
+      shortCashRepayment: cleanNumber(inst.shortCashRepayment || inst.short_cash_repayment),
+      shortBalance: cleanNumber(inst.shortBalance || inst.short_balance),
     };
     const matches = [
       buildChipKConfluenceMatch({ stock, inst: normalizedInst, confluenceSources, valueRank, volumeRank }),
-      buildVolumeTurnoverMatch({ stock, issuedSharesMap, volumeAverageMap }),
+      buildVolumeTurnoverMatch({
+        stock,
+        inst: normalizedInst,
+        issuedSharesMap,
+        volumeAverageMap,
+        pctOrdinalRank: pctOrdinalRanks.get(stock.code) || 0,
+        volumeIncreaseOrdinalRank: volumeIncreaseOrdinalRanks.get(stock.code) || 0,
+      }),
     ].filter(Boolean);
     const volumeTurnover = matches.find((match) => match.id === "volume_turnover_breakout");
     return {
@@ -1472,7 +1564,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     };
   });
 
-  const strategy4Candidates = readStrategy4Candidates();
+  const strategy4Candidates = await readStrategy4Candidates();
   const strategy4ByCode = new Map(strategy4Candidates.map((stock) => [String(stock.code || ""), stock]));
   const historyCandidates = baseRows
     .filter((stock) => {
@@ -1490,6 +1582,8 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     const strategy4 = strategy4ByCode.get(stock.code) || {};
     const mergedStock = {
       ...stock,
+      strategy4Matched: Boolean(strategy4ByCode.has(stock.code)),
+      strategy4RunId: strategy4.strategy4RunId || "",
       strategy4Score: cleanNumber(strategy4.swingScore || strategy4.score),
       strategy4Reason: strategy4.reason || "",
       strategy4Signals: strategy4.signals || strategy4.swingSignals || [],

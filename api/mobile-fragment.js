@@ -368,11 +368,13 @@ function rowHtml(row, index, tab = "") {
   const reason = firstValue(row, ["reason", "summary", "description", "memo", "note", "why"], "");
   const line = `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
   const triangleChart = tab === "strategy4" ? strategy4TriangleSvg(row) : "";
+  const strategy4Matched = tab === "strategy5" && Boolean(firstValue(row, ["strategy4Matched", "strategy4_matched", "strategy4RunId", "strategy4_run_id"], ""));
+  const displayName = strategy4Matched ? `🔥 ${name}` : name;
   return `
     <article class="mobile-terminal-row">
       <b>#${index + 1}</b>
       <div>
-        <h4>${esc(code)} ${esc(name)}</h4>
+        <h4>${esc(code)} ${esc(displayName)}</h4>
         <p>${esc(line)}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
         ${triangleChart}
