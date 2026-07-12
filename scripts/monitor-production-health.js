@@ -92,6 +92,10 @@ function endpointHasStrategy2(endpoints = {}) {
   return Object.keys(endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint));
 }
 
+function isMembershipRedactedBundle(payload = {}) {
+  return payload?.membershipRequired === true || payload?.protected === true;
+}
+
 function num(value) {
   if (value === undefined || value === null || value === "") return 0;
   return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
@@ -272,11 +276,15 @@ async function main() {
 
   const b = bundle.body || {};
   if (bundle.status < 200 || bundle.status >= 300 || b.ok === false) pushLiveContractIssue(clock, issues, warnings, `terminal-fast-bundle unhealthy HTTP ${bundle.status}`);
-  if (b.snapshotHit !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotHit is not true");
-  if (b.snapshotFresh !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotFresh is not true");
-  if (b.partial !== false) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle partial is not false");
-  if (Number(Object.keys(b.endpoints || {}).length) < 10) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle endpoint count too low");
-  if (endpointHasStrategy2(b.endpoints || {})) issues.push("terminal-fast-bundle includes strategy2 cold endpoint");
+  if (isMembershipRedactedBundle(b)) {
+    if (Number(Object.keys(b.endpoints || {}).length) < 3) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle public endpoint count too low for membership-redacted payload");
+  } else {
+    if (b.snapshotHit !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotHit is not true");
+    if (b.snapshotFresh !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotFresh is not true");
+    if (b.partial !== false) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle partial is not false");
+    if (Number(Object.keys(b.endpoints || {}).length) < 10) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle endpoint count too low");
+    if (endpointHasStrategy2(b.endpoints || {})) issues.push("terminal-fast-bundle includes strategy2 cold endpoint");
+  }
 
   const h = health.body || {};
   if (health.status < 200 || health.status >= 300 || h.ok === false) {

@@ -68,6 +68,7 @@ function callJson(label, handler, query = {}, timeoutMs = 8000) {
       method: "GET",
       url: `${label}?${search.toString()}`,
       headers: { host: "localhost", "x-production-health": "1" },
+      fumanInternalVerify: true,
       query,
     };
     Promise.resolve(handler(req, capture)).catch((error) => {

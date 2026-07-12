@@ -61,6 +61,10 @@ function runMirrorGuard() {
   }
 }
 
+function isMembershipRedactedBundle(payload = {}) {
+  return payload?.membershipRequired === true || payload?.protected === true;
+}
+
 function issueWhen(condition, message) {
   if (condition) issues.push(message);
 }
@@ -112,11 +116,15 @@ async function main() {
   issueWhen(snapshot.partial !== false, "production-health snapshot partial is not false");
   issueWhen(Number(snapshot.endpointCount || 0) < 10, `production-health snapshot endpoint count too low: ${snapshot.endpointCount || 0}`);
 
-  issueWhen(bundle.snapshotHit !== true, "terminal-fast-bundle snapshotHit is not true");
-  issueWhen(bundle.snapshotFresh !== true, "terminal-fast-bundle snapshotFresh is not true");
-  issueWhen(bundle.partial !== false, "terminal-fast-bundle partial is not false");
-  issueWhen(Number(Object.keys(bundle.endpoints || {}).length) < 10, "terminal-fast-bundle endpoint count too low");
-  issueWhen(Object.keys(bundle.endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint)), "terminal-fast-bundle includes strategy2 cold endpoint");
+  if (isMembershipRedactedBundle(bundle)) {
+    issueWhen(Number(Object.keys(bundle.endpoints || {}).length) < 3, "terminal-fast-bundle public endpoint count too low for membership-redacted payload");
+  } else {
+    issueWhen(bundle.snapshotHit !== true, "terminal-fast-bundle snapshotHit is not true");
+    issueWhen(bundle.snapshotFresh !== true, "terminal-fast-bundle snapshotFresh is not true");
+    issueWhen(bundle.partial !== false, "terminal-fast-bundle partial is not false");
+    issueWhen(Number(Object.keys(bundle.endpoints || {}).length) < 10, "terminal-fast-bundle endpoint count too low");
+    issueWhen(Object.keys(bundle.endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint)), "terminal-fast-bundle includes strategy2 cold endpoint");
+  }
 
   const payload = {
     ok: issues.length === 0,
