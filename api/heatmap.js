@@ -234,12 +234,27 @@ function expectedHeatmapTradeDateKey(clock = taipeiClock(), marketCalendar = nul
   );
 }
 
+function dateKeyAgeDays(expectedKey, actualKey) {
+  const expected = String(expectedKey || "").replace(/\D/g, "").slice(0, 8);
+  const actual = String(actualKey || "").replace(/\D/g, "").slice(0, 8);
+  if (expected.length !== 8 || actual.length !== 8) return Infinity;
+  const expectedMs = Date.UTC(Number(expected.slice(0, 4)), Number(expected.slice(4, 6)) - 1, Number(expected.slice(6, 8)));
+  const actualMs = Date.UTC(Number(actual.slice(0, 4)), Number(actual.slice(4, 6)) - 1, Number(actual.slice(6, 8)));
+  if (!Number.isFinite(expectedMs) || !Number.isFinite(actualMs)) return Infinity;
+  return Math.floor((expectedMs - actualMs) / (24 * 60 * 60 * 1000));
+}
+
 function isUsablePreviousGoodHeatmapPayload(payload, clock = taipeiClock(), marketCalendar = null) {
   if (!hasHeatmapSnapshotPayload(payload)) return false;
   const meta = heatmapPayloadMeta(payload);
   const expected = expectedHeatmapTradeDateKey(clock, marketCalendar);
   if (meta.rows < 500) return false;
   if (!meta.maxDate || !expected) return false;
+  const beforeHeatmapWindow = Number(clock?.seconds || 0) < HEATMAP_WINDOW_START_SECONDS;
+  if (beforeHeatmapWindow) {
+    const ageDays = dateKeyAgeDays(expected, meta.maxDate);
+    return ageDays >= 0 && ageDays <= 7;
+  }
   return meta.maxDate >= expected;
 }
 function snapshotHeatmapPayload(snapshot, clock) {
@@ -3454,4 +3469,5 @@ module.exports = async function handler(request, response) {
     response.status(502).json({ ok: false, error: error.message });
   }
 };
+
 

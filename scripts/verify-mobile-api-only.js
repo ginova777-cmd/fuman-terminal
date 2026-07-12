@@ -257,6 +257,38 @@ async function fetchLive(rel) {
   }
 }
 
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function isMembershipLockedJson(payload) {
+  return Boolean(payload && (
+    payload.membershipRequired === true ||
+    payload.protected === true ||
+    payload.error === "membership_required" ||
+    payload.code === "membership_required"
+  ));
+}
+
+function isMembershipLockedHtml(text) {
+  return /membership-required|data-membership-required|會員權限|開通權限|請登入已開通帳號/.test(String(text || ""));
+}
+
+function assertNoProtectedMobileLeak(payload, label) {
+  const fragments = payload?.fragments && typeof payload.fragments === "object" ? payload.fragments : {};
+  const protectedTabs = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+  for (const tab of protectedTabs) {
+    if (fragments[tab]) pushIssue(`${label} leaked protected fragment ${tab} while membershipRequired=true`);
+  }
+  const runs = payload?.runs && typeof payload.runs === "object" ? payload.runs : {};
+  for (const tab of protectedTabs) {
+    if (runs[tab]) pushIssue(`${label} leaked protected run ${tab} while membershipRequired=true`);
+  }
+}
 async function checkLive() {
   const mobile = await fetchLive("mobile");
   if (!mobile.response.ok) pushIssue(`live /mobile returned ${mobile.response.status}`);
@@ -296,26 +328,48 @@ async function checkLive() {
   if (!/no-store/i.test(boot.response.headers.get("cdn-cache-control") || "")) {
     pushIssue(`live /api/mobile-boot CDN must be no-store actual=${boot.response.headers.get("cdn-cache-control") || "<missing>"}`);
   }
-  let bootJson = null;
-  try { bootJson = JSON.parse(boot.text); } catch {}
-  for (const tab of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]) {
-    const fragment = bootJson?.fragments?.[tab];
-    if (!String(fragment?.url || "").startsWith("/api/mobile-fragment?tab=")) {
-      pushIssue(`live /api/mobile-boot fragment ${tab} must point to /api/mobile-fragment actual=${fragment?.url || "<missing>"}`);
-      continue;
+  const bootJson = parseJson(boot.text);
+  const bootMembershipLocked = isMembershipLockedJson(bootJson);
+  if (bootMembershipLocked) {
+    assertNoProtectedMobileLeak(bootJson, "live /api/mobile-boot");
+    const publicSurfaces = Array.isArray(bootJson?.publicSurfaces) ? bootJson.publicSurfaces : [];
+    for (const publicSurface of ["market-overview", "market-ai", "learning-plan"]) {
+      if (!publicSurfaces.includes(publicSurface)) {
+        pushIssue(`live /api/mobile-boot membership lock must list public surface ${publicSurface}`);
+      }
     }
-    if (!fragment?.runId) pushIssue(`live /api/mobile-boot fragment ${tab} missing runId`);
+  } else {
+    for (const tab of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]) {
+      const fragment = bootJson?.fragments?.[tab];
+      if (!String(fragment?.url || "").startsWith("/api/mobile-fragment?tab=")) {
+        pushIssue(`live /api/mobile-boot fragment ${tab} must point to /api/mobile-fragment actual=${fragment?.url || "<missing>"}`);
+        continue;
+      }
+      if (!fragment?.runId) pushIssue(`live /api/mobile-boot fragment ${tab} missing runId`);
+    }
   }
   const strategy2Fragment = await fetchLive("api/mobile-fragment?tab=strategy2");
-  if (!strategy2Fragment.response.ok) pushIssue(`live /api/mobile-fragment?tab=strategy2 returned ${strategy2Fragment.response.status}`);
+  const strategy2FragmentJson = parseJson(strategy2Fragment.text);
+  const strategy2MembershipLocked = strategy2Fragment.response.status === 401 &&
+    (isMembershipLockedJson(strategy2FragmentJson) || isMembershipLockedHtml(strategy2Fragment.text));
+  if (!strategy2Fragment.response.ok && !strategy2MembershipLocked) pushIssue(`live /api/mobile-fragment?tab=strategy2 returned ${strategy2Fragment.response.status}`);
   if (!/no-store/i.test(strategy2Fragment.response.headers.get("cache-control") || "")) {
     pushIssue(`live /api/mobile-fragment must be no-store actual=${strategy2Fragment.response.headers.get("cache-control") || "<missing>"}`);
   }
-  if (!strategy2Fragment.text.includes("data-run-id")) {
-    pushIssue("live /api/mobile-fragment must render data-run-id");
-  }
-  if (/empty-state/.test(strategy2Fragment.text) || !/mobile-terminal-row/.test(strategy2Fragment.text)) {
-    pushIssue("live /api/mobile-fragment?tab=strategy2 must render Strategy2 cards instead of empty-state");
+  if (strategy2MembershipLocked) {
+    if (!isMembershipLockedHtml(strategy2Fragment.text)) {
+      pushIssue("live /api/mobile-fragment?tab=strategy2 membership lock must render locked HTML");
+    }
+    if (/data-run-id|mobile-terminal-row/.test(strategy2Fragment.text)) {
+      pushIssue("live /api/mobile-fragment?tab=strategy2 leaked protected rows while membership locked");
+    }
+  } else {
+    if (!strategy2Fragment.text.includes("data-run-id")) {
+      pushIssue("live /api/mobile-fragment must render data-run-id");
+    }
+    if (/empty-state/.test(strategy2Fragment.text) || !/mobile-terminal-row/.test(strategy2Fragment.text)) {
+      pushIssue("live /api/mobile-fragment?tab=strategy2 must render Strategy2 cards instead of empty-state");
+    }
   }
 }
 
