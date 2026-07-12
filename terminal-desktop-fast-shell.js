@@ -6874,6 +6874,25 @@
     );
   }
 
+  function compactUiDateKey(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const digits = text.replace(/\D/g, "");
+    if (/^\d{8}$/.test(digits)) return digits;
+    if (/^\d{7}$/.test(digits)) return `${1911 + Number(digits.slice(0, 3))}${digits.slice(3)}`;
+    const parsed = Date.parse(text);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString().slice(0, 10).replace(/\D/g, "");
+    return digits.slice(0, 8);
+  }
+
+  function warrantUnderlyingQuoteValue(row) {
+    const expectedDate = compactUiDateKey(row?.sourceTradeDate || row?.tradeDate || row?.sourceDate || row?.usedDate || "");
+    const quoteDate = compactUiDateKey(row?.underlyingQuoteDate || row?.quoteDate || row?.underlyingTradeDate || "");
+    if (expectedDate && quoteDate && expectedDate !== quoteDate) return "缺標的報價";
+    if (expectedDate && !quoteDate) return "缺標的報價";
+    return unifiedListValue(row, ["underlyingPrice", "underlyingClose", "displayClose", "stockPrice", "stockClose"], "缺標的報價");
+  }
+
   function unifiedListMetrics(row, route) {
     const kind = unifiedListKind(route);
     if (kind === "institution") {
@@ -6905,7 +6924,7 @@
       const warrantPrice = unifiedListValue(row, ["warrantPrice", "warrantLast", "warrantClose", "warrantLastPrice", "warrant_price"], "");
       const warrantQuote = warrantPrice || (bid > 0 && ask > 0 ? `${bid}/${ask}` : "--");
       return [
-        unifiedListValue(row, ["underlyingPrice", "underlyingClose", "stockPrice", "targetPrice", "price", "lastPrice"]),
+        warrantUnderlyingQuoteValue(row),
         warrantQuote,
         spreadLeverage || computedSpreadLeverage || "缺報價",
         unifiedListValue(row, ["score", "rankScore", "signalScore"]),

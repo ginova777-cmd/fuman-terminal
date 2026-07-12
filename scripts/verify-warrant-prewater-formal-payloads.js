@@ -347,6 +347,26 @@ function verifyApiFormalPayloads() {
   assertFormalPayload("api.buildPayload ready", formalPayload, { expectReady: true });
   assertBusinessMatrixPayload("api.buildPayload business fields", formalPayload);
 
+  const quoteRun = readyRunPayload();
+  quoteRun.scan_date = "2026-07-10";
+  quoteRun.payload.usedDate = "20260710";
+  quoteRun.payload.sourceDate = "20260710";
+  quoteRun.payload.tradeDate = "20260710";
+  const freshQuoteRows = readyRows(quoteRun.run_id).map((row) => ({
+    ...row,
+    scan_date: "2026-07-10",
+    payload: { ...row.payload, underlyingClose: 2340, displayClose: 2340, quoteDate: "20260710" },
+  }));
+  const freshQuotePayload = api.buildPayload(freshQuoteRows, quoteRun);
+  if (freshQuotePayload.matches[0]?.underlyingQuoteFresh !== true || Number(freshQuotePayload.matches[0]?.underlyingClose) !== 2340) {
+    throw new Error("api.buildPayload fresh underlying quote was not retained");
+  }
+  const staleQuoteRows = freshQuoteRows.map((row) => ({ ...row, payload: { ...row.payload, quoteDate: "20260625" } }));
+  const staleQuotePayload = api.buildPayload(staleQuoteRows, quoteRun);
+  if (staleQuotePayload.matches[0]?.underlyingQuoteFresh !== false || Number(staleQuotePayload.matches[0]?.underlyingClose) !== 0 || Number(staleQuotePayload.matches[0]?.displayClose) !== 0) {
+    throw new Error("api.buildPayload stale underlying quote was not stripped: expected issue=stale_underlying_quote_stripped");
+  }
+
   const apiError = formalizeApiPayload(api.apiOnlyError("source_timeout"), { status: "blocked", reason: "source_timeout" });
   assertFormalPayload("api.apiOnlyError blocked", apiError, { expectBlocked: true });
 

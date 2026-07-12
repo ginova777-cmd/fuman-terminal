@@ -3,7 +3,7 @@
   "strategy": "warrant-flow",
   "strategyName": "權證走向",
   "scorecardType": "pre-water-prep",
-  "generatedAt": "2026-07-04T10:51:06.538Z",
+  "generatedAt": "2026-07-12T13:40:47.956Z",
   "supabaseRead": false,
   "supabaseWrite": false,
   "deployed": false,

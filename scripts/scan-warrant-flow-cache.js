@@ -430,6 +430,15 @@ function loadStockQuoteMap() {
   return new Map(rows.map((item) => [stockCodeOf(item), item]).filter(([code]) => code));
 }
 
+function freshStockQuoteFor(item, quoteMap = new Map(), gateDate = "") {
+  const code = String(item?.underlyingCode || item?.code || "").trim();
+  const quote = quoteMap.get(code) || null;
+  if (!quote) return null;
+  const expectedDate = normalizeDateKey(gateDate || item?.tradeDate || item?.sourceDate || item?.usedDate || "");
+  const quoteDate = normalizeDateKey(quote.quoteDate || quote.tradeDate || quote.TradeDate || "");
+  return expectedDate && quoteDate === expectedDate ? quote : null;
+}
+
 function tradeDateToDate(value) {
   const text = String(value || "").trim();
   let match = text.match(/^(\d{3})(\d{2})(\d{2})$/);
@@ -473,13 +482,13 @@ function annotateWarrantRowDates(row, sourceDate) {
   return next;
 }
 
-function normalizeMatch(item, quoteMap = new Map()) {
+function normalizeMatch(item, quoteMap = new Map(), gateDate = "") {
   const code = String(item.underlyingCode || item.code || "").trim();
   const name = String(item.underlyingName || item.name || "").trim();
-  const quote = quoteMap.get(code) || {};
+  const quote = freshStockQuoteFor(item, quoteMap, gateDate) || {};
   const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
   const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
-  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
+  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.displayClose ?? item.stockClose);
   const percentRaw = item.underlyingPercent ?? item.percent ?? item.stockPercent;
   const percent = Number.isFinite(quotePercent)
     ? quotePercent
@@ -501,12 +510,12 @@ function normalizeMatch(item, quoteMap = new Map()) {
   };
 }
 
-function normalizeSingleSignal(item, quoteMap = new Map()) {
+function normalizeSingleSignal(item, quoteMap = new Map(), gateDate = "") {
   const code = String(item.underlyingCode || item.code || "").trim();
-  const quote = quoteMap.get(code) || {};
+  const quote = freshStockQuoteFor(item, quoteMap, gateDate) || {};
   const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
   const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
-  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
+  const close = quoteClose || cleanNumber(item.underlyingClose ?? item.displayClose ?? item.stockClose);
   const percentRaw = item.underlyingPercent ?? item.percent ?? item.stockPercent;
   const percent = Number.isFinite(quotePercent)
     ? quotePercent
@@ -540,8 +549,8 @@ function normalizeSingleSignal(item, quoteMap = new Map()) {
   };
 }
 
-function normalizeVolumeMatch(item, quoteMap = new Map()) {
-  const normalized = normalizeMatch(item, quoteMap);
+function normalizeVolumeMatch(item, quoteMap = new Map(), gateDate = "") {
+  const normalized = normalizeMatch(item, quoteMap, gateDate);
   return {
     ...normalized,
     thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume),
@@ -558,13 +567,14 @@ function isControlledSingleSignal(item) {
 async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const payload = await runHandler();
+  const gateDate = normalizeDateKey(payload.tradeDate || payload.sourceDate || payload.usedDate || payload.date || "");
   const stockQuoteMap = loadStockQuoteMap();
-  const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap)) : [];
+  const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap, gateDate)) : [];
   const volumeMatches = Array.isArray(payload.volumeMatches)
-    ? payload.volumeMatches.map((item) => normalizeVolumeMatch(item, stockQuoteMap))
+    ? payload.volumeMatches.map((item) => normalizeVolumeMatch(item, stockQuoteMap, gateDate))
     : [];
   const singleSignals = Array.isArray(payload.singleSignals)
-    ? payload.singleSignals.map((item) => normalizeSingleSignal(item, stockQuoteMap)).filter(isControlledSingleSignal)
+    ? payload.singleSignals.map((item) => normalizeSingleSignal(item, stockQuoteMap, gateDate)).filter(isControlledSingleSignal)
     : [];
   const output = {
     ...payload,

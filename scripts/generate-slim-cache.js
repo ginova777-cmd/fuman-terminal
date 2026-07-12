@@ -200,6 +200,25 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function compactSlimDateKey(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const digits = text.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return digits;
+  if (/^\d{7}$/.test(digits)) return `${1911 + Number(digits.slice(0, 3))}${digits.slice(3)}`;
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return new Date(parsed).toISOString().slice(0, 10).replace(/\D/g, "");
+  return digits.slice(0, 8);
+}
+
+function freshWarrantQuoteFor(payload, item, quoteByCode) {
+  const quote = quoteByCode.get(String(item?.underlyingCode || item?.code || "").trim()) || null;
+  if (!quote) return null;
+  const expectedDate = compactSlimDateKey(item?.tradeDate || item?.sourceTradeDate || item?.sourceDate || item?.usedDate || payload?.sourceDate || payload?.usedDate || payload?.tradeDate || "");
+  const quoteDate = compactSlimDateKey(quote.quoteDate || quote.tradeDate || quote.TradeDate || "");
+  return expectedDate && quoteDate === expectedDate ? quote : null;
+}
+
 function indexRowsFromPayload(payload, def) {
   return def.fields.flatMap((field) => {
     const value = payload?.[field];
@@ -387,10 +406,10 @@ function slimWarrant(payload) {
   const singleSignals = Array.isArray(payload?.singleSignals) ? payload.singleSignals : [];
   const quoteRows = normalizeArray(readOptional("data/stocks-quotes-slim.json", {})?.quotes);
   const quoteByCode = new Map(quoteRows.map((row) => [String(row?.code || "").trim(), row]).filter(([code]) => code));
-  const quoteFor = (item) => quoteByCode.get(String(item?.underlyingCode || item?.code || "").trim()) || null;
-  const closeFor = (item) => cleanNumber(quoteFor(item)?.close ?? item.displayClose ?? item.underlyingClose ?? item.close ?? item.stockClose);
-  const percentFor = (item) => cleanNumber(quoteFor(item)?.percent ?? item.displayPercent ?? item.underlyingPercent ?? item.percent ?? item.stockPercent);
-  const quoteDateFor = (item) => quoteFor(item)?.quoteDate || item.quoteDate || "";
+  const quoteFor = (item) => freshWarrantQuoteFor(payload, item, quoteByCode);
+  const closeFor = (item) => cleanNumber(quoteFor(item)?.close ?? item.displayClose ?? item.underlyingClose ?? item.stockClose);
+  const percentFor = (item) => cleanNumber(quoteFor(item)?.percent ?? item.displayPercent ?? item.underlyingPercent ?? item.stockPercent);
+  const quoteDateFor = (item) => quoteFor(item)?.quoteDate || item.underlyingQuoteDate || item.quoteDate || "";
   return {
     ok: Boolean(payload?.ok ?? true),
     source: payload?.source || "warrant-flow-slim",
@@ -465,7 +484,7 @@ function slimWarrant(payload) {
 
 function slimSingleWarrantSignal(item, options = {}) {
   const quote = options.quote || null;
-  const close = cleanNumber(quote?.close ?? item.displayClose ?? item.underlyingClose ?? item.close ?? item.stockClose);
+  const close = cleanNumber(quote?.close ?? item.displayClose ?? item.underlyingClose ?? item.stockClose);
   const percent = cleanNumber(quote?.percent ?? item.displayPercent ?? item.underlyingPercent ?? item.percent ?? item.stockPercent);
   return {
     code: String(item.underlyingCode || item.code || ""),

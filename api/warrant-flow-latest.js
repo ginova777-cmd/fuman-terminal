@@ -478,14 +478,25 @@ function normalizeRow(row, context = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const marketDate = compactDateKey(context.sourceDate || context.usedDate || row.scan_date || "");
   const underlyingQuoteDate = compactDateKey(payload.underlyingQuoteDate || payload.underlyingTradeDate || payload.quoteDate || "");
+  const underlyingQuoteFresh = Boolean(marketDate && underlyingQuoteDate && marketDate === underlyingQuoteDate);
+  const close = underlyingQuoteFresh
+    ? cleanNumber(payload.underlyingPrice || payload.underlyingClose || payload.displayClose || payload.stockPrice || payload.stockClose)
+    : 0;
+  const percent = underlyingQuoteFresh
+    ? cleanNumber(payload.underlyingPercent ?? payload.displayPercent ?? payload.stockPercent)
+    : 0;
   return {
     ...payload,
     code: String(payload.code || row.underlying_code || row.code || "").trim(),
     name: String(payload.name || row.underlying_name || row.name || "").trim(),
     underlyingCode: String(payload.underlyingCode || row.underlying_code || payload.code || "").trim(),
     underlyingName: String(payload.underlyingName || row.underlying_name || payload.name || "").trim(),
-    close: cleanNumber(payload.close || payload.displayClose || payload.underlyingClose || row.close),
-    percent: cleanNumber(payload.percent ?? payload.displayPercent ?? payload.underlyingPercent ?? row.change_percent),
+    close,
+    displayClose: close,
+    underlyingClose: close,
+    percent,
+    displayPercent: percent,
+    underlyingPercent: percent,
     value: cleanNumber(payload.value || payload.callValue || row.trade_value),
     finalScore: cleanNumber(payload.finalScore || payload.score || row.score),
     score: cleanNumber(payload.score || payload.finalScore || row.score),
@@ -493,6 +504,7 @@ function normalizeRow(row, context = {}) {
     quoteDate: marketDate || compactDateKey(payload.quoteDate || row.scan_date || ""),
     sourceTradeDate: marketDate || "",
     underlyingQuoteDate,
+    underlyingQuoteFresh,
   };
 }
 

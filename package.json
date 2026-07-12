@@ -234,6 +234,8 @@
     "verify:all-api-unattended": "node --use-system-ca scripts/verify-api-unattended-scorecard.js",
     "verify:production-api-freshness": "node --use-system-ca scripts/verify-production-api-freshness-contract.js",
     "verify:warrant-strategy-requirements": "node scripts/verify-warrant-strategy-requirements.js",
+    "verify:warrant-prewater": "node scripts/verify-warrant-prewater-strict.js",
+    "verify:warrant-prewater-fixtures": "node scripts/verify-warrant-prewater-fixture.js",
     "verify:warrant-business-fields": "node scripts/verify-warrant-business-fields.js",
     "verify:warrant-formal-payloads": "node scripts/verify-warrant-formal-payloads.js",
     "verify:warrant-ui-display": "node scripts/verify-warrant-ui-display.js",
