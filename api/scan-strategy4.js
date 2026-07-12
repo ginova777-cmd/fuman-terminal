@@ -504,6 +504,35 @@ function emaSeries(values, length) {
   return out;
 }
 
+function kdSnapshot(rows, period = 5, smooth = 3) {
+  if (!Array.isArray(rows) || rows.length < period + 1) {
+    return { k: 50, d: 50, prevK: 50, prevD: 50, goldenCross: false };
+  }
+  let k = 50;
+  let d = 50;
+  let prevK = 50;
+  let prevD = 50;
+  const alpha = 1 / Math.max(1, smooth);
+  rows.forEach((row, index) => {
+    if (index < period - 1) return;
+    const window = rows.slice(index - period + 1, index + 1);
+    const high = Math.max(...window.map((item) => cleanNumber(item.high)).filter(Number.isFinite));
+    const low = Math.min(...window.map((item) => cleanNumber(item.low)).filter(Number.isFinite));
+    const closeValue = cleanNumber(row.close);
+    const rsv = high > low ? ((closeValue - low) / (high - low)) * 100 : 50;
+    prevK = k;
+    prevD = d;
+    k = k * (1 - alpha) + rsv * alpha;
+    d = d * (1 - alpha) + k * alpha;
+  });
+  return {
+    k,
+    d,
+    prevK,
+    prevD,
+    goldenCross: prevK <= prevD && k > d,
+  };
+}
 function rsi(values, length = 14) {
   if (values.length <= length) return 50;
   let gains = 0;
@@ -1036,6 +1065,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const aTradeValue = cleanNumber(a.value) || cleanNumber(a.close) * cleanNumber(a.volume) * 1000;
     const avgTradeValue5 = avg(daily.rows.slice(-5).map((row) => cleanNumber(row.value) || cleanNumber(row.close) * cleanNumber(row.volume) * 1000));
     const liquidEnough = avgTradeValue5 >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE && aTradeValue >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE;
+    const kd = kdSnapshot(daily.rows, 5, 3);
     const previousTrendDown = priorHigh > 0 &&
       dropFromPriorHighPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
     return liquidEnough &&
@@ -1045,7 +1075,8 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
       b.close > a.close &&
       c.close > b.close &&
-      c.close > a.high;
+      c.close > a.high &&
+      kd.goldenCross;
   })();
   if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5 && !threeInside) return null;
   const deepFallFib = daily.deepFall && isRed;
@@ -1077,7 +1108,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段自高點回落後長黑帶量，連兩日翻紅且第二根收盤站上長黑高點。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段自高點回落後長黑帶量，連兩日翻紅、第二根收盤站上長黑高點，且KD(5,3)黃金交叉。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({
