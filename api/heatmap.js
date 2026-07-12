@@ -224,6 +224,24 @@ function isFinalCloseHeatmapPayload(payload, clock) {
 function hasHeatmapSnapshotPayload(payload) {
   return Array.isArray(payload?.sectors) && payload.sectors.length > 0 && heatmapPayloadRows(payload).length > 0;
 }
+
+function expectedHeatmapTradeDateKey(clock = taipeiClock(), marketCalendar = null) {
+  return compactDateKeyFromValue(
+    marketCalendar?.displayTradeDate
+    || marketCalendar?.marketDate
+    || clock?.date
+    || taipeiDateKey()
+  );
+}
+
+function isUsablePreviousGoodHeatmapPayload(payload, clock = taipeiClock(), marketCalendar = null) {
+  if (!hasHeatmapSnapshotPayload(payload)) return false;
+  const meta = heatmapPayloadMeta(payload);
+  const expected = expectedHeatmapTradeDateKey(clock, marketCalendar);
+  if (meta.rows < 500) return false;
+  if (!meta.maxDate || !expected) return false;
+  return meta.maxDate >= expected;
+}
 function snapshotHeatmapPayload(snapshot, clock) {
   return attachHeatmapDetectWindow({
     ...(snapshot.payload || {}),
@@ -3203,7 +3221,7 @@ module.exports = async function handler(request, response) {
       allowLatestFallback: true,
       timeoutMs: 900,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+    if (snapshot?.payload && isUsablePreviousGoodHeatmapPayload(snapshot.payload, clock, marketCalendar)) {
       const snapshotReason = isFinalCloseHeatmapPayload(snapshot.payload, clock) ? "snapshot-first" : "snapshot-first-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload({
         ...snapshot,
@@ -3213,7 +3231,7 @@ module.exports = async function handler(request, response) {
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+    if (localSnapshot?.payload && isUsablePreviousGoodHeatmapPayload(localSnapshot.payload, clock, marketCalendar)) {
       const localReason = isFinalCloseHeatmapPayload(localSnapshot.payload, clock) ? "snapshot-first-local" : "snapshot-first-local-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
@@ -3246,14 +3264,14 @@ module.exports = async function handler(request, response) {
       allowLatestFallback: true,
       timeoutMs: 1400,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+    if (snapshot?.payload && isUsablePreviousGoodHeatmapPayload(snapshot.payload, clock, marketCalendar)) {
       const snapshotReason = isFinalCloseHeatmapPayload(snapshot.payload, clock) ? "supabase-snapshot" : "supabase-snapshot-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload({ ...snapshot, reason: snapshotReason }, clock), clock, snapshotReason));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+    if (localSnapshot?.payload && isUsablePreviousGoodHeatmapPayload(localSnapshot.payload, clock, marketCalendar)) {
       const localReason = isFinalCloseHeatmapPayload(localSnapshot.payload, clock) ? "after-1330-cache" : "after-1330-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
