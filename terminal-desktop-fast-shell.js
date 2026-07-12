@@ -6831,7 +6831,7 @@
     const kind = unifiedListKind(route);
     if (kind === "institution") return ["收盤價", "漲幅", "外資/投信", "分數"];
     if (kind === "cb") return ["價格", "變動", "訊號", "分數"];
-    if (kind === "warrant") return ["標的價", "漲幅", "量能", "分數"];
+    if (kind === "warrant") return ["標的現價", "權證價", "差槓比", "分數"];
     if (kind === "strategy4") return ["進場價", "漲幅", "量比", "分數"];
     if (kind === "strategy5") return ["價格", "漲幅", "籌碼", "分數"];
     if (kind === "strategy1") return ["價格", "漲幅", "狀態", "分數"];
@@ -6895,10 +6895,19 @@
       ];
     }
     if (kind === "warrant") {
+      const bid = cleanNumber(row?.warrantBid ?? row?.bidPrice ?? row?.bid);
+      const ask = cleanNumber(row?.warrantAsk ?? row?.askPrice ?? row?.ask);
+      const leverage = cleanNumber(row?.effectiveLeverage ?? row?.effective_leverage ?? row?.leverage);
+      const spreadLeverage = unifiedListValue(row, ["spreadLeverageRatio", "spreadToLeverageRatio", "spreadRatioLeverage", "diffLeverageRatio"], "");
+      const computedSpreadLeverage = bid > 0 && ask > bid && leverage > 0
+        ? `${((((ask - bid) / ((ask + bid) / 2)) / leverage) * 100).toFixed(3)}%`
+        : "";
+      const warrantPrice = unifiedListValue(row, ["warrantPrice", "warrantLast", "warrantClose", "warrantLastPrice", "warrant_price"], "");
+      const warrantQuote = warrantPrice || (bid > 0 && ask > 0 ? `${bid}/${ask}` : "--");
       return [
-        unifiedListValue(row, ["targetPrice", "underlyingPrice", "price", "lastPrice"]),
-        unifiedListValue(row, ["pct", "change", "changePercent"]),
-        unifiedListValue(row, ["volume", "volumeRatio", "tradeValue", "amount"]),
+        unifiedListValue(row, ["underlyingPrice", "underlyingClose", "stockPrice", "targetPrice", "price", "lastPrice"]),
+        warrantQuote,
+        spreadLeverage || computedSpreadLeverage || "缺報價",
         unifiedListValue(row, ["score", "rankScore", "signalScore"]),
       ];
     }
@@ -6959,12 +6968,12 @@
       cb_stock_price: [/富果|現股價|stockPrice|price/i],
       cb_conversion: [/轉換|conversion|premium/i],
       cb_signal: [/訊號|signal|entry/i],
-      warrant_flow: [/資金|flow|money/i],
-      warrant_underlying: [/標的|underlying|強弱/i],
-      warrant_volume: [/爆量|volume|量/i],
-      warrant_single: [/單券|異常|single/i],
-      warrant_bid: [/買盤|集中|bid/i],
-      warrant_risk: [/風險|risk|排除/i],
+      warrant_flow: [/資金|flow|money|callValue|tradeValue|認購金額|金額/i],
+      warrant_underlying: [/標的|underlying|強弱|stockSetup|股票型態|finalScore|score/i],
+      warrant_volume: [/爆量|volume|量|thirtyMinuteVolume|volumeMultiple|倍數/i],
+      warrant_single: [/單券|異常|single|warrantCode|warrantName|權證/i],
+      warrant_bid: [/買盤|集中|bid|callPutRatio|認購\/認售|認購/i],
+      warrant_risk: [/風險|risk|排除|stockRisk|fallback|preserve/i],
     })[key] || [];
   }
 
@@ -7234,16 +7243,69 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "CB 細分檢查");
   }
 
+  function warrantNumeric(row, keys) {
+    for (const key of keys) {
+      const value = cleanNumber(row?.[key]);
+      if (Number.isFinite(value) && value !== 0) return value;
+    }
+    return 0;
+  }
+
+  function warrantText(row) {
+    return rowSearchText(row);
+  }
+
   function warrantOptionCards(rows) {
-    const defs = [
-      { key: "warrant_flow", label: "資金異動", patterns: [/資金|flow|money/i] },
-      { key: "warrant_underlying", label: "標的強弱", patterns: [/標的|underlying|強弱/i] },
-      { key: "warrant_volume", label: "爆量權證", patterns: [/爆量|volume|量/i] },
-      { key: "warrant_single", label: "單券異常", patterns: [/單券|異常|single/i] },
-      { key: "warrant_bid", label: "買盤集中", patterns: [/買盤|集中|bid/i] },
-      { key: "warrant_risk", label: "風險排除", patterns: [/風險|risk|排除/i] },
+    const list = Array.isArray(rows) ? rows : [];
+    const countBy = (predicate) => list.filter((row) => row && predicate(row)).length;
+    const counts = [
+      {
+        key: "warrant_flow",
+        label: "資金異動",
+        count: countBy((row) => warrantNumeric(row, ["callValue", "tradeValue", "value", "totalSignalValue", "amount"]) > 0
+          || /資金|認購金額|金額|flow|money/i.test(warrantText(row))),
+      },
+      {
+        key: "warrant_underlying",
+        label: "標的強弱",
+        count: countBy((row) => warrantNumeric(row, ["stockSetupScore", "finalScore", "score", "warrantHeatScore"]) >= 70
+          || /標的|股票型態|強弱|underlying/i.test(warrantText(row))),
+      },
+      {
+        key: "warrant_volume",
+        label: "爆量權證",
+        count: countBy((row) => warrantNumeric(row, ["volumeMultiple", "volumeRatio", "multiple"]) >= 2
+          || warrantNumeric(row, ["thirtyMinuteVolume", "warrantVolume", "totalVolume", "volume", "tradeVolume"]) > 0
+          || /爆量|倍數|30 分量|volume/i.test(warrantText(row))),
+      },
+      {
+        key: "warrant_single",
+        label: "單券異常",
+        count: countBy((row) => Boolean(String(row?.warrantCode || row?.warrant_code || row?.targetCode || "").trim())
+          || normalizeArray(row?.topWarrants).length > 0
+          || /單券|異常|權證|single/i.test(warrantText(row))),
+      },
+      {
+        key: "warrant_bid",
+        label: "買盤集中",
+        count: countBy((row) => warrantNumeric(row, ["callPutRatio"]) >= 3
+          || warrantNumeric(row, ["callValue"]) > warrantNumeric(row, ["putValue"])
+          || warrantNumeric(row, ["atMoneyCallCount", "callCount"]) > 0
+          || /買盤|集中|認購\/認售|認購/i.test(warrantText(row))),
+      },
+      {
+        key: "warrant_risk",
+        label: "風險排除",
+        count: countBy((row) => {
+          const text = warrantText(row);
+          const risk = String(row?.stockRisk || row?.risk || row?.riskLabel || "").toLowerCase();
+          return row?.fallbackUsed !== true
+            && !/high|blocked|exclude|排除|過高|風險高/i.test(risk)
+            && !/publish blocked|preserve previous good|source_quality_fail/i.test(text);
+        }),
+      },
     ];
-    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "權證走向細分");
+    return cardsFromCounts(counts, "權證走向細分");
   }
 
   function unifiedRunCards(route, rows, payloadMeta) {

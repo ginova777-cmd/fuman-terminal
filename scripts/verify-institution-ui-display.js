@@ -25,6 +25,19 @@ function regexMatch(text, regex, label) {
   return { label, pattern: String(regex) };
 }
 
+function assertLegacyChipTableHidden(files) {
+  const results = [];
+  for (const file of files) {
+    const text = readText(file);
+    const match = text.match(/<section\s+class="chip-cb-layout"[^>]*>/);
+    assert(match, `${file} missing legacy chip table container`);
+    assert(match[0].includes("hidden"), `${file} legacy chip table container must be hidden`);
+    assert(match[0].includes('aria-hidden="true"'), `${file} legacy chip table container must be aria-hidden`);
+    results.push({ file, section: match[0] });
+  }
+  return { label: "legacy chip table hidden", results };
+}
+
 function assertNoForbiddenStaticRendererUse(files, forbiddenPaths) {
   const hits = [];
   for (const file of files) {
@@ -88,6 +101,7 @@ function main() {
     "投信買賣超(張)",
     "法人合計(張)",
   ], "desktop DOM"));
+  checks.push(assertLegacyChipTableHidden(["index.html", "index.github.html"]));
   checks.push(includesAll(desktopShell, [
     "\"chip-trade|買賣超\": \"/api/institution-latest\"",
     "foreignStreak",
