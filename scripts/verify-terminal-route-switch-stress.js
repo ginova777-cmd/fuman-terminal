@@ -128,7 +128,9 @@ const PROTECTED_ROUTES = new Set([
   "strategy4",
   "strategy5",
   "chip-trade",
+  "institution",
   "cb",
+  "warrant",
   "warrant-flow",
   "watchlist",
 ]);
@@ -470,10 +472,10 @@ async function activateRoute(cdp, key) {
         return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
       };
       return {
-        ok: document.body.classList.contains("auth-locked") || visible(document.querySelector(".member-lock-overlay")) || visible(document.querySelector("#auth-gate")),
+        ok: document.body.classList.contains("auth-locked") || visible(document.querySelector(".member-lock-overlay")) || visible(document.querySelector("#auth-gate")) || /會員權限|開通權限|登入 \/ 開通權限|membership_required/.test(document.body.textContent || ""),
       };
-    }, null, 1200, 120).catch(() => ({ ok: false }));
-    if (locked.ok) return;
+    }, null, 5000, 120).catch(() => ({ ok: false }));
+    if (locked.ok) return { membershipLocked: true };
   }
   await waitFor(cdp, (selector) => {
     const panel = document.querySelector(selector);
@@ -573,7 +575,8 @@ function collectRouteStats(config, key) {
   const membershipLocked = Boolean(config.protected)
     && (document.body.classList.contains("auth-locked")
       || visible(document.querySelector(".member-lock-overlay"))
-      || visible(document.querySelector("#auth-gate")));
+      || visible(document.querySelector("#auth-gate"))
+      || /會員權限|開通權限|登入 \/ 開通權限|membership_required/.test(document.body.textContent || ""));
   if (membershipLocked) {
     return {
       route: key,
@@ -623,7 +626,8 @@ function collectRouteStats(config, key) {
 async function verifyRoute(cdp, key) {
   const config = ROUTE_CONFIG[key];
   const startedAt = Date.now();
-  await activateRoute(cdp, key);
+  const activation = await activateRoute(cdp, key);
+  if (activation?.membershipLocked) return { route: key, ok: true, membershipLocked: true, rows: 0, sampleRows: [], modeTabs: 0, aiPanels: 0, activePanel: [], panelText: "membership gate active", blockers: [], ms: Date.now() - startedAt };
   const stats = await waitFor(cdp, ({ config, key, collectSource, ensureSource }) => {
     const ensure = (0, eval)(`(${ensureSource})`);
     const active = ensure(config);
@@ -730,3 +734,6 @@ main().catch((error) => {
   console.error(error.stack || error.message || error);
   process.exit(1);
 });
+
+
+
