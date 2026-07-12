@@ -59,6 +59,8 @@ function filterPublicBundlePayload(payload, entitlement) {
     partial: Boolean(payload?.partial),
     source: payload?.source || "terminal-fast-bundle",
     cacheSource: payload?.cacheSource || "",
+    snapshotHit: payload?.snapshotHit === true,
+    snapshotFresh: payload?.snapshotFresh === true,
     updatedAt: payload?.updatedAt || new Date().toISOString(),
     elapsedMs: Number(payload?.elapsedMs || 0) || 0,
     protected: true,
@@ -814,4 +816,6 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
+
 

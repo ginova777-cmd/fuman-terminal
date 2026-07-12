@@ -269,8 +269,16 @@ async function assertLiveState(version) {
       const payload = JSON.parse(bundle.body);
       const endpointKeys = Object.keys(payload.endpoints || {});
       const marketClosed = payload.marketOpen === false && payload.marketStatus === "closed" && payload.formalScanSkipped === true;
+      const membershipRedacted = payload.protected === true && payload.membershipRequired === true;
       if (payload.ok === false) issues.push("terminal-fast-bundle ok=false");
-      if (marketClosed) {
+      if (membershipRedacted) {
+        if (payload.snapshotHit !== true) issues.push("terminal-fast-bundle protected payload snapshotHit must be true");
+        if (payload.snapshotFresh !== true) issues.push("terminal-fast-bundle protected payload snapshotFresh must be true");
+        if (payload.partial !== false) issues.push("terminal-fast-bundle protected payload partial must be false");
+        if (endpointKeys.length < 2) issues.push(`terminal-fast-bundle protected public endpoint count too low: ${endpointKeys.length}`);
+        const protectedLeaks = endpointKeys.filter((endpoint) => /strategy[1-5]|open-buy|institution|cb-detect|warrant-flow|latest-strategy|latest-signals/i.test(endpoint));
+        if (protectedLeaks.length) issues.push(`terminal-fast-bundle protected payload leaks protected endpoints: ${protectedLeaks.join(", ")}`);
+      } else if (marketClosed) {
         if (payload.sourceFreshnessRequired !== false) issues.push("terminal-fast-bundle market closed must not require source freshness");
         if (payload.preservePreviousGood !== true) issues.push("terminal-fast-bundle market closed must preserve previous good");
         if (payload.latestPointerUpdated !== false) issues.push("terminal-fast-bundle market closed must not update latest pointer");
@@ -310,3 +318,5 @@ main().catch((error) => {
   console.error(`[production-guard] failed: ${error.stack || error.message}`);
   process.exit(1);
 });
+
+
