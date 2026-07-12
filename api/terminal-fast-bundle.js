@@ -14,6 +14,7 @@ const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
+const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
@@ -24,7 +25,8 @@ function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
   return path === "/api/market"
     || path === "/api/heatmap"
-    || path === "/api/market-ai-live";
+    || path === "/api/market-ai-live"
+    || path === "/api/watchlist-match-index";
 }
 
 function sanitizePublicEndpointPayload(value) {
@@ -48,7 +50,11 @@ function filterPublicBundlePayload(payload, entitlement) {
   if (entitlement?.ok) return payload;
   const endpoints = {};
   for (const [endpoint, endpointPayload] of Object.entries(payload?.endpoints || {})) {
-    if (isPublicBundleEndpoint(endpoint)) endpoints[endpoint] = sanitizePublicEndpointPayload(endpointPayload);
+    if (isPublicBundleEndpoint(endpoint)) {
+      endpoints[endpoint] = String(endpoint || "").startsWith("/api/watchlist-match-index")
+        ? endpointPayload
+        : sanitizePublicEndpointPayload(endpointPayload);
+    }
   }
   const timings = {};
   for (const [endpoint, elapsedMs] of Object.entries(payload?.timings || {})) {
@@ -817,6 +823,7 @@ module.exports = async function handler(request, response) {
     ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],
     ["/api/cb-detect-latest", cbDetectLatest, compactQuery(60), 2200],
     ["/api/warrant-flow-latest", warrantFlowLatest, compactQuery(60), 7000],
+    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
   const runnableTasks = entitlement.ok ? tasks : tasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
@@ -826,10 +833,12 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
-  endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
-    cacheSource: "api/terminal-fast-bundle",
-    via: "api/terminal-fast-bundle",
-  });
+  if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
+    endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
+      cacheSource: "api/terminal-fast-bundle",
+      via: "api/terminal-fast-bundle",
+    });
+  }
   sanitizeStrategy2Endpoints(endpoints);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;

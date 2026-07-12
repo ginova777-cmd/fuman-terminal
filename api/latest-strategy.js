@@ -58,6 +58,7 @@ async function captureHandler(handler, request = {}, query = {}) {
   await handler({
     method: "GET",
     headers: request.headers || {},
+    fumanInternalVerify: request.fumanInternalVerify === true,
     query,
     url: queryUrl(query),
   }, response);
