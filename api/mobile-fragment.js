@@ -114,13 +114,19 @@ function lockedFragment(tab) {
   </section>`;
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 9000) {
+function authHeadersFrom(request) {
+  const headers = request?.headers || {};
+  const authorization = headers.authorization || headers.Authorization || "";
+  return authorization ? { authorization } : {};
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = 9000, extraHeaders = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       cache: "no-store",
-      headers: { "Cache-Control": "no-cache", Accept: "application/json" },
+      headers: { "Cache-Control": "no-cache", Accept: "application/json", ...extraHeaders },
       signal: controller.signal,
     });
     const text = await response.text();
@@ -674,7 +680,7 @@ module.exports = async function handler(request, response) {
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? (tab === "strategy5"
         ? await fetchStrategy5Internal(request, endpoint)
-        : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000))
+        : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);

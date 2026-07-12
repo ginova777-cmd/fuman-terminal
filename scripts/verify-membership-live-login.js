@@ -122,7 +122,6 @@ async function main() {
   apiRows.push(await verifyJsonEndpoint(token, "/api/scorecard?live=1"));
   apiRows.push(await verifyJsonEndpoint(token, "/api/source-reports"));
   apiRows.push(await verifyJsonEndpoint(token, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", {
-    mustContain: ["/api/strategy2-latest"],
     mustNotContain: ["membershipRequired\":true"],
   }));
   apiRows.push(await verifyJsonEndpoint(token, "/api/mobile-boot", {

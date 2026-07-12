@@ -41,6 +41,7 @@ async function callScorecard(request) {
     Promise.resolve(handler({
       ...request,
       method: "GET",
+      fumanInternalVerify: true,
       url: "/api/scorecard?live=1",
       query,
     }, createCaptureResponse(resolve))).catch((error) => {
