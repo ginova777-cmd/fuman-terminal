@@ -31,6 +31,13 @@ const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/ma
   assert.strictEqual(attached.emptyResultWritten, false, "attached empty write");
   assert.strictEqual(attached.displayTradeDate, "2026-07-09", "attached display date");
 
+  const weekendContract = await buildMarketCalendarContract({
+    now: new Date("2026-07-12T12:00:00+08:00"),
+  });
+  assert.strictEqual(weekendContract.marketOpen, false, "weekend should be closed");
+  assert.strictEqual(weekendContract.displayTradeDate, "2026-07-09", "weekend previous trading date respects 2026-07-10 closure override");
+  assert.strictEqual(weekendContract.preservePreviousGood, true, "weekend preserves previous good");
+
   console.log(JSON.stringify({
     ok: true,
     status: "market-closed-protection-ready",
