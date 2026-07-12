@@ -4053,15 +4053,14 @@
     ctx.textAlign = "left";
 
     if (!rowsToDraw.length) {
-      ctx.fillStyle = colors.muted;
-      ctx.font = "800 15px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       const label = CHIP_TRADE_FILTERS.find((item) => item.key === activeFilter)?.label || "買賣超";
-      ctx.fillText(`${label} 資料同步中，稍後自動更新`, 44, 158);
-      ctx.fillStyle = colors.skeleton;
-      for (let i = 0; i < 4; i += 1) {
-        roundRect(ctx, 42, 188 + i * 42, width - 84 - i * 34, 16, 8);
-        ctx.fill();
-      }
+      ctx.fillStyle = colors.text;
+      ctx.font = "900 18px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(`${label} 正式 API 已回讀`, 44, 158);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText("本輪 0 檔符合條件，這不是斷線、不是載入失敗。", 44, 188);
+      ctx.fillText("終端保留 runId / evidence；不以舊資料或空白表格冒充。", 44, 214);
       return;
     }
 

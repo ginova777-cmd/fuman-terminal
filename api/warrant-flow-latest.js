@@ -478,13 +478,17 @@ function normalizeRow(row, context = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const marketDate = compactDateKey(context.sourceDate || context.usedDate || row.scan_date || "");
   const underlyingQuoteDate = compactDateKey(payload.underlyingQuoteDate || payload.underlyingTradeDate || payload.quoteDate || "");
+  const underlyingQuoteDateOk = !marketDate || !underlyingQuoteDate || underlyingQuoteDate === marketDate;
+  const safeUnderlyingClose = underlyingQuoteDateOk
+    ? cleanNumber(payload.close || payload.displayClose || payload.underlyingClose || row.close)
+    : null;
   return {
     ...payload,
     code: String(payload.code || row.underlying_code || row.code || "").trim(),
     name: String(payload.name || row.underlying_name || row.name || "").trim(),
     underlyingCode: String(payload.underlyingCode || row.underlying_code || payload.code || "").trim(),
     underlyingName: String(payload.underlyingName || row.underlying_name || payload.name || "").trim(),
-    close: cleanNumber(payload.close || payload.displayClose || payload.underlyingClose || row.close),
+    close: safeUnderlyingClose,
     percent: cleanNumber(payload.percent ?? payload.displayPercent ?? payload.underlyingPercent ?? row.change_percent),
     value: cleanNumber(payload.value || payload.callValue || row.trade_value),
     finalScore: cleanNumber(payload.finalScore || payload.score || row.score),
@@ -493,6 +497,8 @@ function normalizeRow(row, context = {}) {
     quoteDate: marketDate || compactDateKey(payload.quoteDate || row.scan_date || ""),
     sourceTradeDate: marketDate || "",
     underlyingQuoteDate,
+    underlyingQuoteDateOk,
+    quoteIntegrity: underlyingQuoteDateOk ? "same_trade_date_or_missing" : "blocked_stale_underlying_quote",
   };
 }
 

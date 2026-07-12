@@ -473,10 +473,22 @@ function annotateWarrantRowDates(row, sourceDate) {
   return next;
 }
 
-function normalizeMatch(item, quoteMap = new Map()) {
+function quoteDateOf(row) {
+  return normalizeDateKey(row?.quoteDate || row?.tradeDate || row?.TradeDate || row?.date || row?.Date || "");
+}
+
+function quoteForTradeDate(code, quoteMap = new Map(), expectedTradeDate = "") {
+  const quote = quoteMap.get(code) || {};
+  const expected = normalizeDateKey(expectedTradeDate || "");
+  const quoteDate = quoteDateOf(quote);
+  if (expected && quoteDate && quoteDate !== expected) return {};
+  return quote;
+}
+
+function normalizeMatch(item, quoteMap = new Map(), expectedTradeDate = "") {
   const code = String(item.underlyingCode || item.code || "").trim();
   const name = String(item.underlyingName || item.name || "").trim();
-  const quote = quoteMap.get(code) || {};
+  const quote = quoteForTradeDate(code, quoteMap, expectedTradeDate || item.tradeDate || item.sourceDate);
   const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
   const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
   const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
@@ -501,9 +513,9 @@ function normalizeMatch(item, quoteMap = new Map()) {
   };
 }
 
-function normalizeSingleSignal(item, quoteMap = new Map()) {
+function normalizeSingleSignal(item, quoteMap = new Map(), expectedTradeDate = "") {
   const code = String(item.underlyingCode || item.code || "").trim();
-  const quote = quoteMap.get(code) || {};
+  const quote = quoteForTradeDate(code, quoteMap, expectedTradeDate || item.tradeDate || item.sourceDate);
   const quoteClose = cleanNumber(quote.close ?? quote.ClosingPrice ?? quote.z);
   const quotePercent = Number(quote.percent ?? quote.pct ?? quote.Percent ?? NaN);
   const close = quoteClose || cleanNumber(item.underlyingClose ?? item.close ?? item.stockClose);
@@ -540,8 +552,8 @@ function normalizeSingleSignal(item, quoteMap = new Map()) {
   };
 }
 
-function normalizeVolumeMatch(item, quoteMap = new Map()) {
-  const normalized = normalizeMatch(item, quoteMap);
+function normalizeVolumeMatch(item, quoteMap = new Map(), expectedTradeDate = "") {
+  const normalized = normalizeMatch(item, quoteMap, expectedTradeDate);
   return {
     ...normalized,
     thirtyMinuteVolume: cleanNumber(item.thirtyMinuteVolume),
@@ -559,12 +571,13 @@ async function main() {
   const backup = readJson(BACKUP_FILE, { ok: true, matches: [] });
   const payload = await runHandler();
   const stockQuoteMap = loadStockQuoteMap();
-  const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap)) : [];
+  const expectedTradeDate = normalizeDateKey(payload.tradeDate || payload.sourceDate || payload.usedDate || "");
+  const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => normalizeMatch(item, stockQuoteMap, expectedTradeDate)) : [];
   const volumeMatches = Array.isArray(payload.volumeMatches)
-    ? payload.volumeMatches.map((item) => normalizeVolumeMatch(item, stockQuoteMap))
+    ? payload.volumeMatches.map((item) => normalizeVolumeMatch(item, stockQuoteMap, expectedTradeDate))
     : [];
   const singleSignals = Array.isArray(payload.singleSignals)
-    ? payload.singleSignals.map((item) => normalizeSingleSignal(item, stockQuoteMap)).filter(isControlledSingleSignal)
+    ? payload.singleSignals.map((item) => normalizeSingleSignal(item, stockQuoteMap, expectedTradeDate)).filter(isControlledSingleSignal)
     : [];
   const output = {
     ...payload,

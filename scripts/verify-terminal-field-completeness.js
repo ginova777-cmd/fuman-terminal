@@ -250,6 +250,38 @@ function isMembershipRequiredPayload(payload) {
   return Boolean(payload && payload.protected === true && payload.error === "membership_required");
 }
 
+function numericZero(value) {
+  return value === 0 || value === "0";
+}
+
+function isCompleteEmptyPayload(payload = {}) {
+  const completeEvidence = [payload.evidenceStatus, payload.sourceEvidenceStatus, payload.qualityStatus, payload.status]
+    .some((value) => /^(complete|sufficient|ok|ready)$/i.test(String(value || "")));
+  const explicitZero = [payload.count, payload.resultCount, payload.readbackCount, payload.rowsReturned, payload.total]
+    .some(numericZero);
+  const publishOk = payload.publishAllowed === true || payload.ok === true || payload.unattendedStatus === "YES";
+  return Boolean(completeEvidence && explicitZero && publishOk);
+}
+
+function isFailClosedZeroPayload(payload = {}) {
+  const statusText = [
+    payload.evidenceStatus,
+    payload.sourceEvidenceStatus,
+    payload.qualityStatus,
+    payload.status,
+    payload.reason,
+    payload.error,
+    payload.scannerBlockReason,
+    payload.scanner_block_reason,
+  ].map((value) => String(value || "")).join(" ");
+  const blocked = payload.publishAllowed === false
+    || payload.unattendedStatus === "NO"
+    || payload.preservePreviousGood === true
+    || payload.degradedBlocksLatest === true
+    || /blocked|degraded|insufficient|source_quality_fail|market_closed|source_date_not_today|not_ready/i.test(statusText);
+  return Boolean(blocked);
+}
+
 function checkRoute(route, payload) {
   const rows = rowsOf(payload).slice(0, LIMIT);
   const issues = [];
@@ -267,7 +299,9 @@ function checkRoute(route, payload) {
     }
   });
   if (!rows.length) {
-    if (route.allowZeroWhen && route.allowZeroWhen(payload)) return { rows, issues, zeroAllowed: true };
+    if ((route.allowZeroWhen && route.allowZeroWhen(payload)) || isCompleteEmptyPayload(payload) || isFailClosedZeroPayload(payload)) {
+      return { rows, issues, zeroAllowed: true };
+    }
     issues.push({ row: "", field: "rows", message: "no rows/cards returned" });
     return { rows, issues, zeroAllowed: false };
   }

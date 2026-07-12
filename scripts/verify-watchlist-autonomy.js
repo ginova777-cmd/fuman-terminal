@@ -86,7 +86,7 @@ async function main() {
   }
   failWhen(writerHits.length !== 1 || writerHits[0] !== "lib/desktop-route-snapshot-builder.js", `official writer must be only desktop-route-snapshot-builder; actual=${writerHits.join(",") || "none"}`);
   failWhen(!/verify:watchlist-autonomy/.test(pkg), "package.json missing verify:watchlist-autonomy script");
-  failWhen(!/key:\s*["']strategy2["']/.test(indexBuilder) || !/\/api\/latest-strategy\?key=strategy2/.test(indexBuilder), "watchlist builder must include strategy2 source");
+  failWhen(!/key:\s*["']strategy2["']/.test(indexBuilder) || !/\/api\/strategy2-latest/.test(indexBuilder), "watchlist builder must include strategy2 latest source");
   failWhen(!/sourceKeyFor/.test(indexBuilder) || !/策略2-/.test(indexBuilder), "watchlist builder must preserve strategy2 sub-signal labels");
   for (const marker of ["buildRunEvidence", "source_snapshot_captured_at", "source_status_at_run", "quote_coverage_at_run", "fallbackUsed", "degradedBlocksLatest", "preservePreviousGood", "unattendedStatus"]) {
     failWhen(!indexBuilder.includes(marker), `watchlist builder missing run-time evidence marker ${marker}`);

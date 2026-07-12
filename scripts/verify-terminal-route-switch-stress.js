@@ -58,6 +58,7 @@ const ROUTE_CONFIG = {
     selector: 'aside.sidebar a.realtime-radar-nav[data-view="realtime-radar"]',
     panel: "#realtime-radar-view",
     rows: ".radar-signal-card,.radar-leader-card,.realtime-radar-card,.radar-row",
+    allowEmpty: true,
   },
   strategy1: {
     view: "strategy",
@@ -96,6 +97,7 @@ const ROUTE_CONFIG = {
     selector: 'aside.sidebar a[data-view="chip-trade"]',
     panel: "#chip-trade-view",
     rows: ".chip-trade-row,.chip-trade-card,.strategy-row",
+    allowEmpty: true,
   },
   cb: {
     view: "cb-detect",
@@ -117,6 +119,22 @@ const ROUTE_CONFIG = {
     allowEmpty: true,
   },
 };
+
+const PROTECTED_ROUTES = new Set([
+  "realtime-radar",
+  "strategy1",
+  "strategy2",
+  "strategy3",
+  "strategy4",
+  "strategy5",
+  "chip-trade",
+  "cb",
+  "warrant-flow",
+  "watchlist",
+]);
+for (const [key, config] of Object.entries(ROUTE_CONFIG)) {
+  if (PROTECTED_ROUTES.has(key)) config.protected = true;
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -443,6 +461,20 @@ async function activateRoute(cdp, key) {
   const config = ROUTE_CONFIG[key];
   if (!config) throw new Error(`Unknown route ${key}`);
   await clickSelector(cdp, config.selector);
+  if (config.protected) {
+    const locked = await waitFor(cdp, () => {
+      const visible = (node) => {
+        if (!node) return false;
+        const rect = node.getBoundingClientRect();
+        const style = getComputedStyle(node);
+        return rect.width > 1 && rect.height > 1 && style.display !== "none" && style.visibility !== "hidden";
+      };
+      return {
+        ok: document.body.classList.contains("auth-locked") || visible(document.querySelector(".member-lock-overlay")) || visible(document.querySelector("#auth-gate")),
+      };
+    }, null, 1200, 120).catch(() => ({ ok: false }));
+    if (locked.ok) return;
+  }
   await waitFor(cdp, (selector) => {
     const panel = document.querySelector(selector);
     if (!panel) return { ok: false, reason: "panel-missing" };
@@ -538,6 +570,24 @@ function collectRouteStats(config, key) {
   const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
   const panel = document.querySelector(config.panel);
   const panelText = text(panel).slice(0, 12000);
+  const membershipLocked = Boolean(config.protected)
+    && (document.body.classList.contains("auth-locked")
+      || visible(document.querySelector(".member-lock-overlay"))
+      || visible(document.querySelector("#auth-gate")));
+  if (membershipLocked) {
+    return {
+      route: key,
+      ok: true,
+      membershipLocked: true,
+      rows: 0,
+      sampleRows: [],
+      modeTabs: document.querySelectorAll("#market-view .market-mode-tabs").length,
+      aiPanels: document.querySelectorAll("#market-view .market-ai-dashboard,#market-view [data-market-ai-root],#market-view .market-ai-panel").length,
+      activePanel: [...document.querySelectorAll(".content-panel,[id$='-view']")].filter(visible).map((el) => el.id || el.dataset.view || "").filter(Boolean).slice(0, 8),
+      panelText: "membership gate active",
+      blockers: [],
+    };
+  }
   const emptyPattern = /等待資料載入|尚未產生|目前沒有符合|尚未新增自選股|更新策略資料中|載入全台股|等待最新 complete run|權證快照尚未建立|載入最新 AI 判讀資料中/;
   const rows = [...(panel || document).querySelectorAll(config.rows || "article")]
     .map((el) => ({ visible: visible(el), text: text(el) }))

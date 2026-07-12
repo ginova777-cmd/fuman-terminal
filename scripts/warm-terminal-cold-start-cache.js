@@ -55,14 +55,20 @@ async function warm(pathname, label) {
     const text = await response.text();
     let payload = null;
     try { payload = JSON.parse(text); } catch {}
+    const authLocked = payload?.error === "membership_required";
+    const failClosedDisplay = payload?.evidenceStatus === "source_quality_fail"
+      && payload?.publishAllowed === false
+      && (payload?.unattendedStatus === "NO" || payload?.ok === false);
     return {
       label,
-      ok: response.status >= 200 && response.status < 500 && payload?.ok !== false,
+      ok: response.status >= 200 && response.status < 500 && (payload?.ok !== false || authLocked || failClosedDisplay),
       status: response.status,
       ms: Date.now() - startedAt,
       rows: rowsOf(payload || {}),
-      cacheSource: payload?.cacheSource || payload?.source || "",
-      error: payload?.error || "",
+      cacheSource: payload?.cacheSource || payload?.source || (authLocked ? "membership-gate" : failClosedDisplay ? "fail-closed-display" : ""),
+      authLocked,
+      failClosedDisplay,
+      error: authLocked || failClosedDisplay ? "" : payload?.error || "",
     };
   } catch (error) {
     return {

@@ -559,7 +559,7 @@ function isMembershipSnapshotFallback(summary) {
 function isNonTradingRealtimeZero(config, live, compact) {
   if (config?.key !== "realtime-radar") return false;
   const text = `${live?.error || ""} ${compact?.error || ""}`;
-  return /non-trading-day-cache|market_closed|weekend|holiday/i.test(text)
+  return /non-trading-day-cache|market_closed|weekend|holiday|source_date_not_today|realtime_radar_source_date_not_today/i.test(text)
     && cleanNumber(live?.count || live?.returnedCount) === 0
     && cleanNumber(compact?.count || compact?.returnedCount) === 0;
 }
@@ -688,13 +688,14 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`sourceHealth intraday1mReadyCount ${sourceHealth.intraday1mReadyCount} < ${sourceHealth.minIntraday1mCandidates}`);
     }
   }
-  if (!live?.membershipProtected && (live?.status >= 500 || live?.ok === false)) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
-  if (!compact?.membershipProtected && (compact?.status >= 500 || compact?.ok === false)) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
+  const nonTradingRealtimeZero = isNonTradingRealtimeZero(config, live, compact);
+  if (!live?.membershipProtected && !nonTradingRealtimeZero && (live?.status >= 500 || live?.ok === false)) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
+  if (!compact?.membershipProtected && !nonTradingRealtimeZero && (compact?.status >= 500 || compact?.ok === false)) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
   if (config.requireApiRunId && !live?.runId && !live?.membershipProtected) issues.push("live API missing runId");
   if (config.requireApiRunId && !compact?.runId && !compact?.membershipProtected) issues.push("terminal API missing runId");
   if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus && !live?.membershipProtected) issues.push("live API missing writeBudget disclosure");
   if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus && !compact?.membershipProtected) issues.push("terminal API missing writeBudget disclosure");
-  if (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot") && !isNonTradingRealtimeZero(config, live, compact))) {
+  if (!nonTradingRealtimeZero && (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot")))) {
     issues.push(`desktop snapshot endpoint missing/error`);
   }
   if (mobile && mobile.status >= 500) issues.push(`mobile fragment ${mobile.status}`);
@@ -709,12 +710,12 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     && live.date
     && live.date === snapshot.date
   );
-  if (!live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
+  if (!nonTradingRealtimeZero && !live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
   if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
   if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
-  if (!config.allowZeroTerminal && compact && !compact.membershipProtected && cleanNumber(compact.count || compact.returnedCount) <= 0 && !isNonTradingRealtimeZero(config, live, compact)) issues.push("terminal API has zero rows");
+  if (!config.allowZeroTerminal && compact && !compact.membershipProtected && cleanNumber(compact.count || compact.returnedCount) <= 0 && !nonTradingRealtimeZero) issues.push("terminal API has zero rows");
   if (!config.allowZeroTerminal && mobile && mobile.empty) issues.push("mobile fragment empty");
   return issues;
 }

@@ -389,6 +389,25 @@ function isMarketClosedLiveSourceCheck(check, tradingDay) {
   );
 }
 
+function isIntradayLiveWindow(date = new Date()) {
+  const minutes = taipeiMinutes(date);
+  return minutes >= 8 * 60 + 45 && minutes <= 13 * 60 + 35;
+}
+
+function isOutsideLiveWindowSourceCheck(check, tradingDay) {
+  if (tradingDay?.isTradingDay === false) return false;
+  const table = String(check.table || "");
+  const liveWindowTables = new Set([
+    "fugle_quotes_live",
+    "fugle_realtime_quote_latest",
+    "v_strategy2_intraday_ready",
+    "v_strategy2_readiness_status",
+    "v_strategy2_readiness_missing",
+  ]);
+  const liveOnly = check.kind === "realtime-radar-cache" || liveWindowTables.has(table);
+  return Boolean(liveOnly && !isIntradayLiveWindow());
+}
+
 function compactDate(value) {
   const text = String(value || "");
   const direct = text.replace(/\D/g, "");
@@ -597,11 +616,13 @@ async function checkOne(strategy, check) {
   const result = await fetchRows(check.table, check.select, check.query);
   const tradingDay = await currentTradingDayStatus();
   const marketClosedLiveSource = isMarketClosedLiveSourceCheck(check, tradingDay);
+  const outsideLiveWindowSource = isOutsideLiveWindowSourceCheck(check, tradingDay);
+  const liveSourceSkipped = marketClosedLiveSource || outsideLiveWindowSource;
   const issues = [];
   if (!result.ok) {
     issues.push(`${check.table} ${check.kind} unreadable: HTTP ${result.status} ${result.error}`);
   }
-  if (result.ok && check.minRows && result.rows.length < check.minRows && !marketClosedLiveSource) {
+  if (result.ok && check.minRows && result.rows.length < check.minRows && !liveSourceSkipped) {
     issues.push(`${check.table} ${check.kind} rows ${result.rows.length}<${check.minRows}`);
   }
   if (result.ok && check.kind.startsWith("latest-run") && !result.rows[0]?.run_id) {
@@ -610,7 +631,7 @@ async function checkOne(strategy, check) {
   if (result.ok && check.kind.startsWith("latest-run") && Number(result.rows[0]?.result_count || 0) <= 0 && strategy.key !== "strategy2") {
     issues.push(`${check.table} latest complete run result_count<=0`);
   }
-  if (result.ok && check.requireToday && !marketClosedLiveSource) {
+  if (result.ok && check.requireToday && !liveSourceSkipped) {
     const expected = await expectedQuoteDateKey();
     const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const today = taipeiDateKey();
@@ -624,7 +645,7 @@ async function checkOne(strategy, check) {
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
     if (ageDays != null && ageDays > check.maxAgeDays) issues.push(`${check.table} newest date ${newest} age ${ageDays}d > ${check.maxAgeDays}d`);
   }
-  if (result.ok && check.healthStatusField && !marketClosedLiveSource) {
+  if (result.ok && check.healthStatusField && !liveSourceSkipped) {
     const row = result.rows[0] || {};
     const status = String(row[check.healthStatusField] || "").trim().toLowerCase();
     const accepted = new Set((check.acceptedHealthStatuses || []).map((item) => String(item).trim().toLowerCase()).filter(Boolean));
@@ -635,7 +656,7 @@ async function checkOne(strategy, check) {
       issues.push(`${check.table} ${check.healthStatusField}=${status}${reason ? ` (${reason})` : ""}`);
     }
   }
-  if (result.ok && check.kind === "realtime-radar-cache" && !marketClosedLiveSource) {
+  if (result.ok && check.kind === "realtime-radar-cache" && !liveSourceSkipped) {
     const row = result.rows[0] || {};
     const payload = row.payload && typeof row.payload === "object" ? row.payload : null;
     const payloadRows = Array.isArray(payload?.rows) ? payload.rows : [];
@@ -664,7 +685,11 @@ async function checkOne(strategy, check) {
       ? realtimeRadarPayloadDate(result.rows[0]?.payload || {}) || rowDate(result.rows[0] || {})
       : result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "",
     issues,
-    skippedReason: marketClosedLiveSource ? `market_closed:${tradingDay.reason || "closed"}` : "",
+    skippedReason: marketClosedLiveSource
+      ? "market_closed:" + (tradingDay.reason || "closed")
+      : outsideLiveWindowSource
+        ? "outside_live_window:" + new Date().toLocaleString("sv-SE", { timeZone: "Asia/Taipei" })
+        : "",
   };
 }
 

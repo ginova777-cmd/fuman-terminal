@@ -3203,28 +3203,30 @@ module.exports = async function handler(request, response) {
       allowLatestFallback: true,
       timeoutMs: 900,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+      const snapshotReason = isFinalCloseHeatmapPayload(snapshot.payload, clock) ? "snapshot-first" : "snapshot-first-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload({
         ...snapshot,
-        reason: "snapshot-first",
-      }, clock), clock, "snapshot-first"));
+        reason: snapshotReason,
+      }, clock), clock, snapshotReason));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+      const localReason = isFinalCloseHeatmapPayload(localSnapshot.payload, clock) ? "snapshot-first-local" : "snapshot-first-local-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
           cache: {
             hit: true,
             source: localSnapshot.file,
-            reason: "snapshot-first-local",
+            reason: localReason,
           },
         },
         clock,
-        "snapshot-first-local"
-      ), clock, "snapshot-first-local"));
+        localReason
+      ), clock, localReason));
       return;
     }
 
@@ -3244,25 +3246,27 @@ module.exports = async function handler(request, response) {
       allowLatestFallback: true,
       timeoutMs: 1400,
     });
-    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload) && isFinalCloseHeatmapPayload(snapshot.payload, clock)) {
-      response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload(snapshot, clock), clock, "supabase-snapshot"));
+    if (snapshot?.payload && hasHeatmapSnapshotPayload(snapshot.payload)) {
+      const snapshotReason = isFinalCloseHeatmapPayload(snapshot.payload, clock) ? "supabase-snapshot" : "supabase-snapshot-previous-good";
+      response.status(200).json(withHeatmapRunTimeSourceSnapshot(snapshotHeatmapPayload({ ...snapshot, reason: snapshotReason }, clock), clock, snapshotReason));
       return;
     }
 
     const localSnapshot = readLatestHeatmapSnapshot();
-    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload) && isFinalCloseHeatmapPayload(localSnapshot.payload, clock)) {
+    if (localSnapshot?.payload && hasHeatmapSnapshotPayload(localSnapshot.payload)) {
+      const localReason = isFinalCloseHeatmapPayload(localSnapshot.payload, clock) ? "after-1330-cache" : "after-1330-previous-good";
       response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow(
         {
           ...localSnapshot.payload,
           cache: {
             hit: true,
             source: localSnapshot.file,
-            reason: "after-1330-cache",
+            reason: localReason,
           },
         },
         clock,
-        "after-1330-cache"
-      ), clock, "after-1330-cache"));
+        localReason
+      ), clock, localReason));
       return;
     }
   }
