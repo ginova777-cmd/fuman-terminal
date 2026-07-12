@@ -3272,6 +3272,39 @@ module.exports = async function handler(request, response) {
     }
   }
 
+  if (snapshotFirst && !forceLiveContract) {
+    const reason = "snapshot_first_no_usable_last_good";
+    response.status(200).json(withHeatmapRunTimeSourceSnapshot(attachHeatmapDetectWindow({
+      ok: false,
+      source: "heatmap-snapshot-first-fail-closed",
+      formalSource: "heatmap_latest",
+      sectors: [],
+      rows: [],
+      count: 0,
+      stockCount: 0,
+      realtimeStockCount: 0,
+      evidenceStatus: "source_quality_fail",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      degradedBlocksLatest: true,
+      preservePreviousGood: true,
+      strictQuoteContract: {
+        ok: false,
+        issue: reason,
+        source: "heatmap_latest",
+        rows: 0,
+        fallbackUsed: false,
+      },
+      health: {
+        stockCount: 0,
+        realtimeStockCount: 0,
+        isHealthy: false,
+      },
+      cache: { hit: false, reason },
+    }, clock, reason), clock, reason, marketCalendar));
+    return;
+  }
+
   const detectWindowActive = isHeatmapDetectWindow(clock);
   if (!detectWindowActive && !forceLiveContract) {
     const snapshot = await readSnapshot("heatmap_latest", {
@@ -3469,5 +3502,8 @@ module.exports = async function handler(request, response) {
     response.status(502).json({ ok: false, error: error.message });
   }
 };
+
+
+
 
 
