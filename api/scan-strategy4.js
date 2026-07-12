@@ -1188,6 +1188,29 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       reason: `完整掃描保留：扣除剔除名單後納入策略4股票池；趨勢分 ${trendScore}/8，準備分 ${prepScore}/7，量比 ${daily.volumeRatio.toFixed(2)}，位階 ${daily.stage.label}。`,
     });
   }
+  const last20Rows = daily.rows.slice(-20);
+  const last60Rows = daily.rows.slice(-60);
+  const high20 = rowHigh(last20Rows);
+  const high60 = rowHigh(last60Rows);
+  const low60 = rowLow(last60Rows);
+  const below20HighPct = high20 > 0 ? ((last.close - high20) / high20) * 100 : 0;
+  const position60 = high60 > low60 ? (last.close - low60) / (high60 - low60) : 0.5;
+  if (high20 > 0 && below20HighPct <= -8) {
+    signals.push({
+      id: "below_20d_high_8",
+      short: "20高-8%",
+      icon: "低",
+      reason: `目前股價低於近20日高點 ${Math.abs(below20HighPct).toFixed(2)}%，屬短線回落位階。`,
+    });
+  }
+  if (high60 > low60 && position60 <= 0.5) {
+    signals.push({
+      id: "lower_half_60d",
+      short: "60日下半",
+      icon: "低",
+      reason: `目前股價位於近60日區間下半部，區間位置 ${(position60 * 100).toFixed(1)}%。`,
+    });
+  }
   const zoneBase = swingZone === "A" ? 48 : swingZone === "B" ? 38 : 28;
   const entryPrice = last.close;
   const stopPrice = daily.gapUp && prev ? prev.high : entryPrice - daily.atr14 * 1.5;
