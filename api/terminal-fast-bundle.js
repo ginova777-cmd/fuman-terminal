@@ -86,6 +86,37 @@ function filterPublicBundlePayload(payload, entitlement) {
   };
 }
 
+function buildFastMembershipLockedBundle(entitlement, marketCalendar) {
+  const updatedAt = new Date().toISOString();
+  const endpoints = {
+    '/api/market': { ok: true, protected: false, publicSurface: 'market-overview', rows: [], count: 0, source: 'membership-fast-shell', updatedAt },
+    '/api/heatmap': { ok: false, protected: false, publicSurface: 'market-overview', rows: [], count: 0, source: 'membership-fast-shell', evidenceStatus: 'public_shell_only', publishAllowed: false, updatedAt },
+    '/api/market-ai-live': { ok: true, protected: false, publicSurface: 'market-ai', rows: [], count: 0, source: 'membership-fast-shell', updatedAt },
+  };
+  return attachMarketCalendar({
+    ok: true,
+    partial: false,
+    source: 'terminal-fast-bundle',
+    cacheSource: 'membership-fast-shell',
+    snapshotHit: true,
+    snapshotFresh: true,
+    updatedAt,
+    elapsedMs: 0,
+    protected: true,
+    membershipRequired: true,
+    protectedReason: entitlement?.reason || 'missing_bearer_token',
+    publicSurfaces: ['market-overview', 'market-ai', 'learning-plan'],
+    endpoints,
+    summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
+    misses: [],
+    timings: Object.fromEntries(Object.keys(endpoints).map((endpoint) => [endpoint, 0])),
+    sourceFreshnessRequired: false,
+    preservePreviousGood: true,
+    latestPointerUpdated: false,
+    emptyResultWritten: false,
+  }, marketCalendar);
+}
+
 function createCaptureResponse(resolve, label) {
   let settled = false;
   const done = (statusCode, payload, headers = {}) => {
@@ -698,6 +729,14 @@ module.exports = async function handler(request, response) {
   const wantsLive = request.query?.live === "1"
     || request.query?.refresh === "1"
     || request.query?.force === "1";
+  if (!entitlement?.ok && !wantsLive) {
+    if (request.method === 'HEAD') {
+      response.status(200).end('');
+      return;
+    }
+    response.status(200).json(buildFastMembershipLockedBundle(entitlement, marketCalendar));
+    return;
+  }
   if (!wantsLive) {
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
     if (snapshot?.payload?.endpoints) {
