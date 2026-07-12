@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260711-03";
+  const VERSION = "watchlist-rich-shell-20260712-quote-source-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -181,15 +181,24 @@
   async function loadMeta() {
     if (metaPromise) return metaPromise;
     metaPromise = (async () => {
-      for (const url of [`/data/stocks-slim.json?t=${Date.now()}`, `/api/stocks?watchlist=1&t=${Date.now()}`]) {
+      const urls = [
+        `/api/stocks?watchlist=1&t=${Date.now()}`,
+        `/data/stocks-slim.json?t=${Date.now()}`,
+      ];
+      for (const url of urls) {
         try {
           const response = await fetch(url, { cache: "no-store" });
           if (!response.ok) continue;
           const payload = await response.json();
+          let loaded = 0;
           for (const row of extractRows(payload)) {
             const meta = normalizeMeta(row);
-            if (meta) metaMap.set(meta.code, { ...(metaMap.get(meta.code) || {}), ...meta });
+            if (meta) {
+              metaMap.set(meta.code, { ...(metaMap.get(meta.code) || {}), ...meta });
+              loaded += 1;
+            }
           }
+          if (url.includes("/api/stocks") && loaded > 1000) break;
           if (metaMap.size > 1000) break;
         } catch {}
       }
@@ -644,32 +653,55 @@
   async function hydrateQuote(code) {
     const target = normalizeCode(code);
     if (!target) return null;
-    const cached = quoteMap.get(target);
-    if (cached && Date.now() - number(cached.quoteAt) < 30000) return cached;
+    let quote = null;
     try {
-      const response = await fetch(`/api/proxy?code=${encodeURIComponent(target)}&t=${Date.now()}`, { cache: "no-store" });
-      const data = await response.json();
-      const item = data?.msgArray?.[0] || {};
-      const close = parsePrice(item.z, item.pz, item.a, item.b, item.o);
-      const prev = parsePrice(item.y, item.o, item.z);
-      const quote = {
-        code: target,
-        name: item.n || findMetaSync(target)?.name || target,
-        market: findMetaSync(target)?.market || "",
-        close,
-        prevClose: prev,
-        change: close && prev ? close - prev : 0,
-        percent: prev ? ((close - prev) / prev) * 100 : 0,
-        quoteAt: Date.now(),
-      };
-      quoteMap.set(target, quote);
-      const rows = readRows().map((row) => row.code === target ? { ...row, name: quote.name || row.name, market: quote.market || row.market } : row);
-      writeRows(rows);
-      render();
-      return quote;
-    } catch {
-      return null;
+      const response = await fetch(`/api/realtime?codes=${encodeURIComponent(target)}&t=${Date.now()}`, { cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        const item = extractRows(data).find((row) => normalizeCode(row?.code || row?.symbol) === target) || null;
+        const close = number(item?.close ?? item?.price ?? item?.lastPrice);
+        const prev = number(item?.prevClose ?? item?.previousClose ?? item?.referencePrice);
+        if (close > 0) {
+          quote = {
+            code: target,
+            name: item?.name || findMetaSync(target)?.name || target,
+            market: findMetaSync(target)?.market || item?.market || "",
+            close,
+            prevClose: prev,
+            percent: number(item?.percent ?? item?.changePercent) || (close && prev ? ((close - prev) / prev) * 100 : 0),
+            tradeVolume: number(item?.tradeVolume ?? item?.volume ?? item?.totalVolume),
+            quoteSource: item?.quoteSource || item?.realtimeFallback || data?.primarySource || "api-realtime",
+          };
+        }
+      }
+    } catch {}
+    if (!quote) {
+      try {
+        const response = await fetch(`/api/proxy?code=${encodeURIComponent(target)}&t=${Date.now()}`, { cache: "no-store" });
+        const data = await response.json();
+        const item = data?.msgArray?.[0] || {};
+        const close = parsePrice(item.z, item.pz, item.a, item.b, item.o);
+        const prev = parsePrice(item.y, item.o, item.z);
+        if (close > 0) {
+          quote = {
+            code: target,
+            name: item.n || findMetaSync(target)?.name || target,
+            market: findMetaSync(target)?.market || "",
+            close,
+            prevClose: prev,
+            percent: close && prev ? ((close - prev) / prev) * 100 : 0,
+            tradeVolume: number(item.v || item.tv),
+            quoteSource: "twse-mis-proxy",
+          };
+        }
+      } catch {}
     }
+    if (!quote) return null;
+    quoteMap.set(target, quote);
+    const rows = readRows().map((row) => row.code === target ? { ...row, name: quote.name || row.name, market: quote.market || row.market } : row);
+    writeRows(rows);
+    render();
+    return quote;
   }
 
   function parsePrice(...values) {
