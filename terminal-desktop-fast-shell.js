@@ -8210,12 +8210,32 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
       }
-      #strategy-view.strategy3-only .strategy3-run-cards article {
+      #strategy-view.strategy3-only .strategy3-run-cards article,
+      #strategy-view.strategy3-only .strategy3-run-cards button {
         min-height: 88px;
         padding: 15px 16px;
         border: 1px solid rgba(148, 163, 184, 0.20);
         border-radius: 8px;
-        background: rgba(15, 23, 42, 0.62);
+        background:
+          linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 64, 175, 0.30)),
+          rgba(2, 6, 23, 0.82);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 10px 22px rgba(2, 6, 23, 0.20);
+        color: #dbeafe;
+        text-align: center;
+        cursor: pointer;
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards button:hover {
+        border-color: rgba(96, 165, 250, 0.48);
+        background:
+          linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(37, 99, 235, 0.34)),
+          rgba(2, 6, 23, 0.88);
+      }
+      #strategy-view.strategy3-only .strategy3-run-cards button.active {
+        border-color: rgba(251, 146, 60, 0.68);
+        background:
+          linear-gradient(135deg, rgba(124, 45, 18, 0.72), rgba(30, 64, 175, 0.36)),
+          rgba(15, 23, 42, 0.90);
+        box-shadow: inset 4px 0 0 #fb923c, 0 14px 28px rgba(124, 45, 18, 0.22);
       }
       #strategy-view.strategy3-only .strategy3-run-cards span,
       #strategy-view.strategy3-only .strategy3-run-cards small {
@@ -8369,7 +8389,8 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         color: #9a3412;
         background: #fed7aa;
       }
-      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards article {
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards article,
+      body.fuman-light-theme #strategy-view.strategy3-only .strategy3-run-cards button {
         border-color: rgba(96, 165, 250, 0.28);
         background: linear-gradient(180deg, #ffffff, #eff6ff);
         box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);

@@ -1,5 +1,5 @@
 (function () {
-  const version = "public-terminal-fast-20260630-20";
+  const version = "public-terminal-fast-20260630-21";
   const runtimeAssetEpoch = "desktop-fast-shell-core-20260628-03";
   window.FUMAN_TERMINAL_VERSION = version;
   window.FUMAN_TERMINAL_RUNTIME_ASSET_EPOCH = runtimeAssetEpoch;
