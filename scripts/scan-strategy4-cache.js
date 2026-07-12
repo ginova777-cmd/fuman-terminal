@@ -50,6 +50,7 @@ const STRATEGY4_PUBLISH_GATE_FILE = process.env.FUMAN_SUPABASE_PUBLISH_GATE_FILE
 const STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS = Number(process.env.STRATEGY4_PUBLISH_GATE_MAX_AGE_SECONDS || 1800);
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_FIRST !== "0";
+const CONDITION_REFRESH = process.env.STRATEGY4_CONDITION_REFRESH === "1";
 const SKIP_RETRY_ON_SUPABASE_FIRST = process.env.STRATEGY4_SUPABASE_SKIP_RETRY !== "0";
 const FAIL_ON_INCOMPLETE = process.env.STRATEGY4_FAIL_ON_INCOMPLETE !== "0";
 const ALLOW_PARTIAL_PUBLISH = process.env.STRATEGY4_ALLOW_PARTIAL_PUBLISH === "1";
@@ -221,6 +222,7 @@ function strategy4BreakdownIssues(stock) {
 function buildStrategy4PrePublishSelfTest(output) {
   const matches = normalizeArray(output.matches);
   const coverage = output.supabaseCoverage && typeof output.supabaseCoverage === "object" ? output.supabaseCoverage : {};
+  const requireSupabaseCoverage = output.conditionRefresh !== true;
   const breakdownIssues = matches.flatMap(strategy4BreakdownIssues);
   const issues = [];
 
@@ -235,11 +237,13 @@ function buildStrategy4PrePublishSelfTest(output) {
   if (cleanNumber(output.computableUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`computableUniverseTotal ${cleanNumber(output.computableUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.sourceUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`sourceUniverseTotal ${cleanNumber(output.sourceUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.insufficientHistoryCount) !== 0) issues.push(`insufficientHistoryCount must be 0, got ${output.insufficientHistoryCount}`);
-  if (coverage.ok !== true) issues.push("supabaseCoverage.ok must be true");
-  if (String(coverage.phase || "") !== "complete") issues.push(`supabaseCoverage.phase must be complete, got ${coverage.phase || "(blank)"}`);
-  if (cleanNumber(coverage.remainingMiss) !== 0) issues.push(`supabaseCoverage.remainingMiss must be 0, got ${coverage.remainingMiss}`);
-  if (cleanNumber(coverage.insufficientHistoryCount) !== 0) issues.push(`supabaseCoverage.insufficientHistoryCount must be 0, got ${coverage.insufficientHistoryCount}`);
-  if (cleanNumber(coverage.computableUniverse) < MIN_SOURCE_ROW_COUNT) issues.push(`supabaseCoverage.computableUniverse ${cleanNumber(coverage.computableUniverse)} below ${MIN_SOURCE_ROW_COUNT}`);
+  if (requireSupabaseCoverage) {
+    if (coverage.ok !== true) issues.push("supabaseCoverage.ok must be true");
+    if (String(coverage.phase || "") !== "complete") issues.push(`supabaseCoverage.phase must be complete, got ${coverage.phase || "(blank)"}`);
+    if (cleanNumber(coverage.remainingMiss) !== 0) issues.push(`supabaseCoverage.remainingMiss must be 0, got ${coverage.remainingMiss}`);
+    if (cleanNumber(coverage.insufficientHistoryCount) !== 0) issues.push(`supabaseCoverage.insufficientHistoryCount must be 0, got ${coverage.insufficientHistoryCount}`);
+    if (cleanNumber(coverage.computableUniverse) < MIN_SOURCE_ROW_COUNT) issues.push(`supabaseCoverage.computableUniverse ${cleanNumber(coverage.computableUniverse)} below ${MIN_SOURCE_ROW_COUNT}`);
+  }
   if (breakdownIssues.length) issues.push(...breakdownIssues.slice(0, 20));
 
   return {
@@ -263,6 +267,7 @@ function buildStrategy4PrePublishSelfTest(output) {
       dataSourceCounts: output.dataSourceCounts || {},
       yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
       misSourceRatio: cleanNumber(output.misSourceRatio),
+      conditionRefresh: output.conditionRefresh === true,
       supabaseCoverage: coverage,
     },
   };
@@ -1139,6 +1144,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     scanStamp,
+    conditionRefresh: CONDITION_REFRESH,
     fullScan: FULL_SCAN,
     runMode,
     complete: baseComplete,
@@ -1371,6 +1377,7 @@ function buildSupabaseRunRow(output, runId) {
       yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
       misSourceCount: cleanNumber(output.misSourceCount),
       misSourceRatio: cleanNumber(output.misSourceRatio),
+      conditionRefresh: output.conditionRefresh === true,
       dataSourceCounts: output.dataSourceCounts || {},
       supabaseCoverage: output.supabaseCoverage || null,
       supabasePublishGate: output.supabasePublishGate || null,
@@ -1727,7 +1734,7 @@ async function main() {
     throw new Error("Strategy4 API-only requires full scan -> Supabase complete run; partial static JSON runs are disabled");
   }
   const prewarmStatus = runSupabaseHistoryPrewarm();
-  const supabaseCoverage = getSupabaseCoverageStatus() || prewarmStatus || null;
+  const supabaseCoverage = CONDITION_REFRESH ? null : (getSupabaseCoverageStatus() || prewarmStatus || null);
   let universe = await fetchUniverse();
   const insufficientHistoryCodes = insufficientHistoryCodesFromCoverage(supabaseCoverage);
   const insufficientHistory = normalizeArray(supabaseCoverage?.insufficientHistory)

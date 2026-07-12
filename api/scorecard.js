@@ -281,6 +281,7 @@ function callStrategy4Latest(timeoutMs = 12000) {
         url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
