@@ -1054,6 +1054,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     (runawayGap ? 20 : 0) +
     (daily.rsi14 < 40 ? 10 : 0)
   ) >= 60;
+  const threeInsideKd = kdSnapshot(daily.rows, 5, 3);
   const threeInside = daily.rows.length >= 3 && (() => {
     const a = daily.rows.at(-3);
     const b = daily.rows.at(-2);
@@ -1065,7 +1066,6 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     const aTradeValue = cleanNumber(a.value) || cleanNumber(a.close) * cleanNumber(a.volume) * 1000;
     const avgTradeValue5 = avg(daily.rows.slice(-5).map((row) => cleanNumber(row.value) || cleanNumber(row.close) * cleanNumber(row.volume) * 1000));
     const liquidEnough = avgTradeValue5 >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE && aTradeValue >= STRATEGY4_THREE_INSIDE_MIN_AVG_TRADE_VALUE;
-    const kd = kdSnapshot(daily.rows, 5, 3);
     const previousTrendDown = priorHigh > 0 &&
       dropFromPriorHighPct <= -STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT;
     return liquidEnough &&
@@ -1075,8 +1075,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       Math.abs(a.close - a.open) / aRange > STRATEGY4_THREE_INSIDE_BODY_RATIO &&
       b.close > a.close &&
       c.close > b.close &&
-      c.close > a.high &&
-      kd.goldenCross;
+      c.close > a.high;
   })();
   if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5 && !threeInside) return null;
   const deepFallFib = daily.deepFall && isRed;
@@ -1108,7 +1107,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     icon: "Fib",
     reason: `深跌反轉環境成立，負乖離 ${daily.bias20.toFixed(2)}%，Fib 0.382=${daily.fib382.toFixed(2)}、0.500=${daily.fib500.toFixed(2)}、0.618=${daily.fib618.toFixed(2)}。`,
   });
-  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: "↻", reason: "前段自高點回落後長黑帶量，連兩日翻紅、第二根收盤站上長黑高點，且KD(5,3)黃金交叉。" });
+  if (threeInside) signals.push({ id: "three_inside", short: "三內翻紅", icon: threeInsideKd.goldenCross ? "🔥" : "↻", reason: threeInsideKd.goldenCross ? "前段自高點回落後長黑帶量，連兩日翻紅、第二根收盤站上長黑高點；KD(5,3)黃金交叉加分。" : "前段自高點回落後長黑帶量，連兩日翻紅且第二根收盤站上長黑高點。" });
   if (goldenCross) signals.push({ id: "golden_cross", short: "金釵", icon: "✦", reason: "MA5 > MA10 > MA20 且收紅，多金釵候選。" });
   if (daily.wallet.strongBuy) {
     signals.push({
