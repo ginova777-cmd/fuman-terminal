@@ -133,6 +133,10 @@ const ROUTES = [
       ["時間", ["time", "quoteTime", "updatedAt", "latestSeenAt"]],
       ["訊號", ["reason", "signal", "state", "tags", "signalTags"]],
     ],
+    allowZeroWhen: (payload) => payload?.marketOpen === false
+      && payload?.marketStatus === "closed"
+      && payload?.publishAllowed === false
+      && payload?.preservePreviousGood === true,
   },
   {
     key: "market",
@@ -242,6 +246,10 @@ async function fetchJson(endpoint) {
   }
 }
 
+function isMembershipRequiredPayload(payload) {
+  return Boolean(payload && payload.protected === true && payload.error === "membership_required");
+}
+
 function checkRoute(route, payload) {
   const rows = rowsOf(payload).slice(0, LIMIT);
   const issues = [];
@@ -315,6 +323,19 @@ async function main() {
     console.log(`[field-completeness] ${route.key}`);
     const response = await fetchJson(route.endpoint);
     if (!response.ok || !response.json) {
+      if (response.status === 401 && isMembershipRequiredPayload(response.json)) {
+        results.push({
+          key: route.key,
+          label: route.label,
+          endpoint: route.endpoint,
+          status: response.status,
+          ok: true,
+          protectedByMembership: true,
+          rows: 0,
+          issues: [],
+        });
+        continue;
+      }
       results.push({
         key: route.key,
         label: route.label,

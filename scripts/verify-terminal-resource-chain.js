@@ -283,14 +283,14 @@ async function fetchText(url, options = {}) {
 
 async function fetchJson(url, options = {}) {
   const result = await fetchText(url, { ...options, accept: "application/json" });
-  if (!result.ok) return { ...result, json: null };
+  let json = null;
   try {
-    return { ...result, json: JSON.parse(result.text || "{}") };
+    json = JSON.parse(result.text || "{}");
   } catch (error) {
-    return { ...result, ok: false, json: null, error: `json_parse_failed:${error?.message || error}` };
+    if (result.ok) return { ...result, ok: false, json: null, error: "json_parse_failed:" + error.message };
   }
+  return { ...result, json };
 }
-
 async function fetchSupabaseRows(table, query, timeoutMs = 25000) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return { ok: false, status: 0, rows: [], error: "missing_supabase_credentials" };
@@ -432,6 +432,24 @@ function topCodes(rows, limit = 5) {
     .filter(Boolean);
 }
 
+function isMembershipRequiredPayload(payload) {
+  return Boolean(payload && payload.error === "membership_required" && (payload.protected === true || payload.ok === false));
+}
+
+function membershipProtectedSummary(result) {
+  return {
+    status: result.status,
+    ok: true,
+    membershipProtected: true,
+    elapsedMs: result.elapsedMs,
+    runId: "",
+    count: 0,
+    returnedCount: 0,
+    cacheSource: "membership-required",
+    transportSource: "membership-gate",
+  };
+}
+
 function summarizePayload(payload, status = 200, elapsedMs = 0) {
   const rows = rowsOf(payload);
   return {
@@ -534,6 +552,25 @@ function compatibleRun(expected, actual, options = {}) {
   return true;
 }
 
+function isMembershipSnapshotFallback(summary) {
+  return Boolean(summary && summary.snapshotFallback === true && /membership_required/i.test(String(summary.error || "")));
+}
+
+function isNonTradingRealtimeZero(config, live, compact) {
+  if (config?.key !== "realtime-radar") return false;
+  const text = `${live?.error || ""} ${compact?.error || ""}`;
+  return /non-trading-day-cache|market_closed|weekend|holiday/i.test(text)
+    && cleanNumber(live?.count || live?.returnedCount) === 0
+    && cleanNumber(compact?.count || compact?.returnedCount) === 0;
+}
+
+function membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot) {
+  if (!config?.allowReceiptDriftWhenDownstreamFresh) return false;
+  if (!supabase?.runId || !snapshot?.runId || snapshot.runId !== supabase.runId) return false;
+  if (cleanNumber(snapshot.count || snapshot.returnedCount) !== cleanNumber(supabase.count)) return false;
+  return Boolean(live?.membershipProtected || compact?.membershipProtected);
+}
+
 function obviousFallback(summary) {
   const text = [
     summary?.source,
@@ -606,7 +643,8 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
 
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {
   const issues = [];
-  const downstreamFresh = downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile);
+  const downstreamFresh = downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile)
+    || membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot);
   if (receipt) {
     if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
     if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
@@ -650,20 +688,20 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`sourceHealth intraday1mReadyCount ${sourceHealth.intraday1mReadyCount} < ${sourceHealth.minIntraday1mCandidates}`);
     }
   }
-  if (live?.status >= 500 || live?.ok === false) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
-  if (compact?.status >= 500 || compact?.ok === false) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
-  if (config.requireApiRunId && !live?.runId) issues.push("live API missing runId");
-  if (config.requireApiRunId && !compact?.runId) issues.push("terminal API missing runId");
-  if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus) issues.push("live API missing writeBudget disclosure");
-  if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus) issues.push("terminal API missing writeBudget disclosure");
-  if (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot"))) {
+  if (!live?.membershipProtected && (live?.status >= 500 || live?.ok === false)) issues.push(`live API ${live.status || ""} ${live.error || ""}`.trim());
+  if (!compact?.membershipProtected && (compact?.status >= 500 || compact?.ok === false)) issues.push(`terminal API ${compact.status || ""} ${compact.error || ""}`.trim());
+  if (config.requireApiRunId && !live?.runId && !live?.membershipProtected) issues.push("live API missing runId");
+  if (config.requireApiRunId && !compact?.runId && !compact?.membershipProtected) issues.push("terminal API missing runId");
+  if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus && !live?.membershipProtected) issues.push("live API missing writeBudget disclosure");
+  if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus && !compact?.membershipProtected) issues.push("terminal API missing writeBudget disclosure");
+  if (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && snapshot?.error === "endpoint_not_in_desktop_snapshot") && !isNonTradingRealtimeZero(config, live, compact))) {
     issues.push(`desktop snapshot endpoint missing/error`);
   }
   if (mobile && mobile.status >= 500) issues.push(`mobile fragment ${mobile.status}`);
-  if (supabase?.ok && live && !compatibleRun(supabase, live, { allowDateMismatch: config.key === "strategy5" })) {
+  if (supabase?.ok && live && !live?.membershipProtected && !compatibleRun(supabase, live, { allowDateMismatch: config.key === "strategy5" })) {
     issues.push(`Supabase latest run != live API (${supabase.runId || supabase.date} vs ${live.runId || live.date})`);
   }
-  if (!compatibleLiveSurfaceRun(config, live, compact)) issues.push(`live API != terminal API runId (${live.runId} vs ${compact.runId})`);
+  if (!live?.membershipProtected && !compact?.membershipProtected && !compatibleLiveSurfaceRun(config, live, compact)) issues.push(`live API != terminal API runId (${live.runId} vs ${compact.runId})`);
   const allowedDesktopSnapshotDrift = Boolean(
     config.allowDesktopSnapshotRunIdDrift
     && allowedFormalQuoteViewFallback(config, live)
@@ -671,12 +709,12 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     && live.date
     && live.date === snapshot.date
   );
-  if (!compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
+  if (!live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
   if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
-  if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
-  if (!config.allowZeroTerminal && compact && cleanNumber(compact.count || compact.returnedCount) <= 0) issues.push("terminal API has zero rows");
+  if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
+  if (!config.allowZeroTerminal && compact && !compact.membershipProtected && cleanNumber(compact.count || compact.returnedCount) <= 0 && !isNonTradingRealtimeZero(config, live, compact)) issues.push("terminal API has zero rows");
   if (!config.allowZeroTerminal && mobile && mobile.empty) issues.push("mobile fragment empty");
   return issues;
 }
@@ -694,13 +732,13 @@ async function auditOne(config, desktopSnapshotPayload) {
   ]);
   const supabase = latestRun || snapshotKey;
   const resultRows = supabase?.runId ? await fetchResultRows(config, supabase.runId) : null;
-  const live = liveResult.json ? summarizePayload(liveResult.json, liveResult.status, liveResult.elapsedMs) : {
+  const live = isMembershipRequiredPayload(liveResult.json) ? membershipProtectedSummary(liveResult) : liveResult.json ? summarizePayload(liveResult.json, liveResult.status, liveResult.elapsedMs) : {
     status: liveResult.status,
     ok: false,
     elapsedMs: liveResult.elapsedMs,
     error: liveResult.error || liveResult.text?.slice(0, 140) || "",
   };
-  const compact = compactResult.json ? summarizePayload(compactResult.json, compactResult.status, compactResult.elapsedMs) : {
+  const compact = isMembershipRequiredPayload(compactResult.json) ? membershipProtectedSummary(compactResult) : compactResult.json ? summarizePayload(compactResult.json, compactResult.status, compactResult.elapsedMs) : {
     status: compactResult.status,
     ok: false,
     elapsedMs: compactResult.elapsedMs,

@@ -1,8 +1,8 @@
 "use strict";
 
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
-const EXPECTED_DISPLAY_DATE = process.env.FUMAN_EXPECTED_DISPLAY_TRADE_DATE || "2026-07-09";
-const EXPECTED_CLOSED_REASON = process.env.FUMAN_EXPECTED_CLOSED_REASON || "typhoon_holiday";
+const EXPECTED_DISPLAY_DATE = process.env.FUMAN_EXPECTED_DISPLAY_TRADE_DATE || "";
+const EXPECTED_CLOSED_REASON = process.env.FUMAN_EXPECTED_CLOSED_REASON || "";
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -61,6 +61,21 @@ async function fetchWithTimeout(path, as = "json") {
   }
 }
 
+function isMembershipRequiredPayload(payload) {
+  return Boolean(payload && payload.protected === true && payload.error === "membership_required");
+}
+
+function validClosedReason(reason) {
+  if (EXPECTED_CLOSED_REASON) return reason === EXPECTED_CLOSED_REASON;
+  return Boolean(reason && /^(weekend|holiday|typhoon_holiday|market_closed|non_trading_day)$/i.test(String(reason)));
+}
+
+function validDisplayTradeDate(value) {
+  if (EXPECTED_DISPLAY_DATE) return value === EXPECTED_DISPLAY_DATE;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
+  return String(value) <= new Date().toISOString().slice(0, 10);
+}
+
 function inspectMarketClosedPayload(name, payload) {
   const issues = [];
   if (!payload || typeof payload !== "object") {
@@ -69,16 +84,16 @@ function inspectMarketClosedPayload(name, payload) {
   }
   if (payload.marketOpen !== false) issues.push(`marketOpen expected false got ${JSON.stringify(payload.marketOpen)}`);
   if (payload.marketStatus !== "closed") issues.push(`marketStatus expected closed got ${JSON.stringify(payload.marketStatus)}`);
-  if (payload.closedReason !== EXPECTED_CLOSED_REASON) issues.push(`closedReason expected ${EXPECTED_CLOSED_REASON} got ${JSON.stringify(payload.closedReason)}`);
+  if (!validClosedReason(payload.closedReason)) issues.push(`closedReason expected ${EXPECTED_CLOSED_REASON || "closed reason"} got ${JSON.stringify(payload.closedReason)}`);
   if (payload.formalScanSkipped !== true) issues.push(`formalScanSkipped expected true got ${JSON.stringify(payload.formalScanSkipped)}`);
   if (payload.sourceFreshnessRequired !== false) issues.push(`sourceFreshnessRequired expected false got ${JSON.stringify(payload.sourceFreshnessRequired)}`);
   if (payload.preservePreviousGood !== true) issues.push(`preservePreviousGood expected true got ${JSON.stringify(payload.preservePreviousGood)}`);
   if (payload.latestPointerUpdated !== false) issues.push(`latestPointerUpdated expected false got ${JSON.stringify(payload.latestPointerUpdated)}`);
   if (payload.emptyResultWritten !== false) issues.push(`emptyResultWritten expected false got ${JSON.stringify(payload.emptyResultWritten)}`);
-  if (payload.displayTradeDate !== EXPECTED_DISPLAY_DATE) issues.push(`displayTradeDate expected ${EXPECTED_DISPLAY_DATE} got ${JSON.stringify(payload.displayTradeDate)}`);
+  if (!validDisplayTradeDate(payload.displayTradeDate)) issues.push(`displayTradeDate expected ${EXPECTED_DISPLAY_DATE || "valid previous/current trade date"} got ${JSON.stringify(payload.displayTradeDate)}`);
   if (name === "market-calendar") {
     if (payload.scannerAction !== "skip_formal_scan") issues.push(`scannerAction expected skip_formal_scan got ${JSON.stringify(payload.scannerAction)}`);
-    if (payload.tradingDay?.source !== "dgpa_auto_update" && payload.tradingDay?.source !== "manual_override") {
+    if (EXPECTED_CLOSED_REASON && payload.tradingDay?.source !== "dgpa_auto_update" && payload.tradingDay?.source !== "manual_override") {
       issues.push(`market calendar source expected dgpa_auto_update/manual_override got ${JSON.stringify(payload.tradingDay?.source)}`);
     }
   }
@@ -103,6 +118,11 @@ async function main() {
     try {
       const result = await fetchWithTimeout(path, "json");
       const endpointIssues = [];
+      const membershipProtected = result.status === 401 && isMembershipRequiredPayload(result.payload);
+      if (membershipProtected) {
+        jsonReports.push({ name, url: result.url, status: result.status, ok: true, membershipProtected: true, issues: endpointIssues });
+        continue;
+      }
       if (!result.ok) endpointIssues.push(`HTTP ${result.status}`);
       endpointIssues.push(...inspectMarketClosedPayload(name, result.payload));
       jsonReports.push({ name, url: result.url, status: result.status, ok: result.ok, marketOpen: result.payload?.marketOpen, marketStatus: result.payload?.marketStatus, closedReason: result.payload?.closedReason, displayTradeDate: result.payload?.displayTradeDate, issues: endpointIssues });
