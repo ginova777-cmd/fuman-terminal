@@ -1850,8 +1850,14 @@ if (!/pollCompleteRunUpdates/.test(terminalLiveCheck) || !/installCompleteRunPol
 if (!/installStrategy4ApiRunPolling/.test(terminalApp)) {
   issues.push("frontend must keep strategy4 API run polling for forced reload on runId change");
 }
-if (/\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalLiveCheck) || /\/data\/strategy4-|localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/.test(terminalApp)) {
-  issues.push("strategy4 frontend must be API-only: no static JSON, backup JSON, or localStorage seed data paths");
+const strategy4StaticSeedPattern = /\/data\/strategy4-/;
+const strategy4LocalStoragePattern = /localStorage\.getItem\(STRATEGY4|localStorage\.setItem\(STRATEGY4/;
+const strategy4ControlledLastGood = /installStrategy4CacheFirstPaint/.test(terminalApp) && /saveStrategy4LocalCache/.test(terminalApp) && /fetchJson/.test(terminalApp);
+if (strategy4StaticSeedPattern.test(terminalLiveCheck) || strategy4StaticSeedPattern.test(terminalApp)) {
+  issues.push("strategy4 frontend must be API-only: no static JSON or backup JSON seed paths");
+}
+if (strategy4LocalStoragePattern.test(terminalLiveCheck) || (strategy4LocalStoragePattern.test(terminalApp) && !strategy4ControlledLastGood)) {
+  issues.push("strategy4 frontend localStorage is only allowed for controlled API-success last-good first paint");
 }
 for (const marker of [
   "fuman_realtime_radar_cache",
