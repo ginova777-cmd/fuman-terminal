@@ -1,5 +1,80 @@
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
+function compactDate(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function displayDateKey(marketCalendar) {
+  return compactDate(marketCalendar?.displayTradeDate || marketCalendar?.marketDate || marketCalendar?.requestedDate || "");
+}
+
+function snapshotDateKey(payload) {
+  const candidates = [
+    payload?.source_snapshot_captured_at,
+    payload?.updatedAt,
+    payload?.transport?.updatedAt,
+    payload?.transport?.snapshotId,
+    payload?.runId,
+  ].map(compactDate).filter((value) => value.length === 8);
+  return candidates.sort().at(-1) || "";
+}
+
+function staleSnapshotDetails(payload, marketCalendar) {
+  const expectedDate = displayDateKey(marketCalendar);
+  const snapshotDate = snapshotDateKey(payload);
+  const stale = Boolean(expectedDate && snapshotDate && snapshotDate < expectedDate);
+  return {
+    stale,
+    expectedDate,
+    snapshotDate,
+    displayTradeDate: marketCalendar?.displayTradeDate || "",
+    marketStatus: marketCalendar?.marketStatus || "",
+    reason: stale ? "watchlist_match_index_snapshot_older_than_display_trade_date" : "",
+  };
+}
+
+function stalePayload(snapshot, details) {
+  return {
+    ...snapshot,
+    ok: false,
+    error: "watchlist_match_index_stale",
+    reason: details.reason,
+    cacheSource: snapshot?.cacheSource || "supabase:market_snapshots",
+    byCode: {},
+    quoteByCode: {},
+    namesByCode: {},
+    count: 0,
+    staleSnapshot: details,
+    source_status_at_run: {
+      status: "degraded",
+      issueCount: 1,
+      issues: [details.reason],
+      staleSnapshot: details,
+    },
+    quote_coverage_at_run: {
+      status: "degraded",
+      required: true,
+      reason: details.reason,
+      staleSnapshot: details,
+    },
+    run_quality_at_publish: {
+      status: "degraded",
+      publishable: false,
+      reasons: [details.reason],
+      staleSnapshot: details,
+    },
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    transport: {
+      ...(snapshot?.transport || {}),
+      staleBlockedBy: "api/watchlist-match-index",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
 function hasIndex(payload) {
   return Boolean(payload && payload.byCode && typeof payload.byCode === "object");
 }
@@ -217,6 +292,12 @@ module.exports = async function handler(request, response) {
   try {
     const snapshot = await readSnapshotPayload();
     if (snapshot) {
+      const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+      const staleDetails = staleSnapshotDetails(snapshot, marketCalendar);
+      if (staleDetails.stale) {
+        response.status(503).json(stalePayload(snapshot, staleDetails));
+        return;
+      }
       response.status(200).json(snapshot);
       return;
     }

@@ -1931,7 +1931,7 @@
       return;
     }
     if (pathname === "/api/watchlist-match-index") {
-      strategy5WatchlistMatchIndexPayload = payload;
+      strategy5WatchlistMatchIndexPayload = strategy5WatchlistIndexIsUsable(payload) ? payload : null;
     }
   }
 
@@ -6989,7 +6989,38 @@
     return map;
   }
 
+  function strategy5WatchlistIndexDateKey(payload) {
+    const candidates = [
+      payload?.staleSnapshot?.snapshotDate,
+      payload?.source_snapshot_captured_at,
+      payload?.updatedAt,
+      payload?.transport?.updatedAt,
+      payload?.transport?.snapshotId,
+      payload?.runId,
+    ].map((value) => String(value || "").replace(/\D/g, "").slice(0, 8)).filter((value) => value.length === 8);
+    return candidates.sort().at(-1) || "";
+  }
+
+  function strategy5WatchlistExpectedDateKey(payload) {
+    return String(
+      payload?.staleSnapshot?.expectedDate
+        || payload?.displayTradeDate
+        || payload?.marketCalendar?.displayTradeDate
+        || ""
+    ).replace(/\D/g, "").slice(0, 8);
+  }
+
+  function strategy5WatchlistIndexIsUsable(payload) {
+    if (!payload || payload.ok === false || payload.staleSnapshot) return false;
+    const byCode = payload.byCode;
+    if (!byCode || typeof byCode !== "object") return false;
+    const snapshotDate = strategy5WatchlistIndexDateKey(payload);
+    const expectedDate = strategy5WatchlistExpectedDateKey(payload);
+    if (expectedDate && snapshotDate && snapshotDate < expectedDate) return false;
+    return true;
+  }
   function strategy5WatchlistEntriesByCode() {
+    if (!strategy5WatchlistIndexIsUsable(strategy5WatchlistMatchIndexPayload)) return null;
     const byCode = strategy5WatchlistMatchIndexPayload?.byCode;
     return byCode && typeof byCode === "object" ? byCode : null;
   }
@@ -6997,14 +7028,13 @@
   function fetchStrategy5WatchlistMatchIndexIfNeeded() {
     if (strategy5WatchlistEntriesByCode() || strategy5WatchlistMatchIndexPromise) return;
     strategy5WatchlistMatchIndexPromise = fetch("/api/watchlist-match-index?compact=1&shell=1&limit=320", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
+      .then((response) => response.json().catch(() => null))
       .then((payload) => {
-        if (payload?.byCode && typeof payload.byCode === "object") {
-          strategy5WatchlistMatchIndexPayload = payload;
-          if (isStrategy5Route(canvasState.route)) {
-            canvasPreRenderedRoutes.delete(canvasState.route);
-            scheduleCanvasDraw();
-          }
+        const usable = strategy5WatchlistIndexIsUsable(payload);
+        strategy5WatchlistMatchIndexPayload = usable ? payload : null;
+        if (isStrategy5Route(canvasState.route)) {
+          canvasPreRenderedRoutes.delete(canvasState.route);
+          scheduleCanvasDraw();
         }
       })
       .catch(() => undefined)
