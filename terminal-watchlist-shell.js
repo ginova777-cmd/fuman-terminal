@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260712-quote-source-01";
+  const VERSION = "watchlist-rich-shell-20260712-quote-source-02";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -69,8 +69,9 @@
       if (!code || seen.has(code)) continue;
       seen.add(code);
       const meta = findMetaSync(code);
+      const { close, change, percent, prevClose, tradeVolume, quoteSource, ...safeRaw } = raw && typeof raw === "object" ? raw : {};
       output.push({
-        ...raw,
+        ...safeRaw,
         code,
         name: String(raw?.name || raw?.Name || raw?.stockName || meta?.name || code).trim(),
         market: normalizeMarket(raw?.market || raw?.Market || meta?.market || "台股"),
@@ -119,14 +120,21 @@
   function normalizeMeta(row) {
     const code = normalizeCode(row?.code || row?.Code || row?.symbol || row?.Symbol || row?.stock_id || row?.stockNo);
     if (!code) return null;
+    const close = number(row?.close ?? row?.Close ?? row?.ClosingPrice ?? row?.price ?? row?.lastPrice ?? row?.z);
+    const change = number(row?.change ?? row?.Change ?? row?.change_price ?? row?.spread);
+    const prevClose = number(row?.prevClose ?? row?.previousClose ?? row?.referencePrice ?? row?.ReferencePrice);
+    const percent = number(row?.percent ?? row?.Percent ?? row?.pct ?? row?.changePercent ?? row?.漲跌幅)
+      || (close && prevClose ? ((close - prevClose) / prevClose) * 100 : 0);
     return {
       code,
       name: String(row?.name || row?.Name || row?.stockName || row?.stock_name || row?.["證券名稱"] || row?.["名稱"] || code).trim(),
       market: normalizeMarket(row?.market || row?.Market || row?.exchange || row?.type || row?.["市場"] || row?.["上市櫃"]),
-      close: number(row?.close ?? row?.Close ?? row?.price ?? row?.z),
-      change: number(row?.change ?? row?.Change),
-      percent: number(row?.percent ?? row?.pct ?? row?.changePercent ?? row?.漲跌幅),
-      tradeVolume: number(row?.tradeVolume ?? row?.volume ?? row?.total_volume),
+      close,
+      change,
+      prevClose,
+      percent,
+      tradeVolume: number(row?.tradeVolume ?? row?.TradeVolume ?? row?.volume ?? row?.total_volume),
+      quoteDate: row?.quoteDate || row?.tradeDate || row?.TradeDate || row?.Date || "",
     };
   }
 
@@ -289,7 +297,9 @@
   }
 
   function mergeQuote(row) {
-    return { ...row, ...(quoteMap.get(row.code) || {}), ...(findMetaSync(row.code) || {}) };
+    const meta = findMetaSync(row.code) || {};
+    const quote = quoteMap.get(row.code) || {};
+    return { ...row, ...meta, ...quote };
   }
 
   function metaChanged(row, meta) {
