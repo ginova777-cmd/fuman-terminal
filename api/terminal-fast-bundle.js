@@ -537,6 +537,43 @@ async function repairStrategy3LatestSnapshot(request, endpoints) {
   });
 }
 
+function isStrategy4Endpoint(endpoint) {
+  return String(endpoint || "").startsWith("/api/strategy4-latest");
+}
+
+function hasStrategy4Endpoint(endpoints = {}) {
+  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
+    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
+    return isStrategy4Endpoint(endpoint) && runId.startsWith("strategy4-");
+  });
+}
+
+async function repairStrategy4LatestSnapshot(request, endpoints) {
+  if (hasStrategy4Endpoint(endpoints)) return;
+  const result = await callJson("/api/strategy4-latest", strategy4Latest, request, {
+    ...compactQuery(70),
+    live: "1",
+    verify: "1",
+    noSnapshot: "1",
+  }, 20000);
+  const replacement = result?.payload;
+  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
+  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
+  if (!replacementRunId.startsWith("strategy4-")) return;
+  if (replacement?.evidenceStatus !== "complete" || replacement?.publishAllowed !== true) return;
+  Object.keys(endpoints || {}).forEach((endpoint) => {
+    if (isStrategy4Endpoint(endpoint)) delete endpoints[endpoint];
+  });
+  endpoints["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+    ...replacement,
+    transport: {
+      ...(replacement.transport || {}),
+      fastBundleRepair: "strategy4-latest-complete-run",
+      fetchedAt: new Date().toISOString(),
+    },
+  });
+}
+
 function isStrategy2SnapshotEndpoint(endpoint) {
   const value = String(endpoint || "");
   return value.startsWith("/api/latest-strategy?key=strategy2")
