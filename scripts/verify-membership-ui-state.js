@@ -199,7 +199,6 @@ async function runUiProbe(baseUrl) {
         { key: "strategy3", view: "strategy", text: "策略3" },
         { key: "strategy4", view: "strategy", text: "策略4" },
         { key: "strategy5", view: "strategy", text: "策略5" },
-        { key: "realtime-radar", view: "realtime-radar" },
         { key: "institution", view: "chip-trade" },
         { key: "cb", view: "cb-detect" },
         { key: "warrant", view: "warrant-flow" },

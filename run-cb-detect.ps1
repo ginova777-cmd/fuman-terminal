@@ -102,6 +102,6 @@ try {
   Pop-Location
 }
 
-"CB detect API-only: cache sync, afterhours static status, and release/freshness gate are disabled; terminal reads Supabase snapshot/API plus desktop snapshot." >> $log
+"CB detect API-only: scanner success reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
 exit 0

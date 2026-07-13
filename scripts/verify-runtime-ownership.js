@@ -70,8 +70,8 @@ if (!/terminal-core\.js\?v=public-terminal-fast-\d{8}-\d{2}&runtime=desktop-fast
 }
 
 const realtimeNavCount = (indexHtml.match(/data-view=["']realtime-radar["']/g) || []).length;
-if (realtimeNavCount !== 1) {
-  issues.push(`index.html must contain exactly one realtime-radar nav entry; found ${realtimeNavCount}`);
+if (realtimeNavCount !== 0) {
+  issues.push(`index.html must not contain retired realtime-radar nav entries; found ${realtimeNavCount}`);
 }
 
 assertNoRegex("terminal-hotfix.js", /__fumanDesktopFastShell\s*[!=]==?\s*["']20\d{6}[^"']*["']/g, "version-pinned fast shell ownership checks");

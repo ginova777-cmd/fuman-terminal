@@ -1762,7 +1762,7 @@ for (const marker of ["strategy2CoverageGateHealthy", "coverageGateHealthy", "�
 if (/pause\|hold\|history\|b\[-_ \]\?only\|暫停\|歷史\|市場來源可用率/.test(desktopFastShell)) {
   issues.push("terminal-desktop-fast-shell.js must not pause Strategy2 rows merely because text contains 市場來源可用率");
 }
-for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "script-idle", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "market-prime-inflight", "primeDesktopFastBundle(false, \"script\")", "paintMarketSnapshotFirstPayload", "primeDesktopFastBundle(false, \"market-snapshot-first\")"]) {
+for (const marker of ["installStrategy2SnapshotFirstPrime", "primeStrategy2SnapshotFirst", "snapshot-first-prime", "script-idle", "installMarketColdPayloadPrime", "primeMarketColdPayloads", "marketJsonInflight", "primeDesktopFastBundle(false, \"script\")", "paintMarketSnapshotFirstPayload", "primeDesktopFastBundle(false, \"market-snapshot-first\")"]) {
   if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing cold-start snapshot/cache marker ${marker}`);
 }
 for (const marker of ["installStrategy2LivePrime", "primeStrategy2LiveRows", "api-live-prime", "primeStrategy2LiveRows(false, \"script\")"]) {
@@ -1924,21 +1924,11 @@ for (const marker of [
   if (!realtimeRadarFrontendContract.includes(marker)) issues.push(`verify-realtime-radar-frontend-contract.js missing frontend contract marker ${marker}`);
 }
 for (const marker of [
-  "function renderRealtimeRadarDomShell",
-  "data-realtime-radar-dom-shell",
-  "radar-dom-shell",
-  "realtimeRadarDomSide",
-  "realtimeRadarDomSide = \"long\"",
-  "data-radar-dom-side=\"long\"",
-  "data-radar-dom-side=\"short\"",
-  "流水帳逐筆記錄",
-  "limit: 1200",
-  "full: true",
-  "/api/realtime-radar-latest?full=1",
-  "marketJsonCacheKey(\"/api/realtime-radar-latest?full=1\", 1200)",
-  "panel.querySelectorAll(\":scope > .desktop-route-shell.desktop-canvas-app\").forEach((node) => node.remove())",
+  "isDisabledMarketDataPath",
+  "disabledMarketDataPayload",
+  "frontend-disabled-surface",
 ]) {
-  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing realtime radar DOM/full-session marker ${marker}`);
+  if (!desktopFastShell.includes(marker)) issues.push(`terminal-desktop-fast-shell.js missing retired heatmap/realtime disabled marker ${marker}`);
 }
 if (desktopFastShell.includes('data-radar-dom-side="all"') || /全部\s+\$\{escapeHtml\(String\(sessionRows\.length\)\)\}/.test(desktopFastShell)) {
   issues.push("terminal-desktop-fast-shell.js must not render realtime radar all-session tab; only long/short tabs are allowed");
