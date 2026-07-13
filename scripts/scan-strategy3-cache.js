@@ -1931,6 +1931,30 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
+function ordinalRankMap(stocks, key) {
+  const sorted = [...stocks]
+    .filter((stock) => normalizeCode(stock.code) && cleanNumber(stock[key]) > 0)
+    .sort((a, b) => cleanNumber(b[key]) - cleanNumber(a[key]) || normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
+  const ranks = new Map();
+  sorted.forEach((stock, index) => {
+    ranks.set(normalizeCode(stock.code), index + 1);
+  });
+  return ranks;
+}
+
+function strategy3TopRankSignals(changeRank, volumeRank) {
+  const signals = [];
+  const change = cleanNumber(changeRank);
+  const volume = cleanNumber(volumeRank);
+  if (change > 0 && change <= 100) {
+    signals.push({ id: "漲幅前100", reason: `今日漲幅排行榜第${change}名` });
+  }
+  if (volume > 0 && volume <= 100) {
+    signals.push({ id: "成交量前100", reason: `今日成交量排行榜第${volume}名` });
+  }
+  return signals;
+}
+
 function strategy3FieldGate(stock, volumeRatio, volumeLots) {
   const pct = cleanNumber(stock.percent);
   const outsideVolume = cleanNumber(stock.outsideVolume ?? stock.cumulativeAskVolume);
@@ -2022,10 +2046,15 @@ function buildStrategy3MatchDiagnostics(scored, tvAnalyzed = []) {
 
 async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const valueRanks = rankMap(stocks, "value");
-  const volumeRanks = rankMap(stocks, "tradeVolume");
+  const volumeRankScores = rankMap(stocks, "tradeVolume");
+  const changeRanks = ordinalRankMap(stocks, "percent");
+  const volumeRanks = ordinalRankMap(stocks, "tradeVolume");
   const allScored = stocks.map((stock) => {
-    const valueRank = valueRanks.get(stock.code) || 0;
-    const volumeRank = volumeRanks.get(stock.code) || 0;
+    const code = normalizeCode(stock.code);
+    const valueRank = valueRanks.get(code) || valueRanks.get(stock.code) || 0;
+    const volumeRankScore = volumeRankScores.get(code) || volumeRankScores.get(stock.code) || 0;
+    const changeRank = changeRanks.get(code) || 0;
+    const volumeRank = volumeRanks.get(code) || 0;
     const pct = Number(stock.percent) || 0;
     const volumeLots = stock.tradeVolume / 1000;
     const issuedShares = issuedSharesMap.get(stock.code) || 0;
@@ -2057,7 +2086,9 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     return {
       ...stock,
       valueRank,
+      changeRank,
       volumeRank,
+      volumeRankScore,
       volumeLots: Math.round(volumeLots),
       tradeVolumeLots: Math.round(volumeLots),
       turnoverRate: Number(turnoverRate.toFixed(2)),
@@ -2076,7 +2107,10 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       overnightScore,
       overnightState: fixedPass ? "待TV判斷" : "觀察",
       score: overnightScore,
-      matches: [{ id: "overnight_chip", reason: fixedReason }],
+      matches: [
+        ...strategy3TopRankSignals(changeRank, volumeRank),
+        { id: "overnight_chip", reason: fixedReason },
+      ],
     };
   });
   const scored = allScored
