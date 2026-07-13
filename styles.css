@@ -8747,3 +8747,26 @@ body.fuman-light-theme {
   font-size: 12px;
   font-weight: 850;
 }
+
+/* membership-footer-status-readable-20260713 */
+.sidebar-foot .member-state {
+  min-height: 44px;
+  max-width: min(72vw, 260px);
+  padding: 10px 14px;
+  font-size: 17px;
+  font-weight: 950;
+  line-height: 1.12;
+}
+
+.sidebar-foot .member-state::before {
+  width: 10px;
+  height: 10px;
+}
+
+.sidebar-foot .logout {
+  min-height: 42px;
+  padding: 10px 14px;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.12;
+}

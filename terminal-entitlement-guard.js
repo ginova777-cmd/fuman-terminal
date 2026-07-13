@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-07";
+  const VERSION = "membership-entitlement-guard-20260713-08";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -93,8 +93,41 @@
     return model;
   }
 
+  function clearAuthStorage() {
+    try {
+      localStorage.removeItem(AUTH_CACHE_KEY);
+      Object.keys(localStorage || {}).forEach((key) => {
+        if (/^sb-.*-auth-token$/i.test(key)) localStorage.removeItem(key);
+      });
+    } catch {}
+  }
+
+  function openLoginPage() {
+    const authUrl = new URL("/auth.html", location.origin);
+    authUrl.searchParams.set("mode", "login");
+    authUrl.searchParams.set("next", "/?desktop=1");
+    location.href = authUrl.toString();
+  }
+
+  function handleMemberAuthAction(event) {
+    const button = event.target?.closest?.(".sidebar-foot .logout");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const model = syncMemberStatusBadge();
+    if (model.actionMode === "logout") {
+      clearAuthStorage();
+      syncMemberStatusBadge();
+      location.href = "/?desktop=1&membership=logged-out";
+      return;
+    }
+    openLoginPage();
+  }
+
   function installMemberStatusSync() {
     const sync = () => syncMemberStatusBadge();
+    document.addEventListener("click", handleMemberAuthAction, true);
     window.addEventListener("storage", sync);
     window.addEventListener("focus", sync);
     window.addEventListener("pageshow", sync);
@@ -521,6 +554,7 @@
     readAccess,
     membershipStatusModel,
     syncMemberStatusBadge,
+    handleMemberAuthAction,
     isProtectedLink,
     isProtectedView,
     showLocked

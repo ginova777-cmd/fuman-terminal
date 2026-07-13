@@ -229,6 +229,11 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "syncMemberStatusBadge");
   requireIncludes("terminal-member-module.js", 'actionMode === "logout"');
   requireIncludes("styles.css", "membership-footer-status-20260713");
+  requireIncludes("terminal-entitlement-guard.js", "handleMemberAuthAction");
+  requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
+  requireIncludes("index.html", "membership-lock=20260713-08");
+  requireIncludes("index.html", "membership-footer=20260713-02");
+  requireIncludes("styles.css", "membership-footer-status-readable-20260713");
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
   requireIncludes("api/terminal-fast-bundle.js", "verifyRequestEntitlement");
   requireIncludes("api/mobile-boot.js", "PUBLIC_FRAGMENT_TABS");
