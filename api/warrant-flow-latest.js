@@ -236,8 +236,11 @@ function readRequestOptions(request) {
   try {
     const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
     const canvas = url.searchParams.get("canvas") === "1";
+    const displayRead = url.searchParams.get("compact") === "1"
+      || url.searchParams.get("top") === "1";
     const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
     const snapshotFriendly = canvas
+      || displayRead
       || url.searchParams.get("snapshotBuild") === "1"
       || url.searchParams.get("fastBundle") === "1"
       || url.searchParams.get("shell") === "1";
@@ -971,5 +974,6 @@ module.exports._prewater = {
   buildPayload,
   completeRunGateIssues,
   emptySnapshotPayload,
+  readRequestOptions,
   validateDataContract,
 };

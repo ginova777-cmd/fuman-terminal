@@ -355,6 +355,14 @@ function verifyApiFormalPayloads() {
     reason: "snapshot_friendly_empty",
   });
   assertFormalPayload("api.emptySnapshotPayload blocked", empty, { expectBlocked: true });
+
+  const displayOptions = api.readRequestOptions({
+    url: "/api/warrant-flow-latest?top=1&compact=1&limit=120",
+    headers: { host: "localhost" },
+  });
+  if (displayOptions.snapshotFriendly !== true) {
+    throw new Error("api.readRequestOptions display compact/top read must be snapshotFriendly to avoid production 404 before latest run completes");
+  }
 }
 
 function verifyWriterFormalPayloads() {
