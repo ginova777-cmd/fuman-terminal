@@ -19,7 +19,6 @@ const ROUTE_ALIASES = new Map([
   ["cb-detect-latest", "cb"],
   ["warrant-flow", "warrant"],
   ["warrant-flow-latest", "warrant"],
-  ["realtime-radar-latest", "realtime-radar"],
   ["market-overview", "market"],
 ]);
 
@@ -148,18 +147,6 @@ const STRATEGIES = [
     resultStrategy: "warrant_flow",
     allowReceiptDriftWhenDownstreamFresh: true,
     scorecardKeys: ["warrant","權證成績單","權證走向","權證"],
-  },
-  {
-    key: "realtime-radar",
-    label: "即時雷達",
-    policy: "same-day live",
-    endpoint: "/api/realtime-radar-latest",
-    receiptKey: "realtime-radar",
-    requireApiRunId: true,
-    requireWriteBudgetDisclosure: true,
-    allowFormalQuoteViewFallback: true,
-    allowDesktopSnapshotRunIdDrift: true,
-    scorecardKeys: ["realtime-radar","即時雷達成績單","即時雷達"],
   },
   {
     key: "market",
