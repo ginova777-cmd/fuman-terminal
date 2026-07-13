@@ -67,16 +67,33 @@ function readLatestCachedFile(file) {
   return rows[0]?.payload || null;
 }
 
+function strategy2HistoryDirs() {
+  return [
+    path.join(RUNTIME_DIR, "data", "strategy2-intraday-history"),
+    path.join(ROOT, "data", "strategy2-intraday-history"),
+  ];
+}
+
+function strategy2AllHistoryCandidates() {
+  return strategy2HistoryDirs().flatMap((dir) => {
+    try {
+      return fs.readdirSync(dir)
+        .filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))
+        .map((name) => path.join(dir, name));
+    } catch {
+      return [];
+    }
+  });
+}
+
 function runtimeStrategy2HistoryCandidates(marketSession = null) {
   const keys = [
     marketSession?.today,
     marketSession?.marketDataDate,
     taipeiClock().ymd,
   ].map(isoDate).filter(Boolean);
-  return [...new Set(keys)].flatMap((date) => [
-    path.join(RUNTIME_DIR, "data", "strategy2-intraday-history", `${date}.json`),
-    path.join(ROOT, "data", "strategy2-intraday-history", `${date}.json`),
-  ]);
+  const dated = [...new Set(keys)].flatMap((date) => strategy2HistoryDirs().map((dir) => path.join(dir, `${date}.json`)));
+  return [...new Set([...dated, ...strategy2AllHistoryCandidates()])];
 }
 
 function runtimeStrategy2SignalsCandidate(marketSession = null) {
