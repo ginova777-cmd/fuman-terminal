@@ -33,6 +33,29 @@ const AUDIT_SURFACES = [
   ["schedule-registry", "Schedule registry", "Windows Task:Fuman Scorecard Daily Automation 1400"],
   ["deploy-hygiene", "Deploy hygiene", "/api/release-manifest"],
 ];
+function isRetiredScorecardSurfaceName(value) {
+  return /即時雷達|熱力圖|realtime-radar|heatmap/i.test(cleanText(value));
+}
+
+function sanitizeScorecardSourceQuery(sourceQuery = {}) {
+  if (!sourceQuery || typeof sourceQuery !== "object") return sourceQuery;
+  const latestDateCandidates = Array.isArray(sourceQuery.latestDateCandidates)
+    ? sourceQuery.latestDateCandidates.map((candidate) => {
+      const byStrategy = Object.fromEntries(Object.entries(candidate.byStrategy || {})
+        .filter(([strategy]) => !isRetiredScorecardSurfaceName(strategy)));
+      const missingStrategies = Array.isArray(candidate.missingStrategies)
+        ? candidate.missingStrategies.filter((strategy) => !isRetiredScorecardSurfaceName(strategy))
+        : candidate.missingStrategies;
+      return {
+        ...candidate,
+        byStrategy,
+        missingStrategies,
+        strategies: Object.keys(byStrategy).length || candidate.strategies || 0,
+      };
+    })
+    : sourceQuery.latestDateCandidates;
+  return { ...sourceQuery, latestDateCandidates };
+}
 const SCORECARD_REQUIRED_FIELDS = [
   "record_date",
   "strategy",
@@ -1259,7 +1282,7 @@ function blockedSourceReports(sourceReports) {
 }
 
 function selectPayloadDate(payload, requestedDate = "") {
-  const allRecords = Array.isArray(payload?.records) ? payload.records : [];
+  const allRecords = (Array.isArray(payload?.records) ? payload.records : []).filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const dates = historyDates(allRecords);
   const selectedDate = dates.includes(requestedDate) ? requestedDate : (isoDate(payload?.latestDate) || dates[0] || "");
   const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
@@ -1278,6 +1301,7 @@ function selectPayloadDate(payload, requestedDate = "") {
     selectedDate: selectedDate || payload.latestDate || "",
     historyLatestDate: dates[0] || payload.latestDate || "",
     historyDates: dates,
+    sourceQuery: sanitizeScorecardSourceQuery(payload.sourceQuery || {}),
     records,
     sourceReports,
     suppressedRows: suppressedRows.map((row) => ({
