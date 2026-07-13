@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260630-23";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260630-24";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -7,36 +7,36 @@ const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260711-03";
 const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
-  "/styles.css?v=public-terminal-fast-20260630-23",
-  "/terminal-core.js?v=public-terminal-fast-20260630-23&runtime=desktop-fast-shell-core-20260628-03",
-  "/terminal-modules.js?v=public-terminal-fast-20260630-23",
-  "/terminal-sector-map.js?v=public-terminal-fast-20260630-23",
-  "/terminal-strategy-config.js?v=public-terminal-fast-20260630-23",
-  "/terminal-market-config.js?v=public-terminal-fast-20260630-23",
-  "/terminal-ui-config.js?v=public-terminal-fast-20260630-23",
-  "/terminal-runtime-config.js?v=public-terminal-fast-20260630-23",
-  "/terminal-tuning-config.js?v=public-terminal-fast-20260630-23",
-  "/terminal-worker.js?v=public-terminal-fast-20260630-23",
-  "/terminal.js?v=public-terminal-fast-20260630-23",
-  "/terminal-app.js?v=public-terminal-fast-20260630-23",
-  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260630-23",
-  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260630-23",
-  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-23",
+  "/styles.css?v=public-terminal-fast-20260630-24",
+  "/terminal-core.js?v=public-terminal-fast-20260630-24&runtime=desktop-fast-shell-core-20260628-03",
+  "/terminal-modules.js?v=public-terminal-fast-20260630-24",
+  "/terminal-sector-map.js?v=public-terminal-fast-20260630-24",
+  "/terminal-strategy-config.js?v=public-terminal-fast-20260630-24",
+  "/terminal-market-config.js?v=public-terminal-fast-20260630-24",
+  "/terminal-ui-config.js?v=public-terminal-fast-20260630-24",
+  "/terminal-runtime-config.js?v=public-terminal-fast-20260630-24",
+  "/terminal-tuning-config.js?v=public-terminal-fast-20260630-24",
+  "/terminal-worker.js?v=public-terminal-fast-20260630-24",
+  "/terminal.js?v=public-terminal-fast-20260630-24",
+  "/terminal-app.js?v=public-terminal-fast-20260630-24",
+  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260630-24",
+  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260630-24",
+  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-24",
   `/terminal-market-overview-restore.css?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
   `/terminal-market-overview-restore.js?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
-  "/terminal-member-module.js?v=public-terminal-fast-20260630-23",
-  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260630-23",
-  "/terminal-strategy-module.js?v=public-terminal-fast-20260630-23",
+  "/terminal-member-module.js?v=public-terminal-fast-20260630-24",
+  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260630-24",
+  "/terminal-strategy-module.js?v=public-terminal-fast-20260630-24",
   "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260711-03",
   "/terminal-realtime-radar.css?v=radar-ledger-20260630-02",
-  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260630-23",
-  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260630-23",
-  "/terminal-chip-flow.js?v=public-terminal-fast-20260630-23",
-  "/terminal-warrant-flow.js?v=public-terminal-fast-20260630-23",
-  "/terminal-watchlist-module.js?v=public-terminal-fast-20260630-23",
-  "/terminal-intraday-radar.css?v=public-terminal-fast-20260630-23",
-  "/terminal-utility.css?v=public-terminal-fast-20260630-23",
-  "/refresh.html?v=public-terminal-fast-20260630-23",
+  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260630-24",
+  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260630-24",
+  "/terminal-chip-flow.js?v=public-terminal-fast-20260630-24",
+  "/terminal-warrant-flow.js?v=public-terminal-fast-20260630-24",
+  "/terminal-watchlist-module.js?v=public-terminal-fast-20260630-24",
+  "/terminal-intraday-radar.css?v=public-terminal-fast-20260630-24",
+  "/terminal-utility.css?v=public-terminal-fast-20260630-24",
+  "/refresh.html?v=public-terminal-fast-20260630-24",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -232,7 +232,7 @@ async function purgeOldWatchlistAssets() {
   const requests = await cache.keys();
   await Promise.allSettled(requests.map((request) => {
     const url = new URL(request.url);
-    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH) && !url.search.includes("public-terminal-fast-20260630-23")) return cache.delete(request);
+    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH) && !url.search.includes("public-terminal-fast-20260630-24")) return cache.delete(request);
     if (url.pathname === "/terminal-hotfix.js" && !url.search.includes(WATCHLIST_HOTFIX_BRIDGE_EPOCH)) return cache.delete(request);
     return undefined;
   }));
