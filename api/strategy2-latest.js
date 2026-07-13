@@ -39,6 +39,21 @@ function readJsonFile(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
 }
 
+function readStrategy2RuntimeReceiptRunId(date = "") {
+  const candidates = [
+    path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2.json"),
+    path.join(ROOT, "data", "scan-receipts", "strategy2.json"),
+  ];
+  for (const file of candidates) {
+    const payload = readJsonFile(file);
+    const runId = String(payload?.runId || "").trim();
+    if (!/^strategy2-\d{8}-\d+/.test(runId)) continue;
+    const compactRunDate = runId.match(/strategy2-(\d{8})-/)?.[1] || "";
+    const compactTarget = compactDate(date || payload?.date || payload?.finishedAt || payload?.startedAt || "");
+    if (!compactTarget || compactRunDate === compactTarget) return runId;
+  }
+  return "";
+}
 function readLatestCachedFile(file) {
   const rows = cacheCandidates(file)
     .filter((candidate) => fs.existsSync(candidate))
@@ -52,13 +67,33 @@ function readLatestCachedFile(file) {
   return rows[0]?.payload || null;
 }
 
+function strategy2HistoryDirs() {
+  return [
+    path.join(RUNTIME_DIR, "data", "strategy2-intraday-history"),
+    path.join(ROOT, "data", "strategy2-intraday-history"),
+  ];
+}
+
+function strategy2AllHistoryCandidates() {
+  return strategy2HistoryDirs().flatMap((dir) => {
+    try {
+      return fs.readdirSync(dir)
+        .filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))
+        .map((name) => path.join(dir, name));
+    } catch {
+      return [];
+    }
+  });
+}
+
 function runtimeStrategy2HistoryCandidates(marketSession = null) {
   const keys = [
     marketSession?.today,
     marketSession?.marketDataDate,
     taipeiClock().ymd,
   ].map(isoDate).filter(Boolean);
-  return [...new Set(keys)].map((date) => path.join(RUNTIME_DIR, "data", "strategy2-intraday-history", `${date}.json`));
+  const dated = [...new Set(keys)].flatMap((date) => strategy2HistoryDirs().map((dir) => path.join(dir, `${date}.json`)));
+  return [...new Set([...dated, ...strategy2AllHistoryCandidates()])];
 }
 
 function runtimeStrategy2SignalsCandidate(marketSession = null) {
@@ -118,8 +153,11 @@ function readStrategy2RuntimeHistoryPayload(marketSession = null, options = {}) 
   const latest = candidates[0];
   if (!latest) return null;
   const payload = latest.payload;
+  const inferredRunId = payload.runId || payload.latestRunId || payload.transport?.runId || readStrategy2RuntimeReceiptRunId(payload.date || marketSession?.today || marketSession?.marketDataDate || "");
   return compactStrategy2Payload({
     ...payload,
+    runId: inferredRunId,
+    latestRunId: payload.latestRunId || inferredRunId,
     ok: payload.ok !== false,
     cacheSource: "runtime-session-history",
     gate: "strategy2-session-history-0900-1200",
@@ -143,6 +181,7 @@ function readStrategy2RuntimeHistoryPayload(marketSession = null, options = {}) 
     marketSession,
     transport: {
       ...(payload.transport || {}),
+      runId: inferredRunId,
       source: "runtime-session-history",
       file: latest.file,
       localOnly: true,
@@ -1763,15 +1802,98 @@ function buildStrategy2RunPayload(run, { skippedEmptyRunIds = [], sourceTable = 
   return compactStrategy2Payload(fullPayload, options);
 }
 
-async function readStrategy2SnapshotPayload(options = {}) {
+function strategy2DisplayOnlyPreviousGood(payload, reason) {
+  if (!payload || typeof payload !== "object") return null;
+  const fallbackScope = [...new Set([...(Array.isArray(payload.fallbackScope) ? payload.fallbackScope : []), "display-only-previous-good", "supabase-read-failed"])];
+  const fallbackDetails = [
+    ...(Array.isArray(payload.fallbackDetails) ? payload.fallbackDetails : []),
+    { scope: "display-only-previous-good", reason, at: new Date().toISOString() },
+  ];
+  return {
+    ...payload,
+    ok: false,
+    status: "blocked",
+    qualityStatus: "degraded",
+    publishAllowed: false,
+    publishBlocked: true,
+    publishBlockedReason: reason,
+    blockedReason: reason,
+    scanner_block_reason: reason,
+    evidenceStatus: "insufficient",
+    sourceEvidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    unattended: {
+      ...(payload.unattended || {}),
+      status: "NO",
+      canRunUnattended: false,
+      evidenceStatus: "insufficient",
+      reason,
+    },
+    fallbackUsed: true,
+    fallbackAllowed: false,
+    fallbackScope,
+    fallbackDetails,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    mustPreserveLatest: true,
+    latestWriteAttempted: false,
+    latestPointerUpdated: false,
+    emptyResultWritten: false,
+    sourceCoverage: {
+      ...(payload.sourceCoverage || {}),
+      ok: false,
+      ready: false,
+      status: "display_only_previous_good",
+      reason,
+      checkedAt: new Date().toISOString(),
+    },
+    sourceGate: {
+      ...(payload.sourceGate || {}),
+      ok: false,
+      publishAllowed: false,
+      reason,
+      issues: [...new Set([...(Array.isArray(payload.sourceGate?.issues) ? payload.sourceGate.issues : []), "supabase_read_failed_display_only_previous_good"])],
+    },
+    run_quality_at_publish: {
+      ...(payload.run_quality_at_publish || {}),
+      publishAllowed: false,
+      degradedBlocksLatest: true,
+      preservePreviousGood: true,
+      fallbackUsed: true,
+      fallbackAllowed: false,
+      fallbackScope,
+      fallbackDetails,
+      blockedReason: reason,
+      scanner_block_reason: reason,
+      reason,
+    },
+    reason,
+  };
+}
+
+async function readStrategy2DisplayFallbackPayload(marketSession, options = {}, reason = "strategy2_display_only_previous_good") {
+  const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
+  if (runtimeHistoryPayload && hasStrategy2PayloadRows(runtimeHistoryPayload)) {
+    return strategy2DisplayOnlyPreviousGood(runtimeHistoryPayload, reason);
+  }
+  const snapshotPayload = await readStrategy2SnapshotPayload({ ...options, snapshot: true, live: false }, marketSession).catch(() => null);
+  if (snapshotPayload && hasStrategy2PayloadRows(snapshotPayload)) {
+    return strategy2DisplayOnlyPreviousGood(snapshotPayload, reason);
+  }
+  return null;
+}
+async function readStrategy2SnapshotPayload(options = {}, marketSession = null) {
   const snapshot = await readSnapshot(STRATEGY2_SNAPSHOT_KEY, {
     allowLatestFallback: true,
     timeoutMs: Number(process.env.STRATEGY2_SNAPSHOT_READ_TIMEOUT_MS || 5000),
   }).catch(() => null);
   const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
   if (!payload || !hasStrategy2PayloadRows(payload)) return null;
+  const inferredRunId = payload.runId || payload.latestRunId || payload.transport?.runId || readStrategy2RuntimeReceiptRunId(payload.date || marketSession?.today || marketSession?.marketDataDate || "");
   return compactStrategy2Payload({
     ...payload,
+    runId: inferredRunId,
+    latestRunId: payload.latestRunId || inferredRunId,
     ok: payload.ok !== false,
     cacheSource: "supabase:strategy2_latest_snapshot",
     snapshotFirst: true,
@@ -1919,7 +2041,7 @@ async function handler(request, response) {
   try {
     const options = parseRequestOptions(request);
     if (options.snapshot && !options.live) {
-      const snapshotPayload = await readStrategy2SnapshotPayload(options);
+      const snapshotPayload = await readStrategy2SnapshotPayload(options, marketSessionState());
       if (snapshotPayload) {
         setStrategy2SnapshotCache(response);
         response.status(200).json(snapshotPayload);
@@ -2011,8 +2133,19 @@ async function handler(request, response) {
     }
     response.status(404).json(apiOnlyError("strategy2_complete_run_empty"));
   } catch (error) {
+    const options = parseRequestOptions(request);
+    const marketSession = marketSessionState();
+    const reason = `strategy2_api_only_failed_display_only_previous_good:${error?.message || String(error)}`;
+    const fallbackPayload = await readStrategy2DisplayFallbackPayload(marketSession, options, reason);
+    if (fallbackPayload) {
+      setStrategy2LiveShellCache(response, options);
+      response.status(200).json(fallbackPayload);
+      return;
+    }
     response.status(503).json(apiOnlyError("strategy2_api_only_failed", error?.message || String(error)));
   }
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
+

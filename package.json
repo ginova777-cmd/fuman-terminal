@@ -157,6 +157,7 @@
     "strategy2:daytrade-1m-chain": "node --use-system-ca scripts/check-strategy2-daytrade-1m-chain.js",
     "verify:strategy2-live-on": "node --use-system-ca scripts/verify-strategy2-live-on.js",
     "verify:strategy2-e2e-closure": "node --use-system-ca scripts/verify-strategy2-e2e-closure.js",
+    "verify:strategy2-terminal-visible-readback": "node --use-system-ca scripts/verify-strategy2-terminal-visible-readback.js",
     "verify:strategy2-business-fields": "node scripts/verify-strategy2-business-fields.js --business-fields",
     "verify:strategy2-formal-payloads": "node scripts/verify-strategy2-business-fields.js --formal-payloads",
     "verify:strategy2-prewater-strict": "node scripts/verify-strategy2-business-fields.js --strict",

@@ -77,6 +77,91 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function latestStrategy2HistoryPayload() {
+  const dirs = [
+    path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "data", "strategy2-intraday-history"),
+    path.join(process.cwd(), "data", "strategy2-intraday-history"),
+  ];
+  const files = dirs.flatMap((dir) => {
+    try {
+      return fs.readdirSync(dir)
+        .filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))
+        .map((name) => path.join(dir, name));
+    } catch {
+      return [];
+    }
+  });
+  return files
+    .map((file) => {
+      try {
+        const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+        const stat = fs.statSync(file);
+        return { file, payload, mtime: stat.mtimeMs };
+      } catch {
+        return null;
+      }
+    })
+    .filter((item) => item?.payload && Array.isArray(item.payload.records) && item.payload.records.length)
+    .sort((a, b) => String(b.payload.date || "").localeCompare(String(a.payload.date || "")) || b.mtime - a.mtime)[0]?.payload || null;
+}
+
+function readStrategy2ScorecardFallbackResult(reason = "strategy2_scorecard_display_only_previous_good") {
+  const payload = latestStrategy2HistoryPayload();
+  if (!payload) return null;
+  const rows = Array.isArray(payload.records) ? payload.records : [];
+  const runId = cleanText(payload.runId || payload.latestRunId || payload.transport?.runId);
+  const date = cleanText(payload.date || rows[0]?.date);
+  const updatedAt = cleanText(payload.updatedAt || rows[0]?.timestamp || new Date().toISOString());
+  return {
+    statusCode: 200,
+    payload: {
+      ...payload,
+      ok: false,
+      status: "blocked",
+      qualityStatus: "degraded",
+      runId,
+      latestRunId: runId,
+      rows,
+      count: rows.length,
+      resultCount: rows.length,
+      readbackCount: rows.length,
+      date,
+      tradeDate: date,
+      usedDate: date,
+      sourceDate: date,
+      updatedAt,
+      source_snapshot_captured_at: updatedAt,
+      evidenceStatus: "source_quality_fail",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      preservePreviousGood: true,
+      fallbackUsed: true,
+      fallbackAllowed: false,
+      fallbackScope: ["repo-bundled-strategy2-history", "display-only-previous-good", "scorecard-source-timeout"],
+      degradedBlocksLatest: true,
+      latestWriteAttempted: false,
+      latestPointerUpdated: false,
+      blockedReason: reason,
+      scanner_block_reason: reason,
+      reason,
+      run_quality_at_publish: {
+        publishAllowed: false,
+        latestOverwriteAllowed: false,
+        preservePreviousGood: true,
+        fallbackUsed: true,
+        fallbackAllowed: false,
+        degradedBlocksLatest: true,
+        evidenceStatus: "source_quality_fail",
+        unattendedStatus: "NO",
+        blockedReason: reason,
+        scanner_block_reason: reason,
+      },
+      transport: { ...(payload.transport || {}), runId, source: "repo-bundled-strategy2-history", reason },
+    },
+  };
+}
+
 function reportStatusFromBool(ok) {
   return ok ? "complete" : "insufficient";
 }
@@ -423,7 +508,7 @@ function callStrategy1Latest(timeoutMs = 12000) {
   });
 }
 
-function callStrategy2Latest(timeoutMs = 12000) {
+function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_SOURCE_TIMEOUT_MS || 9000)) {
   return new Promise((resolve) => {
     let timer = null;
     try {
@@ -437,7 +522,7 @@ function callStrategy2Latest(timeoutMs = 12000) {
         verify: "1",
         top: "1",
       };
-      timer = setTimeout(() => resolve({
+      timer = setTimeout(() => resolve(readStrategy2ScorecardFallbackResult("strategy2_source_report_timeout_display_only_previous_good") || {
         statusCode: 504,
         payload: { ok: false, error: "strategy2_source_report_timeout" },
       }), timeoutMs);
