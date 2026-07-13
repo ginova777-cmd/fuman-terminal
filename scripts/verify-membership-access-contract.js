@@ -72,7 +72,6 @@ async function verifyProductionProtection() {
     "/api/institution-latest?live=1",
     "/api/cb-detect-latest?live=1",
     "/api/warrant-flow-latest?live=1",
-    "/api/source-reports",
   ];
   const protectedRows = [];
   for (const apiPath of protectedPaths) {
@@ -82,7 +81,7 @@ async function verifyProductionProtection() {
       issues.push(`${apiPath} must reject unauthenticated direct access with 401 membership_required; status=${result.status} error=${result.json?.error || ""}`);
     }
   }
-  const publicPaths = ["/", "/auth.html", "/api/market-ai-live", "/api/scorecard?live=1"];
+  const publicPaths = ["/", "/auth.html", "/api/market-ai-live", "/api/scorecard?live=1", "/api/source-reports"];
   const publicRows = [];
   for (const apiPath of publicPaths) {
     const result = await fetchJson(`${PRODUCTION_URL}${apiPath}`);

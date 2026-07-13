@@ -21,8 +21,6 @@ const protectedApis = {
   "api/institution-latest.js": "institution",
   "api/cb-detect-latest.js": "cb-detect",
   "api/warrant-flow-latest.js": "warrant-flow",
-  "api/scorecard.js": "scorecard",
-  "api/source-reports.js": "source-reports",
 };
 
 requireIncludes("lib/server-entitlement-guard.js", "verifyRequestEntitlement");
@@ -44,7 +42,7 @@ requireIncludes("terminal-entitlement-guard.js", "readAccessToken");
 requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
 requireIncludes("terminal-entitlement-guard.js", "authorization");
 requireIncludes("terminal-entitlement-guard.js", "Bearer ${token}");
-requireIncludes("terminal-entitlement-guard.js", "open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports");
+requireIncludes("terminal-entitlement-guard.js", "open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest");
 requireIncludes("package.json", "\"verify:server-entitlement-guard\": \"node scripts/verify-server-entitlement-guard.js\"");
 
 if (issues.length) {
@@ -55,7 +53,7 @@ if (issues.length) {
 console.log(JSON.stringify({
   ok: true,
   protectedApis: Object.keys(protectedApis),
-  publicSurfaces: ["市場總覽", "AI 判讀", "學習方案"],
+  publicSurfaces: ["市場總覽", "AI 判讀", "學習方案", "/api/scorecard", "/api/source-reports"],
   contract: "server-side-membership-entitlement-v1",
   expectedUnauthedResponse: "401 membership_required",
   expectedInactiveResponse: "403 membership_not_enabled"

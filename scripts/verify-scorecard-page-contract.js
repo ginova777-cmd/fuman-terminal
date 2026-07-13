@@ -19,6 +19,7 @@ function assertRegex(issues, text, regex, label) {
 
 const page = read("88.html");
 const api = read("api/scorecard.js");
+const sourceReportsApi = read("api/source-reports.js");
 const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
@@ -59,6 +60,9 @@ assertRegex(issues, api, /cacheSource[\s\S]*supabase-snapshot/, "scorecard API s
 
 if (api.includes('withEntitlementRequired(handler, "scorecard")')) {
   issues.push("/api/scorecard must remain public for /88; do not wrap it in membership bearer gate");
+}
+if (sourceReportsApi.includes('withEntitlementRequired(handler, "source-reports")')) {
+  issues.push("/api/source-reports must remain public for /88 readiness; do not wrap it in membership bearer gate");
 }
 
 if (/\/data\/scorecard[^"'\s]*\.json/.test(page)) {

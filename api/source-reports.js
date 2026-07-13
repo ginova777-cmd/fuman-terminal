@@ -1,4 +1,3 @@
-const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 "use strict";
 
@@ -83,4 +82,4 @@ async function handler(request, response) {
   });
 };
 
-module.exports = withEntitlementRequired(handler, "source-reports");
+module.exports = handler;
