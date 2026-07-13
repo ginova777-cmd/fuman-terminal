@@ -1759,15 +1759,47 @@
     return hms ? hms[0] : raw || "--";
   }
 
+  function routePayloadHasDrawableRows(payload) {
+    return ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload?.[key]) && payload[key].some((item) => item && typeof item === "object"));
+  }
+
+  function strategy2UndrawableReason(payload = {}) {
+    if (!payload || typeof payload !== "object") return "";
+    if (routePayloadHasDrawableRows(payload)) return "";
+    const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+      ? payload.run_quality_at_publish
+      : {};
+    const joined = [
+      payload.reason,
+      payload.error,
+      payload.detail,
+      payload.qualityStatus,
+      payload.status,
+      payload.publishBlockedReason,
+      payload.selfCheck?.reason,
+      payload.sourceCoverage?.reason,
+      payload.resourceReadiness?.reason,
+      payload.transport?.reason,
+      payload.transport?.error,
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (payload.protected === true || payload.membershipRequired === true || /membership_required|missing_bearer_token|member|unauthorized|forbidden|401|403/.test(joined)) return "membership_required";
+    if (payload.ok === false || payload.publishBlocked === true || payload.transport?.publishBlocked === true) return joined || "blocked";
+    if (quality.publishAllowed === false || quality.latestOverwriteAllowed === false) return joined || "publish_blocked";
+    if (payload.publishAllowed === false || payload.latestOverwriteAllowed === false) return joined || "publish_blocked";
+    if (/not_ready|blocked|insufficient|timeout|stale|empty|no_result|no rows|source/.test(joined)) return joined;
+    return "";
+  }
+
   function isRoutePayloadNotDrawable(payload, route = "") {
     if (!payload || typeof payload !== "object") return false;
     if (isRealtimeRadarRoute(route)) {
-      const hasDrawableRows = ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload[key]) && payload[key].some((item) => item && typeof item === "object"));
-      return !hasDrawableRows && payload.ok === false;
+      return !routePayloadHasDrawableRows(payload) && payload.ok === false;
+    }
+    if (isStrategy2Route(route)) {
+      return Boolean(strategy2UndrawableReason(payload));
     }
     if (route !== "strategy|策略1") return false;
-    const hasDrawableRows = ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload[key]) && payload[key].some((item) => item && typeof item === "object"));
-    if (hasDrawableRows) return false;
+    if (routePayloadHasDrawableRows(payload)) return false;
     const reason = String(payload.reason || payload.error || payload.detail || payload.qualityStatus || "").toLowerCase();
     const decisionReady = payload.decisionReady ?? payload.meta?.decision_ready;
     return decisionReady === false
@@ -1785,6 +1817,9 @@
     if (isRealtimeRadarRoute(route)) {
       title = /stale/i.test(`${reason} ${detail}`) ? "即時功能資料過期" : "即時功能已停用";
       message = "正式水源尚未提供可用的今日盤中資料，已停止沿用舊快照。";
+    } else if (isStrategy2Route(route)) {
+      title = /membership_required|missing_bearer_token|401|403/i.test(`${reason} ${detail}`) ? "等待會員權限資料" : "策略2資料阻擋";
+      message = "策略2 本次讀回未取得可發布 rows；畫面保留上一筆有效資料，不用空 payload 覆蓋。";
     } else if (/futopt/i.test(detail)) {
       title = "等待期權資料";
       message = "期權資料尚未 ready，策略1 決策 gate 暫停出名單。";
@@ -1877,6 +1912,31 @@
 
   function rememberCanvasEmptyPayload(route, source = "api-empty", at = Date.now(), meta = null) {
     if (!route || !meta || typeof meta !== "object") return false;
+    if (isStrategy2Route(route)) {
+      const existingRows = rowsForRoute(route);
+      const shouldPreserve = existingRows.length && (
+        meta.ok === false
+        || meta.publishAllowed !== true
+        || meta.latestOverwriteAllowed === false
+        || String(meta.evidenceStatus || "").toLowerCase() !== "complete"
+        || String(meta.unattendedStatus || "").toUpperCase() !== "YES"
+        || /membership_required|missing_bearer_token|not_ready|blocked|insufficient|empty|stale|timeout|401|403/i.test(String(meta.reason || meta.error || meta.qualityStatus || ""))
+      );
+      if (shouldPreserve) {
+        const nextMeta = { ...(canvasStore.get(route)?.meta || {}), ...meta, preservedOnEmptyPayload: true };
+        canvasStore.set(route, { rows: existingRows, source: "api-empty-preserved", at, meta: nextMeta });
+        canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
+        canvasPreRenderedRoutes.delete(route);
+        if (canvasState.route === route) {
+          canvasState.rows = existingRows;
+          canvasState.source = "api-empty-preserved";
+          canvasState.meta = nextMeta;
+          applyCanvasFilter();
+          updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+        }
+        return true;
+      }
+    }
     canvasStore.set(route, { rows: [], source, at, meta });
     canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
     canvasPreRenderedRoutes.delete(route);
@@ -2070,12 +2130,16 @@
       runId: payload.runId || payload.transport?.runId || "",
       updatedAt: payload.updatedAt || payload.generatedAt || "",
       resultCount,
-      qualityStatus: payload.qualityStatus || "",
+      qualityStatus: payload.qualityStatus || payload.status || "",
       evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || "",
       unattendedStatus: payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "",
       publishAllowed: payload.publishAllowed ?? quality.publishAllowed,
       latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
-      reason: payload.publishBlockedReason || payload.selfCheck?.reason || payload.sourceCoverage?.reason || payload.resourceReadiness?.reason || payload.reason || "",
+      reason: payload.publishBlockedReason || payload.selfCheck?.reason || payload.sourceCoverage?.reason || payload.resourceReadiness?.reason || payload.reason || payload.error || payload.detail || "",
+      error: payload.error || "",
+      httpStatus: payload.httpStatus || payload.statusCode || "",
+      protected: payload.protected === true,
+      membershipRequired: payload.membershipRequired === true,
       publishBlocked: payload.publishBlocked === true || payload.transport?.publishBlocked === true,
       cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
       sourceCoverage: payload.sourceCoverage || null,
@@ -2292,6 +2356,12 @@
           };
           if (isRealtimeRadarRoute(route)) {
             rememberRealtimeRadarHealth(errorPayload);
+            const emptyState = routeEmptyStateFromPayload(errorPayload, route);
+            if (emptyState) canvasEmptyStates.set(route, emptyState);
+            if (canvasState.route === route) canvasState.source = emptyState?.reason || errorPayload.reason || "api-error";
+            return errorPayload;
+          }
+          if (isStrategy2Route(route)) {
             const emptyState = routeEmptyStateFromPayload(errorPayload, route);
             if (emptyState) canvasEmptyStates.set(route, emptyState);
             if (canvasState.route === route) canvasState.source = emptyState?.reason || errorPayload.reason || "api-error";
@@ -11351,3 +11421,6 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     }, true);
   })();
 })();
+
+
+
