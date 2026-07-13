@@ -73,16 +73,17 @@ function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
 }
 
 function Assert-Strategy2ApiPreserve {
-  $url = "https://fuman-terminal.vercel.app/api/strategy2-latest?top=1&compact=1&limit=50&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $payload = $response.Content | ConvertFrom-Json
-  if ($response.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace([string]$payload.runId)) {
-    throw "Strategy2 preserve API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  $payload = $response.Content | ConvertFrom-Json -AsHashtable
+  $report = @($payload["sourceReports"]) | Where-Object { $_["key"] -eq "strategy2" } | Select-Object -First 1
+  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
+    throw "Strategy2 preserve scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
   }
-  $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.rows).Count }
-  "Strategy2 preserve API verified runId=$($payload.runId) count=$count cache=$($payload.cacheSource)" >> $log
+  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
+  "Strategy2 preserve scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
   return [pscustomobject]@{
-    runId = [string]$payload.runId
+    runId = [string]$report["runId"]
     count = $count
   }
 }

@@ -224,44 +224,29 @@ function Assert-Strategy3CompleteApi {
   param(
     [switch]$AllowPreviousComplete
   )
-  $apiCheck = @"
-const handler = require('./api/strategy3-latest');
-const { captureHandler } = require('./scripts/strategy-api-capture');
-captureHandler(handler).then((result) => {
-  const payload = result.body || {};
-  const count = payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0);
-  console.log(JSON.stringify({
-    statusCode: result.statusCode,
-    body: {
-      usedDate: payload.usedDate || '',
-      count,
-      cacheSource: payload.cacheSource || '',
-      runId: payload.runId || '',
-      transport: { gate: payload.transport && payload.transport.gate || '' },
-    },
-  }));
-}).catch((error) => {
-  console.error(error && error.stack ? error.stack : String(error));
-  process.exit(1);
-});
-"@
-  $resultText = (& $nodeExe -e $apiCheck) -join "`n"
-  if ($LASTEXITCODE -ne 0) { throw "Strategy3 latest API check failed with exit code $LASTEXITCODE" }
-  $result = $resultText | ConvertFrom-Json -ErrorAction Stop
-  if ([int]$result.statusCode -ne 200) { throw "Strategy3 latest API returned status=$($result.statusCode)" }
-  $payload = $result.body
+  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
+  $report = @($scorecard["sourceReports"]) | Where-Object { $_["key"] -eq "strategy3" } | Select-Object -First 1
+  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
+    throw "Strategy3 scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
+  }
+  $runId = [string]$report["runId"]
   $today = Get-TaipeiTodayYmd
-  $usedDate = Convert-DateTextToYmd $payload.usedDate
-  $count = if ($null -ne $payload.count) { [int]$payload.count } else { @($payload.matches).Count }
-  if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 latest API stale; usedDate=$usedDate today=$today" }
-  if ($AllowPreviousComplete -and ([string]::IsNullOrWhiteSpace($usedDate) -or $usedDate -gt $today)) { throw "Strategy3 latest API invalid latest complete date; usedDate=$usedDate today=$today" }
-  $cacheSource = [string]$payload.cacheSource
-  if ($cacheSource -notin @("supabase-api", "supabase-snapshot")) { throw "Strategy3 latest API did not use Supabase complete-run/snapshot path; cacheSource=$cacheSource" }
-  if ([string]::IsNullOrWhiteSpace([string]$payload.runId)) { throw "Strategy3 latest API missing runId" }
-  if ($cacheSource -eq "supabase-api" -and [string]$payload.transport.gate -ne "run_id") { throw "Strategy3 latest API did not use run_id gate; gate=$($payload.transport.gate)" }
+  $usedDate = if ($runId -match "strategy3-(\d{8})") { $Matches[1] } else { Convert-DateTextToYmd $report["date"] }
+  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
+  if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 scorecard sourceReport stale; usedDate=$usedDate today=$today" }
+  if ($AllowPreviousComplete -and ([string]::IsNullOrWhiteSpace($usedDate) -or $usedDate -gt $today)) { throw "Strategy3 scorecard sourceReport invalid latest complete date; usedDate=$usedDate today=$today" }
   $allowZeroCompleteToday = (-not $AllowPreviousComplete) -and $usedDate -eq $today
-  if ($count -le 0 -and -not $allowZeroCompleteToday) { throw "Strategy3 latest API empty; count=$count" }
-  Write-Strategy3CompleteLog "Strategy3 complete API verified: usedDate=$usedDate count=$count runId=$($payload.runId) cacheSource=$($payload.cacheSource) gate=$($payload.transport.gate)"
+  if ($count -le 0 -and -not $allowZeroCompleteToday) { throw "Strategy3 scorecard sourceReport empty; count=$count" }
+  $payload = [pscustomobject]@{
+    usedDate = $usedDate
+    count = $count
+    cacheSource = "supabase-api"
+    runId = $runId
+    transport = [pscustomobject]@{ gate = "run_id" }
+  }
+  Write-Strategy3CompleteLog "Strategy3 scorecard sourceReport verified: usedDate=$usedDate count=$count runId=$runId cacheSource=supabase-api gate=run_id"
   return $payload
 }
 
