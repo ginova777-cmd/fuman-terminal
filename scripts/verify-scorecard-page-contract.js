@@ -23,7 +23,7 @@ const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
 assertMarker(issues, page, "/api/scorecard?live=1", "/88 live scorecard API");
-assertMarker(issues, page, "membership-lock=20260713-09", "/88 must load current membership guard");
+assertMarker(issues, page, "membership-lock=20260713-10", "/88 must load current membership guard");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "scorecard-audit-panel", "/88 audit panel");
 assertMarker(issues, page, "rowEvidenceOk", "/88 YES gate");
@@ -34,6 +34,7 @@ assertMarker(issues, page, "sampleMissingRows", "/88 sample missing rows disclos
 assertMarker(issues, page, "Scorecard Health", "/88 final scorecard format");
 assertMarker(issues, page, "Live A source evidence", "/88 live source verdict");
 
+assertMarker(issues, api, "module.exports = handler;", "scorecard API public handler");
 assertMarker(issues, api, "module.exports.__test", "scorecard API runtime test export");
 assertMarker(issues, api, "buildPayloadFromSnapshotPayload", "scorecard API runtime builder");
 assertMarker(issues, api, "validateScorecardPayload", "scorecard API runtime validator");
@@ -55,6 +56,10 @@ assertMarker(issues, api, "issues", "scorecard API top-level issues");
 assertMarker(issues, api, "warnings", "scorecard API top-level warnings");
 assertRegex(issues, api, /qualityStatus[\s\S]*complete/, "scorecard API complete quality path");
 assertRegex(issues, api, /cacheSource[\s\S]*supabase-snapshot/, "scorecard API supabase snapshot path");
+
+if (api.includes('withEntitlementRequired(handler, "scorecard")')) {
+  issues.push("/api/scorecard must remain public for /88; do not wrap it in membership bearer gate");
+}
 
 if (/\/data\/scorecard[^"'\s]*\.json/.test(page)) {
   issues.push("/88 must not reference /data/scorecard*.json");

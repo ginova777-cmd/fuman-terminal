@@ -17,6 +17,10 @@ function requireIncludes(file, marker) {
   if (!read(file).includes(marker)) issues.push(`${file}: missing ${marker}`);
 }
 
+function requireExcludes(file, marker) {
+  if (read(file).includes(marker)) issues.push(`${file}: must not include ${marker}`);
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -68,7 +72,6 @@ async function verifyProductionProtection() {
     "/api/institution-latest?live=1",
     "/api/cb-detect-latest?live=1",
     "/api/warrant-flow-latest?live=1",
-    "/api/scorecard?live=1",
     "/api/source-reports",
   ];
   const protectedRows = [];
@@ -79,7 +82,7 @@ async function verifyProductionProtection() {
       issues.push(`${apiPath} must reject unauthenticated direct access with 401 membership_required; status=${result.status} error=${result.json?.error || ""}`);
     }
   }
-  const publicPaths = ["/", "/auth.html", "/api/market-ai-live"];
+  const publicPaths = ["/", "/auth.html", "/api/market-ai-live", "/api/scorecard?live=1"];
   const publicRows = [];
   for (const apiPath of publicPaths) {
     const result = await fetchJson(`${PRODUCTION_URL}${apiPath}`);
@@ -137,7 +140,7 @@ async function verifyProductionProtection() {
 
   const scorecardPage = await fetchJson(`${PRODUCTION_URL}/88?membership_probe=${Date.now()}`);
   if (scorecardPage.status !== 200) {
-    issues.push(`/88 page shell must remain HTTP 200 so visitors can see the page shell/login gate; status=${scorecardPage.status}`);
+    issues.push(`/88 page shell must remain HTTP 200 so visitors can see the public scorecard shell; status=${scorecardPage.status}`);
   }
 
   return {
@@ -147,7 +150,7 @@ async function verifyProductionProtection() {
       terminalFastBundle: { status: bundle.status, membershipRequired: bundle.json?.membershipRequired === true, leaks: bundleLeaks },
       mobileBoot: { status: mobileBoot.status, membershipRequired: mobileBoot.json?.membershipRequired === true, leaks: mobileBootLeaks },
       mobileStrategy2Fragment: { status: mobileStrategy2.status, locked: mobileStrategy2Text.includes("data-membership-required=\"1\""), loginActions: mobileLoginMisses.length === 0 },
-      scorecardPage88: { status: scorecardPage.status, shellVisible: scorecardPage.status === 200 },
+      scorecardPage88: { status: scorecardPage.status, publicShellVisible: scorecardPage.status === 200 },
     }
   };
 }
@@ -250,17 +253,19 @@ async function main() {
   requireIncludes("styles.css", "membership-footer-status-20260713");
   requireIncludes("terminal-entitlement-guard.js", "handleMemberAuthAction");
   requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
-  requireIncludes("index.html", "membership-lock=20260713-09");
-  requireIncludes("mobile.html", "membership-lock=20260713-09");
-  requireIncludes("88.html", "membership-lock=20260713-09");
+  requireIncludes("index.html", "membership-lock=20260713-10");
+  requireIncludes("mobile.html", "membership-lock=20260713-10");
+  requireIncludes("88.html", "membership-lock=20260713-10");
   requireIncludes("api/mobile-fragment.js", "data-mobile-membership-login=\"1\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-orientation-login=\"portrait-landscape\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"login\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"signup\"");
   requireIncludes("api/mobile-fragment.js", "/auth.html?mode=login");
   requireIncludes("api/mobile-fragment.js", "/auth.html?mode=signup");
-  requireIncludes("terminal-entitlement-guard.js", "data-testid=\"scorecard-locked\"");
-  requireIncludes("terminal-entitlement-guard.js", "/auth.html?next=%2F88");
+  requireIncludes("api/scorecard.js", "module.exports = handler;");
+  requireExcludes("api/scorecard.js", "withEntitlementRequired(handler, \"scorecard\")");
+  requireExcludes("terminal-entitlement-guard.js", "data-testid=\"scorecard-locked\"");
+  requireExcludes("terminal-entitlement-guard.js", "/auth.html?next=%2F88");
   requireIncludes("index.html", "membership-footer=20260713-02");
   requireIncludes("styles.css", "membership-footer-status-readable-20260713");
   requireIncludes("terminal-entitlement-guard.js", "forceActivePanel");

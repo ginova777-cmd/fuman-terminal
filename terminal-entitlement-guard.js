@@ -1,13 +1,13 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-09";
+  const VERSION = "membership-entitlement-guard-20260713-10";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
   const PUBLIC_VIEWS = new Set(["market", "member"]);
   const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"]);
-  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究", "輔滿成績單"];
+  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "CB", "權證走向", "權證"];
 
   function parseJson(value) {
     try {
@@ -88,7 +88,7 @@
     if (authMessage && !isEntitled()) {
       authMessage.textContent = model.status === "pending"
         ? "已登入但尚未開通策略權限；策略內容會先以會員罩顯示。"
-        : "請登入或註冊，開通後即可查看策略1-5、籌碼、CB、權證與成績單。";
+        : "請登入或註冊，開通後即可查看策略1-5、籌碼、CB 與權證。";
     }
     return model;
   }
@@ -144,7 +144,7 @@
   }
 
   function isScorecardUrl(url) {
-    return Boolean(url && /\/88(?:\.html)?$/i.test(url.pathname) && !isLearningPlanUrl(url));
+    return false;
   }
 
   function isProtectedHref(href) {
@@ -174,7 +174,7 @@
 
   function isProtectedApiUrl(url) {
     if (!url || url.origin !== location.origin) return false;
-    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports|terminal-fast-bundle|mobile-boot|mobile-fragment)(?:$|[/?#])/i.test(url.pathname);
+    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|source-reports|terminal-fast-bundle|mobile-boot|mobile-fragment)(?:$|[/?#])/i.test(url.pathname);
   }
 
   function readAccessToken() {
@@ -516,51 +516,7 @@
   }
 
   function installScorecardLock() {
-    const current = new URL(location.href);
-    if (!isScorecardUrl(current) || isEntitled()) return;
-    const originalFetch = window.fetch?.bind(window);
-    if (originalFetch) {
-      window.fetch = function entitlementFetch(input, init) {
-        const raw = typeof input === "string" ? input : input?.url || "";
-        let url = null;
-        try {
-          url = new URL(raw, location.href);
-        } catch {}
-        if (url && /^\/api\/(scorecard|source-reports)/i.test(url.pathname)) {
-          return Promise.resolve(new Response(JSON.stringify({ ok: false, status: 403, reason: "membership_required" }), {
-            status: 403,
-            headers: { "content-type": "application/json; charset=utf-8" }
-          }));
-        }
-        return originalFetch(input, init);
-      };
-    }
-    const renderLock = () => {
-      ensureStyles();
-      document.body.dataset.entitlementScorecardLocked = "true";
-      const main = document.querySelector("main");
-      if (!main) return;
-      main.innerHTML = `
-        <section class="top" data-testid="scorecard-locked">
-          <div>
-            <div class="badge">FUMAN SCORECARD</div>
-            <h1>輔滿成績單</h1>
-            <p>成績單需要登入會員並開通權限。公開區保留市場總覽、AI 判讀與學習方案。</p>
-          </div>
-        </section>
-        <section class="fuman-entitlement-card" style="margin:24px auto;width:min(720px,100%);">
-          <h2>會員權限尚未開通</h2>
-          <p>/88 成績單屬於付費驗收與回測研究內容；未開通前不讀 scorecard API，也不顯示策略成績。</p>
-          <div class="fuman-entitlement-actions">
-            <a class="primary" href="/auth.html?next=%2F88">登入 / 開通權限</a>
-            <a href="/?desktop=1">回市場總覽</a>
-            <span aria-disabled="true" title="學習方案建置中，暫不開放連結">學習方案建置中</span>
-          </div>
-        </section>
-      `;
-    };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderLock, { once: true });
-    else renderLock();
+    // /88 is a public scorecard surface. Membership guard only protects terminal strategy data.
   }
 
   sanitizeSavedRoute();

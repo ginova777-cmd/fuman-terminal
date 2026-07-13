@@ -324,11 +324,11 @@
     {
       "taskName": "\\Fuman API Unattended Scorecard",
       "displayName": "Fuman API Unattended Scorecard",
-      "description": "All-strategy API unattended scorecard from the local production mirror. Runs once after strategy windows to avoid early false criticals.",
-      "time": "21:35",
+      "description": "All-strategy API unattended scorecard from the local production mirror. Runs after afternoon strategy windows so /88 can show same-day public scorecard before evening checks.",
+      "time": "16:10",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "21:35"
+        "16:10"
       ]
     },
     {

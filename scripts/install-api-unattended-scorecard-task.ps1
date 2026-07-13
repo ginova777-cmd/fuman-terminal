@@ -4,7 +4,7 @@ param(
   [string]$ProductionUrl = "https://fuman-terminal.vercel.app",
   [string]$ComputerLabel = $env:COMPUTERNAME,
   [string]$TaskName = "Fuman API Unattended Scorecard",
-  [string[]]$Times = @("21:35"),
+  [string[]]$Times = @("16:10"),
   [switch]$SkipVerifiers,
   [switch]$NoFail
 )

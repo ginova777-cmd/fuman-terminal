@@ -243,15 +243,15 @@ if (fumanScheduleRegistry) {
   if (!apiUnattendedScorecardTask) {
     issues.push("scripts/fuman-schedule-registry.json must include Fuman API Unattended Scorecard");
   } else {
-    if (apiUnattendedScorecardTask.time !== "21:35") {
-      issues.push(`scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard time must be 21:35; current=${apiUnattendedScorecardTask.time || "(missing)"}`);
+    if (apiUnattendedScorecardTask.time !== "16:10") {
+      issues.push(`scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard time must be 16:10; current=${apiUnattendedScorecardTask.time || "(missing)"}`);
     }
     const triggers = Array.isArray(apiUnattendedScorecardTask.expectedTriggers) ? apiUnattendedScorecardTask.expectedTriggers : [];
-    if (triggers.length !== 1 || triggers[0] !== "21:35") {
-      issues.push("scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard expectedTriggers must be exactly 21:35");
+    if (triggers.length !== 1 || triggers[0] !== "16:10") {
+      issues.push("scripts/fuman-schedule-registry.json Fuman API Unattended Scorecard expectedTriggers must be exactly 16:10");
     }
   }
-  for (const retiredApiScorecardTime of ["08:35", "09:10", "09:35", "12:05", "20:35"]) {
+  for (const retiredApiScorecardTime of ["08:35", "09:10", "09:35", "12:05", "20:35", "21:35"]) {
     if (tasks.some((task) => task?.taskName === "\\Fuman API Unattended Scorecard"
       && (String(task?.time || "").includes(retiredApiScorecardTime) || (Array.isArray(task?.expectedTriggers) && task.expectedTriggers.includes(retiredApiScorecardTime))))) {
       issues.push(`scripts/fuman-schedule-registry.json must not schedule Fuman API Unattended Scorecard at retired time ${retiredApiScorecardTime}`);
@@ -3015,14 +3015,14 @@ for (const marker of [
 for (const marker of [
   "Fuman API Unattended Scorecard",
   "run-api-unattended-scorecard.ps1",
-  "21:35",
+  "16:10",
   "Register-ScheduledTask",
 ]) {
   if (!apiUnattendedInstaller.includes(marker)) {
     issues.push(`install-api-unattended-scorecard-task.ps1 missing schedule installer marker ${marker}`);
   }
 }
-for (const retiredEarlyTime of ["08:35", "09:10", "09:35", "12:05", "20:35"]) {
+for (const retiredEarlyTime of ["08:35", "09:10", "09:35", "12:05", "20:35", "21:35"]) {
   if (apiUnattendedInstaller.includes(retiredEarlyTime)) {
     issues.push(`install-api-unattended-scorecard-task.ps1 must not install early all-strategy scorecard time ${retiredEarlyTime}`);
   }
