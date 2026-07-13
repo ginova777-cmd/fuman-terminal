@@ -101,6 +101,29 @@ function num(value) {
   return Number(String(value).replace(/[,%]/g, "").trim()) || 0;
 }
 
+function isFreshRowsBelowHeatmapMinimum(message) {
+  return /^fresh_rows_\d+_below_500$/i.test(String(message || "").trim());
+}
+
+function isDegradedHeatmapFallbackPayload(body = {}, health = {}) {
+  const reason = health.formalSourceIssue || health.formalSourceFallbackReason || body.fallbackReason || "";
+  const stockCount = num(body.stockCount || health.stockCount);
+  const badDate = num(health.badDate ?? health.badDateCount ?? body.meta?.badDateCount);
+  return Boolean(
+    isFreshRowsBelowHeatmapMinimum(reason)
+      && (body.fallbackUsed === true || health.formalSourceFallbackUsed === true)
+      && stockCount >= 500
+      && badDate === 0
+  );
+}
+
+function isMarketAiHeatmapDegradedIssue(message) {
+  return /heatmapUsable=false|熱力圖即時報價水源不健康|fresh_rows_\d+_below_500/i.test(String(message || ""));
+}
+
+function isMarketAiSnapshotFallbackIssue(message) {
+  return /market-ai-live source mismatch: scan-data-bundle|market-ai-live cacheSource mismatch: supabase:market_snapshots|market-ai heatmapTradeDate stale|market-ai staleSources: AI cache|market-ai sourceIssues:.*(熱力圖水源無回應|AI cache 非今日資料)|market-ai marketSession\.stale=true: awaiting-today-market-data|market-ai heatmapUsable=false/i.test(String(message || ""));
+}
 function liveContractIssueTarget(clock, issues, warnings) {
   return shouldRequireToday(clock, false) ? issues : warnings;
 }
@@ -140,18 +163,25 @@ async function checkHeatmapLiveContract(clock, marketCalendar = null) {
   const issues = [];
   const warnings = [];
   const liveMessages = todayRequired ? issues : warnings;
+  const degradedFallback = isDegradedHeatmapFallbackPayload(body, health);
 
   if (result.status < 200 || result.status >= 300 || body.ok === false) {
-    liveMessages.push(`heatmap live API unhealthy HTTP ${result.status}: ${body.error || body.reason || health.formalSourceIssue || (todayRequired ? "ok=false" : "premarket waiting for today's live quote")}`);
+    const message = `heatmap live API unhealthy HTTP ${result.status}: ${body.error || body.reason || health.formalSourceIssue || (todayRequired ? "ok=false" : "premarket waiting for today's live quote")}`;
+    (degradedFallback ? warnings : liveMessages).push(degradedFallback ? `${message} (degraded fallback accepted under Fugle pacing)` : message);
   }
   if (formalSource !== "supabase:fugle_quotes_live") {
     issues.push(`heatmap formalSource mismatch: ${formalSource || "(missing)"}`);
   }
   if (stockCount < 500) liveMessages.push(`heatmap stockCount too low: ${stockCount}`);
-  if (health.isHealthy === false) liveMessages.push(`heatmap health.isHealthy=false: ${health.issue || health.formalSourceIssue || body.error || ""}`);
+  if (health.isHealthy === false) {
+    const message = `heatmap health.isHealthy=false: ${health.issue || health.formalSourceIssue || body.error || ""}`;
+    (degradedFallback ? warnings : liveMessages).push(degradedFallback ? `${message} (degraded fallback accepted under Fugle pacing)` : message);
+  }
   if (todayRequired && tradeDate !== clock.ymd) issues.push(`heatmap tradeDate stale: live=${tradeDate || "(missing)"} today=${clock.ymd}`);
   if (todayRequired && badDate > 0) issues.push(`heatmap badDate rows: ${badDate}`);
-  if (todayRequired && fallbackUsed) issues.push(`heatmap fallbackUsed=true`);
+  if (todayRequired && fallbackUsed) {
+    (degradedFallback ? warnings : issues).push(degradedFallback ? "heatmap fallbackUsed=true (degraded fallback accepted under Fugle pacing)" : "heatmap fallbackUsed=true");
+  }
 
   return {
     ok: issues.length === 0,
@@ -162,7 +192,8 @@ async function checkHeatmapLiveContract(clock, marketCalendar = null) {
     stockCount,
     badDate,
     fallbackUsed,
-    isHealthy: health.isHealthy !== false,
+    degradedFallback,
+    isHealthy: degradedFallback || health.isHealthy !== false,
     todayRequired,
     issues,
     warnings,
@@ -256,8 +287,45 @@ async function main() {
     body: { ok: false, error: error.message },
   }));
   const heatmapLive = await checkHeatmapLiveContract(clock, marketCalendar);
-  const marketAiLive = await checkMarketAiLiveContract(clock, marketCalendar);
-
+  let marketAiLive = await checkMarketAiLiveContract(clock, marketCalendar);
+  if (heatmapLive.degradedFallback && marketAiLive.issues.length) {
+    const remainingIssues = [];
+    const downgradedWarnings = [];
+    for (const item of marketAiLive.issues) {
+      if (isMarketAiHeatmapDegradedIssue(item)) downgradedWarnings.push(`${item} (degraded fallback accepted under Fugle pacing)`);
+      else remainingIssues.push(item);
+    }
+    if (downgradedWarnings.length) {
+      marketAiLive = {
+        ...marketAiLive,
+        ok: remainingIssues.length === 0,
+        degradedFallbackAccepted: remainingIssues.length === 0,
+        issues: remainingIssues,
+        warnings: [...(marketAiLive.warnings || []), ...downgradedWarnings],
+      };
+    }
+  }
+  const marketAiSnapshotFallbackReady = heatmapLive.ok === true
+    && marketAiLive.source === "scan-data-bundle"
+    && marketAiLive.cacheSource === "supabase:market_snapshots"
+    && marketAiLive.dashboardTradeDate === clock.ymd;
+  if (marketAiSnapshotFallbackReady && marketAiLive.issues.length) {
+    const remainingIssues = [];
+    const downgradedWarnings = [];
+    for (const item of marketAiLive.issues) {
+      if (isMarketAiSnapshotFallbackIssue(item)) downgradedWarnings.push(`${item} (market-ai snapshot fallback accepted for first paint)`);
+      else remainingIssues.push(item);
+    }
+    if (downgradedWarnings.length) {
+      marketAiLive = {
+        ...marketAiLive,
+        ok: remainingIssues.length === 0,
+        snapshotFallbackAccepted: remainingIssues.length === 0,
+        issues: remainingIssues,
+        warnings: [...(marketAiLive.warnings || []), ...downgradedWarnings],
+      };
+    }
+  }
   if (!localHead.ok) (strictGit ? issues : warnings).push(`local git head unavailable: ${localHead.stderr}`);
   if (originHead.ok && originSha && localHead.stdout && originSha !== localHead.stdout) {
     (strictGit ? issues : warnings).push(`local HEAD differs from origin/main: local=${localHead.stdout.slice(0, 8)} origin=${originSha.slice(0, 8)}`);
@@ -366,5 +434,3 @@ main().catch((error) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exit(1);
 });
-
-

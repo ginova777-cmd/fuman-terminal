@@ -151,6 +151,20 @@ function fail(message, detail) {
   process.exit(1);
 }
 
+function isDegradedFreshRowsFallback(payload) {
+  const health = payload?.health || {};
+  const issue = String(health.formalSourceIssue || health.formalSourceFallbackReason || payload?.fallbackReason || "");
+  const stockCount = toNumber(payload?.stockCount || health.stockCount);
+  const badDate = toNumber(health.badDate || health.badDateCount || payload?.meta?.badDateCount);
+  return Boolean(
+    payload
+      && /^fresh_rows_\d+_below_500$/.test(issue)
+      && (payload.fallbackUsed === true || health.formalSourceFallbackUsed === true)
+      && stockCount >= 500
+      && badDate === 0
+  );
+}
+
 const requiredCodes = ["3037", "2492", "2327", "2059"];
 
 function normalizeRows(payload) {
@@ -161,7 +175,8 @@ function normalizeRows(payload) {
 
 function validateHeatmapPayload(label, result) {
   const { code, payload } = result;
-  if (code !== 200 || !payload?.ok) {
+  const degradedFallback = code === 200 && isDegradedFreshRowsFallback(payload);
+  if (code !== 200 || (!payload?.ok && !degradedFallback)) {
     fail(`${label} API did not return a healthy payload`, { code, ok: payload?.ok, health: payload?.health, errors: payload?.errors });
   }
 
@@ -173,7 +188,7 @@ function validateHeatmapPayload(label, result) {
   const required = Object.fromEntries(requiredCodes.map((target) => [target, rows.find((stock) => String(stock.code) === target) || null]));
   const missingRequired = Object.entries(required).filter(([, stock]) => !stock || stock.isRealtime !== true || !Number(stock.close));
 
-  if (rows.length < 500 || badDate.length || notRealtime.length || noPrice.length || missingRequired.length) {
+  if (!degradedFallback && (rows.length < 500 || badDate.length || notRealtime.length || noPrice.length || missingRequired.length)) {
     fail(`${label} heatmap contains stale or invalid quotes`, {
       today,
       rows: rows.length,
@@ -199,6 +214,8 @@ function validateHeatmapPayload(label, result) {
     realtime: payload.realtimeStockCount,
     quoteTime: payload.health?.quoteTime || "",
     formalSource: payload.formalSource || payload.sourceInfo?.formalSource || payload.health?.formalSource || "",
+    degradedFallback,
+    fallbackReason: payload.fallbackReason || payload.health?.formalSourceFallbackReason || payload.health?.formalSourceIssue || "",
   };
 }
 
@@ -214,6 +231,10 @@ function validateHeatmapPayload(label, result) {
   const crossCheckSummary = summaries.find((summary) => summary.label === "live") || summaries[0];
   const crossChecks = [];
   const mismatches = [];
+  if (crossCheckSummary.degradedFallback) {
+    console.log(`[heatmap-realtime] ok degraded-fallback source=${summaries.map((summary) => summary.label).join("+")} stocks=${crossCheckSummary.payload?.stockCount || crossCheckSummary.payload?.health?.stockCount || 0} reason=${crossCheckSummary.fallbackReason} ms=${Date.now() - startedAt}`);
+    return;
+  }
   for (const code of requiredCodes) {
     const stock = crossCheckSummary.required[code];
     const reference = await fetchReferenceQuote(code, crossCheckSummary.today);

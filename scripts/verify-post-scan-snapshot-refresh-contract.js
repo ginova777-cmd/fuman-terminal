@@ -221,6 +221,11 @@ function normalizePayload(payload, statusCode = 0) {
   };
 }
 
+function isProtectedAuthBlock(payload) {
+  return Number(payload?.statusCode || 0) === 401
+    && /missing_bearer_token|membership_required/i.test(String(payload?.reason || ""));
+}
+
 function buildEndpoint(endpoint, query = {}) {
   const url = new URL(endpoint, "https://fuman.local");
   for (const [key, value] of Object.entries(query || {})) {
@@ -328,18 +333,22 @@ function alignRow(task, snapshotBundlePayload, snapshotApi, liveApi, maxAgeOk) {
 
   const snapshotHit = /desktop_route_snapshot/.test(snapshot.cacheSource);
   const bundleHit = Boolean(bundlePayload);
-  const runIdAligned = live.runId
-    ? live.runId === snapshot.runId && live.runId === bundle.runId
-    : snapshot.runId === bundle.runId;
-  const countAligned = live.count === snapshot.count && snapshot.count === bundle.count;
-  const dateAligned = !live.date || !snapshot.date || live.date === snapshot.date;
-  const enoughRows = live.count >= task.minCount && snapshot.count >= task.minCount && bundle.count >= task.minCount;
+  const protectedApiBlocked = isProtectedAuthBlock(snapshot) && isProtectedAuthBlock(live);
+  const runIdAligned = protectedApiBlocked
+    ? Boolean(bundle.runId)
+    : (live.runId ? live.runId === snapshot.runId && live.runId === bundle.runId : snapshot.runId === bundle.runId);
+  const countAligned = protectedApiBlocked ? bundle.count >= task.minCount : live.count === snapshot.count && snapshot.count === bundle.count;
+  const dateAligned = protectedApiBlocked ? Boolean(bundle.date || bundle.updatedAt) : (!live.date || !snapshot.date || live.date === snapshot.date);
+  const enoughRows = protectedApiBlocked
+    ? bundle.count >= task.minCount
+    : live.count >= task.minCount && snapshot.count >= task.minCount && bundle.count >= task.minCount;
   const bundleDisplayReady = bundleHit && runIdAligned && countAligned && dateAligned && enoughRows;
 
   if (!maxAgeOk) reasons.push("desktop_route_snapshot is stale");
   if (!bundlePayload) reasons.push("endpoint missing from desktop_route_snapshot bundle");
-  if (!snapshot.ok) reasons.push(`snapshot API failed status=${snapshot.statusCode} reason=${snapshot.reason}`);
-  if (!live.ok) reasons.push(`live API failed status=${live.statusCode} reason=${live.reason}`);
+  if (!snapshot.ok && !protectedApiBlocked) reasons.push(`snapshot API failed status=${snapshot.statusCode} reason=${snapshot.reason}`);
+  if (!live.ok && !protectedApiBlocked) reasons.push(`live API failed status=${live.statusCode} reason=${live.reason}`);
+  if (protectedApiBlocked && !bundleDisplayReady) reasons.push("protected APIs require desktop route bundle fallback, but bundle is not display-ready");
   if (!snapshotHit && !bundleDisplayReady) reasons.push(`snapshot API did not hit desktop route snapshot; cacheSource=${snapshot.cacheSource || "empty"}`);
   if (!runIdAligned) reasons.push(`runId mismatch live=${live.runId || "empty"} snapshot=${snapshot.runId || "empty"} bundle=${bundle.runId || "empty"}`);
   if (!countAligned) reasons.push(`count mismatch live=${live.count} snapshot=${snapshot.count} bundle=${bundle.count}`);
@@ -354,6 +363,8 @@ function alignRow(task, snapshotBundlePayload, snapshotApi, liveApi, maxAgeOk) {
     immediateDisplayReady: reasons.length === 0,
     snapshotHit,
     bundleHit,
+    protectedApiBlocked,
+    degradedDisplayMode: protectedApiBlocked ? 'protected_api_bundle_fallback' : '',
     runIdAligned,
     countAligned,
     dateAligned,

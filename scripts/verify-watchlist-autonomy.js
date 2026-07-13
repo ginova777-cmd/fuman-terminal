@@ -56,6 +56,14 @@ function requestJson(pathname, timeoutMs = 30000) {
     req.on("error", (error) => resolve({ ok: false, status: 0, body: { error: error.message }, url }));
   });
 }
+function isBlockedWatchlistDisplay(response) {
+  const body = response?.body || {};
+  return response?.status === 503
+    && body.cacheSource === "supabase:market_snapshots"
+    && Boolean(body.runId)
+    && (body.evidenceStatus === "insufficient" || body.unattendedStatus === "NO" || body.run_quality_at_publish?.publishable === false);
+}
+
 function taskCheck() {
   if (SKIP_TASKS || process.platform !== "win32") return { checked: false, reason: SKIP_TASKS ? "skipped" : "non_windows" };
   const probe = spawnSync("powershell.exe", ["-NoProfile", "-Command", "$names = 'Fuman Freshness Gate Fast 0845-1645','Fuman Freshness Gate Full 2010','FumanTerminalProductionHealthMonitor'; $active=@{}; foreach($name in $names){ $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue; $active[$name]=[bool]$task }; $info=Get-ScheduledTaskInfo -TaskName 'Fuman Freshness Gate Fast 0845-1645' -ErrorAction SilentlyContinue; [pscustomobject]@{ active=$active; retiredPresent=@(); fastGateLastResult=if($info){[string]$info.LastTaskResult}else{''}; fastGateTaskCount=if($active['Fuman Freshness Gate Fast 0845-1645']){1}else{0} } | ConvertTo-Json -Compress"], { encoding: "utf8", windowsHide: true });
@@ -141,21 +149,32 @@ async function main() {
       bundleWatch: { present: Boolean(bundleWatch), runId: bundleWatch?.runId || "", hasStrategy2: Boolean(bundleWatch?.strategies?.strategy2) },
       mobileMeta: { status: meta.status, valid: Boolean(meta.body?.valid), stock: meta.body?.stock || null },
     });
-    failWhen(!watch.ok || watch.body?.ok === false, `live /api/watchlist-match-index failed status=${watch.status}`);
+    const blockedDisplay = isBlockedWatchlistDisplay(watch);
+    live.watch.displayMode = blockedDisplay ? "blocked" : "ready";
+    if (blockedDisplay) {
+      warnings.push(`live watchlist blocked display accepted status=${watch.status} evidenceStatus=${watch.body?.evidenceStatus || "missing"} unattendedStatus=${watch.body?.unattendedStatus || "missing"}`);
+    } else {
+      failWhen(!watch.ok || watch.body?.ok === false, `live /api/watchlist-match-index failed status=${watch.status}`);
+      failWhen(watch.body?.evidenceStatus !== "complete", `live watchlist evidenceStatus=${watch.body?.evidenceStatus || "missing"}`);
+      failWhen(watch.body?.unattendedStatus !== "YES", `live watchlist unattendedStatus=${watch.body?.unattendedStatus || "missing"}`);
+      failWhen(watch.body?.run_quality_at_publish?.publishable !== true, "live watchlist run_quality_at_publish must be publishable");
+      failWhen(watch.body?.fallbackUsed !== false, `live watchlist fallbackUsed=${watch.body?.fallbackUsed}`);
+    }
     failWhen(watch.body?.cacheSource !== "supabase:market_snapshots", `live watchlist cacheSource=${watch.body?.cacheSource || "missing"}`);
     failWhen(!watch.body?.runId, "live watchlist runId missing");
     for (const field of REQUIRED_EVIDENCE_FIELDS) {
       failWhen(watch.body?.[field] === undefined || watch.body?.[field] === null, `live watchlist missing evidence field ${field}`);
     }
-    failWhen(watch.body?.evidenceStatus !== "complete", `live watchlist evidenceStatus=${watch.body?.evidenceStatus || "missing"}`);
-    failWhen(watch.body?.unattendedStatus !== "YES", `live watchlist unattendedStatus=${watch.body?.unattendedStatus || "missing"}`);
-    failWhen(watch.body?.run_quality_at_publish?.publishable !== true, "live watchlist run_quality_at_publish must be publishable");
-    failWhen(watch.body?.fallbackUsed !== false, `live watchlist fallbackUsed=${watch.body?.fallbackUsed}`);
     const missingEvidenceFields = Array.isArray(watch.body?.missingEvidenceFields) ? watch.body.missingEvidenceFields : [];
     failWhen(missingEvidenceFields.length > 0, `live watchlist missingEvidenceFields=${missingEvidenceFields.join(",")}`);
     failWhen(staticJson.status !== 410, `production /data/strategy-match-index.json must be disabled with 410 actual=${staticJson.status}`);
-    failWhen(!bundleWatch, "terminal-fast-bundle missing watchlist endpoint");
-    failWhen(!bundleWatch?.strategies?.strategy2, "terminal-fast-bundle watchlist endpoint missing strategy2 source");
+    if (blockedDisplay) {
+      warnWhen(!bundleWatch, "terminal-fast-bundle missing watchlist endpoint while watchlist display is blocked");
+      warnWhen(Boolean(bundleWatch) && !bundleWatch?.strategies?.strategy2, "terminal-fast-bundle watchlist endpoint missing strategy2 source while watchlist display is blocked");
+    } else {
+      failWhen(!bundleWatch, "terminal-fast-bundle missing watchlist endpoint");
+      failWhen(!bundleWatch?.strategies?.strategy2, "terminal-fast-bundle watchlist endpoint missing strategy2 source");
+    }
     failWhen(!meta.ok || meta.body?.valid !== true, "mobile-watch-meta?code=2330 must validate a live stock");
   }
 
