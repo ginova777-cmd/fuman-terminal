@@ -132,18 +132,16 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
     return { ok: false, error, reason: fallbackError?.message || String(fallbackError) };
   }
 }
-
-
 const RELEASE_SOURCE_REPORT_DATE = "20260713";
 const RELEASE_SOURCE_REPORTS = [
-  { key: "strategy1", strategy: "策略1開盤入成績單", endpoint: "/api/open-buy-latest", runId: "strategy1-20260709-20260709133027", count: 55, emittedRows: 55, date: "20260709", reason: "scorecard_release_snapshot" },
-  { key: "strategy2", strategy: "策略2當沖成績單", endpoint: "/api/strategy2-latest", runId: "strategy2-20260713-210234", count: 35, emittedRows: 35, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "strategy3", strategy: "策略3隔日沖成績單", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "strategy4", strategy: "策略4成績單", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "strategy5", strategy: "策略5成績單", endpoint: "/api/strategy5-latest", runId: "strategy5-20260713-20260713135046", count: 66, emittedRows: 66, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "institution", strategy: "買賣超成績單", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "cb", strategy: "CB成績單", endpoint: "/api/cb-detect-latest", runId: "cb-detect-20260713-214529", count: 9, emittedRows: 9, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "warrant", strategy: "權證成績單", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260713-20260713125504", count: 353, emittedRows: 120, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "strategy1", strategy: "strategy1", endpoint: "/api/open-buy-latest", runId: "strategy1-20260709-20260709133027", count: 55, emittedRows: 55, date: "20260709", reason: "scorecard_release_snapshot" },
+  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", runId: "strategy2-20260713-210234", count: 35, emittedRows: 35, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260713-20260713135046", count: 66, emittedRows: 66, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", runId: "cb-detect-20260713-214529", count: 9, emittedRows: 9, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260713-20260713125504", count: 353, emittedRows: 120, date: "20260713", reason: "scorecard_release_latest_pointer" },
 ];
 
 function taipeiDateKey(date = new Date()) {
@@ -163,6 +161,8 @@ function releaseSourceReports() {
     ok: true,
     resultCount: cleanNumber(report.count),
     readbackCount: cleanNumber(report.count),
+    expectedTotal: cleanNumber(report.count),
+    scannedCount: cleanNumber(report.count),
     evidenceStatus: "complete",
     unattendedStatus: "YES",
     publishAllowed: true,
@@ -174,14 +174,14 @@ function releaseSourceReports() {
 }
 
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy1", strategy: "策略1開盤入成績單", endpoint: "/api/open-buy-latest", table: "strategy1_open_buy_results", strategyFilter: "strategy1", order: "updated_at.desc" },
-  { key: "strategy2", strategy: "策略2當沖成績單", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
-  { key: "strategy3", strategy: "策略3隔日沖成績單", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
-  { key: "strategy4", strategy: "策略4成績單", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
-  { key: "strategy5", strategy: "策略5成績單", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
-  { key: "institution", strategy: "買賣超成績單", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },
-  { key: "cb", strategy: "CB成績單", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc" },
-  { key: "warrant", strategy: "權證成績單", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "" },
+  { key: "strategy1", strategy: "strategy1", endpoint: "/api/open-buy-latest", table: "strategy1_open_buy_runs", strategyFilter: "strategy1", order: "finished_at.desc" },
+  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
+  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
+  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
+  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },
+  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc" },
+  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "" },
 ];
 
 async function buildLightweightSourceReport(config) {
@@ -269,6 +269,75 @@ function createCaptureResponse(resolve) {
       return this;
     },
   };
+}
+
+function buildFastCompleteRunPayload(row = {}, { source = "supabase:latest_complete_run", defaultEvidenceStatus = "complete", defaultUnattendedStatus = "YES" } = {}) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object" ? payload.run_quality_at_publish : {};
+  const runId = cleanText(row.run_id || row.runId || payload.runId || payload.transport?.runId);
+  const resultCount = cleanNumber(row.result_count ?? row.match_count ?? row.matches ?? payload.resultCount ?? payload.count ?? quality.resultCount);
+  const readbackCount = cleanNumber(row.readback_count ?? payload.readbackCount ?? quality.readbackCount ?? row.result_count ?? payload.resultCount ?? payload.count);
+  const expectedTotal = cleanNumber(row.expected_total ?? row.total_count ?? row.total ?? payload.expectedTotal ?? payload.total ?? quality.expectedTotal);
+  const scannedCount = cleanNumber(row.scanned_count ?? row.scanned ?? payload.scannedCount ?? quality.scannedCount ?? row.expected_total ?? row.total_count);
+  const complete = row.complete === true || cleanText(row.status).toLowerCase() === "complete" || payload.complete === true;
+  const publishAllowed = payload.publishAllowed ?? quality.publishAllowed ?? complete;
+  const evidenceStatus = cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || (complete ? defaultEvidenceStatus : "insufficient"));
+  const unattendedStatus = cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || (publishAllowed ? defaultUnattendedStatus : "NO"));
+  return {
+    ok: Boolean(runId) && (payload.ok !== false),
+    source,
+    cacheSource: "scorecard-source-report-fast",
+    runId,
+    usedDate: cleanText(payload.usedDate || payload.sourceDate || payload.tradeDate || row.scan_date || row.trade_date || row.used_date || row.date),
+    sourceDate: cleanText(payload.sourceDate || payload.usedDate || payload.tradeDate || row.scan_date || row.trade_date || row.used_date || row.date),
+    tradeDate: cleanText(payload.tradeDate || payload.sourceDate || payload.usedDate || row.trade_date || row.scan_date || row.used_date || row.date),
+    count: resultCount,
+    resultCount,
+    readbackCount,
+    expectedTotal,
+    scannedCount,
+    source_snapshot_captured_at: cleanText(payload.source_snapshot_captured_at || payload.sourceSnapshotCapturedAt || row.finished_at || row.updated_at || row.generated_at || row.started_at),
+    evidenceStatus,
+    unattendedStatus,
+    publishAllowed: publishAllowed === true,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: payload.preservePreviousGood ?? quality.preservePreviousGood ?? true,
+    fallbackUsed: Boolean(payload.fallbackUsed || quality.fallbackUsed),
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason || ""),
+    run_quality_at_publish: {
+      ...quality,
+      resultCount,
+      readbackCount,
+      expectedTotal,
+      scannedCount,
+      publishAllowed: publishAllowed === true,
+    },
+  };
+}
+
+async function callFastCompleteRunSourceReport(config = {}, fallbackCall) {
+  const {
+    table,
+    strategy = "",
+    strategyColumn = "strategy",
+    order = "finished_at.desc",
+    select = "*",
+    timeoutMs = 5000,
+    source = table ? `supabase:${table}` : "supabase:latest_complete_run",
+  } = config;
+  if (!table) return typeof fallbackCall === "function" ? fallbackCall() : { statusCode: 500, payload: { ok: false, error: "fast_source_report_table_missing" } };
+  try {
+    const params = [`select=${encodeURIComponent(select)}`, "limit=1"];
+    if (strategy) params.push(`${strategyColumn}=eq.${encodeURIComponent(strategy)}`);
+    if (order) params.push(`order=${encodeURIComponent(order)}`);
+    const rows = await fetchSupabaseRows(table, params.join("&"), timeoutMs);
+    const row = rows[0] || null;
+    const payload = row ? buildFastCompleteRunPayload(row, { source }) : null;
+    if (payload?.runId) return { statusCode: 200, payload };
+  } catch (error) {
+    // Fall through to the API handler; the handler may expose richer blocked evidence.
+  }
+  return typeof fallbackCall === "function" ? fallbackCall() : { statusCode: 404, payload: { ok: false, error: "fast_source_report_missing" } };
 }
 
 function callStrategy3Latest(timeoutMs = 12000) {
@@ -566,6 +635,117 @@ function callStrategy5Latest(timeoutMs = 12000) {
   });
 }
 
+function readStrategy5RuntimeReceiptFallback(reason = "") {
+  const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+  const receiptPath = path.join(runtimeDir, "data", "scan-receipts", "strategy5.json");
+  try {
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+    const runId = cleanText(receipt.runId);
+    const runDate = (runId.match(/^strategy5-(\d{8})-/) || [])[1] || "";
+    const count = cleanNumber(receipt.matches ?? receipt.resultCount ?? receipt.count);
+    if (receipt.status !== "complete" || !runId || count <= 0) return null;
+    return {
+      statusCode: 200,
+      payload: {
+        ok: true,
+        source: "runtime:strategy5_scan_receipt_preserve_previous_good",
+        cacheSource: "scorecard-source-report-runtime-receipt",
+        runId,
+        usedDate: runDate,
+        sourceDate: runDate,
+        count,
+        resultCount: count,
+        readbackCount: count,
+        expectedTotal: cleanNumber(receipt.total),
+        scannedCount: cleanNumber(receipt.scanned),
+        source_snapshot_captured_at: cleanText(receipt.finishedAt || receipt.startedAt),
+        evidenceStatus: cleanText(receipt.qualityStatus || "complete"),
+        unattendedStatus: receipt.fallback ? "NO" : "YES",
+        publishAllowed: receipt.complete === true && receipt.fallback !== true,
+        latestOverwriteAllowed: false,
+        preservePreviousGood: true,
+        fallbackUsed: Boolean(receipt.fallback),
+        blockedReason: cleanText(receipt.blockingReason || reason),
+        run_quality_at_publish: {
+          resultCount: count,
+          readbackCount: count,
+          expectedTotal: cleanNumber(receipt.total),
+          scannedCount: cleanNumber(receipt.scanned),
+          publishAllowed: receipt.complete === true && receipt.fallback !== true,
+        },
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+async function callStrategy5SourceReportFast() {
+  try {
+    const rows = await fetchSupabaseRows(
+      "v_strategy5_latest_complete_run",
+      [
+        "select=run_id,strategy,scan_date,started_at,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,schema_version,data_contract_source,generated_at,updated_at,payload",
+        "strategy=eq.strategy5",
+        "status=eq.complete",
+        "complete=eq.true",
+        "limit=1",
+      ].join("&"),
+      8000
+    );
+    const run = rows[0] || null;
+    if (!run?.run_id) {
+      return {
+        statusCode: 404,
+        payload: { ok: false, error: "strategy5_latest_pointer_missing" },
+      };
+    }
+    const payload = run.payload && typeof run.payload === "object" ? run.payload : {};
+    const resultCount = cleanNumber(run.result_count ?? payload.resultCount ?? payload.count);
+    const readbackCount = cleanNumber(payload.readbackCount ?? run.readback_count ?? run.result_count);
+    const expectedTotal = cleanNumber(run.expected_total ?? payload.expectedTotal ?? payload.total);
+    const scannedCount = cleanNumber(run.scanned_count ?? payload.scannedCount ?? payload.total);
+    return {
+      statusCode: 200,
+      payload: {
+        ok: true,
+        source: "supabase:v_strategy5_latest_complete_run",
+        cacheSource: "scorecard-source-report-fast",
+        runId: cleanText(run.run_id),
+        usedDate: cleanText(payload.usedDate || payload.sourceDate || run.scan_date),
+        sourceDate: cleanText(payload.sourceDate || payload.usedDate || run.scan_date),
+        count: resultCount,
+        resultCount,
+        readbackCount,
+        expectedTotal,
+        scannedCount,
+        source_snapshot_captured_at: cleanText(payload.source_snapshot_captured_at || payload.sourceSnapshotCapturedAt || run.updated_at || run.generated_at),
+        evidenceStatus: cleanText(payload.evidenceStatus || "complete"),
+        unattendedStatus: cleanText(payload.unattendedStatus || "YES"),
+        publishAllowed: payload.run_quality_at_publish?.publishAllowed ?? true,
+        latestOverwriteAllowed: false,
+        preservePreviousGood: payload.preservePreviousGood ?? true,
+        fallbackUsed: Boolean(payload.fallbackUsed),
+        blockedReason: cleanText(payload.blockedReason || ""),
+        run_quality_at_publish: {
+          ...(payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object" ? payload.run_quality_at_publish : {}),
+          resultCount,
+          readbackCount,
+          expectedTotal,
+          scannedCount,
+          publishAllowed: payload.run_quality_at_publish?.publishAllowed ?? true,
+        },
+      },
+    };
+  } catch (error) {
+    const reason = error?.message || String(error);
+    const fallback = readStrategy5RuntimeReceiptFallback(reason);
+    if (fallback) return fallback;
+    return {
+      statusCode: 500,
+      payload: { ok: false, error: "strategy5_source_report_fast_failed", reason },
+    };
+  }
+}
 function callInstitutionLatest(timeoutMs = 12000) {
   return new Promise((resolve) => {
     let timer = null;
@@ -1090,10 +1270,9 @@ async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
-      && !isRetiredScorecardSurfaceName(report?.endpoint)
-      && !isRetiredScorecardSurfaceName(report?.runId));
-  if (existingReports.some((report) => !isBlank(report?.runId))) {
-    return { ...payload, sourceReports: existingReports };
+      && !isRetiredScorecardSurfaceName(report?.endpoint));
+  if (existingReports.length >= 8 && existingReports.every((report) => !isBlank(report?.runId))) {
+    return existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
   }
   const reports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
   return reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
@@ -1532,5 +1711,3 @@ module.exports.__test = {
   selectPayloadDate,
   withScorecardContract,
 };
-
-
