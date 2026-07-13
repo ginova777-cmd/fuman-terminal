@@ -121,7 +121,7 @@
   let marketApiOnlySignature = "";
   let marketApiOnlyLoading = false;
   let marketDesktopAiLoading = false;
-  let marketDesktopMode = "overview";
+  let marketDesktopMode = "ai";
   let marketSnapshotFirstPayload = null;
   let marketAiBundlePayload = null;
   let marketRadarBundlePayload = null;
@@ -5120,10 +5120,11 @@
       tabs = document.createElement("section");
       tabs.className = "market-mode-tabs";
       tabs.dataset.fumanMarketTabs = "1";
-      tabs.setAttribute("aria-label", "市場總覽切換");
+      tabs.setAttribute("aria-label", "市場 AI 總覽");
+      tabs.hidden = true;
+      tabs.style.display = "none";
       tabs.innerHTML = [
-        '<button type="button" class="active" data-market-mode="overview">◉ 市場總覽</button>',
-        '<button type="button" data-market-mode="ai">♙ AI 判讀</button>',
+        '<button type="button" class="active" data-market-mode="ai">市場 AI 總覽</button>',
       ].join("");
       const header = market.querySelector(".page-header");
       header?.insertAdjacentElement("afterend", tabs);
@@ -5139,6 +5140,8 @@
     }
     ai.id = ai.id || "market-ai-panel";
     ai.dataset.marketApiAi = ai.dataset.marketApiAi || "1";
+    marketDesktopMode = "ai";
+    document.documentElement.dataset.fumanMarketDesktopMode = "ai";
     installMarketDesktopModeHandlers(tabs);
     market.classList.toggle("market-overview-mode", marketDesktopMode !== "ai");
     market.classList.toggle("market-ai-mode", marketDesktopMode === "ai");
@@ -5147,19 +5150,20 @@
     });
     ai.hidden = marketDesktopMode !== "ai";
     const title = market.querySelector(".page-header h1");
-    if (title) title.textContent = marketDesktopMode === "ai" ? "AI 判讀" : "市場總覽";
+    if (title) title.textContent = "市場 AI 總覽";
     return { market, tabs, ai };
   }
 
   function applyMarketDesktopMode(mode) {
-    marketDesktopMode = mode === "ai" ? "ai" : "overview";
+    marketDesktopMode = "ai";
+    document.documentElement.dataset.fumanMarketDesktopMode = "ai";
     ensureMarketDesktopShell();
   }
 
   function syncMarketAiDesktopModeIfVisible() {
     const market = document.querySelector("#market-view");
     const ai = market?.querySelector?.("[data-market-api-ai], #market-ai-panel");
-    if (document.documentElement.dataset.fumanMarketDesktopMode && document.documentElement.dataset.fumanMarketDesktopMode !== "ai") return;
+    document.documentElement.dataset.fumanMarketDesktopMode = "ai";
     const shouldSync = marketDesktopMode === "ai"
       || document.documentElement.dataset.fumanMarketDesktopMode === "ai"
       || (ai && ai.hidden === false && market?.classList.contains("market-ai-mode"));
@@ -5172,7 +5176,7 @@
     });
     if (ai) ai.hidden = false;
     const title = market.querySelector(".page-header h1");
-    if (title) title.textContent = "AI 判讀";
+    if (title) title.textContent = "市場 AI 總覽";
     document.documentElement.dataset.fumanMarketDesktopMode = "ai";
   }
 
@@ -5230,7 +5234,7 @@
   }
 
   function selectMarketDesktopMode(mode, source = "market-mode") {
-    const nextMode = mode === "ai" ? "ai" : "overview";
+    const nextMode = "ai";
     document.documentElement.dataset.fumanMarketDesktopMode = nextMode;
     document.documentElement.dataset.fumanMarketDesktopModeSource = source;
     if (nextMode !== "ai") {
@@ -5909,7 +5913,28 @@
       : /空方|偏空|short|空/i.test(String(biasTitle))
         ? "market-ai-bearish"
         : "market-ai-neutral";
-    const heroMetricsHtml = `
+    const marketIndexSources = aiPayload?.dashboard?.dataSources || aiPayload?.dataSources || aiPayload?.market?.dataSources || {};
+    const marketIndexFallbacks = aiPayload?.market?.indexes || aiPayload?.indexes || {};
+    const pickMarketIndex = (...keys) => keys.map((key) => marketIndexSources?.[key] || marketIndexFallbacks?.[key]).find(Boolean) || null;
+    const formatMarketIndexPrice = (value) => {
+      const raw = String(value ?? "").replace(/,/g, "").trim();
+      if (!raw) return "--";
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed.toLocaleString("zh-TW", { maximumFractionDigits: 2 }) : escapeHtml(String(value));
+    };
+    const formatMarketIndexPct = (value) => {
+      const raw = String(value ?? "").trim();
+      const parsed = raw ? Number(raw) : NaN;
+      return Number.isFinite(parsed) ? `${parsed >= 0 ? "+" : ""}${parsed.toFixed(2)}%` : "--";
+    };
+    const indexChipHtml = (label, item) => {
+      if (!item || typeof item !== "object") return `<span class="market-ai-index-chip muted"><small>${escapeHtml(label)}</small><b>--</b><em class="flat">--</em></span>`;
+      const pctRaw = item.pct ?? item.percent ?? item.changePercent ?? item.changePct ?? item.change;
+      const pctParsed = Number(String(pctRaw ?? "").trim());
+      const pctClass = Number.isFinite(pctParsed) ? (pctParsed >= 0 ? "up" : "down") : "flat";
+      return `<span class="market-ai-index-chip"><small>${escapeHtml(label)}</small><b>${formatMarketIndexPrice(item.price ?? item.close ?? item.value ?? item.index)}</b><em class="${pctClass}">${escapeHtml(formatMarketIndexPct(pctRaw))}</em></span>`;
+    };
+    const heroIndexHtml = `<div class="market-ai-hero-indexes">${indexChipHtml("加權指數", pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX"))}</div>`;    const heroMetricsHtml = `
       <div class="market-ai-hero-metrics">
         <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
         <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
@@ -5991,7 +6016,7 @@
         <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
-            <strong>${escapeHtml(biasTitle)}</strong>
+            <div class="market-ai-hero-title-row"><strong>${escapeHtml(biasTitle)}</strong>${heroIndexHtml}</div>
             <p>${up >= down ? "多方候選與強勢延續標的較多，仍需確認族群擴散與量價延續。" : "下跌家數偏多，盤面先以風險控管為主；強勢股需確認族群延續，不追高雜訊。"}</p>
           </div>
           ${heroMetricsHtml}
@@ -10554,7 +10579,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12) !important;
         }
         #market-view .market-mode-tabs {
-          display: inline-flex !important;
+          display: none !important;
           align-items: center !important;
           gap: 8px !important;
           margin: 10px 0 18px !important;
