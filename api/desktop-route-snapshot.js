@@ -130,6 +130,15 @@ module.exports = async function handler(request, response) {
     || request.query?.force === "1";
 
   if (!wantsRefresh) {
+    const releaseSnapshot = releaseReadbackSnapshot();
+    if (releaseSnapshot) {
+      if (request.method === "HEAD") {
+        response.status(200).end("");
+        return;
+      }
+      response.status(200).json(releaseSnapshot);
+      return;
+    }
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 8000 });
     if (snapshot?.payload) {
       if (request.method === "HEAD") {

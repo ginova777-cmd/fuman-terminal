@@ -1480,6 +1480,9 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
 }
 
 async function buildPayload(requestedDate = "") {
+  if (releaseSourceReports().some((report) => !isBlank(report?.runId))) {
+    return selectPayloadDate(await withLiveSourceReports(readStaticSnapshot("scorecard_release_static_snapshot")), requestedDate);
+  }
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 8000 }).catch(() => null);
   if (snapshot?.payload && typeof snapshot.payload === "object") {
     const payload = await withLiveSourceReports(withScorecardContract({
