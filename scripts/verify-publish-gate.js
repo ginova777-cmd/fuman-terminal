@@ -90,6 +90,13 @@ const membershipE2ELayeringGuard = spawnSync(process.execPath, [path.join(ROOT, 
 if (membershipE2ELayeringGuard.status !== 0) {
   issues.push(`verify-membership-e2e-layering failed: ${(membershipE2ELayeringGuard.stderr || membershipE2ELayeringGuard.stdout || "").trim()}`);
 }
+const membershipUiStateGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-membership-ui-state.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (membershipUiStateGuard.status !== 0) {
+  issues.push(`verify-membership-ui-state failed: ${(membershipUiStateGuard.stderr || membershipUiStateGuard.stdout || "").trim()}`);
+}
 
 const fugleSourceContractGuard = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "verify-fugle-source-contract.js"), "--static-only"], {
   cwd: ROOT,

@@ -274,6 +274,7 @@
     "verify:strategy5-volume-turnover": "node --use-system-ca scripts/verify-strategy5-volume-turnover.js",
     "verify:strategy5-protected-e2e-closure": "node --use-system-ca scripts/verify-strategy5-protected-e2e-closure.js",
     "verify:membership-e2e-layering": "node scripts/verify-membership-e2e-layering.js",
+    "verify:membership-ui-state": "node scripts/verify-membership-ui-state.js",
     "verify:strategy5-independence": "node --use-system-ca scripts/verify-strategy5-independence.js",
     "verify:strategy5-branch-flow": "node --use-system-ca scripts/verify-strategy5-branch-flow-coverage.js",
     "verify:strategy4-88-data-chain": "node --use-system-ca scripts/verify-strategy4-88-data-chain.js"

@@ -209,8 +209,13 @@
   function sanitizeSavedRoute() {
     if (isEntitled()) return;
     const saved = localStorage.getItem(LAST_ROUTE_KEY) || "";
-    if (/^(strategy|chip-trade|cb-detect|warrant-flow|realtime-radar)\|/.test(saved)) {
-      localStorage.setItem(LAST_ROUTE_KEY, "market|市場總覽");
+    let locked = /^(strategy|chip-trade|cb-detect|warrant-flow|realtime-radar)\|/.test(saved);
+    if (!locked) {
+      const route = parseJson(saved);
+      locked = isProtectedView(String(route?.viewName || route?.view || ""));
+    }
+    if (locked) {
+      localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ viewName: "market", strategyRoute: "", at: Date.now() }));
     }
   }
 

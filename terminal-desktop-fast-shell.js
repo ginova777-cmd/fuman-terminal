@@ -610,11 +610,14 @@
   }
 
   function installActiveRouteGuard() {
+    const previousRouteState = window.FUMAN_DESKTOP_ROUTE_STATE || {};
+    const previousShouldBlockView = previousRouteState.shouldBlockView;
     window.FUMAN_DESKTOP_ROUTE_STATE = {
       version: "20260623-09",
       active: () => window.__fumanDesktopActiveRoute || null,
       isCurrent: (key, seq) => isRouteCurrent(key, seq),
       shouldBlockView(viewName, activeLink = null) {
+        if (typeof previousShouldBlockView === "function" && previousShouldBlockView.call(previousRouteState, viewName, activeLink)) return true;
         const active = window.__fumanDesktopActiveRoute;
         if (!active || Date.now() - Number(active.at || 0) > 2600) return false;
         if (viewName && active.view && viewName !== active.view) return true;
