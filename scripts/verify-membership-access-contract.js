@@ -120,8 +120,19 @@ async function verifyProductionProtection() {
   }
 
   const mobileStrategy2 = await fetchJson(`${PRODUCTION_URL}/api/mobile-fragment?tab=strategy2&membership_probe=${Date.now()}`);
-  if (mobileStrategy2.status !== 401 || !String(mobileStrategy2.text || "").includes("data-membership-required=\"1\"")) {
-    issues.push(`mobile-fragment strategy2 unauthenticated must return locked fragment HTTP 401; status=${mobileStrategy2.status}`);
+  const mobileStrategy2Text = String(mobileStrategy2.text || "");
+  const mobileLoginMarkers = [
+    "data-membership-required=\"1\"",
+    "data-mobile-membership-login=\"1\"",
+    "data-mobile-orientation-login=\"portrait-landscape\"",
+    "/auth.html?mode=login",
+    "/auth.html?mode=signup",
+    "data-mobile-login-action=\"login\"",
+    "data-mobile-login-action=\"signup\"",
+  ];
+  const mobileLoginMisses = mobileLoginMarkers.filter((marker) => !mobileStrategy2Text.includes(marker));
+  if (mobileStrategy2.status !== 401 || mobileLoginMisses.length) {
+    issues.push(`mobile-fragment strategy2 unauthenticated must return locked fragment HTTP 401 with mobile portrait/landscape login actions; status=${mobileStrategy2.status} misses=${mobileLoginMisses.join(",")}`);
   }
 
   const scorecardPage = await fetchJson(`${PRODUCTION_URL}/88?membership_probe=${Date.now()}`);
@@ -135,7 +146,7 @@ async function verifyProductionProtection() {
     redactedSurfaces: {
       terminalFastBundle: { status: bundle.status, membershipRequired: bundle.json?.membershipRequired === true, leaks: bundleLeaks },
       mobileBoot: { status: mobileBoot.status, membershipRequired: mobileBoot.json?.membershipRequired === true, leaks: mobileBootLeaks },
-      mobileStrategy2Fragment: { status: mobileStrategy2.status, locked: String(mobileStrategy2.text || "").includes("data-membership-required=\"1\"") },
+      mobileStrategy2Fragment: { status: mobileStrategy2.status, locked: mobileStrategy2Text.includes("data-membership-required=\"1\""), loginActions: mobileLoginMisses.length === 0 },
       scorecardPage88: { status: scorecardPage.status, shellVisible: scorecardPage.status === 200 },
     }
   };
@@ -232,6 +243,16 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "handleMemberAuthAction");
   requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
   requireIncludes("index.html", "membership-lock=20260713-09");
+  requireIncludes("mobile.html", "membership-lock=20260713-09");
+  requireIncludes("88.html", "membership-lock=20260713-09");
+  requireIncludes("api/mobile-fragment.js", "data-mobile-membership-login=\"1\"");
+  requireIncludes("api/mobile-fragment.js", "data-mobile-orientation-login=\"portrait-landscape\"");
+  requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"login\"");
+  requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"signup\"");
+  requireIncludes("api/mobile-fragment.js", "/auth.html?mode=login");
+  requireIncludes("api/mobile-fragment.js", "/auth.html?mode=signup");
+  requireIncludes("terminal-entitlement-guard.js", "data-testid=\"scorecard-locked\"");
+  requireIncludes("terminal-entitlement-guard.js", "/auth.html?next=%2F88");
   requireIncludes("index.html", "membership-footer=20260713-02");
   requireIncludes("styles.css", "membership-footer-status-readable-20260713");
   requireIncludes("terminal-entitlement-guard.js", "forceActivePanel");

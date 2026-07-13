@@ -23,6 +23,7 @@ const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
 assertMarker(issues, page, "/api/scorecard?live=1", "/88 live scorecard API");
+assertMarker(issues, page, "membership-lock=20260713-09", "/88 must load current membership guard");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "scorecard-audit-panel", "/88 audit panel");
 assertMarker(issues, page, "rowEvidenceOk", "/88 YES gate");

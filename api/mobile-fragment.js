@@ -104,13 +104,26 @@ function sendHtml(request, response, statusCode, html, extra = {}) {
 }
 
 function lockedFragment(tab) {
-  return `<section class="mobile-terminal-fragment mobile-terminal-locked" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-membership-required="1">
+  const next = encodeURIComponent(`/api/mobile-page?tab=${tab || "ai"}`);
+  return `<section class="mobile-terminal-fragment mobile-terminal-locked" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-membership-required="1" data-mobile-membership-login="1" data-mobile-orientation-login="portrait-landscape">
+    <style data-mobile-membership-lock-style="20260713-01">
+      .mobile-terminal-locked .mobile-terminal-auth-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
+      .mobile-terminal-locked .mobile-terminal-auth-actions a{display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid var(--line,#223047);border-radius:8px;background:var(--panel,#101623);color:var(--text,#edf3ff);font-size:16px;font-weight:900;text-decoration:none}
+      .mobile-terminal-locked .mobile-terminal-auth-actions a.primary{background:#0f9488;border-color:#0f9488;color:#fff}
+      .mobile-terminal-locked .mobile-terminal-auth-note{margin-top:8px;color:var(--muted,#91a0b8);font-size:13px;line-height:1.6}
+      @media (orientation:landscape) and (max-height:520px){.mobile-terminal-locked .mobile-terminal-auth-actions{grid-template-columns:1fr 1fr}.mobile-terminal-locked .mobile-terminal-auth-actions a{min-height:40px}}
+    </style>
     <article class="mobile-terminal-head">
       <small>會員權限</small>
-      <strong>此分頁需要開通權限</strong>
-      <p>市場總覽、AI 判讀與學習方案可公開瀏覽；策略、籌碼、CB、權證與成績單需登入並開通。</p>
+      <strong>此分頁需要登入開通</strong>
+      <p>手機直向與橫向都會導入同一個會員登入頁；市場總覽、AI 判讀與學習方案可公開瀏覽，策略、籌碼、CB、權證與成績單需登入並開通。</p>
+      <div class="mobile-terminal-auth-actions" data-mobile-membership-actions="1">
+        <a class="primary" data-mobile-login-action="login" href="/auth.html?mode=login&next=${next}">登入</a>
+        <a data-mobile-login-action="signup" href="/auth.html?mode=signup&next=${next}">註冊 / 開通權限</a>
+      </div>
+      <p class="mobile-terminal-auth-note">已註冊帳號請直接登入；若註冊時顯示帳號已存在，系統會導回登入/終端流程。</p>
     </article>
-    <div class="empty-state">請登入已開通帳號。</div>
+    <div class="empty-state" data-mobile-login-empty="1">請登入已開通帳號。</div>
   </section>`;
 }
 
