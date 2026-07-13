@@ -379,8 +379,14 @@ function normalizedStrategySet(values) {
 function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
   const missing = Array.isArray(summary?.missingStrategies) ? summary.missingStrategies : [];
   if (!missing.length) return true;
-  const covered = normalizedStrategySet(peerSummary?.emptyCompleteStrategies);
-  const blocked = normalizedStrategySet(peerSummary?.blockedStrategies);
+  const covered = new Set([
+    ...normalizedStrategySet(summary?.emptyCompleteStrategies),
+    ...normalizedStrategySet(peerSummary?.emptyCompleteStrategies),
+  ]);
+  const blocked = new Set([
+    ...normalizedStrategySet(summary?.blockedStrategies),
+    ...normalizedStrategySet(peerSummary?.blockedStrategies),
+  ]);
   return missing.every((strategy) => {
     const normalized = normalizeStrategyName(strategy);
     return covered.has(normalized) || blocked.has(normalized);
