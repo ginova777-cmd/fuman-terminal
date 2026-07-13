@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260711-03";
+  const VERSION = "membership-entitlement-guard-20260713-01";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -120,7 +120,9 @@
     const style = document.createElement("style");
     style.id = "fuman-entitlement-guard-style";
     style.textContent = `
-      .fuman-entitlement-preview{min-height:calc(100vh - 120px);padding:28px;background:#eef9fb;background-image:linear-gradient(rgba(9,74,85,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(9,74,85,.055) 1px,transparent 1px);background-size:48px 48px;color:#10202a}
+      .view-panel.fuman-entitlement-panel-locked{position:relative;min-height:calc(100vh - 120px)}
+      .view-panel.fuman-entitlement-panel-locked > :not(.fuman-entitlement-preview){filter:blur(2px);opacity:.16;pointer-events:none;user-select:none}
+      .fuman-entitlement-preview{position:relative;z-index:20;min-height:calc(100vh - 120px);padding:28px;background:#eef9fb;background-image:linear-gradient(rgba(9,74,85,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(9,74,85,.055) 1px,transparent 1px);background-size:48px 48px;color:#10202a}
       .fuman-entitlement-hero{display:grid;grid-template-columns:minmax(260px,1.1fr) repeat(3,minmax(180px,.7fr));gap:12px;margin-bottom:22px}
       .fuman-entitlement-panel,.fuman-entitlement-stat,.fuman-entitlement-side,.fuman-entitlement-main,.fuman-entitlement-lock-card{border:1px solid #cfe2eb;border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 10px 30px rgba(42,74,92,.08)}
       .fuman-entitlement-panel{padding:26px 20px}.fuman-entitlement-kicker{display:inline-flex;align-items:center;border:1px solid #f2b99a;border-radius:999px;padding:6px 10px;color:#b84d24;background:#fff7f1;font-weight:800;font-size:12px}.fuman-entitlement-panel h1{margin:12px 0 0;font-size:36px;letter-spacing:0}.fuman-entitlement-stat{padding:16px}.fuman-entitlement-stat span{display:block;color:#475569;font-size:12px;font-weight:800}.fuman-entitlement-stat strong{display:block;margin-top:8px;font-size:23px}.fuman-entitlement-stat small{display:block;margin-top:5px;color:#64748b}
@@ -137,13 +139,17 @@
   }
 
   function openMarket() {
+    clearLockedPreview();
     const marketLink = document.querySelector('[data-view="market"]');
     if (marketLink) marketLink.click();
     else if (location.pathname !== "/") location.href = "/?desktop=1";
   }
 
-  function openMemberCenter() {
-    location.href = `/auth.html?next=${encodeURIComponent(location.pathname + location.search + location.hash || "/?desktop=1")}`;
+  function openMemberCenter(mode = "login") {
+    const authUrl = new URL("/auth.html", location.origin);
+    authUrl.searchParams.set("mode", mode === "signup" ? "signup" : "login");
+    authUrl.searchParams.set("next", location.pathname + location.search + location.hash || "/?desktop=1");
+    location.href = authUrl.toString();
   }
 
   function lockedTitle(viewName, targetLabel) {
@@ -222,8 +228,8 @@
               </div>
               <div class="fuman-entitlement-empty"><span>--</span><strong>今日尚無候選</strong><small>等待策略更新</small></div>
               <div class="fuman-entitlement-actions">
-                <button class="primary" type="button" data-entitlement-action="member">登入已開通帳號</button>
-                <button type="button" data-entitlement-action="member">聯絡開通權限</button>
+                <button class="primary" type="button" data-entitlement-action="signup">註冊 / 開通權限</button>
+                <button type="button" data-entitlement-action="login">登入已開通帳號</button>
                 <button type="button" data-entitlement-action="market">回市場總覽</button>
               </div>
             </article>
@@ -233,21 +239,57 @@
     `;
   }
 
-  function showLocked(targetLabel, viewName = "strategy", activeLink = null) {
-    ensureStyles();
+  function clearLockedPreview() {
     document.querySelector("#fuman-entitlement-locked-overlay")?.remove();
-    const normalizedView = PROTECTED_VIEWS.has(viewName) ? viewName : (activeLink?.dataset?.view || "strategy");
-    const panel = activateLockedView(normalizedView, activeLink);
-    if (!panel) return;
-    panel.innerHTML = lockedPreviewMarkup(normalizedView, targetLabel);
+    document.querySelectorAll(".fuman-entitlement-preview").forEach((node) => node.remove());
+    document.querySelectorAll(".fuman-entitlement-panel-locked").forEach((panel) => {
+      panel.classList.remove("fuman-entitlement-panel-locked");
+      delete panel.dataset.entitlementLocked;
+      delete panel.dataset.entitlementView;
+      delete panel.dataset.entitlementLabel;
+    });
+  }
+
+  function bindLockedPreviewActions(panel) {
     panel.querySelectorAll("[data-entitlement-action]").forEach((node) => {
+      if (node.dataset.entitlementBound === "1") return;
+      node.dataset.entitlementBound = "1";
       node.addEventListener("click", (event) => {
         event.preventDefault();
         const action = event.currentTarget?.dataset?.entitlementAction;
         if (action === "market") openMarket();
-        else openMemberCenter();
+        else openMemberCenter(action === "signup" ? "signup" : "login");
       });
     });
+  }
+
+  function renderLockedPreview(panel, viewName, targetLabel) {
+    panel.querySelector(".fuman-entitlement-preview")?.remove();
+    panel.classList.add("fuman-entitlement-panel-locked");
+    panel.dataset.entitlementLocked = "1";
+    panel.dataset.entitlementView = viewName;
+    panel.dataset.entitlementLabel = targetLabel || "";
+    panel.insertAdjacentHTML("afterbegin", lockedPreviewMarkup(viewName, targetLabel));
+    bindLockedPreviewActions(panel);
+    installLockedPreviewObserver(panel);
+  }
+
+  function installLockedPreviewObserver(panel) {
+    if (panel.__fumanEntitlementObserver) return;
+    panel.__fumanEntitlementObserver = new MutationObserver(() => {
+      if (isEntitled() || panel.dataset.entitlementLocked !== "1" || panel.querySelector(".fuman-entitlement-preview")) return;
+      renderLockedPreview(panel, panel.dataset.entitlementView || "strategy", panel.dataset.entitlementLabel || "付費功能");
+    });
+    panel.__fumanEntitlementObserver.observe(panel, { childList: true });
+  }
+
+  function showLocked(targetLabel, viewName = "strategy", activeLink = null) {
+    ensureStyles();
+    clearLockedPreview();
+    const normalizedView = PROTECTED_VIEWS.has(viewName) ? viewName : (activeLink?.dataset?.view || "strategy");
+    const panel = activateLockedView(normalizedView, activeLink);
+    if (!panel) return;
+    renderLockedPreview(panel, normalizedView, targetLabel);
   }
   function blockEvent(event, link) {
     if (isEntitled()) return false;

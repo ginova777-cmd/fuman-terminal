@@ -446,7 +446,8 @@
       const tabs = [...document.querySelectorAll("[data-auth-mode]")];
       const switchText = document.querySelector("#switchText");
       const switchMode = document.querySelector("#switchMode");
-      const nextUrl = new URLSearchParams(location.search).get("next") || "/?desktop=1";
+      const authParams = new URLSearchParams(location.search);
+      const nextUrl = authParams.get("next") || "/?desktop=1";
       let mode = "login";
 
       function setStatus(message, type = "") {
@@ -604,7 +605,7 @@
       });
       document.querySelector("#googleLogin").href = googleAuthorizeUrl();
       document.querySelector("#googleFallbackLink").href = googleAuthorizeUrl();
-      applyMode("login");
+      applyMode(authParams.get("mode") === "signup" ? "signup" : "login");
       void finishOAuthRedirect();
     })();
   </script>

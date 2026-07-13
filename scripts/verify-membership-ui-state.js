@@ -209,11 +209,14 @@ async function runUiProbe(baseUrl) {
         const panel = document.querySelector(`#${target.view}-view`);
         const preview = panel?.querySelector(".fuman-entitlement-preview");
         const card = preview?.querySelector(".fuman-entitlement-lock-card");
+        const panelChildren = panel ? [...panel.children] : [];
         return {
           exists: Boolean(preview),
           visible: visible(preview),
           inPanel: Boolean(panel && preview && panel.contains(preview)),
           panelActive: Boolean(panel && panel.hidden === false && panel.getAttribute("aria-hidden") !== "true" && panel.classList.contains("active")),
+          panelLocked: Boolean(panel?.classList.contains("fuman-entitlement-panel-locked") && panel?.dataset.entitlementLocked === "1"),
+          preservedPanelShell: Boolean(panelChildren.some((node) => node !== preview)),
           dialog: card?.getAttribute("role") === "dialog" && card?.getAttribute("aria-label") === "會員權限尚未開通",
           text: preview?.textContent || "",
           actions: [...preview?.querySelectorAll("[data-entitlement-action]") || []].map((node) => node.dataset.entitlementAction).sort(),
@@ -270,14 +273,16 @@ function assertSummary(summary) {
     if (!result.linkFound) issues.push(`${result.key} protected nav link missing`);
     if (!result.marked) issues.push(`${result.key} protected nav must be visibly marked as locked`);
     if (!preview.exists || !preview.visible || !preview.inPanel || !result.protectedPanelActive) issues.push(`${result.key} must render visible inline member preview inside the protected panel`);
-    if (!preview.dialog || !/解鎖完整|登入已開通帳號|聯絡開通權限/.test(preview.text || "")) issues.push(`${result.key} preview must expose locked preview copy and registration actions`);
-    for (const action of ["member", "market"]) {
+    if (!preview.dialog || !/解鎖完整|註冊 \/ 開通權限|登入已開通帳號/.test(preview.text || "")) issues.push(`${result.key} preview must expose locked preview copy and registration actions`);
+    if (!preview.panelLocked || !preview.preservedPanelShell) issues.push(`${result.key} preview must preserve the protected panel DOM instead of replacing it`);
+    for (const action of ["signup", "login", "market"]) {
       if (!preview.actions?.includes(action)) issues.push(`${result.key} preview missing ${action} action`);
     }
     if (preview.rowsLeaked) issues.push(`${result.key} preview must not leak protected rows/cards before membership unlock`);
   }
   if (summary.directRoute.routeBlocked !== true) issues.push("direct route guard must block protected strategy route");
   if (!summary.directRoute.preview?.visible || !summary.directRoute.strategyActive) issues.push("direct route guard must render inline member preview in the strategy panel");
+  if (!summary.directRoute.preview?.panelLocked || !summary.directRoute.preview?.preservedPanelShell) issues.push("direct route guard must preserve strategy panel DOM under the member preview");
 }
 (async () => {
   let staticServer = null;
