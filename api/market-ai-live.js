@@ -280,6 +280,17 @@ function canServeCachedPayload(request, detectWindowActive, mustDetectToday) {
   return Boolean(!mustDetectToday && (!shouldRefresh(request) || !detectWindowActive));
 }
 
+function wantsFastCachedPayload(request) {
+  const query = request?.query || {};
+  return Boolean(
+    query.shell === "1"
+    || query.compact === "1"
+    || query.canvas === "1"
+    || query.fast === "1"
+    || query.snapshot === "1"
+  );
+}
+
 function cachedResponsePayload(cached, breadth, clock, reason = "cache") {
   return {
     ...cached,
@@ -1000,6 +1011,7 @@ module.exports = async function handler(request, response) {
   const requireTodayLiveSource = marketCalendar?.marketOpen === false ? false : requiresTodayLiveSource(clock, session);
   const mustDetectToday = marketCalendar?.marketOpen === false ? false : requiresTodayDetection(clock, session);
   const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
+  const fastCachedPayload = wantsFastCachedPayload(request) && !shouldRefresh(request) && !request.query?.t;
 
   if (cached && isWeekendClosedSession(session) && !shouldRefresh(request)) {
     const payload = normalizeNonTradingCachePayload(
@@ -1014,6 +1026,22 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  if (cached && fastCachedPayload) {
+    const closedForDisplay = isMarketAiPostClose(clock) || sessionForPayload.marketOpen === false || sessionForPayload.marketCalendar?.marketOpen === false;
+    const basePayload = cachedResponsePayload(cached, breadth, clock, closedForDisplay ? "after-1330-cache" : "fast-shell-cache");
+    const payload = closedForDisplay
+      ? normalizeNonTradingCachePayload(basePayload, sessionForPayload)
+      : { ...basePayload, marketSession: sessionForPayload };
+    response.status(200).json(withMarketAiRunTimeSourceSnapshot(
+      await enrichMarketAiPayload(payload, request, clock, sessionForPayload, {
+        heatmapPayload: payload?.heatmap || null,
+        radarPayload: payload?.realtimeRadar || null,
+      }),
+      clock,
+      sessionForPayload
+    ));
+    return;
+  }
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
     allowLatestFallback: !requireTodayLiveSource && !isMarketAiPostClose(clock),
