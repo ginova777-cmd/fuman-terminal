@@ -279,7 +279,8 @@
     "verify:strategy5-branch-flow": "node --use-system-ca scripts/verify-strategy5-branch-flow-coverage.js",
     "verify:strategy4-88-data-chain": "node --use-system-ca scripts/verify-strategy4-88-data-chain.js",
     "verify:full-scan-date-preflight": "node --use-system-ca scripts/verify-full-scan-date-preflight.js",
-    "full-scan:date-preflight": "node --use-system-ca scripts/check-full-scan-date-preflight.js --receipt"
+    "full-scan:date-preflight": "node --use-system-ca scripts/check-full-scan-date-preflight.js --receipt",
+    "verify:market-ai-index-report": "node scripts/verify-market-ai-index-report.js"
   },
   "engines": {
     "node": "24.x"

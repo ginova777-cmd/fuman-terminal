@@ -5492,8 +5492,13 @@
     }
   }
 
+  function isDisplayOnlyIndexReportPayload(payload = {}) {
+    return payload?.displayAllowed === true && payload?.displayOnly === true && payload?.reportMode === "weighted-index-simple-report";
+  }
+
   function marketPayloadBlockedForFormalDisplay(payload = {}) {
     if (!payload || typeof payload !== "object") return "";
+    if (isDisplayOnlyIndexReportPayload(payload)) return "";
     const evidence = String(payload.evidenceStatus || payload.sourceEvidenceStatus || payload.unattended?.evidenceStatus || "").toLowerCase();
     const unattended = String(payload.unattendedStatus || payload.unattended?.status || "").toUpperCase();
     const status = String(payload.status || payload.qualityStatus || "").toLowerCase();

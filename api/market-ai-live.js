@@ -840,6 +840,332 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
   };
 }
 
+
+function usesSimpleMarketAiReport(request = {}) {
+  const query = request.query || {};
+  if (query.legacy === "1" || query.mode === "legacy") return false;
+  if (query.simple === "0" || query.report === "legacy") return false;
+  return process.env.FUMAN_MARKET_AI_SIMPLE_REPORT_ONLY !== "0";
+}
+
+function marketIndexItem(marketPayload = {}, matcher) {
+  return normalizeArray(marketPayload.indexes).find((item) => matcher(String(item?.["指數"] || item?.name || item?.title || ""))) || null;
+}
+
+function signedMarketPercent(item = {}) {
+  const rawPct = optionalNumber(item?.["漲跌百分比"] ?? item?.pct ?? item?.changePercent ?? item?.change_percent);
+  if (rawPct === null) return null;
+  const signText = String(item?.["漲跌"] ?? item?.sign ?? "");
+  const signed = signText.includes("-") || signText.includes("跌") ? -Math.abs(rawPct) : Math.abs(rawPct);
+  return Number(signed.toFixed(2));
+}
+
+function signedFuturesPercent(futures = {}) {
+  const raw = optionalNumber(futures?.pct ?? futures?.changePercent ?? futures?.change_percent);
+  if (raw === null) return null;
+  const text = String(futures?.pct ?? futures?.change ?? "");
+  const signed = text.includes("-") || futures?.basisSide === "short" ? -Math.abs(raw) : Math.abs(raw);
+  return Number(signed.toFixed(2));
+}
+
+function formatSignedPercent(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "--";
+  const number = Number(value);
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function reportScoreFromPct(value) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return 50;
+  return Math.max(1, Math.min(100, Math.round(50 + Number(value) * 18)));
+}
+
+function buildIndexReportRows({ weighted, otc, futures, weightedPct, otcPct, futuresPct, action, riskText, updatedAt, tradeDate }) {
+  const rows = [];
+  if (weighted) {
+    rows.push({
+      rank: rows.length + 1,
+      code: "TWSE",
+      name: "加權指數",
+      title: "加權指數",
+      close: cleanNumber(weighted["收盤指數"]),
+      price: weighted["收盤指數"] || "--",
+      pct: weightedPct ?? 0,
+      percent: weightedPct ?? 0,
+      percentSource: "index-change-percent",
+      score: reportScoreFromPct(weightedPct),
+      side: weightedPct > 0 ? "long" : weightedPct < 0 ? "short" : "flat",
+      reason: `${weighted._source || "TWSE"} ${formatSignedPercent(weightedPct)}`,
+      source: weighted._source || "TWSE index",
+      industry: "大盤",
+      tags: ["加權指數", "低成本指數"],
+      updatedAt,
+      quoteDate: tradeDate,
+    });
+  }
+  if (otc) {
+    rows.push({
+      rank: rows.length + 1,
+      code: "OTC",
+      name: "櫃買指數",
+      title: "櫃買指數",
+      close: cleanNumber(otc["收盤指數"]),
+      price: otc["收盤指數"] || "--",
+      pct: otcPct ?? 0,
+      percent: otcPct ?? 0,
+      percentSource: "index-change-percent",
+      score: reportScoreFromPct(otcPct),
+      side: otcPct > 0 ? "long" : otcPct < 0 ? "short" : "flat",
+      reason: `${otc._source || "OTC"} ${formatSignedPercent(otcPct)}`,
+      source: otc._source || "OTC index",
+      industry: "櫃買",
+      tags: ["櫃買指數", "低成本指數"],
+      updatedAt,
+      quoteDate: tradeDate,
+    });
+  }
+  if (futures) {
+    rows.push({
+      rank: rows.length + 1,
+      code: "TXF",
+      name: "台指期近月",
+      title: futures.name || "台指期近月",
+      close: cleanNumber(futures.price),
+      price: futures.price || "--",
+      pct: futuresPct ?? 0,
+      percent: futuresPct ?? 0,
+      percentSource: "futures-change-percent",
+      score: reportScoreFromPct(futuresPct),
+      side: futures.basisSide || (futuresPct > 0 ? "long" : futuresPct < 0 ? "short" : "flat"),
+      reason: futures.basisLabel || `${futures.change || ""} ${formatSignedPercent(futuresPct)}`.trim(),
+      source: "TAIFEX MIS",
+      industry: "期貨",
+      tags: ["台指期", "期貨校正"],
+      updatedAt,
+      quoteDate: tradeDate,
+    });
+  }
+  rows.push({
+    rank: rows.length + 1,
+    code: "REPORT",
+    name: "操作建議",
+    title: "操作建議",
+    pct: 0,
+    percent: 0,
+    percentSource: "report-only",
+    score: 50,
+    side: "report",
+    reason: action,
+    source: "AI index report",
+    industry: "報告",
+    tags: ["AI 判讀", "操作建議"],
+    updatedAt,
+    quoteDate: tradeDate,
+  });
+  rows.push({
+    rank: rows.length + 1,
+    code: "RISK",
+    name: "風險提醒",
+    title: "風險提醒",
+    pct: 0,
+    percent: 0,
+    percentSource: "report-only",
+    score: 50,
+    side: "risk",
+    reason: riskText,
+    source: "AI index report",
+    industry: "報告",
+    tags: ["風險", "不追價"],
+    updatedAt,
+    quoteDate: tradeDate,
+  });
+  return rows;
+}
+
+function groupIndexReportRows(rows) {
+  const riskRows = rows.filter((row) => row.side === "short" || row.side === "risk");
+  const momentumRows = rows.filter((row) => row.side === "long");
+  return {
+    all: groupPayload("簡單報告", "market index report", rows, "只整合 AI 判讀與加權指數，不使用熱力圖或即時雷達"),
+    momentum: groupPayload("偏多線索", "market index report", momentumRows, "加權、櫃買、台指期的偏多項目"),
+    institution: groupPayload("籌碼/族群", "disabled", [], "簡單報告模式不掃個股籌碼"),
+    intraday: groupPayload("即時雷達", "disabled", [], "使用者已停用即時雷達，不訂閱 Fugle 全市場"),
+    risk: groupPayload("風險", "market index report", riskRows, "大盤轉弱或資料不足時只做提醒"),
+  };
+}
+
+async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
+  const req = { ...request, method: "GET", query: { ...(request.query || {}), canvas: "1", limit: "12" } };
+  const marketResult = deps.marketResult || await withTimeout(capture(market, req), 10000, { statusCode: 504, payload: { ok: false, error: "market_timeout" } });
+  const marketPayload = marketResult?.payload || {};
+  const updatedAt = marketPayload.updatedAt || new Date().toISOString();
+  const tradeDate = compactDate(marketPayload.today || marketPayload.resolvedTradeDate || marketPayload.sourceTradeDate || updatedAt) || clock.ymd;
+  const weighted = marketIndexItem(marketPayload, (name) => name.includes("加權") || name.includes("發行量"));
+  const otc = marketIndexItem(marketPayload, (name) => name.includes("櫃買"));
+  const futures = marketPayload.futuresNear || marketPayload.futures || null;
+  const weightedPct = signedMarketPercent(weighted);
+  const otcPct = signedMarketPercent(otc);
+  const futuresPct = signedFuturesPercent(futures);
+  const pctValues = [weightedPct, otcPct, futuresPct].filter((value) => value !== null);
+  const weightedScore = weightedPct ?? 0;
+  const otcScore = otcPct ?? weightedScore;
+  const futuresScore = futuresPct ?? weightedScore;
+  const trendScore = Number((weightedScore * 0.55 + otcScore * 0.25 + futuresScore * 0.20).toFixed(2));
+  const bias = pctValues.length === 0 ? "資料不足" : trendScore >= 0.35 ? "偏多" : trendScore <= -0.35 ? "偏空" : "中性整理";
+  const confidence = pctValues.length >= 3 && Math.abs(trendScore) >= 0.5 ? "中高" : pctValues.length >= 2 ? "中" : "低";
+  const action = bias === "偏多"
+    ? "只看指數方向偏多，仍以分批與停損控風險，不啟動個股雷達。"
+    : bias === "偏空"
+      ? "大盤偏弱，先降槓桿與觀察反彈品質，不用熱力圖硬找強勢股。"
+      : "盤面偏整理，維持觀察清單與資金控管，等待加權指數與台指期同向。";
+  const riskText = pctValues.length < 2
+    ? "可用指數資料不足，這份報告只能顯示保守結論，不寫 latest。"
+    : "此模式不掃全市場、不訂 Fugle WebSocket；只適合簡報觀察，不作正式進場水源。";
+  const rows = buildIndexReportRows({ weighted, otc, futures, weightedPct, otcPct, futuresPct, action, riskText, updatedAt, tradeDate });
+  const groups = groupIndexReportRows(rows);
+  const filters = ["all", "momentum", "institution", "intraday", "risk"].map((key) => ({ key, ...groups[key] }));
+  const up = pctValues.filter((value) => value > 0).length;
+  const down = pctValues.filter((value) => value < 0).length;
+  const flat = pctValues.length - up - down;
+  const todayPoints = [
+    `加權指數：${weighted?.["收盤指數"] || "--"}（${formatSignedPercent(weightedPct)}）`,
+    `櫃買指數：${otc?.["收盤指數"] || "--"}（${formatSignedPercent(otcPct)}）`,
+    `台指期近月：${futures?.price || "--"}（${formatSignedPercent(futuresPct)}）`,
+    action,
+  ];
+  const riskNotes = [
+    { title: "水源成本", text: "熱力圖與即時雷達已從 AI 判讀預設鏈路停用，不常駐 Fugle WebSocket。" },
+    { title: "正式水源", text: "這是 display-only 報告，不 publish latest，也不升級 daytrade formal entry。" },
+    { title: "資料不足", text: riskText },
+  ];
+  const reasoning = [
+    { key: "twse", title: "加權指數", text: weighted ? `來源 ${weighted._source || "market API"}，變動 ${formatSignedPercent(weightedPct)}。` : "尚未取得加權指數。" },
+    { key: "otc", title: "櫃買指數", text: otc ? `來源 ${otc._source || "market API"}，變動 ${formatSignedPercent(otcPct)}。` : "尚未取得櫃買指數。" },
+    { key: "txf", title: "台指期", text: futures ? `${futures.name || "TXF"} ${futures.price || "--"}，${futures.basisLabel || formatSignedPercent(futuresPct)}。` : "尚未取得台指期資料。" },
+    { key: "policy", title: "資源規則", text: "報告模式不呼叫 heatmap / realtime-radar，不使用 shared source 升級正式水源。" },
+  ];
+  const dashboard = {
+    sample: pctValues.length,
+    up,
+    down,
+    flat,
+    upRatio: pctValues.length ? Number((up / pctValues.length * 100).toFixed(2)) : 0,
+    downRatio: pctValues.length ? Number((down / pctValues.length * 100).toFixed(2)) : 0,
+    bias,
+    confidence,
+    action,
+    tradeDate,
+    dataSources: {
+      weightedIndex: weighted ? { price: weighted["收盤指數"] || "", pct: weightedPct, source: weighted._source || "" } : null,
+      otcIndex: otc ? { price: otc["收盤指數"] || "", pct: otcPct, source: otc._source || "" } : null,
+      txfNear: futures ? { price: futures.price || "", pct: futuresPct, source: "TAIFEX MIS", basisLabel: futures.basisLabel || "" } : null,
+      heatmapRows: 0,
+      radarRows: 0,
+      heatmapDisabled: true,
+      realtimeRadarDisabled: true,
+    },
+  };
+  const ok = Boolean(marketPayload.ok !== false && (weighted || otc || futures));
+  return {
+    ok,
+    source: "market-ai-index-report",
+    cacheSource: "api/market-ai-live",
+    reportMode: "weighted-index-simple-report",
+    displayOnly: true,
+    publishAllowed: false,
+    preservePreviousGood: true,
+    fallbackUsed: false,
+    fallbackAllowed: false,
+    usesHeatmap: false,
+    usesRealtimeRadar: false,
+    updatedAt,
+    market: marketPayload,
+    heatmap: { disabled: true, reason: "user_disabled_heatmap_for_simple_report", stockCount: 0, sectorCount: 0 },
+    realtimeRadar: { disabled: true, reason: "user_disabled_realtime_radar_for_simple_report", rows: [] },
+    breadth: deps.breadth || null,
+    rows,
+    count: rows.length,
+    hotStocks: rows.filter((row) => row.code !== "REPORT" && row.code !== "RISK").slice(0, 3),
+    groups,
+    filters,
+    todayPoints,
+    riskNotes,
+    priorityObservation: {
+      title: "加權指數簡報",
+      text: action,
+      stock: null,
+      staleBlocked: false,
+    },
+    sectorFocus: {
+      title: "停用熱力圖",
+      sectors: [],
+    },
+    reasoning,
+    dashboard,
+    dataFreshness: {
+      today: clock.ymd,
+      reportTradeDate: tradeDate,
+      baseTradeDate: tradeDate,
+      baseIsToday: tradeDate === clock.ymd,
+      heatmapTradeDate: "",
+      heatmapIsToday: false,
+      heatmapUsable: false,
+      heatmapDisabled: true,
+      radarTradeDate: "",
+      radarIsToday: false,
+      realtimeRadarDisabled: true,
+      staleSources: [],
+      sourceIssues: [],
+      reportWarnings: ok ? [] : [marketPayload.error || "market_index_source_unavailable"],
+      heatmapQuoteCoverage: { status: "not_required", ok: true, reason: "simple_index_report_no_heatmap" },
+      priorityStaleBlocked: false,
+    },
+    fieldCompleteness: {
+      todayPoints: todayPoints.length >= 4,
+      riskNotes: riskNotes.length >= 2,
+      priorityObservation: true,
+      sectorFocus: true,
+      hotStocks: true,
+      reasoning: reasoning.length >= 4,
+      filters: filters.length === 5,
+      simpleIndexReport: true,
+      heatmapDisabled: true,
+      realtimeRadarDisabled: true,
+    },
+    summary: {
+      marketStatus: marketPayload.marketStatus || "",
+      trading: marketPayload.trading === true,
+      sample: dashboard.sample,
+      up,
+      down,
+      bias,
+      confidence,
+      action,
+      rows: rows.length,
+      hotStocks: Math.min(3, rows.length),
+      strategy2Count: 0,
+      realtimeRadarCount: 0,
+      reportMode: "weighted-index-simple-report",
+      filterCounts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, group.count])),
+    },
+    aiDetectWindow: {
+      timezone: "Asia/Taipei",
+      start: "09:00:00",
+      end: "13:30:00",
+      active: isMarketAiDetectWindow(clock),
+      reason: "simple-index-report-no-heatmap-radar",
+      taipeiDate: clock.date,
+      taipeiTime: clock.time,
+    },
+    marketSession: {
+      ...session,
+      requiresTodayDetection: false,
+      requiresTodayLiveSource: false,
+      stale: false,
+      reason: session?.reason || "simple-index-report",
+    },
+  };
+}
+
 async function enrichMarketAiPayload(payload, request, clock, session, deps = {}) {
   const mustDetectToday = session?.requiresTodayDetection === true;
   const marketClosedDisplay = session?.marketOpen === false || session?.marketCalendar?.marketOpen === false;
@@ -908,25 +1234,83 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
   };
 }
 
+
+function normalizeDisplayOnlyMarketAiEvidence(payload = {}) {
+  const issueFilter = (issue) => !/source_status_at_run_status_display_only|run_quality_publishAllowed_false/i.test(String(issue || ""));
+  const runQuality = {
+    ...(payload.run_quality_at_publish || {}),
+    status: "display_only",
+    publishAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    qualityStatus: "display_only",
+    reason: "display_only_report_not_publishable",
+    blockedReason: "",
+    scanner_block_reason: "",
+  };
+  const runTimeSourceSnapshot = payload.run_time_source_snapshot ? {
+    ...payload.run_time_source_snapshot,
+    run_quality_at_publish: {
+      ...(payload.run_time_source_snapshot.run_quality_at_publish || {}),
+      ...runQuality,
+    },
+  } : payload.run_time_source_snapshot;
+  const camelSnapshot = payload.runTimeSourceSnapshot ? {
+    ...payload.runTimeSourceSnapshot,
+    run_quality_at_publish: {
+      ...(payload.runTimeSourceSnapshot.run_quality_at_publish || {}),
+      ...runQuality,
+    },
+  } : payload.runTimeSourceSnapshot;
+  return {
+    ...payload,
+    displayOnly: true,
+    displayAllowed: true,
+    sourceEvidenceStatus: "display_only",
+    evidenceStatus: "display_only",
+    sourceEvidenceIssues: normalizeArray(payload.sourceEvidenceIssues).filter(issueFilter),
+    issues: normalizeArray(payload.issues).filter(issueFilter),
+    unattendedStatus: "DISPLAY_ONLY",
+    unattended: {
+      ...(payload.unattended || {}),
+      status: "DISPLAY_ONLY",
+      canRunUnattended: false,
+      evidenceStatus: "display_only",
+      reason: "display_only_report_not_publishable",
+    },
+    publishAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    mustPreserveLatest: true,
+    blockedReason: "",
+    scanner_block_reason: "",
+    run_quality_at_publish: runQuality,
+    run_time_source_snapshot: runTimeSourceSnapshot,
+    runTimeSourceSnapshot: camelSnapshot,
+  };
+}
+
 function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), session = {}) {
   const freshness = payload?.dataFreshness || {};
   const dataSources = payload?.dashboard?.dataSources || {};
-  const sourceIssues = Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : [];
+  const displayOnlyReport = payload?.displayOnly === true || payload?.reportMode === "weighted-index-simple-report";
+  const sourceIssues = displayOnlyReport ? [] : (Array.isArray(freshness.sourceIssues) ? freshness.sourceIssues.filter(Boolean) : []);
   const staleSources = Array.isArray(freshness.staleSources) ? freshness.staleSources.filter(Boolean) : [];
   const heatmapRows = cleanNumber(dataSources.heatmapRows || payload?.heatmap?.stockCount || payload?.heatmap?.sectorCount);
   const radarRows = cleanNumber(dataSources.radarRows || count(payload?.realtimeRadar));
   const heatmapQuoteCoverage = freshness.heatmapQuoteCoverage || payload?.heatmap?.quoteCoverage || {};
-  const quoteReady = freshness.heatmapUsable === true
+  const quoteReady = displayOnlyReport
+    || freshness.heatmapUsable === true
     || freshness.radarIsToday === true
     || heatmapRows >= 500
     || radarRows > 0;
-  const quoteFreshnessRequired = session?.requiresTodayLiveSource === true
-    || Boolean(isMarketAiDetectWindow(clock) && !session?.closed);
+  const quoteFreshnessRequired = displayOnlyReport ? false : (session?.requiresTodayLiveSource === true
+    || Boolean(isMarketAiDetectWindow(clock) && !session?.closed));
   const quoteFreshnessReason = quoteFreshnessRequired
     ? ""
     : (session?.marketOpen === false || session?.marketCalendar?.marketOpen === false ? "market_closed_quote_age_not_required" : "post_close_quote_age_not_required");
-  const sourceStatus = sourceIssues.length ? "degraded" : "ready";
-  return attachRunTimeSourceEvidence({
+  const sourceStatus = displayOnlyReport ? "display_only" : (sourceIssues.length ? "degraded" : "ready");
+  const evidencedPayload = attachRunTimeSourceEvidence({
     ...payload,
     issues: retainedNonSourceEvidenceIssues(payload?.issues),
     fallbackUsed: false,
@@ -934,8 +1318,8 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
     fallbackAllowed: false,
     fallbackDetails: [],
     ...buildRunTimeSourceSnapshotFields({
-      strategy: "market-ai",
-      runId: `market-ai-live-${String(clock?.date || "").replace(/\D/g, "") || Date.now()}`,
+      strategy: displayOnlyReport ? "market-ai-index-report" : "market-ai",
+      runId: `${displayOnlyReport ? "market-ai-index-report" : "market-ai-live"}-${String(clock?.date || "").replace(/\D/g, "") || Date.now()}`,
       payload,
       sourceStatus: {
         status: sourceStatus,
@@ -967,13 +1351,13 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
         baseTradeDate: freshness.baseTradeDate || "",
         sourceIssues,
       },
-      intraday1mReadiness: { status: "not_applicable", ok: true, reason: "market-ai consumes heatmap/radar surfaces, not raw intraday 1m" },
+      intraday1mReadiness: { status: "not_applicable", ok: true, reason: displayOnlyReport ? "simple index report does not consume intraday 1m" : "market-ai consumes heatmap/radar surfaces, not raw intraday 1m" },
       maReadiness: { status: "not_applicable", ok: true, reason: "market-ai does not calculate MA readiness" },
       preopenFutoptDailyReadiness: { status: "not_applicable", ok: true, reason: "market-ai does not require preopen/futopt/daily volume directly" },
-      publishAllowed: true,
-      degradedBlocksLatest: false,
-      preservePreviousGood: false,
-      qualityStatus: sourceIssues.length ? "degraded_exposed" : "ready",
+      publishAllowed: !displayOnlyReport,
+      degradedBlocksLatest: displayOnlyReport,
+      preservePreviousGood: displayOnlyReport,
+      qualityStatus: displayOnlyReport ? "display_only" : (sourceIssues.length ? "degraded_exposed" : "ready"),
       fallbackUsed: false,
       fallbackScope: [],
       fallbackAllowed: false,
@@ -983,9 +1367,12 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
       resultCount: count(payload),
       readbackCount: count(payload),
       retentionOk: true,
-      writeBudget: { status: "live-api", allowed: true, reason: "market-ai is an on-demand live surface" },
+      writeBudget: displayOnlyReport
+        ? { status: "display-only", allowed: false, reason: "simple index report must not publish latest" }
+        : { status: "live-api", allowed: true, reason: "market-ai is an on-demand live surface" },
     }),
   });
+  return displayOnlyReport ? normalizeDisplayOnlyMarketAiEvidence(evidencedPayload) : evidencedPayload;
 }
 
 module.exports = async function handler(request, response) {
@@ -1011,6 +1398,17 @@ module.exports = async function handler(request, response) {
   const requireTodayLiveSource = marketCalendar?.marketOpen === false ? false : requiresTodayLiveSource(clock, session);
   const mustDetectToday = marketCalendar?.marketOpen === false ? false : requiresTodayDetection(clock, session);
   const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
+
+  if (usesSimpleMarketAiReport(request)) {
+    const simplePayload = await buildSimpleMarketAiReport(request, clock, {
+      ...sessionForPayload,
+      requiresTodayDetection: false,
+      requiresTodayLiveSource: false,
+    }, { breadth, marketSummary, cached });
+    response.status(200).json(withMarketAiRunTimeSourceSnapshot(simplePayload, clock, simplePayload.marketSession));
+    return;
+  }
+
   const fastCachedPayload = wantsFastCachedPayload(request) && !shouldRefresh(request) && !request.query?.t;
 
   if (cached && isWeekendClosedSession(session) && !shouldRefresh(request)) {
