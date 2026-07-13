@@ -94,6 +94,7 @@
       window.dispatchEvent(new CustomEvent("fuman:membership-status-refresh"));
       const message = document.querySelector("#auth-message");
       if (message) message.textContent = "已登出，策略內容會以會員罩顯示。";
+      location.href = "/?desktop=1&membership=logged-out";
       return;
     }
     const authUrl = new URL("/auth.html", location.origin);
