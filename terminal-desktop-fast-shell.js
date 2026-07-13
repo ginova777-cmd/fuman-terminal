@@ -10681,10 +10681,10 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         }
         #market-view .market-ai-hero-board {
           display: grid;
-          grid-template-columns: minmax(420px, 1fr) minmax(540px, 0.5fr);
+          grid-template-columns: minmax(420px, 1fr) minmax(720px, 0.58fr);
           gap: 14px;
           align-items: stretch;
-          min-height: 168px;
+          min-height: 198px;
           border: 1px solid rgba(16, 185, 129, 0.52);
           border-radius: 8px;
           background:
@@ -10711,37 +10711,45 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           gap: 8px;
         }
         #market-view .market-ai-index-chip {
-          display: inline-grid;
-          grid-template-columns: minmax(0, 1fr) max-content;
-          gap: 6px 12px;
-          align-items: end;
-          min-height: 64px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto 1fr auto;
+          gap: 10px;
+          align-items: center;
+          justify-items: start;
+          min-height: 96px;
+          width: 100%;
           border: 1px solid rgba(234, 179, 8, 0.30);
           border-radius: 8px;
           background: rgba(8, 15, 26, 0.72);
-          padding: 12px 14px;
+          padding: 20px 22px;
           white-space: nowrap;
         }
         #market-view .market-ai-index-metrics .market-ai-index-chip {
-          min-height: 88px;
-          align-content: center;
+          min-height: 136px;
+          height: 100%;
+          align-content: stretch;
         }
         #market-view .market-ai-index-chip small {
           grid-column: 1 / -1;
           color: #9fb3d9;
-          font-size: 13px;
+          font-size: 17px;
           font-weight: 900;
+          line-height: 1.2;
         }
         #market-view .market-ai-index-chip b {
           color: #f8fafc;
-          font-size: 24px;
+          font-size: 36px;
           line-height: 1.05;
         }
         #market-view .market-ai-index-chip em {
           font-style: normal;
-          font-size: 14px;
+          font-size: 18px;
           font-weight: 900;
           line-height: 1;
+          padding: 5px 9px;
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.76);
         }
         #market-view .market-ai-index-chip em.up {
           color: #fb7185;
@@ -10802,21 +10810,23 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         #market-view .market-ai-hero-metrics {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 14px;
-          align-content: center;
+          gap: 18px;
+          align-content: stretch;
+          align-items: stretch;
+          height: 100%;
         }
         #market-view .market-ai-hero-metrics .market-ai-index-chip,
         #market-view .market-ai-hero-action {
           border: 1px solid rgba(234, 179, 8, 0.26);
           border-radius: 8px;
           background: rgba(8, 15, 26, 0.82);
-          padding: 16px;
+          padding: 20px 22px;
         }
         #market-view .market-ai-hero-metrics b {
           display: block;
           margin-top: 4px;
           color: #f8fafc;
-          font-size: 26px;
+          font-size: 36px;
           line-height: 1.05;
         }
         #market-view .market-ai-hero-action {
