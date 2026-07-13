@@ -107,7 +107,7 @@
   const MARKET_JSON_CACHE_TTL_MS = 18000;
   const MARKET_HEATMAP_FETCH_TIMEOUT_MS = 12000;
   const MARKET_RADAR_FETCH_TIMEOUT_MS = 12000;
-  const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 18000;
+  const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 5000;
   let marketAiRenderSignature = "";
   let marketAiRenderTimer = 0;
   let marketAiRenderRequest = null;
