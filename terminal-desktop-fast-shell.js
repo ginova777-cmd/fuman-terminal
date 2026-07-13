@@ -20,9 +20,9 @@
   const REALTIME_RADAR_ROUTE = "realtime-radar|即時雷達";
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
-  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = [];
-  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, REALTIME_RADAR_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
@@ -43,14 +43,12 @@
     "strategy|策略4": "/api/strategy4-latest",
     "strategy|策略5": "/api/strategy5-latest",
     [MARKET_ROUTE]: "/api/market",
-    "realtime-radar|即時雷達": "/api/realtime-radar-latest",
     "chip-trade|買賣超": "/api/institution-latest",
     "cb-detect|CB可轉債": "/api/cb-detect-latest",
     "warrant-flow|權證走向": "/api/warrant-flow-latest",
   };
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
-    "realtime-radar|即時雷達": { limit: 1200, ttl: 6500, live: true, today: true, full: true },
     "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
@@ -174,7 +172,22 @@
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
+  disableRealtimeRadarSurface();
+  window.setInterval(disableRealtimeRadarSurface, 1500);
 
+
+  function disableRealtimeRadarSurface() {
+    document.querySelectorAll('[data-view="realtime-radar"],.realtime-radar-nav,#realtime-radar-view,[data-disabled-surface="realtime-radar"]').forEach((node) => {
+      node.hidden = true;
+      node.setAttribute("aria-hidden", "true");
+      if (node.matches?.('[data-view="realtime-radar"]')) node.setAttribute("tabindex", "-1");
+      node.style?.setProperty?.("display", "none", "important");
+    });
+    try {
+      const saved = JSON.parse(localStorage.getItem(LAST_ROUTE_KEY) || "null");
+      if (saved?.viewName === "realtime-radar") localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ viewName: "market", at: Date.now(), source: "disabled-realtime-radar" }));
+    } catch (error) {}
+  }
   function routeKey(link) {
     return `${link?.dataset?.view || ""}|${(link?.textContent || "").replace(/\s+/g, " ").trim()}`;
   }
@@ -238,7 +251,7 @@
     if (isStrategyLink(link)) return strategyRouteKey(link);
     const view = link?.dataset?.view || "";
     if (view === "market") return MARKET_ROUTE;
-    if (view === "realtime-radar") return REALTIME_RADAR_ROUTE;
+    if (view === "realtime-radar") return "";
     if (view === "chip-trade") return "chip-trade|買賣超";
     if (view === "cb-detect") return "cb-detect|CB可轉債";
     if (view === "warrant-flow") return "warrant-flow|權證走向";
@@ -320,7 +333,7 @@
     if (route.viewName === "chip-trade") return "chip-trade|買賣超";
     if (route.viewName === "cb-detect") return "cb-detect|CB可轉債";
     if (route.viewName === "warrant-flow") return "warrant-flow|權證走向";
-    if (route.viewName === "realtime-radar") return REALTIME_RADAR_ROUTE;
+    if (route.viewName === "realtime-radar") return MARKET_ROUTE;
     if (route.viewName === "watchlist") return "watchlist|自選股";
     if (route.viewName === "market") return MARKET_ROUTE;
     return "";
@@ -1925,14 +1938,7 @@
       }
       return;
     }
-    if (pathname === "/api/realtime-radar-latest") {
-      rememberRealtimeRadarHealth(payload);
-      marketRadarBundlePayload = payload;
-      if (isMarketViewActive() && isMarketDesktopAiModeActive()) {
-        scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload, marketAiBundlePayload || {}, { delay: 160 });
-      }
-      return;
-    }
+    if (pathname === "/api/realtime-radar-latest") return;
     if (pathname === "/api/watchlist-match-index") {
       strategy5WatchlistMatchIndexPayload = strategy5WatchlistIndexIsUsable(payload) ? payload : null;
     }
@@ -2276,25 +2282,6 @@
     const bypassRouteCache = isChipTradeRoute(route) && Boolean(canvasState.signalFilter);
     if (!force && !bypassRouteCache && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
       return Promise.resolve(cached.rows);
-    }
-    if (!force && route === REALTIME_RADAR_ROUTE) {
-      const radarKey = marketJsonCacheKey("/api/realtime-radar-latest?full=1", 1200);
-      const radarCached = marketJsonCache.get(radarKey);
-      if (radarCached?.payload && Date.now() - Number(radarCached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
-        const rows = normalizeCanvasRowsFromPayload(radarCached.payload, REALTIME_RADAR_ROUTE);
-        if (rows.length) {
-          rememberCanvasRows(route, rows, "market-prime-cache", radarCached.at || Date.now(), routePayloadMeta(route, radarCached.payload));
-          return Promise.resolve(rows);
-        }
-      }
-      const radarInflight = marketJsonInflight.get(radarKey);
-      if (radarInflight) {
-        return radarInflight.then((payload) => {
-          const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
-          if (rows.length) rememberCanvasRows(route, rows, "market-prime-inflight", Date.now(), routePayloadMeta(route, payload));
-          return rows.length ? rows : rowsForRoute(route);
-        });
-      }
     }
     const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
@@ -4338,7 +4325,6 @@
       () => window.loadMarketData?.(true),
       () => window.loadHeatmap?.(true),
       () => window.renderMarketAiPanel?.(),
-      () => window.renderRealtimeRadar?.(),
     ];
     calls.forEach((call) => {
       try { call(); } catch (error) {}
@@ -4819,12 +4805,7 @@
   }
 
   function rememberRealtimeRadarPayload(payload, source = "market-prime") {
-    if (!payload || typeof payload !== "object") return 0;
-    rememberRealtimeRadarHealth(payload);
-    marketRadarBundlePayload = payload;
-    const rows = normalizeCanvasRowsFromPayload(payload, REALTIME_RADAR_ROUTE);
-    if (rows.length) rememberCanvasRows(REALTIME_RADAR_ROUTE, rows, source, Date.now());
-    return rows.length;
+    return 0;
   }
 
   function primeMarketColdPayloads(force = false, reason = "boot") {
@@ -4839,9 +4820,6 @@
     ];
     if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
       tasks.push(
-        fetchMarketJson("/api/realtime-radar-latest?full=1", 1200, force, MARKET_RADAR_FETCH_TIMEOUT_MS).then((payload) => {
-          rememberRealtimeRadarPayload(payload, `market-prime-${reason}`);
-        }),
         fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS).then((payload) => {
           if (payload && typeof payload === "object") marketAiBundlePayload = payload;
         }),
@@ -5104,12 +5082,7 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/realtime-radar-latest", 20, force, MARKET_RADAR_FETCH_TIMEOUT_MS)
-      .then((payload) => {
-        state.radar = payload || {};
-        if (!hasMarketAiPayload(state.ai)) paint(false, 180);
-      })
-      .finally(done);
+    done();
   }
 
   function ensureMarketDesktopShell() {
@@ -6171,12 +6144,7 @@
       })
       .finally(done);
     if (aiMode) {
-      fetchMarketJson("/api/realtime-radar-latest", 20, force, MARKET_RADAR_FETCH_TIMEOUT_MS)
-        .then((payload) => {
-          state.radar = payload || {};
-          renderIfChanged(true);
-        })
-        .finally(done);
+      done();
       fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
         .then((payload) => {
           state.ai = payload || {};
