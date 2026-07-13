@@ -18,7 +18,7 @@ const {
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { fetchStrategy3TvCandles } = require("../lib/strategy3-tv-candles");
-const { analyzeTradingViewOvernightEntry } = require("../lib/strategy3-tv-entry");
+const { analyzeTradingViewOvernightEntry, rsiAt } = require("../lib/strategy3-tv-entry");
 const { auditRunTimeSourceSnapshotQuality, buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -53,11 +53,15 @@ const STRATEGY3_MIN_INTRADAY_1M_COVERAGE = Number(process.env.STRATEGY3_MIN_INTR
 const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
 const STRATEGY3_MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
-const STRATEGY3_MAX_CHANGE_PERCENT = Number(process.env.STRATEGY3_MAX_CHANGE_PERCENT || 5);
 const STRATEGY3_MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO || 1);
 const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
 const STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
 const STRATEGY3_REQUIRE_NEAR_100_HIGH = process.env.STRATEGY3_REQUIRE_NEAR_100_HIGH === "1";
+const STRATEGY3_REQUIRE_OPENING_CANDIDATE = process.env.STRATEGY3_REQUIRE_OPENING_CANDIDATE !== "0";
+const STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS || 3000);
+const STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE || 0.7);
+const STRATEGY3_BOLLINGER_PERIOD = Number(process.env.STRATEGY3_BOLLINGER_PERIOD || 20);
+const STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER = Number(process.env.STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER || 2);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -337,6 +341,17 @@ function taipeiDateKeyFromValue(value) {
   return compact.length >= 8 ? compact.slice(0, 8) : "";
 }
 
+function taipeiTodayDateKey(now = new Date()) {
+  return taipeiDateKeyFromValue(now.toISOString());
+}
+
+function strategy3TargetDateKey(now = new Date()) {
+  const forced = String(process.env.STRATEGY3_TRADE_DATE || process.env.STRATEGY3_SCAN_TRADE_DATE || "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
+  return forced || taipeiTodayDateKey(now);
+}
+
 function latestStockDateKey(stocks) {
   return [...new Set((stocks || []).flatMap((stock) => [
     taipeiDateKeyFromValue(stock.quoteDate),
@@ -346,6 +361,44 @@ function latestStockDateKey(stocks) {
   ]).filter((dateKey) => /^\d{8}$/.test(dateKey)))]
     .sort()
     .at(-1) || "";
+}
+
+function collectDateCandidates(entries = []) {
+  return entries
+    .map(([field, value]) => {
+      const dateKey = taipeiDateKeyFromValue(value);
+      return /^\d{8}$/.test(dateKey)
+        ? { field, dateKey, value: String(value || "") }
+        : null;
+    })
+    .filter(Boolean);
+}
+
+function selectDateCandidate(candidates = [], targetDate = "") {
+  const targetMatch = candidates.find((candidate) => candidate.dateKey === targetDate);
+  return targetMatch || candidates[0] || { field: "", dateKey: "", value: "" };
+}
+
+function collectStockUniverseDateCandidates(stocks = []) {
+  const counts = new Map();
+  const fields = [
+    ["quoteDate", (stock) => stock.quoteDate],
+    ["latestCandleTime", (stock) => stock.latestCandleTime],
+    ["updatedAt", (stock) => stock.updatedAt],
+    ["quoteTimeRaw", (stock) => stock.quoteTimeRaw],
+  ];
+  for (const stock of stocks || []) {
+    for (const [field, getter] of fields) {
+      const value = getter(stock);
+      const dateKey = taipeiDateKeyFromValue(value);
+      if (!/^\d{8}$/.test(dateKey)) continue;
+      const key = `${field}:${dateKey}`;
+      const current = counts.get(key) || { field, dateKey, count: 0, sample: String(value || "") };
+      current.count += 1;
+      counts.set(key, current);
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || String(a.field).localeCompare(String(b.field)));
 }
 
 function preservePreviousTradingSource(previousPayload, currentPayload) {
@@ -399,6 +452,18 @@ function buildSupabaseHeaders(preferCount = false) {
   return headers;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function fetchSupabaseRest(pathname, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("missing Supabase service credentials");
@@ -427,6 +492,103 @@ async function fetchSupabaseCountAtLeast(pathname, minRequired, options = {}) {
   const limitedPath = `${pathname}${separator}limit=${Math.max(1, cleanNumber(minRequired))}`;
   const limited = await fetchSupabaseRest(limitedPath, { ...options, count: false });
   return Math.max(cleanNumber(limited.rows?.length), limited.rows?.length || 0);
+}
+
+async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
+  const targetDate = strategy3TargetDateKey(now);
+  const taipeiToday = taipeiTodayDateKey(now);
+  const issues = [];
+  let quoteRow = {};
+  let intradayRow = {};
+
+  try {
+    const quoteResult = await fetchSupabaseRest(
+      "fugle_quotes_latest?select=updated_at,last_trade_time,quote_time,session,payload&order=updated_at.desc&limit=1",
+      { timeoutMs: 30000 }
+    );
+    quoteRow = quoteResult.rows?.[0] || {};
+  } catch (error) {
+    issues.push(`quote source date read failed: ${error?.message || String(error)}`);
+  }
+
+  try {
+    const intradayResult = await fetchSupabaseRest(
+      `${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date,candle_time,updated_at&order=trade_date.desc,candle_time.desc&limit=1`,
+      { timeoutMs: 30000 }
+    );
+    intradayRow = intradayResult.rows?.[0] || {};
+  } catch (error) {
+    issues.push(`intraday 1m source date read failed: ${error?.message || String(error)}`);
+  }
+
+  const quoteDateCandidates = collectDateCandidates([
+    ["payload.formal_trade_date", quoteRow?.payload?.formal_trade_date],
+    ["payload.tradeDate", quoteRow?.payload?.tradeDate],
+    ["payload.raw.tradeDate", quoteRow?.payload?.raw?.tradeDate],
+    ["payload.raw.quoteSeenAt", quoteRow?.payload?.raw?.quoteSeenAt],
+    ["last_trade_time", quoteRow?.last_trade_time],
+    ["quote_time", quoteRow?.quote_time],
+    ["updated_at", quoteRow?.updated_at],
+  ]);
+  const intradayDateCandidates = collectDateCandidates([
+    ["trade_date", intradayRow?.trade_date],
+    ["candle_time", intradayRow?.candle_time],
+    ["updated_at", intradayRow?.updated_at],
+  ]);
+  const universeDateCandidates = collectStockUniverseDateCandidates(stocks);
+  const quoteSelected = selectDateCandidate(quoteDateCandidates, targetDate);
+  const intradaySelected = selectDateCandidate(intradayDateCandidates, targetDate);
+  const universeSelected = selectDateCandidate(universeDateCandidates, targetDate);
+  const quoteTradeDate = quoteSelected.dateKey;
+  const intradayTradeDate = intradaySelected.dateKey;
+  const universeTradeDate = universeSelected.dateKey || latestStockDateKey(stocks);
+
+  if (!/^\d{8}$/.test(targetDate)) issues.push(`scanner target date invalid: ${targetDate || "missing"}`);
+  if (taipeiToday !== targetDate) issues.push(`taipeiToday ${taipeiToday} != scannerTargetDate ${targetDate}`);
+  if (!quoteTradeDate) issues.push("quote source tradeDate missing");
+  if (!intradayTradeDate) issues.push("intraday 1m source tradeDate missing");
+  if (!universeTradeDate) issues.push("stock universe source tradeDate missing");
+  if (quoteTradeDate && quoteTradeDate !== targetDate) issues.push(`quote source tradeDate ${quoteTradeDate} != scannerTargetDate ${targetDate}`);
+  if (intradayTradeDate && intradayTradeDate !== targetDate) issues.push(`intraday 1m source tradeDate ${intradayTradeDate} != scannerTargetDate ${targetDate}`);
+  if (universeTradeDate && universeTradeDate !== targetDate) issues.push(`stock universe source tradeDate ${universeTradeDate} != scannerTargetDate ${targetDate}`);
+
+  return {
+    ok: issues.length === 0,
+    status: issues.length ? "failed" : "ready",
+    taipeiToday,
+    scannerTargetDate: targetDate,
+    targetDate,
+    sourceTradeDates: {
+      quote: quoteTradeDate,
+      intraday1m: intradayTradeDate,
+      stockUniverse: universeTradeDate,
+    },
+    sourceTradeDateFields: {
+      quote: quoteSelected.field,
+      intraday1m: intradaySelected.field,
+      stockUniverse: universeSelected.field,
+    },
+    sourceTradeDateResolution: {
+      mode: "target_date_candidate_preferred",
+      targetDate,
+      quoteCandidates: quoteDateCandidates,
+      intraday1mCandidates: intradayDateCandidates,
+      stockUniverseCandidates: universeDateCandidates.slice(0, 12),
+      quoteAutoResolved: quoteDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && quoteTradeDate === targetDate,
+      intraday1mAutoResolved: intradayDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && intradayTradeDate === targetDate,
+      stockUniverseAutoResolved: universeDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && universeTradeDate === targetDate,
+    },
+    sourceRows: {
+      quoteUpdatedAt: quoteRow?.updated_at || "",
+      quoteLastTradeTime: quoteRow?.last_trade_time || "",
+      quoteTime: quoteRow?.quote_time || "",
+      intradayTradeDate: intradayRow?.trade_date || "",
+      intradayCandleTime: intradayRow?.candle_time || "",
+      intradayUpdatedAt: intradayRow?.updated_at || "",
+    },
+    issues,
+    reason: issues.join("; "),
+  };
 }
 
 function strategy2IntradayReadyRow(row) {
@@ -557,7 +719,15 @@ async function fetchStrategy3SourceDriftHealth(options = {}) {
   try {
     const readiness = await fetchStrategy3IntradayReadyCount(minIntradayRows);
     const rowCount = cleanNumber(readiness.readyCount);
-    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount: readiness.rowCount, rawLatestValidDay: readiness.rawLatestValidDay || null, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: minIntradayRows, status: rowCount >= minIntradayRows ? "ready" : "failed" });
+    const rawRowCount = cleanNumber(readiness.rowCount);
+    const effectiveMinRequired = Math.max(
+      1,
+      Math.min(
+        minIntradayRows,
+        rawRowCount > 0 ? Math.ceil(rawRowCount * STRATEGY3_MIN_INTRADAY_1M_COVERAGE) : minIntradayRows
+      )
+    );
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount, rawLatestValidDay: readiness.rawLatestValidDay || null, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: effectiveMinRequired, configuredMinRequired: minIntradayRows, status: rowCount >= effectiveMinRequired ? "ready" : "failed" });
   } catch (error) {
     add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount: 0, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: minIntradayRows, status: "failed", reason: error?.message || String(error) });
   }
@@ -797,7 +967,7 @@ function strategy3BusinessValue(row = {}, key, index = 0, output = {}) {
   if (key === "entryWindow") return String(row.entryWindow || entry.entryWindow || "13:00-13:30").trim();
   if (key === "entryWindowStart") return String(row.entryWindowStart || entry.entryWindowStart || "13:00").trim();
   if (key === "entryWindowEnd") return String(row.entryWindowEnd || entry.entryWindowEnd || "13:30").trim();
-  if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
+  if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.entryWindowRows || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
   if (key === "ma20") return cleanNumber(row.ma20 ?? entry.ma20);
   if (key === "ma35") return cleanNumber(row.ma35 ?? entry.ma35);
   if (key === "maTrend") return String(row.maTrend || strategy3MaTrend(row.ma20 ?? entry.ma20, row.ma35 ?? entry.ma35)).trim();
@@ -960,6 +1130,7 @@ function buildStrategy3BlockedReceipt(output = {}, reason = "", stage = "prepubl
     sourceHealth: output.sourceHealth || null,
     sourceCoverage: output.sourceCoverage || null,
     sourceDriftHealth: output.sourceDriftHealth || null,
+    datePreflight: output.datePreflight || null,
     scanCoverage: output.scanCoverage || null,
     matchDiagnostics: output.matchDiagnostics || null,
   };
@@ -1162,6 +1333,7 @@ function buildSupabaseRunRow(output, runId, status = "complete") {
       sourceCoverage: output.sourceCoverage || null,
       sourceSnapshotAudit: output.sourceSnapshotAudit || null,
       sourceDriftHealth: output.sourceDriftHealth || null,
+      datePreflight: output.datePreflight || null,
       scanCoverage: output.scanCoverage || null,
       selfTest: output.selfTest || null,
       publishedSelfTest: output.publishedSelfTest || null,
@@ -1226,7 +1398,7 @@ function buildSupabaseScanRows(output, runId) {
 }
 
 async function upsertSupabaseRows(table, rows, conflictTarget) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictTarget}`, {
+  const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictTarget}`, {
     method: "POST",
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -1235,7 +1407,7 @@ async function upsertSupabaseRows(table, rows, conflictTarget) {
       Prefer: "resolution=merge-duplicates",
     },
     body: JSON.stringify(rows),
-  });
+  }, 30000);
   if (response.ok) return;
   const text = await response.text().catch(() => "");
   throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 500)}`.trim());
@@ -1775,6 +1947,199 @@ function rankMap(stocks, key) {
   return ranks;
 }
 
+function ordinalRankMap(stocks, key) {
+  const sorted = [...stocks]
+    .filter((stock) => normalizeCode(stock.code) && cleanNumber(stock[key]) > 0)
+    .sort((a, b) => cleanNumber(b[key]) - cleanNumber(a[key]) || normalizeCode(a.code).localeCompare(normalizeCode(b.code)));
+  const ranks = new Map();
+  sorted.forEach((stock, index) => {
+    ranks.set(normalizeCode(stock.code), index + 1);
+  });
+  return ranks;
+}
+
+function strategy3TopRankSignals(changeRank, volumeRank) {
+  const signals = [];
+  const change = cleanNumber(changeRank);
+  const volume = cleanNumber(volumeRank);
+  if (change > 0 && change <= 100) {
+    signals.push({ id: "漲幅前100", reason: `今日漲幅排行榜第${change}名` });
+  }
+  if (volume > 0 && volume <= 100) {
+    signals.push({ id: "成交量前100", reason: `今日成交量排行榜第${volume}名` });
+  }
+  return signals;
+}
+
+function averageStrategy3Numbers(values) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  return usable.length ? usable.reduce((sum, value) => sum + value, 0) / usable.length : 0;
+}
+
+function strategy3SmaAtEnd(values, period) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  if (usable.length < period) return 0;
+  return averageStrategy3Numbers(usable.slice(-period));
+}
+
+function strategy3StandardDeviation(values, average) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  if (!usable.length) return 0;
+  const mean = cleanNumber(average) || averageStrategy3Numbers(usable);
+  const variance = usable.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / usable.length;
+  return Math.sqrt(variance);
+}
+
+function strategy3BollingerAtEnd(dailyRows, period = STRATEGY3_BOLLINGER_PERIOD) {
+  const closes = (dailyRows || []).map((row) => cleanNumber(row.close)).filter((value) => value > 0);
+  if (closes.length < period) return null;
+  const window = closes.slice(-period);
+  const middle = averageStrategy3Numbers(window);
+  const deviation = strategy3StandardDeviation(window, middle);
+  const upper = middle + (deviation * STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER);
+  const lower = middle - (deviation * STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER);
+  return {
+    period,
+    middle: Number(middle.toFixed(2)),
+    upper: Number(upper.toFixed(2)),
+    lower: Number(lower.toFixed(2)),
+    widthPercent: middle > 0 ? Number((((upper / Math.max(lower, 0.01)) - 1) * 100).toFixed(2)) : 0,
+  };
+}
+
+function strategy3DailyCloseZone(row) {
+  const high = cleanNumber(row?.high);
+  const low = cleanNumber(row?.low);
+  const close = cleanNumber(row?.close);
+  if (!(close > 0) || !(high > 0) || !(low > 0)) return 0;
+  if (high <= low) return close >= high ? 1 : 0;
+  return clamp((close - low) / (high - low), 0, 1);
+}
+
+async function fetchStrategy3DailyRows(code) {
+  const symbol = normalizeCode(code);
+  if (!symbol) return [];
+  const path = [
+    "stock_daily_volume",
+    "?select=symbol,code,trade_date,open,high,low,close,volume_lots,volume_shares",
+    `&symbol=eq.${encodeURIComponent(symbol)}`,
+    "&order=trade_date.desc",
+    "&limit=80",
+  ].join("");
+  const { rows } = await fetchSupabaseRest(path, { timeoutMs: 20000 });
+  return [...(rows || [])].reverse();
+}
+
+function buildStrategy3DailyEnhancement(stock, dailyRows) {
+  const rows = Array.isArray(dailyRows) ? dailyRows : [];
+  const latest = rows[rows.length - 1] || null;
+  const close = cleanNumber(latest?.close || stock.close);
+  const open = cleanNumber(latest?.open || stock.open);
+  const ma35 = strategy3SmaAtEnd(rows.map((row) => row.close), 35);
+  const bollinger = strategy3BollingerAtEnd(rows);
+  const closeZoneRatio = strategy3DailyCloseZone(latest);
+  const volumeLots = cleanNumber(stock.tradeVolumeLots || stock.volumeLots)
+    || cleanNumber(latest?.volume_lots)
+    || Math.round(cleanNumber(latest?.volume_shares) / 1000);
+  const volumeRatio = cleanNumber(stock.volumeRatio);
+  const turnoverRate = cleanNumber(stock.turnoverRate);
+  const dailyCloseAboveMa35 = close > 0 && ma35 > 0 && close > ma35;
+  const dailyRedK = close > 0 && open > 0 && close > open;
+  const dailyStrongCloseZone = closeZoneRatio >= STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE;
+  const dailyVolumeOk = volumeLots >= STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS;
+  const strategy3OpeningCandidateOk = dailyCloseAboveMa35
+    && dailyRedK
+    && dailyStrongCloseZone
+    && volumeRatio > STRATEGY3_MIN_VOLUME_RATIO
+    && dailyVolumeOk;
+  const bollingerUpperOk = Boolean(bollinger && close >= cleanNumber(bollinger.upper));
+  return {
+    strategy3DailyRows: rows.length,
+    strategy3DailyTradeDate: String(latest?.trade_date || ""),
+    strategy3DailyClose: Number(close.toFixed(2)),
+    strategy3DailyOpen: Number(open.toFixed(2)),
+    strategy3DailyMa35: Number(ma35.toFixed(2)),
+    strategy3DailyCloseAboveMa35: dailyCloseAboveMa35,
+    strategy3DailyRedK: dailyRedK,
+    strategy3DailyCloseZoneRatio: Number(closeZoneRatio.toFixed(2)),
+    strategy3DailyStrongCloseZone: dailyStrongCloseZone,
+    strategy3DailyVolumeLots: Math.round(volumeLots),
+    strategy3DailyVolumeOk: dailyVolumeOk,
+    strategy3OpeningCandidateOk,
+    strategy3BollingerUpper: bollinger ? cleanNumber(bollinger.upper) : 0,
+    strategy3BollingerMiddle: bollinger ? cleanNumber(bollinger.middle) : 0,
+    strategy3BollingerLower: bollinger ? cleanNumber(bollinger.lower) : 0,
+    strategy3BollingerWidthPercent: bollinger ? cleanNumber(bollinger.widthPercent) : 0,
+    strategy3BollingerUpperOk: bollingerUpperOk,
+    strategy3TurnoverBonusOk: turnoverRate > 5,
+  };
+}
+
+function strategy3Chunk(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+async function fetchStrategy3DailyRowsForCodes(codes, sourceWarnings) {
+  const rowsByCode = new Map();
+  const uniqueCodes = [...new Set((codes || []).map(normalizeCode).filter(Boolean))];
+  for (const chunk of strategy3Chunk(uniqueCodes, 40)) {
+    try {
+      const path = [
+        "stock_daily_volume",
+        "?select=symbol,code,trade_date,open,high,low,close,volume_lots,volume_shares",
+        `&symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
+        "&order=trade_date.desc",
+        `&limit=${Math.max(1000, chunk.length * 80)}`,
+      ].join("");
+      const { rows } = await fetchSupabaseRest(path, { timeoutMs: 30000 });
+      for (const row of rows || []) {
+        const code = normalizeCode(row.symbol || row.code);
+        if (!code) continue;
+        const bucket = rowsByCode.get(code) || [];
+        bucket.push(row);
+        rowsByCode.set(code, bucket);
+      }
+    } catch (error) {
+      sourceWarnings.push(`strategy3 daily enhancement batch failed ${chunk.join(",")}: ${error?.message || String(error)}`);
+    }
+  }
+  rowsByCode.forEach((rows, code) => {
+    rowsByCode.set(code, [...rows]
+      .sort((a, b) => String(a.trade_date || "").localeCompare(String(b.trade_date || "")))
+      .slice(-80));
+  });
+  return rowsByCode;
+}
+
+async function fetchStrategy3DailyEnhancementMap(stocks, sourceWarnings) {
+  const stockRows = stocks || [];
+  const rowsByCode = await fetchStrategy3DailyRowsForCodes(stockRows.map((stock) => stock.code), sourceWarnings);
+  return new Map(stockRows
+    .map((stock) => {
+      const code = normalizeCode(stock.code);
+      return [code, buildStrategy3DailyEnhancement(stock, rowsByCode.get(code) || [])];
+    })
+    .filter(([code]) => code));
+}
+
+function strategy3DailyEnhancementSignals(stock) {
+  const signals = [];
+  if (stock.strategy3OpeningCandidateOk) {
+    signals.push({
+      id: "開盤候選",
+      reason: `日線強勢：收盤站上MA35 ${cleanNumber(stock.strategy3DailyMa35).toFixed(2)}、紅K、收在日內強勢區 ${(cleanNumber(stock.strategy3DailyCloseZoneRatio) * 100).toFixed(0)}%、成交量 ${Math.round(cleanNumber(stock.strategy3DailyVolumeLots))} 張`,
+    });
+  }
+  if (stock.strategy3TurnoverBonusOk) {
+    signals.push({ id: "週轉率>5", reason: `週轉率 ${cleanNumber(stock.turnoverRate).toFixed(2)}% > 5%` });
+  }
+  if (stock.strategy3BollingerUpperOk) {
+    signals.push({ id: "站上布林上軌", reason: `收盤 ${cleanNumber(stock.strategy3DailyClose).toFixed(2)} >= 布林上軌 ${cleanNumber(stock.strategy3BollingerUpper).toFixed(2)}` });
+  }
+  return signals;
+}
 function strategy3FieldGate(stock, volumeRatio, volumeLots) {
   const pct = cleanNumber(stock.percent);
   const outsideVolume = cleanNumber(stock.outsideVolume ?? stock.cumulativeAskVolume);
@@ -1784,13 +2149,13 @@ function strategy3FieldGate(stock, volumeRatio, volumeLots) {
     ? outsideVolume / insideVolume
     : (outsideVolume > 0 ? 99 : 0);
   const checks = {
-    changePercent3To5: pct >= STRATEGY3_MIN_CHANGE_PERCENT && pct <= STRATEGY3_MAX_CHANGE_PERCENT,
+    changePercentGteMin: pct >= STRATEGY3_MIN_CHANGE_PERCENT,
     volumeRatioGt1: volumeRatio > STRATEGY3_MIN_VOLUME_RATIO,
     outsideGtInside: !STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE || (outsideVolume > 0 && insideVolume > 0 && outsideVolume > insideVolume),
     tradeVolumeLots: STRATEGY3_MIN_TRADE_VOLUME_LOTS <= 0 || volumeLots >= STRATEGY3_MIN_TRADE_VOLUME_LOTS,
   };
   const ok = Object.values(checks).every(Boolean);
-  const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (${STRATEGY3_MIN_CHANGE_PERCENT}-${STRATEGY3_MAX_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
+  const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (>=${STRATEGY3_MIN_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
   return { ok, checks, reason, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
 }
 
@@ -1850,12 +2215,18 @@ function buildStrategy3MatchDiagnostics(scored, tvAnalyzed = []) {
   const sessionReadyCandidates = scored.filter((stock) => stock.strategy3Session1mReady).length;
   const hardFieldGateCandidates = scored.filter((stock) => stock.strategy3FieldGate?.ok).length;
   const fixedPassCandidates = scored.filter((stock) => stock.strategy3FixedPass).length;
+  const openingCandidateCount = scored.filter((stock) => stock.strategy3OpeningCandidateOk).length;
+  const turnoverBonusCount = scored.filter((stock) => stock.strategy3TurnoverBonusOk).length;
+  const bollingerUpperCount = scored.filter((stock) => stock.strategy3BollingerUpperOk).length;
   const tvPassCount = tvAnalyzed.filter((stock) => stock.tvOvernightEntry?.ok).length;
   return {
     sourceUniverseCount: scored.length,
     sessionReadyCandidates,
     hardFieldGateCandidates,
     fixedPassCandidates,
+    openingCandidateCount,
+    turnoverBonusCount,
+    bollingerUpperCount,
     tvAnalyzedCount: tvAnalyzed.length,
     tvPassCount,
     fieldGateRejectBreakdown: summarizeStrategy3RejectMap(fieldGateRejects),
@@ -1866,10 +2237,15 @@ function buildStrategy3MatchDiagnostics(scored, tvAnalyzed = []) {
 
 async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings) {
   const valueRanks = rankMap(stocks, "value");
-  const volumeRanks = rankMap(stocks, "tradeVolume");
+  const volumeRankScores = rankMap(stocks, "tradeVolume");
+  const changeRanks = ordinalRankMap(stocks, "percent");
+  const volumeRanks = ordinalRankMap(stocks, "tradeVolume");
   const allScored = stocks.map((stock) => {
-    const valueRank = valueRanks.get(stock.code) || 0;
-    const volumeRank = volumeRanks.get(stock.code) || 0;
+    const code = normalizeCode(stock.code);
+    const valueRank = valueRanks.get(code) || valueRanks.get(stock.code) || 0;
+    const volumeRankScore = volumeRankScores.get(code) || volumeRankScores.get(stock.code) || 0;
+    const changeRank = changeRanks.get(code) || 0;
+    const volumeRank = volumeRanks.get(code) || 0;
     const pct = Number(stock.percent) || 0;
     const volumeLots = stock.tradeVolume / 1000;
     const issuedShares = issuedSharesMap.get(stock.code) || 0;
@@ -1901,7 +2277,9 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     return {
       ...stock,
       valueRank,
+      changeRank,
       volumeRank,
+      volumeRankScore,
       volumeLots: Math.round(volumeLots),
       tradeVolumeLots: Math.round(volumeLots),
       turnoverRate: Number(turnoverRate.toFixed(2)),
@@ -1920,16 +2298,47 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       overnightScore,
       overnightState: fixedPass ? "待TV判斷" : "觀察",
       score: overnightScore,
-      matches: [{ id: "overnight_chip", reason: fixedReason }],
+      matches: [
+        ...strategy3TopRankSignals(changeRank, volumeRank),
+        { id: "overnight_chip", reason: fixedReason },
+      ],
     };
   });
-  const scored = allScored
+  const baseScored = allScored
     .filter((stock) => stock.close > 0 && strategy3HasSession1m(stock))
-    .filter((stock) => stock.strategy3FixedPass)
+    .filter((stock) => stock.strategy3FixedPass);
+  const dailyEnhancementMap = await fetchStrategy3DailyEnhancementMap(baseScored, sourceWarnings);
+  const enhancedScored = baseScored.map((stock) => {
+    const enhancement = dailyEnhancementMap.get(normalizeCode(stock.code)) || buildStrategy3DailyEnhancement(stock, []);
+    const bonusScore = (enhancement.strategy3OpeningCandidateOk ? 8 : 0)
+      + (enhancement.strategy3TurnoverBonusOk ? 6 : 0)
+      + (enhancement.strategy3BollingerUpperOk ? 6 : 0);
+    const nextScore = clamp(stock.overnightScore + bonusScore, 0, 100);
+    const enhancedStock = {
+      ...stock,
+      ...enhancement,
+      strategy3OpeningCandidateRequired: STRATEGY3_REQUIRE_OPENING_CANDIDATE,
+      strategy3OpeningCandidateReason: enhancement.strategy3OpeningCandidateOk
+        ? "收盤站上MA35、紅K、收在日內強勢區、成交量達標"
+        : `未進主名單：MA35=${cleanNumber(enhancement.strategy3DailyMa35).toFixed(2)}、紅K=${Boolean(enhancement.strategy3DailyRedK)}、強勢區=${Boolean(enhancement.strategy3DailyStrongCloseZone)}、成交量OK=${Boolean(enhancement.strategy3DailyVolumeOk)}`,
+      strategy3DailyBonusScore: bonusScore,
+      overnightScore: nextScore,
+      score: nextScore,
+    };
+    return {
+      ...enhancedStock,
+      matches: [
+        ...stock.matches,
+        ...strategy3DailyEnhancementSignals(enhancedStock),
+      ],
+    };
+  });
+  const scored = enhancedScored
+    .filter((stock) => !STRATEGY3_REQUIRE_OPENING_CANDIDATE || stock.strategy3OpeningCandidateOk)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value);
 
   if (!STRATEGY3_REQUIRE_TV_ENTRY) {
-    lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, scored);
+    lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(enhancedScored, scored);
     return scored;
   }
 
@@ -1939,14 +2348,21 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   const analyzed = await mapLimit(tvCandidates, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
       const result = await fetchStrategy3TvCandles(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
-      const rawTvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
+      const tvCandles = result.candles || result.rows || [];
+      const rawTvEntry = analyzeTradingViewOvernightEntry(tvCandles);
       const quality = result.quality || {};
+      const tvRsi = firstFiniteNumber(rawTvEntry.rsi, rsiAt(tvCandles.map((row) => cleanNumber(row.close)), 14));
+      const entryWindowCandles = cleanNumber(quality.entryWindowRows);
       const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、session=${quality.sessionRows ?? 0}、entryWindow=${quality.entryWindowRows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
       const tvEntry = {
         ...rawTvEntry,
         reason: `${rawTvEntry.reason} ${sourceNote}。`,
         candleSource: result.source || "",
         candleQuality: quality,
+        entryWindowCandles,
+        entryWindowRows: entryWindowCandles,
+        rsi: tvRsi,
+        tvFieldSource: "strategy3-tv-candles",
         candleFallbackFrom: result.fallbackFrom || "",
         candleFallbackReason: result.fallbackReason || "",
         candleFallbackError: result.fallbackError || "",
@@ -1960,6 +2376,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
         ma35: cleanNumber(tvEntry.ma35),
         maTrend: strategy3MaTrend(tvEntry.ma20, tvEntry.ma35),
         rsi: cleanNumber(tvEntry.rsi),
+        entryWindowCandles: cleanNumber(tvEntry.entryWindowCandles || tvEntry.entryWindowRows),
         synthetic: false,
         judgment: tvEntry.ok ? "通過" : "觀察",
         overnightScore: clamp(stock.overnightScore + (tvEntry.ok ? 12 : 0), 0, 100),
@@ -1985,8 +2402,9 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     }
   });
 
-  lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, analyzed);
-  return analyzed
+  const sourceCompleteAnalyzed = analyzed.filter((stock) => cleanNumber(stock.tvOvernightEntry?.rsi) > 0 && cleanNumber(stock.tvOvernightEntry?.entryWindowCandles || stock.tvOvernightEntry?.entryWindowRows) > 0);
+  lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(enhancedScored, analyzed);
+  return sourceCompleteAnalyzed
     .sort((a, b) => {
       const tvDiff = Number(Boolean(b.tvOvernightEntry?.ok)) - Number(Boolean(a.tvOvernightEntry?.ok));
       if (tvDiff) return tvDiff;
@@ -2221,6 +2639,36 @@ async function main() {
   stocks = exclusionResult.stocks;
   exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
+  const datePreflight = await fetchStrategy3DatePreflight(stocks, new Date(startedAt));
+  if (!datePreflight.ok) {
+    const blockReason = `Strategy3 date preflight failed: ${datePreflight.reason}`;
+    const receipt = writeStrategy3BlockedReceipt({
+      ok: false,
+      source,
+      startedAt,
+      updatedAt: new Date().toISOString(),
+      usedDate: datePreflight.targetDate,
+      total: stocks.length,
+      count: 0,
+      complete: false,
+      sourceWarnings,
+      qualityStatus: "failed",
+      datePreflight,
+      sourceHealth: { status: "failed", issues: datePreflight.issues || [] },
+      sourceCoverage: { status: "failed", reason: blockReason },
+      sourceDriftHealth: { status: "failed", reason: blockReason },
+      scanCoverage: {
+        completeScan: false,
+        sourceUniverseCount: stocks.length,
+        scannedCount: 0,
+        resultCount: 0,
+        reason: blockReason,
+      },
+    }, blockReason, "date-preflight");
+    console.error(`strategy3 date preflight block reason: ${blockReason}`);
+    console.error(`strategy3 blocked receipt: ${receipt.receiptFile}`);
+    throw new Error(blockReason);
+  }
   const strategy3DriftMinIntradayRows = Math.min(
     STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS,
     Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
@@ -2244,7 +2692,7 @@ async function main() {
       source,
       startedAt,
       updatedAt: new Date().toISOString(),
-      usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+      usedDate: datePreflight?.targetDate || taipeiDateKeyFromValue(new Date().toISOString()),
       total: stocks.length,
       count: 0,
       complete: false,
@@ -2253,6 +2701,7 @@ async function main() {
       sourceHealth,
       sourceCoverage,
       sourceDriftHealth,
+      datePreflight,
       scanCoverage: {
         completeScan: false,
         sourceUniverseCount: stocks.length,
@@ -2266,7 +2715,7 @@ async function main() {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
-  const quoteDate = latestStockDateKey(stocks);
+  const quoteDate = datePreflight.targetDate;
   const tvPassCount = matches.filter((stock) => stock.tvOvernightEntry?.ok).length;
   const displayMode = matches.length ? "field_gate_with_tv_flame" : "no_tv_pass";
   const noMatchReason = matches.length ? "" : STRATEGY3_NO_TV_PASS_REASON;
@@ -2284,7 +2733,10 @@ async function main() {
     hardFieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
     hardFieldGateInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FieldGate?.ok).length,
     fieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
-    fixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    fixedPassCandidates: matches.length,
+    rawFixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    tvSourceCompleteCandidates: matches.length,
+    tvSourceIncompleteCandidates: Math.max(0, cleanNumber(matchDiagnostics.fixedPassCandidates) - matches.length),
     fixedPassInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FixedPass).length,
     tvAnalyzedCount: cleanNumber(matchDiagnostics.tvAnalyzedCount),
     tvAnalyzedInMotherPool: matches.filter((stock) => stock.inDaytradeMotherPool === true).length,
@@ -2314,6 +2766,7 @@ async function main() {
     sourceHealth,
     sourceCoverage,
     sourceDriftHealth,
+    datePreflight,
     scanCoverage,
     matchDiagnostics,
     displayMode,
@@ -2395,7 +2848,7 @@ if (require.main === module) {
         writeStrategy3BlockedReceipt({
           ok: false,
           updatedAt: new Date().toISOString(),
-          usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+          usedDate: strategy3TargetDateKey(),
           count: 0,
           sourceHealth: { status: "failed", issues: [message] },
           sourceCoverage: { status: "failed" },
