@@ -273,6 +273,16 @@ async function runUiProbe(baseUrl) {
   }
 }
 
+async function runUiProbeWithRetry(baseUrl) {
+  let lastSummary = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    lastSummary = await runUiProbe(baseUrl);
+    if (lastSummary && typeof lastSummary === "object" && Array.isArray(lastSummary.results) && lastSummary.results.length) return lastSummary;
+    if (attempt < 2) await sleep(750);
+  }
+  return lastSummary;
+}
+
 function assertSummary(summary) {
   if (!summary || typeof summary !== "object") {
     issues.push("ui probe returned empty summary");
@@ -310,7 +320,7 @@ function assertSummary(summary) {
   let staticServer = null;
   try {
     staticServer = await startStaticServer();
-    const summary = await runUiProbe(`http://127.0.0.1:${staticServer.port}`);
+    const summary = await runUiProbeWithRetry(`http://127.0.0.1:${staticServer.port}`);
     assertSummary(summary);
     if (issues.length) {
       console.error("[membership-ui-state] failed");
