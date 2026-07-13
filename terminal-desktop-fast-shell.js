@@ -4898,7 +4898,8 @@
   function hasMarketAiPayload(payload) {
     if (!payload || typeof payload !== "object") return false;
     return Boolean(
-      payload.dashboard
+      marketPayloadBlockedForFormalDisplay(payload)
+      || payload.dashboard
       || payload.groups
       || payload.fieldCompleteness
       || normalizeArray(payload.filters).length
@@ -4988,6 +4989,19 @@
       if (!isMarketViewActive() || !isMarketDesktopAiModeActive()) return;
       syncMarketAiDesktopModeIfVisible();
       if (!hasMarketAiPayload(next.ai)) {
+        const heatmapBlockReason = marketPayloadBlockedForFormalDisplay(next.heatmap);
+        if (heatmapBlockReason) {
+          renderMarketApiAi(next.heatmap || {}, next.radar || {}, {
+            ok: false,
+            evidenceStatus: "source_quality_fail",
+            unattendedStatus: "NO",
+            publishAllowed: false,
+            fallbackUsed: false,
+            updatedAt: next.heatmap?.updatedAt || next.heatmap?.servedAt || "",
+            issues: [`heatmap_${heatmapBlockReason}`],
+          });
+          return;
+        }
         renderMarketApiAiLoading();
         return;
       }
