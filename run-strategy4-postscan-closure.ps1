@@ -47,6 +47,20 @@ function Read-PropertyBool($Object, $Name) {
   return ($prop.Value -eq $true)
 }
 
+function Read-Strategy4DbLatestRunId($ProjectRoot) {
+  $scriptPath = Join-Path $ProjectRoot "scripts\verify-strategy4-db-latest-run.js"
+  if (-not (Test-Path -LiteralPath $scriptPath)) { return "" }
+  try {
+    $raw = & node --use-system-ca $scriptPath 2>$null
+    if ($LASTEXITCODE -ne 0) { return "" }
+    $json = ($raw | Out-String).Trim()
+    if (-not $json) { return "" }
+    $payload = $json | ConvertFrom-Json
+    return (Read-PropertyString $payload "runId")
+  } catch {
+    return ""
+  }
+}
 $now = Get-TaipeiNow
 $stamp = $now.ToString("yyyyMMdd-HHmmss")
 $logDir = Join-Path $RuntimeRoot "logs"
@@ -66,6 +80,7 @@ $status = "running"
 $errorText = ""
 $scannerReceipt = $null
 $scannerRunId = ""
+$dbLatestRunId = ""
 $verifierExitCode = $null
 $dataChainExitCode = $null
 $verifierReport = $null
@@ -91,6 +106,9 @@ try {
 
   if (-not $scannerRunId) { throw "missing Strategy4 scanner runId in $scannerReceiptFile" }
   if ((Read-PropertyString $scannerReceipt "status") -ne "complete") { throw "Strategy4 scanner receipt not complete: status=$((Read-PropertyString $scannerReceipt "status"))" }
+  $dbLatestRunId = Read-Strategy4DbLatestRunId $ProjectRoot
+  if (-not $dbLatestRunId) { throw "missing Strategy4 DB latest runId from verify-strategy4-db-latest-run.js" }
+  if ($dbLatestRunId -ne $scannerRunId) { throw "runId mismatch scanner=$scannerRunId dbLatest=$dbLatestRunId" }
 
   Push-Location $ProjectRoot
   try {
@@ -135,6 +153,7 @@ try {
     log = $script:LogFile
     scannerReceiptPath = $scannerReceiptFile
     scannerRunId = $scannerRunId
+    dbLatestRunId = $dbLatestRunId
     scannerReceipt = $scannerReceipt
     verifierExitCode = $verifierExitCode
     dataChainExitCode = $dataChainExitCode
@@ -154,3 +173,7 @@ try {
 
 if ($status -ne "complete") { exit 1 }
 exit 0
+
+
+
+

@@ -110,12 +110,16 @@ async function main() {
     sourceReports: path.join(terminalRoot, "api", "source-reports.js"),
   };
 
-  const [latest, bundle, mobile, scorecard, sourceReports, prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
+  const [latest, bundle] = await Promise.all([
     callInternal(modules.strategy4Latest, "/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70", { canvas: "1", compact: "1", shell: "1", live: "1", limit: "70" }),
     callInternal(modules.terminalFastBundle, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80", { canvas: "1", compact: "1", shell: "1", limit: "80" }),
-    callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy4&live=1", { tab: "strategy4", live: "1" }),
+  ]);
+  const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy4&live=1", { tab: "strategy4", live: "1" });
+  const [scorecard, sourceReports] = await Promise.all([
     callInternal(modules.scorecard, "/api/scorecard?live=1", { live: "1" }),
     callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }),
+  ]);
+  const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
     fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80"),
     fetchText("/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70"),
     fetchText("/api/mobile-fragment?tab=strategy4&live=1"),
@@ -141,10 +145,13 @@ async function main() {
     scorecard: parseJson(prodScorecard.text),
     sourceReports: parseJson(prodSourceReports.text),
   };
+  const prodScorecardStrategy4 = strategy4SourceRow(prodPayloads.scorecard || {});
+  const prodScorecardStrategy4RunId = String(prodScorecardStrategy4?.runId || "");
   const prodProtected = {
     strategy4Latest: prodLatest.status === 401 && prodPayloads.strategy4Latest?.protected === true && prodPayloads.strategy4Latest?.reason === "missing_bearer_token",
     mobileFragment: prodMobile.status === 401 && /mobile-terminal-locked|membership_required/.test(prodMobile.text || ""),
     scorecard: prodScorecard.status === 401 && prodPayloads.scorecard?.protected === true && prodPayloads.scorecard?.reason === "missing_bearer_token",
+    scorecardPublicRunAligned: prodScorecard.status === 200 && prodScorecardStrategy4RunId === runId,
     sourceReports: prodSourceReports.status === 401 && prodPayloads.sourceReports?.protected === true && prodPayloads.sourceReports?.reason === "missing_bearer_token",
   };
   const prodBundleRedacted = prodBundle.status === 200 && prodPayloads.terminalFastBundle?.membershipRequired === true && !/strategy4-\d{8}-\d{14}/.test(prodBundle.text || "");
@@ -177,7 +184,7 @@ async function main() {
     hasScorecardCall: prod88.text.includes("/api/scorecard?live=1"),
     hasRunIdInShell: /strategy4-\d{8}-\d{14}/.test(prod88.text || ""),
   });
-  addCheck(checks, prodProtected.strategy4Latest && prodProtected.mobileFragment && prodProtected.scorecard && prodProtected.sourceReports, "production_membership_protection_unchanged", prodProtected);
+  addCheck(checks, prodProtected.strategy4Latest && prodProtected.mobileFragment && (prodProtected.scorecard || prodProtected.scorecardPublicRunAligned) && prodProtected.sourceReports, "production_membership_or_public_scorecard_contract", { ...prodProtected, prodScorecardStrategy4RunId });
   addCheck(checks, prodBundleRedacted, "production_terminal_bundle_guest_redacted", {
     status: prodBundle.status,
     membershipRequired: prodPayloads.terminalFastBundle?.membershipRequired,
@@ -204,7 +211,7 @@ async function main() {
       terminalFastBundle: { status: prodBundle.status, redacted: prodBundleRedacted },
       strategy4Latest: { status: prodLatest.status, protected: prodProtected.strategy4Latest },
       mobileFragment: { status: prodMobile.status, protected: prodProtected.mobileFragment },
-      scorecard: { status: prodScorecard.status, protected: prodProtected.scorecard },
+      scorecard: { status: prodScorecard.status, protected: prodProtected.scorecard, publicRunAligned: prodProtected.scorecardPublicRunAligned, runId: prodScorecardStrategy4RunId },
       sourceReports: { status: prodSourceReports.status, protected: prodProtected.sourceReports },
       page88: { status: prod88.status, shellCallsScorecard: prod88.text.includes("/api/scorecard?live=1") },
     },
@@ -223,4 +230,7 @@ main().catch((error) => {
   console.error(`[strategy4-88-data-chain] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
+
 

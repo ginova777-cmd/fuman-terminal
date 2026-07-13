@@ -148,6 +148,21 @@ Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
 
+& $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
+$datePreflightExit = $LASTEXITCODE
+if ($datePreflightExit -eq 10) {
+  $reason = "Strategy4 date preflight skipped formal scan because market is closed; preserving previous good."
+  Write-Log $reason
+  Write-Strategy4Receipt "complete" 0 $true 0 "" @($reason)
+  exit 0
+}
+if ($datePreflightExit -ne 0) {
+  $reason = "Strategy4 date preflight failed closed; refusing formal scan. exit=$datePreflightExit"
+  Write-Log $reason
+  Write-Strategy4Receipt "failed" $datePreflightExit $false 0 "" @($reason) $reason
+  exit $datePreflightExit
+}
+
 & $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
 $publishGateExit = $LASTEXITCODE
 if ($publishGateExit -ne 0) {
@@ -335,5 +350,6 @@ Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId)
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
+
 
 

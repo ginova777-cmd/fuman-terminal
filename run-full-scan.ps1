@@ -462,10 +462,56 @@ function Invoke-PostScanSnapshotRefreshVerify {
   Write-ScanLog "END [snapshot] post-scan immediate-display verifier complete"
 }
 
+function Invoke-FullScanDatePreflight {
+  Write-ScanLog "START [critical] full scan date preflight"
+  $preflightScript = Join-Path $syncRoot "scripts\check-full-scan-date-preflight.js"
+  $preflightReceipt = Join-Path $receiptDir "full-scan-date-preflight.json"
+  $outputLines = New-Object System.Collections.Generic.List[string]
+  $exitCode = 1
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe $preflightScript "--label=full-scan" "--receipt=1" 2>&1 | ForEach-Object {
+        $line = [string]$_
+        $outputLines.Add($line) | Out-Null
+        Write-ScanLog "date-preflight: $line"
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    $outputLines.Add([string]$_.Exception.Message) | Out-Null
+  }
+
+  $preflight = Read-JsonFile $preflightReceipt
+  if ($preflight) {
+    if ($preflight.scannerTargetDate) { $env:FUMAN_SCANNER_TARGET_DATE = [string]$preflight.scannerTargetDate }
+    if ($preflight.scannerTargetTradeDate) { $env:FUMAN_SCANNER_TARGET_TRADE_DATE = [string]$preflight.scannerTargetTradeDate }
+    if ($preflight.scannerTargetDate) { $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = [string]$preflight.scannerTargetDate }
+    $env:FUMAN_REQUIRE_SOURCE_DATE_MATCH = "1"
+  }
+
+  if ($exitCode -eq 10) {
+    $displayDate = if ($preflight) { [string]$preflight.displayTradeDate } else { "previous_trading_day" }
+    Write-ScanLog "SKIP [critical] market closed; preserve previous good; displayTradeDate=$displayDate"
+    exit 0
+  }
+
+  if ($exitCode -ne 0) {
+    $reason = if ($preflight) { [string]$preflight.reason } else { ($outputLines -join " | ") }
+    throw "Full scan date preflight failed; exitCode=$exitCode reason=$reason"
+  }
+
+  Write-ScanLog "END [critical] full scan date preflight targetDate=$($env:FUMAN_SCANNER_TARGET_DATE)"
+}
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
   Write-ScanLog "scan receipts mode=$(if ($syncReceiptDir) { 'runtime+code-repo' } else { 'runtime-only' })"
+
+  Invoke-FullScanDatePreflight
 
   if (-not $SkipRealtime) {
     Invoke-ScanTask "realtime-radar" "realtime radar raw refresh" "optional" "scripts\scan-realtime-radar-cache.js" (Join-Path $runtimeRoot "data\realtime-radar-latest.json") @{ REALTIME_RADAR_PATROL_INTERVAL_MS = "3000" }
