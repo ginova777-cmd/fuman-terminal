@@ -20,6 +20,14 @@ const EXPECTED_STRATEGIES = [
   "即時雷達成績單",
 ];
 
+const STRATEGY_BLOCK_ALIASES = {
+  "策略2成績單": ["策略2當沖成績單"],
+};
+
+function strategyBlockNames(strategy) {
+  return [strategy, ...(STRATEGY_BLOCK_ALIASES[strategy] || [])].map(cleanText).filter(Boolean);
+}
+
 function cleanText(value) {
   return String(value ?? "").trim();
 }
@@ -124,7 +132,13 @@ function verifyPayload(checks, payload, source = "payload") {
   const latestRows = records.filter((row) => cleanText(row.record_date) === latestDate);
   const latestStats = summarizeRecords(latestRows);
   const strategies = Object.keys(latestStats.byStrategy).sort();
+  const blockedStrategies = new Set([
+    ...(Array.isArray(payload?.blockedStrategies) ? payload.blockedStrategies : []),
+    ...(Array.isArray(summary.blockedStrategies) ? summary.blockedStrategies : []),
+  ].map(cleanText).filter(Boolean));
+  const isBlocked = (strategy) => marketClosedProtection || strategyBlockNames(strategy).some((name) => blockedStrategies.has(name));
   const missingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !latestStats.byStrategy[strategy]);
+  const missingUnblockedStrategies = missingStrategies.filter((strategy) => !isBlocked(strategy));
   const dateKeys = Object.keys(stats.dates).filter(Boolean);
   const nonCbRows = records.filter((row) => cleanText(row.strategy) !== "CB成績單");
   const nonCbEntryMissing = nonCbRows.filter((row) => !cleanNumber(row.entry_price)).length;
@@ -186,6 +200,7 @@ function verifyPayload(checks, payload, source = "payload") {
   }));
   const nonCbNoCalculatedPnlStrategies = EXPECTED_STRATEGIES
     .filter((strategy) => strategy !== "CB成績單")
+    .filter((strategy) => !isBlocked(strategy))
     .filter((strategy) => {
       const bucket = stats.byStrategy[strategy];
       return !bucket || bucket.wins + bucket.losses <= 0;
@@ -196,19 +211,19 @@ function verifyPayload(checks, payload, source = "payload") {
   addCheck(checks, Boolean(latestDate), `${source}-latest-date`, `${source} has latestDate`, { latestDate });
   addCheck(checks, dateKeys.includes(latestDate), `${source}-latest-record-date`, `${source} includes latestDate records`, { latestDate, dates: stats.dates });
   addCheck(checks, latestRows.length > 0, `${source}-latest-rows`, `${source} has rows for latestDate`, { latestDate, latestRows: latestRows.length });
-  addCheck(checks, marketClosedProtection || missingStrategies.length === 0, `${source}-expected-strategies`, `${source} latestDate includes all scorecard strategy groups`, { strategies, missingStrategies, marketClosedProtection });
-  addCheck(checks, cleanNumber(latestStats.byStrategy["策略2成績單"]?.rows) > 0, `${source}-strategy2`, `${source} includes 策略2成績單 rows`, latestStats.byStrategy["策略2成績單"] || {});
+  addCheck(checks, missingUnblockedStrategies.length === 0, `${source}-expected-strategies`, `${source} latestDate includes all scorecard strategy groups or explicit blocked state`, { strategies, missingStrategies, missingUnblockedStrategies, blockedStrategies: [...blockedStrategies], marketClosedProtection });
+  addCheck(checks, cleanNumber(latestStats.byStrategy["策略2成績單"]?.rows) > 0 || isBlocked("策略2成績單"), `${source}-strategy2`, `${source} includes 策略2成績單 rows or explicit blocked state`, { ...(latestStats.byStrategy["策略2成績單"] || {}), blocked: isBlocked("策略2成績單"), blockedStrategies: [...blockedStrategies] });
   addCheck(checks, strategy2OutOfWindow.length === 0, `${source}-strategy2-display-window`, `${source} 策略2 scorecard rows are limited to 09:00-13:30`, { strategy2Rows: strategy2Rows.length, strategy2OutOfWindow });
-  addCheck(checks, marketClosedProtection || cleanNumber(latestStats.byStrategy["策略3隔日沖成績單"]?.rows) > 0, `${source}-strategy3`, `${source} includes 策略3隔日沖成績單 rows`, { ...(latestStats.byStrategy["策略3隔日沖成績單"] || {}), marketClosedProtection });
+  addCheck(checks, cleanNumber(latestStats.byStrategy["策略3隔日沖成績單"]?.rows) > 0 || isBlocked("策略3隔日沖成績單"), `${source}-strategy3`, `${source} includes 策略3隔日沖成績單 rows or explicit blocked state`, { ...(latestStats.byStrategy["策略3隔日沖成績單"] || {}), blocked: isBlocked("策略3隔日沖成績單"), marketClosedProtection });
   addCheck(checks, strategy3WrongEntryTime.length === 0, `${source}-strategy3-entry-time`, `${source} 策略3 full-scan entry_time is 13:00`, { strategy3Rows: strategy3Rows.length, strategy3WrongEntryTime });
   addCheck(checks, strategy3BadSourceDate.length === 0, `${source}-strategy3-source-date`, `${source} 策略3 scorecard source_date is present and matches the Strategy3 source report date`, { latestDate, strategy3Rows: strategy3Rows.length, strategy3ReportDates: [...strategy3ReportDates], strategy3BadSourceDate });
-  addCheck(checks, marketClosedProtection || cleanNumber(latestStats.byStrategy["權證成績單"]?.rows) > 0, `${source}-warrant`, `${source} includes 權證成績單 rows`, { ...(latestStats.byStrategy["權證成績單"] || {}), marketClosedProtection });
+  addCheck(checks, cleanNumber(latestStats.byStrategy["權證成績單"]?.rows) > 0 || isBlocked("權證成績單"), `${source}-warrant`, `${source} includes 權證成績單 rows or explicit blocked state`, { ...(latestStats.byStrategy["權證成績單"] || {}), blocked: isBlocked("權證成績單"), marketClosedProtection });
   addCheck(checks, nonCbEntryMissing === 0, `${source}-entry-filled`, `${source} non-CB rows have entry_price`, { nonCbEntryMissing });
   addCheck(checks, nonCbHighMissing === 0, `${source}-high-filled`, `${source} non-CB rows have high_price`, { nonCbHighMissing });
   addCheck(checks, cbRows.length === 0 || cbEntryMissing === 0, `${source}-cb-entry-filled`, `${source} CB rows use detected stockPrice as entry_price`, { cbRows: cbRows.length, cbEntryMissing });
   addCheck(checks, cbRows.length === 0 || cbCalculated === cbRows.length, `${source}-cb-calculable`, `${source} CB rows have entry/high prices for pnl calculation`, { cbRows: cbRows.length, cbCalculated });
   addCheck(checks, requiredFieldMissing.length === 0, `${source}-required-fields`, `${source} every scorecard row has required display/calculation fields`, { missingCount: requiredFieldMissing.length, samples: requiredFieldMissing.slice(0, 20) });
-  addCheck(checks, marketClosedProtection || nonCbNoCalculatedPnlStrategies.length === 0, `${source}-pnl-calculated`, `${source} non-CB strategy groups have calculated wins/losses`, { nonCbNoCalculatedPnlStrategies, byStrategy: stats.byStrategy, marketClosedProtection });
+  addCheck(checks, nonCbNoCalculatedPnlStrategies.length === 0, `${source}-pnl-calculated`, `${source} non-CB strategy groups have calculated wins/losses or explicit blocked state`, { nonCbNoCalculatedPnlStrategies, blockedStrategies: [...blockedStrategies], byStrategy: stats.byStrategy, marketClosedProtection });
   addCheck(checks, cleanNumber(summary.rows) === records.length, `${source}-summary-row-match`, `${source} summary.rows matches records.length`, { summaryRows: summary.rows, records: records.length });
   addCheck(checks, cleanNumber(summary.wins) === stats.wins, `${source}-summary-wins-match`, `${source} summary.wins matches row pnl`, { summaryWins: summary.wins, wins: stats.wins });
   addCheck(checks, cleanNumber(summary.losses) === stats.losses, `${source}-summary-losses-match`, `${source} summary.losses matches row pnl`, { summaryLosses: summary.losses, losses: stats.losses });
