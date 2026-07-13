@@ -2334,6 +2334,10 @@ for (const marker of [
 if (!read("index.html").includes("terminal-ai-risk-guard.js")) issues.push("index.html missing terminal-ai-risk-guard.js");
 if (!read("index.html").includes("terminal-market-ai-live-watchdog.js")) issues.push("index.html missing terminal-market-ai-live-watchdog.js");
 if (!read("index.github.html").includes("terminal-ai-risk-guard.js")) issues.push("index.github.html missing terminal-ai-risk-guard.js");
+const indexHtmlForMarketResume = read("index.html");
+if (!indexHtmlForMarketResume.includes('data-market-closed-banner="v2"')) issues.push("index.html market closed banner must use v2 open-resume guard");
+if (!indexHtmlForMarketResume.includes("p.marketOpen===true") || !indexHtmlForMarketResume.includes("removeClosed(p)")) issues.push("index.html market closed guard must remove closed protection when marketOpen=true");
+if (!indexHtmlForMarketResume.includes("FUMAN_DESKTOP_FAST_BUNDLE_PRIME?.(true)")) issues.push("index.html market open resume must reprime the desktop fast bundle");
 if (!gate.includes("verify:live-version")) {
   issues.push("run-live-freshness-gate.ps1 must include verify:live-version for market event reminders");
 }

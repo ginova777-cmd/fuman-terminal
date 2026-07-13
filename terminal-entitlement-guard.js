@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-03";
+  const VERSION = "membership-entitlement-guard-20260713-05";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -156,6 +156,41 @@
     location.href = authUrl.toString();
   }
 
+  function formatTradeDateLabel(value) {
+    const raw = String(value || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length >= 8) return `${digits.slice(4, 6)}/${digits.slice(6, 8)}`;
+    if (/^\d{1,2}\/\d{1,2}$/.test(raw)) return raw.padStart(5, "0");
+    return "";
+  }
+
+  function taipeiTodayLabel() {
+    return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit" }).format(new Date());
+  }
+
+  function updateLockedPreviewCalendar(panel) {
+    const preview = panel?.querySelector?.(".fuman-entitlement-preview");
+    if (!preview) return;
+    const dateLabel = preview.querySelector("[data-entitlement-date-label]");
+    const dateMeta = preview.querySelector("[data-entitlement-date-meta]");
+    const marketMeta = preview.querySelector("[data-entitlement-market-meta]");
+    const fallback = taipeiTodayLabel();
+    if (dateLabel && (!dateLabel.textContent || dateLabel.textContent === "--")) dateLabel.textContent = fallback;
+    const apply = (payload) => {
+      const tradeDate = payload?.displayTradeDate || payload?.marketDate || payload?.requestedDate || payload?.taipeiDate || "";
+      const label = formatTradeDateLabel(tradeDate) || fallback;
+      if (dateLabel) dateLabel.textContent = label;
+      if (dateMeta) dateMeta.textContent = payload?.marketOpen === true ? "開市日 / 會員預覽" : "交易日 / 會員預覽";
+      if (marketMeta) marketMeta.textContent = payload?.marketOpen === true ? `${label} 開市恢復，資料持續更新` : "會員預覽不覆蓋正式交易日";
+      preview.dataset.tradeDate = String(tradeDate || "");
+      preview.dataset.marketOpen = payload?.marketOpen === true ? "true" : "false";
+    };
+    apply({ taipeiDate: fallback });
+    fetch(`/api/market-calendar?t=${Date.now()}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => { if (payload) apply(payload); })
+      .catch(() => {});
+  }
   function lockedTitle(viewName, targetLabel) {
     if (viewName === "strategy") return "策略中心";
     if (viewName === "realtime-radar") return "即時雷達";
@@ -201,9 +236,9 @@
             <h1>輔滿策略權限</h1>
             <p>公開訪客保留策略輪廓，完整名單、排序理由與即時欄位由會員權限解鎖。</p>
           </section>
-          <section class="fuman-entitlement-stat"><span>資料日</span><strong>07/09</strong><small>2,779 檔股票</small></section>
+          <section class="fuman-entitlement-stat"><span>資料日</span><strong data-entitlement-date-label>${taipeiTodayLabel()}</strong><small data-entitlement-date-meta>交易日確認中</small></section>
           <section class="fuman-entitlement-stat"><span>策略模組</span><strong>11</strong><small>日線 / 籌碼 / 短線</small></section>
-          <section class="fuman-entitlement-stat"><span>目前結果</span><strong>0</strong><small>訪客預覽</small></section>
+          <section class="fuman-entitlement-stat"><span>目前結果</span><strong>0</strong><small data-entitlement-market-meta>訪客預覽</small></section>
         </div>
         <div class="fuman-entitlement-body">
           <aside class="fuman-entitlement-side" aria-label="目前鎖定模組">

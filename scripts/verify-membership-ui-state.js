@@ -88,8 +88,11 @@ class Cdp {
     if (!pending) return;
     clearTimeout(pending.timer);
     this.pending.delete(message.id);
-    if (message.error) pending.reject(new Error(message.error.message || "CDP error"));
-    else pending.resolve(message.result || {});
+    if (message.error) {
+      const errorMessage = message.error.message || "CDP error";
+      if (pending.method === "Page.navigate" && /Inspected target navigated or closed/i.test(errorMessage)) pending.resolve({});
+      else pending.reject(new Error(errorMessage));
+    } else pending.resolve(message.result || {});
   }
   send(method, params = {}, timeoutMs = 15000) {
     const id = ++this.id;
@@ -98,7 +101,7 @@ class Cdp {
         this.pending.delete(id);
         reject(new Error(`${method} timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, method });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -282,6 +285,8 @@ function assertSummary(summary) {
     if (!preview.exists || !preview.visible || !preview.inPanel || !result.protectedPanelActive) issues.push(`${result.key} must render visible inline member preview inside the protected panel`);
     if (!preview.dialog || !/解鎖完整|註冊 \/ 開通權限|登入已開通帳號/.test(preview.text || "")) issues.push(`${result.key} preview must expose locked preview copy and registration actions`);
     if (!/FUMAN MEMBER PREVIEW|輔滿會員罩|輔滿策略權限/.test(preview.text || "")) issues.push(`${result.key} preview must use the Fuman membership cover design`);
+    const todayLabel = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit" }).format(new Date());
+    if (/07\/09/.test(preview.text || "") || !(preview.text || "").includes(todayLabel)) issues.push(`${result.key} preview data date must follow current Taipei trading day, not stale hard-coded 07/09`);
     if (!preview.panelLocked || !preview.preservedPanelShell) issues.push(`${result.key} preview must preserve the protected panel DOM instead of replacing it`);
     for (const action of ["signup", "login", "market"]) {
       if (!preview.actions?.includes(action)) issues.push(`${result.key} preview missing ${action} action`);
