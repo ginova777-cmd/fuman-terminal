@@ -247,6 +247,10 @@ function releaseSourceReports() {
     readbackCount: cleanNumber(report.count),
     expectedTotal: cleanNumber(report.count),
     scannedCount: cleanNumber(report.count),
+    sourceDate: compactDateToIso(report.date) || cleanText(report.date),
+    source_date: compactDateToIso(report.date) || cleanText(report.date),
+    tradeDate: compactDateToIso(report.date) || cleanText(report.date),
+    usedDate: compactDateToIso(report.date) || cleanText(report.date),
     evidenceStatus: "complete",
     unattendedStatus: "YES",
     publishAllowed: true,
@@ -320,6 +324,11 @@ function isoDate(value) {
 
 function compactDate(value) {
   return cleanText(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function compactDateToIso(value) {
+  const date = compactDate(value);
+  return date.length === 8 ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}` : "";
 }
 
 function compactTimestamp(value) {
@@ -1356,6 +1365,26 @@ function maxSourceReportDate(reports) {
   return Math.max(0, ...(Array.isArray(reports) ? reports.map(sourceReportDateValue) : []));
 }
 
+function alignPayloadDateWithSourceReports(payload) {
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const reportDate = maxSourceReportDate(reports);
+  const payloadDate = Number(compactDate(payload?.latestDate || payload?.marketDate || payload?.selectedDate));
+  if (!reportDate || reportDate <= payloadDate) return payload;
+  const latestDate = compactDateToIso(String(reportDate));
+  return {
+    ...payload,
+    latestDate,
+    marketDate: latestDate,
+    selectedDate: latestDate,
+    sourceReportsDate: latestDate,
+    fallbackReason: cleanText(payload?.fallbackReason || "scorecard_snapshot_older_than_source_reports"),
+    warnings: [
+      ...(Array.isArray(payload?.warnings) ? payload.warnings : []),
+      `scorecard records snapshot older than sourceReports; selectedDate=${latestDate}`,
+    ],
+  };
+}
+
 async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
@@ -1365,16 +1394,16 @@ async function withLiveSourceReports(payload) {
   const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
   const existingComplete = existingReports.length >= 8 && existingReports.every((report) => !isBlank(report?.runId));
   if (releaseComplete && maxSourceReportDate(releaseReports) >= maxSourceReportDate(existingReports)) {
-    return releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+    return alignPayloadDateWithSourceReports(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
   if (existingComplete) {
-    return existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+    return alignPayloadDateWithSourceReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
   if (releaseComplete) {
-    return releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+    return alignPayloadDateWithSourceReports(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
   const reports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
-  return reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+  return alignPayloadDateWithSourceReports(reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
 }
 
 function withScorecardContract(payload, status, reason = "") {
