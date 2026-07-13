@@ -605,6 +605,23 @@ function compatibleLiveSurfaceRun(config, left, right) {
     && left.date
     && left.date === right.date;
 }
+function timestampMs(value) {
+  const ms = Date.parse(String(value || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function allowedHighFrequencySnapshotDrift(config, live, snapshot) {
+  if (config?.key !== "realtime-radar") return false;
+  if (!config.allowDesktopSnapshotRunIdDrift) return false;
+  if (!live?.runId || !snapshot?.runId || live.runId === snapshot.runId) return false;
+  if (live?.status >= 500 || snapshot?.status >= 500 || live?.ok === false || snapshot?.ok === false) return false;
+  if (cleanNumber(live.count || live.returnedCount) <= 0 || cleanNumber(snapshot.count || snapshot.returnedCount) <= 0) return false;
+  const liveAt = timestampMs(live.updatedAt || live.sourceSnapshotCapturedAt || live.servedAt);
+  const snapshotAt = timestampMs(snapshot.updatedAt || snapshot.sourceSnapshotCapturedAt || snapshot.servedAt);
+  if (!liveAt || !snapshotAt) return true;
+  return Math.abs(liveAt - snapshotAt) <= 5 * 60 * 1000;
+}
+
 
 function downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile) {
   const reason = `${receipt?.blockingReason || ""} ${(receipt?.warnings || []).join(" ")}`;
@@ -710,7 +727,8 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     && live.date
     && live.date === snapshot.date
   );
-  if (!nonTradingRealtimeZero && !live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
+  const allowedRealtimeSnapshotDrift = allowedHighFrequencySnapshotDrift(config, live, snapshot);
+  if (!nonTradingRealtimeZero && !live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
   if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);

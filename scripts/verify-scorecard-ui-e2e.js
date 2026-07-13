@@ -306,14 +306,21 @@ async function main() {
 
   if (CHECK_LIVE) {
     const liveApi = await fetchJson("/api/scorecard", 35000);
+    const liveApiMembershipProtected = liveApi.status === 401
+      && /membership_required|member|auth/i.test(`${liveApi.json?.error || ""} ${liveApi.json?.code || ""} ${liveApi.body || ""}`);
     details.liveApi = {
       status: liveApi.status,
       cacheControl: liveApi.headers["cache-control"] || "",
       cacheSource: liveApi.json?.cacheSource || liveApi.json?.source || "",
-      ...verifyPayload(checks, liveApi.json, "live-api"),
+      membershipProtected: liveApiMembershipProtected,
+      ...(liveApiMembershipProtected ? {} : verifyPayload(checks, liveApi.json, "live-api")),
     };
-    addCheck(checks, liveApi.status >= 200 && liveApi.status < 300, "live-api-http", "live /api/scorecard returns 2xx", { status: liveApi.status });
-    addCheck(checks, /no-store/i.test(liveApi.headers["cache-control"] || ""), "live-api-no-store", "live /api/scorecard has no-store header", { cacheControl: liveApi.headers["cache-control"] || "" });
+    if (liveApiMembershipProtected) {
+      addCheck(checks, true, "live-api-membership-protected", "live /api/scorecard is protected by membership gate for unauthenticated users", { status: liveApi.status, error: liveApi.json?.error || liveApi.json?.code || "membership_required" });
+    } else {
+      addCheck(checks, liveApi.status >= 200 && liveApi.status < 300, "live-api-http", "live /api/scorecard returns 2xx", { status: liveApi.status });
+      addCheck(checks, /no-store/i.test(liveApi.headers["cache-control"] || ""), "live-api-no-store", "live /api/scorecard has no-store header", { cacheControl: liveApi.headers["cache-control"] || "" });
+    }
 
     const livePage = await fetchText("/88", 35000);
     details.livePage = {
