@@ -40,8 +40,9 @@ function livePreviewEnabled(request) {
 
 function liveReadFallbackEnabled(request) {
   if (request.query?.snapshotOnly === "1" || request.query?.noLiveReadFallback === "1") return false;
-  return process.env.DESKTOP_ROUTE_SNAPSHOT_DISABLE_LIVE_READ_FALLBACK !== "1"
-    && process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_DISABLE_LIVE_READ_FALLBACK !== "1";
+  if (request.query?.liveReadFallback === "1" || request.query?.allowLiveReadFallback === "1") return true;
+  return process.env.DESKTOP_ROUTE_SNAPSHOT_ENABLE_LIVE_READ_FALLBACK === "1"
+    || process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_ENABLE_LIVE_READ_FALLBACK === "1";
 }
 
 function readMissPayload(reason = "desktop_route_snapshot_unavailable") {
@@ -77,7 +78,7 @@ module.exports = async function handler(request, response) {
     || request.query?.force === "1";
 
   if (!wantsRefresh) {
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
+    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 8000 });
     if (snapshot?.payload) {
       if (request.method === "HEAD") {
         response.status(200).end("");
