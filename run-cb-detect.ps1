@@ -102,6 +102,6 @@ try {
   Pop-Location
 }
 
-"CB detect API-only: scanner success reads Supabase snapshot/API plus desktop snapshot." >> $log
+"CB detect API-only: scanner success verifies api/cb-detect-latest and reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
 exit 0
