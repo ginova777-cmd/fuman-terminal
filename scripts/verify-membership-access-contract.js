@@ -222,6 +222,14 @@ async function main() {
   requireIncludes("auth.html", "isAlreadyRegisteredError(error)");
   requireIncludes("auth.html", "already registered|already exists");
   requireIncludes("auth.html", "finishPasswordLogin(credentials");
+  requireIncludes("auth.html", "resetPasswordForEmail");
+  requireIncludes("auth.html", "redirect.searchParams.set(\"next\", nextUrl");
+  requireIncludes("auth.html", "isPasswordRecoveryUrl()");
+  requireIncludes("auth.html", "finishPasswordRecovery()");
+  requireIncludes("auth.html", "recoveryCode");
+  requireIncludes("auth.html", "client.auth.updateUser({ password: password.value })");
+  requireIncludes("auth.html", "更新密碼");
+  requireIncludes("auth.html", "重設密碼連結已失效");
   requireIncludes("auth.html", "帳號已存在，正在自動登入並進入終端");
   requireIncludes("auth.html", "登入成功，正在進入終端；策略內容會先以會員罩顯示");
   requireIncludes("index.html", "<span class=\"strategy-nav learning-plan-disabled\"");

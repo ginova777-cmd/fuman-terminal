@@ -338,7 +338,7 @@
         </label>
 
         <label>
-          <span class="label-row"><span>密碼</span><a href="#" id="forgotPassword">忘記密碼？</a></span>
+          <span class="label-row"><span id="passwordLabel">密碼</span><a href="#" id="forgotPassword">忘記密碼？</a></span>
           <span class="field">
             <span aria-hidden="true">▢</span>
             <input id="password" type="password" autocomplete="current-password" placeholder="請輸入密碼" minlength="6" required>
@@ -346,7 +346,7 @@
           </span>
         </label>
 
-        <div class="captcha" aria-label="人機驗證占位">
+        <div class="captcha" id="captchaPanel" aria-label="人機驗證占位">
           <label class="captcha-box"><input id="captcha" type="checkbox" required>驗證您是人類</label>
           <div class="cloudflare">CLOUDFLARE<br><small>隱私權 · 條款</small></div>
         </div>
@@ -443,6 +443,9 @@
       const captcha = document.querySelector("#captcha");
       const status = document.querySelector("#status");
       const submit = document.querySelector("#submitButton");
+      const passwordLabel = document.querySelector("#passwordLabel");
+      const forgotPassword = document.querySelector("#forgotPassword");
+      const captchaPanel = document.querySelector("#captchaPanel");
       const tabs = [...document.querySelectorAll("[data-auth-mode]")];
       const switchText = document.querySelector("#switchText");
       const switchMode = document.querySelector("#switchMode");
@@ -455,14 +458,28 @@
         status.className = `status ${type}`.trim();
       }
 
+      function isPasswordRecoveryUrl() {
+        const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+        return authParams.get("type") === "recovery" || hash.get("type") === "recovery";
+      }
+
       function applyMode(next) {
         mode = next;
         tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
-        submit.textContent = mode === "signup" ? "註冊" : "登入";
-        switchText.textContent = mode === "signup" ? "已經有帳號？" : "還沒有帳號？";
-        switchMode.textContent = mode === "signup" ? "立即登入" : "立即註冊帳號";
-        password.autocomplete = mode === "signup" ? "new-password" : "current-password";
-        setStatus(mode === "signup" ? "註冊後需開通權限，才會解鎖策略與成績單。" : "請登入；未開通權限時仍可用訪客模式查看公開市場總覽。");
+        const resetMode = mode === "reset";
+        submit.textContent = resetMode ? "更新密碼" : mode === "signup" ? "註冊" : "登入";
+        switchText.textContent = resetMode ? "已想起密碼？" : mode === "signup" ? "已經有帳號？" : "還沒有帳號？";
+        switchMode.textContent = resetMode ? "回登入" : mode === "signup" ? "立即登入" : "立即註冊帳號";
+        passwordLabel.textContent = resetMode ? "新密碼" : "密碼";
+        password.placeholder = resetMode ? "請輸入新密碼" : "請輸入密碼";
+        password.autocomplete = resetMode || mode === "signup" ? "new-password" : "current-password";
+        forgotPassword.hidden = resetMode;
+        email.required = !resetMode;
+        captcha.required = !resetMode;
+        captchaPanel.hidden = resetMode;
+        setStatus(resetMode
+          ? "請輸入新密碼，送出後會更新帳號密碼並回到終端。"
+          : mode === "signup" ? "註冊後需開通權限，才會解鎖策略與成績單。" : "請登入；未開通權限時仍可用訪客模式查看公開市場總覽。");
       }
 
       async function readAccess(session) {
@@ -519,6 +536,7 @@
       }
 
       async function finishOAuthRedirect() {
+        if (isPasswordRecoveryUrl()) return;
         if (!client) return;
         const params = new URLSearchParams(location.search);
         const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
@@ -571,9 +589,47 @@
         location.href = nextUrl;
       }
 
+      async function finishPasswordRecovery() {
+        if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
+        let session = (await client.auth.getSession()).data?.session;
+        const recoveryCode = new URLSearchParams(location.search).get("code");
+        if (!session && recoveryCode && client.auth.exchangeCodeForSession) {
+          const exchanged = await client.auth.exchangeCodeForSession(recoveryCode);
+          if (exchanged.error) throw exchanged.error;
+          session = exchanged.data?.session || (await client.auth.getSession()).data?.session;
+        }
+        if (!session) return setStatus("重設密碼連結已失效，請重新點忘記密碼取得新連結。", "error");
+        if (!password.value || password.value.length < 6) return setStatus("新密碼至少需要 6 個字元。", "error");
+        setStatus("正在更新密碼...");
+        const result = await client.auth.updateUser({ password: password.value });
+        if (result.error) throw result.error;
+        const nextSession = (await client.auth.getSession()).data?.session || session;
+        const access = await persistSession(nextSession);
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("code");
+        cleanUrl.searchParams.delete("type");
+        cleanUrl.searchParams.delete("error");
+        cleanUrl.searchParams.delete("error_description");
+        cleanUrl.hash = "";
+        history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+        setStatus(access.allowed ? "密碼已更新，正在進入終端。" : "密碼已更新，正在進入終端；權限開通後會自動解鎖。", "good");
+        location.href = nextUrl;
+      }
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
+        if (mode === "reset") {
+          submit.disabled = true;
+          try {
+            await finishPasswordRecovery();
+          } catch (error) {
+            setStatus(error?.message || "密碼更新失敗，請重新取得忘記密碼連結。", "error");
+          } finally {
+            submit.disabled = false;
+          }
+          return;
+        }
         if (!captcha.checked) return setStatus("請先完成您是人類的驗證。", "error");
         submit.disabled = true;
         setStatus(mode === "signup" ? "註冊中..." : "登入中...");
@@ -616,7 +672,9 @@
       document.querySelector("#forgotPassword").addEventListener("click", async (event) => {
         event.preventDefault();
         if (!client || !email.value.trim()) return setStatus("請先輸入 Email，再點忘記密碼。", "error");
-        const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: location.origin + "/auth.html" });
+        const redirect = new URL("/auth.html", location.origin);
+        redirect.searchParams.set("next", nextUrl || "/?desktop=1");
+        const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: redirect.toString() });
         setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
       });
       document.querySelector("#googleLogin").addEventListener("click", (event) => {
@@ -630,7 +688,7 @@
       });
       document.querySelector("#googleLogin").href = googleAuthorizeUrl();
       document.querySelector("#googleFallbackLink").href = googleAuthorizeUrl();
-      applyMode(authParams.get("mode") === "signup" ? "signup" : "login");
+      applyMode(isPasswordRecoveryUrl() ? "reset" : authParams.get("mode") === "signup" ? "signup" : "login");
       void finishOAuthRedirect();
     })();
   </script>
