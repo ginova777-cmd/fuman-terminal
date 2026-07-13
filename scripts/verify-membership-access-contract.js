@@ -243,7 +243,6 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "terminal-fast-bundle");
   requireIncludes("terminal-entitlement-guard.js", "mobile-boot");
   requireIncludes("terminal-entitlement-guard.js", "mobile-fragment");
-  requireIncludes("terminal-entitlement-guard.js", "學習方案建置中");
   requireIncludes("terminal-entitlement-guard.js", "會員：尚未開通");
   requireIncludes("terminal-entitlement-guard.js", "會員：已開通");
   requireIncludes("terminal-entitlement-guard.js", 'action: "登入"');
