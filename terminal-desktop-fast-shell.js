@@ -5934,14 +5934,11 @@
       const pctClass = Number.isFinite(pctParsed) ? (pctParsed >= 0 ? "up" : "down") : "flat";
       return `<span class="market-ai-index-chip"><small>${escapeHtml(label)}</small><b>${formatMarketIndexPrice(item.price ?? item.close ?? item.value ?? item.index)}</b><em class="${pctClass}">${escapeHtml(formatMarketIndexPct(pctRaw))}</em></span>`;
     };
-    const heroIndexHtml = `<div class="market-ai-hero-indexes">${indexChipHtml("加權指數", pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX"))}</div>`;
     const heroMetricsHtml = `
-      <div class="market-ai-hero-metrics">
-        <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
-        <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
-        <span><small>下跌</small><b>${down.toLocaleString("zh-TW")}</b></span>
-        <span><small>信心</small><b>${escapeHtml(confidence)}</b></span>
-        <div class="market-ai-hero-action"><small>操作建議</small><b>${escapeHtml(aiPayload?.dashboard?.action || (up >= down ? "降低追價" : "等待方向"))}</b><span>${up >= down ? "盤面風險偏高時，先把進場條件收緊，避免追高。" : "盤面偏弱時，只看逆勢強股與量價確認。"}</span></div>
+      <div class="market-ai-hero-metrics market-ai-index-metrics">
+        ${indexChipHtml("加權指數", pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX"))}
+        ${indexChipHtml("櫃買指數", pickMarketIndex("otcIndex", "otc", "tpex", "OTC"))}
+        ${indexChipHtml("台指期夜盤", pickMarketIndex("txfNight", "txfNear", "txf", "TXF"))}
       </div>`;
     const pointTexts = normalizeArray(aiPayload?.todayPoints).length >= 4 ? normalizeArray(aiPayload.todayPoints) : [
       `市場廣度顯示上漲家數占 ${upRatio.toFixed(1)}%，站在全市場角度先判斷為${bias}。`,
@@ -6017,7 +6014,7 @@
         <section class="market-ai-hero-board ${biasToneClass}">
           <div class="market-ai-hero-copy">
             <small>盤中決策節奏 · 資料 ${escapeHtml(dateLabel)}</small>
-            <div class="market-ai-hero-title-row"><strong>${escapeHtml(biasTitle)}</strong>${heroIndexHtml}</div>
+            <div class="market-ai-hero-title-row"><strong>${escapeHtml(biasTitle)}</strong></div>
             <p>${up >= down ? "多方候選與強勢延續標的較多，仍需確認族群擴散與量價延續。" : "下跌家數偏多，盤面先以風險控管為主；強勢股需確認族群延續，不追高雜訊。"}</p>
           </div>
           ${heroMetricsHtml}
@@ -10751,7 +10748,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         }
         #market-view .market-ai-index-chip {
           display: inline-grid;
-          grid-template-columns: max-content max-content;
+          grid-template-columns: minmax(0, 1fr) max-content;
           gap: 2px 8px;
           align-items: end;
           min-height: 48px;
@@ -10760,6 +10757,10 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           background: rgba(8, 15, 26, 0.72);
           padding: 8px 10px;
           white-space: nowrap;
+        }
+        #market-view .market-ai-index-metrics .market-ai-index-chip {
+          min-height: 66px;
+          align-content: center;
         }
         #market-view .market-ai-index-chip small {
           grid-column: 1 / -1;
@@ -10836,10 +10837,11 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         }
         #market-view .market-ai-hero-metrics {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          align-content: center;
         }
-        #market-view .market-ai-hero-metrics span,
+        #market-view .market-ai-hero-metrics .market-ai-index-chip,
         #market-view .market-ai-hero-action {
           border: 1px solid rgba(234, 179, 8, 0.26);
           border-radius: 8px;
@@ -10849,7 +10851,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         #market-view .market-ai-hero-metrics b {
           display: block;
           margin-top: 4px;
-          color: #facc15;
+          color: #f8fafc;
           font-size: 19px;
           line-height: 1.1;
         }
