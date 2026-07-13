@@ -155,6 +155,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
         url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -196,6 +197,7 @@ function callStrategy1Latest(timeoutMs = 12000) {
         url: "/api/open-buy-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -239,6 +241,7 @@ function callStrategy2Latest(timeoutMs = 12000) {
         url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&live=1&today=1&verify=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -322,6 +325,7 @@ function callCbDetectLatest(timeoutMs = 12000) {
         url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -363,6 +367,7 @@ function callWarrantLatest(timeoutMs = 12000) {
         url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&live=1&limit=500",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -403,6 +408,7 @@ function callStrategy5Latest(timeoutMs = 12000) {
         url: "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,
@@ -444,6 +450,7 @@ function callInstitutionLatest(timeoutMs = 12000) {
         url: "/api/institution-latest?canvas=1&compact=1&shell=1&live=1&limit=1200",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
+        fumanInternalVerify: true,
       }, createCaptureResponse(finish))).catch((error) => {
         finish({
           statusCode: 500,

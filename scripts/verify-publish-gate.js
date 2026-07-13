@@ -2640,6 +2640,10 @@ for (const marker of [
   "requireApiRunId",
   "requireWriteBudgetDisclosure",
   "writeBudgetStatus",
+  "scorecardKeys",
+  "scorecardSourceReportForConfig",
+  "/88 row/sourceReport",
+  "scorecard /88 row/sourceReport runId != latest pointer",
 ]) {
   if (!terminalResourceChain.includes(marker)) issues.push(`verify-terminal-resource-chain.js missing source contract marker ${marker}`);
 }

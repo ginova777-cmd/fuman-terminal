@@ -962,10 +962,10 @@ function sourceReportsStatus(payload) {
 }
 
 function strategyRunId(row) {
-  return row.runId
+  return sourceReportForStrategy(row.strategy)?.runId
     || row.sourceRunId
     || row.payload?.runId
-    || sourceReportForStrategy(row.strategy)?.runId
+    || row.runId
     || payload?.runId
     || "";
 }

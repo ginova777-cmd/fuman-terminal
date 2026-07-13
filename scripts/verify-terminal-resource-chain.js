@@ -50,6 +50,7 @@ const STRATEGIES = [
     allowZeroTerminal: true,
     allowSoftSnapshotFallback: true,
     allowReceiptDriftWhenDownstreamFresh: true,
+    scorecardKeys: ["strategy1","open-buy","策略1開盤入成績單","策略1"],
   },
   {
     key: "strategy2",
@@ -63,6 +64,7 @@ const STRATEGIES = [
     resultTable: "strategy2_scan_results",
     resultStrategy: "strategy2",
     allowMissingDesktopSnapshot: true,
+    scorecardKeys: ["strategy2","策略2成績單","策略2當沖成績單","策略2"],
   },
   {
     key: "strategy3",
@@ -79,6 +81,7 @@ const STRATEGIES = [
     runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
     resultTable: "strategy3_scan_results",
     resultStrategy: "strategy3",
+    scorecardKeys: ["strategy3","策略3隔日沖成績單","策略3"],
   },
   {
     key: "strategy4",
@@ -91,6 +94,7 @@ const STRATEGIES = [
     runView: { table: "strategy4_scan_runs", strategy: "strategy4", order: "finished_at.desc" },
     resultTable: "strategy4_scan_results",
     resultStrategy: "strategy4",
+    scorecardKeys: ["strategy4","策略4成績單","策略4"],
   },
   {
     key: "strategy5",
@@ -103,6 +107,7 @@ const STRATEGIES = [
     resultTable: "strategy5_scan_results",
     resultStrategy: "strategy5",
     allowReceiptDriftWhenDownstreamFresh: true,
+    scorecardKeys: ["strategy5","策略5成績單","策略5"],
   },
   {
     key: "institution",
@@ -115,6 +120,7 @@ const STRATEGIES = [
     resultTable: "institution_scan_results",
     resultStrategy: "institution",
     allowReceiptDriftWhenDownstreamFresh: true,
+    scorecardKeys: ["institution","買賣超成績單","買賣超"],
   },
   {
     key: "cb",
@@ -128,6 +134,7 @@ const STRATEGIES = [
     resultSelect: "run_id,scan_date,symbol,name,payload,updated_at",
     resultOrder: "symbol.asc",
     snapshotKey: "cb_detect_latest",
+    scorecardKeys: ["cb","CB成績單","CB"],
   },
   {
     key: "warrant",
@@ -140,6 +147,7 @@ const STRATEGIES = [
     resultTable: "warrant_flow_scan_results",
     resultStrategy: "warrant_flow",
     allowReceiptDriftWhenDownstreamFresh: true,
+    scorecardKeys: ["warrant","權證成績單","權證走向","權證"],
   },
   {
     key: "realtime-radar",
@@ -151,6 +159,7 @@ const STRATEGIES = [
     requireWriteBudgetDisclosure: true,
     allowFormalQuoteViewFallback: true,
     allowDesktopSnapshotRunIdDrift: true,
+    scorecardKeys: ["realtime-radar","即時雷達成績單","即時雷達"],
   },
   {
     key: "market",
@@ -516,6 +525,32 @@ function endpointFromSnapshot(snapshotPayload, endpoint) {
   return preferred ? { endpoint: preferred[0], payload: preferred[1] } : { endpoint: "", payload: null };
 }
 
+function scorecardSourceReportForConfig(payload, config) {
+  if (!config?.scorecardKeys?.length) return null;
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const needles = config.scorecardKeys.map((value) => String(value || "").toLowerCase()).filter(Boolean);
+  return reports.find((report) => {
+    const haystack = [report.key, report.strategy, report.strategyName, report.label, report.module, report.name]
+      .map((value) => String(value || "").toLowerCase())
+      .filter(Boolean);
+    return needles.some((needle) => haystack.includes(needle) || haystack.some((value) => value.includes(needle)));
+  }) || null;
+}
+
+function scorecardSummary(report) {
+  if (!report) return { status: 404, ok: false, runId: "", error: "scorecard_source_report_missing" };
+  return {
+    status: 200,
+    ok: report.ok !== false,
+    runId: String(report.runId || report.sourceRunId || ""),
+    strategy: String(report.strategy || report.strategyName || report.label || report.key || ""),
+    key: String(report.key || ""),
+    evidenceStatus: String(report.evidenceStatus || report.sourceEvidenceStatus || ""),
+    publishAllowed: report.publishAllowed,
+    reason: String(report.reason || report.blockedReason || report.error || ""),
+  };
+}
+
 function parseMobileFragment(html) {
   const runId = String(html.match(/data-run-id="([^"]*)"/)?.[1] || "").trim();
   const count = cleanNumber(html.match(/數量\s*<b>([^<]*)<\/b>/)?.[1]);
@@ -658,7 +693,7 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
   return true;
 }
 
-function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile) {
+function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile, scorecard) {
   const issues = [];
   const downstreamFresh = downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile)
     || membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot);
@@ -730,6 +765,12 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   const allowedRealtimeSnapshotDrift = allowedHighFrequencySnapshotDrift(config, live, snapshot);
   if (!nonTradingRealtimeZero && !live?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop snapshot runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
+  if (config.scorecardKeys?.length) {
+    const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
+    if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
+    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
+    else if (expectedRunId && !scorecard.runId) issues.push(`scorecard /88 row/sourceReport missing runId for ${config.key}`);
+  }
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
   if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
   if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
@@ -738,7 +779,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   return issues;
 }
 
-async function auditOne(config, desktopSnapshotPayload) {
+async function auditOne(config, desktopSnapshotPayload, scorecardPayload) {
   const receipt = receiptSummary(config.receiptKey);
   const endpoint = withQuery(config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
   const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, live: 1, t: Date.now() });
@@ -774,7 +815,8 @@ async function auditOne(config, desktopSnapshotPayload) {
   const sourceHealth = sourceHealthSummary(liveResult.json, supabase)
     || sourceHealthSummary(compactResult.json, supabase)
     || sourceHealthSummary(snapEntry.payload, supabase);
-  const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile);
+  const scorecard = scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
+  const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
   return {
     key: config.key,
     label: config.label,
@@ -791,6 +833,7 @@ async function auditOne(config, desktopSnapshotPayload) {
     desktopSnapshot,
     desktopSnapshotNotApplicable: config.allowMissingDesktopSnapshot && desktopSnapshot?.error === "endpoint_not_in_desktop_snapshot",
     mobileFragment: mobile,
+    scorecard,
     ok: issues.length === 0,
     issues,
   };
@@ -805,8 +848,8 @@ function markdown(results, desktopSnapshot, fastBundle) {
   lines.push(`- Desktop snapshot: status=${desktopSnapshot.status} fresh=${desktopSnapshot.summary?.snapshotFresh ?? ""} updatedAt=${desktopSnapshot.summary?.updatedAt || ""} endpointCount=${desktopSnapshot.summary?.endpointCount || 0}`);
   lines.push(`- Terminal fast bundle: status=${fastBundle.status} fresh=${fastBundle.summary?.snapshotFresh ?? ""} updatedAt=${fastBundle.summary?.updatedAt || ""} endpointCount=${fastBundle.summary?.endpointCount || 0}`);
   lines.push("");
-  lines.push("| 項目 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop snapshot | mobile fragment | 判定 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---|");
+  lines.push("| 項目 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop snapshot | mobile fragment | /88 row/sourceReport | 判定 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|");
   for (const row of results) {
     const receipt = row.receipt
       ? `${row.receipt.status || "--"}<br>${row.receipt.runId || "--"}<br>${row.receipt.finishedAt || "--"}`
@@ -827,7 +870,8 @@ function markdown(results, desktopSnapshot, fastBundle) {
     const mob = row.mobileFragment
       ? `${row.mobileFragment.status || "--"} ${row.mobileFragment.runId || "--"}<br>${row.mobileFragment.count ?? "--"}`
       : "n/a";
-    lines.push(`| ${row.label} | ${receipt} | ${sourceHealth} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
+    const scorecard = row.scorecard ? `${row.scorecard.status || "--"} ${row.scorecard.runId || "--"}<br>${row.scorecard.strategy || row.scorecard.key || row.scorecard.error || "--"}` : "n/a";
+    lines.push(`| ${row.label} | ${receipt} | ${sourceHealth} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${scorecard} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
   }
   lines.push("");
   lines.push("## Top Rows");
@@ -846,16 +890,18 @@ function markdown(results, desktopSnapshot, fastBundle) {
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
-  const [desktopSnapshotResult, fastBundleResult] = await Promise.all([
+  const [desktopSnapshotResult, fastBundleResult, scorecardResult] = await Promise.all([
     fetchJson(publicUrl(withQuery("/api/desktop-route-snapshot", { t: Date.now() })), { timeoutMs: 35000 }),
     fetchJson(publicUrl(withQuery("/api/terminal-fast-bundle", { t: Date.now() })), { timeoutMs: 35000 }),
+    fetchJson(publicUrl(withQuery("/api/scorecard", { live: 1, t: Date.now() })), { timeoutMs: 35000 }),
   ]);
   const desktopSnapshotPayload = desktopSnapshotResult.json || {};
   const fastBundlePayload = fastBundleResult.json || {};
+  const scorecardPayload = scorecardResult.json || {};
   const results = [];
   for (const config of STRATEGIES.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
     console.log(`[audit] ${config.key}`);
-    results.push(await auditOne(config, desktopSnapshotPayload));
+    results.push(await auditOne(config, desktopSnapshotPayload, scorecardPayload));
   }
   const desktopSnapshot = {
     status: desktopSnapshotResult.status,
