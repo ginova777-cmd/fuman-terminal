@@ -42,15 +42,21 @@ function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
 }
 
 function Assert-Strategy5Api {
-  $url = "https://fuman-terminal.vercel.app/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $payload = $response.Content | ConvertFrom-Json
-  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
-    throw "Strategy5 API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
+  $report = @($scorecard["sourceReports"]) | Where-Object { $_["key"] -eq "strategy5" } | Select-Object -First 1
+  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
+    throw "Strategy5 scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
   }
-  if ([int]$payload.count -le 0) { throw "Strategy5 API empty count=$($payload.count)" }
-  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)"
-  return $payload
+  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
+  if ($count -le 0) { throw "Strategy5 scorecard sourceReport empty count=$count" }
+  "Strategy5 scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
+  return [pscustomobject]@{
+    runId = [string]$report["runId"]
+    count = $count
+    cacheSource = "scorecard-source-report"
+  }
 }
 
 function Invoke-NodeScan($scriptPath, $label) {
