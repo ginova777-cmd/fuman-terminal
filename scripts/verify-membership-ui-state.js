@@ -177,13 +177,14 @@ async function runUiProbe(baseUrl) {
   let cdp = null;
   try {
     cdp = await createPage(browser.port);
-    await cdp.send("Page.navigate", { url: `${baseUrl}/?desktop=1&membershipUiProbe=${Date.now()}` }, 30000);
+    const firstUrl = `${baseUrl}/?desktop=1&membershipUiProbe=${Date.now()}`;
+    await cdp.send("Page.navigate", { url: firstUrl }, 30000);
     await waitFor(cdp, () => ({ ok: document.readyState === "interactive" || document.readyState === "complete" }), null, 30000);
     await evaluate(cdp, () => {
       localStorage.removeItem("fuman-terminal-auth-cache-v1");
       localStorage.setItem("fuman-terminal-last-route-v1", JSON.stringify({ viewName: "strategy", strategyRoute: "intraday_2m", at: Date.now() }));
-      location.reload();
     });
+    await cdp.send("Page.navigate", { url: `${baseUrl}/?desktop=1&membershipUiProbe=${Date.now()}&savedRoute=1` }, 30000);
     await waitFor(cdp, () => ({ ok: Boolean(window.FUMAN_ENTITLEMENT_GUARD && document.querySelector("aside.sidebar [data-view]")) }), null, 45000);
     return await evaluate(cdp, async () => {
       const targets = [
@@ -204,30 +205,26 @@ async function runUiProbe(baseUrl) {
         return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
       };
       const findTarget = (target) => [...document.querySelectorAll(`[data-view="${target.view}"]`)].find((node) => !target.text || (node.textContent || "").includes(target.text));
-      const overlayState = () => {
-        const overlay = document.querySelector("#fuman-entitlement-locked-overlay");
-        const card = overlay?.querySelector(".fuman-entitlement-card");
-        const style = overlay ? getComputedStyle(overlay) : null;
-        const rect = overlay?.getBoundingClientRect?.();
-        const bounds = rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height, innerWidth, innerHeight } : null;
+      const previewState = (target) => {
+        const panel = document.querySelector(`#${target.view}-view`);
+        const preview = panel?.querySelector(".fuman-entitlement-preview");
+        const card = preview?.querySelector(".fuman-entitlement-lock-card");
         return {
-          exists: Boolean(overlay),
-          visible: visible(overlay),
-          fixed: style?.position === "fixed",
-          fullScreen: Boolean(rect && rect.left <= 1 && rect.top <= 1 && rect.right >= innerWidth - 24 && rect.bottom >= innerHeight - 24),
-          rect: bounds,
-          zIndex: Number(style?.zIndex || 0),
-          dialog: card?.getAttribute("role") === "dialog" && card?.getAttribute("aria-modal") === "true",
-          text: overlay?.textContent || "",
-          actions: [...overlay?.querySelectorAll("[data-entitlement-action]") || []].map((node) => node.dataset.entitlementAction).sort(),
+          exists: Boolean(preview),
+          visible: visible(preview),
+          inPanel: Boolean(panel && preview && panel.contains(preview)),
+          panelActive: Boolean(panel && panel.hidden === false && panel.getAttribute("aria-hidden") !== "true" && panel.classList.contains("active")),
+          dialog: card?.getAttribute("role") === "dialog" && card?.getAttribute("aria-label") === "會員權限尚未開通",
+          text: preview?.textContent || "",
+          actions: [...preview?.querySelectorAll("[data-entitlement-action]") || []].map((node) => node.dataset.entitlementAction).sort(),
+          rowsLeaked: Boolean(preview?.querySelector("tbody tr,.strategy-row,.strategy-stock-card,.radar-signal-card,.chip-trade-row,.cb-detect-card,.warrant-flow-card")),
         };
       };
-      const results = [];
-      const sanitizedRoute = JSON.parse(localStorage.getItem("fuman-terminal-last-route-v1") || "{}");
+      const results = [];      const sanitizedRoute = JSON.parse(localStorage.getItem("fuman-terminal-last-route-v1") || "{}");
       const publicMarketMarked = document.querySelector('[data-view="market"]')?.dataset.entitlementLock || "";
       const memberMarked = document.querySelector('[data-view="member"]')?.dataset.entitlementLock || "";
       for (const target of targets) {
-        document.querySelector("#fuman-entitlement-locked-overlay")?.remove();
+        document.querySelector(".fuman-entitlement-preview")?.remove();
         const link = findTarget(target);
         link?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1 }));
         link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -237,11 +234,11 @@ async function runUiProbe(baseUrl) {
           key: target.key,
           linkFound: Boolean(link),
           marked: link?.dataset.entitlementLock === "required",
-          overlay: overlayState(),
-          protectedPanelHidden: !panel || panel.hidden === true || panel.getAttribute("aria-hidden") === "true" || !panel.classList.contains("active"),
+          preview: previewState(target),
+          protectedPanelActive: Boolean(panel && panel.hidden === false && panel.getAttribute("aria-hidden") !== "true" && panel.classList.contains("active")),
         });
       }
-      document.querySelector("#fuman-entitlement-locked-overlay")?.remove();
+      document.querySelector(".fuman-entitlement-preview")?.remove();
       const strategyLink = findTarget({ view: "strategy", text: "策略2" });
       const routeBlocked = window.FUMAN_DESKTOP_ROUTE_STATE?.shouldBlockView?.("strategy", strategyLink) === true;
       await new Promise((resolve) => setTimeout(resolve, 80));
@@ -252,8 +249,8 @@ async function runUiProbe(baseUrl) {
         results,
         directRoute: {
           routeBlocked,
-          overlay: overlayState(),
-          strategyHidden: document.querySelector("#strategy-view")?.hidden === true || document.querySelector("#strategy-view")?.getAttribute("aria-hidden") === "true" || !document.querySelector("#strategy-view")?.classList.contains("active"),
+          preview: previewState({ view: "strategy" }),
+          strategyActive: document.querySelector("#strategy-view")?.hidden === false && document.querySelector("#strategy-view")?.getAttribute("aria-hidden") !== "true" && document.querySelector("#strategy-view")?.classList.contains("active"),
         },
       };
     }, null, 30000);
@@ -269,20 +266,19 @@ function assertSummary(summary) {
   if (summary.publicMarketMarked) issues.push("public market nav must not be marked entitlement locked");
   if (summary.memberMarked) issues.push("member center nav must not be marked entitlement locked");
   for (const result of summary.results) {
-    const overlay = result.overlay || {};
+    const preview = result.preview || {};
     if (!result.linkFound) issues.push(`${result.key} protected nav link missing`);
     if (!result.marked) issues.push(`${result.key} protected nav must be visibly marked as locked`);
-    if (!overlay.exists || !overlay.visible || !overlay.fixed || !overlay.fullScreen || overlay.zIndex < 1000000) issues.push(`${result.key} must render visible fixed full-screen member overlay`);
-    if (!overlay.dialog || !/會員權限尚未開通|登入 \/ 開通權限/.test(overlay.text || "")) issues.push(`${result.key} overlay must expose member dialog copy and aria dialog state`);
-    for (const action of ["member", "market", "close"]) {
-      if (!overlay.actions?.includes(action)) issues.push(`${result.key} overlay missing ${action} action`);
+    if (!preview.exists || !preview.visible || !preview.inPanel || !result.protectedPanelActive) issues.push(`${result.key} must render visible inline member preview inside the protected panel`);
+    if (!preview.dialog || !/解鎖完整|登入已開通帳號|聯絡開通權限/.test(preview.text || "")) issues.push(`${result.key} preview must expose locked preview copy and registration actions`);
+    for (const action of ["member", "market"]) {
+      if (!preview.actions?.includes(action)) issues.push(`${result.key} preview missing ${action} action`);
     }
-    if (!result.protectedPanelHidden) issues.push(`${result.key} click must not activate protected panel behind member overlay`);
+    if (preview.rowsLeaked) issues.push(`${result.key} preview must not leak protected rows/cards before membership unlock`);
   }
   if (summary.directRoute.routeBlocked !== true) issues.push("direct route guard must block protected strategy route");
-  if (!summary.directRoute.overlay?.visible || !summary.directRoute.strategyHidden) issues.push("direct route guard must render member overlay and keep strategy panel hidden");
+  if (!summary.directRoute.preview?.visible || !summary.directRoute.strategyActive) issues.push("direct route guard must render inline member preview in the strategy panel");
 }
-
 (async () => {
   let staticServer = null;
   try {
@@ -299,7 +295,7 @@ function assertSummary(summary) {
     console.log(JSON.stringify({
       checked: summary.results.map((result) => result.key),
       savedRoute: summary.sanitizedRoute,
-      directRouteOverlay: summary.directRoute.overlay?.visible === true,
+      directRoutePreview: summary.directRoute.preview?.visible === true,
     }, null, 2));
   } catch (error) {
     console.error("[membership-ui-state] failed");
