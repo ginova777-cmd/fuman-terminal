@@ -970,3 +970,20 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     };
   }catch(error){}
 })();
+
+(function installMarketOverviewRouteGuard(){
+  try{
+    if(window.__fumanMarketOverviewRouteGuardInstalled)return;
+    window.__fumanMarketOverviewRouteGuardInstalled=true;
+    document.addEventListener("click",event=>{
+      const link=event.target?.closest?.('aside.sidebar a[data-view="market"]');
+      if(!link)return;
+      setTimeout(()=>{
+        try{
+          if(typeof applyMarketMode==="function")applyMarketMode("overview");
+          else document.querySelector('#market-view [data-market-mode="overview"]')?.click?.();
+        }catch(error){}
+      },0);
+    },true);
+  }catch(error){}
+})();
