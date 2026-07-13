@@ -253,7 +253,7 @@ async function runUiProbe(baseUrl) {
       const strategyLink = findTarget({ view: "strategy", text: "策略2" });
       const routeBlocked = window.FUMAN_DESKTOP_ROUTE_STATE?.shouldBlockView?.("strategy", strategyLink) === true;
       await new Promise((resolve) => setTimeout(resolve, 220));
-      return {
+      return JSON.parse(JSON.stringify({
         sanitizedRoute,
         publicMarketMarked,
         memberMarked,
@@ -264,7 +264,7 @@ async function runUiProbe(baseUrl) {
           preview: previewState({ view: "strategy" }),
           strategyActive: document.querySelector("#strategy-view")?.hidden === false && document.querySelector("#strategy-view")?.getAttribute("aria-hidden") !== "true" && document.querySelector("#strategy-view")?.classList.contains("active"),
         },
-      };
+      }));
     }, null, 30000);
   } finally {
     cdp?.close();
@@ -274,6 +274,15 @@ async function runUiProbe(baseUrl) {
 }
 
 function assertSummary(summary) {
+  if (!summary || typeof summary !== "object") {
+    issues.push("ui probe returned empty summary");
+    return;
+  }
+  if (!Array.isArray(summary.results)) {
+    issues.push("ui probe summary missing results array");
+    summary.results = [];
+  }
+  summary.directRoute = summary.directRoute || {};
   if (summary.sanitizedRoute?.viewName !== "market") issues.push(`saved protected route must sanitize to market; got ${JSON.stringify(summary.sanitizedRoute)}`);
   if (summary.publicMarketMarked) issues.push("public market nav must not be marked entitlement locked");
   if (summary.memberMarked) issues.push("member center nav must not be marked entitlement locked");
