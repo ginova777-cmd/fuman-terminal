@@ -57,6 +57,11 @@ const STRATEGY3_MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO
 const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
 const STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
 const STRATEGY3_REQUIRE_NEAR_100_HIGH = process.env.STRATEGY3_REQUIRE_NEAR_100_HIGH === "1";
+const STRATEGY3_REQUIRE_OPENING_CANDIDATE = process.env.STRATEGY3_REQUIRE_OPENING_CANDIDATE !== "0";
+const STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS || 3000);
+const STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE || 0.7);
+const STRATEGY3_BOLLINGER_PERIOD = Number(process.env.STRATEGY3_BOLLINGER_PERIOD || 20);
+const STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER = Number(process.env.STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER || 2);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -447,6 +452,18 @@ function buildSupabaseHeaders(preferCount = false) {
   return headers;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function fetchSupabaseRest(pathname, options = {}) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("missing Supabase service credentials");
@@ -1381,7 +1398,7 @@ function buildSupabaseScanRows(output, runId) {
 }
 
 async function upsertSupabaseRows(table, rows, conflictTarget) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictTarget}`, {
+  const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${conflictTarget}`, {
     method: "POST",
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -1390,7 +1407,7 @@ async function upsertSupabaseRows(table, rows, conflictTarget) {
       Prefer: "resolution=merge-duplicates",
     },
     body: JSON.stringify(rows),
-  });
+  }, 30000);
   if (response.ok) return;
   const text = await response.text().catch(() => "");
   throw new Error(`${table} HTTP ${response.status} ${text.slice(0, 500)}`.trim());
@@ -1954,6 +1971,175 @@ function strategy3TopRankSignals(changeRank, volumeRank) {
   return signals;
 }
 
+function averageStrategy3Numbers(values) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  return usable.length ? usable.reduce((sum, value) => sum + value, 0) / usable.length : 0;
+}
+
+function strategy3SmaAtEnd(values, period) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  if (usable.length < period) return 0;
+  return averageStrategy3Numbers(usable.slice(-period));
+}
+
+function strategy3StandardDeviation(values, average) {
+  const usable = (values || []).map(cleanNumber).filter((value) => value > 0);
+  if (!usable.length) return 0;
+  const mean = cleanNumber(average) || averageStrategy3Numbers(usable);
+  const variance = usable.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / usable.length;
+  return Math.sqrt(variance);
+}
+
+function strategy3BollingerAtEnd(dailyRows, period = STRATEGY3_BOLLINGER_PERIOD) {
+  const closes = (dailyRows || []).map((row) => cleanNumber(row.close)).filter((value) => value > 0);
+  if (closes.length < period) return null;
+  const window = closes.slice(-period);
+  const middle = averageStrategy3Numbers(window);
+  const deviation = strategy3StandardDeviation(window, middle);
+  const upper = middle + (deviation * STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER);
+  const lower = middle - (deviation * STRATEGY3_BOLLINGER_STDDEV_MULTIPLIER);
+  return {
+    period,
+    middle: Number(middle.toFixed(2)),
+    upper: Number(upper.toFixed(2)),
+    lower: Number(lower.toFixed(2)),
+    widthPercent: middle > 0 ? Number((((upper / Math.max(lower, 0.01)) - 1) * 100).toFixed(2)) : 0,
+  };
+}
+
+function strategy3DailyCloseZone(row) {
+  const high = cleanNumber(row?.high);
+  const low = cleanNumber(row?.low);
+  const close = cleanNumber(row?.close);
+  if (!(close > 0) || !(high > 0) || !(low > 0)) return 0;
+  if (high <= low) return close >= high ? 1 : 0;
+  return clamp((close - low) / (high - low), 0, 1);
+}
+
+async function fetchStrategy3DailyRows(code) {
+  const symbol = normalizeCode(code);
+  if (!symbol) return [];
+  const path = [
+    "stock_daily_volume",
+    "?select=symbol,code,trade_date,open,high,low,close,volume_lots,volume_shares",
+    `&symbol=eq.${encodeURIComponent(symbol)}`,
+    "&order=trade_date.desc",
+    "&limit=80",
+  ].join("");
+  const { rows } = await fetchSupabaseRest(path, { timeoutMs: 20000 });
+  return [...(rows || [])].reverse();
+}
+
+function buildStrategy3DailyEnhancement(stock, dailyRows) {
+  const rows = Array.isArray(dailyRows) ? dailyRows : [];
+  const latest = rows[rows.length - 1] || null;
+  const close = cleanNumber(latest?.close || stock.close);
+  const open = cleanNumber(latest?.open || stock.open);
+  const ma35 = strategy3SmaAtEnd(rows.map((row) => row.close), 35);
+  const bollinger = strategy3BollingerAtEnd(rows);
+  const closeZoneRatio = strategy3DailyCloseZone(latest);
+  const volumeLots = cleanNumber(stock.tradeVolumeLots || stock.volumeLots)
+    || cleanNumber(latest?.volume_lots)
+    || Math.round(cleanNumber(latest?.volume_shares) / 1000);
+  const volumeRatio = cleanNumber(stock.volumeRatio);
+  const turnoverRate = cleanNumber(stock.turnoverRate);
+  const dailyCloseAboveMa35 = close > 0 && ma35 > 0 && close > ma35;
+  const dailyRedK = close > 0 && open > 0 && close > open;
+  const dailyStrongCloseZone = closeZoneRatio >= STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE;
+  const dailyVolumeOk = volumeLots >= STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS;
+  const strategy3OpeningCandidateOk = dailyCloseAboveMa35
+    && dailyRedK
+    && dailyStrongCloseZone
+    && volumeRatio > STRATEGY3_MIN_VOLUME_RATIO
+    && dailyVolumeOk;
+  const bollingerUpperOk = Boolean(bollinger && close >= cleanNumber(bollinger.upper));
+  return {
+    strategy3DailyRows: rows.length,
+    strategy3DailyTradeDate: String(latest?.trade_date || ""),
+    strategy3DailyClose: Number(close.toFixed(2)),
+    strategy3DailyOpen: Number(open.toFixed(2)),
+    strategy3DailyMa35: Number(ma35.toFixed(2)),
+    strategy3DailyCloseAboveMa35: dailyCloseAboveMa35,
+    strategy3DailyRedK: dailyRedK,
+    strategy3DailyCloseZoneRatio: Number(closeZoneRatio.toFixed(2)),
+    strategy3DailyStrongCloseZone: dailyStrongCloseZone,
+    strategy3DailyVolumeLots: Math.round(volumeLots),
+    strategy3DailyVolumeOk: dailyVolumeOk,
+    strategy3OpeningCandidateOk,
+    strategy3BollingerUpper: bollinger ? cleanNumber(bollinger.upper) : 0,
+    strategy3BollingerMiddle: bollinger ? cleanNumber(bollinger.middle) : 0,
+    strategy3BollingerLower: bollinger ? cleanNumber(bollinger.lower) : 0,
+    strategy3BollingerWidthPercent: bollinger ? cleanNumber(bollinger.widthPercent) : 0,
+    strategy3BollingerUpperOk: bollingerUpperOk,
+    strategy3TurnoverBonusOk: turnoverRate > 5,
+  };
+}
+
+function strategy3Chunk(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+async function fetchStrategy3DailyRowsForCodes(codes, sourceWarnings) {
+  const rowsByCode = new Map();
+  const uniqueCodes = [...new Set((codes || []).map(normalizeCode).filter(Boolean))];
+  for (const chunk of strategy3Chunk(uniqueCodes, 40)) {
+    try {
+      const path = [
+        "stock_daily_volume",
+        "?select=symbol,code,trade_date,open,high,low,close,volume_lots,volume_shares",
+        `&symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
+        "&order=trade_date.desc",
+        `&limit=${Math.max(1000, chunk.length * 80)}`,
+      ].join("");
+      const { rows } = await fetchSupabaseRest(path, { timeoutMs: 30000 });
+      for (const row of rows || []) {
+        const code = normalizeCode(row.symbol || row.code);
+        if (!code) continue;
+        const bucket = rowsByCode.get(code) || [];
+        bucket.push(row);
+        rowsByCode.set(code, bucket);
+      }
+    } catch (error) {
+      sourceWarnings.push(`strategy3 daily enhancement batch failed ${chunk.join(",")}: ${error?.message || String(error)}`);
+    }
+  }
+  rowsByCode.forEach((rows, code) => {
+    rowsByCode.set(code, [...rows]
+      .sort((a, b) => String(a.trade_date || "").localeCompare(String(b.trade_date || "")))
+      .slice(-80));
+  });
+  return rowsByCode;
+}
+
+async function fetchStrategy3DailyEnhancementMap(stocks, sourceWarnings) {
+  const stockRows = stocks || [];
+  const rowsByCode = await fetchStrategy3DailyRowsForCodes(stockRows.map((stock) => stock.code), sourceWarnings);
+  return new Map(stockRows
+    .map((stock) => {
+      const code = normalizeCode(stock.code);
+      return [code, buildStrategy3DailyEnhancement(stock, rowsByCode.get(code) || [])];
+    })
+    .filter(([code]) => code));
+}
+
+function strategy3DailyEnhancementSignals(stock) {
+  const signals = [];
+  if (stock.strategy3OpeningCandidateOk) {
+    signals.push({
+      id: "開盤候選",
+      reason: `日線強勢：收盤站上MA35 ${cleanNumber(stock.strategy3DailyMa35).toFixed(2)}、紅K、收在日內強勢區 ${(cleanNumber(stock.strategy3DailyCloseZoneRatio) * 100).toFixed(0)}%、成交量 ${Math.round(cleanNumber(stock.strategy3DailyVolumeLots))} 張`,
+    });
+  }
+  if (stock.strategy3TurnoverBonusOk) {
+    signals.push({ id: "週轉率>5", reason: `週轉率 ${cleanNumber(stock.turnoverRate).toFixed(2)}% > 5%` });
+  }
+  if (stock.strategy3BollingerUpperOk) {
+    signals.push({ id: "站上布林上軌", reason: `收盤 ${cleanNumber(stock.strategy3DailyClose).toFixed(2)} >= 布林上軌 ${cleanNumber(stock.strategy3BollingerUpper).toFixed(2)}` });
+  }
+  return signals;
+}
 function strategy3FieldGate(stock, volumeRatio, volumeLots) {
   const pct = cleanNumber(stock.percent);
   const outsideVolume = cleanNumber(stock.outsideVolume ?? stock.cumulativeAskVolume);
@@ -2029,12 +2215,18 @@ function buildStrategy3MatchDiagnostics(scored, tvAnalyzed = []) {
   const sessionReadyCandidates = scored.filter((stock) => stock.strategy3Session1mReady).length;
   const hardFieldGateCandidates = scored.filter((stock) => stock.strategy3FieldGate?.ok).length;
   const fixedPassCandidates = scored.filter((stock) => stock.strategy3FixedPass).length;
+  const openingCandidateCount = scored.filter((stock) => stock.strategy3OpeningCandidateOk).length;
+  const turnoverBonusCount = scored.filter((stock) => stock.strategy3TurnoverBonusOk).length;
+  const bollingerUpperCount = scored.filter((stock) => stock.strategy3BollingerUpperOk).length;
   const tvPassCount = tvAnalyzed.filter((stock) => stock.tvOvernightEntry?.ok).length;
   return {
     sourceUniverseCount: scored.length,
     sessionReadyCandidates,
     hardFieldGateCandidates,
     fixedPassCandidates,
+    openingCandidateCount,
+    turnoverBonusCount,
+    bollingerUpperCount,
     tvAnalyzedCount: tvAnalyzed.length,
     tvPassCount,
     fieldGateRejectBreakdown: summarizeStrategy3RejectMap(fieldGateRejects),
@@ -2112,13 +2304,41 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
       ],
     };
   });
-  const scored = allScored
+  const baseScored = allScored
     .filter((stock) => stock.close > 0 && strategy3HasSession1m(stock))
-    .filter((stock) => stock.strategy3FixedPass)
+    .filter((stock) => stock.strategy3FixedPass);
+  const dailyEnhancementMap = await fetchStrategy3DailyEnhancementMap(baseScored, sourceWarnings);
+  const enhancedScored = baseScored.map((stock) => {
+    const enhancement = dailyEnhancementMap.get(normalizeCode(stock.code)) || buildStrategy3DailyEnhancement(stock, []);
+    const bonusScore = (enhancement.strategy3OpeningCandidateOk ? 8 : 0)
+      + (enhancement.strategy3TurnoverBonusOk ? 6 : 0)
+      + (enhancement.strategy3BollingerUpperOk ? 6 : 0);
+    const nextScore = clamp(stock.overnightScore + bonusScore, 0, 100);
+    const enhancedStock = {
+      ...stock,
+      ...enhancement,
+      strategy3OpeningCandidateRequired: STRATEGY3_REQUIRE_OPENING_CANDIDATE,
+      strategy3OpeningCandidateReason: enhancement.strategy3OpeningCandidateOk
+        ? "收盤站上MA35、紅K、收在日內強勢區、成交量達標"
+        : `未進主名單：MA35=${cleanNumber(enhancement.strategy3DailyMa35).toFixed(2)}、紅K=${Boolean(enhancement.strategy3DailyRedK)}、強勢區=${Boolean(enhancement.strategy3DailyStrongCloseZone)}、成交量OK=${Boolean(enhancement.strategy3DailyVolumeOk)}`,
+      strategy3DailyBonusScore: bonusScore,
+      overnightScore: nextScore,
+      score: nextScore,
+    };
+    return {
+      ...enhancedStock,
+      matches: [
+        ...stock.matches,
+        ...strategy3DailyEnhancementSignals(enhancedStock),
+      ],
+    };
+  });
+  const scored = enhancedScored
+    .filter((stock) => !STRATEGY3_REQUIRE_OPENING_CANDIDATE || stock.strategy3OpeningCandidateOk)
     .sort((a, b) => b.overnightScore - a.overnightScore || b.value - a.value);
 
   if (!STRATEGY3_REQUIRE_TV_ENTRY) {
-    lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, scored);
+    lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(enhancedScored, scored);
     return scored;
   }
 
@@ -2183,7 +2403,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   });
 
   const sourceCompleteAnalyzed = analyzed.filter((stock) => cleanNumber(stock.tvOvernightEntry?.rsi) > 0 && cleanNumber(stock.tvOvernightEntry?.entryWindowCandles || stock.tvOvernightEntry?.entryWindowRows) > 0);
-  lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, analyzed);
+  lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(enhancedScored, analyzed);
   return sourceCompleteAnalyzed
     .sort((a, b) => {
       const tvDiff = Number(Boolean(b.tvOvernightEntry?.ok)) - Number(Boolean(a.tvOvernightEntry?.ok));
