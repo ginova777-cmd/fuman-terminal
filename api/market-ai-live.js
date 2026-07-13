@@ -625,18 +625,18 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const heatmapQuoteCoverage = buildHeatmapQuoteCoverage(heatmapPayload || {});
   const sourceIssues = [
     heatmapIssue,
-    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時雷達非今日資料：${radarTradeDate}` : "",
+    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時功能非今日資料：${radarTradeDate}` : "",
     !marketClosedDisplay && baseTradeDate && !baseIsToday ? `AI cache 非今日資料：${baseTradeDate}` : "",
   ].filter(Boolean);
   const staleSources = [
     !marketClosedDisplay && heatmapTradeDate && !heatmapIsToday ? `熱力圖 ${heatmapTradeDate}` : "",
-    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時雷達 ${radarTradeDate}` : "",
+    !marketClosedDisplay && radarTradeDate && !radarIsToday ? `即時功能 ${radarTradeDate}` : "",
     !marketClosedDisplay && baseTradeDate && !baseIsToday ? `AI cache ${baseTradeDate}` : "",
   ].filter(Boolean);
 
   const sectors = heatmapUsable ? normalizeArray(heatmapPayload?.sectors) : [];
   const sectorStocks = heatmapUsable ? heatmapStocks(heatmapPayload) : [];
-  const radarRows = filterRowsForToday(rowsFromPayload(radarPayload), clock, radarIsToday);
+  const radarRows = [];
   const baseRows = filterRowsForToday(rowsFromPayload(payload), clock, baseIsToday);
   const heatmapUp = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.up), 0);
   const heatmapDown = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.down), 0);
@@ -647,7 +647,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     .sort((a, b) => cleanNumber(a?.pct ?? a?.avgPct) - cleanNumber(b?.pct ?? b?.avgPct))
     .slice(0, 5);
 
-  const normalizedRadar = radarRows.map((row) => normalizeStockRow(row, "即時雷達", [firstText(row, ["side", "direction"], "多")])).filter(Boolean);
+  const normalizedRadar = radarRows.map((row) => normalizeStockRow(row, "盤中訊號", [firstText(row, ["side", "direction"], "多")])).filter(Boolean);
   const normalizedBase = baseRows.map((row) => normalizeStockRow(row, "AI 判讀", ["AI 判讀"])).filter(Boolean);
   const normalizedHeatmap = sectorStocks
     .sort((a, b) => cleanNumber(b.value ?? b.tradeValue ?? b.amountYi) - cleanNumber(a.value ?? a.tradeValue ?? a.amountYi))
@@ -702,16 +702,16 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     title: "--",
     text: staleSources.length
       ? `等待今日 ${clock.ymd} 即時資料；已排除 ${staleSources.join("、")}，舊 snapshot 不產生優先觀察。`
-      : "等待即時雷達與熱力圖資料。",
+      : "等待指數與 AI 簡報資料。",
     stock: null,
     staleBlocked: priorityStaleBlocked,
   };
 
   const groups = {
-    all: groupPayload("全部", "AI merge: heatmap + realtime radar + market-ai", allGroupRows, "綜合分數排序"),
-    momentum: groupPayload("動能強", "heatmap pct + realtime radar", momentumRows, "優先看漲幅與成交額延續"),
+    all: groupPayload("全部", "AI merge disabled: simple market-ai", allGroupRows, "綜合分數排序"),
+    momentum: groupPayload("動能強", "market-ai momentum", momentumRows, "優先看漲幅與成交額延續"),
     institution: groupPayload("法人買超", "radar/chip tags", institutionRows, "只列有法人、外資、投信或籌碼文字的標的"),
-    intraday: groupPayload("當沖熱", "realtime radar", intradayRows, "只列即時雷達多方訊號"),
+    intraday: groupPayload("盤中線索", "disabled", [], "即時掃描已停用"),
     risk: groupPayload("風險高", "radar short + weak heatmap", riskRows, "偏空、弱勢或風險標的先控管"),
   };
   const filters = [
@@ -738,7 +738,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   ];
   const reasoning = [
     { key: "breadth", title: `上漲 ${upRatio.toFixed(2)}% / 下跌 ${downRatio.toFixed(2)}%`, text: heatmapUsable ? `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。` : (heatmapIssue || "今日熱力圖尚未完成，暫不使用舊 snapshot 判斷市場方向。") },
-    { key: "radar", title: `${normalizedRadar.length.toLocaleString("zh-TW")} 檔即時雷達`, text: "只採 API-only 最新資料，不讀舊 DOM snapshot。" },
+    { key: "radar", title: "簡單指數報告", text: "只採 API-only 最新資料，不讀舊 DOM snapshot。" },
     { key: "sector", title: `強族群前 ${Math.min(3, strongNames.length)} 名`, text: strongNames.join("、") || "等待族群擴散。" },
     { key: "risk", title: groups.risk.count ? "風險標的先排除" : "風險暫無集中", text: groups.risk.rows.slice(0, 4).map((row) => `${row.code} ${row.name}`).join("、") || weakNames.join("、") || "等待風險訊號。" },
   ];
@@ -842,10 +842,7 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
 
 
 function usesSimpleMarketAiReport(request = {}) {
-  const query = request.query || {};
-  if (query.legacy === "1" || query.mode === "legacy") return false;
-  if (query.simple === "0" || query.report === "legacy") return false;
-  return process.env.FUMAN_MARKET_AI_SIMPLE_REPORT_ONLY !== "0";
+  return true;
 }
 
 function marketIndexItem(marketPayload = {}, matcher) {
@@ -985,10 +982,10 @@ function groupIndexReportRows(rows) {
   const riskRows = rows.filter((row) => row.side === "short" || row.side === "risk");
   const momentumRows = rows.filter((row) => row.side === "long");
   return {
-    all: groupPayload("簡單報告", "market index report", rows, "只整合 AI 判讀與加權指數，不使用熱力圖或即時雷達"),
+    all: groupPayload("簡單報告", "market index report", rows, "只整合 AI 判讀、加權指數、櫃買指數與台指期夜盤"),
     momentum: groupPayload("偏多線索", "market index report", momentumRows, "加權、櫃買、台指期的偏多項目"),
     institution: groupPayload("籌碼/族群", "disabled", [], "簡單報告模式不掃個股籌碼"),
-    intraday: groupPayload("即時雷達", "disabled", [], "使用者已停用即時雷達，不訂閱 Fugle 全市場"),
+    intraday: groupPayload("盤中線索", "disabled", [], "即時掃描已停用，不訂閱 Fugle 全市場"),
     risk: groupPayload("風險", "market index report", riskRows, "大盤轉弱或資料不足時只做提醒"),
   };
 }
@@ -1033,7 +1030,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
     action,
   ];
   const riskNotes = [
-    { title: "水源成本", text: "熱力圖與即時雷達已從 AI 判讀預設鏈路停用，不常駐 Fugle WebSocket。" },
+    { title: "水源成本", text: "熱力圖與即時掃描已從 AI 判讀預設鏈路停用，不常駐 Fugle WebSocket。" },
     { title: "正式水源", text: "這是 display-only 報告，不 publish latest，也不升級 daytrade formal entry。" },
     { title: "資料不足", text: riskText },
   ];
@@ -1041,7 +1038,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
     { key: "twse", title: "加權指數", text: weighted ? `來源 ${weighted._source || "market API"}，變動 ${formatSignedPercent(weightedPct)}。` : "尚未取得加權指數。" },
     { key: "otc", title: "櫃買指數", text: otc ? `來源 ${otc._source || "market API"}，變動 ${formatSignedPercent(otcPct)}。` : "尚未取得櫃買指數。" },
     { key: "txf", title: "台指期", text: futures ? `${futures.name || "TXF"} ${futures.price || "--"}，${futures.basisLabel || formatSignedPercent(futuresPct)}。` : "尚未取得台指期資料。" },
-    { key: "policy", title: "資源規則", text: "報告模式不呼叫 heatmap / realtime-radar，不使用 shared source 升級正式水源。" },
+    { key: "policy", title: "資源規則", text: "報告模式只整合市場指數與 AI 判讀，不使用 shared source 升級正式水源。" },
   ];
   const dashboard = {
     sample: pctValues.length,
@@ -1152,7 +1149,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       start: "09:00:00",
       end: "13:30:00",
       active: isMarketAiDetectWindow(clock),
-      reason: "simple-index-report-no-heatmap-radar",
+      reason: "simple-index-report-only",
       taipeiDate: clock.date,
       taipeiTime: clock.time,
     },

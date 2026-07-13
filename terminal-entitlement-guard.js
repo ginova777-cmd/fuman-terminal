@@ -7,7 +7,7 @@
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
   const PUBLIC_VIEWS = new Set(["market", "member"]);
   const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"]);
-  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究"];
+  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究"];
 
   function parseJson(value) {
     try {
@@ -297,7 +297,6 @@
   }
   function lockedTitle(viewName, targetLabel) {
     if (viewName === "strategy") return "策略中心";
-    if (viewName === "realtime-radar") return "即時雷達";
     if (viewName === "chip-trade") return "買賣超";
     if (viewName === "cb-detect") return "CB可轉債";
     if (viewName === "warrant-flow") return "權證走向";

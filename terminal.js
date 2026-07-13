@@ -31,6 +31,11 @@
   }
 
   function loadApp(reason = "idle") {
+    if (document.querySelector("script[data-fuman-desktop-fast-shell]") && !window.FUMAN_RUNTIME_CONFIG?.forceLegacyTerminalApp) {
+      mark(`app-disabled-desktop-fast:${reason}`);
+      window.FUMAN_TERMINAL_APP_READY = true;
+      return Promise.resolve(true);
+    }
     if (window.FUMAN_TERMINAL_APP_READY) return Promise.resolve(window.FUMAN_TERMINAL_APP_READY);
     if (appPromise) return appPromise;
     unlockPublicTerminalShell();

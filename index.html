@@ -9,7 +9,7 @@
     </script>
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="preload" as="image" href="/assets/logo.webp" fetchpriority="high">
-    <link rel="stylesheet" href="styles.css?v=public-terminal-fast-20260630-27&membership-footer=20260713-02">
+    <link rel="stylesheet" href="styles.css?v=public-terminal-fast-20260630-28&membership-footer=20260713-02">
     <link rel="stylesheet" href="terminal-market-overview-restore.css?v=market-overview-restore-20260627-02">
   </head>
   <body class="auth-ready public-terminal" data-disable-heatmap-radar="1">
@@ -68,7 +68,6 @@
 
         <nav class="nav-list" aria-label="Main navigation">
           <a class="nav-item active" href="#" data-view="market" data-mobile-label="市場"><span class="nav-icon globe">●</span>市場總覽</a>
-          <a class="strategy-nav realtime-radar-nav" href="#" data-view="realtime-radar" data-mobile-label="即時" data-disabled-surface="realtime-radar" hidden aria-hidden="true" tabindex="-1" style="display:none!important"><span>◎</span>即時雷達</a>
           <p class="nav-label">策略模組</p>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="雷達"><span class="s1">⚡</span>策略1-明日開盤入</a>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="當沖"><span class="s2">◔</span>策略2-當沖雷達</a>
@@ -196,11 +195,6 @@
             </div>
             <div class="heatmap" id="heatmap"></div>
           </section>
-        </section>
-
-        <!-- 即時雷達 -->
-        <section class="view-panel radar-view" id="realtime-radar-view" data-disabled-surface="realtime-radar" hidden aria-hidden="true" style="display:none!important">
-          <div class="empty-state">即時雷達載入中...</div>
         </section>
 
         <!-- 自選股 -->
@@ -604,7 +598,7 @@
     };
   }
   const hideDisabledSurfaces = () => {
-    document.querySelectorAll('[data-disabled-surface="heatmap"],[data-disabled-surface="realtime-radar"],.realtime-radar-nav,[data-view="realtime-radar"],#realtime-radar-view,#market-view .sector-section,#heatmap,[data-market-heatmap-tabs]').forEach((node) => {
+    document.querySelectorAll('[data-disabled-surface="heatmap"],#market-view .sector-section,#heatmap,[data-market-heatmap-tabs]').forEach((node) => {
       node.hidden = true;
       node.setAttribute("aria-hidden", "true");
       node.style.setProperty("display", "none", "important");
@@ -617,15 +611,6 @@
     } catch {}
   };
   hideDisabledSurfaces();
-  document.addEventListener("click", (event) => {
-    const link = event.target?.closest?.('[data-view="realtime-radar"]');
-    if (!link) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation?.();
-    document.querySelector('[data-view="market"]')?.click?.();
-  }, true);
-  document.documentElement.dataset.fumanDisabledRealtimeRadarClickGuard = "1";
 
   document.addEventListener("DOMContentLoaded", hideDisabledSurfaces, { once: true });
   window.addEventListener("fuman:market-render", hideDisabledSurfaces);
@@ -648,13 +633,13 @@
     <script data-market-closed-banner="v2">
 (()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;const id="fuman-market-closed-banner";function label(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function removeClosed(p){document.querySelector("#"+id)?.remove();document.documentElement.dataset.marketOpen="true";document.documentElement.dataset.marketClosedProtection="false";document.body&&(document.body.dataset.marketOpen="true",document.body.dataset.marketClosedProtection="false");window.FUMAN_MARKET_CALENDAR=p||null;window.dispatchEvent(new CustomEvent("fuman:market-calendar",{detail:p||null}));setTimeout(()=>{try{window.FUMAN_DESKTOP_FAST_BUNDLE_PRIME?.(true)}catch{}},800)}function show(p){window.FUMAN_MARKET_CALENDAR=p||null;if(!p)return;if(p.marketOpen===true){removeClosed(p);return}if(p.marketOpen!==false)return;document.documentElement.dataset.marketOpen="false";document.documentElement.dataset.marketClosedProtection="true";document.body&&(document.body.dataset.marketOpen="false",document.body.dataset.marketClosedProtection="true");let n=document.querySelector("#"+id);if(!n){n=document.createElement("aside");n.id=id;n.setAttribute("role","status");n.style.cssText="position:sticky;top:0;z-index:9999;margin:8px 0 12px;border:1px solid #f59e0b;border-radius:8px;background:#78350f;color:#fff7ed;padding:10px 12px;font-weight:800;line-height:1.5;box-shadow:0 10px 28px rgba(0,0,0,.18)";const target=document.querySelector("main.dashboard")||document.querySelector(".dashboard")||document.body;target.prepend(n)}n.textContent=label(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();
     </script>
-    <script src="terminal-entitlement-guard.js?v=public-terminal-fast-20260630-27&membership-lock=20260713-11"></script>
-    <script src="terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-27&single-ai-renderer=20260702"></script>
+    <script src="terminal-entitlement-guard.js?v=public-terminal-fast-20260630-28&membership-lock=20260713-11"></script>
+    <script src="terminal-ai-risk-guard.js?v=public-terminal-fast-20260630-28&single-ai-renderer=20260702"></script>
     <script src="terminal-hotfix.js?watchlist-bridge=20260628-06" data-fuman-terminal-hotfix="1"></script>
     <script src="terminal-watchlist-shell.js?v=watchlist-rich-shell-20260712-quote-source-01" data-fuman-watchlist-shell="1"></script>
     <script src="terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&realtime-ledger=20260630-02&heatmap-live-contract=20260630-01&strategy2-card=20260701-03&strategy4-triangle=20260702-02&market-ai-single-renderer=20260702-03&display-switcher=20260702-01&strategy5-live-meta=20260706-02&strategy3-formal-header=20260708-01&market-ai-watchlist-actions=20260709-01&strategy3-card-ui=20260709-04" data-fuman-desktop-fast-shell="1"></script>
-    <script src="terminal-core.js?v=public-terminal-fast-20260630-27&runtime=desktop-fast-shell-core-20260628-03"></script>
-    <script src="terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260630-27&heatmap-ai-live=20260702-single-renderer"></script>
+    <script src="terminal-core.js?v=public-terminal-fast-20260630-28&runtime=desktop-fast-shell-core-20260628-03"></script>
+    <script src="terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260630-28&heatmap-ai-live=20260702-single-renderer"></script>
     <script src="terminal-market-overview-restore.js?v=market-overview-restore-20260627-02"></script>
   </body>
 </html>

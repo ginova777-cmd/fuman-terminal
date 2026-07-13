@@ -146,6 +146,24 @@ async function readLatestReportFromSupabase(config) {
   };
 }
 
+function readReportFromFile(file) {
+  const resolved = path.resolve(file);
+  const payload = JSON.parse(fs.readFileSync(resolved, "utf8"));
+  if (!payload || typeof payload !== "object") {
+    throw new Error(`invalid Strategy2 source file payload: ${resolved}`);
+  }
+  return {
+    source: `file:${resolved}`,
+    payload: {
+      ...payload,
+      transport: {
+        ...(payload.transport || {}),
+        sourceFile: resolved,
+        via: "scripts/publish-strategy2-complete-run.js",
+      },
+    },
+  };
+}
 async function postJson(url, key, body, prefer) {
   const timeoutMs = Math.max(15000, Number(process.env.STRATEGY2_COMPLETE_RUN_PUBLISH_TIMEOUT_MS || 90000));
   const response = await fetch(url, {
@@ -341,6 +359,12 @@ async function main() {
     process.exitCode = 3;
     return;
   }
+  const sourceFile = process.env.STRATEGY2_COMPLETE_RUN_SOURCE_FILE || "";
+  if (sourceFile) {
+    const latest = readReportFromFile(sourceFile);
+    source = latest.source;
+    payload = latest.payload;
+  }
   if (!payload) {
     const latest = await readLatestReportFromSupabase(config);
     source = latest.source;
@@ -440,3 +464,4 @@ main().catch((error) => {
   console.error(`[strategy2-complete-run] failed: ${error.message}`);
   process.exit(1);
 });
+

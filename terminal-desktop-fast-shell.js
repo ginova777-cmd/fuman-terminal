@@ -17,7 +17,7 @@
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const MARKET_ROUTE = "market|市場總覽";
-  const REALTIME_RADAR_ROUTE = "realtime-radar|即時雷達";
+  const REALTIME_RADAR_ROUTE = "";
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
   const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
@@ -706,14 +706,6 @@
         title: "市場總覽",
         badge: "FMN://market.fast-shell",
         summary: "加權、櫃買、台指與強勢排行固定殼先顯示，市場資料背景同步。",
-      };
-    }
-    if (view === "realtime-radar") {
-      return {
-        icon: "◎",
-        title: "即時雷達",
-        badge: "FMN://radar.live-api",
-        summary: "今日即時雷達走 live API，資料由正式 endpoint 直接更新。",
       };
     }
     if (view === "chip-trade") {
@@ -1791,7 +1783,7 @@
     let title = "等待完整掃描";
     let message = "策略1 等待下一次完整掃描與期權資料 ready，資料 ready 後會自動顯示。";
     if (isRealtimeRadarRoute(route)) {
-      title = /stale/i.test(`${reason} ${detail}`) ? "即時雷達資料過期" : "即時雷達暫停顯示";
+      title = /stale/i.test(`${reason} ${detail}`) ? "即時功能資料過期" : "即時功能已停用";
       message = "正式水源尚未提供可用的今日盤中資料，已停止沿用舊快照。";
     } else if (/futopt/i.test(detail)) {
       title = "等待期權資料";
@@ -4798,6 +4790,30 @@
     return mins >= 540 && mins <= 810;
   }
 
+  function isDisabledMarketDataPath(path) {
+    try {
+      const pathname = new URL(String(path || ""), window.location.origin).pathname;
+      return pathname === "/api/heatmap" || pathname === "/api/realtime-radar-latest";
+    } catch {
+      const value = String(path || "").split("?")[0];
+      return value === "/api/heatmap" || value === "/api/realtime-radar-latest";
+    }
+  }
+
+  function disabledMarketDataPayload(path) {
+    const base = {
+      ok: false,
+      disabled: true,
+      publishAllowed: false,
+      preservePreviousGood: true,
+      evidenceStatus: "disabled_surface",
+      source: "frontend-disabled-surface",
+      updatedAt: new Date().toISOString(),
+    };
+    return String(path || "").includes("heatmap")
+      ? { ...base, sectors: [], rows: [], stockCount: 0, health: { isHealthy: false, disabled: true } }
+      : { ...base, rows: [], count: 0, totalCount: 0, transport: { disabled: true } };
+  }
   function marketHeatmapContractPath() {
     return isMarketHeatmapLiveWindow()
       ? "/api/heatmap?limit=999&stocks=999&source=desktop-fast-shell-live"
@@ -4836,6 +4852,7 @@
   }
 
   function fetchMarketJson(path, limit = 60, force = false, timeoutMs = 6500) {
+    if (isDisabledMarketDataPath(path)) return Promise.resolve(disabledMarketDataPayload(path));
     const url = marketApiUrl(path, limit, force);
     const key = marketJsonCacheKey(path, limit);
     const cached = marketJsonCache.get(key);
@@ -5703,7 +5720,7 @@
       return;
     }
     const sectors = normalizeArray(heatmapPayload?.sectors);
-    const radarRows = normalizeArray(radarPayload?.rows);
+    const radarRows = [];
     const aiRows = [
       ...normalizeArray(aiPayload?.rows),
       ...normalizeArray(aiPayload?.items),
@@ -5772,7 +5789,6 @@
       const old = stockMap.get(code);
       if (!old || next.score > old.score) stockMap.set(code, next);
     };
-    radarRows.forEach((row) => addStock(row, "即時雷達", [String(row.side || "多")]));
     aiRows.slice(0, 80).forEach((row) => addStock(row, "AI 判讀", ["AI 判讀", row.source || row.cacheSource || "Supabase/API"]));
     sectorStocks.sort((a, b) => pctOf(b) - pctOf(a)).slice(0, 40).forEach((stock) => {
       const pct = pctOf(stock);
@@ -5789,8 +5805,8 @@
         volume: num(row.volume ?? row.tradeVolume),
         score: Math.max(1, Math.min(100, Math.round(num(row.score) || 60))),
         side: row.side || "多",
-        reason: row.reason || "即時雷達",
-        source: "即時雷達",
+        reason: row.reason || "盤中訊號",
+        source: "盤中訊號",
         tags: normalizeArray(row.signalTags).slice(0, 4),
       })).filter((row) => row.code);
     }
@@ -5927,7 +5943,7 @@
       item.key || "ai",
     ]) : [
       ["廣度檢核", `上漲 ${upRatio.toFixed(2)}% / 下跌 ${sample ? (down / sample * 100).toFixed(2) : "0.00"}%`, `樣本 ${sample.toLocaleString("zh-TW")} 檔，依熱力圖 API 判斷市場方向。`, "breadth"],
-      ["訊號母體", `${radarRows.length.toLocaleString("zh-TW")} 檔即時雷達`, "只採 API-only polling 最新資料，不讀舊 DOM snapshot。", "radar"],
+      ["報告模式", "簡單指數報告", "只整合 AI 判讀、加權指數、櫃買指數與台指期夜盤。", "source"],
       ["族群結構", `強族群前 ${Math.min(3, strong.length)} 名`, strongNames, "sector"],
       ["風險檢核", groups.risk.length ? "族群集中 / 融券壓力" : "風險暫無集中", riskNames, "risk"],
     ];
@@ -5955,7 +5971,7 @@
       all: ["綜合分數", "綜合給分參考人氣強弱與族群排序；符合快速判讀今日熱門觀察股。"],
       momentum: ["動能強", "依動能與漲幅排序，觀察價量是否延續。"],
       legal: ["法人買超", "依法人/資金訊號排序，用來觀察籌碼集中方向。"],
-      intraday: ["當沖熱", "依即時雷達與當沖熱度排序。"],
+      intraday: ["盤中線索", "此分頁已停用即時掃描，只保留 AI 判讀中的盤中線索。"],
       risk: ["風險高", "依風險訊號排序，先列需要控管追價的標的。"],
     };
     const [activeFilterTitle, activeFilterNote] = filterNotes[activeFilter] || filterNotes.all;
@@ -5965,7 +5981,7 @@
         <div>
           <h4><span class="market-ai-code">${escapeHtml(stock.code)}</span><span class="market-ai-name">${escapeHtml(stock.name)}</span></h4>
           <p>${escapeHtml(stock.reason || stock.source)}，綜合分數 ${Math.round(stock.score)}</p>
-          <p>排序主因：${escapeHtml(key === "risk" ? "風險排除" : key === "legal" ? "法人/資金訊號" : key === "intraday" ? "即時雷達" : "綜合分數")}；漲幅 ${stock.pct >= 0 ? "+" : ""}${stock.pct.toFixed(2)}%，成交額 ${escapeHtml(formatYi(stock.value))}。</p>
+          <p>排序主因：${escapeHtml(key === "risk" ? "風險排除" : key === "legal" ? "法人/資金訊號" : key === "intraday" ? "AI 判讀" : "綜合分數")}；漲幅 ${stock.pct >= 0 ? "+" : ""}${stock.pct.toFixed(2)}%，成交額 ${escapeHtml(formatYi(stock.value))}。</p>
         </div>
         <div>
           <span class="market-ai-chip">${escapeHtml(stock.industry || "--")}</span>
@@ -5995,7 +6011,7 @@
         <section class="market-ai-summary">
           <article class="market-ai-card hero ${biasToneClass}"><small>趨勢廣度</small><strong>${escapeHtml(biasTitle)}</strong><p>上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，有效漲跌多方占 ${directionalRatio.toFixed(1)}%。</p></article>
           <article class="market-ai-card warning"><small>風險控管</small><strong>${groups.risk.length ? "先控風險" : "風險正常"}</strong><p>${escapeHtml(weakNames)} 需留意，風險高標的不放入第一優先追蹤。</p></article>
-          <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(aiPayload?.priorityObservation?.title || (topStock ? `${topStock.code} ${topStock.name}` : "--"))}</strong><p>${escapeHtml(aiPayload?.priorityObservation?.text || (topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待即時雷達與熱力圖資料。"))}</p></article>
+          <article class="market-ai-card"><small>優先觀察</small><strong>${escapeHtml(aiPayload?.priorityObservation?.title || (topStock ? `${topStock.code} ${topStock.name}` : "--"))}</strong><p>${escapeHtml(aiPayload?.priorityObservation?.text || (topStock ? `${topStock.source}，分數 ${topStock.score}，族群 ${topStock.industry}。` : "等待指數與 AI 簡報資料。"))}</p></article>
         </section>
         <section class="market-ai-decision-strip"><span>判讀依據與風險細節</span><small>${escapeHtml(sessionTitle)} · ${escapeHtml(sessionText)}</small></section>
         <section class="market-ai-decision-grid">
@@ -6067,7 +6083,7 @@
           </div>
         `).join("")}
       </div>
-    ` : '<div class="empty-state">即時雷達 API 暫無資料。</div>';
+    ` : '<div class="empty-state">此頁已停用。</div>';
   }
 
   function refreshMarketApiOnly(force = false) {
@@ -6694,7 +6710,7 @@
           </div>
           <p class="radar-ai-note">多方 ${escapeHtml(radarCanvasMoney(flow.longFlow))} / 空方 ${escapeHtml(radarCanvasMoney(flow.shortFlow))}，淨流向 ${escapeHtml(radarCanvasMoney(flow.netFlow))}，完整保留 09:00-13:30 盤中訊號。</p>
         </section>
-        <nav class="radar-board-tabs" aria-label="即時雷達流水帳篩選">
+        <nav class="radar-board-tabs" aria-label="盤中流水帳篩選">
           <button type="button" data-radar-dom-side="long" class="${realtimeRadarDomSide === "long" ? "active" : ""}">多方 ${escapeHtml(String(flow.longRows.length))}</button>
           <button type="button" data-radar-dom-side="short" class="${realtimeRadarDomSide === "short" ? "short-active active" : "short-active"}">空方 ${escapeHtml(String(flow.shortRows.length))}</button>
         </nav>

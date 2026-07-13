@@ -16,7 +16,6 @@ const FORMAL_STRATEGY_ENDPOINTS = {
   "買賣超成績單": "/api/institution-latest?live=1",
   "權證成績單": "/api/warrant-flow-latest?live=1",
   "CB成績單": "/api/cb-detect-latest?live=1",
-  "即時雷達成績單": "/api/realtime-radar-latest?live=1",
 };
 const AUDIT_SURFACES = [
   ["strategy1", "Strategy1 open-buy", "/api/open-buy-latest?live=1"],
@@ -27,8 +26,6 @@ const AUDIT_SURFACES = [
   ["institution", "Institution / 買賣超", "/api/institution-latest?live=1"],
   ["cb", "CB", "/api/cb-detect-latest?live=1"],
   ["warrant", "Warrant / 權證", "/api/warrant-flow-latest?live=1"],
-  ["realtime-radar", "Realtime Radar", "/api/realtime-radar-latest?live=1"],
-  ["heatmap", "Heatmap", "/api/heatmap?source=desktop-live-contract"],
   ["market-ai", "Market AI", "/api/market-ai-live"],
   ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
   ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
@@ -226,7 +223,7 @@ function callStrategy2Latest(timeoutMs = 12000) {
         live: "1",
         today: "1",
         verify: "1",
-        limit: "70",
+        top: "1",
       };
       timer = setTimeout(() => resolve({
         statusCode: 504,
@@ -238,7 +235,7 @@ function callStrategy2Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&live=1&today=1&verify=1&limit=70",
+        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&live=1&today=1&verify=1&top=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -1394,3 +1391,5 @@ module.exports.__test = {
   selectPayloadDate,
   withScorecardContract,
 };
+
+
