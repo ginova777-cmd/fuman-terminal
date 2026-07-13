@@ -281,6 +281,7 @@ function assertSummary(summary) {
     if (!result.marked) issues.push(`${result.key} protected nav must be visibly marked as locked`);
     if (!preview.exists || !preview.visible || !preview.inPanel || !result.protectedPanelActive) issues.push(`${result.key} must render visible inline member preview inside the protected panel`);
     if (!preview.dialog || !/解鎖完整|註冊 \/ 開通權限|登入已開通帳號/.test(preview.text || "")) issues.push(`${result.key} preview must expose locked preview copy and registration actions`);
+    if (!/FUMAN MEMBER PREVIEW|輔滿會員罩|輔滿策略權限/.test(preview.text || "")) issues.push(`${result.key} preview must use the Fuman membership cover design`);
     if (!preview.panelLocked || !preview.preservedPanelShell) issues.push(`${result.key} preview must preserve the protected panel DOM instead of replacing it`);
     for (const action of ["signup", "login", "market"]) {
       if (!preview.actions?.includes(action)) issues.push(`${result.key} preview missing ${action} action`);

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-02";
+  const VERSION = "membership-entitlement-guard-20260713-03";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -124,17 +124,17 @@
     const style = document.createElement("style");
     style.id = "fuman-entitlement-guard-style";
     style.textContent = `
-      .view-panel.fuman-entitlement-panel-locked{position:relative;min-height:calc(100vh - 120px)}
-      .view-panel.fuman-entitlement-panel-locked > :not(.fuman-entitlement-preview){filter:blur(2px);opacity:.16;pointer-events:none;user-select:none}
-      .fuman-entitlement-preview{position:relative;z-index:20;min-height:calc(100vh - 120px);padding:28px;background:#eef9fb;background-image:linear-gradient(rgba(9,74,85,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(9,74,85,.055) 1px,transparent 1px);background-size:48px 48px;color:#10202a}
-      .fuman-entitlement-hero{display:grid;grid-template-columns:minmax(260px,1.1fr) repeat(3,minmax(180px,.7fr));gap:12px;margin-bottom:22px}
-      .fuman-entitlement-panel,.fuman-entitlement-stat,.fuman-entitlement-side,.fuman-entitlement-main,.fuman-entitlement-lock-card{border:1px solid #cfe2eb;border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 10px 30px rgba(42,74,92,.08)}
-      .fuman-entitlement-panel{padding:26px 20px}.fuman-entitlement-kicker{display:inline-flex;align-items:center;border:1px solid #f2b99a;border-radius:999px;padding:6px 10px;color:#b84d24;background:#fff7f1;font-weight:800;font-size:12px}.fuman-entitlement-panel h1{margin:12px 0 0;font-size:36px;letter-spacing:0}.fuman-entitlement-stat{padding:16px}.fuman-entitlement-stat span{display:block;color:#475569;font-size:12px;font-weight:800}.fuman-entitlement-stat strong{display:block;margin-top:8px;font-size:23px}.fuman-entitlement-stat small{display:block;margin-top:5px;color:#64748b}
-      .fuman-entitlement-body{display:grid;grid-template-columns:380px minmax(0,1fr);gap:18px}.fuman-entitlement-side{padding:16px}.fuman-entitlement-side-row{display:flex;align-items:center;gap:14px}.fuman-entitlement-side-icon{display:grid;place-items:center;width:46px;height:46px;border:1px solid #f2c1cd;border-radius:12px;background:#fff0f3;color:#a33b53;font-weight:900}.fuman-entitlement-side b{display:block;font-size:16px}.fuman-entitlement-side small{display:block;color:#64748b;margin-top:4px}.fuman-entitlement-count{margin-left:auto;border:1px solid #cfe2eb;border-radius:999px;background:#f5fbff;padding:8px 14px;font-weight:900}
-      .fuman-entitlement-main{overflow:hidden}.fuman-entitlement-main-head{display:flex;align-items:center;gap:10px;padding:22px 28px;border-bottom:1px solid #d7e7ef;background:#fffdf5}.fuman-entitlement-main-head h2{margin:0;font-size:24px}.fuman-entitlement-badge{border-radius:999px;background:#fff1ec;color:#c2410c;padding:3px 8px;font-size:12px;font-weight:900}.fuman-entitlement-main-head .fuman-entitlement-count{margin-left:auto}
-      .fuman-entitlement-lock-card{margin:16px;padding:28px}.fuman-entitlement-lock-card h3{margin:14px 0 12px;font-size:28px;letter-spacing:0}.fuman-entitlement-lock-card p{margin:0;color:#64748b;line-height:1.75}.fuman-entitlement-lock-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:20px 0}.fuman-entitlement-lock-grid div{border:1px solid #d5e3ec;border-radius:8px;background:#f8fafc;padding:14px}.fuman-entitlement-lock-grid span{display:block;color:#475569;font-size:12px;font-weight:900}.fuman-entitlement-lock-grid strong{display:block;margin-top:10px;font-size:22px}.fuman-entitlement-pills{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 20px}.fuman-entitlement-pills span{border:1px solid #f6b99c;border-radius:999px;background:#fff7ed;color:#006772;padding:7px 11px;font-weight:900}.fuman-entitlement-empty{width:min(360px,100%);border:1px solid #d4e4ec;border-radius:8px;background:#f8fafc;padding:18px;margin-bottom:18px}.fuman-entitlement-empty strong{display:block;font-size:24px;margin-top:8px}.fuman-entitlement-actions{display:flex;flex-wrap:wrap;gap:10px}.fuman-entitlement-actions button,.fuman-entitlement-actions a{border:1px solid #f2b596;border-radius:10px;padding:12px 16px;color:#006772;background:#fff5ed;font-weight:900;text-decoration:none;cursor:pointer}.fuman-entitlement-actions .primary{background:#fff5ed;color:#006772;border-color:#f2b596}.fuman-entitlement-actions button:hover,.fuman-entitlement-actions a:hover{background:#ffe9db}
+      .view-panel.fuman-entitlement-panel-locked{position:relative;min-height:calc(100vh - 120px);background:#eef9fb!important}
+      .view-panel.fuman-entitlement-panel-locked > :not(.fuman-entitlement-preview){filter:blur(2px);opacity:.08;pointer-events:none;user-select:none}
+      .fuman-entitlement-preview{position:relative;z-index:20;min-height:calc(100vh - 120px);padding:20px 22px 36px;background:#eef9fb;background-image:linear-gradient(rgba(9,74,85,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(9,74,85,.06) 1px,transparent 1px);background-size:48px 48px;color:#10202a;font-family:inherit}
+      .fuman-entitlement-hero{display:grid;grid-template-columns:minmax(320px,1.2fr) repeat(3,minmax(180px,.78fr));gap:12px;margin-bottom:18px}
+      .fuman-entitlement-panel,.fuman-entitlement-stat,.fuman-entitlement-side,.fuman-entitlement-main,.fuman-entitlement-lock-card,.fuman-entitlement-mini-card{border:1px solid #cfe2eb;border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 12px 32px rgba(42,74,92,.08)}
+      .fuman-entitlement-panel{padding:24px 20px;min-height:110px}.fuman-entitlement-kicker{display:inline-flex;align-items:center;width:max-content;border:1px solid #f2b99a;border-radius:999px;padding:6px 10px;color:#b84d24;background:#fff7f1;font-weight:900;font-size:12px}.fuman-entitlement-panel h1{margin:14px 0 6px;font-size:34px;letter-spacing:0;color:#10202a}.fuman-entitlement-panel p{margin:0;color:#64748b;line-height:1.6}.fuman-entitlement-stat{padding:16px 16px 14px}.fuman-entitlement-stat span{display:block;color:#475569;font-size:12px;font-weight:900}.fuman-entitlement-stat strong{display:block;margin-top:8px;font-size:23px;color:#111827}.fuman-entitlement-stat small{display:block;margin-top:5px;color:#64748b}
+      .fuman-entitlement-body{display:grid;grid-template-columns:284px minmax(0,1fr);gap:16px}.fuman-entitlement-side{padding:18px;min-height:500px}.fuman-entitlement-side-row{display:flex;align-items:center;gap:13px}.fuman-entitlement-side-icon{display:grid;place-items:center;width:46px;height:46px;border:1px solid #f2c1cd;border-radius:12px;background:#fff0f3;color:#a33b53;font-weight:900}.fuman-entitlement-side b{display:block;font-size:16px;color:#10202a}.fuman-entitlement-side small{display:block;color:#64748b;margin-top:4px}.fuman-entitlement-count{margin-left:auto;border:1px solid #cfe2eb;border-radius:999px;background:#f5fbff;padding:8px 14px;font-weight:900;color:#10202a}.fuman-entitlement-lock-list{display:grid;gap:10px;margin-top:24px}.fuman-entitlement-lock-list div{border:1px solid #d7e7ef;border-radius:8px;background:#fbfdff;padding:12px}.fuman-entitlement-lock-list span{display:block;color:#006772;font-size:12px;font-weight:900}.fuman-entitlement-lock-list strong{display:block;margin-top:5px;color:#10202a}.fuman-entitlement-lock-list small{display:block;margin-top:4px;color:#64748b}
+      .fuman-entitlement-main{overflow:hidden}.fuman-entitlement-main-head{display:flex;align-items:center;gap:10px;padding:20px 22px;border-bottom:1px solid #d7e7ef;background:#fffdf5}.fuman-entitlement-main-head h2{margin:0;font-size:23px;color:#10202a}.fuman-entitlement-badge{border-radius:999px;background:#fff1ec;color:#c2410c;padding:4px 8px;font-size:12px;font-weight:900}.fuman-entitlement-main-head .fuman-entitlement-count{margin-left:auto}.fuman-entitlement-lock-card{margin:14px;padding:22px}.fuman-entitlement-lock-card h3{margin:14px 0 12px;font-size:28px;letter-spacing:0;color:#10202a}.fuman-entitlement-lock-card p{margin:0;color:#64748b;line-height:1.75}.fuman-entitlement-lock-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.fuman-entitlement-lock-grid div{border:1px solid #d5e3ec;border-radius:8px;background:#f8fafc;padding:14px}.fuman-entitlement-lock-grid span{display:block;color:#475569;font-size:12px;font-weight:900}.fuman-entitlement-lock-grid strong{display:block;margin-top:10px;font-size:22px;color:#111827}.fuman-entitlement-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}.fuman-entitlement-mini-card span{display:inline-flex;border:1px solid #f6b99c;border-radius:999px;background:#fff7ed;color:#006772;padding:5px 9px;font-size:12px;font-weight:900}.fuman-entitlement-mini-card{padding:14px;box-shadow:none}.fuman-entitlement-mini-card b{display:block;margin-top:10px;color:#10202a}.fuman-entitlement-mini-card small{display:block;margin-top:6px;color:#64748b;line-height:1.45}.fuman-entitlement-pills{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 18px}.fuman-entitlement-pills span{border:1px solid #f6b99c;border-radius:999px;background:#fff7ed;color:#006772;padding:7px 11px;font-weight:900}.fuman-entitlement-empty{width:min(360px,100%);border:1px solid #d4e4ec;border-radius:8px;background:#f8fafc;padding:18px;margin-bottom:18px}.fuman-entitlement-empty strong{display:block;font-size:24px;margin-top:8px;color:#10202a}.fuman-entitlement-empty small{display:block;color:#64748b;margin-top:5px}.fuman-entitlement-actions{display:flex;flex-wrap:wrap;gap:10px}.fuman-entitlement-actions button,.fuman-entitlement-actions a{border:1px solid #f2b596;border-radius:8px;padding:12px 16px;color:#006772;background:#fff5ed;font-weight:900;text-decoration:none;cursor:pointer}.fuman-entitlement-actions .primary{background:#006772;color:#fff;border-color:#006772}.fuman-entitlement-actions button:hover,.fuman-entitlement-actions a:hover{background:#ffe9db}.fuman-entitlement-actions .primary:hover{background:#00515d}
       [data-entitlement-lock="required"]::after{content:" 權限";margin-left:6px;color:#ff9b45;font-size:11px;font-weight:800}
-      @media (max-width:900px){.fuman-entitlement-preview{padding:16px}.fuman-entitlement-hero,.fuman-entitlement-body{grid-template-columns:1fr}.fuman-entitlement-lock-grid{grid-template-columns:1fr}.fuman-entitlement-panel h1{font-size:30px}}
+      @media (max-width:1100px){.fuman-entitlement-hero{grid-template-columns:1fr 1fr}.fuman-entitlement-body{grid-template-columns:1fr}.fuman-entitlement-side{min-height:auto}.fuman-entitlement-feature-grid{grid-template-columns:1fr}}
+      @media (max-width:720px){.fuman-entitlement-preview{padding:14px}.fuman-entitlement-hero,.fuman-entitlement-lock-grid{grid-template-columns:1fr}.fuman-entitlement-panel h1{font-size:28px}.fuman-entitlement-lock-card h3{font-size:24px}}
     `;
     document.head.appendChild(style);
   }
@@ -188,44 +188,55 @@
     const feature = escapeHtml(targetLabel || title);
     const isStrategy = viewName === "strategy";
     const sideTitle = isStrategy ? "動能分數 75+" : title;
-    const sideSmall = isStrategy ? "核心動能" : "會員限定模組";
+    const sideSmall = isStrategy ? "核心動能模型" : "會員限定模組";
     const lockTitle = isStrategy ? "解鎖完整策略名單" : `解鎖完整${title}內容`;
     const lockText = isStrategy
-      ? `「${feature}」目前有 0 檔候選。未開通時只保留策略熱度與輪廓，完整股票代號、名稱、價格、籌碼特徵與排序名單會在開通後顯示。`
-      : `${feature} 的即時名單與完整欄位需要登入會員並開通權限；運算與資料更新會照常執行，訪客只看到鎖定預覽。`;
+      ? `「${feature}」已納入輔滿策略權限。訪客只看得到策略熱度、候選數與狀態輪廓；股票代號、名稱、價格、籌碼特徵、排序理由會在註冊並開通後顯示。`
+      : `${feature} 的即時名單、完整欄位與排序理由需要登入會員並開通權限；運算與資料更新會照常執行，訪客只看到鎖定預覽。`;
     return `
-      <section class="fuman-entitlement-preview" data-membership-required="1" data-entitlement-preview="${escapeHtml(viewName)}" aria-label="會員鎖定預覽">
+      <section class="fuman-entitlement-preview fuman-entitlement-preview-v2" data-membership-required="1" data-entitlement-preview="${escapeHtml(viewName)}" aria-label="輔滿會員權限預覽">
         <div class="fuman-entitlement-hero">
           <section class="fuman-entitlement-panel">
-            <span class="fuman-entitlement-kicker">策略控制台</span>
-            <h1>${title}</h1>
+            <span class="fuman-entitlement-kicker">FUMAN MEMBER PREVIEW</span>
+            <h1>輔滿策略權限</h1>
+            <p>公開訪客保留策略輪廓，完整名單、排序理由與即時欄位由會員權限解鎖。</p>
           </section>
           <section class="fuman-entitlement-stat"><span>資料日</span><strong>07/09</strong><small>2,779 檔股票</small></section>
-          <section class="fuman-entitlement-stat"><span>策略數</span><strong>11</strong><small>日線 / 籌碼 / 短線</small></section>
-          <section class="fuman-entitlement-stat"><span>目前結果</span><strong>0</strong><small>--</small></section>
+          <section class="fuman-entitlement-stat"><span>策略模組</span><strong>11</strong><small>日線 / 籌碼 / 短線</small></section>
+          <section class="fuman-entitlement-stat"><span>目前結果</span><strong>0</strong><small>訪客預覽</small></section>
         </div>
         <div class="fuman-entitlement-body">
-          <aside class="fuman-entitlement-side">
+          <aside class="fuman-entitlement-side" aria-label="目前鎖定模組">
             <div class="fuman-entitlement-side-row">
-              <span class="fuman-entitlement-side-icon">⌁</span>
+              <span class="fuman-entitlement-side-icon">↘</span>
               <span><small>目前策略</small><b>${escapeHtml(sideTitle)}</b><small>${escapeHtml(sideSmall)}</small></span>
               <span class="fuman-entitlement-count">0 檔</span>
+            </div>
+            <div class="fuman-entitlement-lock-list">
+              <div><span>01 / 名單</span><strong>股票清單鎖定</strong><small>代號、名稱、價格與排名開通後顯示。</small></div>
+              <div><span>02 / 訊號</span><strong>策略理由鎖定</strong><small>條件命中、籌碼與技術欄位不對訪客曝光。</small></div>
+              <div><span>03 / 更新</span><strong>即時節奏保留</strong><small>系統照常運算，畫面只顯示預覽狀態。</small></div>
             </div>
           </aside>
           <section class="fuman-entitlement-main">
             <header class="fuman-entitlement-main-head">
-              <h2>${escapeHtml(sideTitle)}</h2>
-              <span class="fuman-entitlement-badge">核心功能</span>
+              <h2>${escapeHtml(feature)}</h2>
+              <span class="fuman-entitlement-badge">權限鎖定</span>
               <span class="fuman-entitlement-count">0 檔</span>
             </header>
             <article class="fuman-entitlement-lock-card" role="dialog" aria-modal="false" aria-label="會員權限尚未開通">
-              <span class="fuman-entitlement-kicker">進階策略預覽</span>
+              <span class="fuman-entitlement-kicker">輔滿會員罩</span>
               <h3>${escapeHtml(lockTitle)}</h3>
               <p>${escapeHtml(lockText)}</p>
               <div class="fuman-entitlement-lock-grid">
                 <div><span>候選數</span><strong>0</strong></div>
                 <div><span>更新時間</span><strong>--</strong></div>
                 <div><span>狀態</span><strong>預覽</strong></div>
+              </div>
+              <div class="fuman-entitlement-feature-grid">
+                <div class="fuman-entitlement-mini-card"><span>會員欄位</span><b>完整股票資訊</b><small>股票代號、名稱、價格、排序與策略分數。</small></div>
+                <div class="fuman-entitlement-mini-card"><span>策略證據</span><b>命中條件細節</b><small>籌碼、技術與量價條件只對開通帳號顯示。</small></div>
+                <div class="fuman-entitlement-mini-card"><span>操作入口</span><b>註冊後解鎖</b><small>登入已開通帳號或註冊後聯絡開通權限。</small></div>
               </div>
               <div class="fuman-entitlement-pills">
                 <span>0 檔候選</span><span>${escapeHtml(sideTitle)}</span><span>等待更新</span><span>完整名單已鎖定</span>
@@ -242,7 +253,6 @@
       </section>
     `;
   }
-
   function clearLockedPreview() {
     document.querySelector("#fuman-entitlement-locked-overlay")?.remove();
     document.querySelectorAll(".fuman-entitlement-preview").forEach((node) => node.remove());
