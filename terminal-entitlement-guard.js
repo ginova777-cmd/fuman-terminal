@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-08";
+  const VERSION = "membership-entitlement-guard-20260713-09";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -308,6 +308,15 @@
     return panel;
   }
 
+  function forceActivePanel(panel) {
+    if (!panel) return;
+    document.querySelectorAll(".view-panel").forEach((item) => {
+      const active = item === panel;
+      item.hidden = !active;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-hidden", active ? "false" : "true");
+    });
+  }
   function lockedPreviewMarkup(viewName, targetLabel) {
     const title = escapeHtml(lockedTitle(viewName, targetLabel));
     const feature = escapeHtml(targetLabel || title);
@@ -429,6 +438,9 @@
     const panel = activateLockedView(normalizedView, activeLink);
     if (!panel) return;
     renderLockedPreview(panel, normalizedView, targetLabel);
+    forceActivePanel(panel);
+    requestAnimationFrame(() => forceActivePanel(panel));
+    setTimeout(() => forceActivePanel(panel), 180);
   }
   function blockEvent(event, link) {
     if (isEntitled()) return false;
