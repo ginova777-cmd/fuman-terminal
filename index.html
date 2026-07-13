@@ -68,7 +68,7 @@
 
         <nav class="nav-list" aria-label="Main navigation">
           <a class="nav-item active" href="#" data-view="market" data-mobile-label="市場"><span class="nav-icon globe">●</span>市場總覽</a>
-          <a class="strategy-nav realtime-radar-nav" href="#" data-view="realtime-radar" data-mobile-label="即時" hidden aria-hidden="true" style="display:none!important"><span>◎</span>即時雷達</a>
+          <a class="strategy-nav realtime-radar-nav" href="#" data-view="realtime-radar" data-mobile-label="即時"><span>◎</span>即時雷達</a>
           <p class="nav-label">策略模組</p>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="雷達"><span class="s1">⚡</span>策略1-明日開盤入</a>
           <a class="strategy-nav" href="#" data-view="strategy" data-mobile-label="當沖"><span class="s2">◔</span>策略2-當沖雷達</a>
@@ -199,7 +199,7 @@
         </section>
 
         <!-- 即時雷達 -->
-        <section class="view-panel radar-view" id="realtime-radar-view" hidden data-disabled-surface="realtime-radar" aria-hidden="true" style="display:none!important">
+        <section class="view-panel radar-view" id="realtime-radar-view" hidden>
           <div class="empty-state">即時雷達載入中...</div>
         </section>
 
@@ -604,7 +604,7 @@
     };
   }
   const hideDisabledSurfaces = () => {
-    document.querySelectorAll('.realtime-radar-nav,[data-view="realtime-radar"],#realtime-radar-view,[data-disabled-surface="heatmap"],#market-view .sector-section,#heatmap,[data-market-heatmap-tabs]').forEach((node) => {
+    document.querySelectorAll('[data-disabled-surface="heatmap"],#market-view .sector-section,#heatmap,[data-market-heatmap-tabs]').forEach((node) => {
       node.hidden = true;
       node.setAttribute("aria-hidden", "true");
       node.style.setProperty("display", "none", "important");
