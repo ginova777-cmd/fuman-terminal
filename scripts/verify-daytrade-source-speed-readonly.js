@@ -453,7 +453,8 @@ async function main() {
   if (!sourceIsolationAudit.ok) issues.push(issue("daytrade_source_isolation_violation", "critical", sourceIsolationAudit));
 
   const sourceStatusInjectingOk = sourceStatus === "ok" || (sourceStatus === "degraded" && prioritySourceInjecting);
-  const aReady = sourceAge <= MAX_SOURCE_AGE_SECONDS
+  const sourceFreshOrPriorityInjecting = sourceAge <= MAX_SOURCE_AGE_SECONDS || prioritySourceInjecting;
+  const aReady = sourceFreshOrPriorityInjecting
     && sourceStatusInjectingOk
     && gateMode === "priority_first"
     && quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
@@ -471,7 +472,7 @@ async function main() {
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
   const bObserve = !aReady
-    && sourceAge <= 180
+    && (sourceAge <= 180 || prioritySourceInjecting)
     && quoteAgeSeconds <= OBSERVATION_MAX_QUOTE_AGE_SECONDS
     && prioritySymbols >= MIN_PRIORITY_SYMBOLS
     && (prioritySourceInjecting || priorityFreshQuoteCoverage120 >= 0.5 || priorityFreshQuotes120 >= 150 || freshQuoteCoverage120 >= 0.5 || freshQuotes120 >= 500)
@@ -566,6 +567,8 @@ async function main() {
       priorityMinInjectingQuotesForA: MIN_PRIORITY_INJECTING_QUOTES,
       priorityFreshCoverageMinForA: MIN_PRIORITY_FRESH_QUOTE_COVERAGE,
       priorityFreshCoverageTarget: TARGET_PRIORITY_FRESH_QUOTE_COVERAGE,
+      priorityFreshCoverageBlocksA: false,
+      sourceAgeBlocksAWhenPriorityInjecting: false,
       fullMarketBlocksA: false,
     },
     issues: reportedIssues,
@@ -661,6 +664,7 @@ main().catch((error) => {
   console.error(`[dedicated-daytrade-source-speed] failed: ${error.message}`);
   process.exitCode = 2;
 });
+
 
 
 
