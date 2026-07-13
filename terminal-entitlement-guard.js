@@ -1,13 +1,13 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-10";
+  const VERSION = "membership-entitlement-guard-20260713-11";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
   const PUBLIC_VIEWS = new Set(["market", "member"]);
   const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"]);
-  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "CB", "權證走向", "權證"];
+  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究"];
 
   function parseJson(value) {
     try {

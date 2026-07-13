@@ -243,6 +243,7 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "terminal-fast-bundle");
   requireIncludes("terminal-entitlement-guard.js", "mobile-boot");
   requireIncludes("terminal-entitlement-guard.js", "mobile-fragment");
+  requireIncludes("terminal-entitlement-guard.js", "回測研究");
   requireIncludes("terminal-entitlement-guard.js", "會員：尚未開通");
   requireIncludes("terminal-entitlement-guard.js", "會員：已開通");
   requireIncludes("terminal-entitlement-guard.js", 'action: "登入"');
@@ -252,9 +253,9 @@ async function main() {
   requireIncludes("styles.css", "membership-footer-status-20260713");
   requireIncludes("terminal-entitlement-guard.js", "handleMemberAuthAction");
   requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
-  requireIncludes("index.html", "membership-lock=20260713-10");
-  requireIncludes("mobile.html", "membership-lock=20260713-10");
-  requireIncludes("88.html", "membership-lock=20260713-10");
+  requireIncludes("index.html", "membership-lock=20260713-11");
+  requireIncludes("mobile.html", "membership-lock=20260713-11");
+  requireIncludes("88.html", "membership-lock=20260713-11");
   requireIncludes("api/mobile-fragment.js", "data-mobile-membership-login=\"1\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-orientation-login=\"portrait-landscape\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"login\"");
