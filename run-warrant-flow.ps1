@@ -44,13 +44,14 @@ function Assert-WarrantFlowApi {
   param(
     [switch]$AllowPreviousComplete
   )
-  $url = "https://fuman-terminal.vercel.app/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $endpointKey = "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1"
+  $url = "https://fuman-terminal.vercel.app/api/desktop-route-snapshot?ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $payload = $response.Content | ConvertFrom-Json
-  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
-    throw "Warrant flow API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
-  }
-  if ([int]$payload.count -le 0) { throw "Warrant flow API empty count=$($payload.count)" }
+  $snapshotPayload = $response.Content | ConvertFrom-Json -AsHashtable
+  $payload = $snapshotPayload["endpoints"][$endpointKey]
+  if ($response.StatusCode -ne 200 -or -not $payload -or $payload.ok -ne $true -or -not $payload.runId) {
+    throw "Warrant flow desktop snapshot verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  }  if ([int]$payload.count -le 0) { throw "Warrant flow API empty count=$($payload.count)" }
   $apiUpdatedAtText = [string]($payload.updatedAt ?? $payload.generatedAt)
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Warrant flow API missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
@@ -58,7 +59,7 @@ function Assert-WarrantFlowApi {
   if (-not $AllowPreviousComplete -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
     throw "Warrant flow API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
-  "Warrant flow API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
+  "Warrant flow desktop snapshot verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
   return $payload
 }
 
