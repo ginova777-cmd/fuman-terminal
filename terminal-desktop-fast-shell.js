@@ -5934,7 +5934,8 @@
       const pctClass = Number.isFinite(pctParsed) ? (pctParsed >= 0 ? "up" : "down") : "flat";
       return `<span class="market-ai-index-chip"><small>${escapeHtml(label)}</small><b>${formatMarketIndexPrice(item.price ?? item.close ?? item.value ?? item.index)}</b><em class="${pctClass}">${escapeHtml(formatMarketIndexPct(pctRaw))}</em></span>`;
     };
-    const heroIndexHtml = `<div class="market-ai-hero-indexes">${indexChipHtml("加權指數", pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX"))}</div>`;    const heroMetricsHtml = `
+    const heroIndexHtml = `<div class="market-ai-hero-indexes">${indexChipHtml("加權指數", pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX"))}</div>`;
+    const heroMetricsHtml = `
       <div class="market-ai-hero-metrics">
         <span><small>樣本數</small><b>${sample.toLocaleString("zh-TW")}</b></span>
         <span><small>上漲</small><b>${up.toLocaleString("zh-TW")}</b></span>
@@ -10731,6 +10732,61 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           padding: 18px;
           overflow-anchor: none;
           contain: layout paint;
+        }
+        #market-view .market-ai-hero-title-row {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          flex-wrap: wrap;
+          margin: 8px 0;
+        }
+        #market-view .market-ai-hero-title-row strong {
+          margin: 0;
+        }
+        #market-view .market-ai-hero-indexes {
+          display: flex;
+          align-items: stretch;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        #market-view .market-ai-index-chip {
+          display: inline-grid;
+          grid-template-columns: max-content max-content;
+          gap: 2px 8px;
+          align-items: end;
+          min-height: 48px;
+          border: 1px solid rgba(234, 179, 8, 0.30);
+          border-radius: 8px;
+          background: rgba(8, 15, 26, 0.72);
+          padding: 8px 10px;
+          white-space: nowrap;
+        }
+        #market-view .market-ai-index-chip small {
+          grid-column: 1 / -1;
+          color: #9fb3d9;
+          font-size: 11px;
+          font-weight: 900;
+        }
+        #market-view .market-ai-index-chip b {
+          color: #f8fafc;
+          font-size: 18px;
+          line-height: 1;
+        }
+        #market-view .market-ai-index-chip em {
+          font-style: normal;
+          font-size: 12px;
+          font-weight: 900;
+          line-height: 1;
+        }
+        #market-view .market-ai-index-chip em.up {
+          color: #fb7185;
+        }
+        #market-view .market-ai-index-chip em.down {
+          color: #2dd4bf;
+        }
+        #market-view .market-ai-index-chip em.flat,
+        #market-view .market-ai-index-chip.muted b {
+          color: #94a3b8;
         }
         #market-view .market-ai-hero-board.market-ai-bullish {
           border-color: rgba(251, 113, 133, 0.58);
