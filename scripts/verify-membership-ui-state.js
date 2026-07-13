@@ -181,7 +181,10 @@ async function runUiProbe(baseUrl) {
     await cdp.send("Page.navigate", { url: firstUrl }, 30000);
     await waitFor(cdp, () => ({ ok: document.readyState === "interactive" || document.readyState === "complete" }), null, 30000);
     await evaluate(cdp, () => {
-      localStorage.removeItem("fuman-terminal-auth-cache-v1");
+      localStorage.setItem("fuman-terminal-auth-cache-v1", JSON.stringify({
+        access: { status: "active", plan: "pro", allowed: true, permissions: { strategyTerminal: true } },
+        expiresAt: Math.floor(Date.now() / 1000) + 3600
+      }));
       localStorage.setItem("fuman-terminal-last-route-v1", JSON.stringify({ viewName: "strategy", strategyRoute: "intraday_2m", at: Date.now() }));
     });
     await cdp.send("Page.navigate", { url: `${baseUrl}/?desktop=1&membershipUiProbe=${Date.now()}&savedRoute=1` }, 30000);
@@ -223,9 +226,11 @@ async function runUiProbe(baseUrl) {
           rowsLeaked: Boolean(preview?.querySelector("tbody tr,.strategy-row,.strategy-stock-card,.radar-signal-card,.chip-trade-row,.cb-detect-card,.warrant-flow-card")),
         };
       };
-      const results = [];      const sanitizedRoute = JSON.parse(localStorage.getItem("fuman-terminal-last-route-v1") || "{}");
+      const results = [];
+      const sanitizedRoute = JSON.parse(localStorage.getItem("fuman-terminal-last-route-v1") || "{}");
       const publicMarketMarked = document.querySelector('[data-view="market"]')?.dataset.entitlementLock || "";
       const memberMarked = document.querySelector('[data-view="member"]')?.dataset.entitlementLock || "";
+      const poisonedAccess = window.FUMAN_ENTITLEMENT_GUARD?.readAccess?.();
       for (const target of targets) {
         document.querySelector(".fuman-entitlement-preview")?.remove();
         const link = findTarget(target);
@@ -249,6 +254,7 @@ async function runUiProbe(baseUrl) {
         sanitizedRoute,
         publicMarketMarked,
         memberMarked,
+        poisonedAccess,
         results,
         directRoute: {
           routeBlocked,
@@ -268,6 +274,7 @@ function assertSummary(summary) {
   if (summary.sanitizedRoute?.viewName !== "market") issues.push(`saved protected route must sanitize to market; got ${JSON.stringify(summary.sanitizedRoute)}`);
   if (summary.publicMarketMarked) issues.push("public market nav must not be marked entitlement locked");
   if (summary.memberMarked) issues.push("member center nav must not be marked entitlement locked");
+  if (summary.poisonedAccess?.entitled !== false || summary.poisonedAccess?.hasValidSession !== false || summary.poisonedAccess?.entitledByPlan !== true) issues.push("local active/pro cache without a valid session token must not unlock protected UI");
   for (const result of summary.results) {
     const preview = result.preview || {};
     if (!result.linkFound) issues.push(`${result.key} protected nav link missing`);

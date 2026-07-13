@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-01";
+  const VERSION = "membership-entitlement-guard-20260713-02";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -23,18 +23,22 @@
     const status = String(access.status || access.memberStatus || access.planStatus || "").toLowerCase();
     const plan = String(access.plan || access.planCode || access.tier || "").toLowerCase();
     const permissions = access.permissions || access.features || {};
+    const token = String(cached?.accessToken || cached?.session?.access_token || "").trim();
+    const expiresAt = Number(cached?.expiresAt || 0);
+    const hasValidSession = Boolean(token) && (!expiresAt || expiresAt * 1000 >= Date.now() - 30000);
     const explicitTerminal =
       permissions.strategyTerminal === true ||
       permissions.premiumTerminal === true ||
       permissions.scorecard === true ||
       access.strategyTerminal === true ||
       access.premiumTerminal === true;
-    const entitled =
+    const entitledByPlan =
       explicitTerminal ||
       ALLOWED_STATUSES.has(status) ||
       ALLOWED_STATUSES.has(plan) ||
       (access.allowed === true && ALLOWED_STATUSES.has(status));
-    return { cached, access, status, plan, entitled };
+    const entitled = hasValidSession && entitledByPlan;
+    return { cached, access, status, plan, hasValidSession, entitledByPlan, entitled };
   }
 
   function isEntitled() {
