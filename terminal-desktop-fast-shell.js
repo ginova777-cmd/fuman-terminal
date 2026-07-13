@@ -11149,6 +11149,15 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           padding: 0 8px;
           font-weight: 800;
         }
+        #market-view .page-header .eyebrow,
+        #market-view .market-ai-summary,
+        #market-view .market-ai-decision-strip,
+        #market-view .market-ai-decision-grid,
+        #market-view .market-ai-evidence,
+        #market-view .market-ai-lower-grid {
+          display: none !important;
+        }
+
         @media (max-width: 1180px) {
           #market-view .market-ai-hero-board,
           #market-view .market-ai-lower-grid {
@@ -11199,6 +11208,89 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
             #ffffff !important;
           color: #0f172a !important;
         }
+        body.fuman-light-theme #market-view {
+          color: #172033 !important;
+        }
+        body.fuman-light-theme #market-view .page-header h1 {
+          color: #172033 !important;
+          text-shadow: none !important;
+        }
+        body.fuman-light-theme #market-view .page-header p {
+          color: #2563eb !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-panel.market-ai-visual-dashboard {
+          background: transparent !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-board {
+          border-color: rgba(244, 114, 182, 0.38) !important;
+          background: linear-gradient(135deg, rgba(255, 241, 242, 0.96), rgba(248, 250, 252, 0.98)) !important;
+          box-shadow: 0 18px 42px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bearish {
+          border-color: rgba(20, 184, 166, 0.36) !important;
+          background: linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(248, 250, 252, 0.98)) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-copy small {
+          color: #64748b !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-copy strong,
+        body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bullish .market-ai-hero-copy strong {
+          color: #be123c !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bearish .market-ai-hero-copy strong {
+          color: #0f766e !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hero-copy p {
+          color: #334155 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip,
+        body.fuman-light-theme #market-view .market-ai-hero-metrics .market-ai-index-chip,
+        body.fuman-light-theme #market-view .market-ai-hot-section,
+        body.fuman-light-theme #market-view .market-ai-stock-row,
+        body.fuman-light-theme #market-view .market-ai-current-rule {
+          border-color: rgba(148, 163, 184, 0.34) !important;
+          background: rgba(255, 255, 255, 0.92) !important;
+          box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip small,
+        body.fuman-light-theme #market-view .market-ai-stock-row p,
+        body.fuman-light-theme #market-view .market-ai-current-rule span,
+        body.fuman-light-theme #market-view .market-ai-hot-section > header span {
+          color: #475569 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip b,
+        body.fuman-light-theme #market-view .market-ai-stock-row h4,
+        body.fuman-light-theme #market-view .market-ai-hot-section h4,
+        body.fuman-light-theme #market-view .market-ai-current-rule strong {
+          color: #0f172a !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip em {
+          background: #f1f5f9 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip em.up {
+          color: #be123c !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-index-chip em.down {
+          color: #0f766e !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-filter-row,
+        body.fuman-light-theme #market-view .market-ai-hot-section > header {
+          border-color: rgba(148, 163, 184, 0.24) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-filter-row button,
+        body.fuman-light-theme #market-view .market-ai-actions button,
+        body.fuman-light-theme #market-view .market-ai-chip,
+        body.fuman-light-theme #market-view .market-ai-tags span {
+          border-color: rgba(148, 163, 184, 0.36) !important;
+          background: #f8fafc !important;
+          color: #334155 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-filter-row button.active,
+        body.fuman-light-theme #market-view .market-ai-score strong,
+        body.fuman-light-theme #market-view .market-ai-rank {
+          color: #b45309 !important;
+        }
+
         body.fuman-light-theme #market-view .market-ai-sort-note {
           border-color: rgba(249, 115, 22, 0.28) !important;
           background: #fff7ed !important;
