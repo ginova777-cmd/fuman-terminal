@@ -84,6 +84,34 @@ function endpointHasStrategy2(endpoints = {}) {
   return Object.keys(endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint));
 }
 
+function strategy2Count(payload = {}) {
+  return Number(payload.count ?? payload.total ?? payload.records?.length ?? payload.events?.length ?? 0) || 0;
+}
+
+function strategy2ExplicitBlockedState(payload = {}) {
+  const text = [
+    payload.status,
+    payload.qualityStatus,
+    payload.publishBlockedReason,
+    payload.reason,
+    payload.error,
+    payload.sourceCoverage?.status,
+    payload.sourceCoverage?.reason,
+    payload.sourceGate?.sourceStatus,
+    payload.currentSourceGateCoverage?.status,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return payload.publishBlocked === true
+    || payload.publishAllowed === false
+    || /blocked|degraded|not_ready|preserve|source|gate|after.*window/.test(text);
+}
+
+function strategy2HealthOk(statusCode, payload = {}) {
+  if (statusCode < 200 || statusCode >= 300) return false;
+  if (payload.ok !== false) return true;
+  return strategy2Count(payload) > 0 && strategy2ExplicitBlockedState(payload);
+}
+
+
 function buildIssue(condition, message, issues) {
   if (!condition) issues.push(message);
 }
@@ -177,7 +205,8 @@ module.exports = async function handler(request, response) {
   buildIssue(payload.partial === false, "desktop route snapshot partial", issues);
   buildIssue(endpointCount >= 10, `desktop route snapshot endpoint count too low: ${endpointCount}`, issues);
   buildIssue(!hasStrategy2Snapshot, "strategy2 must not be stored in cold desktop snapshot", issues);
-  buildIssue(strategy2.statusCode >= 200 && strategy2.statusCode < 300 && strategy2Payload.ok !== false, "strategy2 live endpoint unhealthy", issues);
+  const strategy2Ok = strategy2HealthOk(strategy2.statusCode, strategy2Payload);
+  buildIssue(strategy2Ok, "strategy2 live endpoint unhealthy", issues);
   buildIssue(!/desktop_route_snapshot/i.test(strategy2CacheSource), "strategy2 live endpoint is reading desktop snapshot", issues);
 
   const result = {
@@ -199,12 +228,16 @@ module.exports = async function handler(request, response) {
       hasStrategy2Snapshot,
     },
     strategy2: {
-      ok: strategy2.statusCode >= 200 && strategy2.statusCode < 300 && strategy2Payload.ok !== false,
+      ok: strategy2Ok,
       statusCode: strategy2.statusCode,
       elapsedMs: strategy2.elapsedMs,
       source: strategy2CacheSource,
-      count: Number(strategy2Payload.count ?? strategy2Payload.total ?? strategy2Payload.records?.length ?? strategy2Payload.events?.length ?? 0) || 0,
+      count: strategy2Count(strategy2Payload),
       updatedAt: strategy2Payload.updatedAt || strategy2Payload.transport?.fetchedAt || "",
+      status: strategy2Payload.status || "",
+      qualityStatus: strategy2Payload.qualityStatus || "",
+      publishBlocked: strategy2Payload.publishBlocked === true,
+      publishAllowed: strategy2Payload.publishAllowed !== false,
     },
   };
 
