@@ -98,6 +98,41 @@ async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
   return text ? JSON.parse(text) : [];
 }
 
+async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", error = "source_report_timeout" } = {}) {
+  if (!table) return { ok: false, error };
+  const params = ["select=*", "limit=1"];
+  if (strategy) params.push(`strategy=eq.${encodeURIComponent(strategy)}`);
+  if (order) params.push(`order=${encodeURIComponent(order)}`);
+  try {
+    const rows = await fetchSupabaseRows(table, params.join("&"), 5000);
+    const row = rows[0] || {};
+    const quality = row.run_quality_at_publish && typeof row.run_quality_at_publish === "object" ? row.run_quality_at_publish : {};
+    const runId = cleanText(row.run_id || row.runId || quality.runId);
+    return {
+      ok: false,
+      error,
+      runId,
+      count: cleanNumber(row.result_count ?? row.matched_count ?? row.matches ?? row.total ?? quality.resultCount),
+      resultCount: cleanNumber(row.result_count ?? quality.resultCount),
+      readbackCount: cleanNumber(row.readback_count ?? quality.readbackCount),
+      expectedTotal: cleanNumber(row.expected_total ?? row.total ?? quality.expectedTotal),
+      scannedCount: cleanNumber(row.scanned_count ?? row.total ?? quality.scannedCount),
+      usedDate: cleanText(row.used_date || row.scan_date || row.trade_date || row.date),
+      tradeDate: cleanText(row.trade_date || row.scan_date || row.used_date || row.date),
+      source_snapshot_captured_at: cleanText(row.finished_at || row.updated_at || quality.sourceSnapshotCapturedAt),
+      evidenceStatus: "insufficient",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      preservePreviousGood: true,
+      fallbackUsed: true,
+      blockedReason: error,
+    };
+  } catch (fallbackError) {
+    return { ok: false, error, reason: fallbackError?.message || String(fallbackError) };
+  }
+}
+
 function isBlank(value) {
   if (value === null || value === undefined) return true;
   if (typeof value === "number") return !Number.isFinite(value);
@@ -162,9 +197,9 @@ function callStrategy3Latest(timeoutMs = 12000) {
         live: "1",
         limit: "60",
       };
-      timer = setTimeout(() => resolve({
+      timer = setTimeout(async () => resolve({
         statusCode: 504,
-        payload: { ok: false, error: "strategy3_source_report_timeout" },
+        payload: await latestRunFallbackPayload({ table: "v_strategy3_latest_complete_run", strategy: "strategy3", order: "", error: "strategy3_source_report_timeout" }),
       }), timeoutMs);
       const finish = (result) => {
         clearTimeout(timer);
@@ -290,9 +325,9 @@ function callStrategy4Latest(timeoutMs = 12000) {
         live: "1",
         limit: "70",
       };
-      timer = setTimeout(() => resolve({
+      timer = setTimeout(async () => resolve({
         statusCode: 504,
-        payload: { ok: false, error: "strategy4_source_report_timeout" },
+        payload: await latestRunFallbackPayload({ table: "strategy4_scan_runs", strategy: "strategy4", order: "finished_at.desc", error: "strategy4_source_report_timeout" }),
       }), timeoutMs);
       const finish = (result) => {
         clearTimeout(timer);
