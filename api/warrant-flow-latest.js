@@ -479,8 +479,25 @@ function normalizeRow(row, context = {}) {
   const marketDate = compactDateKey(context.sourceDate || context.usedDate || row.scan_date || "");
   const underlyingQuoteDate = compactDateKey(payload.underlyingQuoteDate || payload.underlyingTradeDate || payload.quoteDate || "");
   const underlyingQuoteDateOk = !marketDate || !underlyingQuoteDate || underlyingQuoteDate === marketDate;
-  const safeUnderlyingClose = underlyingQuoteDateOk
-    ? cleanNumber(payload.close || payload.displayClose || payload.underlyingClose || row.close)
+  const explicitUnderlyingClose = cleanNumber(
+    payload.underlyingClose
+    ?? payload.underlyingPrice
+    ?? payload.stockClose
+    ?? payload.stockPrice
+    ?? payload.underlyingLastPrice
+    ?? row.underlying_close
+    ?? row.underlying_price
+  );
+  const explicitWarrantPrice = cleanNumber(
+    payload.warrantPrice
+    ?? payload.warrantClose
+    ?? payload.warrantLastPrice
+    ?? payload.warrant_close
+    ?? payload.warrant_price
+    ?? payload.price
+  );
+  const safeUnderlyingClose = underlyingQuoteDateOk && explicitUnderlyingClose > 0
+    ? explicitUnderlyingClose
     : null;
   return {
     ...payload,
@@ -489,6 +506,15 @@ function normalizeRow(row, context = {}) {
     underlyingCode: String(payload.underlyingCode || row.underlying_code || payload.code || "").trim(),
     underlyingName: String(payload.underlyingName || row.underlying_name || payload.name || "").trim(),
     close: safeUnderlyingClose,
+    displayClose: safeUnderlyingClose,
+    stockClose: safeUnderlyingClose,
+    stockPrice: safeUnderlyingClose,
+    underlyingClose: safeUnderlyingClose,
+    underlyingPrice: safeUnderlyingClose,
+    warrantPrice: explicitWarrantPrice > 0 ? explicitWarrantPrice : null,
+    warrantClose: explicitWarrantPrice > 0 ? explicitWarrantPrice : null,
+    warrantPriceIntegrity: explicitWarrantPrice > 0 ? "explicit_warrant_price" : "missing_explicit_warrant_price",
+    underlyingPriceIntegrity: safeUnderlyingClose ? "same_trade_date_underlying_price" : "blocked_or_missing_underlying_price",
     percent: cleanNumber(payload.percent ?? payload.displayPercent ?? payload.underlyingPercent ?? row.change_percent),
     value: cleanNumber(payload.value || payload.callValue || row.trade_value),
     finalScore: cleanNumber(payload.finalScore || payload.score || row.score),
@@ -510,7 +536,8 @@ function buildPayload(rows, run, options = {}) {
   const byType = (type) => rows
     .filter((row) => String(row.result_type || "match") === type)
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
-    .map((row) => normalizeRow(row, { sourceDate, usedDate }));
+    .map((row) => normalizeRow(row, { sourceDate, usedDate }))
+    .filter((row) => row.underlyingQuoteDateOk !== false);
   const matches = byType("match");
   const volumeMatches = byType("volume");
   const singleSignals = byType("single");

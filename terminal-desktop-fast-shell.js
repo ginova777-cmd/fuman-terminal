@@ -5570,9 +5570,14 @@
       fetchMarketJson(marketHeatmapContractPath(), 36, force, MARKET_HEATMAP_FETCH_TIMEOUT_MS)
         .then((payload) => {
           if (payload && typeof payload === "object" && marketPayloadBlockedForFormalDisplay(payload)) {
-            state.heatmap = { ...(payload || {}), firstPaint: false };
-            marketSnapshotFirstPayload = state.heatmap;
-            paint();
+            if (marketSnapshotFirstPayload?.sectors?.length) {
+              state.heatmap = marketSnapshotFirstPayload;
+              paintMarketSnapshotFirstPayload(state.heatmap, state.market || {});
+            } else {
+              state.heatmap = { ...(payload || {}), firstPaint: false };
+              marketSnapshotFirstPayload = state.heatmap;
+              paint();
+            }
           } else if (payload?.sectors?.length) {
             state.heatmap = {
               ...payload,
@@ -7383,10 +7388,24 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     if (count) count.textContent = String(displayCount || "--");
     if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
     if (top) top.textContent = rows[0]?.code || rows[0]?.symbol || "--";
-    const body = rows.length ? rows.map((row, index) => unifiedListCard(row, index, route)).join("") : `
-      <div class="empty-state">
-        ${escapeHtml(meta.title)} 本次正式 API 已回讀，暫無符合條件的榜單列。
-      </div>
+    const listBlock = rows.length ? `
+      <section class="strategy3-table" aria-label="${escapeHtml(meta.title)} 完整榜單">
+        <div class="strategy3-table-head">
+          <span>Rank</span>
+          <span>Stock</span>
+          <span>Signal</span>
+          <span>Metrics</span>
+        </div>
+        ${rows.map((row, index) => unifiedListCard(row, index, route)).join("")}
+      </section>
+    ` : `
+      <section class="fuman-zero-complete-state" aria-label="${escapeHtml(meta.title)} 0 檔正式結果" data-zero-result="1">
+        <div class="empty-state">
+          <strong>本次正式 API 已回讀，0 檔符合條件。</strong>
+          <span>這是完整掃描後的合法空結果，不是載入失敗；不撐空白表格。</span>
+          ${runId ? `<small>run=${escapeHtml(runId)}</small>` : ""}
+        </div>
+      </section>
     `;
     const html = `
       <section class="strategy5-shell fuman-unified-list-shell">
@@ -7401,15 +7420,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
             <section class="strategy3-run-cards" aria-label="${escapeHtml(meta.title)} 細分策略選項">
               ${cards.map((card) => renderUnifiedFilterCard(route, card)).join("")}
             </section>
-            <section class="strategy3-table" aria-label="${escapeHtml(meta.title)} 完整榜單">
-              <div class="strategy3-table-head">
-                <span>Rank</span>
-                <span>Stock</span>
-                <span>Signal</span>
-                <span>Metrics</span>
-              </div>
-              ${body}
-            </section>
+            ${listBlock}
           </section>
         </section>
       </section>
