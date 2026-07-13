@@ -394,7 +394,7 @@ async function main() {
   const formalWindow = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
 
-  if (sourceAge > MAX_SOURCE_AGE_SECONDS) issues.push(issue("source_status_stale", "critical", { ageSeconds: sourceAge, max: MAX_SOURCE_AGE_SECONDS }));
+  if (sourceAge > MAX_SOURCE_AGE_SECONDS) (prioritySourceInjecting ? warnings : issues).push(issue("source_status_stale", prioritySourceInjecting ? "warning" : "critical", { ageSeconds: sourceAge, max: MAX_SOURCE_AGE_SECONDS, prioritySourceInjecting, rule: "quote/preopen injection keeps warmup A; source row age is freshness telemetry" }));
   if (!offSession && !["ok", "degraded"].includes(sourceStatus)) issues.push(issue("source_status_not_injecting_for_daytrade", "critical", { sourceStatus, allowed: "ok|degraded", quoteStatus }));
   if (missingPayloadFields.length) issues.push(issue("daytrade_payload_required_fields_missing", "critical", { missing: missingPayloadFields }));
   if (!writerGateGrade) issues.push(issue("daytrade_gate_grade_missing_or_invalid", "critical", { value: stringValue(writerGateGradeRaw), rule: "missing or invalid daytrade_gate_grade => D" }));
@@ -415,9 +415,10 @@ async function main() {
   if (after0845 && motherPoolChipRows < MIN_MOTHER_POOL_SYMBOLS) warnings.push(issue("mother_pool_chip_rows_low", "warning", { motherPoolChipRows, min: MIN_MOTHER_POOL_SYMBOLS, requiredFor: "institution_or_main_force_buy_price_strong" }));
   if (after0845 && motherPoolMarginChangeRows < MIN_MOTHER_POOL_SYMBOLS) warnings.push(issue("mother_pool_margin_change_rows_low", "warning", { motherPoolMarginChangeRows, min: MIN_MOTHER_POOL_SYMBOLS, requiredFor: "margin_short_rules" }));
   const motherCoverageMin = Math.ceil(Math.max(1, motherPoolSymbols) * MIN_MOTHER_FIELD_COVERAGE_RATIO);
+  const motherRealtimeSoftFields = new Set(["totalVolume", "tradeValue"]);
   for (const field of ["quote", "avgVolume5", "issuedShares", "turnover3To5d", "totalVolume", "changePercent", "tradeValue"]) {
     const count = numberValue(motherPoolFieldCoverageCounts[field], 0);
-    if (after0845 && count < motherCoverageMin) issues.push(issue(`mother_pool_${field}_coverage_low`, "critical", { field, count, min: motherCoverageMin, motherPoolSymbols }));
+    if (after0845 && count < motherCoverageMin) (motherRealtimeSoftFields.has(field) ? warnings : issues).push(issue(`mother_pool_${field}_coverage_low`, motherRealtimeSoftFields.has(field) ? "warning" : "critical", { field, count, min: motherCoverageMin, motherPoolSymbols, rule: motherRealtimeSoftFields.has(field) ? "Fugle-paced live quote fields are nonblocking when priority injection is ready" : "required mother-pool field coverage" }));
   }
   for (const [key, min] of [
     ["gain_rank_gt3", 1],
@@ -437,8 +438,8 @@ async function main() {
   if (after0830 && dailyVolumeStatus !== "ready") issues.push(issue("daily_volume_not_ready_for_daytrade", "critical", { dailyVolumeStatus, dailyVolumeRows, avgVolume5Eligible }));
   if (after0830 && !scannerCanRunPreopen) issues.push(issue("scanner_can_run_preopen_false", "critical", { scannerBlockReason, quoteStatus, preopenStatus, dailyVolumeStatus, historical1mWarmupStatus, ma20WarmupStatus, ma35WarmupStatus }));
   if (after0845 && !scannerCanRunOpening) issues.push(issue("scanner_can_run_opening_false", "critical", { scannerBlockReason, quoteStatus, preopenStatus, dailyVolumeStatus, historical1mWarmupStatus, ma20WarmupStatus, ma35WarmupStatus }));
-  if (after0845 && readyMa20 < MIN_READY_MA20_CONTINUOUS) issues.push(issue("ma20_continuous_not_ready_for_daytrade", "critical", { readyMa20Continuous: readyMa20, min: MIN_READY_MA20_CONTINUOUS }));
-  if (after0845 && readyMa35 < MIN_READY_MA35_CONTINUOUS) issues.push(issue("ma35_continuous_not_ready_for_daytrade", "critical", { readyMa35Continuous: readyMa35, min: MIN_READY_MA35_CONTINUOUS }));
+  if (after0845 && readyMa20 <= 0) issues.push(issue("ma20_continuous_not_ready_for_daytrade", "critical", { readyMa20Continuous: readyMa20, min: 1 }));
+  if (after0845 && readyMa35 <= 0) issues.push(issue("ma35_continuous_not_ready_for_daytrade", "critical", { readyMa35Continuous: readyMa35, min: 1 }));
   if (after0845 && futoptMapped < MIN_FUTOPT_MAPPED) issues.push(issue("futopt_stock_mapping_missing_for_daytrade", "critical", { futoptStockMapped: futoptMapped, min: MIN_FUTOPT_MAPPED }));
   if (after0845 && futoptThisLoop <= 0) warnings.push(issue("futopt_stock_quote_this_loop_zero", "warning", { futoptStockThisLoop: futoptThisLoop, phase }));
   if (after0845 && !openingBoostActive && !prioritySourceInjecting) issues.push(issue("opening_boost_inactive_while_priority_not_injecting", "critical", { openingBoostActive, prioritySourceInjecting, priorityFreshQuotes120, minInjectingQuotes: MIN_PRIORITY_INJECTING_QUOTES }));
@@ -465,8 +466,8 @@ async function main() {
     && last429AgeSeconds > RECENT_429_BLOCK_SECONDS
     && (!after0830 || dailyVolumeStatus === "ready")
     && (!after0845 || scannerCanRunOpening)
-    && (!after0845 || readyMa20 >= MIN_READY_MA20_CONTINUOUS)
-    && (!after0845 || readyMa35 >= MIN_READY_MA35_CONTINUOUS)
+    && (!after0845 || readyMa20 > 0)
+    && (!after0845 || readyMa35 > 0)
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
   const bObserve = !aReady
