@@ -80,8 +80,15 @@ function main() {
     exitCode: readiness.exitCode,
     tail: readiness.output.split(/\r?\n/).slice(-8),
   });
-  push(checks, e2e.output.includes("[strategy2-e2e-closure] runId="), "e2e_closure_command_runs", {
+  let e2eStdoutJson = null;
+  try {
+    e2eStdoutJson = JSON.parse(e2e.output);
+  } catch {
+    e2eStdoutJson = null;
+  }
+  push(checks, e2e.exitCode === 0 && (e2e.output.includes("[strategy2-e2e-closure] runId=") || e2eStdoutJson?.ok === true), "e2e_closure_command_runs", {
     exitCode: e2e.exitCode,
+    stdoutOk: e2eStdoutJson?.ok === true,
     tail: e2e.output.split(/\r?\n/).slice(-8),
   });
 
