@@ -4,11 +4,18 @@ const path = require("path");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const baseUrl = (process.env.FUMAN_SMOKE_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const smokeBearerToken = String(
+  process.env.FUMAN_SMOKE_BEARER_TOKEN ||
+  process.env.FUMAN_VERIFY_BEARER_TOKEN ||
+  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN ||
+  process.env.FUMAN_AUTH_BEARER_TOKEN ||
+  ""
+).trim();
 
-function fetchText(pathname, timeoutMs = 20000) {
+function fetchText(pathname, timeoutMs = 20000, headers = {}) {
   const url = `${baseUrl}${pathname}`;
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { timeout: timeoutMs }, (res) => {
+    const req = https.get(url, { timeout: timeoutMs, headers }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { body += chunk; });
@@ -50,6 +57,28 @@ function assertOk(name, result, check = () => true) {
 
 function parseJson(result) {
   return JSON.parse(result.body);
+}
+
+function parseJsonSafe(result) {
+  try {
+    return JSON.parse(result.body || "{}");
+  } catch {
+    return null;
+  }
+}
+
+function isMembershipProtected(result) {
+  const payload = parseJsonSafe(result);
+  return result.status === 401 && payload?.protected === true && payload?.error === "membership_required";
+}
+
+function assertProtectedEndpointOk(name, result, check = () => true) {
+  if (!smokeBearerToken && isMembershipProtected(result)) {
+    const payload = parseJsonSafe(result) || {};
+    console.log(`[smoke] ${name} protected ${result.status} ${payload.error} scope=${payload.scope || ""}`);
+    return;
+  }
+  assertOk(name, result, check);
 }
 
 function todayYmd() {
@@ -141,17 +170,21 @@ async function main() {
     ["service-worker", `/fuman-sw.js?v=${version}`, (r) => r.body.includes("terminal-fast-bundle") && r.body.includes("terminal-market-snapshot-module.js") && r.body.includes("terminal-watchlist-shell.js") && r.body.includes("terminal-chip-snapshot-module.js")],
     ["terminal-bootstrap", `/terminal.js?v=${version}`, (r) => r.body.includes("FUMAN_TERMINAL_LOAD_APP") && r.body.includes("FUMAN_TERMINAL_LOAD_FEATURE_MODULE") && r.body.includes("terminal-app.js")],
     ["terminal-app", `/terminal-app.js?v=${version}`, (r) => r.body.includes("FUMAN_LIVE_MEMORY_TTL_MS") && r.body.includes("loadStrategyWeights")],
-    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }],
-    ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }],
+    ["strategy3-api", "/api/strategy3-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && isNotOlderThanLatestTradeDate(p.usedDate || p.date || p.updatedAt, strategy3TradeDate) && Number(p.count) > 0 && !!p.runId; }, { protected: true }],
+    ["strategy4-api", "/api/strategy4-latest?v=verify", (r) => { const p = parseJson(r); return p.ok === true && p.complete === true && Number(p.count) > 0 && !!p.runId; }, { protected: true }],
     ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&v=verify", (r) => {
       const p = parseJson(r);
       const endpointKeys = Object.keys(p.endpoints || {});
+      const membershipRedacted = p.membershipRequired === true || p.protected === true;
       return p.ok === true
         && p.snapshotHit === true
-        && p.cacheSource === "supabase:desktop_route_snapshot"
         && p.partial === false
-        && endpointKeys.length >= 10
-        && !endpointKeys.some((endpoint) => endpoint.includes("strategy2-latest"));
+        && !endpointKeys.some((endpoint) => endpoint.includes("strategy2-latest"))
+        && (
+          membershipRedacted
+            ? endpointKeys.length >= 3 && p.cacheSource === "membership-fast-shell"
+            : endpointKeys.length >= 10 && p.cacheSource === "supabase:desktop_route_snapshot"
+        );
     }],
     ["desktop-route-snapshot", "/api/desktop-route-snapshot?v=verify", (r) => {
       const p = parseJson(r);
@@ -166,7 +199,12 @@ async function main() {
     ["data-consistency", "/data/data-consistency-report.json?v=verify", (r) => parseJson(r).ok === true],
     ["strategy-weights", "/data/strategy-weight-report.json?v=verify", (r) => !!parseJson(r).weights],
   ];
-  for (const [name, pathname, check] of checks) assertOk(name, await fetchText(pathname), check);
+  const protectedHeaders = smokeBearerToken ? { authorization: `Bearer ${smokeBearerToken}` } : {};
+  for (const [name, pathname, check, options] of checks) {
+    const result = await fetchText(pathname, 20000, options?.protected ? protectedHeaders : {});
+    if (options?.protected) assertProtectedEndpointOk(name, result, check);
+    else assertOk(name, result, check);
+  }
   const frontendError = await postJson("/api/frontend-error", { source: "verify", message: "deployment smoke" });
   assertOk("frontend-error-api", frontendError, (r) => typeof parseJson(r).ok === "boolean");
   const performanceReport = await postJson("/api/performance-report", {
@@ -195,3 +233,5 @@ main().catch((error) => {
   console.error(`[smoke] failed: ${error.message}`);
   process.exit(1);
 });
+
+
