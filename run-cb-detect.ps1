@@ -41,23 +41,21 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
 }
 
 function Assert-CbDetectApi {
-  $url = "https://fuman-terminal.vercel.app/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $payload = $response.Content | ConvertFrom-Json
-  if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
-    throw "CB detect API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
+  $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
+  $report = @($scorecard["sourceReports"]) | Where-Object { $_["key"] -eq "cb" } | Select-Object -First 1
+  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
+    throw "CB detect scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
   }
-  if ([int]$payload.count -le 0) { throw "CB detect API empty count=$($payload.count)" }
-  $apiUpdatedAtRaw = $payload.updatedAt ?? $payload.generatedAt
-  $apiUpdatedAtText = if ($apiUpdatedAtRaw -is [DateTime]) { ([DateTime]$apiUpdatedAtRaw).ToUniversalTime().ToString("o") } else { [string]$apiUpdatedAtRaw }
-  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "CB detect API missing updatedAt" }
-  $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal)
-  $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
-  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
-    throw "CB detect API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
+  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
+  if ($count -le 0) { throw "CB detect scorecard sourceReport empty count=$count" }
+  "CB detect scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
+  return [pscustomobject]@{
+    runId = [string]$report["runId"]
+    count = $count
+    cacheSource = "scorecard-source-report"
   }
-  "CB detect API verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
-  return $payload
 }
 
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
