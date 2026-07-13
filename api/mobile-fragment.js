@@ -336,7 +336,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy2") {
     const sortedRows = [...rows].sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a));
     const windowRows = sortedRows.filter(inStrategy2Window);
-    return (windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
+    return (windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab));
   }
   return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
 }

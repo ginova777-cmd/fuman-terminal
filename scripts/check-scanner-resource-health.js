@@ -35,7 +35,7 @@ const STRATEGY_ALIASES = new Map([
 const READY_STATUS = "ready";
 const STALE_STATUS = "stale";
 const BLOCKING_STATUSES = new Set(["not_ready", "failed"]);
-const STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S || 0.9);
+const STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S || 0.95);
 const STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS = Number(process.env.STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS || 120);
 const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000);
 const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
@@ -366,19 +366,18 @@ function strategy2SourceGateIssues(sourceStatus) {
   const formalEntryAllowed = boolValue(payload.formal_entry_allowed);
   const daytradeGateGrade = String(payload.daytrade_gate_grade || payload.priority_gate_grade || "").toUpperCase();
   const selectedSymbolsFreshOk = boolValue(payload.selected_symbols_fresh_ok);
-  const dailyVolumeStatus = String(payload.daily_volume_status || "").toLowerCase();
-  const priorityFreshMaxQuoteAge = cleanNumber(payload.priority_fresh_max_quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.quote_age_seconds, 999999);
+  const priorityQuoteAgeSeconds = cleanNumber(payload.quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.priority_fresh_max_quote_age_seconds, 999999);
   const dedicatedPriorityReady = freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S
-    && priorityFreshMaxQuoteAge <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
+    && priorityQuoteAgeSeconds <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
     && selectedSymbolsFreshOk
-    && (!dailyVolumeStatus || dailyVolumeStatus === "ready");
+    && (!daytradeGateGrade || daytradeGateGrade === "A");
   const hardSeconds = cleanNumber(payload.intraday_1m_fresh_hard_seconds) || STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS;
   const hasCandidateLimit = Object.prototype.hasOwnProperty.call(payload, "quote_derived_1m_candidate_limit");
   const fullUniverse = boolValue(payload.quote_derived_1m_full_universe)
     || (hasCandidateLimit && cleanNumber(payload.quote_derived_1m_candidate_limit) <= 0);
   const session = String(payload.session || "").toLowerCase();
   const minutes = taipeiMinutes();
-  const regularNow = session === "regular" || (minutes >= 9 * 60 && minutes <= 13 * 60 + 35);
+  const regularNow = session === "regular" || (minutes >= 9 * 60 && minutes <= 12 * 60);
   const issues = [];
 
   if (String(payload.permission_status || "").toLowerCase() && String(payload.permission_status || "").toLowerCase() !== "ready") {
@@ -395,7 +394,6 @@ function strategy2SourceGateIssues(sourceStatus) {
     if (!dedicatedPriorityReady && !formalEntryAllowed) issues.push("formal_entry_allowed=false");
     if (!dedicatedPriorityReady && daytradeGateGrade && daytradeGateGrade !== "A") issues.push(`daytrade_gate_grade=${daytradeGateGrade}`);
     if (!selectedSymbolsFreshOk) issues.push("selected_symbols_fresh_ok=false");
-    if (dailyVolumeStatus && dailyVolumeStatus !== "ready") issues.push(`daily_volume_status=${payload.daily_volume_status}`);
     if (!fullUniverse && !scannerCanRunOpening) issues.push("quote_derived_1m_full_universe=false");
     if (!scannerCanRunOpening && activeSymbols >= 1000 && today1mSymbols < activeSymbols) {
       issues.push(`today_1m_symbols ${today1mSymbols}/${activeSymbols} not full universe`);
@@ -418,13 +416,12 @@ function isStrategy2DedicatedPayloadReady(sourceStatus) {
   const freshQuoteCoverage120s = cleanNumber(payload.priority_fresh_quote_coverage_120s)
     || cleanNumber(payload.fresh_quote_coverage_120s)
     || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
-  const quoteAge = cleanNumber(payload.priority_fresh_max_quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.quote_age_seconds, 999999);
+  const quoteAge = cleanNumber(payload.quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.priority_fresh_max_quote_age_seconds, 999999);
   const daytradeGateGrade = String(payload.daytrade_gate_grade || payload.priority_gate_grade || "").toUpperCase();
-  const dailyVolumeStatus = String(payload.daily_volume_status || "").toLowerCase();
   return freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S
     && quoteAge <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
     && boolValue(payload.selected_symbols_fresh_ok)
-    && (!dailyVolumeStatus || dailyVolumeStatus === "ready");
+    && (!daytradeGateGrade || daytradeGateGrade === "A");
 }
 
 function normalizeStrategy(value) {

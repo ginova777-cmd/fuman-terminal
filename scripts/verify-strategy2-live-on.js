@@ -55,7 +55,7 @@ function main() {
   const wrapper = read(WRAPPER);
   const task = queryTask();
   const e2e = runNodeScript(path.join("scripts", "verify-strategy2-e2e-closure.js"));
-  const readiness = runNodeScript(path.join("scripts", "check-strategy2-readiness-gate.js"));
+  const readiness = runNodeScript(path.join("scripts", "check-scanner-resource-health.js"), ["--strategy=strategy2"]);
 
   push(checks, task.ok, "schedule_task_query_ok", { error: task.error || "" });
   push(checks, /Ready|Running/i.test(task.parsed?.Status || ""), "schedule_task_ready_or_running", {
@@ -71,13 +71,23 @@ function main() {
     nextRunTime: task.parsed?.["Next Run Time"] || "",
   });
 
-  push(checks, wrapper.includes("Strategy2 before scan window; handing off to patrol wait loop until 08:45."), "wrapper_before_window_handoff_present");
+  push(checks, wrapper.includes("Strategy2 before scan window; handing off to patrol wait loop until 09:00."), "wrapper_before_window_handoff_present");
   push(checks, !wrapper.includes("outside Strategy2 scan window; preserve latest and do not publish"), "wrapper_old_preopen_exit_removed");
   push(checks, wrapper.includes("after Strategy2 scan window; preserve latest and do not publish"), "wrapper_after_window_preserve_present");
   push(checks, wrapper.includes("& $nodeExe \"scripts\\patrol-intraday-signals.js\""), "wrapper_invokes_patrol");
 
-  push(checks, readiness.output.includes("strategy2 readiness cache refreshed"), "readiness_command_runs", {
+  let readinessJson = null;
+  try {
+    readinessJson = JSON.parse(readiness.output);
+  } catch {
+    readinessJson = null;
+  }
+  push(checks, readiness.exitCode === 0 && readinessJson?.publishAllowed === true, "source_preflight_publish_allowed", {
     exitCode: readiness.exitCode,
+    status: readinessJson?.status || "",
+    publishAllowed: readinessJson?.publishAllowed,
+    sourceGate: readinessJson?.sourceGate || null,
+    reason: readinessJson?.reason || "",
     tail: readiness.output.split(/\r?\n/).slice(-8),
   });
   let e2eStdoutJson = null;
@@ -109,15 +119,15 @@ function main() {
     ok: checks.every((item) => item.ok),
     verifier: "verify-strategy2-live-on",
     generatedAt: new Date().toISOString(),
-    purpose: "Confirm Strategy2 08:00 task is armed, wrapper will not exit before 08:45, and production closure state is explicit.",
+    purpose: "Confirm Strategy2 08:00 task is armed, wrapper will not exit before 09:00, and production closure state is explicit.",
     task: task.parsed || {},
     wrapper: {
       path: WRAPPER,
-      beforeWindowHandoff: wrapper.includes("Strategy2 before scan window; handing off to patrol wait loop until 08:45."),
+      beforeWindowHandoff: wrapper.includes("Strategy2 before scan window; handing off to patrol wait loop until 09:00."),
       oldPreopenExitRemoved: !wrapper.includes("outside Strategy2 scan window; preserve latest and do not publish"),
       afterWindowPreserve: wrapper.includes("after Strategy2 scan window; preserve latest and do not publish"),
     },
-    readiness: { exitCode: readiness.exitCode, outputTail: readiness.output.split(/\r?\n/).slice(-12) },
+    readiness: { exitCode: readiness.exitCode, payload: readinessJson, outputTail: readiness.output.split(/\r?\n/).slice(-12) },
     closure,
     checks,
     issues: checks.filter((item) => !item.ok),

@@ -88,9 +88,9 @@ function runtimeStrategy2SignalsCandidate(marketSession = null) {
       entryCount: records.filter((record) => /entry|go/i.test(String(record?.stateId || ""))).length,
       aCount: records.filter((record) => /entry|go/i.test(String(record?.stateId || ""))).length,
       bOnlyCount: records.filter((record) => !/entry|go/i.test(String(record?.stateId || ""))).length,
-      historyContract: "strategy2-session-history-0845-1200-v1",
+      historyContract: "strategy2-session-history-0900-1200-v2",
       historyWindow: {
-        start: "08:45",
+        start: "09:00",
         end: "12:00",
         source: "scanner-signals-cache",
       },
@@ -122,7 +122,7 @@ function readStrategy2RuntimeHistoryPayload(marketSession = null, options = {}) 
     ...payload,
     ok: payload.ok !== false,
     cacheSource: "runtime-session-history",
-    gate: "strategy2-session-history-0845-1200",
+    gate: "strategy2-session-history-0900-1200",
     sourceCoverage: payload.sourceCoverage || {
       ok: false,
       ready: false,
@@ -325,10 +325,10 @@ function parseRequestOptions(request) {
   const requestedTop = Number(params.get("top") || "");
   const hasTopLimit = Number.isFinite(requestedTop) && requestedTop > 0;
   const requestedLimit = Number(params.get("limit") || "");
-  const fallbackLimit = compact ? 60 : 200;
+  const fallbackLimit = compact ? 240 : 500;
   const wantsAllToday = /^(1|true|yes)$/i.test(params.get("today") || params.get("allToday") || "");
-  const maxLimit = compact ? (wantsAllToday ? 240 : 120) : 500;
-  const rawLimit = hasTopLimit ? requestedTop : Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : fallbackLimit;
+  const maxLimit = compact ? 500 : 1000;
+  const rawLimit = hasTopLimit ? requestedTop : Math.max(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 0, fallbackLimit);
   const minLimit = hasTopLimit ? 1 : 20;
   const limit = Math.max(minLimit, Math.min(maxLimit, rawLimit));
   return {
