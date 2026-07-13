@@ -53,7 +53,6 @@ const STRATEGY3_MIN_INTRADAY_1M_COVERAGE = Number(process.env.STRATEGY3_MIN_INTR
 const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
 const STRATEGY3_MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
-const STRATEGY3_MAX_CHANGE_PERCENT = Number(process.env.STRATEGY3_MAX_CHANGE_PERCENT || 5);
 const STRATEGY3_MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO || 1);
 const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
 const STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
@@ -1964,13 +1963,13 @@ function strategy3FieldGate(stock, volumeRatio, volumeLots) {
     ? outsideVolume / insideVolume
     : (outsideVolume > 0 ? 99 : 0);
   const checks = {
-    changePercent3To5: pct >= STRATEGY3_MIN_CHANGE_PERCENT && pct <= STRATEGY3_MAX_CHANGE_PERCENT,
+    changePercentGteMin: pct >= STRATEGY3_MIN_CHANGE_PERCENT,
     volumeRatioGt1: volumeRatio > STRATEGY3_MIN_VOLUME_RATIO,
     outsideGtInside: !STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE || (outsideVolume > 0 && insideVolume > 0 && outsideVolume > insideVolume),
     tradeVolumeLots: STRATEGY3_MIN_TRADE_VOLUME_LOTS <= 0 || volumeLots >= STRATEGY3_MIN_TRADE_VOLUME_LOTS,
   };
   const ok = Object.values(checks).every(Boolean);
-  const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (${STRATEGY3_MIN_CHANGE_PERCENT}-${STRATEGY3_MAX_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
+  const reason = `硬門檻：漲幅=${pct.toFixed(2)}% (>=${STRATEGY3_MIN_CHANGE_PERCENT}%)、量比=${volumeRatio.toFixed(2)} (> ${STRATEGY3_MIN_VOLUME_RATIO})、外盤=${Math.round(outsideVolume)}、內盤=${Math.round(insideVolume)}、外內差=${Math.round(outsideInsideDiff)}、外內比=${outsideInsideRatio.toFixed(2)}、成交張數=${Math.round(volumeLots)}${STRATEGY3_MIN_TRADE_VOLUME_LOTS > 0 ? ` (>=${STRATEGY3_MIN_TRADE_VOLUME_LOTS})` : ""}`;
   return { ok, checks, reason, outsideVolume, insideVolume, outsideInsideDiff, outsideInsideRatio };
 }
 
