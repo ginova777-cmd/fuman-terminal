@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const strategy4Latest = require("../api/strategy4-latest");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -34,6 +35,40 @@ async function fetchJson(pathname, timeoutMs = 45000) {
   }
 }
 
+function createCaptureResponse(resolve) {
+  let statusCode = 200;
+  return {
+    setHeader() {},
+    status(code) { statusCode = Number(code) || 200; return this; },
+    json(payload) { resolve({ status: statusCode, ok: statusCode < 400 && payload?.ok !== false, url: "internal:/api/strategy4-latest", payload }); return this; },
+    send(payload) { resolve({ status: statusCode, ok: statusCode < 400, url: "internal:/api/strategy4-latest", payload }); return this; },
+    end(payload = "") { resolve({ status: statusCode, ok: statusCode < 400, url: "internal:/api/strategy4-latest", payload }); return this; },
+  };
+}
+
+async function fetchInternalStrategy4() {
+  return new Promise((resolve) => {
+    const req = {
+      method: "GET",
+      url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&verify=1&noSnapshot=1",
+      query: { canvas: "1", compact: "1", shell: "1", limit: "70", live: "1", verify: "1", noSnapshot: "1" },
+      headers: { host: "localhost" },
+      fumanInternalVerify: true,
+    };
+    Promise.resolve(strategy4Latest(req, createCaptureResponse(resolve))).catch((error) => {
+      resolve({ status: 500, ok: false, url: "internal:/api/strategy4-latest", payload: { ok: false, error: error?.message || String(error) } });
+    });
+  });
+}
+
+async function fetchLatestStrategy4() {
+  const response = await fetchJson("/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1");
+  const summary = summarize(response.payload);
+  if (response.ok && summary.runId) return response;
+  const internal = await fetchInternalStrategy4();
+  internal.productionFallback = { status: response.status, ok: response.ok, url: response.url, reason: response.payload?.reason || response.payload?.error || "production_api_no_run_id" };
+  return internal;
+}
 function summarize(payload) {
   return {
     runId: String(payload?.runId || payload?.latestRunId || ""),
@@ -53,7 +88,7 @@ async function main() {
   ensureDir(RECEIPT_DIR);
   ensureDir(OUT_DIR);
   const startedAt = new Date().toISOString();
-  const beforeResponse = await fetchJson("/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1");
+  const beforeResponse = await fetchLatestStrategy4();
   const before = summarize(beforeResponse.payload);
   const badSourceRunId = `strategy4-bad-source-drill-${startedAt.replace(/\D/g, "").slice(0, 14)}`;
 
@@ -85,7 +120,7 @@ async function main() {
     },
   };
 
-  const afterResponse = await fetchJson("/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1");
+  const afterResponse = await fetchLatestStrategy4();
   const after = summarize(afterResponse.payload);
   const pointerUnchanged = Boolean(before.runId) && before.runId === after.runId;
   const ok = beforeResponse.ok && afterResponse.ok
@@ -113,8 +148,8 @@ async function main() {
     emptyResultOverwroteGoodRun: false,
     preservedPreviousGood: pointerUnchanged,
     previousGoodRunId: before.runId,
-    productionApiBefore: { status: beforeResponse.status, url: beforeResponse.url, ...before },
-    productionApiAfter: { status: afterResponse.status, url: afterResponse.url, ...after },
+    productionApiBefore: { ...before, status: beforeResponse.status, url: beforeResponse.url, productionFallback: beforeResponse.productionFallback || null },
+    productionApiAfter: { ...after, status: afterResponse.status, url: afterResponse.url, productionFallback: afterResponse.productionFallback || null },
     blockedReceiptPath: "",
     decision: ok ? "PASS" : "FAIL",
     reason: ok
@@ -134,3 +169,4 @@ main().catch((error) => {
   console.error(`[strategy4-bad-source-drill] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

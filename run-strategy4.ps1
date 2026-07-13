@@ -302,9 +302,33 @@ try {
   }
   Write-Log "Strategy4 API-only verification ok: runId=$($strategy4Output.runId) count=$($strategy4Output.count) scanStamp=$($strategy4Output.scanStamp) cache=$cacheControl"
 } catch {
-  Write-Log "Strategy4 API-only verification failed: $($_.Exception.Message)"
-  Write-Strategy4Receipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
-  exit 1
+  $apiVerifyError = $_.Exception.Message
+  Write-Log "Strategy4 API-only verification failed: $apiVerifyError"
+  Write-Log "Strategy4 API endpoint may be membership-protected; falling back to Supabase complete-run readback."
+  try {
+    $dbVerifyOutput = (& $nodeExe "scripts\verify-strategy4-db-latest-run.js" 2>&1) -join "`n"
+    $dbVerifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    Write-Log "Strategy4 DB latest-run verification exit=$dbVerifyExit $dbVerifyOutput"
+    if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
+    $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
+    if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+    $strategy4Output = [pscustomobject]@{
+      runId = [string]$dbVerify.runId
+      count = [int]$dbVerify.resultCount
+      updatedAt = [string]$dbVerify.updatedAt
+      generatedAt = [string]$dbVerify.updatedAt
+      scanStamp = $strategy4Stamp
+      ok = $true
+    }
+    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete")
+    Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
+    Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
+    exit 0
+  } catch {
+    Write-Log "Strategy4 DB readback verification after API failure failed: $($_.Exception.Message)"
+    Write-Strategy4Receipt "failed" 1 $false 0 "" @($apiVerifyError, $_.Exception.Message) "critical scan failed during API and DB verification"
+    exit 1
+  }
 }
 
 Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)

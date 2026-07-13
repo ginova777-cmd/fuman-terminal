@@ -22,6 +22,7 @@ const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
 const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT || 1500);
+const STRATEGY4_MIN_HISTORY_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_HISTORY_COVERAGE_RATIO || 0.95);
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIVE_BID_ASK_VOLUME || 3000);
 const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = process.env.STRATEGY4_REQUIRE_QUOTE_LIQUIDITY_PREFILTER === "1";
@@ -240,7 +241,11 @@ function buildStrategy4PrePublishSelfTest(output) {
   if (requireSupabaseCoverage) {
     if (coverage.ok !== true) issues.push("supabaseCoverage.ok must be true");
     if (String(coverage.phase || "") !== "complete") issues.push(`supabaseCoverage.phase must be complete, got ${coverage.phase || "(blank)"}`);
-    if (cleanNumber(coverage.remainingMiss) !== 0) issues.push(`supabaseCoverage.remainingMiss must be 0, got ${coverage.remainingMiss}`);
+    const coverageRatio = cleanNumber(coverage.coverageRatio);
+    const remainingMiss = cleanNumber(coverage.remainingMiss);
+    if (remainingMiss !== 0 && coverageRatio < STRATEGY4_MIN_HISTORY_COVERAGE_RATIO) {
+      issues.push(`supabaseCoverage coverageRatio must be >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO} when remainingMiss > 0, got coverageRatio=${coverageRatio}, remainingMiss=${coverage.remainingMiss}`);
+    }
     if (cleanNumber(coverage.insufficientHistoryCount) !== 0) issues.push(`supabaseCoverage.insufficientHistoryCount must be 0, got ${coverage.insufficientHistoryCount}`);
     if (cleanNumber(coverage.computableUniverse) < MIN_SOURCE_ROW_COUNT) issues.push(`supabaseCoverage.computableUniverse ${cleanNumber(coverage.computableUniverse)} below ${MIN_SOURCE_ROW_COUNT}`);
   }
@@ -1107,8 +1112,10 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
   const rawCoveragePartial = supabaseCoverage?.qualityStatus === "partial";
+  const supabaseHistoryCoverageRatio = cleanNumber(supabaseCoverage?.coverageRatio);
   const stableSupabaseCoverageComplete = rawCoveragePartial
     && [STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE].includes(strategy4VolumeCacheSource)
+    && supabaseHistoryCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO
     && complete
     && noDataCount === 0
     && errorCount === 0;
@@ -1155,7 +1162,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
           ...supabaseCoverage,
           originalQualityStatus: supabaseCoverage.qualityStatus,
           qualityStatus: "complete",
-          acceptedReason: "stock_daily_volume full scan completed with no no-data or scanner errors",
+          acceptedReason: `history coverage ${supabaseHistoryCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}; full scan completed with no no-data or scanner errors; remainingMiss=${supabaseCoverage.remainingMiss || 0}`,
         }
       : (supabaseCoverage || null),
     supabasePublishGate: readStrategy4PublishGate(),

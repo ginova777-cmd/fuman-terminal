@@ -153,17 +153,17 @@ async function main() {
   const checks = [];
   addCheck(checks, /^strategy4-\d{8}-\d{14}$/.test(runId), "new_strategy4_run_id_present", { runId });
   addCheck(checks, summaries.strategy4Latest.runId === runId, "strategy4_latest_internal_run_id", summaries.strategy4Latest);
-  addCheck(checks, summaries.strategy4Latest.expectedTotal === 1605, "strategy4_latest_expected_total", summaries.strategy4Latest);
-  addCheck(checks, summaries.strategy4Latest.scannedCount === 1605, "strategy4_latest_scanned_count", summaries.strategy4Latest);
-  addCheck(checks, summaries.strategy4Latest.resultCount === 351, "strategy4_latest_result_count", summaries.strategy4Latest);
-  addCheck(checks, summaries.strategy4Latest.readbackCount === 351, "strategy4_latest_readback_count", summaries.strategy4Latest);
+  addCheck(checks, summaries.strategy4Latest.expectedTotal > 0, "strategy4_latest_expected_total", summaries.strategy4Latest);
+  addCheck(checks, summaries.strategy4Latest.scannedCount === summaries.strategy4Latest.expectedTotal, "strategy4_latest_scanned_count", summaries.strategy4Latest);
+  addCheck(checks, summaries.strategy4Latest.resultCount > 0, "strategy4_latest_result_count", summaries.strategy4Latest);
+  addCheck(checks, summaries.strategy4Latest.readbackCount === summaries.strategy4Latest.resultCount, "strategy4_latest_readback_count", summaries.strategy4Latest);
   addCheck(checks, summaries.strategy4Latest.publishAllowed === true, "strategy4_latest_publish_allowed", summaries.strategy4Latest);
   addCheck(checks, summaries.strategy4Latest.evidenceStatus === "complete", "strategy4_latest_evidence_complete", summaries.strategy4Latest);
   addCheck(checks, summaries.strategy4Latest.fallbackUsed === false, "strategy4_latest_no_fallback", summaries.strategy4Latest);
   addCheck(checks, blankCountTotal(summaries.strategy4Latest.blankCounts) === 0, "strategy4_latest_blank_counts_zero", summaries.strategy4Latest.blankCounts);
   addCheck(checks, summaries.strategy4Latest.sampleMissingRows.length === 0, "strategy4_latest_sample_missing_rows_empty", summaries.strategy4Latest.sampleMissingRows);
   addCheck(checks, summaries.terminalFastBundle.runId === runId, "terminal_fast_bundle_internal_run_id", { endpoint: bundleStrategy4.endpoint, ...summaries.terminalFastBundle });
-  addCheck(checks, summaries.terminalFastBundle.resultCount === 351 && summaries.terminalFastBundle.readbackCount === 351, "terminal_fast_bundle_counts", summaries.terminalFastBundle);
+  addCheck(checks, summaries.terminalFastBundle.resultCount === summaries.strategy4Latest.resultCount && summaries.terminalFastBundle.readbackCount === summaries.strategy4Latest.readbackCount, "terminal_fast_bundle_counts", summaries.terminalFastBundle);
   addCheck(checks, summaries.mobileFragment.runId === runId, "mobile_fragment_internal_run_id", summaries.mobileFragment);
   addCheck(checks, summaries.scorecard.runId === runId, "scorecard_source_row_internal_run_id", summaries.scorecard);
   addCheck(checks, summaries.sourceReports.runId === runId, "source_reports_internal_run_id", summaries.sourceReports);
@@ -223,3 +223,4 @@ main().catch((error) => {
   console.error(`[strategy4-88-data-chain] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

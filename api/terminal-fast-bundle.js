@@ -588,7 +588,7 @@ function hasStrategy4Endpoint(endpoints = {}) {
 }
 
 async function repairStrategy4LatestSnapshot(request, endpoints) {
-  if (hasStrategy4Endpoint(endpoints)) return;
+  // Strategy4 must refresh from the latest complete run even when the desktop snapshot contains an older endpoint.
   const result = await callJson("/api/strategy4-latest", strategy4Latest, request, {
     ...compactQuery(70),
     live: "1",
@@ -754,6 +754,7 @@ module.exports = async function handler(request, response) {
       await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy2LatestSnapshot(request, endpoints);
       await repairStrategy3LatestSnapshot(request, endpoints);
+      await repairStrategy4LatestSnapshot(request, endpoints);
       const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
         timeoutMs: 5500,
         via: "api/terminal-fast-bundle",
@@ -794,6 +795,7 @@ module.exports = async function handler(request, response) {
       }
       const endpoints = {};
       await repairStrategy3LatestSnapshot(request, endpoints);
+      await repairStrategy4LatestSnapshot(request, endpoints);
       const missPayload = {
         ...snapshotMissPayload(),
         endpoints,
@@ -864,6 +866,9 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
+
+
 
 
 

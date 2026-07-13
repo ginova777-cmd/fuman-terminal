@@ -666,6 +666,61 @@ function normalizeRecord(task, payload, row, index) {
   });
 }
 
+async function fetchStrategy4LatestCompletePayload() {
+  const runRows = await fetchSupabaseRows(
+    process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs",
+    [
+      "select=run_id,scan_date,finished_at,status,complete,result_count,updated_at,payload",
+      "strategy=eq.strategy4",
+      "status=eq.complete",
+      "complete=eq.true",
+      "order=updated_at.desc",
+      "limit=1",
+    ].join("&"),
+  );
+  const run = runRows[0];
+  if (!run?.run_id) return null;
+  const resultRows = await fetchSupabaseRows(
+    process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results",
+    [
+      "select=*",
+      `run_id=eq.${encodeURIComponent(run.run_id)}`,
+      "order=rank.asc",
+      "limit=120",
+    ].join("&"),
+  );
+  const rows = resultRows.map((row, index) => {
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+    return {
+      ...payload,
+      code: cleanText(payload.code || row.code),
+      name: cleanText(payload.rawName || payload.name || row.name || row.code),
+      rawName: cleanText(payload.rawName || payload.name || row.name || row.code),
+      close: cleanNumber(payload.close || payload.price || row.close || row.price),
+      price: cleanNumber(payload.price || payload.close || row.price || row.close),
+      tradeVolume: cleanNumber(payload.tradeVolume || payload.volume || row.volume),
+      volume: cleanNumber(payload.volume || payload.tradeVolume || row.volume),
+      score: cleanNumber(payload.score || row.score),
+      rank: cleanNumber(payload.rank || row.rank) || index + 1,
+      reason: cleanText(payload.reason || row.reason || "Strategy4 latest complete run"),
+      scan_date: row.scan_date || row.trade_date || run.scan_date,
+      usedDate: row.scan_date || row.trade_date || run.scan_date,
+      _strategy4ScorecardSourceDate: row.scan_date || row.trade_date || run.scan_date,
+    };
+  });
+  return {
+    ok: true,
+    source: "supabase:strategy4_scan_results",
+    runId: cleanText(run.run_id),
+    usedDate: run.scan_date,
+    date: run.scan_date,
+    updatedAt: cleanText(run.finished_at || run.updated_at),
+    count: Math.max(rows.length, cleanNumber(run.result_count)),
+    matches: rows,
+    rows,
+    reason: "scorecard_source_supabase_latest",
+  };
+}
 async function fetchStrategy5LatestCompletePayload() {
   const runRows = await fetchSupabaseRows(
     process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strategy5_scan_runs",
@@ -904,6 +959,26 @@ async function main() {
       report.emittedRows = strategy3Payload.matches.length;
       report.date = strategy3SourceDate;
       report.reason = strategy3Payload.reason;
+    }
+    rawRecords = records.filter((row) => row.record_date && row.ticker);
+  }
+  const strategy4Task = TASKS.find((task) => task.key === "strategy4");
+  const strategy4Report = reports.find((item) => item.key === "strategy4");
+  const strategy4NeedsFallback = strategy4Report && (!strategy4Report.ok || !strategy4Report.emittedRows);
+  const strategy4Payload = strategy4NeedsFallback ? await fetchStrategy4LatestCompletePayload() : null;
+  if (strategy4Task && strategy4Payload?.matches?.length) {
+    for (let index = records.length - 1; index >= 0; index -= 1) {
+      if (records[index]?.strategy === strategy4Task.strategy) records.splice(index, 1);
+    }
+    strategy4Payload.matches.forEach((row, index) => records.push(normalizeRecord(strategy4Task, strategy4Payload, row, index)));
+    if (strategy4Report) {
+      strategy4Report.statusCode = 200;
+      strategy4Report.ok = true;
+      strategy4Report.runId = cleanText(strategy4Payload.runId);
+      strategy4Report.count = cleanNumber(strategy4Payload.count);
+      strategy4Report.emittedRows = strategy4Payload.matches.length;
+      strategy4Report.date = cleanText(strategy4Payload.usedDate || strategy4Payload.date);
+      strategy4Report.reason = strategy4Payload.reason;
     }
     rawRecords = records.filter((row) => row.record_date && row.ticker);
   }

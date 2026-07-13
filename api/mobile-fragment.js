@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const {
   endpointPayloadFromSnapshot,
@@ -173,6 +174,31 @@ function createCaptureResponse(resolve) {
   };
 }
 
+function fetchStrategy4Internal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("strategy4_internal_timeout")), 12000);
+    const finish = (result) => {
+      clearTimeout(timer);
+      if (Number(result.statusCode || 0) >= 400 || result.payload?.ok === false) {
+        reject(new Error(result.payload?.detail || result.payload?.error || `HTTP ${result.statusCode}`));
+        return;
+      }
+      resolve(result.payload);
+    };
+    Promise.resolve(strategy4Latest({
+      ...request,
+      method: "GET",
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish))).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 function fetchStrategy5Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = Object.fromEntries(url.searchParams.entries());
@@ -686,14 +712,16 @@ module.exports = async function handler(request, response) {
     });
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab === "strategy3" || tab === "strategy5";
+    const forceLivePayload = tab === "strategy3" || tab === "strategy4" || tab === "strategy5";
     const payload = forceLivePayload
       || !snapshotPayload
       || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
-      ? (tab === "strategy5"
-        ? await fetchStrategy5Internal(request, endpoint)
-        : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
+      ? (tab === "strategy4"
+        ? await fetchStrategy4Internal(request, endpoint)
+        : tab === "strategy5"
+          ? await fetchStrategy5Internal(request, endpoint)
+          : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
@@ -702,3 +730,7 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+
+
+
+
