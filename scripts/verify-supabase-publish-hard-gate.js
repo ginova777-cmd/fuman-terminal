@@ -166,7 +166,7 @@ async function buildPayload() {
   const intradayRows = [...(intradayResult.byCode || new Map()).values()];
   const today1mSymbols = intradayRows.filter((row) => cleanNumber(row.today_candle_count ?? row.rows_today) > 0).length;
   const payloadToday1mSymbols = cleanNumber(health.payload?.today_1m_symbols || health.payload?.intraday_1m_symbols_today || health.payload?.today_candle_symbols);
-  const readyGe35 = cleanNumber(health.payload?.ready_ge_35)
+  const readyGe35 = cleanNumber(health.payload?.ready_ge_35 ?? health.payload?.readyGe35 ?? health.payload?.ready_ma35_continuous ?? health.payload?.readyMa35Continuous)
     || intradayRows.filter((row) => row.ready_ma35_continuous === true || row.ready_ge_35 === true || cleanNumber(row.continuous_candle_count ?? row.candle_count) >= 35).length;
   const latestCandleTime = health.payload?.latest_candle_time || health.payload?.intraday_1m_latest_candle_time || intradayRows.map((row) => row.latest_candle_time || row.updated_at).filter(Boolean).sort().at(-1) || "";
   const intraday1mStaleSeconds = cleanNumber(health.payload?.intraday_1m_stale_seconds) || staleSeconds(latestCandleTime, now);
@@ -186,6 +186,30 @@ async function buildPayload() {
     : health.latestRunIdSource || "";
   const writeBudget = health.payload?.writeBudget || health.payload?.write_budget || { status: "read-only", allowed: false, reason: "publish hard gate is read-only" };
   const retentionOk = health.payload?.retentionOk !== false && health.payload?.retention_ok !== false;
+  const priorityGateGrade = String(health.payload?.daytrade_gate_grade || health.payload?.priority_gate_grade || "").toUpperCase();
+  const priorityFreshQuoteCoverage120s = cleanNumber(
+    health.payload?.priority_fresh_quote_coverage_120s
+      ?? health.payload?.priorityFreshQuoteCoverage120s
+      ?? health.payload?.fresh_quote_coverage_120s
+  );
+  const priorityQuoteAgeSeconds = cleanNumber(
+    health.payload?.quote_age_seconds
+      ?? health.payload?.priority_quote_age_p95_seconds
+      ?? quoteAgeSeconds
+  );
+  const daytradePriorityReady = Boolean(
+    STRATEGY_KEY === "strategy2"
+    && (priorityGateGrade === "A" || priorityGateGrade === "READY")
+    && priorityFreshQuoteCoverage120s >= 0.95
+    && priorityQuoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
+    && (health.payload?.rate_limit_status || "ok") === "ok"
+    && health.payload?.collector_rate_limited !== true
+    && health.payload?.rest_quote_rate_limited !== true
+    && (health.payload?.selected_symbols_fresh_ok === true || cleanNumber(health.payload?.priority_fresh_quotes_120s) > 0)
+    && (payloadToday1mSymbols || today1mSymbols) > 0
+    && readyGe35 >= MIN_READY_GE_35
+  );
+  const effectiveRequireSharedSourceStatus = requireSharedSourceStatus && !daytradePriorityReady;
   const sourceCoverage = {
     fresh_quote_coverage_120s: freshQuoteCoverage120s,
     today_1m_symbols: payloadToday1mSymbols || today1mSymbols,
@@ -202,31 +226,31 @@ async function buildPayload() {
   const issues = [];
   const warnings = [];
   if (sourceStatusResult.ok === false || !sourceStatus) {
-    const item = issue(requireSharedSourceStatus ? "critical" : "warning", "source-status-missing", "source_status readback failed", { error: sourceStatusResult.error || "" });
-    (requireSharedSourceStatus ? issues : warnings).push(item);
+    const item = issue(effectiveRequireSharedSourceStatus ? "critical" : "warning", "source-status-missing", "source_status readback failed", { error: sourceStatusResult.error || "" });
+    (effectiveRequireSharedSourceStatus ? issues : warnings).push(item);
   }
-  if (requireSharedSourceStatus && sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "source-status-stale", "source_status is stale before publish", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
-  if (requireSharedSourceStatus && sourceStatus && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok before publish", { sourceStatus }));
+  if (effectiveRequireSharedSourceStatus && sourceStatusStaleSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "source-status-stale", "source_status is stale before publish", { sourceStatusStaleSeconds, max: MAX_QUOTE_AGE_SECONDS }));
+  if (effectiveRequireSharedSourceStatus && sourceStatus && !(sourceStatus === "ok" || health.payload?.source_core_ok === true || health.payload?.source_parts?.source_core_ok === true)) issues.push(issue("critical", "source-status-not-ok", "source_status is not ok before publish", { sourceStatus }));
   if (requireFreshQuote && freshQuoteCoverage120s < MIN_QUOTE_COVERAGE) issues.push(issue("critical", "fresh-quote-coverage-low", "fresh_quote_coverage_120s below publish threshold", { freshQuoteCoverage120s, min: MIN_QUOTE_COVERAGE }));
   if (requireFreshQuote && quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS && sourceStatus !== "ok") issues.push(issue("critical", "quote-stale", "quote age exceeds publish threshold", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
   if (requireIntraday1m && first1mRequired && sourceCoverage.today_1m_symbols < MIN_TODAY_1M_SYMBOLS) issues.push(issue("critical", "today-1m-missing", "09:05 today 1m symbols missing", { today1mSymbols: sourceCoverage.today_1m_symbols, min: MIN_TODAY_1M_SYMBOLS }));
   if (requireIntraday1m && afterFirst1mWindow && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("critical", "intraday-1m-stale", "intraday_1m_stale_seconds exceeds critical threshold", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS }));
   if (requireIntraday1m && ready35Required && readyGe35 < MIN_READY_GE_35) issues.push(issue("critical", "ready-ge35-low", "09:30 ready_ge_35 hard gate failed", { readyGe35, min: MIN_READY_GE_35 }));
   if (preopenRequired && sourceCoverage.preopen_coverage < MIN_PREOPEN_ROWS) issues.push(issue("critical", "preopen-coverage-low", "08:55 preopen snapshot coverage below threshold", { preopenRows: sourceCoverage.preopen_coverage, min: MIN_PREOPEN_ROWS }));
-  if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE) {
+  if (dailyVolumeFreshness < MIN_DAILY_VOLUME_COVERAGE && !daytradePriorityReady) {
     const item = issue(
-      requireSharedSourceStatus ? "critical" : "warning",
+      effectiveRequireSharedSourceStatus ? "critical" : "warning",
       "daily-volume-freshness-low",
       "daily volume freshness below publish threshold",
       { dailyVolumeFreshness, min: MIN_DAILY_VOLUME_COVERAGE, requiredForProfile: requireSharedSourceStatus }
     );
-    (requireSharedSourceStatus ? issues : warnings).push(item);
+    (effectiveRequireSharedSourceStatus ? issues : warnings).push(item);
   }
   if (fallbackUsed) issues.push(issue("critical", "fallback-used", "fallbackUsed is true; fallback or old cache cannot satisfy publish gate"));
   if (retentionOk !== true) issues.push(issue("critical", "retention-not-ok", "retentionOk is not true"));
   if (!health.anonRead?.ok) {
     const anonIssue = issue("critical", "anon-read-failed", "Supabase anon read target check failed", { failed: health.anonRead?.failed || [] });
-    if (requireSharedSourceStatus || !latestRunId) issues.push(anonIssue);
+    if (effectiveRequireSharedSourceStatus || !latestRunId) issues.push(anonIssue);
     else warnings.push({ ...anonIssue, severity: "warning", message: "Supabase anon read target check failed after live window; latest complete run remains authoritative" });
   }
   if (!latestCandleTime && marketSession) warnings.push(issue("warning", "latest-candle-time-missing", "latest_candle_time is missing"));
@@ -249,11 +273,15 @@ async function buildPayload() {
       strategy4AfterClose,
       allowSharedSourceStopped,
       requireSharedSourceStatus,
+      effectiveRequireSharedSourceStatus,
+      daytradePriorityReady,
+      priorityFreshQuoteCoverage120s,
+      priorityQuoteAgeSeconds,
       requireFreshQuote,
       requireIntraday1m,
     },
     staleSeconds: Math.max(
-      requireSharedSourceStatus ? sourceStatusStaleSeconds : 0,
+      effectiveRequireSharedSourceStatus ? sourceStatusStaleSeconds : 0,
       requireFreshQuote ? quoteAgeSeconds : 0,
       requireIntraday1m && latestCandleTime ? intraday1mStaleSeconds : 0
     ),

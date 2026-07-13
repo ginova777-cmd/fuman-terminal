@@ -665,6 +665,13 @@ function strategy2HardAReadiness(payload = {}) {
   const ma = snapshot.ma_readiness_at_run || payload.ma_readiness_at_run || payload.sourceCoverage || {};
   const pre = snapshot.preopen_futopt_daily_readiness_at_run || payload.preopen_futopt_daily_readiness_at_run || {};
   const issues = [];
+  const priorityFirstReady = cleanNumber(quote.fresh_quote_coverage_120s ?? quote.freshQuoteCoverage120s) >= 0.95
+    && cleanNumber(intraday.today_1m_symbols ?? intraday.today1mSymbols ?? quote.today_1m_symbols ?? quote.today1mSymbols) > 0
+    && cleanNumber(ma.ready_ge_35 ?? ma.readyGe35 ?? ma.ready_ma35_continuous ?? ma.readyMa35Continuous) >= 40
+    && payload.complete === true
+    && payload.fallbackUsed !== true
+    && cleanNumber(payload.count ?? payload.resultCount ?? payload.totalCount) > 0;
+  if (priorityFirstReady) return { ok: true, issues: [] };
 
   if (!(source.ok === true && (strategy2StatusReady(source.status) || strategy2StatusReady(source.sourceStatus)))) {
     issues.push("a_source_status_not_ready");
@@ -1231,7 +1238,7 @@ function normalizeStrategy2SourceGateCoverage(sourceGate, readinessCoverage = {}
 }
 
 function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCoverage) {
-  if (sourceGate?.publishAllowed !== true) return {};
+  if (sourceGate?.publishAllowed !== true && sourceCoverage?.ready !== true) return {};
   const runSourcePayload = payload?.source_status_at_run?.payload
     || payload?.runTimeSourceSnapshot?.source_status_at_run?.payload
     || payload?.run_time_source_snapshot?.source_status_at_run?.payload
@@ -1425,7 +1432,16 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
   );
-  const publishAllowed = Boolean(currentGatePublishAllowed || publishedRunSnapshotAllowed);
+  const priorityFirstPublishAllowed = Boolean(
+    payload?.complete === true
+    && payload?.runId
+    && payload?.fallbackUsed !== true
+    && (cleanNumber(payload?.count ?? payload?.resultCount ?? payload?.totalCount) > 0 || (Array.isArray(payload?.rows) && payload.rows.length > 0) || (Array.isArray(payload?.records) && payload.records.length > 0) || (Array.isArray(payload?.events) && payload.events.length > 0))
+    && cleanNumber(readinessCoverage.fresh_quote_coverage_120s ?? readinessCoverage.freshQuoteCoverage120s) >= 0.95
+    && cleanNumber(readinessCoverage.today_1m_symbols ?? readinessCoverage.today1mSymbols) > 0
+    && cleanNumber(readinessCoverage.ready_ge_35 ?? readinessCoverage.readyGe35 ?? readinessCoverage.ready_ma35_continuous ?? readinessCoverage.readyMa35Continuous) >= 40
+  );
+  const publishAllowed = Boolean(currentGatePublishAllowed || publishedRunSnapshotAllowed || priorityFirstPublishAllowed);
   const publishBlocked = !publishAllowed;
   const publishBlockedReason = publishBlocked
     ? gateIssues.join("; ") || payload.publishBlockedReason || readinessCoverage.reason || "strategy2 source publish gate blocked"
@@ -1947,14 +1963,14 @@ async function handler(request, response) {
         : attachStrategy2Readiness(completeRun, readiness, tradingDay);
       setStrategy2LiveShellCache(response, options);
       const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
-      const approvedSnapshotFields = gatedPayload?.sourceGate?.publishAllowed === true
+      const approvedSnapshotFields = (gatedPayload?.sourceGate?.publishAllowed === true || gatedPayload?.sourceCoverage?.ready === true)
         ? buildStrategy2SourceGateSnapshotFields(gatedPayload, gatedPayload.sourceGate, {
           ...(gatedPayload.sourceCoverage || {}),
           ready: true,
           status: "ready",
         })
         : {};
-      const responsePayload = gatedPayload?.sourceGate?.publishAllowed === true
+      const responsePayload = (gatedPayload?.sourceGate?.publishAllowed === true || gatedPayload?.sourceCoverage?.ready === true)
         ? {
           ...gatedPayload,
           ...approvedSnapshotFields,

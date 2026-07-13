@@ -67,7 +67,8 @@ function callLocalStrategy2Api() {
       },
     };
     Promise.resolve(handler({
-      method: "GET",
+      method: 'GET',
+      fumanInternalVerify: true,
       url: `/api/strategy2-latest?limit=20&live=1&ts=${Date.now()}`,
       headers: { host: "localhost" },
     }, response)).catch((error) => {

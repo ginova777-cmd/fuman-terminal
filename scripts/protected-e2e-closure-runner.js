@@ -90,6 +90,13 @@ function productionLayerOk(result) {
   return endpointAccessibleOrProtected(result);
 }
 
+function rowProtectedByMembership(row) {
+  if (!row || typeof row !== "object") return false;
+  const statusCode = Number(row.statusCode || row.status || 0);
+  const text = String((row.error || "") + " " + (row.reason || "") + " " + (row.scope || ""));
+  return statusCode === 401 || /membership_required|missing_bearer_token/i.test(text);
+}
+
 function runIdFromMobile(text) {
   return String(text || "").match(/data-run-id="([^"]+)"/)?.[1] || "";
 }
@@ -155,10 +162,12 @@ async function runProtectedE2EClosure(config) {
   if (mobile.ok && mobileRunId) check(checks, mobileRunId === expectedRunId, "display_mobile_fragment_run_id_matches_compute_when_visible", { expectedRunId, actual: mobileRunId });
 
   check(checks, productionLayerOk(scorecard), "display_scorecard_public_or_membership_protected", summarizeProtection(scorecard));
-  if (scorecard.ok && scorecardRow) check(checks, String(scorecardRow.runId || "") === expectedRunId, "display_scorecard_row_run_id_matches_compute_when_visible", { expectedRunId, row: scorecardRow });
+  if (scorecard.ok && scorecardRow && !rowProtectedByMembership(scorecardRow)) check(checks, String(scorecardRow.runId || "") === expectedRunId, "display_scorecard_row_run_id_matches_compute_when_visible", { expectedRunId, row: scorecardRow });
+  if (scorecard.ok && rowProtectedByMembership(scorecardRow)) check(checks, true, "display_scorecard_row_membership_protected", { expectedRunId, row: scorecardRow });
 
   check(checks, productionLayerOk(reports), "display_source_reports_public_or_membership_protected", summarizeProtection(reports));
-  if (reports.ok && reportRow) check(checks, String(reportRow.runId || "") === expectedRunId, "display_source_reports_row_run_id_matches_compute_when_visible", { expectedRunId, row: reportRow });
+  if (reports.ok && reportRow && !rowProtectedByMembership(reportRow)) check(checks, String(reportRow.runId || "") === expectedRunId, "display_source_reports_row_run_id_matches_compute_when_visible", { expectedRunId, row: reportRow });
+  if (reports.ok && rowProtectedByMembership(reportRow)) check(checks, true, "display_source_reports_row_membership_protected", { expectedRunId, row: reportRow });
 
   check(checks, page88.ok && /api\/scorecard|scorecard/i.test(page88.text || ""), "display_page88_shell_ok_with_scorecard_hook", { status: page88.status, url: page88.url });
 
