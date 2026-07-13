@@ -247,7 +247,7 @@ function completeDateInfo(records, sourceReports = []) {
 async function main() {
   const outFile = argValue("out", OUT_FILE);
   const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
-  const expectedDate = dateOnly(argValue("expected-date", process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
+  const expectedDate = dateOnly(argValue("expected-date", process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
   const since = dateDaysAgo(DAYS);
   const selectRecords = [
     "record_id",
@@ -301,7 +301,10 @@ async function main() {
   )).map(normalizeDaily).filter((row) => row.strategy);
   const sourceReports = readSourceReports();
   const dateInfo = completeDateInfo(records, sourceReports);
-  const latestDate = (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
+  const hasExpectedDateRecords = expectedDate && records.some((row) => row.record_date === expectedDate);
+  const latestDate = hasExpectedDateRecords
+    ? expectedDate
+    : (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
   if (!latestDate) throw new Error("scorecard Supabase source has no trade_records latestDate");
   if (!records.length) throw new Error("scorecard Supabase source returned 0 trade_records");
   if (expectedDate && latestDate !== expectedDate) {
@@ -321,7 +324,7 @@ async function main() {
       source: exportSource,
       since,
       expectedDate,
-      selectedLatestDateReason: dateInfo.find((item) => item.date === latestDate)?.complete
+      selectedLatestDateReason: hasExpectedDateRecords ? "expected date has scorecard source rows" : dateInfo.find((item) => item.date === latestDate)?.complete
         ? "latest complete date with all expected strategies"
         : "fallback newest date; verifier must block if incomplete",
       latestDateCandidates: dateInfo.slice(0, 10),

@@ -124,6 +124,10 @@ function isoDate(value, fallback = taipeiDate()) {
   return fallback;
 }
 
+function scorecardFallbackDate() {
+  return isoDate(process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_SCORECARD_EXPECTED_DATE || "", taipeiDate());
+}
+
 function taipeiDateFromTimestamp(value) {
   const parsed = Date.parse(cleanText(value));
   return Number.isFinite(parsed) ? taipeiDate(new Date(parsed)) : "";
@@ -147,9 +151,14 @@ function latestRunIdDate(runId) {
   return compactToIso(matches.at(-1) || "");
 }
 
+function boundedRecordDate(value) {
+  const date = isoDate(value || "", "");
+  const expected = scorecardFallbackDate();
+  return expected && date && date > expected ? expected : date;
+}
 function scorecardRecordDate(task, payload, row) {
   const explicit = isoDate(row.record_date || row.scorecardDate || payload.scorecardDate || payload.recordDate || "", "");
-  if (explicit) return explicit;
+  if (explicit) return boundedRecordDate(explicit);
 
   const sourceDate = isoDate(
     row.scan_date
@@ -165,15 +174,15 @@ function scorecardRecordDate(task, payload, row) {
       || payload.date,
     "",
   );
-  if (sourceDate) return sourceDate;
+  if (sourceDate) return boundedRecordDate(sourceDate);
 
   const runDate = latestRunIdDate(row.runId || row.run_id || payload.runId || payload.transport?.runId || payload.transport?.snapshotId);
-  if (runDate) return runDate;
+  if (runDate) return boundedRecordDate(runDate);
 
   const updatedDate = taipeiDateFromTimestamp(row.updatedAt || row.updated_at || payload.updatedAt || payload.generatedAt || payload.timestamp);
-  if (updatedDate) return updatedDate;
+  if (updatedDate) return boundedRecordDate(updatedDate);
 
-  return taipeiDate();
+  return boundedRecordDate(scorecardFallbackDate());
 }
 
 function buildEndpoint(endpoint, query = {}) {
@@ -244,6 +253,7 @@ function callApi(task, timeoutMs = 45000) {
       url: endpoint,
       headers: { host: "localhost", "x-scorecard-source": "1" },
       query,
+      fumanInternalVerify: true,
     };
     Promise.resolve(handler(request, createCaptureResponse(finish, endpoint))).catch((error) => {
       finish({
@@ -851,6 +861,20 @@ function scorecardCurrentWriteDecision(nextPayload, outFile) {
   }
   const previousStrategies = strategySetOf(previousRecords);
   const nextStrategies = strategySetOf(nextRecords);
+  const previousDate = isoDate(previous?.latestDate || previous?.summary?.latestDate || "", "");
+  const nextDate = isoDate(nextPayload?.latestDate || nextPayload?.summary?.latestDate || "", "");
+  if (previousDate && nextDate && nextDate > previousDate) {
+    return {
+      allow: true,
+      reason: "current_write_date_advanced",
+      previousRows: previousRecords.length,
+      nextRows: nextRecords.length,
+      previousDate,
+      nextDate,
+      previousStrategies: previousStrategies.size,
+      nextStrategies: nextStrategies.size,
+    };
+  }
   const retainRatio = previousRecords.length ? nextRecords.length / previousRecords.length : 1;
   const missingStrategies = [...previousStrategies].filter((strategy) => !nextStrategies.has(strategy));
   const suspiciousShrink = nextRecords.length < previousRecords.length && (

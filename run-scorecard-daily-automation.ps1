@@ -134,6 +134,9 @@ if (-not $ExpectedDate) {
 
 $tradingDayStatus = Get-TradingDayStatus $ProjectRoot
 $allowPreviousForRun = $AllowPreviousTradeDate -or (-not [bool]$tradingDayStatus.isTradingDay)
+$env:FUMAN_SCANNER_TARGET_DATE = $ExpectedDate
+$env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ExpectedDate
+$env:FUMAN_SCORECARD_EXPECTED_DATE = $ExpectedDate
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
 if ($allowPreviousForRun) {
   $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
@@ -237,7 +240,8 @@ Write-Step "publish scorecard_latest Supabase snapshot"
 Invoke-Step -FilePath "node" -ArgumentList @(
   "--use-system-ca",
   "scripts\publish-scorecard-snapshot.js",
-  "--file=$snapshotFile"
+  "--file=$snapshotFile",
+  "--expected-date=$ExpectedDate"
 ) -Attempts 3 -DelaySeconds 20
 
 Write-Step "verify scorecard snapshot"

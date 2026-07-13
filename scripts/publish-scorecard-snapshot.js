@@ -105,7 +105,7 @@ function readPayload() {
 async function main() {
   const payload = readPayload();
   const payloadLatestDate = latestDate(payload);
-  const expectedDate = cleanText(argValue("--expected-date", process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
+  const expectedDate = cleanText(argValue("--expected-date", process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
   const tradeDate = compactDate(payloadLatestDate);
   if (!tradeDate) {
     throw new Error("refusing to publish scorecard_latest without latestDate");

@@ -366,19 +366,30 @@ function summarizeScorecard(payload) {
   };
 }
 
+function normalizeStrategyName(value) {
+  const text = cleanText(value);
+  if (/^策略2/.test(text)) return "策略2成績單";
+  return text;
+}
+
+function normalizedStrategySet(values) {
+  return new Set((Array.isArray(values) ? values : []).map(normalizeStrategyName).filter(Boolean));
+}
+
 function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
   const missing = Array.isArray(summary?.missingStrategies) ? summary.missingStrategies : [];
   if (!missing.length) return true;
-  const covered = new Set(Array.isArray(peerSummary?.emptyCompleteStrategies) ? peerSummary.emptyCompleteStrategies : []);
-  const blocked = new Set(Array.isArray(peerSummary?.blockedStrategies) ? peerSummary.blockedStrategies : []);
-  return missing.every((strategy) => covered.has(strategy) || blocked.has(strategy));
+  const covered = normalizedStrategySet(peerSummary?.emptyCompleteStrategies);
+  const blocked = normalizedStrategySet(peerSummary?.blockedStrategies);
+  return missing.every((strategy) => {
+    const normalized = normalizeStrategyName(strategy);
+    return covered.has(normalized) || blocked.has(normalized);
+  });
 }
 
 function hasBlockedStrategy2(summary) {
-  return (Array.isArray(summary?.blockedStrategies) ? summary.blockedStrategies : [])
-    .some((strategy) => /^策略2/.test(cleanText(strategy)));
+  return normalizedStrategySet(summary?.blockedStrategies).has("策略2成績單");
 }
-
 function strategy2OutOfWindowCovered(summary, peerSummary) {
   const count = cleanNumber(summary?.strategy2OutOfWindow);
   if (count <= 0) return true;
