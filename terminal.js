@@ -166,7 +166,7 @@
     document.querySelector("#auth-gate")?.setAttribute("hidden", "");
     const memberState = document.querySelector("#member-state");
     if (memberState && /檢查中/.test(memberState.textContent || "")) {
-      memberState.textContent = "公開終端";
+      window.FUMAN_ENTITLEMENT_GUARD?.syncMemberStatusBadge?.();
     }
     window.FUMAN_PUBLIC_TERMINAL_UNLOCK = true;
   }

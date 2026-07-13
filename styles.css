@@ -8698,3 +8698,52 @@ body.fuman-light-theme {
     box-shadow: 0 12px 28px rgba(30, 41, 59, 0.12) !important;
   }
 }
+
+/* membership-footer-status-20260713 */
+.sidebar-foot {
+  font-size: 14px;
+}
+
+.sidebar-foot .member-state {
+  gap: 7px;
+  min-height: 36px;
+  max-width: min(58vw, 220px);
+  padding: 8px 12px;
+  border-color: rgba(255, 115, 60, 0.55);
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.sidebar-foot .member-state::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.sidebar-foot .member-state[data-status="guest"],
+.sidebar-foot .member-state[data-status="pending"] {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.58);
+  background: rgba(255, 209, 102, 0.11);
+}
+
+.sidebar-foot .logout {
+  min-height: 34px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.sidebar-foot .link-state {
+  color: #7b879b;
+  font-size: 12px;
+  font-weight: 850;
+}

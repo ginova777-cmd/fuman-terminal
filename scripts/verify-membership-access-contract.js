@@ -222,6 +222,13 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "mobile-boot");
   requireIncludes("terminal-entitlement-guard.js", "mobile-fragment");
   requireIncludes("terminal-entitlement-guard.js", "學習方案建置中");
+  requireIncludes("terminal-entitlement-guard.js", "會員：尚未開通");
+  requireIncludes("terminal-entitlement-guard.js", "會員：已開通");
+  requireIncludes("terminal-entitlement-guard.js", 'action: "登入"');
+  requireIncludes("terminal-entitlement-guard.js", 'action: "登出"');
+  requireIncludes("terminal-entitlement-guard.js", "syncMemberStatusBadge");
+  requireIncludes("terminal-member-module.js", 'actionMode === "logout"');
+  requireIncludes("styles.css", "membership-footer-status-20260713");
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
   requireIncludes("api/terminal-fast-bundle.js", "verifyRequestEntitlement");
   requireIncludes("api/mobile-boot.js", "PUBLIC_FRAGMENT_TABS");

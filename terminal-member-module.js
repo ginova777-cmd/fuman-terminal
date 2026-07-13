@@ -30,9 +30,9 @@
     gate?.setAttribute("aria-hidden", "true");
     gate?.setAttribute("hidden", "");
     const memberState = document.querySelector("#member-state");
-    if (memberState) memberState.textContent = "公開終端";
+    if (memberState) window.FUMAN_ENTITLEMENT_GUARD?.syncMemberStatusBadge?.();
     const logout = document.querySelector(".sidebar-foot .logout");
-    if (logout) logout.textContent = "公開";
+    window.FUMAN_ENTITLEMENT_GUARD?.syncMemberStatusBadge?.();
     const plan = document.querySelector("#member-plan-label");
     if (plan) plan.textContent = "Public Terminal";
     const billingPlan = document.querySelector("#billing-plan-label");
@@ -81,10 +81,25 @@
   }
 
   function handleAuthButton() {
-    unlockPublicMember();
-    const message = document.querySelector("#auth-message");
-    if (message) message.textContent = "目前為公開終端模式，不需要登入即可查看。";
-    open("account");
+    const guard = window.FUMAN_ENTITLEMENT_GUARD;
+    const model = guard?.membershipStatusModel?.();
+    if (model?.actionMode === "logout") {
+      try {
+        localStorage.removeItem("fuman-terminal-auth-cache-v1");
+        Object.keys(localStorage || {}).forEach((key) => {
+          if (/^sb-.*-auth-token$/i.test(key)) localStorage.removeItem(key);
+        });
+      } catch {}
+      guard?.syncMemberStatusBadge?.();
+      window.dispatchEvent(new CustomEvent("fuman:membership-status-refresh"));
+      const message = document.querySelector("#auth-message");
+      if (message) message.textContent = "已登出，策略內容會以會員罩顯示。";
+      return;
+    }
+    const authUrl = new URL("/auth.html", location.origin);
+    authUrl.searchParams.set("mode", "login");
+    authUrl.searchParams.set("next", "/?desktop=1");
+    location.href = authUrl.toString();
   }
 
   function installMemberTabs() {

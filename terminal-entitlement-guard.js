@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-05";
+  const VERSION = "membership-entitlement-guard-20260713-07";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
@@ -43,6 +43,63 @@
 
   function isEntitled() {
     return readAccess().entitled === true;
+  }
+
+  function membershipStatusModel() {
+    const access = readAccess();
+    const rawStatus = access.status || access.plan || "";
+    const email = String(access.cached?.email || access.access?.email || "").trim();
+    if (access.entitled) {
+      return {
+        status: rawStatus || "active",
+        label: "會員：已開通",
+        action: "登出",
+        actionMode: "logout",
+        detail: email ? `已開通策略權限｜${email}` : "已開通策略權限",
+      };
+    }
+    return {
+      status: access.hasValidSession ? "pending" : "guest",
+      label: "會員：尚未開通",
+      action: "登入",
+      actionMode: "login",
+      detail: access.hasValidSession ? "已登入，但策略權限尚未開通。" : "尚未開通策略權限，請登入或註冊。",
+    };
+  }
+
+  function syncMemberStatusBadge() {
+    const memberState = document.querySelector("#member-state");
+    const model = membershipStatusModel();
+    if (memberState) {
+      memberState.textContent = model.label;
+      memberState.dataset.status = model.status;
+      memberState.dataset.memberStatus = model.status;
+      memberState.title = model.detail;
+      memberState.setAttribute("aria-label", `${model.label}，${model.detail}`);
+    }
+    const authButton = document.querySelector(".sidebar-foot .logout");
+    if (authButton) {
+      authButton.textContent = model.action;
+      authButton.dataset.authAction = model.actionMode;
+      authButton.title = model.actionMode === "logout" ? "登出目前帳號" : "登入或註冊會員";
+      authButton.setAttribute("aria-label", authButton.title);
+    }
+    const authMessage = document.querySelector("#auth-message");
+    if (authMessage && !isEntitled()) {
+      authMessage.textContent = model.status === "pending"
+        ? "已登入但尚未開通策略權限；策略內容會先以會員罩顯示。"
+        : "請登入或註冊，開通後即可查看策略1-5、籌碼、CB、權證與成績單。";
+    }
+    return model;
+  }
+
+  function installMemberStatusSync() {
+    const sync = () => syncMemberStatusBadge();
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    window.addEventListener("pageshow", sync);
+    window.addEventListener("fuman:membership-status-refresh", sync);
+    window.setInterval(sync, 15000);
   }
 
   function textOf(node) {
@@ -396,10 +453,7 @@
       node.dataset.entitlementLock = "required";
       node.setAttribute("aria-label", `${textOf(node)}，需要會員權限`);
     });
-    const memberState = document.querySelector("#member-state");
-    if (memberState && !isEntitled()) memberState.textContent = "會員權限：未開通";
-    const authMessage = document.querySelector("#auth-message");
-    if (authMessage && !isEntitled()) authMessage.textContent = "請登入或註冊，開通後即可查看策略1-5、籌碼、CB、權證與成績單。";
+    syncMemberStatusBadge();
   }
 
   function installScorecardLock() {
@@ -455,6 +509,7 @@
   installRouteHook();
   installInteractionGuard();
   installScorecardLock();
+  installMemberStatusSync();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", markProtectedNav, { once: true });
   else markProtectedNav();
 
@@ -464,6 +519,8 @@
     protectedViews: Array.from(PROTECTED_VIEWS),
     isEntitled,
     readAccess,
+    membershipStatusModel,
+    syncMemberStatusBadge,
     isProtectedLink,
     isProtectedView,
     showLocked
