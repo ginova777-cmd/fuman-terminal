@@ -272,11 +272,14 @@ function marketCanvasRows(indexes, futures, otcSignal, limit = 80, updatedAt = n
     });
   }
   if (otcSignal) {
+    const signalValue = otcSignal.label || otcSignal.side || "--";
     rows.push({
       rank: rows.length + 1,
       code: "006201",
       name: "櫃買訊號",
       title: "櫃買訊號",
+      value: signalValue,
+      price: signalValue,
       pct: otcSignal.label || "",
       score: otcSignal.side || "",
       reason: otcSignal.source || "",
