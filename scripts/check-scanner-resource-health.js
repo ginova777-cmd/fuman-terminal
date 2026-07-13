@@ -181,9 +181,10 @@ async function latestDateAndCount(table, dateField = "trade_date") {
   return { table, latestDate, rowCount: match ? Number(match[1]) || 0 : 0 };
 }
 
-async function fetchStrategy4DailyFallbackStatus() {
+async function fetchStrategy4DailyFallbackStatus(targetDate = "") {
   const finmind = await latestDateAndCount("finmind_daily_ohlcv", "trade_date");
-  const ready = finmind.rowCount >= STRATEGY4_MIN_DAILY_ROWS && Boolean(finmind.latestDate);
+  const dateAligned = Boolean(finmind.latestDate) && (!targetDate || finmind.latestDate === targetDate);
+  const ready = finmind.rowCount >= STRATEGY4_MIN_DAILY_ROWS && dateAligned;
   return {
     ready,
     status: ready ? READY_STATUS : "not_ready",
@@ -191,9 +192,11 @@ async function fetchStrategy4DailyFallbackStatus() {
     latestDate: finmind.latestDate,
     rowCount: finmind.rowCount,
     minRequiredRows: STRATEGY4_MIN_DAILY_ROWS,
+    targetDate,
+    dateAligned,
     reason: ready
       ? `finmind_daily_ohlcv latest_trade_date=${finmind.latestDate}; rows_on_latest_date=${finmind.rowCount}`
-      : `finmind_daily_ohlcv rows_on_latest_date=${finmind.rowCount} < ${STRATEGY4_MIN_DAILY_ROWS}`,
+      : `finmind_daily_ohlcv latest_trade_date=${finmind.latestDate || "missing"} target_trade_date=${targetDate || "unknown"} rows_on_latest_date=${finmind.rowCount} dateAligned=${dateAligned} minRequiredRows=${STRATEGY4_MIN_DAILY_ROWS}`,
   };
 }
 
@@ -515,7 +518,7 @@ async function main() {
   }
   if (String(row.strategy || "").toLowerCase() === "strategy4" && effectiveStatus !== READY_STATUS) {
     try {
-      dailyFallback = await fetchStrategy4DailyFallbackStatus();
+      dailyFallback = await fetchStrategy4DailyFallbackStatus(String(row.latest_date || ""));
       if (dailyFallback.ready) {
         effectiveStatus = READY_STATUS;
       }
@@ -553,7 +556,10 @@ async function main() {
   const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
   const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
-  const suggestedScannerBehavior = strategy2DedicatedSourceReady
+  const strategy4DailyFallbackReady = String(row.strategy || "").toLowerCase() === "strategy4" && dailyFallback?.ready;
+  const suggestedScannerBehavior = strategy4DailyFallbackReady
+    ? "publish allowed; Strategy4 after-close daily fallback is date-aligned and meets row threshold"
+    : strategy2DedicatedSourceReady
     ? "publish allowed; dedicated daytrade source is A and readiness cache is diagnostic-only"
     : sourceGateIssues.length || readinessBlocked
       ? "preserve latest complete run; Strategy2 readiness/source gate is not 100%"

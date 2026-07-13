@@ -179,8 +179,22 @@
 
   function readAccessToken() {
     const access = readAccess();
-    const token = String(access.cached?.accessToken || access.cached?.session?.access_token || "").trim();
-    const expiresAt = Number(access.cached?.expiresAt || 0);
+    const directToken = String(access.cached?.accessToken || access.cached?.session?.access_token || "").trim();
+    const supabaseToken = (() => {
+      const exact = parseJson(localStorage.getItem("sb-jxnqyqnigsppqsxinlrq-auth-token"));
+      const direct = exact?.access_token || exact?.currentSession?.access_token || exact?.session?.access_token;
+      if (direct) return { token: String(direct).trim(), expiresAt: Number(exact?.expires_at || exact?.currentSession?.expires_at || exact?.session?.expires_at || 0) };
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index) || "";
+        if (!key.startsWith("sb-") || !key.endsWith("-auth-token")) continue;
+        const value = parseJson(localStorage.getItem(key));
+        const nested = value?.access_token || value?.currentSession?.access_token || value?.session?.access_token;
+        if (nested) return { token: String(nested).trim(), expiresAt: Number(value?.expires_at || value?.currentSession?.expires_at || value?.session?.expires_at || 0) };
+      }
+      return { token: "", expiresAt: 0 };
+    })();
+    const token = directToken || supabaseToken.token;
+    const expiresAt = Number(access.cached?.expiresAt || supabaseToken.expiresAt || 0);
     if (!token) return "";
     if (expiresAt && expiresAt * 1000 < Date.now() - 30000) return "";
     return token;

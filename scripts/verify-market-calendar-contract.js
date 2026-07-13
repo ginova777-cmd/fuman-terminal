@@ -38,9 +38,27 @@ const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/ma
   assert.strictEqual(weekendContract.displayTradeDate, "2026-07-09", "weekend previous trading date respects 2026-07-10 closure override");
   assert.strictEqual(weekendContract.preservePreviousGood, true, "weekend preserves previous good");
 
+
+  const reopenContract = await buildMarketCalendarContract({
+    now: new Date("2026-07-13T09:30:00+08:00"),
+  });
+  assert.strictEqual(reopenContract.marketOpen, true, "next trading day after 2026-07-10/07-12 closure should reopen");
+  assert.strictEqual(reopenContract.marketStatus, "open", "reopened market status");
+  assert.strictEqual(reopenContract.formalScanSkipped, false, "reopened day must allow formal scan");
+  assert.strictEqual(reopenContract.sourceFreshnessRequired, true, "reopened day requires live source freshness");
+  assert.strictEqual(reopenContract.preservePreviousGood, false, "reopened day must not keep market-closed preserve lock");
+  assert.strictEqual(reopenContract.scannerAction, "allow_formal_scan", "reopened day scanner action");
+  assert.strictEqual(reopenContract.displayMode, "live_market", "reopened day display mode");
+  assert.strictEqual(reopenContract.evidenceStatus, "complete", "reopened day evidence status");
+
+  const reopenedAttached = attachMarketCalendar({ ok: true, runId: "reopen-run", displayTradeDate: "2026-07-09" }, reopenContract);
+  assert.strictEqual(reopenedAttached.marketOpen, true, "attached reopened marketOpen");
+  assert.strictEqual(reopenedAttached.formalScanSkipped, false, "attached reopened skip false");
+  assert.strictEqual(reopenedAttached.skipReason, "", "attached reopened clears market closed skip reason");
+  assert.strictEqual(reopenedAttached.displayTradeDate, "2026-07-09", "attached reopened preserves payload display date until new run updates it");
   console.log(JSON.stringify({
     ok: true,
-    status: "market-closed-protection-ready",
+    status: "market-closed-and-reopen-protection-ready",
     marketOpen: contract.marketOpen,
     marketStatus: contract.marketStatus,
     closedReason: contract.closedReason,
@@ -51,6 +69,9 @@ const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/ma
     latestPointerUpdated: contract.latestPointerUpdated,
     emptyResultWritten: contract.emptyResultWritten,
     override: contract.override,
+    reopenMarketOpen: reopenContract.marketOpen,
+    reopenScannerAction: reopenContract.scannerAction,
+    reopenDisplayMode: reopenContract.displayMode,
   }, null, 2));
 })().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));

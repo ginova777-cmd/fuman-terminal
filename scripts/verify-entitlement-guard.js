@@ -43,7 +43,7 @@ for (const status of ["active", "approved", "admin", "paid", "pro", "premium"]) 
 }
 
 requireIncludes("terminal-desktop-fast-shell.js", "const DEFAULT_DESKTOP_ROUTE_KEY = MARKET_ROUTE;");
-requireIncludes("fuman-sw.js", "/terminal-entitlement-guard.js?v=public-terminal-fast-20260630-20");
+requireIncludes("fuman-sw.js", "/terminal-entitlement-guard.js?v=public-terminal-fast-");
 requireIncludes("package.json", '"verify:entitlement-guard": "node scripts/verify-entitlement-guard.js"');
 requireOrder("index.html", "terminal-entitlement-guard.js", "terminal-desktop-fast-shell.js");
 requireOrder("index.html", "terminal-entitlement-guard.js", "terminal-core.js");

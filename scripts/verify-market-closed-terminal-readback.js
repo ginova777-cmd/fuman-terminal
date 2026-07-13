@@ -70,16 +70,35 @@ function validClosedReason(reason) {
   return Boolean(reason && /^(weekend|holiday|typhoon_holiday|market_closed|non_trading_day)$/i.test(String(reason)));
 }
 
-function validDisplayTradeDate(value) {
-  if (EXPECTED_DISPLAY_DATE) return value === EXPECTED_DISPLAY_DATE;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
-  return String(value) <= new Date().toISOString().slice(0, 10);
+function normalizeDate(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+  return digits.length === 8 ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : "";
 }
 
-function inspectMarketClosedPayload(name, payload) {
+function validDisplayTradeDate(value) {
+  if (EXPECTED_DISPLAY_DATE) return normalizeDate(value) === normalizeDate(EXPECTED_DISPLAY_DATE);
+  const normalized = normalizeDate(value);
+  if (!normalized) return false;
+  return normalized <= new Date().toISOString().slice(0, 10);
+}
+
+function inspectMarketCalendarPayload(name, payload, expectedOpen = null) {
   const issues = [];
   if (!payload || typeof payload !== "object") {
     issues.push("payload is not object");
+    return issues;
+  }
+  const openMode = expectedOpen === null ? payload.marketOpen !== false : expectedOpen === true;
+  if (openMode) {
+    if (payload.marketOpen !== true) issues.push(`marketOpen expected true got ${JSON.stringify(payload.marketOpen)}`);
+    if (payload.marketStatus !== "open") issues.push(`marketStatus expected open got ${JSON.stringify(payload.marketStatus)}`);
+    if (payload.closedReason) issues.push(`closedReason expected empty got ${JSON.stringify(payload.closedReason)}`);
+    if (payload.formalScanSkipped === true) issues.push("formalScanSkipped must be false after market reopens");
+    if (payload.sourceFreshnessRequired === false) issues.push("sourceFreshnessRequired must be true after market reopens");
+    if (name === "market-calendar" && payload.preservePreviousGood === true) issues.push("market calendar preservePreviousGood must not remain true after reopen");
+    if (String(payload.skipReason || "").includes("market_closed")) issues.push(`skipReason still contains market_closed after reopen: ${JSON.stringify(payload.skipReason)}`);
+    if (name === "market-calendar" && payload.scannerAction !== "allow_formal_scan") issues.push(`scannerAction expected allow_formal_scan got ${JSON.stringify(payload.scannerAction)}`);
+    if (!validDisplayTradeDate(payload.displayTradeDate || payload.marketDate || payload.requestedDate)) issues.push(`displayTradeDate expected valid current trade date got ${JSON.stringify(payload.displayTradeDate || payload.marketDate || payload.requestedDate)}`);
     return issues;
   }
   if (payload.marketOpen !== false) issues.push(`marketOpen expected false got ${JSON.stringify(payload.marketOpen)}`);
@@ -124,7 +143,7 @@ async function main() {
         continue;
       }
       if (!result.ok) endpointIssues.push(`HTTP ${result.status}`);
-      endpointIssues.push(...inspectMarketClosedPayload(name, result.payload));
+      endpointIssues.push(...inspectMarketCalendarPayload(name, result.payload));
       jsonReports.push({ name, url: result.url, status: result.status, ok: result.ok, marketOpen: result.payload?.marketOpen, marketStatus: result.payload?.marketStatus, closedReason: result.payload?.closedReason, displayTradeDate: result.payload?.displayTradeDate, issues: endpointIssues });
       for (const issue of endpointIssues) issues.push(`${name}: ${issue}`);
     } catch (error) {
@@ -149,19 +168,28 @@ async function main() {
 
   const report = {
     ok: issues.length === 0,
-    contract: "market-closed-terminal-readback-v1",
+    contract: "market-calendar-terminal-readback-v2",
     checkedAt: new Date().toISOString(),
     baseUrl,
     expected: {
-      marketOpen: false,
-      marketStatus: "closed",
+      mode: "auto-open-or-closed",
+      marketOpen: "auto",
+      marketStatus: "auto",
       closedReason: EXPECTED_CLOSED_REASON,
       displayTradeDate: EXPECTED_DISPLAY_DATE,
-      formalScanSkipped: true,
-      sourceFreshnessRequired: false,
-      preservePreviousGood: true,
-      latestPointerUpdated: false,
-      emptyResultWritten: false,
+      closedModeRequires: {
+        formalScanSkipped: true,
+        sourceFreshnessRequired: false,
+        preservePreviousGood: true,
+        latestPointerUpdated: false,
+        emptyResultWritten: false,
+      },
+      openModeRequires: {
+        formalScanSkipped: false,
+        sourceFreshnessRequired: true,
+        marketCalendarScannerAction: "allow_formal_scan",
+        noMarketClosedSkipReason: true,
+      },
     },
     jsonReports,
     htmlReports,
@@ -172,6 +200,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(JSON.stringify({ ok: false, contract: "market-closed-terminal-readback-v1", error: error?.message || String(error), checkedAt: new Date().toISOString() }, null, 2));
+  console.error(JSON.stringify({ ok: false, contract: "market-calendar-terminal-readback-v2", error: error?.message || String(error), checkedAt: new Date().toISOString() }, null, 2));
   process.exit(1);
 });

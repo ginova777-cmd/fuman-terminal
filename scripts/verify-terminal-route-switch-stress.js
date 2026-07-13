@@ -591,9 +591,9 @@ function collectRouteStats(config, key) {
       blockers: [],
     };
   }
-  const explicitTerminalBlocked = key === "market-ai" && /正式水源未通過|不顯示正常判讀|不以 fallback\/壞水源顯示正常盤面|source_quality_fail|api_ok_false|publish=blocked|unattended=NO/i.test(panelText);
-  const loadingText = /載入今日正式 AI 判讀資料中|載入最新 AI 判讀資料中/.test(panelText);
-  const emptyPattern = /等待資料載入|尚未產生|目前沒有符合|尚未新增自選股|更新策略資料中|載入全台股|等待最新 complete run|權證快照尚未建立|載入今日正式 AI 判讀資料中|載入最新 AI 判讀資料中/;
+  const explicitTerminalBlocked = (key === "market-ai" || key === "heatmap") && /正式水源未通過|正式水源 blocked|熱力圖正式水源未通過|不顯示正常判讀|不以 fallback\/壞水源顯示正常盤面|source_quality_fail|api_ok_false|publish=blocked|unattended=NO/i.test(panelText);
+  const loadingText = /載入今日正式 AI 判讀資料中|載入最新 AI 判讀資料中|載入今日正式 AI 判讀\/熱力圖資料中|正式熱力圖水源同步中|heatmap cache/i.test(panelText);
+  const emptyPattern = /等待資料載入|尚未產生|目前沒有符合|尚未新增自選股|更新策略資料中|載入全台股|等待最新 complete run|權證快照尚未建立|載入今日正式 AI 判讀資料中|載入最新 AI 判讀資料中|載入今日正式 AI 判讀\/熱力圖資料中|正式熱力圖水源同步中/;
   const rows = [...(panel || document).querySelectorAll(config.rows || "article")]
     .map((el) => ({ visible: visible(el), text: text(el) }))
     .filter((row) => row.visible && row.text && !emptyPattern.test(row.text));
@@ -610,7 +610,7 @@ function collectRouteStats(config, key) {
   if (!panel || !visible(panel)) hardBlockers.push(`panel not visible ${config.panel}`);
   if (config.requiredText && !panelText.includes(config.requiredText)) hardBlockers.push(`route ${key} missing required text ${config.requiredText}`);
   if (!config.allowEmpty && rows.length < 1 && !explicitTerminalBlocked) hardBlockers.push(`route ${key} rendered no rows`);
-  if (key === "market-ai" && loadingText) hardBlockers.push("route market-ai still loading");
+  if ((key === "market-ai" || key === "heatmap") && loadingText) hardBlockers.push(`route ${key} still loading blocked source`);
   if (modeTabs > 1) hardBlockers.push(`modeTabs duplicated actual=${modeTabs}`);
   if (aiPanels > 1) hardBlockers.push(`aiPanels duplicated actual=${aiPanels}`);
   return {

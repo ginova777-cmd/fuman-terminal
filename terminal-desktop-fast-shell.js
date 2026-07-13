@@ -5025,7 +5025,7 @@
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = "desktop-fast-shell-loading";
-    panels.ai.innerHTML = '<div class="empty-state">載入今日正式 AI 判讀資料中...</div>';
+    panels.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
   }
 
   function hydrateMarketDesktopAiDirect(force = false) {
@@ -5034,7 +5034,7 @@
     marketDesktopAiLoading = true;
     const shell = ensureMarketDesktopShell();
     if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
-      shell.ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
+      shell.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
     }
     const state = {
       heatmap: marketSnapshotFirstPayload || null,
@@ -5134,7 +5134,7 @@
       ai.className = "market-ai-panel";
       ai.dataset.marketApiAi = "1";
       ai.hidden = true;
-      ai.innerHTML = '<div class="empty-state">載入最新 AI 判讀資料中...</div>';
+      ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
       tabs.insertAdjacentElement("afterend", ai);
     }
     ai.id = ai.id || "market-ai-panel";
@@ -5510,16 +5510,14 @@
     if (/fallback|source_quality_fail|quote_coverage|not_ok|degraded/i.test(issueText)) return issueText.slice(0, 160);
     return "";
   }
-
   function renderMarketHeatmapBlocked(payload = {}, reason = "source_not_ready") {
     const shell = ensureMarketDesktopShell();
     const market = shell.market || document.querySelector("#market-view");
-    const heatmap = market?.querySelector?.("#heatmap");
-    if (!heatmap) return;
+    if (!market) return;
     const issues = normalizeArray(payload.issues || payload.blockers || payload.warnings || payload.run_quality_at_publish?.issues).slice(0, 6);
     const updatedAt = payload.updatedAt || payload.servedAt || payload.source_snapshot_captured_at || "";
-    heatmap.innerHTML = `
-      <div class="empty-state heatmap-blocked-state">
+    const blockedHtml = `
+      <div class="empty-state heatmap-blocked-state" data-heatmap-blocked-state="1">
         <strong>熱力圖正式水源未通過</strong>
         <p>reason=${escapeHtml(String(reason || "source_not_ready"))}</p>
         <p>evidence=${escapeHtml(String(payload.evidenceStatus || payload.sourceEvidenceStatus || "--"))}｜unattended=${escapeHtml(String(payload.unattendedStatus || payload.unattended?.status || "--"))}｜publish=${escapeHtml(String(payload.publishAllowed === true ? "allowed" : "blocked"))}</p>
@@ -5527,6 +5525,16 @@
         ${issues.length ? `<ul>${issues.map((issue) => `<li>${escapeHtml(String(issue))}</li>`).join("")}</ul>` : ""}
       </div>
     `;
+    const targets = new Set();
+    const direct = market.querySelector?.("#heatmap");
+    if (direct) targets.add(direct);
+    market.querySelectorAll?.("[data-market-heatmap-grid],.market-heatmap-grid,.heatmap-grid,.sector-grid").forEach((node) => targets.add(node));
+    market.querySelectorAll?.(".empty-state").forEach((node) => {
+      const text = String(node.textContent || "");
+      if (/載入今日正式 AI 判讀|熱力圖水源同步|heatmap cache|熱力圖正式水源未通過/.test(text)) targets.add(node.parentElement || node);
+    });
+    if (!targets.size) targets.add(market);
+    targets.forEach((node) => { node.innerHTML = blockedHtml; });
     const titleCount = document.querySelector("#market-view .sector-section .section-title > span");
     if (titleCount) titleCount.textContent = "正式水源 blocked";
   }
