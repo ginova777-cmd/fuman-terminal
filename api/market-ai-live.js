@@ -1044,11 +1044,11 @@ module.exports = async function handler(request, response) {
   }
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
-    allowLatestFallback: !requireTodayLiveSource && !isMarketAiPostClose(clock),
+    allowLatestFallback: fastCachedPayload || (!requireTodayLiveSource && !isMarketAiPostClose(clock)),
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
-  if (snapshot?.payload && !mustDetectToday && !isMarketAiPostClose(clock)) {
+  if (snapshot?.payload && (fastCachedPayload || (!mustDetectToday && !isMarketAiPostClose(clock)))) {
     const payload = {
       ...snapshotResponsePayload(snapshot, breadth, clock),
       marketSession: sessionForPayload,
