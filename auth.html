@@ -489,6 +489,10 @@
         }
       }
 
+      function isAlreadyRegisteredError(error) {
+        return /already registered|already exists|user.*registered|user.*exists/i.test(String(error?.message || error || ""));
+      }
+
       async function persistSession(session) {
         const access = await readAccess(session);
         const statusValue = access.allowed ? (access.status || "active") : (access.status || "pending");
@@ -552,6 +556,21 @@
         }
       }
 
+      async function finishPasswordLogin(credentials, message = "登入中...") {
+        setStatus(message);
+        const result = await client.auth.signInWithPassword(credentials);
+        if (result.error) throw result.error;
+        const session = result.data?.session || (await client.auth.getSession()).data?.session;
+        if (!session) throw new Error("登入成功但沒有取得 session，請重新整理後再試。");
+        const access = await persistSession(session);
+        if (access.allowed) {
+          setStatus("登入成功，會員權限已開通，正在進入終端。", "good");
+        } else {
+          setStatus("登入成功，正在進入終端；策略內容會先以會員罩顯示，開通後自動解鎖。", "good");
+        }
+        location.href = nextUrl;
+      }
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
@@ -560,29 +579,35 @@
         setStatus(mode === "signup" ? "註冊中..." : "登入中...");
         try {
           const credentials = { email: email.value.trim(), password: password.value };
-          const result = mode === "signup"
-            ? await client.auth.signUp(credentials)
-            : await client.auth.signInWithPassword(credentials);
-          if (result.error) throw result.error;
-          const session = result.data?.session || (await client.auth.getSession()).data?.session;
-          if (!session && mode === "signup") {
-            setStatus("註冊完成，請先完成 Email 驗證；權限開通後即可解鎖策略與成績單。", "good");
+          if (mode === "signup") {
+            const result = await client.auth.signUp(credentials);
+            if (result.error) {
+              if (isAlreadyRegisteredError(result.error)) {
+                await finishPasswordLogin(credentials, "帳號已存在，正在自動登入並進入終端...");
+                return;
+              }
+              throw result.error;
+            }
+            const session = result.data?.session || (await client.auth.getSession()).data?.session;
+            if (!session) {
+              setStatus("註冊完成，請先完成 Email 驗證；權限開通後即可解鎖策略與成績單。", "good");
+              return;
+            }
+            await finishPasswordLogin(credentials, "註冊完成，正在進入終端...");
             return;
           }
-          const access = await persistSession(session);
-          if (access.allowed) {
-            setStatus("登入成功，會員權限已開通，正在進入終端。", "good");
-            location.href = nextUrl;
-          } else {
-            setStatus("登入成功，但此帳號尚未開通策略權限；目前只能查看市場總覽、AI 判讀與學習方案。", "error");
-          }
+          await finishPasswordLogin(credentials);
         } catch (error) {
-          setStatus(error?.message || "登入失敗，請確認帳號密碼。", "error");
+          if (mode === "signup" && isAlreadyRegisteredError(error)) {
+            applyMode("login");
+            setStatus("此 Email 已註冊，請直接登入；若密碼相同會自動進入終端。", "error");
+          } else {
+            setStatus(error?.message || "登入失敗，請確認帳號密碼。", "error");
+          }
         } finally {
           submit.disabled = false;
         }
       });
-
       tabs.forEach((tab) => tab.addEventListener("click", () => applyMode(tab.dataset.authMode)));
       switchMode.addEventListener("click", () => applyMode(mode === "login" ? "signup" : "login"));
       document.querySelector("#togglePassword").addEventListener("click", () => {

@@ -208,6 +208,11 @@ async function main() {
   requireIncludes("auth.html", "storageKey: AUTH_STORAGE_KEY");
   requireIncludes("auth.html", "PRESERVE_STORAGE_KEYS");
   requireIncludes("auth.html", `const table = config.accessTable || "${ACCESS_TABLE}"`);
+  requireIncludes("auth.html", "isAlreadyRegisteredError(error)");
+  requireIncludes("auth.html", "already registered|already exists");
+  requireIncludes("auth.html", "finishPasswordLogin(credentials");
+  requireIncludes("auth.html", "帳號已存在，正在自動登入並進入終端");
+  requireIncludes("auth.html", "登入成功，正在進入終端；策略內容會先以會員罩顯示");
   requireIncludes("index.html", "<span class=\"strategy-nav learning-plan-disabled\"");
   requireIncludes("index.html", "data-learning-plan-disabled=\"1\"");
   requireIncludes("index.html", "學習方案建置中，暫不開放連結");

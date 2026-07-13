@@ -90,7 +90,7 @@ class Cdp {
     this.pending.delete(message.id);
     if (message.error) {
       const errorMessage = message.error.message || "CDP error";
-      if (pending.method === "Page.navigate" && /Inspected target navigated or closed/i.test(errorMessage)) pending.resolve({});
+      if (/Inspected target navigated or closed/i.test(errorMessage)) pending.resolve({});
       else pending.reject(new Error(errorMessage));
     } else pending.resolve(message.result || {});
   }
@@ -239,7 +239,7 @@ async function runUiProbe(baseUrl) {
         const link = findTarget(target);
         link?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1 }));
         link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await new Promise((resolve) => setTimeout(resolve, 220));
         const panel = document.querySelector(`#${target.view}-view`);
         results.push({
           key: target.key,
@@ -252,7 +252,7 @@ async function runUiProbe(baseUrl) {
       document.querySelector(".fuman-entitlement-preview")?.remove();
       const strategyLink = findTarget({ view: "strategy", text: "策略2" });
       const routeBlocked = window.FUMAN_DESKTOP_ROUTE_STATE?.shouldBlockView?.("strategy", strategyLink) === true;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 220));
       return {
         sanitizedRoute,
         publicMarketMarked,
