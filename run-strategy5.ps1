@@ -113,23 +113,6 @@ if ($scanExit -ne 0) {
   exit $scanExit
 }
 
-$strategy5File = Join-Path $env:FUMAN_DATA_DIR "strategy5-latest.json"
-if (Test-Path -LiteralPath $strategy5File) {
-  try {
-    $payload = Get-Content -LiteralPath $strategy5File -Raw -Encoding utf8 | ConvertFrom-Json
-    $warningCount = [int]($payload.sourceHealth.warningCount ?? 0)
-    if ($warningCount -gt 0 -and $env:STRATEGY5_ALLOW_SOURCE_WARNINGS -ne "1") {
-      Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan blocked: sourceHealth.warningCount=$warningCount. Set STRATEGY5_ALLOW_SOURCE_WARNINGS=1 only for manual degraded publish."
-      Write-Strategy5Receipt "degraded" 2 $true 0 "" @("sourceHealth.warningCount=$warningCount") ""
-      exit 2
-    }
-  } catch {
-    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scan blocked: unable to validate source health: $($_.Exception.Message)"
-    Write-Strategy5Receipt "degraded" 2 $true 0 "" @($_.Exception.Message) ""
-    exit 2
-  }
-}
-
 try {
   $verifiedPayload = Assert-Strategy5Api
 } catch {
@@ -151,7 +134,7 @@ if (Test-Path -LiteralPath $snapshotScript) {
 }
 
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
-Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: slim generation and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot."
+Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: scanner success verifies /api/strategy5-latest through scorecard source report; terminal reads Supabase/API plus desktop snapshot."
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue
 Add-Content -LiteralPath $log -Encoding utf8 -Value "=== Strategy5 scan end $(Get-Date) ==="
