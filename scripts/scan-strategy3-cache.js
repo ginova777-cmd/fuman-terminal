@@ -18,7 +18,7 @@ const {
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { fetchStrategy3TvCandles } = require("../lib/strategy3-tv-candles");
-const { analyzeTradingViewOvernightEntry } = require("../lib/strategy3-tv-entry");
+const { analyzeTradingViewOvernightEntry, rsiAt } = require("../lib/strategy3-tv-entry");
 const { auditRunTimeSourceSnapshotQuality, buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -337,6 +337,17 @@ function taipeiDateKeyFromValue(value) {
   return compact.length >= 8 ? compact.slice(0, 8) : "";
 }
 
+function taipeiTodayDateKey(now = new Date()) {
+  return taipeiDateKeyFromValue(now.toISOString());
+}
+
+function strategy3TargetDateKey(now = new Date()) {
+  const forced = String(process.env.STRATEGY3_TRADE_DATE || process.env.STRATEGY3_SCAN_TRADE_DATE || "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
+  return forced || taipeiTodayDateKey(now);
+}
+
 function latestStockDateKey(stocks) {
   return [...new Set((stocks || []).flatMap((stock) => [
     taipeiDateKeyFromValue(stock.quoteDate),
@@ -346,6 +357,14 @@ function latestStockDateKey(stocks) {
   ]).filter((dateKey) => /^\d{8}$/.test(dateKey)))]
     .sort()
     .at(-1) || "";
+}
+
+function firstDateKeyFromValues(...values) {
+  for (const value of values) {
+    const dateKey = taipeiDateKeyFromValue(value);
+    if (/^\d{8}$/.test(dateKey)) return dateKey;
+  }
+  return "";
 }
 
 function preservePreviousTradingSource(previousPayload, currentPayload) {
@@ -427,6 +446,78 @@ async function fetchSupabaseCountAtLeast(pathname, minRequired, options = {}) {
   const limitedPath = `${pathname}${separator}limit=${Math.max(1, cleanNumber(minRequired))}`;
   const limited = await fetchSupabaseRest(limitedPath, { ...options, count: false });
   return Math.max(cleanNumber(limited.rows?.length), limited.rows?.length || 0);
+}
+
+async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
+  const targetDate = strategy3TargetDateKey(now);
+  const taipeiToday = taipeiTodayDateKey(now);
+  const issues = [];
+  let quoteRow = {};
+  let intradayRow = {};
+
+  try {
+    const quoteResult = await fetchSupabaseRest(
+      "fugle_quotes_latest?select=updated_at,last_trade_time,quote_time,session,payload&order=updated_at.desc&limit=1",
+      { timeoutMs: 30000 }
+    );
+    quoteRow = quoteResult.rows?.[0] || {};
+  } catch (error) {
+    issues.push(`quote source date read failed: ${error?.message || String(error)}`);
+  }
+
+  try {
+    const intradayResult = await fetchSupabaseRest(
+      `${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date,candle_time,updated_at&order=trade_date.desc,candle_time.desc&limit=1`,
+      { timeoutMs: 30000 }
+    );
+    intradayRow = intradayResult.rows?.[0] || {};
+  } catch (error) {
+    issues.push(`intraday 1m source date read failed: ${error?.message || String(error)}`);
+  }
+
+  const quoteTradeDate = firstDateKeyFromValues(
+    quoteRow?.payload?.formal_trade_date,
+    quoteRow?.payload?.tradeDate,
+    quoteRow?.payload?.raw?.tradeDate,
+    quoteRow?.payload?.raw?.quoteSeenAt,
+    quoteRow?.last_trade_time,
+    quoteRow?.quote_time,
+    quoteRow?.updated_at
+  );
+  const intradayTradeDate = firstDateKeyFromValues(intradayRow?.trade_date, intradayRow?.candle_time, intradayRow?.updated_at);
+  const universeTradeDate = latestStockDateKey(stocks);
+
+  if (!/^\d{8}$/.test(targetDate)) issues.push(`scanner target date invalid: ${targetDate || "missing"}`);
+  if (taipeiToday !== targetDate) issues.push(`taipeiToday ${taipeiToday} != scannerTargetDate ${targetDate}`);
+  if (!quoteTradeDate) issues.push("quote source tradeDate missing");
+  if (!intradayTradeDate) issues.push("intraday 1m source tradeDate missing");
+  if (!universeTradeDate) issues.push("stock universe source tradeDate missing");
+  if (quoteTradeDate && quoteTradeDate !== targetDate) issues.push(`quote source tradeDate ${quoteTradeDate} != scannerTargetDate ${targetDate}`);
+  if (intradayTradeDate && intradayTradeDate !== targetDate) issues.push(`intraday 1m source tradeDate ${intradayTradeDate} != scannerTargetDate ${targetDate}`);
+  if (universeTradeDate && universeTradeDate !== targetDate) issues.push(`stock universe source tradeDate ${universeTradeDate} != scannerTargetDate ${targetDate}`);
+
+  return {
+    ok: issues.length === 0,
+    status: issues.length ? "failed" : "ready",
+    taipeiToday,
+    scannerTargetDate: targetDate,
+    targetDate,
+    sourceTradeDates: {
+      quote: quoteTradeDate,
+      intraday1m: intradayTradeDate,
+      stockUniverse: universeTradeDate,
+    },
+    sourceRows: {
+      quoteUpdatedAt: quoteRow?.updated_at || "",
+      quoteLastTradeTime: quoteRow?.last_trade_time || "",
+      quoteTime: quoteRow?.quote_time || "",
+      intradayTradeDate: intradayRow?.trade_date || "",
+      intradayCandleTime: intradayRow?.candle_time || "",
+      intradayUpdatedAt: intradayRow?.updated_at || "",
+    },
+    issues,
+    reason: issues.join("; "),
+  };
 }
 
 function strategy2IntradayReadyRow(row) {
@@ -557,7 +648,15 @@ async function fetchStrategy3SourceDriftHealth(options = {}) {
   try {
     const readiness = await fetchStrategy3IntradayReadyCount(minIntradayRows);
     const rowCount = cleanNumber(readiness.readyCount);
-    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount: readiness.rowCount, rawLatestValidDay: readiness.rawLatestValidDay || null, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: minIntradayRows, status: rowCount >= minIntradayRows ? "ready" : "failed" });
+    const rawRowCount = cleanNumber(readiness.rowCount);
+    const effectiveMinRequired = Math.max(
+      1,
+      Math.min(
+        minIntradayRows,
+        rawRowCount > 0 ? Math.ceil(rawRowCount * STRATEGY3_MIN_INTRADAY_1M_COVERAGE) : minIntradayRows
+      )
+    );
+    add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount, rawRowCount, rawLatestValidDay: readiness.rawLatestValidDay || null, latestCandleTime: readiness.latestCandleTime, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: effectiveMinRequired, configuredMinRequired: minIntradayRows, status: rowCount >= effectiveMinRequired ? "ready" : "failed" });
   } catch (error) {
     add({ source: STRATEGY3_INTRADAY_STATUS_SOURCE, rowCount: 0, metric: "ready_ma35_continuous OR continuous_candle_count>=35", upstreamSource: "dedicated daytrade 1m", minRequired: minIntradayRows, status: "failed", reason: error?.message || String(error) });
   }
@@ -797,7 +896,7 @@ function strategy3BusinessValue(row = {}, key, index = 0, output = {}) {
   if (key === "entryWindow") return String(row.entryWindow || entry.entryWindow || "13:00-13:30").trim();
   if (key === "entryWindowStart") return String(row.entryWindowStart || entry.entryWindowStart || "13:00").trim();
   if (key === "entryWindowEnd") return String(row.entryWindowEnd || entry.entryWindowEnd || "13:30").trim();
-  if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
+  if (key === "entryWindowCandles") return cleanNumber(row.entryWindowCandles || entry.entryWindowCandles || entry.entryWindowRows || entry.candleQuality?.entryWindowRows || breakdown.entryWindowRows);
   if (key === "ma20") return cleanNumber(row.ma20 ?? entry.ma20);
   if (key === "ma35") return cleanNumber(row.ma35 ?? entry.ma35);
   if (key === "maTrend") return String(row.maTrend || strategy3MaTrend(row.ma20 ?? entry.ma20, row.ma35 ?? entry.ma35)).trim();
@@ -960,6 +1059,7 @@ function buildStrategy3BlockedReceipt(output = {}, reason = "", stage = "prepubl
     sourceHealth: output.sourceHealth || null,
     sourceCoverage: output.sourceCoverage || null,
     sourceDriftHealth: output.sourceDriftHealth || null,
+    datePreflight: output.datePreflight || null,
     scanCoverage: output.scanCoverage || null,
     matchDiagnostics: output.matchDiagnostics || null,
   };
@@ -1162,6 +1262,7 @@ function buildSupabaseRunRow(output, runId, status = "complete") {
       sourceCoverage: output.sourceCoverage || null,
       sourceSnapshotAudit: output.sourceSnapshotAudit || null,
       sourceDriftHealth: output.sourceDriftHealth || null,
+      datePreflight: output.datePreflight || null,
       scanCoverage: output.scanCoverage || null,
       selfTest: output.selfTest || null,
       publishedSelfTest: output.publishedSelfTest || null,
@@ -1939,14 +2040,21 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   const analyzed = await mapLimit(tvCandidates, STRATEGY3_TV_CONCURRENCY, async (stock) => {
     try {
       const result = await fetchStrategy3TvCandles(stock.code, STRATEGY3_TV_CANDLE_LIMIT);
-      const rawTvEntry = analyzeTradingViewOvernightEntry(result.candles || result.rows || []);
+      const tvCandles = result.candles || result.rows || [];
+      const rawTvEntry = analyzeTradingViewOvernightEntry(tvCandles);
       const quality = result.quality || {};
+      const tvRsi = firstFiniteNumber(rawTvEntry.rsi, rsiAt(tvCandles.map((row) => cleanNumber(row.close)), 14));
+      const entryWindowCandles = cleanNumber(quality.entryWindowRows);
       const sourceNote = `K線來源=${result.source || "unknown"}、rows=${quality.rows ?? 0}、session=${quality.sessionRows ?? 0}、entryWindow=${quality.entryWindowRows ?? 0}、退化=${quality.degenerateRows ?? 0}/${quality.rows ?? 0}`;
       const tvEntry = {
         ...rawTvEntry,
         reason: `${rawTvEntry.reason} ${sourceNote}。`,
         candleSource: result.source || "",
         candleQuality: quality,
+        entryWindowCandles,
+        entryWindowRows: entryWindowCandles,
+        rsi: tvRsi,
+        tvFieldSource: "strategy3-tv-candles",
         candleFallbackFrom: result.fallbackFrom || "",
         candleFallbackReason: result.fallbackReason || "",
         candleFallbackError: result.fallbackError || "",
@@ -1960,6 +2068,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
         ma35: cleanNumber(tvEntry.ma35),
         maTrend: strategy3MaTrend(tvEntry.ma20, tvEntry.ma35),
         rsi: cleanNumber(tvEntry.rsi),
+        entryWindowCandles: cleanNumber(tvEntry.entryWindowCandles || tvEntry.entryWindowRows),
         synthetic: false,
         judgment: tvEntry.ok ? "通過" : "觀察",
         overnightScore: clamp(stock.overnightScore + (tvEntry.ok ? 12 : 0), 0, 100),
@@ -1985,8 +2094,9 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
     }
   });
 
+  const sourceCompleteAnalyzed = analyzed.filter((stock) => cleanNumber(stock.tvOvernightEntry?.rsi) > 0 && cleanNumber(stock.tvOvernightEntry?.entryWindowCandles || stock.tvOvernightEntry?.entryWindowRows) > 0);
   lastStrategy3MatchDiagnostics = buildStrategy3MatchDiagnostics(allScored, analyzed);
-  return analyzed
+  return sourceCompleteAnalyzed
     .sort((a, b) => {
       const tvDiff = Number(Boolean(b.tvOvernightEntry?.ok)) - Number(Boolean(a.tvOvernightEntry?.ok));
       if (tvDiff) return tvDiff;
@@ -2221,6 +2331,36 @@ async function main() {
   stocks = exclusionResult.stocks;
   exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
+  const datePreflight = await fetchStrategy3DatePreflight(stocks, new Date(startedAt));
+  if (!datePreflight.ok) {
+    const blockReason = `Strategy3 date preflight failed: ${datePreflight.reason}`;
+    const receipt = writeStrategy3BlockedReceipt({
+      ok: false,
+      source,
+      startedAt,
+      updatedAt: new Date().toISOString(),
+      usedDate: datePreflight.targetDate,
+      total: stocks.length,
+      count: 0,
+      complete: false,
+      sourceWarnings,
+      qualityStatus: "failed",
+      datePreflight,
+      sourceHealth: { status: "failed", issues: datePreflight.issues || [] },
+      sourceCoverage: { status: "failed", reason: blockReason },
+      sourceDriftHealth: { status: "failed", reason: blockReason },
+      scanCoverage: {
+        completeScan: false,
+        sourceUniverseCount: stocks.length,
+        scannedCount: 0,
+        resultCount: 0,
+        reason: blockReason,
+      },
+    }, blockReason, "date-preflight");
+    console.error(`strategy3 date preflight block reason: ${blockReason}`);
+    console.error(`strategy3 blocked receipt: ${receipt.receiptFile}`);
+    throw new Error(blockReason);
+  }
   const strategy3DriftMinIntradayRows = Math.min(
     STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS,
     Math.ceil(stocks.length * STRATEGY3_MIN_INTRADAY_1M_COVERAGE)
@@ -2244,7 +2384,7 @@ async function main() {
       source,
       startedAt,
       updatedAt: new Date().toISOString(),
-      usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+      usedDate: datePreflight?.targetDate || taipeiDateKeyFromValue(new Date().toISOString()),
       total: stocks.length,
       count: 0,
       complete: false,
@@ -2253,6 +2393,7 @@ async function main() {
       sourceHealth,
       sourceCoverage,
       sourceDriftHealth,
+      datePreflight,
       scanCoverage: {
         completeScan: false,
         sourceUniverseCount: stocks.length,
@@ -2266,7 +2407,7 @@ async function main() {
     throw new Error(`Strategy3 source health failed: ${sourceHealth.issues.join("; ")}`);
   }
   const matches = await buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWarnings);
-  const quoteDate = latestStockDateKey(stocks);
+  const quoteDate = datePreflight.targetDate;
   const tvPassCount = matches.filter((stock) => stock.tvOvernightEntry?.ok).length;
   const displayMode = matches.length ? "field_gate_with_tv_flame" : "no_tv_pass";
   const noMatchReason = matches.length ? "" : STRATEGY3_NO_TV_PASS_REASON;
@@ -2284,7 +2425,10 @@ async function main() {
     hardFieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
     hardFieldGateInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FieldGate?.ok).length,
     fieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
-    fixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    fixedPassCandidates: matches.length,
+    rawFixedPassCandidates: cleanNumber(matchDiagnostics.fixedPassCandidates),
+    tvSourceCompleteCandidates: matches.length,
+    tvSourceIncompleteCandidates: Math.max(0, cleanNumber(matchDiagnostics.fixedPassCandidates) - matches.length),
     fixedPassInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FixedPass).length,
     tvAnalyzedCount: cleanNumber(matchDiagnostics.tvAnalyzedCount),
     tvAnalyzedInMotherPool: matches.filter((stock) => stock.inDaytradeMotherPool === true).length,
@@ -2314,6 +2458,7 @@ async function main() {
     sourceHealth,
     sourceCoverage,
     sourceDriftHealth,
+    datePreflight,
     scanCoverage,
     matchDiagnostics,
     displayMode,
@@ -2395,7 +2540,7 @@ if (require.main === module) {
         writeStrategy3BlockedReceipt({
           ok: false,
           updatedAt: new Date().toISOString(),
-          usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+          usedDate: strategy3TargetDateKey(),
           count: 0,
           sourceHealth: { status: "failed", issues: [message] },
           sourceCoverage: { status: "failed" },
