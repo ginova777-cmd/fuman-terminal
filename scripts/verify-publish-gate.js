@@ -449,6 +449,9 @@ if (!packageJson.scripts?.["verify:market-surfaces-chain"] || !/verify-market-su
 if (!packageJson.scripts?.["verify:market-ai-dashboard-ui"] || !/verify-terminal-ui-e2e\.js/.test(packageJson.scripts["verify:market-ai-dashboard-ui"]) || !/market-ai/.test(packageJson.scripts["verify:market-ai-dashboard-ui"])) {
   issues.push("package.json missing scripts.verify:market-ai-dashboard-ui for AI dashboard hero/cards/evidence/filter E2E");
 }
+if (!packageJson.scripts?.["verify:terminal-ui-state-acceptance"] || !/verify-terminal-ui-state-acceptance\.js/.test(packageJson.scripts["verify:terminal-ui-state-acceptance"])) {
+  issues.push("package.json missing scripts.verify:terminal-ui-state-acceptance for empty/blocked/degraded/0-result rendered UI proof");
+}
 if (!packageJson.scripts?.["verify:fast-shell-self-contained"] || !/verify-fast-shell-self-contained\.js/.test(packageJson.scripts["verify:fast-shell-self-contained"])) {
   issues.push("package.json missing scripts.verify:fast-shell-self-contained for desktop fast shell helper isolation");
 }
@@ -471,6 +474,9 @@ if (!String(packageJson.scripts?.["verify:terminal-cold-start:strict"] || "").in
 }
 if (!String(packageJson.scripts?.["verify:terminal-perfect"] || "").includes("verify:terminal-cold-start")) {
   issues.push("verify:terminal-perfect must include verify:terminal-cold-start");
+}
+if (!String(packageJson.scripts?.["verify:terminal-perfect"] || "").includes("verify:terminal-ui-state-acceptance")) {
+  issues.push("verify:terminal-perfect must include verify:terminal-ui-state-acceptance");
 }
 if (!String(packageJson.scripts?.["monitor:terminal-cold-start"] || "").includes("scripts/monitor-terminal-cold-start-stability.js")) {
   issues.push("package.json missing scripts.monitor:terminal-cold-start for cold-start stability monitoring");
@@ -694,6 +700,9 @@ const publishGate = read("run-publish-gate.ps1");
 const dailyRelease = read("run-daily-release.ps1");
 const refreshDesktopSnapshot = read("refresh-desktop-route-snapshot.ps1");
 const agentsGuide = read("AGENTS.md");
+for (const marker of ["All-Terminal UI Acceptance", "empty", "blocked", "degraded", "0-result", "actual rendered desktop and mobile UI"]) {
+  if (!agentsGuide.includes(marker)) issues.push(`AGENTS.md missing all-terminal UI state acceptance marker ${marker}`);
+}
 const postScanSnapshotAgents = read("post-scan-snapshot-refreshAGENTS.MD");
 const prepareDeploy = read("scripts/prepare-deploy.js");
 const deployProductionWithReleaseEnv = read("scripts/deploy-production-with-release-env.js");
@@ -2495,9 +2504,9 @@ for (const marker of [
   "run-freshness-gate-task.ps1",
   ".vercel/output/static/scan-intraday-signals.js",
   ".vercel/output/static/intraday-radar-rules.js",
-  "data/chip-trade-health-latest.json",
+  "data/chip-trade-health-latest.json",
   "data/fugle-open-rebound-latest.json",
-  "warrant-volume-page-",
+  "warrant-volume-page-",
   "open-buy-page-",
   "strategy2-intraday-page-",
   "strategy3-page-",
@@ -3277,7 +3286,7 @@ if (fetchResult.status !== 0) {
       "api/terminal-home.js",
       "api/strategy2-latest.js",
       "terminal-runtime-config.js",
-      "scripts/e2e-smoke.js",
+      "scripts/e2e-smoke.js",
       "scripts/verify-deployment.js",
       "scripts/verify-warrant-freshness.js",
       "legacy-entrypoint-guard.ps1",
@@ -3331,6 +3340,7 @@ if (fetchResult.status !== 0) {
       "scripts/generate-strategy-weight-report.js",
       "scripts/verify-mobile-health.js",
       "scripts/verify-terminal-ui-e2e.js",
+      "scripts/verify-terminal-ui-state-acceptance.js",
       "scripts/verify-mobile-api-only.js",
       "scripts/verify-mobile-ai-fragment.js",
       "scripts/verify-membership-e2e-layering.js",

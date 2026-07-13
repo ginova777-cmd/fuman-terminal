@@ -19,6 +19,30 @@ When the user asks for a complete scan / fresh / readiness / UI / health / immed
 
 Do not answer from terminal appearance alone. The receipts, snapshot contract, UI E2E, health, readiness, and schedule must agree.
 
+## All-Terminal UI Acceptance
+
+UI acceptance must cover every terminal route and every data-backed strategy surface touched by the change. Do not validate only the data contract, JSON schema, row counts, scan receipt, snapshot contract, or Supabase readback. The actual rendered desktop and mobile UI must also be verified.
+
+For all strategies and terminal data surfaces, UI E2E or an equivalent rendered-page verifier must prove these states when they are possible for the affected surface:
+
+```text
+empty
+blocked
+degraded
+0-result
+```
+
+Required UI evidence:
+
+```text
+empty: the user sees a deliberate empty state, not a blank table, stale rows, broken skeleton, or spinner that never resolves
+blocked: the blocking reason is visible in the UI, with the affected strategy/source named and no misleading success state
+degraded: the UI shows degraded-but-usable status, source warning, stale/partial coverage reason, incident banner, or fallback source where applicable
+0-result: a completed healthy scan with zero matches renders as an explicit no-result state, not as loading, failure, or missing data
+```
+
+This is a cross-strategy rule for Strategy1/open-buy, Strategy2, Strategy3, Strategy4, Strategy5, realtime radar, market overview, AI interpretation, warrant flow, chip/institution flow, CB detect, watchlist, mobile views, and any future terminal module. A release, hotfix, readiness report, or verification reply is incomplete unless it includes both data-contract proof and UI-state proof for the affected states.
+
 ## Commands
 
 Full scan:

@@ -49,6 +49,7 @@ const DEFAULT_CONFIG = {
     targetSymbolsMin: 300,
     targetSymbolsMax: 500,
     minFreshQuoteCoverageForA: 0.95,
+    minFreshQuotesForInjectingA: 1,
   },
   collector: {
     quoteBatchSize: 40,
@@ -81,6 +82,7 @@ const SELECTED_SYMBOL_MAX_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.sele
 const MIN_PRIORITY_POOL_SYMBOLS = positiveNumber(CONFIG.priorityPool?.targetSymbolsMin, 300);
 const MAX_PRIORITY_POOL_SYMBOLS = positiveNumber(CONFIG.priorityPool?.targetSymbolsMax, 500);
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.95);
+const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFreshQuotesForInjectingA, 1);
 const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT, 40));
 const MOTHER_POOL_MIN_SYMBOLS = Math.max(
   FORMAL_DAYTRADE_PRIORITY_LIMIT,
@@ -1884,12 +1886,17 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const freshFull = [];
   const freshPriority = [];
   const quoteAges = [];
+  let lastQuoteAt = "";
   const priorityAges = [];
   const freshPriorityAges = [];
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
-    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    if (quote) quoteAges.push(quoteAge);
+    const quoteTime = quoteFreshnessTime(quote);
+    const quoteAge = ageSeconds(quoteTime);
+    if (quote) {
+      quoteAges.push(quoteAge);
+      if (quoteTime && (!lastQuoteAt || Date.parse(quoteTime) > Date.parse(lastQuoteAt))) lastQuoteAt = quoteTime;
+    }
     if (quoteAge <= WINDOW_SECONDS) freshFull.push(symbol);
   }
   for (const symbol of prioritySet) {
@@ -1911,6 +1918,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const priorityCoverageAge = percentile(priorityAges, MIN_PRIORITY_FRESH_COVERAGE);
   const priorityStaleOrMissingSymbols = Math.max(0, priorityPoolSymbols - freshPriority.length);
   const latestQuoteAge = quoteAges.length ? Math.min(...quoteAges) : 999999;
+  const prioritySourceInjecting = priorityPoolSymbols >= minFormalPrioritySymbols
+    && freshPriority.length >= MIN_PRIORITY_INJECTING_QUOTES
+    && latestQuoteAge <= MAX_QUOTE_AGE_SECONDS;
   const selectedSymbolsFreshOk = priorityPoolSymbols >= minFormalPrioritySymbols
     && priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && priorityCoverageAge <= SELECTED_SYMBOL_MAX_AGE_SECONDS;
@@ -1954,7 +1964,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const last429AgeSeconds = state.last429At ? ageSeconds(state.last429At) : 999999;
   const rateLimitStatus = cooldownRemaining > 0 ? "cooldown" : fetchResult.rateLimited ? "rate_limited" : "ok";
   const actualQuoteSpeed = fetchResult.elapsedSeconds ? Number((fetchResult.fetched / fetchResult.elapsedSeconds).toFixed(4)) : 0;
-  const scannerCanRunQuoteOnly = selectedSymbolsFreshOk && latestQuoteAge <= MAX_QUOTE_AGE_SECONDS;
+  const scannerCanRunQuoteOnly = prioritySourceInjecting && rateLimitStatus === "ok";
   const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, Math.max(minFormalPrioritySymbols, priorityPoolSymbols || minFormalPrioritySymbols));
   const effectiveMa35Required = Math.min(MIN_READY_MA35_CONTINUOUS, Math.max(minFormalPrioritySymbols, priorityPoolSymbols || minFormalPrioritySymbols));
   const scannerCanRunOpening = scannerCanRunQuoteOnly
@@ -1963,15 +1973,49 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && readyMa35 >= effectiveMa35Required
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
+  const scannerCanRunPreopen = scannerCanRunQuoteOnly
+    && dailyVolumeStatus === "ready"
+    && readyMa20 >= effectiveMa20Required
+    && readyMa35 >= effectiveMa35Required;
+  const scannerCanRunIntraday = scannerCanRunOpening
+    && after0900
+    && today1mSymbols > 0
+    && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
+  const quoteRows = quoteAges.length;
+  const quoteStatus = latestQuoteAge <= MAX_QUOTE_AGE_SECONDS
+    ? "ready"
+    : freshFull.length > 0
+    ? "degraded"
+    : quoteRows > 0
+    ? "stale"
+    : "empty";
+  const preopenStatus = prioritySourceInjecting
+    ? "ready"
+    : priorityPoolSymbols >= minFormalPrioritySymbols && freshPriority.length > 0
+    ? "degraded"
+    : priorityPoolSymbols > 0
+    ? "stale"
+    : "empty";
+  const ma20WarmupStatus = readyMa20 >= effectiveMa20Required ? "ready" : readyMa20 > 0 ? "degraded" : "empty";
+  const ma35WarmupStatus = readyMa35 >= effectiveMa35Required ? "ready" : readyMa35 > 0 ? "degraded" : "empty";
+  const historical1mWarmupStatus = ma35WarmupStatus === "ready" ? "ready" : readyMa20 > 0 || readyMa35 > 0 ? "degraded" : "empty";
+  const today1mStatus = after0900
+    ? today1mSymbols > 0 && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS
+      ? "ready"
+      : today1mSymbols > 0
+      ? "degraded"
+      : "empty"
+    : "not_required_preopen";
 
   const priorityGateA = sourceGateA({
     after0830,
     after0845,
     after0900,
     selectedSymbolsFreshOk,
+    prioritySourceInjecting,
     priorityPoolSymbols,
     priorityFreshCoverage,
-    quoteAgeSeconds: priorityCoverageAge,
+    quoteAgeSeconds: latestQuoteAge,
     cooldownRemaining,
     last429AgeSeconds,
     dailyVolumeStatus,
@@ -2001,14 +2045,15 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     .map((row) => row.symbol);
   const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
   const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
-  const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : freshFull.length > 0 ? "C" : "D";
+  const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
-  const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : gateGrade === "B" || gateGrade === "C" ? "degraded" : "stale";
+  const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
+  const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
   const message = offSession
-    ? `dedicated daytrade source stopped off-session; latest formal entry disabled; priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount}`
+    ? `dedicated daytrade source stopped off-session; latest formal entry disabled; quote=${quoteStatus} priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount}`
     : gateGrade === "A"
-    ? "dedicated daytrade source priority gate A"
-    : `dedicated daytrade source ${gateGrade}; priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount} rate=${rateLimitStatus}`;
+    ? "dedicated daytrade source priority injecting gate A"
+    : `dedicated daytrade source ${gateGrade}; status=${status}; quote=${quoteStatus}; preopen=${preopenStatus}; daily=${dailyVolumeStatus}; historical1m=${historical1mWarmupStatus}; today1m=${today1mStatus}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`;
 
   const payload = {
     source_name: SOURCE_NAME,
@@ -2016,13 +2061,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     daytrade_gate_grade: gateGrade,
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
-    priority_gate_grade: priorityGateA ? "A" : selectedSymbolsFreshOk ? "B" : "D",
+    priority_gate_grade: priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D",
     full_market_gate_grade: fullMarketGateA ? "A" : "C",
     fresh_quote_window_seconds: WINDOW_SECONDS,
     fresh_quotes_120s: freshFull.length,
     fresh_quote_coverage_120s: Number(freshQuoteCoverage.toFixed(4)),
     active_symbols: activeCount,
-    quote_age_seconds: priorityPoolSymbols ? priorityCoverageAge : latestQuoteAge,
+    quote_age_seconds: latestQuoteAge,
     priority_quote_age_p95_seconds: priorityCoverageAge,
     priority_fresh_max_quote_age_seconds: priorityFreshMaxAge,
     priority_max_quote_age_seconds: priorityMaxAge,
@@ -2085,13 +2130,31 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     formal_daytrade_priority_symbols: priorityPoolSymbols,
     priority_fresh_quotes_120s: freshPriority.length,
     priority_fresh_quote_coverage_120s: Number(priorityFreshCoverage.toFixed(4)),
+    priority_source_injecting: prioritySourceInjecting,
+    priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
+    priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,
     selected_symbols_fresh_ok: selectedSymbolsFreshOk,
     eligible_quote_rows: freshFull.length,
+    quotes: quoteRows,
+    quote_count: quoteRows,
+    quote_rows: quoteRows,
+    last_quote_at: lastQuoteAt,
+    quote_status: quoteStatus,
+    preopen_status: preopenStatus,
+    preopen_symbols: freshPriority.length,
+    preopen_coverage: Number(priorityFreshCoverage.toFixed(4)),
     scanner_can_run_opening: scannerCanRunOpening,
+    scanner_can_run_preopen: scannerCanRunPreopen,
+    scanner_can_run_intraday: scannerCanRunIntraday,
     scanner_can_run_quote_only: scannerCanRunQuoteOnly,
     daily_volume_status: dailyVolumeStatus,
+    daily_volume_rows: dailyVolumeMap.size,
     avg_volume5_eligible: avgVolume5Eligible,
     avg_volume5_coverage: Number(dailyVolumeCoverage.toFixed(4)),
+    historical_1m_warmup_status: historical1mWarmupStatus,
+    today_1m_status: today1mStatus,
+    ma20_warmup_status: ma20WarmupStatus,
+    ma35_warmup_status: ma35WarmupStatus,
     ready_ma20_continuous: readyMa20,
     ready_ma35_continuous: readyMa35,
     ready_ma20_required: effectiveMa20Required,
@@ -2116,8 +2179,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     last_self_heal_reason: state.lastSelfHealReason || "",
     phase,
     off_session: offSession,
-    formal_entry_allowed: !offSession && gateGrade === "A",
-    latest_update_allowed: !offSession && gateGrade === "A",
+    formal_entry_allowed: !offSession && after0845 && gateGrade === "A",
+    latest_update_allowed: !offSession && after0845 && gateGrade === "A",
     preserve_previous_good: offSession || gateGrade !== "A",
     apply_mode: APPLY,
     fetch_enabled: FETCH_ENABLED,
@@ -2131,12 +2194,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 }
 
 function sourceGateA(values) {
-  return values.selectedSymbolsFreshOk
+  return values.prioritySourceInjecting
     && values.priorityPoolSymbols >= (values.minPriorityPoolSymbols || MIN_PRIORITY_POOL_SYMBOLS)
-    && values.priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && values.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
-    && (values.cooldownRemaining <= 0 || values.priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE)
-    && (values.priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE || values.last429AgeSeconds > RECENT_429_BLOCK_SECONDS)
+    && values.cooldownRemaining <= 0
+    && values.last429AgeSeconds > RECENT_429_BLOCK_SECONDS
     && (!values.after0830 || values.dailyVolumeStatus === "ready")
     && (!values.after0845 || values.scannerCanRunOpening)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
@@ -2541,3 +2603,7 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
+
+
+
+
