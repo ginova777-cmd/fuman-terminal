@@ -154,7 +154,6 @@ function taipeiDateKey(date = new Date()) {
 }
 
 function releaseSourceReports() {
-  if (taipeiDateKey() !== RELEASE_SOURCE_REPORT_DATE) return [];
   return RELEASE_SOURCE_REPORTS.map((report) => ({
     ...report,
     statusCode: 200,
@@ -1262,17 +1261,32 @@ async function withLiveStrategy3SourceReport(payload) {
   return mergeSourceReport(payload, buildStrategy3SourceReport(result));
 }
 
+function sourceReportDateValue(report) {
+  const text = cleanText(report?.date || report?.usedDate || report?.sourceDate || report?.tradeDate || report?.runId);
+  const match = text.match(/(20\d{6})/);
+  return match ? Number(match[1]) : 0;
+}
+
+function maxSourceReportDate(reports) {
+  return Math.max(0, ...(Array.isArray(reports) ? reports.map(sourceReportDateValue) : []));
+}
+
 async function withLiveSourceReports(payload) {
-  const releaseReports = releaseSourceReports();
-  if (releaseReports.some((report) => !isBlank(report?.runId))) {
-    return releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
-  }
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
-  if (existingReports.length >= 8 && existingReports.every((report) => !isBlank(report?.runId))) {
+  const releaseReports = releaseSourceReports();
+  const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
+  const existingComplete = existingReports.length >= 8 && existingReports.every((report) => !isBlank(report?.runId));
+  if (releaseComplete && maxSourceReportDate(releaseReports) >= maxSourceReportDate(existingReports)) {
+    return releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+  }
+  if (existingComplete) {
     return existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
+  }
+  if (releaseComplete) {
+    return releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
   }
   const reports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
   return reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload);
@@ -1659,9 +1673,6 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
 }
 
 async function buildPayload(requestedDate = "") {
-  if (releaseSourceReports().some((report) => !isBlank(report?.runId))) {
-    return selectPayloadDate(await withLiveSourceReports(readStaticSnapshot("scorecard_release_static_snapshot")), requestedDate);
-  }
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 8000 }).catch(() => null);
   if (snapshot?.payload && typeof snapshot.payload === "object") {
     const payload = await withLiveSourceReports(withScorecardContract({
