@@ -1286,9 +1286,14 @@ function selectPayloadDate(payload, requestedDate = "") {
   const dates = historyDates(allRecords);
   const selectedDate = dates.includes(requestedDate) ? requestedDate : (isoDate(payload?.latestDate) || dates[0] || "");
   const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
-  const allDaily = Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [];
+  const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
+    .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
-  const sourceReports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const sourceReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+    .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
+      && !isRetiredScorecardSurfaceName(report?.strategy)
+      && !isRetiredScorecardSurfaceName(report?.endpoint)
+      && !isRetiredScorecardSurfaceName(report?.runId));
   const blockedReports = blockedSourceReports(sourceReports);
   const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
   const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));
