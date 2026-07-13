@@ -4895,9 +4895,9 @@
 
   function hasMarketAiPayload(payload) {
     if (!payload || typeof payload !== "object") return false;
+    if (marketPayloadBlockedForFormalDisplay(payload)) return false;
     return Boolean(
-      marketPayloadBlockedForFormalDisplay(payload)
-      || payload.dashboard
+      payload.dashboard
       || payload.groups
       || payload.fieldCompleteness
       || normalizeArray(payload.filters).length
@@ -4987,17 +4987,9 @@
       if (!isMarketViewActive() || !isMarketDesktopAiModeActive()) return;
       syncMarketAiDesktopModeIfVisible();
       if (!hasMarketAiPayload(next.ai)) {
-        const heatmapBlockReason = marketPayloadBlockedForFormalDisplay(next.heatmap);
-        if (heatmapBlockReason) {
-          renderMarketApiAi(next.heatmap || {}, next.radar || {}, {
-            ok: false,
-            evidenceStatus: "source_quality_fail",
-            unattendedStatus: "NO",
-            publishAllowed: false,
-            fallbackUsed: false,
-            updatedAt: next.heatmap?.updatedAt || next.heatmap?.servedAt || "",
-            issues: [`heatmap_${heatmapBlockReason}`],
-          });
+        const panel = document.querySelector("#market-view [data-market-api-ai]");
+        if (panel?.querySelector?.(".market-ai-hero-board")) {
+          panel.dataset.marketApiAiSkippedReason = marketPayloadBlockedForFormalDisplay(next.heatmap) || "ai_payload_not_ready";
           return;
         }
         renderMarketApiAiLoading();
@@ -5016,6 +5008,7 @@
   function renderMarketApiAiLoading() {
     const panels = ensureMarketApiPanels();
     if (!panels.ai) return;
+    if (panels.ai.querySelector?.(".market-ai-hero-board")) return;
     if (panels.ai.dataset.marketApiAi === "live-api-bundle" && hasMarketAiPayload(marketAiBundlePayload)) return;
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
@@ -5693,28 +5686,15 @@
     if (!panels.ai) return;
     const aiBlockedReason = marketPayloadBlockedForFormalDisplay(aiPayload);
     if (aiBlockedReason) {
-      const issues = normalizeArray(aiPayload.issues || aiPayload.blockers || aiPayload.warnings).slice(0, 8);
-      panels.ai.classList.add("market-ai-visual-dashboard");
       panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
-      panels.ai.dataset.marketApiAi = "blocked";
-      panels.ai.innerHTML = `
-        <section class="market-ai-summary">
-          <article class="market-ai-card warning">
-            <small>AI 判讀正式水源</small>
-            <strong>未通過，不顯示正常判讀</strong>
-            <p>reason=${escapeHtml(String(aiBlockedReason || "source_not_ready"))}</p>
-          </article>
-          <article class="market-ai-card warning">
-            <small>contract</small>
-            <strong>evidence=${escapeHtml(String(aiPayload.evidenceStatus || "--"))}</strong>
-            <p>unattended=${escapeHtml(String(aiPayload.unattendedStatus || "--"))}｜publish=${escapeHtml(String(aiPayload.publishAllowed === true ? "allowed" : "blocked"))}｜fallback=${escapeHtml(String(aiPayload.fallbackUsed === true))}</p>
-          </article>
-        </section>
-        <section class="market-ai-block">
-          <h3>阻擋原因</h3>
-          <div class="market-ai-list">
-            ${(issues.length ? issues : [aiBlockedReason]).map((issue, index) => `<div class="market-ai-point"><b>${index + 1}</b><span>${escapeHtml(String(issue))}</span></div>`).join("")}
-          </div>
+      panels.ai.dataset.marketApiAiSkippedReason = String(aiBlockedReason || "source_not_ready");
+      if (panels.ai.querySelector?.(".market-ai-hero-board")) return;
+      panels.ai.classList.add("market-ai-visual-dashboard");
+      panels.ai.dataset.marketApiAi = "preserve-previous-good";
+      panels.ai.innerHTML = ` 
+        <section class="market-ai-block" data-market-ai-preserve-previous-good="1">
+          <h3>AI 判讀暫時保留上一筆簡報</h3>
+          <p>正式資料尚未穩定，這次刷新不覆蓋正常判讀。</p>
         </section>
       `;
       return;
