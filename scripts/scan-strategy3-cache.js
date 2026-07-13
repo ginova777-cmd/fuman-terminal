@@ -359,12 +359,42 @@ function latestStockDateKey(stocks) {
     .at(-1) || "";
 }
 
-function firstDateKeyFromValues(...values) {
-  for (const value of values) {
-    const dateKey = taipeiDateKeyFromValue(value);
-    if (/^\d{8}$/.test(dateKey)) return dateKey;
+function collectDateCandidates(entries = []) {
+  return entries
+    .map(([field, value]) => {
+      const dateKey = taipeiDateKeyFromValue(value);
+      return /^\d{8}$/.test(dateKey)
+        ? { field, dateKey, value: String(value || "") }
+        : null;
+    })
+    .filter(Boolean);
+}
+
+function selectDateCandidate(candidates = [], targetDate = "") {
+  const targetMatch = candidates.find((candidate) => candidate.dateKey === targetDate);
+  return targetMatch || candidates[0] || { field: "", dateKey: "", value: "" };
+}
+
+function collectStockUniverseDateCandidates(stocks = []) {
+  const counts = new Map();
+  const fields = [
+    ["quoteDate", (stock) => stock.quoteDate],
+    ["latestCandleTime", (stock) => stock.latestCandleTime],
+    ["updatedAt", (stock) => stock.updatedAt],
+    ["quoteTimeRaw", (stock) => stock.quoteTimeRaw],
+  ];
+  for (const stock of stocks || []) {
+    for (const [field, getter] of fields) {
+      const value = getter(stock);
+      const dateKey = taipeiDateKeyFromValue(value);
+      if (!/^\d{8}$/.test(dateKey)) continue;
+      const key = `${field}:${dateKey}`;
+      const current = counts.get(key) || { field, dateKey, count: 0, sample: String(value || "") };
+      current.count += 1;
+      counts.set(key, current);
+    }
   }
-  return "";
+  return [...counts.values()].sort((a, b) => b.count - a.count || String(a.field).localeCompare(String(b.field)));
 }
 
 function preservePreviousTradingSource(previousPayload, currentPayload) {
@@ -475,17 +505,27 @@ async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
     issues.push(`intraday 1m source date read failed: ${error?.message || String(error)}`);
   }
 
-  const quoteTradeDate = firstDateKeyFromValues(
-    quoteRow?.payload?.formal_trade_date,
-    quoteRow?.payload?.tradeDate,
-    quoteRow?.payload?.raw?.tradeDate,
-    quoteRow?.payload?.raw?.quoteSeenAt,
-    quoteRow?.last_trade_time,
-    quoteRow?.quote_time,
-    quoteRow?.updated_at
-  );
-  const intradayTradeDate = firstDateKeyFromValues(intradayRow?.trade_date, intradayRow?.candle_time, intradayRow?.updated_at);
-  const universeTradeDate = latestStockDateKey(stocks);
+  const quoteDateCandidates = collectDateCandidates([
+    ["payload.formal_trade_date", quoteRow?.payload?.formal_trade_date],
+    ["payload.tradeDate", quoteRow?.payload?.tradeDate],
+    ["payload.raw.tradeDate", quoteRow?.payload?.raw?.tradeDate],
+    ["payload.raw.quoteSeenAt", quoteRow?.payload?.raw?.quoteSeenAt],
+    ["last_trade_time", quoteRow?.last_trade_time],
+    ["quote_time", quoteRow?.quote_time],
+    ["updated_at", quoteRow?.updated_at],
+  ]);
+  const intradayDateCandidates = collectDateCandidates([
+    ["trade_date", intradayRow?.trade_date],
+    ["candle_time", intradayRow?.candle_time],
+    ["updated_at", intradayRow?.updated_at],
+  ]);
+  const universeDateCandidates = collectStockUniverseDateCandidates(stocks);
+  const quoteSelected = selectDateCandidate(quoteDateCandidates, targetDate);
+  const intradaySelected = selectDateCandidate(intradayDateCandidates, targetDate);
+  const universeSelected = selectDateCandidate(universeDateCandidates, targetDate);
+  const quoteTradeDate = quoteSelected.dateKey;
+  const intradayTradeDate = intradaySelected.dateKey;
+  const universeTradeDate = universeSelected.dateKey || latestStockDateKey(stocks);
 
   if (!/^\d{8}$/.test(targetDate)) issues.push(`scanner target date invalid: ${targetDate || "missing"}`);
   if (taipeiToday !== targetDate) issues.push(`taipeiToday ${taipeiToday} != scannerTargetDate ${targetDate}`);
@@ -506,6 +546,21 @@ async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
       quote: quoteTradeDate,
       intraday1m: intradayTradeDate,
       stockUniverse: universeTradeDate,
+    },
+    sourceTradeDateFields: {
+      quote: quoteSelected.field,
+      intraday1m: intradaySelected.field,
+      stockUniverse: universeSelected.field,
+    },
+    sourceTradeDateResolution: {
+      mode: "target_date_candidate_preferred",
+      targetDate,
+      quoteCandidates: quoteDateCandidates,
+      intraday1mCandidates: intradayDateCandidates,
+      stockUniverseCandidates: universeDateCandidates.slice(0, 12),
+      quoteAutoResolved: quoteDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && quoteTradeDate === targetDate,
+      intraday1mAutoResolved: intradayDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && intradayTradeDate === targetDate,
+      stockUniverseAutoResolved: universeDateCandidates.some((candidate) => candidate.dateKey !== targetDate) && universeTradeDate === targetDate,
     },
     sourceRows: {
       quoteUpdatedAt: quoteRow?.updated_at || "",
