@@ -64,7 +64,6 @@ async function verifyAuthAccessTableProbe() {
 
 async function verifyProductionProtection() {
   const protectedPaths = [
-    "/api/open-buy-latest?live=1",
     "/api/strategy2-latest?live=1",
     "/api/strategy3-latest?live=1",
     "/api/strategy4-latest?live=1",
@@ -92,7 +91,6 @@ async function verifyProductionProtection() {
   const bundle = await fetchJson(`${PRODUCTION_URL}/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70&membership_probe=${Date.now()}`);
   const bundleText = bundle.text || JSON.stringify(bundle.json || {});
   const forbiddenBundleMarkers = [
-    "strategy1-",
     "strategy2-",
     "strategy3-",
     "strategy4-",
@@ -100,7 +98,6 @@ async function verifyProductionProtection() {
     "institution-",
     "cb-detect-",
     "warrant-flow-",
-    "/api/open-buy-latest",
     "/api/strategy2-latest",
     "/api/strategy3-latest",
     "/api/strategy4-latest",

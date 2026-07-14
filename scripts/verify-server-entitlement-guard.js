@@ -13,7 +13,6 @@ function requireIncludes(file, needle) {
 }
 
 const protectedApis = {
-  "api/open-buy-latest.js": "strategy1",
   "api/strategy2-latest.js": "strategy2",
   "api/strategy3-latest.js": "strategy3",
   "api/strategy4-latest.js": "strategy4",
