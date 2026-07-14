@@ -917,7 +917,51 @@ function callDaytradeEntryHistory(timeoutMs = 12000) {
   });
 }
 
-function buildStrategy5SourceReport(result) {
+function buildStrategy4SourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const runId = cleanText(payload.runId || payload.transport?.runId);
+  const runDate = (runId.match(/^strategy4-(\d{8})-/) || [])[1] || "";
+  const date = cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date || runDate);
+  const iso = compactDateToIso(runDate || date) || date;
+  const publishAllowed = payload.publishAllowed === true || quality.publishAllowed === true;
+  return {
+    key: "strategy4",
+    strategy: "strategy4",
+    endpoint: "/api/strategy4-latest",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId,
+    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
+    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
+    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
+    expectedTotal: cleanNumber(payload.expectedTotal ?? quality.expectedTotal),
+    scannedCount: cleanNumber(payload.scannedCount ?? quality.scannedCount),
+    date: runDate || compactDate(date) || date,
+    sourceDate: iso,
+    source_date: iso,
+    tradeDate: iso,
+    usedDate: iso,
+    sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
+    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
+    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
+    publishAllowed,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: publishAllowed ? false : (payload.preservePreviousGood === true || quality.preservePreviousGood === true),
+    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
+    fallbackAllowed: payload.fallbackAllowed === true || quality.fallbackAllowed === true,
+    fallbackScope: Array.isArray(payload.fallbackScope) ? payload.fallbackScope : [],
+    degradedBlocksLatest: publishAllowed ? false : (payload.degradedBlocksLatest === true || quality.degradedBlocksLatest === true),
+    latestWriteAttempted: payload.latestWriteAttempted === true || quality.latestWriteAttempted === true,
+    latestPointerUpdated: payload.latestPointerUpdated === true || quality.latestPointerUpdated === true,
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    scanner_block_reason: cleanText(payload.scanner_block_reason || payload.blockedReason || quality.blockedReason),
+    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+  };
+}function buildStrategy5SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
     ? payload.run_quality_at_publish
@@ -1261,14 +1305,18 @@ function alignPayloadDateWithSourceReports(payload) {
 }
 
 
-async function withFreshStrategy5SourceReport(payload) {
+async function withFreshStrategySourceReports(payload) {
+  let nextPayload = payload;
   try {
-    const report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
-    if (report.runId) return mergeSourceReport(payload, report);
+    const strategy4Report = buildStrategy4SourceReport(await callStrategy4Latest());
+    if (strategy4Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy4Report);
   } catch {}
-  return payload;
-}
-async function withLiveSourceReports(payload) {
+  try {
+    const strategy5Report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
+    if (strategy5Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy5Report);
+  } catch {}
+  return nextPayload;
+}async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
@@ -1291,15 +1339,15 @@ async function withLiveSourceReports(payload) {
   const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
   const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId));
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (existingComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (releaseComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
-  return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+  return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
