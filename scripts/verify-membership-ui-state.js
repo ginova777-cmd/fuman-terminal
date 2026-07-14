@@ -189,16 +189,15 @@ async function runUiProbe(baseUrl) {
         expiresAt: Math.floor(Date.now() / 1000) + 3600
       }));
       localStorage.setItem("fuman-terminal-last-route-v1", JSON.stringify({ viewName: "strategy", strategyRoute: "intraday_2m", at: Date.now() }));
-    });
+    }, null, 15000);
     await cdp.send("Page.navigate", { url: `${baseUrl}/?desktop=1&membershipUiProbe=${Date.now()}&savedRoute=1` }, 30000);
     await waitFor(cdp, () => ({ ok: Boolean(window.FUMAN_ENTITLEMENT_GUARD && document.querySelector("aside.sidebar [data-view]")) }), null, 45000);
-    return await evaluate(cdp, async () => {
+    const summaryJson = await evaluate(cdp, async () => {
       const targets = [
-        { key: "strategy1", view: "strategy", text: "策略1" },
-        { key: "strategy2", view: "strategy", text: "策略2" },
-        { key: "strategy3", view: "strategy", text: "策略3" },
-        { key: "strategy4", view: "strategy", text: "策略4" },
-        { key: "strategy5", view: "strategy", text: "策略5" },
+        { key: "strategy2", view: "strategy", text: "當沖雷達" },
+        { key: "strategy3", view: "strategy", text: "隔日沖" },
+        { key: "strategy4", view: "strategy", text: "波段" },
+        { key: "strategy5", view: "strategy", text: "綜合策略" },
         { key: "institution", view: "chip-trade" },
         { key: "cb", view: "cb-detect" },
         { key: "warrant", view: "warrant-flow" },
@@ -249,10 +248,10 @@ async function runUiProbe(baseUrl) {
         });
       }
       document.querySelector(".fuman-entitlement-preview")?.remove();
-      const strategyLink = findTarget({ view: "strategy", text: "策略2" });
+      const strategyLink = findTarget({ view: "strategy", text: "當沖雷達" });
       const routeBlocked = window.FUMAN_DESKTOP_ROUTE_STATE?.shouldBlockView?.("strategy", strategyLink) === true;
       await new Promise((resolve) => setTimeout(resolve, 220));
-      return JSON.parse(JSON.stringify({
+      return JSON.stringify({
         sanitizedRoute,
         publicMarketMarked,
         memberMarked,
@@ -263,8 +262,9 @@ async function runUiProbe(baseUrl) {
           preview: previewState({ view: "strategy" }),
           strategyActive: document.querySelector("#strategy-view")?.hidden === false && document.querySelector("#strategy-view")?.getAttribute("aria-hidden") !== "true" && document.querySelector("#strategy-view")?.classList.contains("active"),
         },
-      }));
+      });
     }, null, 30000);
+    return JSON.parse(summaryJson);
   } finally {
     cdp?.close();
     try { browser.child.kill(); } catch {}
