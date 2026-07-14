@@ -978,11 +978,16 @@ function buildIndexReportRows({ weighted, otc, futures, weightedPct, otcPct, fut
   return rows;
 }
 
+function isTaiwanStockObservationRow(row) {
+  return /^\d{4}$/.test(String(row?.code || row?.Code || row?.stockId || "").trim());
+}
+
 function groupIndexReportRows(rows) {
-  const riskRows = rows.filter((row) => row.side === "short" || row.side === "risk");
-  const momentumRows = rows.filter((row) => row.side === "long");
+  const stockRows = normalizeArray(rows).filter(isTaiwanStockObservationRow);
+  const riskRows = stockRows.filter((row) => row.side === "short" || row.side === "risk");
+  const momentumRows = stockRows.filter((row) => row.side === "long");
   return {
-    all: groupPayload("簡單報告", "market index report", rows, "只整合 AI 判讀、加權指數、櫃買指數與台指期夜盤"),
+    all: groupPayload("簡單報告", "market index report", stockRows, "只整合 AI 判讀、加權指數、櫃買指數與台指期夜盤"),
     momentum: groupPayload("偏多線索", "market index report", momentumRows, "加權、櫃買、台指期的偏多項目"),
     institution: groupPayload("籌碼/族群", "disabled", [], "簡單報告模式不掃個股籌碼"),
     intraday: groupPayload("盤中線索", "disabled", [], "即時掃描已停用，不訂閱 Fugle 全市場"),
@@ -1081,7 +1086,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
     breadth: deps.breadth || null,
     rows,
     count: rows.length,
-    hotStocks: rows.filter((row) => row.code !== "REPORT" && row.code !== "RISK").slice(0, 3),
+    hotStocks: rows.filter(isTaiwanStockObservationRow).slice(0, 10),
     groups,
     filters,
     todayPoints,

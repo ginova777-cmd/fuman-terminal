@@ -539,6 +539,10 @@ function groupRows(payload, key, aliases = []) {
   return arrayAt(group || filter || {}, ["rows", "stocks"]).slice(0, 8);
 }
 
+function isTaiwanStockRow(row) {
+  return /^\d{4}$/.test(String(firstValue(row, ["code", "Code", "symbol", "stockId", "stock_id"], "")).trim());
+}
+
 function renderAiStockRow(row, index) {
   const code = firstValue(row, ["code", "Code", "symbol", "stockId", "stock_id"], "--");
   const name = firstValue(row, ["name", "Name", "stockName", "stock_name"], "");
@@ -564,9 +568,9 @@ function renderAiStockRow(row, index) {
 function renderAiFragment(tab, config, payload) {
   const dashboard = payload?.dashboard || {};
   const summary = payload?.summary || {};
-  const hotStocks = arrayAt(payload, ["hotStocks"]);
-  const apiRows = arrayAt(payload, ["rows"]);
-  const rows = hotStocks.length ? hotStocks : apiRows.length ? apiRows : groupRows(payload, "all");
+  const hotStocks = arrayAt(payload, ["hotStocks"]).filter(isTaiwanStockRow);
+  const apiRows = arrayAt(payload, ["rows"]).filter(isTaiwanStockRow);
+  const rows = hotStocks.length ? hotStocks : apiRows.length ? apiRows : groupRows(payload, "all").filter(isTaiwanStockRow);
   const updatedAt = payload?.updatedAt || payload?.servedAt || payload?.generatedAt || "";
   const runId = extractRunId({ runId: payload?.snapshot?.snapshotId || payload?.snapshot?.key || payload?.cacheSource || "market-ai-live", updatedAt }, tab);
   const sample = Number(dashboard.sample || summary.sample || payload?.breadth?.sample || 0) || rows.length;
@@ -579,11 +583,11 @@ function renderAiFragment(tab, config, payload) {
   const riskNotes = arrayAt(payload, ["riskNotes"]).slice(0, 3);
   const reasoning = arrayAt(payload, ["reasoning"]).slice(0, 4);
   const filters = [
-    ["all", "全部", groupRows(payload, "all")],
-    ["momentum", "動能強", groupRows(payload, "momentum")],
-    ["institution", "法人買超", groupRows(payload, "institution", ["legal"])],
-    ["intraday", "當沖熱", groupRows(payload, "intraday")],
-    ["risk", "風險高", groupRows(payload, "risk")],
+    ["all", "全部", groupRows(payload, "all").filter(isTaiwanStockRow)],
+    ["momentum", "動能強", groupRows(payload, "momentum").filter(isTaiwanStockRow)],
+    ["institution", "法人買超", groupRows(payload, "institution", ["legal"]).filter(isTaiwanStockRow)],
+    ["intraday", "當沖熱", groupRows(payload, "intraday").filter(isTaiwanStockRow)],
+    ["risk", "風險高", groupRows(payload, "risk").filter(isTaiwanStockRow)],
   ];
   const pointHtml = todayPoints.length ? todayPoints.map((point, index) => `
     <p class="market-ai-point"><b>${index + 1}</b><span>${esc(point)}</span></p>

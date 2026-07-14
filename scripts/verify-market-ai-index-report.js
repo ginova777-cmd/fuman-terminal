@@ -88,7 +88,17 @@ function capture(handler, req) {
   assert.ok(body.dashboard?.dataSources?.otcIndex, "OTC index evidence missing");
   assert.ok(body.dashboard?.dataSources?.txfNear, "TXF evidence missing");
   assert.ok((body.todayPoints || []).some((text) => /加權指數/.test(text)), "report must mention weighted index");
-  assert.ok((body.reasoning || []).some((item) => /heatmap \/ realtime-radar/.test(item.text || "")), "resource policy evidence missing");
+  assert.ok(
+    body.usesHeatmap === false
+      && body.usesRealtimeRadar === false
+      && body.heatmap?.disabled === true
+      && body.realtimeRadar?.disabled === true,
+    "resource policy evidence missing"
+  );
+  const hotStocks = Array.isArray(body.hotStocks) ? body.hotStocks : [];
+  const hotCodes = hotStocks.map((row) => String(row?.code || "").trim());
+  assert.deepStrictEqual(hotCodes.filter((code) => !/^\d{4}$/.test(code)), [], "hotStocks must contain only 4-digit Taiwan stock codes");
+  assert.ok(!hotCodes.some((code) => ["TWSE", "OTC", "TXF", "REPORT", "RISK"].includes(code)), "hotStocks must not contain indexes or report rows");
   assert.deepStrictEqual(calls, { market: 1, heatmap: 0, radar: 0, strategy: 0 });
   console.log("[market-ai-index-report] ok", JSON.stringify({ rows: body.rows?.length || 0, bias: body.summary?.bias, action: body.summary?.action }));
 })().catch((error) => {

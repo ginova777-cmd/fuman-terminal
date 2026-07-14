@@ -5974,6 +5974,7 @@
     const nameOf = (item) => String(item?.name || item?.industry || item?.sector || "--");
     const stockName = (item) => String(item?.name || item?.Name || "");
     const stockCode = (item) => String(item?.code || item?.Code || item?.stockId || "").trim();
+    const isTaiwanStockCode = (code) => /^\d{4}$/.test(String(code || "").trim());
     const tradeDate = String(aiPayload?.dashboard?.tradeDate || aiPayload?.aiDetectWindow?.taipeiDate || aiPayload?.snapshot?.tradeDate || heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.date || "").replace(/-/g, "");
     const dateLabel = tradeDate.length >= 8 ? `${tradeDate.slice(4, 6)}/${tradeDate.slice(6, 8)}` : compactMarketTime(aiPayload?.updatedAt || heatmapPayload?.updatedAt || "");
     const detectWindow = aiPayload?.aiDetectWindow || {};
@@ -6001,7 +6002,7 @@
     const stockMap = new Map();
     const addStock = (stock, source, extraTags = []) => {
       const code = stockCode(stock);
-      if (!code) return;
+      if (!isTaiwanStockCode(code)) return;
       const pct = num(stock.percent ?? stock.pct ?? stock.changePercent ?? stock.Change ?? stock.change ?? stock.change_pct);
       const value = num(stock.value ?? stock.tradeValue ?? stock.TradeValue ?? stock.amount ?? stock.amountYi);
       const volume = num(stock.volume ?? stock.tradeVolume ?? stock.TradeVolume ?? stock.totalVolume);
@@ -6047,7 +6048,7 @@
         reason: row.reason || "盤中訊號",
         source: "盤中訊號",
         tags: normalizeArray(row.signalTags).slice(0, 4),
-      })).filter((row) => row.code);
+      })).filter((row) => isTaiwanStockCode(row.code));
     }
     const topStock = allStocks[0] || null;
     let groups = {
@@ -6057,6 +6058,7 @@
       intraday: allStocks.filter((stock) => /雷達|當沖|即時|多/.test(stock.tags.join("") + stock.source + stock.side)).slice(0, 10),
       risk: [...radarRisks.map((row) => {
         const code = stockCode(row);
+        if (!isTaiwanStockCode(code)) return null;
         return {
           code,
           name: stockName(row) || code,
@@ -6070,11 +6072,11 @@
           source: "風險雷達",
           tags: [...new Set([...normalizeArray(row.signalTags), "風險高"])].slice(0, 5),
         };
-      }).filter((row) => row.code), ...allStocks.filter((stock) => stock.pct < 0)].slice(0, 10),
+      }).filter(Boolean), ...allStocks.filter((stock) => stock.pct < 0)].filter((row) => isTaiwanStockCode(row.code)).slice(0, 10),
     };
     const normalizeDisplayStock = (stock, fallbackSource) => {
       const code = stockCode(stock);
-      if (!code) return null;
+      if (!isTaiwanStockCode(code)) return null;
       const tags = [
         ...normalizeArray(stock.signalTags),
         ...normalizeArray(stock.tags),
@@ -6131,7 +6133,8 @@
       reason: "弱勢族群",
       source: "熱力圖",
       tags: ["風險高", nameOf(sector)],
-    }))).filter((row) => row.code).slice(0, 10);
+    }))).filter((row) => isTaiwanStockCode(row.code)).slice(0, 10);
+    Object.keys(groups).forEach((key) => { groups[key] = normalizeArray(groups[key]).filter((stock) => isTaiwanStockCode(stock?.code)).slice(0, 10); });
     const strongNames = strong.map((item) => nameOf(item)).slice(0, 3).join("、") || "等待族群擴散";
     const weakNames = weak.map((item) => nameOf(item)).slice(0, 3).join("、") || "暫無明顯弱勢";
     const riskNames = groups.risk.slice(0, 4).map((stock) => `${stock.code} ${stock.name}`).join("、") || weakNames;
