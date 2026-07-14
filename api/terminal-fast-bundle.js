@@ -12,6 +12,7 @@ const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
+const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
@@ -739,22 +740,29 @@ module.exports = async function handler(request, response) {
     return;
   }
   if (!wantsLive) {
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 });
+    const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
+    const snapshot = releaseSnapshotPayload
+      ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
+      : await readDesktopRouteSnapshot({ timeoutMs: 8000 });
+    const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
       response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
       response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
-      await repairStrategy1WaitingSnapshot(request, endpoints);
-      await repairStrategy5FullSnapshot(request, endpoints);
-      await repairStrategy2LatestSnapshot(request, endpoints);
-      await repairStrategy3LatestSnapshot(request, endpoints);
-      await repairStrategy4LatestSnapshot(request, endpoints);
-      const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
-        timeoutMs: 5500,
-        via: "api/terminal-fast-bundle",
-        shapePayload: (payload) => shapeTopPayload(request, payload),
-      });
+      let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
+      if (!isReleaseReadbackSnapshot) {
+        await repairStrategy1WaitingSnapshot(request, endpoints);
+        await repairStrategy5FullSnapshot(request, endpoints);
+        await repairStrategy2LatestSnapshot(request, endpoints);
+        await repairStrategy3LatestSnapshot(request, endpoints);
+        await repairStrategy4LatestSnapshot(request, endpoints);
+        realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
+          timeoutMs: 5500,
+          via: "api/terminal-fast-bundle",
+          shapePayload: (payload) => shapeTopPayload(request, payload),
+        });
+      }
       if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
         endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
           cacheSource: "api/terminal-fast-bundle:snapshot-derived",
@@ -769,10 +777,10 @@ module.exports = async function handler(request, response) {
         summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
         ok: snapshot.payload.ok !== false,
         source: "terminal-fast-bundle",
-        cacheSource: "supabase:desktop_route_snapshot",
+        cacheSource: isReleaseReadbackSnapshot ? "release-readback-snapshot" : "supabase:desktop_route_snapshot",
         partial: Boolean(snapshot.payload.partial),
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
-        snapshotHit: true,
+        snapshotHit: !isReleaseReadbackSnapshot,
         snapshotRepairs: realtimeRadarRepairs,
       };
       if (request.method === "HEAD") {

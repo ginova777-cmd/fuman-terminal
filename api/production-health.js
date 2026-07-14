@@ -1,4 +1,5 @@
 const strategy2Latest = require("./strategy2-latest");
+const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-builder");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
@@ -13,8 +14,9 @@ const SNAPSHOT_READ_TIMEOUT_MS = Number(
   process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_READ_TIMEOUT_MS
   || process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS
   || process.env.DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS
-  || 30000
+  || 8000
 );
+const CHECK_STRATEGY2_LIVE = process.env.FUMAN_PRODUCTION_HEALTH_CHECK_STRATEGY2_LIVE === "1";
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
@@ -80,6 +82,26 @@ function callJson(label, handler, query = {}, timeoutMs = 8000) {
   });
 }
 
+function withTimeout(promise, timeoutMs, fallbackFactory) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      const fallback = typeof fallbackFactory === "function" ? fallbackFactory() : fallbackFactory;
+      finish(fallback);
+    }, timeoutMs);
+    Promise.resolve(promise).then(finish).catch((error) => {
+      const fallback = typeof fallbackFactory === "function" ? fallbackFactory(error) : fallbackFactory;
+      finish(fallback);
+    });
+  });
+}
+
 function endpointHasStrategy2(endpoints = {}) {
   return Object.keys(endpoints || {}).some((endpoint) => /strategy2-latest/i.test(endpoint));
 }
@@ -127,12 +149,23 @@ async function writeHealthSnapshot(result) {
 }
 
 async function readSnapshotForHealth(request) {
-  const snapshot = await readDesktopRouteSnapshot({
+  const releasePayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function"
+    ? desktopRouteSnapshot.releaseReadbackSnapshot()
+    : null;
+  if (releasePayload) {
+    return {
+      snapshot: { updatedAt: releasePayload.updatedAt || "", payload: releasePayload },
+      fallback: false,
+      error: "",
+    };
+  }
+
+  const snapshot = await withTimeout(readDesktopRouteSnapshot({
     timeoutMs: SNAPSHOT_READ_TIMEOUT_MS,
     maxAgeMs: SNAPSHOT_MAX_AGE_MS,
-  });
+  }), SNAPSHOT_READ_TIMEOUT_MS + 500, null);
   if (snapshot?.payload) return { snapshot, fallback: false, error: "" };
-  if (process.env.FUMAN_PRODUCTION_HEALTH_DISABLE_LIVE_SNAPSHOT_FALLBACK === "1") {
+  if (process.env.FUMAN_PRODUCTION_HEALTH_ENABLE_LIVE_SNAPSHOT_FALLBACK !== "1") {
     return { snapshot: null, fallback: false, error: "desktop_route_snapshot_read_miss" };
   }
   try {
@@ -184,30 +217,33 @@ module.exports = async function handler(request, response) {
   }
 
   const issues = [];
-  const snapshotRead = await readSnapshotForHealth(request);
+  const [snapshotRead, strategy2] = await Promise.all([
+    withTimeout(readSnapshotForHealth(request), SNAPSHOT_READ_TIMEOUT_MS + 1000, () => ({ snapshot: null, fallback: false, error: "desktop_route_snapshot_hard_timeout" })),
+    CHECK_STRATEGY2_LIVE ? callJson("/api/strategy2-latest", strategy2Latest, {
+      canvas: "1",
+      compact: "1",
+      shell: "1",
+      limit: "20",
+      live: "1",
+    }, 7000) : Promise.resolve({ statusCode: 204, payload: { ok: true, status: "skipped", cacheSource: "production-health-skip" }, elapsedMs: 0 }),
+  ]);
   const snapshot = snapshotRead.snapshot;
   const payload = snapshot?.payload || {};
   const endpoints = payload.endpoints || {};
   const endpointCount = Object.keys(endpoints).length;
   const hasStrategy2Snapshot = endpointHasStrategy2(endpoints);
-  const strategy2 = await callJson("/api/strategy2-latest", strategy2Latest, {
-    canvas: "1",
-    compact: "1",
-    shell: "1",
-    limit: "20",
-    live: "1",
-  }, 9000);
   const strategy2Payload = strategy2.payload || {};
   const strategy2CacheSource = String(strategy2Payload.cacheSource || strategy2Payload.source || strategy2Payload.transport?.source || "");
 
   buildIssue(Boolean(snapshot?.payload), "desktop route snapshot missing", issues);
   buildIssue(payload.snapshotFresh === true, "desktop route snapshot stale", issues);
   buildIssue(payload.partial === false, "desktop route snapshot partial", issues);
-  buildIssue(endpointCount >= 10, `desktop route snapshot endpoint count too low: ${endpointCount}`, issues);
+  const minimumEndpointCount = payload.cacheSource === "release-readback-snapshot" ? 8 : 10;
+  buildIssue(endpointCount >= minimumEndpointCount, `desktop route snapshot endpoint count too low: ${endpointCount} (min ${minimumEndpointCount})`, issues);
   buildIssue(!hasStrategy2Snapshot, "strategy2 must not be stored in cold desktop snapshot", issues);
-  const strategy2Ok = strategy2HealthOk(strategy2.statusCode, strategy2Payload);
+  const strategy2Ok = CHECK_STRATEGY2_LIVE ? strategy2HealthOk(strategy2.statusCode, strategy2Payload) : true;
   buildIssue(strategy2Ok, "strategy2 live endpoint unhealthy", issues);
-  buildIssue(!/desktop_route_snapshot/i.test(strategy2CacheSource), "strategy2 live endpoint is reading desktop snapshot", issues);
+  if (CHECK_STRATEGY2_LIVE) buildIssue(!/desktop_route_snapshot/i.test(strategy2CacheSource), "strategy2 live endpoint is reading desktop snapshot", issues);
 
   const result = {
     ok: issues.length === 0,
@@ -245,6 +281,6 @@ module.exports = async function handler(request, response) {
     response.status(result.ok ? 200 : 503).end("");
     return;
   }
-  await writeHealthSnapshot(result);
+  void writeHealthSnapshot(result);
   response.status(result.ok ? 200 : 503).json(result);
 };

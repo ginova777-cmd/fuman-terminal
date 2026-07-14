@@ -22,12 +22,103 @@ const LATEST_RUN_VIEW = process.env.WARRANT_FLOW_SUPABASE_LATEST_RUN_VIEW || "v_
 const TWSE_STATE_DIR = process.env.FUMAN_STATE_DIR || path.join("/tmp", "fuman-state");
 const REQUIRED_SCHEMA_VERSION = "warrant-flow-run-id-complete-v1";
 const WARRANT_FLOW_REQUIRED_FIELDS = ["warrantCode", "underlyingCode", "warrantName", "underlyingName", "finalScore"];
+const RELEASE_WARRANT_SUMMARY_DATE = "20260713";
+const RELEASE_WARRANT_SUMMARY_UNTIL_DATE = "20260714";
+const RELEASE_WARRANT_SUMMARY_PATH = path.join(__dirname, "..", "data", "release-warrant-flow-summary-20260713.json");
+
 const WARRANT_FLOW_BUSINESS_BLANK_KEYS = [
   "underlyingCode", "underlyingName", "warrantCode", "warrantName", "finalScore", "score", "reason",
   "actionLabel", "signalGrade", "stockRisk", "callValue", "putValue", "callPutRatio", "warrantHeatScore",
   "stockSetupScore", "branchPowerScore", "branchStatus", "volumeMultiple", "thirtyMinuteVolume",
   "floatingUnits", "quoteSource", "source_snapshot_captured_at", "fallbackUsed",
 ];
+
+function releaseWarrantWindowOpen() {
+  const today = taipeiTodayKey();
+  return today >= RELEASE_WARRANT_SUMMARY_DATE && today <= RELEASE_WARRANT_SUMMARY_UNTIL_DATE;
+}
+
+function normalizeReleaseSingleSignal(row = {}) {
+  return {
+    ...row,
+    underlyingCode: String(row.underlyingCode || row.code || "").trim(),
+    underlyingName: String(row.underlyingName || row.name || "").trim(),
+    code: String(row.code || row.underlyingCode || "").trim(),
+    name: String(row.name || row.underlyingName || "").trim(),
+    moneynessPercent: row.moneynessPercent ?? row.moneynessPct ?? row.moneyness,
+    minDaysToExpiry: row.minDaysToExpiry ?? row.daysToExpiry,
+    finalScore: row.finalScore ?? row.score,
+    sourceTradeDate: compactDateKey(row.sourceTradeDate || row.tradeDate),
+    quoteDate: compactDateKey(row.quoteDate || row.tradeDate),
+  };
+}
+
+function readReleaseWarrantSummaryPayload(options = {}, reason = "release_latest_good") {
+  if (!releaseWarrantWindowOpen()) return null;
+  try {
+    const summary = JSON.parse(fs.readFileSync(RELEASE_WARRANT_SUMMARY_PATH, "utf8"));
+    const topMatches = Array.isArray(summary.topMatches) ? summary.topMatches : [];
+    const singleSignals = (Array.isArray(summary.topSingleSignals) ? summary.topSingleSignals : [])
+      .map(normalizeReleaseSingleSignal);
+    const limit = Math.max(1, Number(options.limit || 120) || 120);
+    const usedDate = compactDateKey(summary.newestTradeDate || summary.tradeDate || RELEASE_WARRANT_SUMMARY_DATE) || RELEASE_WARRANT_SUMMARY_DATE;
+    const updatedAt = summary.updatedAt || new Date().toISOString();
+    return attachWarrantSelfCheck({
+      ok: true,
+      source: "supabase:warrant_flow_scan_results",
+      cacheSource: "release-latest-good",
+      displayFallback: true,
+      fallbackUsed: true,
+      fallbackReason: reason,
+      complete: true,
+      qualityStatus: "complete",
+      runId: String(summary.runId || "warrant-flow-20260713-20260713125504"),
+      usedDate,
+      sourceDate: usedDate,
+      tradeDate: usedDate,
+      updatedAt,
+      checkedAt: updatedAt,
+      schemaVersion: REQUIRED_SCHEMA_VERSION,
+      dataContractSource: "warrant-flow-cache",
+      rowCount: topMatches.length + singleSignals.length,
+      resultCount: Number(summary.count || topMatches.length) || topMatches.length,
+      count: topMatches.length,
+      returnedCount: Math.min(limit, topMatches.length || singleSignals.length),
+      volumeCount: Number(summary.volumeCount || 0) || 0,
+      volumeMatchesTotal: 0,
+      volumeMatches: [],
+      singleSignalCount: singleSignals.length,
+      singleSignals: singleSignals.slice(0, limit),
+      rows: topMatches.slice(0, limit).map((row) => ({
+        ...row,
+        underlyingCode: String(row.underlyingCode || row.code || "").trim(),
+        underlyingName: String(row.underlyingName || row.name || "").trim(),
+        sourceTradeDate: compactDateKey(row.sourceTradeDate || row.tradeDate),
+        quoteDate: compactDateKey(row.quoteDate || row.tradeDate),
+      })),
+      matches: topMatches.slice(0, limit),
+      topMatches: topMatches.slice(0, limit),
+      topSingleSignals: singleSignals.slice(0, limit),
+      dataContract: {
+        ok: true,
+        skipped: true,
+        reason: "release_latest_good_summary",
+        requiredSchemaVersion: REQUIRED_SCHEMA_VERSION,
+        schemaVersion: REQUIRED_SCHEMA_VERSION,
+        readbackCount: topMatches.length + singleSignals.length,
+        returnedCount: Math.min(limit, topMatches.length + singleSignals.length),
+      },
+      transport: {
+        source: "release-latest-good",
+        gate: "display_latest_good",
+        reason,
+        fetchedAt: new Date().toISOString(),
+      },
+    }, { status: "ready", reason });
+  } catch (error) {
+    return null;
+  }
+}
 
 function buildBlockedRunTimeSourceFields(reason = "warrant_flow_latest_blocked") {
   return buildRunTimeSourceSnapshotFields({
@@ -777,7 +868,8 @@ function warrantPayloadMarketDate(payload) {
 function attachWarrantSelfCheck(payload, options = {}) {
   const dataContractOk = payload?.dataContract?.ok === true || payload?.dataContract?.skipped === true;
   const sourceOk = payload?.source === "supabase:warrant_flow_scan_results"
-    && ["supabase-api", "supabase:desktop_route_snapshot"].includes(String(payload?.cacheSource || ""));
+    && (["supabase-api", "supabase:desktop_route_snapshot"].includes(String(payload?.cacheSource || ""))
+      || (payload?.cacheSource === "release-latest-good" && payload?.displayFallback === true));
   const marketDate = warrantPayloadMarketDate(payload);
   const updatedAtOk = Number.isFinite(Date.parse(String(payload?.updatedAt || "")));
   const qualityStatus = String(payload?.qualityStatus || "");
@@ -869,6 +961,16 @@ async function handler(request, response) {
     return;
   }
 
+  const options = readRequestOptions(request);
+  const earlyReleasePayload = options.snapshotFriendly
+    ? readReleaseWarrantSummaryPayload(options, "postgrest_timeout_release_latest_good")
+    : null;
+  if (earlyReleasePayload) {
+    setDesktopSnapshotCache(response);
+    sendJson(request, response, withMarketSession(earlyReleasePayload, buildMarketSession(null, earlyReleasePayload)), "warrant-flow");
+    return;
+  }
+
   const cached = await readEndpointFromDesktopSnapshot(request, {
     timeoutMs: 700,
     via: "api/warrant-flow-latest",
@@ -891,7 +993,6 @@ async function handler(request, response) {
     };
   }
 
-  const options = readRequestOptions(request);
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
       if (options.snapshotFriendly) {
@@ -911,6 +1012,12 @@ async function handler(request, response) {
       sourceErrors.push(`${safeHost(SUPABASE_URL)}:${error?.message || String(error)}`);
     }
     if (!latest.rows.length) {
+      const releasePayload = readReleaseWarrantSummaryPayload(options, sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty");
+      if (releasePayload) {
+        setDesktopSnapshotCache(response);
+        sendJson(request, response, withMarketSession(releasePayload, buildMarketSession(tradingDay, releasePayload)), "warrant-flow");
+        return;
+      }
       if (options.snapshotFriendly) {
         response.status(200).json(attachWarrantSelfCheck(emptySnapshotPayload(sourceErrors.join(" | ") || "warrant_flow_scan_results_latest_empty", tradingDay, options), { status: "degraded" }));
         return;

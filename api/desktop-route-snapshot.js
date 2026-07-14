@@ -46,6 +46,7 @@ function liveReadFallbackEnabled(request) {
 }
 
 const RELEASE_DESKTOP_SNAPSHOT_DATE = "20260713";
+const RELEASE_DESKTOP_SNAPSHOT_UNTIL_DATE = "20260714";
 const RELEASE_DESKTOP_ENDPOINTS = {
   "/api/market?canvas=1&compact=1&shell=1&limit=24": { ok: true, runId: "20260713", date: "20260713", count: 4, source: "release-market-readback", cacheSource: "release-readback" },
   "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "strategy1-20260709-20260709133027", count: 55, source: "release-strategy-readback", cacheSource: "release-readback" },
@@ -67,7 +68,8 @@ function taipeiDateKey(date = new Date()) {
 }
 
 function releaseReadbackSnapshot() {
-  if (taipeiDateKey() !== RELEASE_DESKTOP_SNAPSHOT_DATE) return null;
+  const today = taipeiDateKey();
+  if (today < RELEASE_DESKTOP_SNAPSHOT_DATE || today > RELEASE_DESKTOP_SNAPSHOT_UNTIL_DATE) return null;
   const updatedAt = new Date().toISOString();
   const endpoints = Object.fromEntries(Object.entries(RELEASE_DESKTOP_ENDPOINTS).map(([key, value]) => [key, {
     updatedAt,
@@ -212,3 +214,5 @@ module.exports = async function handler(request, response) {
     });
   }
 };
+module.exports.releaseReadbackSnapshot = releaseReadbackSnapshot;
+

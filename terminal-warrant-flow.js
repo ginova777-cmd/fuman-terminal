@@ -7,14 +7,16 @@ const WARRANT_FLOW_LEGACY_CACHE_KEY = "fuman-terminal-warrant-flow-valid-cache-v
 const WARRANT_FLOW_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 function normalizeSingleWarrantRows(payload) {
-  return normalizeArray(payload && payload.singleSignals);
+  const rows = normalizeArray(payload && payload.singleSignals);
+  if (rows.length) return rows;
+  return normalizeArray(payload && payload.topSingleSignals);
 }
 
 function isApiWarrantPayload(payload) {
   return Boolean(
     payload &&
     payload.ok !== false &&
-    payload.cacheSource === "supabase-api" &&
+    ["supabase-api", "supabase:desktop_route_snapshot", "release-latest-good", "snapshot-soft-fallback"].includes(payload.cacheSource) &&
     payload.runId &&
     (!payload.dataContract || payload.dataContract.ok === true)
   );
@@ -43,9 +45,13 @@ function normalizeWarrantVolumeRows(payload) {
 
 function applyWarrantFlowSnapshot(payload) {
   if (!isApiWarrantPayload(payload)) return false;
-  const rows = normalizeWarrantVolumeRows(payload);
+  const chipRows = normalizeSingleWarrantRows(payload);
+  let rows = normalizeWarrantVolumeRows(payload);
+  if (!rows.length && chipRows.length) {
+    rows = chipRows;
+    warrantFlowTab = "chip";
+  }
   if (!rows.length) return false;
-  const chipRows = normalizeArray(payload && payload.singleSignals);
   warrantFlowData = rows;
   warrantFlowChipData = chipRows.length ? chipRows : warrantFlowChipData;
   warrantFlowPrioritySignature = "";
@@ -401,10 +407,18 @@ async function loadWarrantFlow(force = false) {
     let payload = await fetchVersionedJson(warrantFlowApiEndpoint(30), 9000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
     let rows = normalizeWarrantVolumeRows(payload);
     warrantFlowChipData = normalizeSingleWarrantRows(payload);
+    if (!rows.length && warrantFlowChipData.length) {
+      rows = warrantFlowChipData;
+      warrantFlowTab = "chip";
+    }
     if (!rows.length || !isApiWarrantPayload(payload)) {
       payload = await fetchVersionedJson(warrantFlowApiEndpoint(120), 10000, (warrantFlowSummary && warrantFlowSummary.updatedAt) || "", force);
       rows = normalizeWarrantVolumeRows(payload);
       warrantFlowChipData = normalizeSingleWarrantRows(payload);
+      if (!rows.length && warrantFlowChipData.length) {
+        rows = warrantFlowChipData;
+        warrantFlowTab = "chip";
+      }
     }
     if (!rows.length || !isApiWarrantPayload(payload)) return;
     applyWarrantFlowSnapshot({ ...(payload || {}), rows, volumeMatches: rows, singleSignals: warrantFlowChipData });
@@ -429,3 +443,4 @@ async function loadWarrantFlow(force = false) {
     },
   };
 })();
+
