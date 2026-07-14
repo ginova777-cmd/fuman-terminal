@@ -236,10 +236,15 @@ function taipeiDateKey(date = new Date()) {
 }
 
 function releaseSourceReports() {
+  const today = taipeiDateKey();
+  const releaseStale = RELEASE_SOURCE_REPORT_DATE < today;
+  const staleReason = releaseStale
+    ? "scorecard_release_source_reports_stale_display_only_previous_good:" + RELEASE_SOURCE_REPORT_DATE + "<" + today
+    : "";
   return RELEASE_SOURCE_REPORTS.map((report) => ({
     ...report,
     statusCode: 200,
-    ok: true,
+    ok: releaseStale ? false : true,
     resultCount: cleanNumber(report.count),
     readbackCount: cleanNumber(report.count),
     expectedTotal: cleanNumber(report.count),
@@ -248,16 +253,22 @@ function releaseSourceReports() {
     source_date: compactDateToIso(report.date) || cleanText(report.date),
     tradeDate: compactDateToIso(report.date) || cleanText(report.date),
     usedDate: compactDateToIso(report.date) || cleanText(report.date),
-    evidenceStatus: "complete",
-    unattendedStatus: "YES",
-    publishAllowed: true,
+    evidenceStatus: releaseStale ? "insufficient" : "complete",
+    unattendedStatus: releaseStale ? "NO" : "YES",
+    publishAllowed: releaseStale ? false : true,
     latestOverwriteAllowed: false,
-    preservePreviousGood: false,
-    fallbackUsed: false,
-    blockedReason: "",
+    preservePreviousGood: releaseStale ? true : false,
+    fallbackUsed: releaseStale ? true : false,
+    fallbackAllowed: releaseStale ? false : true,
+    fallbackScope: releaseStale ? ["release-source-report", "display-only-previous-good"] : [],
+    degradedBlocksLatest: releaseStale ? true : false,
+    latestWriteAttempted: false,
+    latestPointerUpdated: false,
+    blockedReason: releaseStale ? staleReason : "",
+    scanner_block_reason: releaseStale ? staleReason : "",
+    reason: releaseStale ? staleReason : report.reason,
   }));
 }
-
 const LIGHTWEIGHT_SOURCE_REPORTS = [
   { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
