@@ -32,7 +32,7 @@
       "Fuman Strategy3 Battle Verify 1305",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy4 Cache 1600",
-      "Fuman Strategy4 Postscan Closure 1605",
+      "Fuman Strategy4 Source Prewarm 1535",
       "Fuman Strategy5 Cache 2100",
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
@@ -56,7 +56,9 @@
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830"
     ],
-    "expectedDisabledTasks": [],
+    "expectedDisabledTasks": [
+      "Fuman Strategy4 Postscan Closure 1605"
+    ],
     "retiredTasks": [
       "Fuman Auto Main Release 1615",
       "Fuman Daily Health Summary 1545",
@@ -210,6 +212,10 @@
         2147946720,
         -2147020576
       ],
+      "Fuman Strategy4 Source Prewarm 1535": [
+        0,
+        267009
+      ],
       "Fuman Strategy4 Postscan Closure 1605": [
         0,
         267009
@@ -271,6 +277,12 @@
           "strategy4.json"
         ],
         "detail": "covered by later Strategy4 complete receipt"
+      },
+      "Fuman Strategy4 Source Prewarm 1535": {
+        "files": [
+          "strategy4-source-prewarm-latest.json"
+        ],
+        "detail": "Strategy4 source prewarm receipt"
       },
       "Fuman Strategy4 Postscan Closure 1605": {
         "files": [
@@ -570,11 +582,21 @@
       "expectedState": "Ready"
     },
     {
+      "taskName": "\\Fuman Strategy4 Source Prewarm 1535",
+      "displayName": "Fuman Strategy4 Source Prewarm 1535",
+      "description": "Strategy4 source prewarm before 16:00 publish scan.",
+      "time": "15:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "15:35"
+      ]
+    },
+    {
       "taskName": "\\Fuman Strategy4 Postscan Closure 1605",
       "displayName": "Fuman Strategy4 Postscan Closure 1605",
-      "description": "Strategy4 postscan closure verifier: scanner runId must match production API, desktop fast bundle, mobile fragment, and /88 Strategy4 row.",
+      "description": "Retired: Strategy4 terminal chain verification now runs inline inside run-strategy4.ps1 after successful publish.",
       "time": "16:05",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "16:05"
       ]
