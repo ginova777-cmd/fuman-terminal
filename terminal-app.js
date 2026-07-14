@@ -1051,6 +1051,7 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     document.body.dataset.membershipAccess=allowed?"allowed":"locked";
     if(!validToken||!allowed){document.body.dataset.membershipContent="waiting";return false}
     ensureMembershipUnlockedShell(info);
+    purgeProtectedJsonCaches();
     if(probing)return false;
     if(sig===lastProbeSig&&Date.now()-lastProbeAt<3e4&&document.body.dataset.membershipContent==="verified")return true;
     probing=true;
@@ -1058,14 +1059,25 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
       const payload=await fetchJson(`/api/terminal-fast-bundle?membershipProbe=1&t=${Date.now()}`,7e3,{cache:"no-store"});
       const verified=!!payload&&payload.ok!==false&&payload.protected!==true&&!/missing_bearer|membership_required|unauthor/i.test(String(payload.protectedReason||payload.reason||payload.error||""));
       lastProbeAt=Date.now();lastProbeSig=sig;
-      document.body.dataset.membershipContent=verified?"verified":"blocked";
+      document.body.dataset.membershipContent=verified?"verified":"token_unlocked";
       document.body.dataset.membershipProbeAt=String(lastProbeAt);
-      if(!verified)throw new Error(payload?.protectedReason||payload?.reason||payload?.error||"membership_probe_blocked");
-      purgeProtectedJsonCaches();
+      if(!verified){
+        forceProtectedTerminalDataRefresh?.(`membership-token-unlocked:${reason}`);
+        return true;
+      }
       forceProtectedTerminalDataRefresh?.(`membership-content-verified:${reason}`);
       window.dispatchEvent(new CustomEvent("fuman:membership-content-verified",{detail:{reason,at:lastProbeAt}}));
       return true;
     }catch(error){
+      const latest=tokenInfo();
+      if(hasValidToken(latest)&&hasAllowedAccess(latest)){
+        ensureMembershipUnlockedShell(latest);
+        purgeProtectedJsonCaches();
+        document.body.dataset.membershipContent="token_unlocked";
+        forceProtectedTerminalDataRefresh?.(`membership-probe-softfail:${reason}`);
+        recordFrontendError?.("membership-content-probe-softfail",error);
+        return true;
+      }
       document.body.dataset.membershipContent=/401|403|membership|bearer|unauthor/i.test(String(error?.message||error))?"blocked":"probe_error";
       recordFrontendError?.("membership-content-probe",error);
       return false;
@@ -1075,7 +1087,7 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   const schedule=(reason,delay=450)=>setTimeout(()=>probeMembershipContent(reason),delay);
   try{
     const originalSetTerminalAuthState=setTerminalAuthState;
-    setTerminalAuthState=function(...args){const result=originalSetTerminalAuthState.apply(this,args);schedule("auth-state",250);return result};
+    setTerminalAuthState=function(...args){const result=originalSetTerminalAuthState.apply(this,args);ensureMembershipUnlockedShell();schedule("auth-state",250);return result};
   }catch(error){}
   window.addEventListener("focus",()=>schedule("focus",250),{passive:true});
   window.addEventListener("pageshow",()=>schedule("pageshow",350),{passive:true});
