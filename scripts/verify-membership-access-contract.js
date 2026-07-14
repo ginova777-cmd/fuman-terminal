@@ -213,8 +213,17 @@ async function main() {
   requireIncludes("auth.html", "shouldFastRedirectAfterAuth()");
   requireIncludes("auth.html", "google_mobile_fast_redirect");
   requireIncludes("auth.html", "password_mobile_fast_redirect");
+  requireIncludes("auth.html", "function finishSignupSession(session)");
+  requireIncludes("auth.html", "signup_mobile_fast_redirect");
+  requireIncludes("auth.html", "fuman-mobile-member-notice-v1");
+  requireIncludes("auth.html", "註冊完成，請聯繫作者開通權限。");
+  requireIncludes("mobile.html", "function consumeMemberNotice()");
+  requireIncludes("mobile.html", "請聯繫作者開通權限");
   requireIncludes("auth.html", "recovery_mobile_fast_redirect");
   requireIncludes("auth.html", "location.replace(nextUrl || \"/?desktop=1\")");
+
+  const authHtml = read("auth.html");
+  if (/await finishPasswordLogin\(credentials, \"註冊完成/.test(authHtml)) issues.push("forbid signup from calling finishPasswordLogin after signUp session; mobile signup must fast redirect from signUp session");
   requireIncludes("auth.html", "googleAuthorizeUrl()");
   requireIncludes("auth.html", "finishOAuthRedirect()");
   requireIncludes("auth.html", "exchangeCodeForSession(code)");

@@ -627,6 +627,20 @@
         redirectAfterAuth();
       }
 
+      async function finishSignupSession(session) {
+        if (!session) throw new Error("註冊完成但沒有取得 session，請重新登入。");
+        if (shouldFastRedirectAfterAuth()) {
+          persistSessionFast(session, "signup_mobile_fast_redirect");
+          safeSetStorage("fuman-mobile-member-notice-v1", "註冊成功，請聯繫作者開通權限");
+          setStatus("註冊完成，請聯繫作者開通權限。", "good");
+          redirectAfterAuth();
+          return;
+        }
+        const access = await persistSession(session);
+        setStatus(access.allowed ? "註冊完成，會員權限已開通，正在進入終端。" : "註冊完成，請聯繫作者開通權限。", "good");
+        redirectAfterAuth();
+      }
+
       async function finishPasswordRecovery() {
         if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
         let session = (await client.auth.getSession()).data?.session;
@@ -693,7 +707,7 @@
               setStatus("註冊完成，請先完成 Email 驗證；權限開通後即可解鎖策略與成績單。", "good");
               return;
             }
-            await finishPasswordLogin(credentials, "註冊完成，正在進入終端...");
+            await finishSignupSession(session);
             return;
           }
           await finishPasswordLogin(credentials);
