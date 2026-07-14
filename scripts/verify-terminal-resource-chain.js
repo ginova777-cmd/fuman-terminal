@@ -7,8 +7,6 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-resource-chain-audit");
 const NOW = new Date();
 const ROUTE_ALIASES = new Map([
-  ["open-buy", "strategy1"],
-  ["open-buy-latest", "strategy1"],
   ["strategy2-latest", "strategy2"],
   ["strategy3-latest", "strategy3"],
   ["strategy4-latest", "strategy4"],
@@ -37,26 +35,10 @@ const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
 const STRATEGIES = [
   {
-    key: "strategy1",
-    label: "策略1",
-    policy: "latest-complete; non-canvas full API may be blocked until futopt decision ready",
-    endpoint: "/api/open-buy-latest",
-    mobileTab: "strategy1",
-    receiptKey: "open-buy",
-    runView: { table: "v_strategy1_open_buy_latest_complete_run", strategy: "strategy1" },
-    resultTable: "strategy1_open_buy_results",
-    resultStrategy: "strategy1",
-    allowZeroTerminal: true,
-    allowSoftSnapshotFallback: true,
-    allowReceiptDriftWhenDownstreamFresh: true,
-    scorecardKeys: ["strategy1","open-buy","策略1開盤入成績單","策略1"],
-  },
-  {
     key: "strategy2",
     label: "策略2 即時",
     policy: "same-day live",
-    endpoint: "/api/latest-strategy?key=strategy2",
-    directEndpoint: "/api/strategy2-latest",
+    endpoint: "/api/strategy2-latest",
     mobileTab: "strategy2",
     receiptKey: "strategy2",
     runView: { table: "v_strategy2_latest_complete_run", strategy: "strategy2" },

@@ -1,4 +1,3 @@
-const openBuyLatest = require("./open-buy-latest");
 const strategy2Latest = require("./strategy2-latest");
 const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
@@ -92,9 +91,6 @@ function normalizeOpenBuyRow(row) {
   };
 }
 
-async function fetchOpenBuyLatest(base) {
-  return callJson(openBuyLatest, base || {});
-}
 
 function buildStatusEntry(payload, source) {
   return {
@@ -134,7 +130,6 @@ function buildStrategyEvidence(payload) {
 
 function buildHomePayload(base, parts) {
   const now = new Date().toISOString();
-  const openBuy = parts.openBuy || {};
   const strategy2 = parts.strategy2 || {};
   const strategy3 = parts.strategy3 || {};
   const strategy4 = parts.strategy4 || {};
@@ -170,7 +165,6 @@ function buildHomePayload(base, parts) {
   const statusEntries = {
     "institution-latest.json": buildStatusEntry(institution, "supabase:institution_scan_results"),
     "warrant-flow-latest.json": buildStatusEntry(warrant, "supabase:warrant_flow_scan_results"),
-    "open-buy-latest.json": buildStatusEntry(openBuy, "supabase:strategy1_open_buy_results"),
     "strategy2-intraday-latest.json": buildStatusEntry(strategy2, "supabase:strategy2_latest"),
     "strategy3-latest.json": buildStatusEntry(strategy3, "supabase:strategy3_scan_results"),
     "strategy4-latest.json": buildStatusEntry(strategy4, "supabase:strategy4_scan_results"),
@@ -190,15 +184,6 @@ function buildHomePayload(base, parts) {
       entries: statusEntries,
     },
     strategies: {
-      openBuy: {
-        updatedAt: openBuy.updatedAt || openBuy.generatedAt || "",
-        date: openBuy.usedDate || openBuy.date || "",
-        count: countOf(openBuy),
-        top: topRows(openBuy, 12),
-        matches: topRows(openBuy, 60),
-        runId: openBuy.runId || openBuy.transport?.runId || "",
-        gate: openBuy.transport?.gate || "",
-      },
       strategy3: {
         updatedAt: strategy3.updatedAt || strategy3.generatedAt || "",
         date: strategy3.usedDate || strategy3.date || "",
@@ -256,7 +241,6 @@ function buildHomePayload(base, parts) {
       runIds: {
         institution: institution.runId || institution.transport?.runId || "",
         warrant: warrant.runId || warrant.transport?.runId || "",
-        openBuy: openBuy.runId || openBuy.transport?.runId || "",
         strategy2: strategy2.runId || strategy2.transport?.runId || "",
         strategy3: strategy3.runId || strategy3.transport?.runId || "",
         strategy4: strategy4.runId || strategy4.transport?.runId || "",
@@ -287,8 +271,7 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const [openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
-      safeCall("openBuy", () => fetchOpenBuyLatest()),
+    const [strategy2, strategy3, strategy4, strategy5, institution, warrant] = await Promise.all([
       safeCall("strategy2", () => callJson(strategy2Latest, request)),
       safeCall("strategy3", () => callJson(strategy3Latest, request)),
       safeCall("strategy4", () => callJson(strategy4Latest, request)),
@@ -296,7 +279,7 @@ module.exports = async function handler(request, response) {
       safeCall("institution", () => callJson(institutionLatest, request)),
       safeCall("warrant", () => callJson(warrantFlowLatest, request)),
     ]);
-    response.status(200).json(buildHomePayload(null, { openBuy, strategy2, strategy3, strategy4, strategy5, institution, warrant }));
+    response.status(200).json(buildHomePayload(null, { strategy2, strategy3, strategy4, strategy5, institution, warrant }));
   } catch (error) {
     response.status(503).json({
       ok: false,

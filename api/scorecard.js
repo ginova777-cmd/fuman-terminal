@@ -8,7 +8,6 @@ const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_late
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const FORMAL_STRATEGY_ENDPOINTS = {
-  "策略1開盤入成績單": "/api/open-buy-latest?live=1",
   "策略2成績單": "/api/strategy2-latest?live=1",
   "策略3隔日沖成績單": "/api/strategy3-latest?live=1",
   "策略4成績單": "/api/strategy4-latest?live=1",
@@ -18,7 +17,6 @@ const FORMAL_STRATEGY_ENDPOINTS = {
   "CB成績單": "/api/cb-detect-latest?live=1",
 };
 const AUDIT_SURFACES = [
-  ["strategy1", "Strategy1 open-buy", "/api/open-buy-latest?live=1"],
   ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest?live=1"],
   ["strategy3", "Strategy3", "/api/strategy3-latest?live=1"],
   ["strategy4", "Strategy4", "/api/strategy4-latest?live=1"],
@@ -34,7 +32,7 @@ const AUDIT_SURFACES = [
   ["deploy-hygiene", "Deploy hygiene", "/api/release-manifest"],
 ];
 function isRetiredScorecardSurfaceName(value) {
-  return /即時雷達|熱力圖|realtime-radar|heatmap/i.test(cleanText(value));
+  return /即時雷達|熱力圖|realtime-radar|heatmap|strategy1|open-buy|openBuy|open_buy|明日開盤|開盤入/i.test(cleanText(value));
 }
 
 function sanitizeScorecardSourceQuery(sourceQuery = {}) {
@@ -219,7 +217,6 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
 }
 const RELEASE_SOURCE_REPORT_DATE = "20260713";
 const RELEASE_SOURCE_REPORTS = [
-  { key: "strategy1", strategy: "strategy1", endpoint: "/api/open-buy-latest", runId: "strategy1-20260709-20260709133027", count: 55, emittedRows: 55, date: "20260709", reason: "scorecard_release_snapshot" },
   { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", runId: "strategy2-20260713-210234", count: 35, emittedRows: 35, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
@@ -262,7 +259,6 @@ function releaseSourceReports() {
 }
 
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy1", strategy: "strategy1", endpoint: "/api/open-buy-latest", table: "strategy1_open_buy_runs", strategyFilter: "strategy1", order: "finished_at.desc" },
   { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
@@ -470,48 +466,6 @@ function callStrategy3Latest(timeoutMs = 12000) {
       resolve({
         statusCode: 500,
         payload: { ok: false, error: "strategy3_source_report_failed", reason: error?.message || String(error) },
-      });
-    }
-  });
-}
-
-function callStrategy1Latest(timeoutMs = 12000) {
-  return new Promise((resolve) => {
-    let timer = null;
-    try {
-      const handler = require("./open-buy-latest");
-      const query = {
-        canvas: "1",
-        compact: "1",
-        shell: "1",
-        live: "1",
-        limit: "70",
-      };
-      timer = setTimeout(() => resolve({
-        statusCode: 504,
-        payload: { ok: false, error: "strategy1_source_report_timeout" },
-      }), timeoutMs);
-      const finish = (result) => {
-        clearTimeout(timer);
-        resolve(result);
-      };
-      Promise.resolve(handler({
-        method: "GET",
-        url: "/api/open-buy-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
-        headers: { host: "localhost", "x-scorecard-source": "1" },
-        query,
-        fumanInternalVerify: true,
-      }, createCaptureResponse(finish))).catch((error) => {
-        finish({
-          statusCode: 500,
-          payload: { ok: false, error: "strategy1_source_report_failed", reason: error?.message || String(error) },
-        });
-      });
-    } catch (error) {
-      if (timer) clearTimeout(timer);
-      resolve({
-        statusCode: 500,
-        payload: { ok: false, error: "strategy1_source_report_failed", reason: error?.message || String(error) },
       });
     }
   });
@@ -980,99 +934,6 @@ function buildStrategy5SourceReport(result) {
   };
 }
 
-function buildStrategy1SourceReport(result) {
-  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
-  return {
-    key: "strategy1",
-    strategy: "策略1開盤入成績單",
-    endpoint: "/api/open-buy-latest",
-    statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
-    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
-    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
-    expectedTotal: cleanNumber(payload.expectedTotal ?? quality.expectedTotal),
-    scannedCount: cleanNumber(payload.scannedCount ?? quality.scannedCount),
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
-    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-  };
-}
-
-function buildStrategy4SourceReport(result) {
-  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
-  return {
-    key: "strategy4",
-    strategy: "策略4成績單",
-    endpoint: "/api/strategy4-latest",
-    statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
-    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
-    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
-    expectedTotal: cleanNumber(payload.expectedTotal ?? quality.expectedTotal),
-    scannedCount: cleanNumber(payload.scannedCount ?? quality.scannedCount),
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
-    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-  };
-}
-
-function buildInstitutionSourceReport(result) {
-  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
-  return {
-    key: "institution",
-    strategy: "買賣超成績單",
-    endpoint: "/api/institution-latest",
-    statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
-    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
-    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
-    expectedTotal: cleanNumber(payload.expectedTotal ?? quality.expectedTotal),
-    scannedCount: cleanNumber(payload.scannedCount ?? quality.scannedCount),
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
-    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-  };
-}
-
 function buildStrategy2SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
@@ -1392,7 +1253,7 @@ async function withLiveSourceReports(payload) {
       && !isRetiredScorecardSurfaceName(report?.endpoint));
   const releaseReports = releaseSourceReports();
   const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
-  const existingComplete = existingReports.length >= 8 && existingReports.every((report) => !isBlank(report?.runId));
+  const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
   if (releaseComplete && maxSourceReportDate(releaseReports) >= maxSourceReportDate(existingReports)) {
     return alignPayloadDateWithSourceReports(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }

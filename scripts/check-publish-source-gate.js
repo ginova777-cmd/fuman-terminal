@@ -12,7 +12,6 @@ const ALERT_RECEIPT = process.env.FUMAN_PUBLISH_SOURCE_GATE_ALERT_RECEIPT || pat
 const NODE = process.execPath;
 
 const STRATEGIES = [
-  "strategy1",
   "strategy2",
   "strategy3",
   "strategy4",

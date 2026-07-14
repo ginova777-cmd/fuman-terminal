@@ -551,9 +551,7 @@ async function repairStrategy4LatestSnapshot(request, endpoints) {
 
 function isStrategy2SnapshotEndpoint(endpoint) {
   const value = String(endpoint || "");
-  return value.startsWith("/api/strategy2-latest")
-    || value.startsWith("/api/latest-strategy?key=strategy2")
-    || value.startsWith("/api/latest-strategy") && /[?&]key=strategy2(?:&|$)/.test(value);
+  return value.startsWith("/api/strategy2-latest");
 }
 
 function isSoftSnapshotEndpoint(endpoint) {
@@ -801,10 +799,3 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
-
-
-
-
-
-
-

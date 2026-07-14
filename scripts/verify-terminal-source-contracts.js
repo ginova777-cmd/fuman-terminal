@@ -7,8 +7,6 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-source-contracts");
 const STRICT_WARNINGS = process.argv.includes("--strict") || process.env.TERMINAL_SOURCE_CONTRACT_STRICT_WARNINGS === "1";
 const ROUTE_ALIASES = new Map([
-  ["open-buy", "strategy1"],
-  ["open-buy-latest", "strategy1"],
   ["strategy2-latest", "strategy2"],
   ["strategy3-latest", "strategy3"],
   ["strategy4-latest", "strategy4"],
@@ -51,18 +49,6 @@ let expectedQuoteDatePromise = null;
 let currentTradingDayPromise = null;
 
 const CONTRACTS = [
-  {
-    key: "strategy1",
-    label: "strategy1 open-buy",
-    checks: [
-      runTableSelect(
-        "strategy1_open_buy_runs",
-        "strategy1",
-        "run_id,scan_date,run_trade_date,finished_at,status,complete,expected_total,scanned_count,result_count,quality_status,payload"
-      ),
-      resultTable("strategy1_open_buy_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "reason", "decision"]),
-    ],
-  },
   {
     key: "strategy2",
     label: "strategy2 live",

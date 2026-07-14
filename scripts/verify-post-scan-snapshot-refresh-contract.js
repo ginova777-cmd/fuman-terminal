@@ -15,14 +15,6 @@ const {
 
 const TASKS = [
   {
-    key: "strategy1",
-    strategy: "Strategy1",
-    endpoint: "/api/open-buy-latest",
-    modulePath: "../api/open-buy-latest",
-    query: { canvas: "1", compact: "1", shell: "1", limit: "60" },
-    minCount: 1,
-  },
-  {
     key: "strategy3",
     strategy: "Strategy3",
     endpoint: "/api/strategy3-latest",

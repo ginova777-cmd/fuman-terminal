@@ -722,7 +722,6 @@ const runtimeConfig = read("terminal-runtime-config.js");
 const realtimeApi = read("api/realtime.js");
 const realtimeRadarApi = read("api/realtime-radar-latest.js");
 const realtimeRadarCss = read("terminal-realtime-radar.css");
-const openBuyLatestApi = read("api/open-buy-latest.js");
 const latestStrategyApi = read("api/latest-strategy.js");
 const strategy2LatestApi = read("api/strategy2-latest.js");
 const strategy2IntradayScanner = read("scripts/scan-intraday-signals.js");
@@ -732,6 +731,9 @@ const strategy5LatestApi = read("api/strategy5-latest.js");
 const warrantFlowLatestApi = read("api/warrant-flow-latest.js");
 const institutionLatestApi = read("api/institution-latest.js");
 const terminalFastBundleApi = read("api/terminal-fast-bundle.js");
+if (/open-buy-latest|openBuyLatest|repairStrategy1WaitingSnapshot|latest-strategy\?key=strategy2/.test(terminalFastBundleApi)) {
+  issues.push("api/terminal-fast-bundle.js must not include retired open-buy/latest-strategy strategy2 endpoints");
+}
 const desktopRouteSnapshotCache = read("lib/desktop-route-snapshot-cache.js");
 const desktopRouteSnapshotBuilder = read("lib/desktop-route-snapshot-builder.js");
 const terminalHomeApi = read("api/terminal-home.js");
@@ -1604,7 +1606,6 @@ if (/realtimeRadarStaticCache:\s*"\/data\/realtime-radar-latest\.json"/.test(run
   issues.push("terminal-runtime-config.js must not expose realtime radar static cache fallback");
 }
 for (const marker of [
-  "openBuyCache: \"/api/open-buy-latest\"",
   "strategy4Cache: \"/api/strategy4-latest\"",
   "strategy3Cache: \"/api/strategy3-latest\"",
   "strategy5Cache: \"/api/strategy5-latest\"",
@@ -1618,27 +1619,6 @@ if (/legacy-scan-time/.test(strategy4LatestApi) || !/gate: "(run_id|complete-run
 }
 if (/staticFallback|static-fallback|\/data\/strategy4-|strategy4_static|strategy4_scan_results_latest_empty/.test(strategy4LatestApi)) {
   issues.push("api/strategy4-latest.js must be API-only and must not fall back to static strategy4 JSON");
-}
-if (!/api\/open-buy-latest/.test(openBuyLatestApi) || !/strategy1_open_buy_runs/.test(openBuyLatestApi) || !/strategy1_open_buy_results/.test(openBuyLatestApi) || !/v_strategy1_ready_status/.test(openBuyLatestApi) || !/Cache-Control", "no-store/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js must read Strategy1 from Supabase API-only runs/results with decision_ready and no-store headers");
-}
-if (/v_strategy1_open_buy_latest_complete_run|LATEST_RUN_VIEW|latestRunView|latest_run_view/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js must not use legacy latest run view fallback");
-}
-if (/latest-payload/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js must not expose legacy latest-payload gate");
-}
-if (/snapshot-friendly-skip-ready-status/.test(openBuyLatestApi) || /options\.snapshotFriendly\s*\?\s*\{\s*decision_ready:\s*false/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js snapshot/compact path must still read v_strategy1_ready_status and must not bypass decision_ready");
-}
-if (!/snapshotFriendlyPendingPayload/.test(openBuyLatestApi) || !/decision-pending-display/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js compact snapshot response must show latest complete-run candidates when decision_ready is false, with decision-pending metadata");
-}
-if (!/previous_2130_carry_forward/.test(openBuyLatestApi) || !/previous-2130-carry-forward/.test(openBuyLatestApi) || !/21:30 初篩名單/.test(openBuyLatestApi) || !/allowPrevious2130Run/.test(openBuyLatestApi)) {
-  issues.push("api/open-buy-latest.js must carry forward the previous 21:30 Strategy1 complete run during holidays/preopen waits instead of showing an empty waiting snapshot");
-}
-if (!/canvas=1&compact=1&shell=1&limit=60&live=1/.test(runOpenBuy)) {
-  issues.push("run-open-buy.ps1 must verify terminal compact Strategy1 API, not the strict full API, before refreshing desktop snapshot");
 }
 if (/legacy scan_time gate|legacy_scan_time_gate|includeRunId = false|STRATEGY4_SUPABASE_RUN_ID/.test(strategy4Scanner)) {
   issues.push("scan-strategy4-cache.js must hard-fail when run_id complete gate is unavailable, not retry legacy scan_time");
@@ -1784,7 +1764,6 @@ if (!/function\s+liveCompactQuery/.test(desktopRouteSnapshotBuilder) || !/WATCHL
   issues.push("lib/desktop-route-snapshot-builder.js must use live query helpers for post-scan snapshot capture instead of stale CDN/cache reads");
 }
 for (const marker of [
-  '["/api/open-buy-latest", openBuyLatest, liveCompactQuery(60)',
   '["/api/strategy3-latest", strategy3Latest, liveCompactQuery(60)',
   '["/api/strategy4-latest", strategy4Latest, liveCompactQuery(70)',
   '["/api/strategy5-latest", strategy5Latest, liveCompactQuery(140)',
@@ -1818,12 +1797,6 @@ for (const [file, source] of [
 if (!/compactSnapshotEndpoints/.test(terminalFastBundleApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=45, stale-while-revalidate=240"/.test(terminalFastBundleApi)) {
   issues.push("api/terminal-fast-bundle.js must compact desktop snapshot payloads and keep enough edge cache for cold-start route switching");
 }
-if (!/isEmptyStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
-  || !/repairStrategy1WaitingSnapshot/.test(terminalFastBundleApi)
-  || !/strategy1-previous-2130-carry-forward/.test(terminalFastBundleApi)
-  || !/strategy1Previous2130Repair/.test(terminalFastBundleApi)) {
-  issues.push("api/terminal-fast-bundle.js must repair stale Strategy1 holiday/preopen waiting snapshots with the previous 21:30 carry-forward run");
-}
 if (!/function\s+setStrategy2LiveShellCache/.test(strategy2LatestApi) || !/Vercel-CDN-Cache-Control",\s*"public, max-age=12, stale-while-revalidate=30"/.test(strategy2LatestApi)) {
   issues.push("api/strategy2-latest.js must micro-cache desktop shell live payloads so Strategy2 keeps realtime without cold-start stalls");
 }
@@ -1842,11 +1815,10 @@ if (!/require\("\.\/strategy2-latest"\)/.test(terminalHomeApi) || !/callJson\(st
 if (!/STRATEGY2_HEALTH_ENDPOINT\s*=\s*"\/api\/strategy2-latest\?top=1&compact=1&limit=50&live=1"/.test(mobileHealthVerifier) || /strategy2\?top=1/.test(mobileHealthVerifier)) {
   issues.push("scripts/verify-mobile-health.js must probe the direct Strategy2 live API and must not build malformed latest-strategy query strings");
 }
-if (!/strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow/.test(runIdCompleteGate) || /RUN_GATE_OPTIONAL \|\| "strategy2"/.test(runIdCompleteGate)) {
+if (!/strategy2,strategy3,strategy4,strategy5,institution,warrant_flow/.test(runIdCompleteGate) || !/RUN_GATE_STRICT \|\| "strategy2"/.test(runIdCompleteGate) || /RUN_GATE_OPTIONAL \|\| "strategy2"/.test(runIdCompleteGate)) {
   issues.push("verify-run-id-complete-gates.js must require strategy2 as a strict complete-run gate by default");
 }
 for (const marker of [
-  "/api/open-buy-latest",
   "/api/strategy4-latest",
   "/api/strategy3-latest",
   "/api/strategy5-latest",
@@ -1856,9 +1828,6 @@ for (const marker of [
   if (!terminalLiveCheck.includes(marker) && !runtimeConfig.includes(marker)) {
     issues.push(`frontend source missing complete-run/no-store polling endpoint ${marker}`);
   }
-}
-if (!/loadOpenBuySupabasePayload/.test(terminalApp) || !/api\/open-buy-latest/.test(terminalApp)) {
-  issues.push("terminal-app.js must poll api/open-buy-latest before static open-buy fallback");
 }
 if (!/pollCompleteRunUpdates/.test(terminalLiveCheck) || !/installCompleteRunPollingManager/.test(terminalApp) || !/installStrategy3ApiRunPolling/.test(terminalApp)) {
   issues.push("frontend must keep unified complete-run polling manager for API no-store auto updates, including strategy3 API run polling");
@@ -2933,8 +2902,6 @@ for (const marker of [
   "cb",
   "warrant",
   "realtime-radar",
-  "/api/open-buy-latest",
-  "/api/latest-strategy?key=strategy2",
   "/api/strategy2-latest",
   "/api/strategy3-latest",
   "/api/strategy4-latest",
@@ -3435,6 +3402,3 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
-
-
-

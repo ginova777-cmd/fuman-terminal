@@ -16,8 +16,8 @@
   const MEMBER_STRATEGY_PREVIEW_PREFIX = "FUMAN_MEMBER_STRATEGY_PREVIEW:";
   const MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const MEMBER_STRATEGY_PREVIEW_MAX_CHARS = 900000;
-  const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
-  const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const SNAPSHOT_ROUTES = ["strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
+  const API_ONLY_STRATEGY_ROUTES = ["strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
   const MARKET_ROUTE = "market|市場總覽";
   const REALTIME_RADAR_ROUTE = "";
@@ -40,7 +40,6 @@
   const HOVER_WARM_IDLE_MS = 780;
   const CLICK_WARM_IDLE_MS = 980;
   const CANVAS_ENDPOINTS = {
-    "strategy|策略1": "/api/open-buy-latest",
     "strategy|策略2": "/api/strategy2-latest",
     "strategy|策略3": "/api/strategy3-latest",
     "strategy|策略4": "/api/strategy4-latest",
@@ -52,7 +51,6 @@
   };
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
-    "strategy|策略1": { limit: 60, ttl: 18000 },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
     "strategy|策略4": { limit: 70, ttl: 24000 },
@@ -226,7 +224,7 @@
   function installMemberBearerFetchBridge20260714() {
     if (window.fetch?.__fumanMemberBearerBridge20260714) return;
     const originalFetch = window.fetch.bind(window);
-    const protectedApiPattern = /^\/api\/(?:open-buy-latest|strategy[2-5]-latest|terminal-fast-bundle|institution-latest|institution-tdcc-breakout-latest|cb-detect-latest|warrant-flow-latest|mobile-boot|mobile-fragment)\b/;
+    const protectedApiPattern = /^\/api\/(?:strategy[2-5]-latest|terminal-fast-bundle|institution-latest|institution-tdcc-breakout-latest|cb-detect-latest|warrant-flow-latest|mobile-boot|mobile-fragment)\b/;
     const runtimeAuthKey = window.FUMAN_RUNTIME_CONFIG?.authCacheKey || "fuman-terminal-auth-cache-v1";
     const tokenKeys = [runtimeAuthKey, "fuman-terminal-auth-cache-v1"];
 
@@ -372,7 +370,6 @@
   }
 
   function savedStrategyRouteName(key) {
-    if (key === "strategy|策略1") return "open_buy";
     if (key === "strategy|策略2") return "intraday_2m";
     if (key === "strategy|策略3") return "strategy3";
     if (key === "strategy|策略4") return "swing_radar";
@@ -398,7 +395,6 @@
     if (Date.now() - cleanNumber(route.at) > 7 * 24 * 60 * 60 * 1000) return "";
     if (route.viewName === "strategy") {
       const strategy = String(route.strategyRoute || "");
-      if (strategy === "open_buy") return "strategy|策略1";
       if (strategy === "intraday_2m") return "strategy|策略2";
       if (strategy === "strategy3") return "strategy|策略3";
       if (strategy === "swing_radar") return "strategy|策略4";
@@ -633,7 +629,6 @@
     const samples = [];
     const routes = [
       "market|市場總覽",
-      "strategy|策略1",
       "strategy|策略2",
       "strategy|策略3",
       "strategy|策略4",
@@ -764,7 +759,6 @@
     const text = (typeof link === "string" ? link : link?.textContent || "").replace(/\s+/g, " ").trim();
     if (typeof link !== "string" && !isStrategyLink(link)) return "";
     const explicitRoute = typeof link === "string" ? "" : String(link?.dataset?.strategyRoute || "");
-    if (explicitRoute === "open_buy") return "strategy|策略1";
     if (explicitRoute === "intraday_2m") return "strategy|策略2";
     if (explicitRoute === "strategy3") return "strategy|策略3";
     if (explicitRoute === "swing_radar") return "strategy|策略4";
@@ -773,7 +767,7 @@
     if (text.includes("隔日") || text.includes("strategy3")) return "strategy|策略3";
     if (text.includes("波段") || text.includes("swing_radar")) return "strategy|策略4";
     if (text.includes("綜合") || text.includes("strategy5")) return "strategy|策略5";
-    if (text.includes("策略1")) return "strategy|策略1";
+    if (/策略1|明日開盤|開盤入/.test(text)) return "";
     if (text.includes("策略2")) return "strategy|策略2";
     if (text.includes("策略3")) return "strategy|策略3";
     if (text.includes("策略4")) return "strategy|策略4";
@@ -828,14 +822,7 @@
     const text = typeof linkOrKey === "string"
       ? linkOrKey
       : (linkOrKey?.textContent || "").replace(/\s+/g, " ").trim();
-    if (text.includes("策略1")) {
-      return {
-        icon: "⚡",
-        title: "策略1-明日開盤入",
-        badge: "FMN://strategy.open-buy",
-        summary: "08:46 期貨初動；08:55 期現試撮；08:58~08:59 終判，分層顯示不混成單一 BUY。",
-      };
-    }
+    if (/策略1|明日開盤|開盤入/.test(text)) return { icon: "", title: "", badge: "", summary: "" };
     if (text.includes("策略2")) {
       return {
         icon: "◔",
@@ -1936,14 +1923,7 @@
     if (isStrategy2Route(route)) {
       return Boolean(strategy2UndrawableReason(payload));
     }
-    if (route !== "strategy|策略1") return false;
-    if (routePayloadHasDrawableRows(payload)) return false;
-    const reason = String(payload.reason || payload.error || payload.detail || payload.qualityStatus || "").toLowerCase();
-    const decisionReady = payload.decisionReady ?? payload.meta?.decision_ready;
-    return decisionReady === false
-      || reason.includes("not_ready")
-      || reason.includes("waiting_snapshot")
-      || reason.includes("futopt_not_ready");
+    return false;
   }
 
   function routeEmptyStateFromPayload(payload, route = "") {
@@ -7052,7 +7032,7 @@
   }
 
   function unifiedListKind(route) {
-    if (String(route || "").includes("策略1")) return "strategy1";
+    if (String(route || "").includes("策略1")) return "generic";
     if (isStrategy3Route(route)) return "strategy3";
     if (isStrategy4Route(route)) return "strategy4";
     if (isStrategy5Route(route)) return "strategy5";
@@ -7179,10 +7159,6 @@
 
   function optionPatternsForKey(key) {
     return ({
-      s1_2130: [/s1_2130|21:30|初篩|candidate|開盤/i],
-      s1_0845: [/s1_0845|08:45|0845|個股期貨|futopt|future/i],
-      s1_0855: [/s1_0855|08:55|0855|搓合|preopen|auction/i],
-      s1_buy: [/s1_buy|\bBUY\b|買進|開盤入|無腦入/i],
       s3_tail: [/尾盤|13:00|12:59|帶量/],
       s3_base: [/基態|base/i],
       s3_control: [/控盤|control/i],
@@ -7435,20 +7411,6 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     `;
   }
 
-  function strategy1OptionCards(rows) {
-    const defs = [
-      { key: "s1_2130", label: "21:30 初篩", patterns: [/s1_2130|21:30|初篩|candidate/i] },
-      { key: "s1_0845", label: "08:45 個股期貨", patterns: [/s1_0845|08:45|個股期貨|futopt/i] },
-      { key: "s1_0855", label: "08:55 搓合確認", patterns: [/s1_0855|08:55|搓合|preopen/i] },
-      { key: "s1_buy", label: "BUY 候選", patterns: [/s1_buy|\bBUY\b|買進|開盤入|無腦入/i] },
-    ];
-    const list = Array.isArray(rows) ? rows : [];
-    return cardsFromCounts(defs.map((item) => {
-      const stageCount = list.filter((row) => row?.stageKey === item.key).length;
-      return { ...item, count: stageCount || countRowsByText(rows, item.patterns) };
-    }), "Strategy1 關卡");
-  }
-
   function strategy3OptionCards(rows) {
     const defs = [
       { key: "s3_tail", label: "尾盤帶量", patterns: [/尾盤|13:00|12:59|帶量/] },
@@ -7526,7 +7488,6 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     if (isStrategy4Route(route)) return strategy4OptionCards(rows);
     if (isStrategy5Route(route)) return strategy5OptionCards(rows);
     if (isStrategy3Route(route)) return strategy3OptionCards(rows);
-    if (String(route || "").includes("策略1")) return strategy1OptionCards(rows);
     if (isChipTradeRoute(route)) return institutionOptionCards(rows);
     if (isCbDetectRoute(route)) return cbOptionCards(rows);
     if (isWarrantFlowRoute(route)) return warrantOptionCards(rows);

@@ -11,19 +11,6 @@ const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--route
 
 const ROUTES = [
   {
-    key: "strategy1",
-    label: "策略1",
-    endpoint: "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1",
-    allowZeroWhen: (payload) => payload?.decisionReady === false || /not_ready|waiting|pending/i.test(`${payload?.error || ""} ${payload?.reason || ""} ${payload?.detail || ""}`),
-    groups: [
-      ["代號", ["code", "symbol", "stockId", "stock_id"]],
-      ["名稱", ["name", "stockName", "stock_name"]],
-      ["價格", ["price", "close", "lastPrice", "latestClose"]],
-      ["量能", ["volume", "tradeVolume", "totalVolume", "volumeLots"]],
-      ["條件/原因", ["reason", "decision", "signals", "tags", "description"]],
-    ],
-  },
-  {
     key: "strategy2",
     label: "策略2即時",
     endpoint: "/api/strategy2-latest?compact=1&limit=60&live=1",

@@ -51,7 +51,7 @@ function todayTaipei() {
 }
 
 const expectedDate = process.env.RUN_GATE_DATE || todayTaipei();
-const allGateStrategies = "strategy1,strategy2,strategy3,strategy4,strategy5,institution,warrant_flow";
+const allGateStrategies = "strategy2,strategy3,strategy4,strategy5,institution,warrant_flow";
 const strictStrategies = new Set(String(process.env.RUN_GATE_STRICT || "strategy2").split(",").map((item) => item.trim()).filter(Boolean));
 const optionalStrategies = new Set(String(process.env.RUN_GATE_OPTIONAL || "").split(",").map((item) => item.trim()).filter(Boolean));
 // Only live routes should require same-day data by default. Complete-scan routes
@@ -59,7 +59,6 @@ const optionalStrategies = new Set(String(process.env.RUN_GATE_OPTIONAL || "").s
 const dateStrictStrategies = new Set(String(process.env.RUN_GATE_DATE_STRICT || "strategy2").split(",").map((item) => item.trim()).filter(Boolean));
 
 const gates = [
-  { key: "strategy1", view: "v_strategy1_open_buy_latest_complete_run" },
   { key: "strategy2", view: "v_strategy2_latest_complete_run" },
   { key: "strategy3", view: "v_strategy3_latest_complete_run" },
   { key: "strategy4", table: "strategy4_scan_runs" },
