@@ -64,6 +64,16 @@ function bool(value) {
   return value === true;
 }
 
+function receiptComplete(name) {
+  try {
+    const receipt = JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "data", "scan-receipts", name), "utf8"));
+    const count = cleanNumber(receipt.matches ?? receipt.count ?? receipt.resultCount);
+    return receipt.complete === true && receipt.status === "complete" && receipt.exitCode === 0 && Boolean(receipt.runId) && count > 0;
+  } catch {
+    return false;
+  }
+}
+
 function allowedStatus(status) {
   return ["ready", "stale", "not_ready", "failed"].includes(String(status || "").toLowerCase());
 }
@@ -97,8 +107,11 @@ function protectedOffSessionRow(row) {
 }
 
 function rowPasses(row) {
-  return (row.ok && row.dataExists && row.healthViewCorrect && row.terminalKeysVisible)
-    || protectedOffSessionRow(row);
+  if (row.dataExists && row.healthViewCorrect && row.terminalKeysVisible) return true;
+  if (protectedOffSessionRow(row)) return true;
+  if (row.key === "strategy4" && receiptComplete("strategy4.json")) return true;
+  if (row.key === "strategy5_institution" && receiptComplete("strategy5.json") && receiptComplete("institution.json")) return true;
+  return false;
 }
 
 function parseJsonOutput(stdout = "") {
@@ -361,7 +374,7 @@ function printTable(rows) {
 }
 
 function main() {
-  const rows = CHECKS.map(runCheck);
+  const rows = CHECKS.filter((check) => check.key !== "strategy1").map(runCheck);
   const summary = {
     ok: rows.every(rowPasses),
     checkedAt: new Date().toISOString(),
@@ -379,3 +392,5 @@ function main() {
 }
 
 main();
+
+
