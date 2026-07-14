@@ -529,6 +529,7 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
 
 foreach ($name in ($policy.Tasks.Keys | Sort-Object)) {
   $entry = $policy.Tasks[$name]
+  if ($policy.Retired.ContainsKey($name) -or (Test-RetiredPattern $policy $name)) { continue }
   if ($entry.ExpectedState -eq "Disabled") { continue }
   if (-not $present.ContainsKey($name)) {
     $rows += [pscustomobject]@{

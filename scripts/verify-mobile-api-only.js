@@ -167,7 +167,9 @@ function checkMobileShell() {
   requireText(mobile, "mobile-watch-v2-add-recovery-20260628-01", "mobile watchlist V2 must recover valid adds that get stuck at confirming without rendering cards");
   requireText(mobile, "mobile-watch-v2-stuck-status-recovery-20260628-01", "mobile watchlist V2 must recover manual adds stuck on the confirming status text");
   requireText(mobile, "event.composedPath", "mobile watchlist V2 click bridge must detect button clicks through composedPath");
-  requireText(mobile, "mobile-tab-request-lock-20260628-01", "mobile tabs must keep the request-lock loader so old fragment loads cannot overwrite the newest tab");
+  requireText(mobile, "mobile-tab-request-lock-retired-20260714-01", "mobile tabs must retire the old unauthenticated request-lock loader");
+  rejectText(mobile, "data-mobile-tab-loading", "mobile shell must not show the old visible loading placeholder");
+  rejectText(mobile, "載入中。", "mobile shell must not show the old visible loading text");
   requireText(mobile, "/api/mobile-watch-meta?code=", "mobile watchlist must validate one stock code through the small meta API before static fallback");
   requireText(mobile, "MutationObserver", "mobile watchlist V2 must guard against the legacy watch renderer overwriting cards");
   requireText(mobile, "callback=", "mobile watchlist V2 must keep JSONP fallback when fetch is unavailable");

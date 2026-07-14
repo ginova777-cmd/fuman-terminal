@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>輔滿極速手機版</title><script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-07&membership-lock=20260713-11"></script><link rel="preload" href="/api/mobile-boot" as="fetch"><style>:root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--blue:#74a7ff}html[data-sun="1"]{color-scheme:light;--bg:#f7f9ff;--panel:#fff;--line:#cbd6e6;--text:#142033;--muted:#5b6b82;--blue:#1763c7}
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>輔滿極速手機版</title><script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-08&membership-lock=20260713-11"></script><link rel="preload" href="/api/mobile-boot" as="fetch"><style>:root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--blue:#74a7ff}html[data-sun="1"]{color-scheme:light;--bg:#f7f9ff;--panel:#fff;--line:#cbd6e6;--text:#142033;--muted:#5b6b82;--blue:#1763c7}
     *{box-sizing:border-box}
     html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif}
     body{padding:12px;line-height:1.45;letter-spacing:0}
@@ -530,60 +530,7 @@ async function loadFragment(k,force=false){const m=memberAccess(boot);if(k==="me
   self.FUMAN_MOBILE_WATCH_ADD_RECOVERY = "mobile-watch-v2-add-recovery-20260628-01";
   self.FUMAN_MOBILE_WATCH_STUCK_STATUS_RECOVERY = "mobile-watch-v2-stuck-status-recovery-20260628-01";
 })();
-</script><script data-mobile-tab-loader="mobile-tab-request-lock-20260628-01">
-(() => {
-  const tabs = document.querySelector("#tabs");
-  const content = document.querySelector("#content");
-  if (!tabs || !content) return;
-  let requestId = 0;
-  const code = (value) => String(value || "").replace(/[^\w-]/g, "");
-  const jsonpHtml = (url) => new Promise((resolve, reject) => {
-    const callback = `__fm_tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement("script");
-    const cleanup = () => {
-      delete self[callback];
-      script.remove();
-    };
-    self[callback] = (payload) => {
-      cleanup();
-      resolve(payload?.html || "");
-    };
-    script.onerror = () => {
-      cleanup();
-      reject(Error("mobile tab jsonp failed"));
-    };
-    script.src = `${url}${url.includes("?") ? "&" : "?"}callback=${callback}`;
-    document.head.appendChild(script);
-  });
-  const fetchHtml = async (tab) => {
-    const url = `/api/mobile-fragment?tab=${encodeURIComponent(tab)}&v=${Date.now()}`;
-    if (!self.fetch) return jsonpHtml(url);
-    const response = await fetch(url, { cache: "no-store", headers: { "Cache-Control": "no-cache" } });
-    if (!response.ok) throw Error(`HTTP ${response.status}`);
-    return response.text();
-  };
-  window.addEventListener("click", (event) => {
-    const button = event.target.closest?.("#tabs button[data-fragment]");
-    if (!button) return;
-    const tab = code(button.dataset.fragment);
-    if (!tab || tab === "watch") return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    const current = ++requestId;
-    tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
-    content.innerHTML = `<div class="empty-state" data-mobile-tab-loading="${tab}">載入中。</div>`;
-    fetchHtml(tab).then((html) => {
-      if (current !== requestId) return;
-      content.innerHTML = html || '<div class="empty-state">等待最新 complete run。</div>';
-    }).catch(() => {
-      if (current !== requestId) return;
-      content.innerHTML = '<div class="empty-state">暫時無法取得，請重新整理。</div>';
-    });
-  }, true);
-  self.FUMAN_MOBILE_TAB_REQUEST_LOCK = "mobile-tab-request-lock-20260628-01";
-})();
-</script><script data-mobile-watch-rescue="mobile-watch-v2-rescue-render-20260628-01">
+</script><script data-mobile-tab-loader-retired="mobile-tab-request-lock-retired-20260714-01">self.FUMAN_MOBILE_TAB_REQUEST_LOCK="retired-mobile-tab-request-lock-20260714-01";</script><script data-mobile-watch-rescue="mobile-watch-v2-rescue-render-20260628-01">
 (() => {
   const HOTFIX = "mobile-watch-v2-direct-render-20260628-04";
   const KEY = "fuman_watchlist";
