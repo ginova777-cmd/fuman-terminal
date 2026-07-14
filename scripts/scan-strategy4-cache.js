@@ -158,6 +158,30 @@ function writeSupabaseStatus(ok, details = {}) {
   });
 }
 
+function refreshStrategy4PublishGate() {
+  if (process.env.STRATEGY4_SKIP_PUBLISH_GATE_REFRESH === "1") {
+    return { ok: true, skipped: true, exitCode: 0 };
+  }
+  const result = spawnSync(process.execPath, [
+    "--use-system-ca",
+    path.join(ROOT, "scripts", "verify-supabase-publish-hard-gate.js"),
+    "--strategy=strategy4",
+  ], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      FUMAN_SUPABASE_PUBLISH_GATE_FILE: STRATEGY4_PUBLISH_GATE_FILE,
+    },
+  });
+  return {
+    ok: result.status === 0,
+    skipped: false,
+    exitCode: result.status,
+    stdout: String(result.stdout || "").split(/\r?\n/).filter(Boolean).slice(-5).join(" | ").slice(0, 1000),
+    stderr: String(result.stderr || "").split(/\r?\n/).filter(Boolean).slice(-5).join(" | ").slice(0, 1000),
+  };
+}
 function readStrategy4PublishGate() {
   const payload = readJson(STRATEGY4_PUBLISH_GATE_FILE, null);
   if (!payload || typeof payload !== "object") return null;
@@ -167,8 +191,12 @@ function readStrategy4PublishGate() {
 }
 
 function assertStrategy4PublishGate() {
+  const refresh = refreshStrategy4PublishGate();
   const gate = readStrategy4PublishGate();
   const issues = [];
+  if (!refresh.ok) {
+    issues.push(`publish gate refresh failed exit=${refresh.exitCode}: ${refresh.stderr || refresh.stdout || "no output"}`);
+  }
   if (!gate) {
     issues.push(`missing Strategy4 publish hard gate file ${STRATEGY4_PUBLISH_GATE_FILE}`);
   } else {
@@ -189,7 +217,7 @@ function assertStrategy4PublishGate() {
   if (issues.length) {
     throw new Error(`Strategy4 publish hard gate failed: ${issues.join("; ")}`);
   }
-  return gate;
+  return { ...gate, refresh };
 }
 
 function hasOwnObjectField(object, field) {

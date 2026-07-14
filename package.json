@@ -279,6 +279,7 @@
     "verify:strategy5-independence": "node --use-system-ca scripts/verify-strategy5-independence.js",
     "verify:strategy5-branch-flow": "node --use-system-ca scripts/verify-strategy5-branch-flow-coverage.js",
     "verify:strategy4-88-data-chain": "node --use-system-ca scripts/verify-strategy4-88-data-chain.js",
+    "strategy4:source-prewarm": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./run-strategy4-source-prewarm.ps1",
     "verify:full-scan-date-preflight": "node --use-system-ca scripts/verify-full-scan-date-preflight.js",
     "full-scan:date-preflight": "node --use-system-ca scripts/check-full-scan-date-preflight.js --receipt",
     "verify:market-ai-index-report": "node scripts/verify-market-ai-index-report.js",

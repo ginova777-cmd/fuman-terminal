@@ -144,6 +144,73 @@ function Invoke-Strategy4SourceRepair {
   }
 }
 
+
+function Test-Strategy4PrewarmReceiptReady {
+  $receiptPath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-source-prewarm-latest.json"
+  if (-not (Test-Path -LiteralPath $receiptPath)) {
+    Write-Log "Strategy4 source prewarm receipt not found: $receiptPath"
+    return $false
+  }
+  try {
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+  } catch {
+    Write-Log "Strategy4 source prewarm receipt unreadable: $($_.Exception.Message)"
+    return $false
+  }
+  try {
+    $tz = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+    $today = ([TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)).ToString("yyyy-MM-dd")
+  } catch {
+    $today = (Get-Date).ToString("yyyy-MM-dd")
+  }
+  $tradeDate = [string]$receipt.tradeDate
+  $ageOk = $false
+  try {
+    $finished = [DateTimeOffset]::Parse([string]$receipt.finishedAt)
+    $ageOk = (([DateTimeOffset]::Now - $finished).TotalHours -le 3)
+  } catch {
+    $ageOk = $false
+  }
+  $ready = ($receipt.ok -eq $true -and [string]$receipt.status -eq "complete" -and $receipt.sourceReady -eq $true -and $tradeDate -eq $today -and $ageOk)
+  Write-Log "Strategy4 source prewarm receipt ready=$ready tradeDate=$tradeDate today=$today sourceReady=$($receipt.sourceReady) ageOk=$ageOk reason=$($receipt.reason)"
+  return $ready
+}
+
+function Invoke-Strategy4InlineTerminalVerify {
+  param([string]$RunId)
+  if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 inline terminal verify missing runId" }
+  $outDir = Join-Path $RuntimeRoot "outputs\strategy4-88-data-chain"
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+  Push-Location $repo
+  try {
+    $previousRunId = $env:EXPECTED_STRATEGY4_RUN_ID
+    $previousRoot = $env:FUMAN_TERMINAL_ROOT
+    $previousRuntime = $env:FUMAN_RUNTIME_DIR
+    $previousAuditBase = $env:FUMAN_AUDIT_BASE_URL
+    try {
+      $env:EXPECTED_STRATEGY4_RUN_ID = $RunId
+      $env:FUMAN_TERMINAL_ROOT = $repo
+      $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+      $env:FUMAN_AUDIT_BASE_URL = "https://fuman-terminal.vercel.app"
+      Write-Log "Strategy4 inline terminal chain verify start runId=$RunId"
+      & npm.cmd run verify:strategy4-88-data-chain -- --out=$outDir *>&1 | Tee-Object -FilePath $log -Append
+      $verifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+      if ($verifyExit -ne 0) { throw "strategy4 terminal chain verifier exit=$verifyExit" }
+      $reportPath = Join-Path $outDir "strategy4-88-data-chain.json"
+      $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+      if ($report.ok -ne $true) { throw "strategy4 terminal chain verifier ok=false issues=$($report.issues | ConvertTo-Json -Compress)" }
+      if ([string]$report.runId -ne $RunId) { throw "strategy4 terminal chain runId mismatch expected=$RunId actual=$($report.runId)" }
+      Write-Log "Strategy4 inline terminal chain verify ok runId=$RunId resultCount=$($report.resultCount) readbackCount=$($report.readbackCount)"
+    } finally {
+      if ($null -ne $previousRunId) { $env:EXPECTED_STRATEGY4_RUN_ID = $previousRunId } else { Remove-Item Env:EXPECTED_STRATEGY4_RUN_ID -ErrorAction SilentlyContinue }
+      if ($null -ne $previousRoot) { $env:FUMAN_TERMINAL_ROOT = $previousRoot } else { Remove-Item Env:FUMAN_TERMINAL_ROOT -ErrorAction SilentlyContinue }
+      if ($null -ne $previousRuntime) { $env:FUMAN_RUNTIME_DIR = $previousRuntime } else { Remove-Item Env:FUMAN_RUNTIME_DIR -ErrorAction SilentlyContinue }
+      if ($null -ne $previousAuditBase) { $env:FUMAN_AUDIT_BASE_URL = $previousAuditBase } else { Remove-Item Env:FUMAN_AUDIT_BASE_URL -ErrorAction SilentlyContinue }
+    }
+  } finally {
+    Pop-Location
+  }
+}
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
@@ -242,7 +309,11 @@ try {
     Write-Strategy4Receipt "failed" $contractExit $false 0 "" @("contract verification exit code $contractExit") "critical scan failed during contract verification"
     exit $contractExit
   }
-  Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
+  $prewarmReceiptReady = Test-Strategy4PrewarmReceiptReady
+  if ($prewarmReceiptReady) {
+    Write-Log "Strategy4 source prewarm receipt ready for today; skipping in-scan heavy prewarm."
+  } else {
+    Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
   $previousPrewarmBatchSize = $env:STRATEGY4_PREWARM_BATCH_SIZE
   $previousPrewarmBatches = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
   $previousPrewarmSleep = $env:STRATEGY4_PREWARM_SLEEP_MS
@@ -275,6 +346,7 @@ try {
     exit $prewarmExit
   }
   Write-Log "=== Strategy4 Supabase daily volume cache prewarm end $(Get-Date) ==="
+  }
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
   $scanExit = $LASTEXITCODE
 } finally {
@@ -335,7 +407,8 @@ try {
       scanStamp = $strategy4Stamp
       ok = $true
     }
-    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete")
+    Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
+    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete; inline terminal chain verified")
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
     exit 0
@@ -347,8 +420,15 @@ try {
 }
 
 Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
+try {
+  Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
+} catch {
+  Write-Log "Strategy4 inline terminal chain verification failed: $($_.Exception.Message)"
+  Write-Strategy4Receipt "failed" 1 $false 0 ([string]$strategy4Output.runId) @($_.Exception.Message) "critical scan failed during inline terminal chain verification"
+  exit 1
+}
 
-Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId)
+Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) @("inline terminal chain verified")
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
 
 
