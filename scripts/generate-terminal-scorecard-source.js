@@ -77,6 +77,10 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
+function isRetiredScorecardStrategy(value) {
+  return /即時雷達|熱力圖|realtime-radar|heatmap|strategy1|open-buy|openBuy|open_buy|明日開盤|開盤入/i.test(cleanText(value));
+}
+
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
@@ -1013,7 +1017,9 @@ async function main() {
   const finalBatchLatestDate = scorecardRecords.map((row) => row.record_date).filter(Boolean).sort().at(-1) || latestDate;
   latestDate = tradingDay.isTradingDay ? finalBatchLatestDate : (sourceLatestDate || finalBatchLatestDate);
   const filtered = await enrichWithQuoteHighs(scorecardRecords.map((row) => alignRecordDate(row, latestDate)));
-  const daily = summarize(filtered);
+  const activeFiltered = filtered.filter((row) => !isRetiredScorecardStrategy(`${row.strategy || ""} ${row.source || ""} ${row.endpoint || ""}`));
+  const activeReports = reports.filter((report) => !isRetiredScorecardStrategy(`${report.key || ""} ${report.strategy || ""} ${report.endpoint || ""}`));
+  const daily = summarize(activeFiltered);
   const payload = {
     ok: true,
     source: "terminal-complete-run-scorecard",
@@ -1040,10 +1046,10 @@ async function main() {
       followupPositiveGrowthRule: "close_or_high_T+7 > entry_price",
     },
     days: 1,
-    records: filtered,
+    records: activeFiltered,
     summary: {
       latestDate,
-      rows: filtered.length,
+      rows: activeFiltered.length,
       daily,
       byStrategy: daily.map((row) => ({
         strategy: row.strategy,
@@ -1055,7 +1061,7 @@ async function main() {
         pnl: row.total_pnl,
       })),
     },
-    sourceReports: reports,
+    sourceReports: activeReports,
   };
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   const writeDecision = scorecardCurrentWriteDecision(payload, OUT_FILE);
@@ -1065,9 +1071,9 @@ async function main() {
       ok: true,
       out: OUT_FILE,
       latestDate,
-      rows: filtered.length,
+      rows: activeFiltered.length,
       dailyRows: daily.length,
-      reports,
+      reports: activeReports,
       currentWriteAllowed: false,
       previousGoodPreserved: true,
       reason: writeDecision.reason,
@@ -1081,13 +1087,13 @@ async function main() {
     ok: true,
     out: OUT_FILE,
     latestDate,
-    rows: filtered.length,
+    rows: activeFiltered.length,
     dailyRows: daily.length,
-    reports,
+    reports: activeReports,
     currentWriteAllowed: true,
     writeDecision,
   }, null, 2));
-  if (!filtered.length) process.exit(2);
+  if (!activeFiltered.length) process.exit(2);
 }
 
 main().catch((error) => {
