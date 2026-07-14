@@ -432,9 +432,9 @@ async function main() {
     const count = numberValue(motherPoolRuleHitCounts[key], 0);
     if (after0845 && count < min) warnings.push(issue(`mother_pool_rule_${key}_not_hit`, "warning", { rule: key, count, min }));
   }
-  if (after0845 && priorityFreshQuoteCoverage120 < MIN_PRIORITY_FRESH_QUOTE_COVERAGE) warnings.push(issue("priority_pool_fresh_coverage_below_target_nonblocking", "warning", { priorityFreshQuoteCoverage120s: priorityFreshQuoteCoverage120, target: MIN_PRIORITY_FRESH_QUOTE_COVERAGE, priorityFreshQuotes120s: priorityFreshQuotes120, priorityPoolSymbols, rule: "Fugle-paced A gate requires continuous priority injection; 95% remains a tuning target." }));
+  if (after0845 && priorityFreshQuoteCoverage120 < MIN_PRIORITY_FRESH_QUOTE_COVERAGE) issues.push(issue("priority_pool_fresh_coverage_below_formal_min", "critical", { priorityFreshQuoteCoverage120s: priorityFreshQuoteCoverage120, target: MIN_PRIORITY_FRESH_QUOTE_COVERAGE, priorityFreshQuotes120s: priorityFreshQuotes120, priorityPoolSymbols, rule: "Formal daytrade entry requires priority_top40 fresh quote coverage >= 95%." }));
   if (after0845 && priorityFreshQuoteCoverage120 < TARGET_PRIORITY_FRESH_QUOTE_COVERAGE) warnings.push(issue("priority_pool_not_100_percent_fresh", "warning", { priorityFreshQuoteCoverage120s: priorityFreshQuoteCoverage120, target: TARGET_PRIORITY_FRESH_QUOTE_COVERAGE, note: "Production tuning can target 100%, but A follows Fugle-paced continuous injection." }));
-  if (after0845 && !selectedSymbolsFreshOk) warnings.push(issue("selected_symbols_not_all_fresh_nonblocking", "warning", { selectedSymbolsFreshOk, maxQuoteAgeSeconds: SELECTED_SYMBOL_MAX_QUOTE_AGE_SECONDS, prioritySourceInjecting, rule: "continuous priority injection is the A gate under Fugle pacing" }));
+  if (after0845 && !selectedSymbolsFreshOk) issues.push(issue("selected_symbols_fresh_gate_not_ready", "critical", { selectedSymbolsFreshOk, maxQuoteAgeSeconds: SELECTED_SYMBOL_MAX_QUOTE_AGE_SECONDS, prioritySourceInjecting, rule: "formal gate requires selected symbols freshness, not only active injection" }));
   if (after0830 && dailyVolumeStatus !== "ready") issues.push(issue("daily_volume_not_ready_for_daytrade", "critical", { dailyVolumeStatus, dailyVolumeRows, avgVolume5Eligible }));
   if (after0830 && !scannerCanRunPreopen) issues.push(issue("scanner_can_run_preopen_false", "critical", { scannerBlockReason, quoteStatus, preopenStatus, dailyVolumeStatus, historical1mWarmupStatus, ma20WarmupStatus, ma35WarmupStatus }));
   if (after0845 && !scannerCanRunOpening) issues.push(issue("scanner_can_run_opening_false", "critical", { scannerBlockReason, quoteStatus, preopenStatus, dailyVolumeStatus, historical1mWarmupStatus, ma20WarmupStatus, ma35WarmupStatus }));
@@ -567,7 +567,7 @@ async function main() {
       priorityMinInjectingQuotesForA: MIN_PRIORITY_INJECTING_QUOTES,
       priorityFreshCoverageMinForA: MIN_PRIORITY_FRESH_QUOTE_COVERAGE,
       priorityFreshCoverageTarget: TARGET_PRIORITY_FRESH_QUOTE_COVERAGE,
-      priorityFreshCoverageBlocksA: false,
+      priorityFreshCoverageBlocksA: true,
       sourceAgeBlocksAWhenPriorityInjecting: false,
       fullMarketBlocksA: false,
     },

@@ -92,10 +92,10 @@ const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
   positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 300),
 );
-const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 20));
+const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 40));
 const BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT, REST_PRIORITY_BATCH_LIMIT, positiveNumber(CONFIG.collector?.quoteBatchSize, 40)));
 const CONCURRENCY = 1;
-const TARGET_BATCH_INTERVAL_SECONDS = Math.max(30, positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 30));
+const TARGET_BATCH_INTERVAL_SECONDS = Math.max(5, positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 5));
 const REQUEST_DELAY_MS = Math.max(0, Math.floor((TARGET_BATCH_INTERVAL_SECONDS * 1000) / Math.max(1, BATCH_SIZE)));
 const COOLDOWN_INITIAL_SECONDS = positiveNumber(CONFIG.collector?.cooldownInitialSeconds, 90);
 const COOLDOWN_MAX_SECONDS = positiveNumber(CONFIG.collector?.cooldownMaxSeconds, 900);
@@ -1964,7 +1964,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const last429AgeSeconds = state.last429At ? ageSeconds(state.last429At) : 999999;
   const rateLimitStatus = cooldownRemaining > 0 ? "cooldown" : fetchResult.rateLimited ? "rate_limited" : "ok";
   const actualQuoteSpeed = fetchResult.elapsedSeconds ? Number((fetchResult.fetched / fetchResult.elapsedSeconds).toFixed(4)) : 0;
-  const scannerCanRunQuoteOnly = prioritySourceInjecting && rateLimitStatus === "ok";
+  const scannerCanRunQuoteOnly = selectedSymbolsFreshOk && rateLimitStatus === "ok";
   const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, Math.max(minFormalPrioritySymbols, priorityPoolSymbols || minFormalPrioritySymbols));
   const effectiveMa35Required = Math.min(MIN_READY_MA35_CONTINUOUS, Math.max(minFormalPrioritySymbols, priorityPoolSymbols || minFormalPrioritySymbols));
   const scannerCanRunOpening = scannerCanRunQuoteOnly
@@ -1989,7 +1989,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     : quoteRows > 0
     ? "stale"
     : "empty";
-  const preopenStatus = prioritySourceInjecting
+  const preopenStatus = selectedSymbolsFreshOk
     ? "ready"
     : priorityPoolSymbols >= minFormalPrioritySymbols && freshPriority.length > 0
     ? "degraded"
@@ -2194,7 +2194,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 }
 
 function sourceGateA(values) {
-  return values.prioritySourceInjecting
+  return values.selectedSymbolsFreshOk
     && values.priorityPoolSymbols >= (values.minPriorityPoolSymbols || MIN_PRIORITY_POOL_SYMBOLS)
     && values.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
     && values.cooldownRemaining <= 0
