@@ -132,6 +132,8 @@ function checkMobileShell() {
   requireText(mobile, 'fuman-mobile-active-tab-v1', "mobile shell must remember last tab while defaulting to the first visible strategy tab");
   requireText(mobile, '||"strategy2"', "mobile shell must still default first open to the first visible strategy tab");
   requireText(mobile, 'function paintFastFragment', "mobile shell must paint previous-good fragment immediately for opened members");
+  requireText(mobile, 'fragmentMatchesTab(k,html)', "mobile shell must reject stale fragments whose content key does not match the active tab");
+  requireText(mobile, 'active!==k||seq!==fragmentSeq', "mobile shell must prevent late fragment responses from overwriting the current tab");
   requireText(mobile, '.status{display:none', "mobile shell must hide the noisy fresh/API status line");
   requireText(mobile, 'function firstMetricText', "mobile index cards must render value plus change text");
   requireText(mobile, 'function refreshMarketCore', "mobile shell must asynchronously fill market indexes without blocking membership boot");

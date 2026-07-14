@@ -119,6 +119,8 @@ function checkLocal() {
   requireText(mobile, 'fuman-mobile-active-tab-v1', "mobile shell must remember the last selected tab for instant return");
   requireText(mobile, 'fuman-mobile-fragment-cache-v2', "mobile shell must keep previous-good fragment cache for instant display");
   requireText(mobile, 'function paintFastFragment', "mobile shell must paint cached fragment before slow network checks finish");
+  requireText(mobile, 'fragmentMatchesTab(k,html)', "mobile shell must reject cached fragments whose content key does not match the active tab");
+  requireText(mobile, 'active!==k||seq!==fragmentSeq', "mobile shell must prevent late fragment responses from overwriting the current tab");
   requireText(mobile, 'saveFastFragment(k,h,html)', "mobile shell must save successful fragments for the next open");
   requireText(mobile, '.status{display:none', "mobile shell must hide the noisy fresh/API status line");
   requireText(mobile, 'function firstMetricText', "mobile index cards must render value plus change text");
