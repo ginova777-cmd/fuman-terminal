@@ -11,7 +11,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
-const ALLOWED_KEYS = new Set(["strategy1", "strategy2", "strategy3", "strategy4", "strategy5"]);
+const ALLOWED_KEYS = new Set(["strategy2", "strategy3", "strategy4", "strategy5"]);
 const DIRECT_AUTHORITATIVE_KEYS = new Set(["strategy2"]);
 const STRATEGY_HANDLERS = {
   strategy2: () => require("./strategy2-latest"),

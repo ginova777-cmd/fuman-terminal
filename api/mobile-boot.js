@@ -6,10 +6,9 @@ const {
 } = require("../lib/desktop-route-snapshot-cache");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 
-const FRAGMENT_TABS = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+const FRAGMENT_TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
 const PUBLIC_FRAGMENT_TABS = [];
 const TAB_ENDPOINTS = {
-  strategy1: "/api/open-buy-latest",
   strategy2: "/api/strategy2-latest",
   strategy3: "/api/strategy3-latest",
   strategy4: "/api/strategy4-latest",
@@ -301,5 +300,3 @@ module.exports = function handler(request, response) {
     });
   });
 };
-
-

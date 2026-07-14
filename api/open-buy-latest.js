@@ -774,7 +774,27 @@ async function handler(request, response) {
   }
 }
 
-module.exports = withEntitlementRequired(handler, "strategy1");
+function retiredStrategy1Handler(request, response) {
+  response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.status(200).json({
+    ok: false,
+    retired: true,
+    status: "retired",
+    strategy: "strategy1",
+    message: "Strategy1 retired; open-buy source is no longer queried.",
+    rows: [],
+    count: 0,
+    publishAllowed: false,
+    evidenceStatus: "retired",
+    fallbackUsed: false,
+    preservePreviousGood: true,
+    source: "strategy1_retired_no_supabase_read",
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+module.exports = retiredStrategy1Handler;
 module.exports.__contract = {
   buildPayload,
   missingPayload,

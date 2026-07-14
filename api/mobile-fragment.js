@@ -14,12 +14,6 @@ const TAB_CONFIG = {
     endpoint: "/api/market-ai-live",
     points: ["今日重點", "風險提醒", "優先觀察", "熱門觀察股"],
   },
-  strategy1: {
-    title: "策略1 開盤入",
-    subtitle: "Supabase complete run",
-    endpoint: "/api/open-buy-latest",
-    points: ["08:46 期貨初動", "08:55 期現試撮", "08:58~08:59 終判"],
-  },
   strategy2: {
     title: "策略2 當沖",
     subtitle: "2 分 K 即時偵測",
@@ -304,7 +298,7 @@ function isValidBusinessRow(row, tab = "") {
     const stockCode = String(firstValue(row, ["stockCode", "stock_id", "stockId", "underlyingCode", "code"], "")).trim();
     return /^\d{4,6}$/.test(cbCode) && /^\d{4}$/.test(stockCode || cbCode.slice(0, 4));
   }
-  if (["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)) {
+  if (["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)) {
     const code = String(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")).trim();
     return /^\d{4}$/.test(code);
   }
@@ -715,7 +709,7 @@ module.exports = async function handler(request, response) {
     const forceLivePayload = tab === "strategy3" || tab === "strategy4" || tab === "strategy5";
     const payload = forceLivePayload
       || !snapshotPayload
-      || (tab === "strategy1" && isEmptyStrategy1WaitingSnapshot(snapshotPayload))
+
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? (tab === "strategy4"
         ? await fetchStrategy4Internal(request, endpoint)
@@ -730,7 +724,3 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
-
-
-
-
