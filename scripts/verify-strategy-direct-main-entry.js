@@ -24,12 +24,19 @@ const runtimeFiles = ["terminal.js", "terminal-app.js"];
 const visibleFiles = ["index.html", "index.github.html", ...runtimeFiles];
 
 mustInclude("terminal-core.js", "script.src = `terminal.js?v=${version}`", "runtime loads terminal.js");
-mustInclude("index.html", "FMN://strategy5.all", "direct main static badge");
-mustInclude("index.html", "策略5主要結果", "direct main static title");
+mustInclude("index.html", "FMN://strategy.route", "retired static strategy route badge");
+mustInclude("index.html", "正式策略載入中", "retired static strategy loading title");
+mustNotInclude("index.html", "策略主要結果", "visible retired strategy main shell heading");
 mustNotInclude("index.html", "strategy-list-title", "retired static strategy checklist");
-mustInclude("index.github.html", "FMN://strategy5.all", "direct main github static badge");
-mustInclude("index.github.html", "策略5主要結果", "direct main github static title");
+mustInclude("index.github.html", "FMN://strategy.route", "retired static strategy route badge");
+mustInclude("index.github.html", "正式策略載入中", "retired static strategy loading title");
+mustNotInclude("index.github.html", "策略主要結果", "visible retired strategy main shell heading");
 mustNotInclude("index.github.html", "strategy-list-title", "retired static strategy checklist");
+mustInclude("index.html", "data-retired-strategy-shell=\"1\"", "retired strategy shell marker");
+mustInclude("index.github.html", "data-retired-strategy-shell=\"1\"", "retired strategy shell marker");
+mustInclude("styles.css", "retire-visible-strategy-intermediate-shell-20260714", "retired visible strategy intermediate shell CSS");
+mustInclude("styles.css", "#strategy-view[data-retired-strategy-shell=\"1\"] .strategy-toolbar", "strategy toolbar hidden in retired shell");
+mustInclude("styles.css", "#strategy-view[data-retired-strategy-shell=\"1\"] .strategy-terminal", "strategy terminal full-width retired shell");
 
 for (const file of runtimeFiles) {
   mustInclude(file, "installStrategyDirectMainEntry", "direct main entry guard");

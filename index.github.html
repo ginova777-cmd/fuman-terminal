@@ -91,23 +91,23 @@
       <main class="dashboard">
 
         <!-- 策略模組 -->
-        <section class="view-panel" id="strategy-view" hidden>
-          <header class="strategy-header">
+        <section class="view-panel" id="strategy-view" data-retired-strategy-shell="1" hidden>
+          <header class="strategy-header" data-retired-strategy-shell-header="1" aria-hidden="true">
             <div>
               <span class="console-badge">策略控管台</span>
-              <h1>策略主要結果</h1>
-              <p>直接顯示目前正式策略結果；側欄可切換其他策略與籌碼模組。</p>
+              <h1>策略資料載入中</h1>
+              <p>正在切換正式策略畫面。</p>
             </div>
             <div class="header-time strategy-time">05/07 17:20</div>
           </header>
-          <section class="strategy-terminal" aria-label="Strategy scanner">
+          <section class="strategy-terminal" data-retired-strategy-grid="1" aria-label="Strategy scanner">
 
             <section class="strategy-results">
               <div class="strategy-toolbar">
                 <div>
-                  <span class="console-badge">FMN://strategy5.all</span>
-                  <h2>策略5主要結果</h2>
-                  <p id="strategy-summary">綜合策略主要結果直接載入；不再停留舊總覽。</p>
+                  <span class="console-badge">FMN://strategy.route</span>
+                  <h2>正式策略載入中</h2>
+                  <p id="strategy-summary">請稍候，正在切換正式策略畫面。</p>
                 </div>
                 <div class="strategy-actions">
                   <div class="mode-toggle" aria-label="篩選模式">
@@ -130,7 +130,7 @@
               </label>
 
               <div class="strategy-table" id="strategy-table">
-                <div class="empty-state">正在載入策略5主要結果...</div>
+                <div class="empty-state">正在載入正式策略資料...</div>
               </div>
             </section>
           </section>

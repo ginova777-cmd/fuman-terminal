@@ -8770,3 +8770,51 @@ body.fuman-light-theme {
   font-weight: 950;
   line-height: 1.12;
 }
+
+/* retire-visible-strategy-intermediate-shell-20260714 */
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] {
+  padding-top: 0 !important;
+}
+
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] > .strategy-header,
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-toolbar,
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-metrics,
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-results > .strategy-search {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-terminal,
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-results,
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] #strategy-table {
+  display: block !important;
+  grid-template-columns: none !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-terminal {
+  margin: 0 !important;
+  gap: 0 !important;
+}
+
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] .strategy-results {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+body.public-terminal #strategy-view[data-retired-strategy-shell="1"] #strategy-table > .empty-state {
+  border: 1px dashed rgba(115, 130, 164, 0.22) !important;
+  border-radius: 8px !important;
+  background: rgba(10, 15, 25, 0.68) !important;
+  color: #bfd7ff !important;
+  min-height: 160px !important;
+}
