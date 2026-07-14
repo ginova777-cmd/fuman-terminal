@@ -1097,3 +1097,83 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   schedule("boot",1800);
   setInterval(()=>{if(isTerminalUnlocked?.()&&!isDocumentHidden?.())probeMembershipContent("interval")},6e4);
 })();
+
+;(()=>{
+  if(window.__installFumanStrategyRouteGuard20260714)return;
+  window.__installFumanStrategyRouteGuard20260714=true;
+  function routeFromLink(link){
+    const text=String(link?.textContent||"");
+    const route=String(link?.dataset?.strategyRoute||"");
+    if(route)return route;
+    if(text.includes("明日"))return "open_buy";
+    if(text.includes("隔日"))return "strategy3";
+    if(text.includes("波段"))return "swing_radar";
+    if(text.includes("綜合"))return "strategy5";
+    if(text.includes("當沖")||text.includes("雷達"))return "intraday_2m";
+    return "";
+  }
+  function clearStrategySearch(){
+    strategyMode="any";strategyKeyword="";
+    strategySearch&&(strategySearch.value="");
+  }
+  function applyRoute(route,reason="nav"){
+    if(!route)return false;
+    clearStrategySearch();
+    if(route==="strategy5"){
+      strategyPresetMode="strategy5";strategy5ActiveId="multi_strategy_confluence";selectedStrategyIds=new Set([strategy5ActiveId]);strategy5Page=1;
+      setStrategyChrome?.("strategy5");renderStrategyScanner?.();deferUiWork?.(()=>loadStrategy5Cache?.(!1),40);
+      return true;
+    }
+    if(route==="strategy3"){
+      strategyPresetMode="strategy3";selectedStrategyIds=new Set(["overnight_chip"]);strategy3Page=1;
+      setStrategyChrome?.("strategy3");renderStrategyScanner?.();deferUiWork?.(async()=>{await loadStrategyStocks?.();await loadStrategy3Cache?.(!1);renderStrategyScanner?.();},40);
+      return true;
+    }
+    if(route==="swing_radar"){
+      strategyPresetMode="";selectedStrategyIds=new Set(["swing_radar"]);swingSignalFilter="all";swingZoneFilter="all";swingPage=1;
+      setStrategyChrome?.("swing");renderStrategyScanner?.();deferUiWork?.(()=>loadStrategy4Summary?.(!1),30);deferUiWork?.(()=>loadStrategy4Cache?.(!1),60);deferUiWork?.(()=>loadInstitutionSummary?.(!1),120);
+      return true;
+    }
+    if(route==="intraday_2m"){
+      strategyPresetMode="";selectedStrategyIds=new Set(["intraday_2m"]);intradaySignalFilter="all";
+      setStrategyChrome?.("intraday");renderStrategyScanner?.();deferUiWork?.(async()=>{await loadStrategyStocks?.();await loadStrategy2IntradayCache?.(!strategy2IntradayEventByCode?.size);renderStrategyScanner?.();ensureStrategyStocksLoaded?.().then(()=>shouldRunLivePolling?.()?refreshStrategyRealtimeScan?.("force"):renderStrategyScanner?.()).catch(()=>{});},0);
+      return true;
+    }
+    if(route==="open_buy"){
+      strategyPresetMode="";selectedStrategyIds=new Set(["open_buy"]);openBuyPage=1;
+      setStrategyChrome?.("openBuy");renderStrategyScanner?.();deferUiWork?.(()=>loadOpenBuyCache?.(!0),40);
+      return true;
+    }
+    return false;
+  }
+  if(typeof applyStrategyPresetFromLink==="function"){
+    const original=applyStrategyPresetFromLink;
+    applyStrategyPresetFromLink=function(link){
+      const route=routeFromLink(link);
+      const result=original.call(this,link);
+      applyRoute(route,"apply");
+      return result;
+    };
+  }
+  if(typeof showView==="function"){
+    const originalShow=showView;
+    showView=function(viewName,activeLink){
+      if(viewName==="strategy")applyRoute(routeFromLink(activeLink),"show");
+      return originalShow.call(this,viewName,activeLink);
+    };
+  }
+  document.addEventListener("click",event=>{
+    const link=event.target?.closest?.('[data-view="strategy"]');
+    if(!link)return;
+    const route=routeFromLink(link);
+    route&&setTimeout(()=>{applyRoute(route,"click");renderStrategyScanner?.();},80);
+  },true);
+  deferUiWork?.(()=>{
+    if(isViewActive?.("strategy")&&(!selectedStrategyIds||!selectedStrategyIds.size)){
+      const active=document.querySelector('[data-view="strategy"].active')||document.querySelector('[data-view="strategy"][data-strategy-route]');
+      applyRoute(routeFromLink(active)||"swing_radar","boot-fallback");
+      renderStrategyScanner?.();
+    }
+  },500);
+  window.FUMAN_STRATEGY_ROUTE_GUARD={routeFromLink,applyRoute};
+})();
