@@ -30,6 +30,8 @@ requireIncludes("lib/server-entitlement-guard.js", "missing_bearer_token");
 requireIncludes("lib/server-entitlement-guard.js", "invalid_or_expired_token");
 requireIncludes("lib/server-entitlement-guard.js", "membership_not_enabled");
 requireIncludes("lib/server-entitlement-guard.js", "fumanInternalVerify");
+requireIncludes("api/open-buy-latest.js", "Strategy1 retired; open-buy source is no longer queried.");
+requireIncludes("api/open-buy-latest.js", "strategy1_retired_no_supabase_read");
 
 for (const [file, scope] of Object.entries(protectedApis)) {
   requireIncludes(file, "server-entitlement-guard");
@@ -42,7 +44,7 @@ requireIncludes("terminal-entitlement-guard.js", "readAccessToken");
 requireIncludes("terminal-entitlement-guard.js", "installProtectedApiBearer");
 requireIncludes("terminal-entitlement-guard.js", "authorization");
 requireIncludes("terminal-entitlement-guard.js", "Bearer ${token}");
-requireIncludes("terminal-entitlement-guard.js", "open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest");
+requireIncludes("terminal-entitlement-guard.js", "strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest");
 requireIncludes("package.json", "\"verify:server-entitlement-guard\": \"node scripts/verify-server-entitlement-guard.js\"");
 
 if (issues.length) {

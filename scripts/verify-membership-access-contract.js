@@ -116,7 +116,7 @@ async function verifyProductionProtection() {
 
   const mobileBoot = await fetchJson(`${PRODUCTION_URL}/api/mobile-boot?membership_probe=${Date.now()}`);
   const mobileBootText = mobileBoot.text || JSON.stringify(mobileBoot.json || {});
-  const mobileBootLeaks = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"].filter((marker) => mobileBootText.includes(`"${marker}"`));
+  const mobileBootLeaks = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"].filter((marker) => mobileBootText.includes(`"${marker}"`));
   if (mobileBoot.status !== 200 || mobileBoot.json?.membershipRequired !== true || mobileBootLeaks.length) {
     issues.push(`mobile-boot unauthenticated payload must expose public tabs only; status=${mobileBoot.status} membershipRequired=${mobileBoot.json?.membershipRequired} leaks=${mobileBootLeaks.join(",")}`);
   }
