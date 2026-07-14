@@ -188,7 +188,7 @@ async function buildBoot(request) {
       protected: true,
       membershipRequired: true,
       protectedReason: entitlement.reason || "membership_required",
-      publicSurfaces: ["auth", "signup", "member-status"],
+      publicSurfaces: ["auth", "signup", "member-status", "market-overview", "market-ai", "learning-plan"],
       updatedAt,
       bootHash: lockedHash,
       marketCalendar: null,
