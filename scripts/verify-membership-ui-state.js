@@ -264,6 +264,9 @@ async function runUiProbe(baseUrl) {
         },
       });
     }, null, 30000);
+    if (typeof summaryJson !== "string" || !summaryJson.trim()) {
+      throw new Error("ui_probe_empty_summary");
+    }
     return JSON.parse(summaryJson);
   } finally {
     cdp?.close();
@@ -274,12 +277,18 @@ async function runUiProbe(baseUrl) {
 
 async function runUiProbeWithRetry(baseUrl) {
   let lastSummary = null;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    lastSummary = await runUiProbe(baseUrl);
-    if (lastSummary && typeof lastSummary === "object" && Array.isArray(lastSummary.results) && lastSummary.results.length) return lastSummary;
-    if (attempt < 2) await sleep(750);
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      lastSummary = await runUiProbe(baseUrl);
+      if (lastSummary && typeof lastSummary === "object" && Array.isArray(lastSummary.results) && lastSummary.results.length) return lastSummary;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < 3) await sleep(900);
   }
-  return lastSummary;
+  if (lastSummary) return lastSummary;
+  throw lastError || new Error("ui_probe_failed");
 }
 
 function assertSummary(summary) {
