@@ -113,7 +113,7 @@ function checkLocal() {
   checkMobileShellCss(mobile);
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use /api/mobile-boot as primary boot endpoint");
-  requireText(mobile, 'fetch(fresh(url),{cache:"no-store"})', "mobile JSON fetches must use no-store plus cache-busting query");
+  requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must use no-store plus cache-busting query");
   requireText(mobile, 'url.includes("?v=")?url:fresh(url)', "mobile fragment fetch must preserve versioned ?v=hash URLs");
   requireText(mobile, 'v="+encodeURIComponent', "mobile fragments and analysis must be versioned by hash/updatedAt");
   requireText(mobile, "boot_hash", "mobile realtime must compare boot_hash before fetching");

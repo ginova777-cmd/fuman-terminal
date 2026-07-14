@@ -126,7 +126,7 @@ function checkMobileShell() {
   const mobile = read("mobile.html");
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use no-store /api/mobile-boot as the only boot/latest endpoint");
-  requireText(mobile, 'fetch(fresh(url),{cache:"no-store"})', "mobile JSON fetches must be no-store");
+  requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must be no-store");
   requireText(mobile, "boot_hash", "mobile Realtime must compare boot_hash before refetch");
   requireText(mobile, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile must keep 120s polling fallback only as backup");
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must render from hash contract instead of recalculating data");

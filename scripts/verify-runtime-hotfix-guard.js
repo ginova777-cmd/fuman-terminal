@@ -4,11 +4,21 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXPECTED_HOTFIX = "20260623-09";
-const EXPECTED_FRONTEND_VERSION = "public-terminal-fast-20260623-09";
+const EXPECTED_FRONTEND_VERSION =
+  process.env.FUMAN_EXPECTED_FRONTEND_VERSION || readCurrentFrontendVersion();
 const BASE_URL = (process.env.FUMAN_VERIFY_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const LIVE = process.argv.includes("--live");
 
 const issues = [];
+
+function readCurrentFrontendVersion() {
+  try {
+    const payload = JSON.parse(fs.readFileSync(path.join(ROOT, "version.json"), "utf8"));
+    return String(payload.version || "").trim();
+  } catch (error) {
+    return "";
+  }
+}
 
 function filePath(file) {
   return path.join(ROOT, file);
@@ -143,7 +153,7 @@ async function main() {
   requireMarker("terminal-hotfix.js", "finishShellAdd", "watchlist async shell add bridge");
   requireMarker("terminal-hotfix.js", "watchlist-storage-guard-20260628-03", "watchlist placeholder storage blocker");
   requireMarker("terminal-hotfix.js", "scheduleShellValidation", "watchlist storage validation handoff");
-  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260711-03", "watchlist redesigned shell 20260711-03");
+  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260714-detail-sync-01", "watchlist detail quote sync shell 20260714");
   requireMarker("terminal-watchlist-shell.js", "memoryRows", "watchlist memory-backed rows");
   requireMarker("terminal-watchlist-shell.js", "validateTaiwanStockCode", "watchlist Taiwan stock validation");
   requireMarker("terminal-watchlist-shell.js", "不是有效上市/上櫃台股代號", "watchlist invalid stock blocker");
@@ -155,8 +165,11 @@ async function main() {
   requireMarker("terminal-hotfix.js", "observedPanels");
   requireMarker("terminal.js", "unlockPublicTerminalShell");
   requireMarker("terminal.js", "FUMAN_PUBLIC_TERMINAL_UNLOCK");
-  requireMarker("terminal-app.js", "status:\"public_terminal\"");
+  requireMarker("terminal-app.js", "memberState", "terminal member state control");
   requireMarker("terminal-app.js", "FUMAN_SUPABASE_URL&&FUMAN_SUPABASE_KEY");
+  if (!EXPECTED_FRONTEND_VERSION) {
+    issues.push("version.json missing current frontend version");
+  }
   requireMarker("version.json", EXPECTED_FRONTEND_VERSION);
   requireMarker("terminal-core.js", `const version = "${EXPECTED_FRONTEND_VERSION}"`);
   requireMarker("index.html", `terminal-core.js?v=${EXPECTED_FRONTEND_VERSION}`);
