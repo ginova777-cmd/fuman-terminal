@@ -987,3 +987,85 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     },true);
   }catch(error){}
 })();
+;(function installFumanMembershipContentDetector(){
+  if(window.__fumanMembershipContentDetectorReady)return;
+  window.__fumanMembershipContentDetectorReady=true;
+  const ALLOWED=new Set(["active","approved","admin","paid","pro","premium","trial"]);
+  let probing=false,lastProbeAt=0,lastProbeSig="";
+  function parseJson(value){try{return value?JSON.parse(value):null}catch{return null}}
+  function readAuthCache(){return parseJson(localStorage.getItem(FUMAN_AUTH_CACHE_KEY)||"")||{}}
+  function readStoredSupabaseToken(){
+    const exact=parseJson(localStorage.getItem("sb-jxnqyqnigsppqsxinlrq-auth-token"));
+    const direct=exact?.access_token||exact?.currentSession?.access_token||exact?.session?.access_token;
+    if(direct)return{token:String(direct),expiresAt:cleanNumber(exact?.expires_at||exact?.currentSession?.expires_at||exact?.session?.expires_at)};
+    for(let index=0;index<localStorage.length;index+=1){
+      const key=localStorage.key(index)||"";
+      if(!/^sb-.*-auth-token$/i.test(key))continue;
+      const value=parseJson(localStorage.getItem(key));
+      const nested=value?.access_token||value?.currentSession?.access_token||value?.session?.access_token;
+      if(nested)return{token:String(nested),expiresAt:cleanNumber(value?.expires_at||value?.currentSession?.expires_at||value?.session?.expires_at)};
+    }
+    return{token:"",expiresAt:0};
+  }
+  function tokenInfo(){
+    const cached=readAuthCache(),stored=readStoredSupabaseToken(),sessionToken=String(currentFumanSession?.access_token||"").trim();
+    const token=sessionToken||String(cached.accessToken||cached.session?.access_token||"").trim()||stored.token;
+    const expiresAt=cleanNumber(currentFumanSession?.expires_at||cached.expiresAt||cached.session?.expires_at||stored.expiresAt);
+    return{token,expiresAt,cached};
+  }
+  function hasValidToken(info=tokenInfo()){return Boolean(info.token)&&(!info.expiresAt||info.expiresAt*1e3>=Date.now()-3e4)}
+  function hasAllowedAccess(info=tokenInfo()){
+    const cached=info.cached||{},access=cached.access||{},status=String(currentFumanAccess?.status||access.status||cached.status||"").toLowerCase(),plan=String(access.plan||cached.plan||"").toLowerCase();
+    return currentFumanAccess?.allowed===true||cached.allowed===true||access.allowed===true||ALLOWED.has(status)||ALLOWED.has(plan);
+  }
+  function purgeProtectedJsonCaches(){
+    try{
+      const pattern=/^fuman-json-cache-v1:.*(terminal-fast-bundle|mobile-boot|mobile-fragment|strategy[2-5]-latest|latest-strategy|latest-signals|institution|cb-detect|warrant-flow)/i;
+      const remove=[];
+      for(let index=0;index<localStorage.length;index+=1){const key=localStorage.key(index)||"";if(pattern.test(key))remove.push(key)}
+      remove.forEach(key=>localStorage.removeItem(key));
+      const indexKey=typeof terminalJsonCacheIndexKey==="function"?terminalJsonCacheIndexKey():"fuman-json-cache-index-v1";
+      const cacheIndex=parseJson(localStorage.getItem(indexKey))||{};
+      ["strategy2","strategy3","strategy4","strategy5","chip-trade","cb-detect","warrant-flow","realtime-radar"].forEach(key=>delete cacheIndex[key]);
+      localStorage.setItem(indexKey,JSON.stringify(cacheIndex));
+    }catch(error){}
+  }
+  async function probeMembershipContent(reason="auto"){
+    const info=tokenInfo(),validToken=hasValidToken(info),allowed=hasAllowedAccess(info),sig=`${validToken?1:0}:${allowed?1:0}:${String(info.token||"").slice(-10)}`;
+    document.body.dataset.membershipToken=validToken?"present":"missing";
+    document.body.dataset.membershipAccess=allowed?"allowed":"locked";
+    if(!validToken||!allowed){document.body.dataset.membershipContent="waiting";return false}
+    if(probing)return false;
+    if(sig===lastProbeSig&&Date.now()-lastProbeAt<3e4&&document.body.dataset.membershipContent==="verified")return true;
+    probing=true;
+    try{
+      const payload=await fetchJson(`/api/terminal-fast-bundle?membershipProbe=1&t=${Date.now()}`,7e3,{cache:"no-store"});
+      const verified=!!payload&&payload.ok!==false&&payload.protected!==true&&!/missing_bearer|membership_required|unauthor/i.test(String(payload.protectedReason||payload.reason||payload.error||""));
+      lastProbeAt=Date.now();lastProbeSig=sig;
+      document.body.dataset.membershipContent=verified?"verified":"blocked";
+      document.body.dataset.membershipProbeAt=String(lastProbeAt);
+      if(!verified)throw new Error(payload?.protectedReason||payload?.reason||payload?.error||"membership_probe_blocked");
+      purgeProtectedJsonCaches();
+      forceProtectedTerminalDataRefresh?.(`membership-content-verified:${reason}`);
+      window.dispatchEvent(new CustomEvent("fuman:membership-content-verified",{detail:{reason,at:lastProbeAt}}));
+      return true;
+    }catch(error){
+      document.body.dataset.membershipContent=/401|403|membership|bearer|unauthor/i.test(String(error?.message||error))?"blocked":"probe_error";
+      recordFrontendError?.("membership-content-probe",error);
+      return false;
+    }finally{probing=false}
+  }
+  window.FUMAN_MEMBERSHIP_CONTENT_DETECTOR={probe:probeMembershipContent,purgeProtectedJsonCaches,tokenInfo};
+  const schedule=(reason,delay=450)=>setTimeout(()=>probeMembershipContent(reason),delay);
+  try{
+    const originalSetTerminalAuthState=setTerminalAuthState;
+    setTerminalAuthState=function(...args){const result=originalSetTerminalAuthState.apply(this,args);schedule("auth-state",250);return result};
+  }catch(error){}
+  window.addEventListener("focus",()=>schedule("focus",250),{passive:true});
+  window.addEventListener("pageshow",()=>schedule("pageshow",350),{passive:true});
+  window.addEventListener("storage",event=>{if(!event.key||event.key===FUMAN_AUTH_CACHE_KEY||/^sb-.*-auth-token$/i.test(event.key))schedule("storage",250)});
+  window.addEventListener("fuman:membership-status-refresh",()=>schedule("status-refresh",250));
+  document.addEventListener("visibilitychange",()=>{if(!isDocumentHidden?.())schedule("visible",350)},{passive:true});
+  schedule("boot",1800);
+  setInterval(()=>{if(isTerminalUnlocked?.()&&!isDocumentHidden?.())probeMembershipContent("interval")},6e4);
+})();
