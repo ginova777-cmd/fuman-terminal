@@ -129,7 +129,9 @@ function checkMobileShell() {
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must be no-store");
   requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/member/logout actions");
   rejectText(mobile, "id=\"mobile-signup-link\"", "mobile shell top action cluster must not expose the old signup button");
-  requireText(mobile, 'let boot=null,active="strategy2"', "mobile shell must open on the first visible strategy tab after the AI pill is removed");
+  requireText(mobile, 'fuman-mobile-active-tab-v1', "mobile shell must remember last tab while defaulting to the first visible strategy tab");
+  requireText(mobile, '||"strategy2"', "mobile shell must still default first open to the first visible strategy tab");
+  requireText(mobile, 'function paintFastFragment', "mobile shell must paint previous-good fragment immediately for opened members");
   requireText(mobile, '.status{display:none', "mobile shell must hide the noisy fresh/API status line");
   requireText(mobile, 'function firstMetricText', "mobile index cards must render value plus change text");
   requireText(mobile, 'function refreshMarketCore', "mobile shell must asynchronously fill market indexes without blocking membership boot");
