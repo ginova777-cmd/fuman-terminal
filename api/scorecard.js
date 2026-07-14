@@ -1260,6 +1260,14 @@ function alignPayloadDateWithSourceReports(payload) {
   };
 }
 
+
+async function withFreshStrategy5SourceReport(payload) {
+  try {
+    const report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
+    if (report.runId) return mergeSourceReport(payload, report);
+  } catch {}
+  return payload;
+}
 async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
@@ -1269,16 +1277,16 @@ async function withLiveSourceReports(payload) {
   const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
   const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
   if (releaseComplete && maxSourceReportDate(releaseReports) >= maxSourceReportDate(existingReports)) {
-    return alignPayloadDateWithSourceReports(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (existingComplete) {
-    return alignPayloadDateWithSourceReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (releaseComplete) {
-    return alignPayloadDateWithSourceReports(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(releaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   const reports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
-  return alignPayloadDateWithSourceReports(reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+  return alignPayloadDateWithSourceReports(await withFreshStrategy5SourceReport(reports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
 }
 
 function withScorecardContract(payload, status, reason = "") {
@@ -1711,3 +1719,4 @@ module.exports.__test = {
   selectPayloadDate,
   withScorecardContract,
 };
+
