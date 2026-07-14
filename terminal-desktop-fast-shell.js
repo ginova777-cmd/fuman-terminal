@@ -1474,7 +1474,7 @@
         try { key = store.key(index) || ""; } catch (error) { key = ""; }
         if (!key) continue;
         try { value = store.getItem(key) || ""; } catch (error) { value = ""; }
-        if (key.startsWith(SNAPSHOT_PREFIX) || retiredSurfaceCacheNeedle(key) || retiredSurfaceCacheNeedle(value)) {
+        if (retiredSurfaceCacheNeedle(key) || retiredSurfaceCacheNeedle(value)) {
           try { store.removeItem(key); } catch (error) {}
         }
       }
@@ -1495,10 +1495,13 @@
     try { marketJsonCache.clear(); } catch (error) {}
     try { marketJsonInflight.clear(); } catch (error) {}
     if ("indexedDB" in window) {
-      try {
-        snapshotDbPromise = null;
-        indexedDB.deleteDatabase(SNAPSHOT_DB);
-      } catch (error) {}
+      openSnapshotDb().then((db) => {
+        if (!db) return;
+        try {
+          const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+          ["strategy|策略1", "realtime-radar|即時雷達", "realtime-radar", "heatmap", "market|熱力圖"].forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+        } catch (error) {}
+      }).catch(() => undefined);
     }
     if ("caches" in window) {
       caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
@@ -2561,9 +2564,9 @@
             canvasEmptyStates.set(route, emptyState);
             if (canvasState.route === route) {
               canvasState.source = emptyState.qualityStatus || emptyState.reason || "waiting";
-              if (isStrategy3Route(route)) {
+              if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken()) {
                 const panel = document.querySelector("#strategy-view");
-                if (panel) renderStrategy3CompleteRunShell(route, strategyMeta(route), panel);
+                if (panel) renderMemberStrategyPendingShell(route, strategyMeta(route), panel);
               }
             }
           }
@@ -7583,6 +7586,68 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     `;
   }
 
+  function renderMemberStrategyPendingShell(route, meta, panel) {
+    if (!panel) return false;
+    const stored = canvasStore.get(route);
+    const payloadMeta = stored?.meta || canvasState.meta || {};
+    const runId = payloadMeta.runId || payloadMeta.transport?.runId || "";
+    panel.dataset.fumanRouteSnapshotRestoring = "1";
+    panel.dataset.fumanCanvasPersistent = "0";
+    panel.classList.add("fuman-unified-list-panel", "fuman-api-only-strategy-route");
+    panel.classList.remove("strategy5-only", "swing-only", "open-buy-only");
+    panel.classList.toggle("strategy3-only", isStrategy3Route(route));
+    const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
+    const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
+    const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
+    const headerBadge = panel.querySelector(".strategy-header .console-badge");
+    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
+    const summary = panel.querySelector("#strategy-summary");
+    const count = panel.querySelector("#strategy-match-count");
+    const avg = panel.querySelector("#strategy-avg-score");
+    const top = panel.querySelector("#strategy-top-hit");
+    const table = isStrategyRoute(route) ? panel.querySelector("#strategy-table") : null;
+    if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
+    if (headerText) headerText.textContent = "開通會員資料載入中；優先讀取 fast bundle / previous-good。";
+    if (headerLine) headerLine.textContent = `會員資料同步中${runId ? `｜run=${runId}` : ""}`;
+    if (headerBadge) headerBadge.textContent = meta.badge;
+    if (toolbarTitle) toolbarTitle.textContent = meta.title;
+    if (toolbarBadge) toolbarBadge.textContent = meta.badge;
+    if (summary) summary.textContent = `${meta.title}｜會員資料同步中｜不顯示 0 檔空殼`;
+    if (count) count.textContent = "--";
+    if (avg) avg.textContent = "--";
+    if (top) top.textContent = "--";
+    const html = `
+      <section class="strategy5-shell fuman-unified-list-shell" data-member-strategy-pending="1">
+        <section class="strategy5-dashboard strategy3-clean">
+          <section class="strategy5-results">
+            <div class="strategy5-results-head">
+              <div>
+                <h3>${escapeHtml(meta.icon)} ${escapeHtml(meta.title)}</h3>
+                <p>正在讀取會員 fast bundle / previous-good，不顯示 0 檔空結果。</p>
+              </div>
+              <strong class="strategy3-count-pill">同步中</strong>
+            </div>
+            <section class="strategy3-table" aria-label="會員策略資料同步中">
+              <div class="empty-state">
+                <strong>資料同步中</strong>
+                <span>已確認會員登入，正在讀取正式 bundle 或上一筆有效結果。</span>
+              </div>
+            </section>
+          </section>
+        </section>
+      </section>
+    `;
+    if (table) table.innerHTML = html;
+    else {
+      const existing = panel.querySelector(":scope > .fuman-unified-list-shell");
+      if (existing) existing.outerHTML = html;
+      else panel.insertAdjacentHTML("afterbegin", html);
+    }
+    window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
+    return true;
+  }
+
   function renderUnifiedListShell(route, meta, panel) {
     const payloadMeta = canvasPayloadMeta(route) || {};
     const allRows = (Array.isArray(canvasState.rows) ? canvasState.rows : []).filter((row) => row && typeof row === "object");
@@ -7593,6 +7658,9 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
       .slice(0, 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
+    }
+    if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
     }
     const displayCount = unifiedDisplayCount(route, rows, allRows, payloadMeta);
     const runId = payloadMeta.runId || "";
@@ -7792,7 +7860,9 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
       return true;
     }
     const meta = strategyMeta(link);
-    if (isStrategy3Route(key)) return renderStrategy3CompleteRunShell(key, meta, panel);
+    const drawableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
+    if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken()) return renderMemberStrategyPendingShell(key, meta, panel);
+    if (isStrategy3Route(key)) return renderUnifiedListShell(key, meta, panel);
     if (!isStrategy2Route(key)) return renderUnifiedListShell(key, meta, panel);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
@@ -7950,6 +8020,13 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     switchStrategyViewNow(link);
     markLatency("nav", key);
     const rows = rowsForRoute(key);
+    if (isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken()) {
+      primeDesktopFastBundle(true, "member-route").then(() => {
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+        const bundleRows = rowsForRoute(key);
+        if (bundleRows.length) renderStrategyRouteShell(key, "fast-bundle", bundleRows);
+      }).catch(() => undefined);
+    }
     renderStrategyRouteShell(link, source, rows);
     markLatency("shell", key);
     restoreStrategySnapshot(link);
@@ -7983,7 +8060,13 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
             }, 900);
           }
         } else {
-          scheduleCanvasDraw();
+          if (isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
+            const fallbackRows = rowsForRoute(key);
+            if (fallbackRows.length) scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "previous-good", fallbackRows), "previous-good");
+            else renderStrategyRouteShell(key, "member-pending", []);
+          } else {
+            scheduleCanvasDraw();
+          }
         }
       }).catch(() => setCanvasStatus("沿用快照"));
     }, snapshotFirst ? 0 : rows.length ? 80 : 140);
