@@ -962,14 +962,6 @@ async function handler(request, response) {
   }
 
   const options = readRequestOptions(request);
-  const earlyReleasePayload = options.snapshotFriendly
-    ? readReleaseWarrantSummaryPayload(options, "postgrest_timeout_release_latest_good")
-    : null;
-  if (earlyReleasePayload) {
-    setDesktopSnapshotCache(response);
-    sendJson(request, response, withMarketSession(earlyReleasePayload, buildMarketSession(null, earlyReleasePayload)), "warrant-flow");
-    return;
-  }
 
   const cached = await readEndpointFromDesktopSnapshot(request, {
     timeoutMs: 700,
