@@ -115,6 +115,14 @@ function checkLocal() {
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use /api/mobile-boot as primary boot endpoint");
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must use no-store plus cache-busting query");
   requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/signup/logout actions");
+  requireText(mobile, 'let boot=null,active="strategy2"', "mobile shell must open on the first visible strategy tab after the AI pill is removed");
+  requireText(mobile, '.status{display:none', "mobile shell must hide the noisy fresh/API status line");
+  requireText(mobile, 'function firstMetricText', "mobile index cards must render value plus change text");
+  requireText(mobile, 'market-metric', "mobile index cards must use explicit market metric markup");
+  rejectText(mobile, 'data-fragment="ai">AI</button>', "mobile shell must not render the old AI circular tab");
+  if (!/id="mobile-auth-actions"[\s\S]*id="mobile-member-state"[\s\S]*id="mobile-logout-button"/.test(mobile)) {
+    issues.push("mobile member status must sit inside the login/logout action cluster");
+  }
   requireText(mobile, "data-mobile-auth-lock", "mobile shell must render a locked membership card before data loads");
   requireText(mobile, "renderAuthGate({checking:true})", "mobile shell must lock immediately while membership is checking");
   requireText(mobile, 'if(active==="ai"){renderAi();loadFragment(active,force).then', "mobile shell must paint AI summary before waiting for fragment HTML");
