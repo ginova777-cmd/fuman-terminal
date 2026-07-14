@@ -1043,6 +1043,13 @@ function apiIssues(strategy, endpointResult, basic, freshness, coverage, fields,
   return { issues, warnings };
 }
 
+function isMembershipProtectedPayload(endpointResult = {}) {
+  const payload = endpointResult.json || {};
+  const text = String(endpointResult.text || "");
+  const reason = String(payload.reason || payload.error || payload.code || "");
+  return Number(endpointResult.status || 0) === 401
+    && (payload.protected === true || payload.membershipRequired === true || /membership_required|missing_bearer_token/i.test(reason + " " + text));
+}
 function isProtectedFailClosedPayload(payload = {}) {
   if (!payload || typeof payload !== "object") return false;
   const publishAllowed = firstDirectValue(payload, ["publishAllowed", "run_quality_at_publish.publishAllowed", "runTimeSourceSnapshot.run_quality_at_publish.publishAllowed"], null);
@@ -1062,12 +1069,13 @@ function isProtectedFailClosedPayload(payload = {}) {
 function applyProfileJudgement(strategy, endpointResult, judgement) {
   if (STRICT_LIVE || !judgement.issues.length) return judgement;
   const protectedFailClosed = isProtectedFailClosedPayload(endpointResult.json);
+  const membershipProtected = isMembershipProtectedPayload(endpointResult);
   const downgraded = [];
   const kept = [];
   for (const issue of judgement.issues) {
     if (strategy.liveSessionSurface && /^(http_status_0|http_status_503|api_ok_false|api_rows_empty|rows_below_expected_|field_blanks_)/.test(issue)) {
       downgraded.push(issue);
-    } else if (protectedFailClosed && /^(api_ok_false|api_status_|api_evidence_status_|api_unattended_status_no|run_time_source_snapshot_source_quality_fail|run_time_source_snapshot_quality_issues_|runtime_source_snapshot_quality_fail|runtime_source_snapshot_missing|fallback_or_static_cache_used|realtime_radar_evidence_missing_|fresh_quote_coverage_|quote_age_seconds_|write_budget_|alert_receipt_)/.test(issue)) {
+    } else if ((protectedFailClosed || membershipProtected) && /^(http_status_401|api_ok_false|api_rows_empty|api_status_|api_evidence_status_|api_unattended_status_no|run_time_source_snapshot_source_quality_fail|run_time_source_snapshot_quality_issues_|run_time_source_snapshot_insufficient_|runtime_source_snapshot_quality_fail|runtime_source_snapshot_missing|fallback_or_static_cache_used|realtime_radar_evidence_missing_|fresh_quote_coverage_|quote_age_seconds_|write_budget_|alert_receipt_)/.test(issue)) {
       downgraded.push(issue);
     } else {
       kept.push(issue);
@@ -1077,7 +1085,7 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   const staleHint = JSON.stringify(endpointResult.json || {}).slice(0, 1600) + " " + String(endpointResult.text || "");
   const reason = /stale|not_today|fresh_rows_0_below|trading_day_radar_cache_stale|marketDataDate|off.?session/i.test(staleHint)
     ? "off_session_live_stale"
-    : protectedFailClosed
+    : (protectedFailClosed || membershipProtected)
       ? "off_session_protected_fail_closed"
       : "off_session_live_unavailable";
   return {
@@ -1386,4 +1394,5 @@ main().catch((error) => {
   console.error(`[api-unattended] failed: ${payload.blockers[0]}`);
   if (!NO_FAIL) process.exitCode = 1;
 });
+
 
