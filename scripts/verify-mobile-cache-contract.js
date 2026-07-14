@@ -117,6 +117,7 @@ function checkLocal() {
   requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/signup/logout actions");
   requireText(mobile, "data-mobile-auth-lock", "mobile shell must render a locked membership card before data loads");
   requireText(mobile, "renderAuthGate({checking:true})", "mobile shell must lock immediately while membership is checking");
+  requireText(mobile, 'if(active==="ai"){renderAi();loadFragment(active,force).then', "mobile shell must paint AI summary before waiting for fragment HTML");
   requireText(mobile, 'url.includes("?v=")?url:fresh(url)', "mobile fragment fetch must preserve versioned ?v=hash URLs");
   requireText(mobile, 'v="+encodeURIComponent', "mobile fragments and analysis must be versioned by hash/updatedAt");
   requireText(mobile, "boot_hash", "mobile realtime must compare boot_hash before fetching");
@@ -141,6 +142,7 @@ function checkLocal() {
   requireText(apiBoot, 'Cache-Control", "no-store', "/api/mobile-boot must set browser no-store");
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must set CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must set Vercel CDN no-store");
+  requireText(apiBoot, "function fastWaitingPayload", "mobile boot must avoid strategy endpoint fan-out during boot");
 
   requireText(sw, "const DATA_CACHE", "service worker must isolate data cache");
   requireText(sw, "/\\/data\\/mobile-boot\\.json/i", "service worker must know mobile boot data pattern");

@@ -19,8 +19,8 @@ const TAB_ENDPOINTS = {
 };
 const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
 const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = 2500;
-const MOBILE_BOOT_MARKET_TIMEOUT_MS = 2500;
-const MOBILE_BOOT_TAB_TIMEOUT_MS = 4500;
+const MOBILE_BOOT_MARKET_TIMEOUT_MS = 900;
+const MOBILE_BOOT_TAB_TIMEOUT_MS = 900;
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
@@ -112,6 +112,21 @@ function waitingRunId(payload, tab = "") {
   const reason = payload?.reason || payload?.error || payload?.detail || payload?.qualityStatus || payload?.cacheSource || "waiting";
   const date = compactDate(payload?.date || payload?.marketSession?.taipeiDate || payload?.updatedAt || payload?.transport?.fetchedAt);
   return `${compactToken(tab || "mobile")}-waiting-${date}-${compactToken(reason)}`;
+}
+
+function fastWaitingPayload(tab, endpoint, reason = "snapshot_not_ready") {
+  return {
+    ok: true,
+    source: "mobile-boot-fast-snapshot",
+    cacheSource: "mobile-boot-fast-snapshot",
+    reason,
+    endpoint,
+    count: 0,
+    complete: false,
+    publishAllowed: false,
+    preservePreviousGood: true,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function extractRunId(payload, tab = "") {
@@ -261,16 +276,7 @@ async function buildBoot(request) {
       ts: Date.now(),
     });
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    try {
-      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${endpoint}`, MOBILE_BOOT_TAB_TIMEOUT_MS);
-    } catch (error) {
-      payload = {
-        ok: false,
-        source: "mobile-boot-tab-timeout",
-        error: "mobile_boot_tab_unavailable",
-        message: error?.message || String(error),
-      };
-    }
+    if (!payload) payload = fastWaitingPayload(tab, endpoint);
     return [tab, payload];
   }));
   const fragments = {};

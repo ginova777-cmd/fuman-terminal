@@ -131,6 +131,7 @@ function checkMobileShell() {
   requireText(mobile, "mobile-logout-button", "mobile shell must expose logout action");
   requireText(mobile, "data-mobile-auth-lock", "mobile shell must lock content before membership is confirmed");
   requireText(mobile, "function renderAuthGate", "mobile shell must render a membership gate before protected data");
+  requireText(mobile, 'if(active==="ai"){renderAi();loadFragment(active,force).then', "mobile shell must paint AI summary before waiting for fragment HTML");
   requireText(mobile, "boot_hash", "mobile Realtime must compare boot_hash before refetch");
   requireText(mobile, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile must keep 120s polling fallback only as backup");
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must render from hash contract instead of recalculating data");
@@ -182,6 +183,7 @@ function checkApiBoot() {
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must be CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
   requireText(apiBoot, "/api/mobile-fragment?tab=", "/api/mobile-boot must point strategy tabs to API-rendered fragments");
+  requireText(apiBoot, "function fastWaitingPayload", "mobile boot must not wait for every strategy endpoint before painting");
   for (const endpoint of ["/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
     requireText(apiBoot, endpoint, `/api/mobile-boot must derive mobile fragments from ${endpoint}`);
     requireText(fragmentApi, endpoint, `/api/mobile-fragment must render rows from ${endpoint}`);
