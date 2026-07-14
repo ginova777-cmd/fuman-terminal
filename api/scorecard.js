@@ -1315,6 +1315,10 @@ async function withFreshStrategySourceReports(payload) {
     const strategy5Report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
     if (strategy5Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy5Report);
   } catch {}
+  try {
+    const daytradeReport = await buildDaytradeSourceReport();
+    if (daytradeReport.runId) nextPayload = mergeSourceReport(nextPayload, daytradeReport);
+  } catch {}
   return nextPayload;
 }async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
