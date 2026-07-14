@@ -420,6 +420,31 @@ function entryTimeOf(task, payload, row) {
     return fallbackEntryTime(task, payload);
   }
   const latest = row?.latestRecord && typeof row.latestRecord === "object" ? row.latestRecord : {};
+  if (task.key === "strategy2") {
+    const strategy2Candidates = [
+      row.quoteTime,
+      row.quote_time,
+      latest.quoteTime,
+      latest.quote_time,
+      row.entry_time,
+      row.entryTime,
+      row.firstTradableAAt,
+      row.firstAAt,
+      row.latestAAt,
+      row.latestSeenAt,
+      latest.entryAt,
+      latest.timestamp,
+      row.entryAt,
+      row.time,
+      row.updatedAt,
+      payload.updatedAt,
+    ];
+    for (const candidate of strategy2Candidates) {
+      const time = taipeiTime(candidate);
+      if (time) return time;
+    }
+    return fallbackEntryTime(task, payload);
+  }
   const candidates = [
     row.entry_time,
     row.entryTime,
@@ -829,8 +854,14 @@ function recordsOf(payload) {
   return Array.isArray(payload?.records) ? payload.records : [];
 }
 
+function activeScorecardRecords(records) {
+  return (Array.isArray(records) ? records : []).filter((row) => {
+    const surfaceName = `${row?.strategy || ""} ${row?.source || ""} ${row?.dataSource || ""} ${row?.key || ""}`;
+    return !isRetiredScorecardStrategy(surfaceName);
+  });
+}
 function strategySetOf(records) {
-  return new Set(records.map((row) => cleanText(row.strategy)).filter(Boolean));
+  return new Set(records.map((row) => cleanText(row.strategy || row.strategyName || row.source || row.dataSource)).filter(Boolean));
 }
 
 function scorecardCurrentWriteDecision(nextPayload, outFile) {
@@ -841,13 +872,21 @@ function scorecardCurrentWriteDecision(nextPayload, outFile) {
     return { allow: true, reason: "explicit_allow_current_shrink" };
   }
   const previous = readJsonSafe(outFile);
-  const previousRecords = recordsOf(previous);
-  const nextRecords = recordsOf(nextPayload);
+  const previousRecords = activeScorecardRecords(recordsOf(previous));
+  const nextRecords = activeScorecardRecords(recordsOf(nextPayload));
   if (!previousRecords.length || !nextRecords.length) {
     return { allow: Boolean(nextRecords.length), reason: nextRecords.length ? "no_previous_good" : "next_empty" };
   }
   const previousStrategies = strategySetOf(previousRecords);
+  for (const report of Array.isArray(previous?.sourceReports) ? previous.sourceReports : []) {
+    const strategy = cleanText(report?.strategy || report?.strategyName || report?.source || report?.key);
+    if (strategy && !isRetiredScorecardStrategy(strategy)) previousStrategies.add(strategy);
+  }
   const nextStrategies = strategySetOf(nextRecords);
+  for (const report of Array.isArray(nextPayload?.sourceReports) ? nextPayload.sourceReports : []) {
+    const strategy = cleanText(report?.strategy || report?.strategyName || report?.source || report?.key);
+    if (strategy && !isRetiredScorecardStrategy(strategy)) nextStrategies.add(strategy);
+  }
   const previousDate = isoDate(previous?.latestDate || previous?.summary?.latestDate || "", "");
   const nextDate = isoDate(nextPayload?.latestDate || nextPayload?.summary?.latestDate || "", "");
   if (previousDate && nextDate && nextDate > previousDate) {
@@ -1100,3 +1139,4 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+

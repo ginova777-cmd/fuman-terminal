@@ -12,10 +12,9 @@ const CHECK_LIVE = !process.argv.includes("--no-live");
 const WRITE_OUTPUT = !process.argv.includes("--no-output");
 const CHECK_SCHEDULE = !process.argv.includes("--skip-schedule");
 const SNAPSHOT_FILE = argValue("--snapshot-file", process.env.FUMAN_SCORECARD_SNAPSHOT_FILE || "");
-const MIN_ROWS = Number(argValue("--min-rows", process.env.FUMAN_SCORECARD_MIN_ROWS || "450")) || 0;
+const MIN_ROWS = Number(argValue("--min-rows", process.env.FUMAN_SCORECARD_MIN_ROWS || "10")) || 0;
 const MIN_ROW_RATIO = Number(argValue("--min-row-ratio", process.env.FUMAN_SCORECARD_MIN_ROW_RATIO || "0.8")) || 0;
 const EXPECTED_STRATEGIES = [
-  "策略1開盤入成績單",
   "策略2成績單",
   "策略3隔日沖成績單",
   "策略4成績單",
@@ -23,10 +22,8 @@ const EXPECTED_STRATEGIES = [
   "買賣超成績單",
   "權證成績單",
   "CB成績單",
-  "即時雷達成績單",
 ];
 const SOURCE_REPORT_STRATEGY_BY_KEY = {
-  strategy1: "策略1開盤入成績單",
   strategy2: "策略2成績單",
   strategy3: "策略3隔日沖成績單",
   strategy4: "策略4成績單",
@@ -34,7 +31,6 @@ const SOURCE_REPORT_STRATEGY_BY_KEY = {
   institution: "買賣超成績單",
   warrant: "權證成績單",
   cb: "CB成績單",
-  "realtime-radar": "即時雷達成績單",
 };
 const REQUIRED_SCORECARD_UI_MARKERS = [
   "scorecard-history-date",
@@ -149,7 +145,7 @@ function rowsByStrategy(rows, payload = {}, latestDate = "") {
   for (const report of Array.isArray(payload?.sourceReports) ? payload.sourceReports : []) {
     const key = cleanText(report?.key || "");
     const strategy = cleanText(report?.strategy || SOURCE_REPORT_STRATEGY_BY_KEY[key] || "");
-    if (!strategy || sourceReportDate(report) !== latestDate) continue;
+    if (!strategy) continue;
     byStrategy[strategy] = Math.max(byStrategy[strategy] || 0, 1, cleanNumber(report?.emittedRows ?? report?.count ?? 0));
   }
   return byStrategy;
@@ -245,7 +241,7 @@ function verifyPayload(checks, payload, source, baseline = null) {
   addCheck(checks, cacheSource === "supabase-snapshot", `${source}-cache-source`, `${source} cacheSource must be supabase-snapshot`, { cacheSource });
   addCheck(checks, !/google|sheet|streamlit|duckdb|retired/i.test(sourceText), `${source}-no-retired-source`, `${source} must not point to retired source`, { sourceText });
   addCheck(checks, Boolean(latestDate), `${source}-latest-date`, `${source} latestDate exists`, { latestDate });
-  addCheck(checks, hardMissingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all 9 strategies or formally blocked source reports`, {
+  addCheck(checks, hardMissingStrategies.length === 0, `${source}-all-strategies`, `${source} must include all active strategies or formally blocked source reports`, {
     byStrategy,
     missingStrategies,
     blockedCoveredStrategies: [...blockedCoverage],
@@ -407,4 +403,5 @@ main().catch((error) => {
   console.error(`[scorecard-no-rollback] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
 

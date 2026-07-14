@@ -8011,7 +8011,19 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     return false;
   }
 
+  function blockProtectedFastRoute(viewName, link, event = null) {
+    const guard = window.FUMAN_ENTITLEMENT_GUARD;
+    if (!guard || guard.isEntitled?.() === true) return false;
+    const protectedRoute = guard.isProtectedView?.(viewName, link) || guard.isProtectedLink?.(link);
+    if (!protectedRoute) return false;
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+    guard.showLocked?.(String(link?.textContent || viewName || "付費功能").trim(), viewName, link);
+    return true;
+  }
   function activateStrategyRoute(link, source) {
+    if (blockProtectedFastRoute("strategy", link)) return false;
     startLatency(link, source || "strategy");
     beginInteractionHold(`strategy-${source || "route"}`);
     const key = strategyRouteKey(link);
@@ -8075,6 +8087,8 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
   function activateFixedPageRoute(link, source) {
     const key = fixedRouteKey(link);
     if (!key || isStrategyLink(link)) return false;
+    const viewName = link?.dataset?.view || key.split("|")[0] || "";
+    if (blockProtectedFastRoute(viewName, link)) return false;
     activeSnapshotRoute = key;
     const now = Date.now();
     if (source === "click" && key === fixedClickRoute && now - fixedClickAt < 360) return true;
@@ -8293,6 +8307,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
       markFastEvent(event);
       markInstantActive(link);
       if (isStrategyLink(link)) {
+        if (blockProtectedFastRoute("strategy", link, event)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         beginInteractionHold("strategy-pointer");
@@ -8302,6 +8317,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         return;
       }
       if (fixedRouteKey(link)) {
+        if (blockProtectedFastRoute(link?.dataset?.view || fixedRouteKey(link).split("|")[0], link, event)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -8334,6 +8350,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
       }
       if (!isStrategyLink(link)) {
         if (fixedRouteKey(link)) {
+          if (blockProtectedFastRoute(link?.dataset?.view || fixedRouteKey(link).split("|")[0], link, event)) return;
           event.preventDefault();
           event.stopImmediatePropagation();
         }

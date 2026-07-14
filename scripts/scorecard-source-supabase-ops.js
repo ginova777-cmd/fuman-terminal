@@ -12,19 +12,12 @@ const RECEIPT_FILE = process.env.FUMAN_SCORECARD_SOURCE_RECEIPT
   || path.join(RUNTIME_DIR, "data", "scan-receipts", "scorecard-source-supabase.json");
 const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const SCORECARD_HISTORY_DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_HISTORY_DAYS || "30"));
-const TERMINAL_SCORECARD_STRATEGIES = [
+const RETIRED_SCORECARD_STRATEGIES = [
   "即時雷達成績單",
   "策略1成績單",
   "策略1開盤入成績單",
-  "策略2成績單",
   "策略2-A區進場",
   "策略3成績單",
-  "策略3隔日沖成績單",
-  "策略4成績單",
-  "策略5成績單",
-  "買賣超成績單",
-  "權證成績單",
-  "CB成績單",
 ];
 
 function arg(name, fallback = "") {
@@ -338,9 +331,9 @@ async function backfill() {
         `source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&summary_date=lt.${encodeURIComponent(historyCutoff)}`,
       ),
     };
-    cleanup.legacyStrategies = [];
-    for (const strategy of TERMINAL_SCORECARD_STRATEGIES) {
-      cleanup.legacyStrategies.push({
+    cleanup.retiredStrategies = [];
+    for (const strategy of RETIRED_SCORECARD_STRATEGIES) {
+      cleanup.retiredStrategies.push({
         strategy,
         currentTradeRecords: await restDelete(
           "trade_records",
@@ -409,3 +402,4 @@ main().catch((error) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exit(1);
 });
+
