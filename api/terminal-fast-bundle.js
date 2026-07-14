@@ -48,9 +48,7 @@ function filterPublicBundlePayload(payload, entitlement) {
   const endpoints = {};
   for (const [endpoint, endpointPayload] of Object.entries(payload?.endpoints || {})) {
     if (isPublicBundleEndpoint(endpoint)) {
-      endpoints[endpoint] = String(endpoint || "").startsWith("/api/watchlist-match-index")
-        ? endpointPayload
-        : sanitizePublicEndpointPayload(endpointPayload);
+      endpoints[endpoint] = sanitizePublicEndpointPayload(endpointPayload);
     }
   }
   const timings = {};
