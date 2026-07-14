@@ -571,8 +571,12 @@ function isNonTradingRealtimeZero(config, live, compact) {
 function membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot) {
   if (!config?.allowReceiptDriftWhenDownstreamFresh) return false;
   if (!supabase?.runId || !snapshot?.runId || snapshot.runId !== supabase.runId) return false;
-  if (cleanNumber(snapshot.count || snapshot.returnedCount) !== cleanNumber(supabase.count)) return false;
-  return Boolean(live?.membershipProtected || compact?.membershipProtected);
+  const snapshotCount = cleanNumber(snapshot.count || snapshot.returnedCount);
+  const supabaseCount = cleanNumber(supabase.count);
+  const protectedSurface = Boolean(live?.membershipProtected || compact?.membershipProtected);
+  if (!protectedSurface) return false;
+  if (snapshotCount === supabaseCount) return true;
+  return supabaseCount > 0 && snapshotCount > 0 && snapshotCount <= supabaseCount;
 }
 
 function obviousFallback(summary) {

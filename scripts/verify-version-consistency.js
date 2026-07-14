@@ -23,6 +23,9 @@ const issues = [];
 function requireIncludes(file, needle) {
   if (!read(file).includes(needle)) issues.push(`${file}: missing ${needle}`);
 }
+function forbidIncludes(file, needle) {
+  if (read(file).includes(needle)) issues.push(`${file}: stale ${needle}`);
+}
 
 requireIncludes("index.html", `styles.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
@@ -42,7 +45,13 @@ requireIncludes("fuman-sw.js", `/terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-member-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-snapshot-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-strategy-module.js?v=${VERSION}`);
-requireIncludes("fuman-sw.js", `/terminal-watchlist-shell.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", "WATCHLIST_SHELL_ASSET_EPOCH");
+requireIncludes("fuman-sw.js", "watchlist-rich-shell-20260714-detail-sync-01");
+requireIncludes("fuman-sw.js", "`/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`");
+forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260711-03");
+forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260712-quote-source-01");
+forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260712-quote-source-02");
+forbidIncludes("fuman-sw.js", `/terminal-watchlist-shell.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-chip-snapshot-module.js?v=${VERSION}`);
 requireIncludes("refresh.html", `/?v=${VERSION}`);
 requireIncludes("version.json", `"version": "${VERSION}"`);
