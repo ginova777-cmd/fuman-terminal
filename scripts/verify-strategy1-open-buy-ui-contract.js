@@ -32,6 +32,15 @@ forbidIncludes("index.github.html", [
   "策略1 明日開盤入",
   "明日開盤入</a>",
 ]);
+forbidIncludes("mobile.html", [
+  'data-fragment="strategy1"',
+  ">策略1<",
+  ">策略2<",
+  ">策略3<",
+  ">策略4<",
+  ">策略5<",
+  'strategy1:"策略1"',
+]);
 forbidIncludes("api/mobile-fragment.js", [
   'strategy1: {',
   'endpoint: "/api/open-buy-latest"',
