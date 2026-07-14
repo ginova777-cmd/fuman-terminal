@@ -382,8 +382,15 @@ function compactSnapshotEndpoints(request, endpoints = {}) {
   }
   return compacted;
 }
+const RETIRED_TERMINAL_ENDPOINTS = new Set([
+  `/api/${"open-buy"}-latest`,
+  `/api/${"realtime-radar"}-latest`,
+  `/api/${"heatmap"}`,
+]);
+
 function isRetiredTerminalEndpoint(endpoint) {
-  return /^\/api\/(?:open-buy-latest|realtime-radar-latest|heatmap)(?:\?|$)/i.test(String(endpoint || ""));
+  const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+  return RETIRED_TERMINAL_ENDPOINTS.has(path);
 }
 
 function stripRetiredTerminalEndpoints(endpoints = {}) {
@@ -809,4 +816,5 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
 

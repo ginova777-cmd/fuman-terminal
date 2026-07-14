@@ -5,6 +5,7 @@
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
+  const UNLOCKED_MEMBERSHIP_CONTENT = new Set(["verified", "token_unlocked"]);
   const PUBLIC_VIEWS = new Set(["market", "member"]);
   const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"]);
   const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究"];
@@ -17,6 +18,50 @@
     }
   }
 
+  function readStoredSupabaseToken() {
+    const readToken = (value) => {
+      const parsed = parseJson(value);
+      const token = parsed?.access_token || parsed?.currentSession?.access_token || parsed?.session?.access_token;
+      if (!token) return null;
+      return {
+        token: String(token).trim(),
+        expiresAt: Number(parsed?.expires_at || parsed?.currentSession?.expires_at || parsed?.session?.expires_at || 0),
+      };
+    };
+    const exact = readToken(localStorage.getItem("sb-jxnqyqnigsppqsxinlrq-auth-token"));
+    if (exact?.token) return exact;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index) || "";
+      if (!/^sb-.*-auth-token$/i.test(key)) continue;
+      const value = readToken(localStorage.getItem(key));
+      if (value?.token) return value;
+    }
+    return { token: "", expiresAt: 0 };
+  }
+
+  function readRuntimeUnlockState() {
+    const body = document.body;
+    const memberState = document.querySelector("#member-state");
+    const status = String(memberState?.dataset?.status || memberState?.dataset?.memberStatus || "").toLowerCase();
+    const bodyAccess = body?.dataset?.membershipAccess === "allowed";
+    const bodyToken = body?.dataset?.membershipToken === "present";
+    const bodyContent = String(body?.dataset?.membershipContent || "").toLowerCase();
+    const contentVerified = UNLOCKED_MEMBERSHIP_CONTENT.has(bodyContent);
+    const authReady = body?.classList?.contains("auth-ready") && !body.classList.contains("auth-locked");
+    const logoutReady = document.querySelector(".sidebar-foot .logout")?.dataset?.authAction === "logout";
+    const memberReady = ALLOWED_STATUSES.has(status) || bodyAccess || contentVerified;
+    const sessionReady = bodyToken || authReady || logoutReady;
+    return {
+      status,
+      bodyAccess,
+      bodyToken,
+      bodyContent,
+      contentVerified,
+      authReady,
+      logoutReady,
+      entitled: Boolean(memberReady && sessionReady),
+    };
+  }
   function readAccess() {
     const cached = parseJson(localStorage.getItem(AUTH_CACHE_KEY));
     const access = cached?.access || cached?.profile || cached?.user || cached || {};
@@ -24,8 +69,10 @@
     const plan = String(access.plan || access.planCode || access.tier || "").toLowerCase();
     const permissions = access.permissions || access.features || {};
     const token = String(cached?.accessToken || cached?.session?.access_token || "").trim();
-    const expiresAt = Number(cached?.expiresAt || 0);
-    const hasValidSession = Boolean(token) && (!expiresAt || expiresAt * 1000 >= Date.now() - 30000);
+    const storedToken = readStoredSupabaseToken();
+    const expiresAt = Number(cached?.expiresAt || cached?.session?.expires_at || storedToken.expiresAt || 0);
+    const sessionToken = token || storedToken.token;
+    const hasValidSession = Boolean(sessionToken) && (!expiresAt || expiresAt * 1000 >= Date.now() - 30000);
     const explicitTerminal =
       permissions.strategyTerminal === true ||
       permissions.premiumTerminal === true ||
@@ -37,8 +84,9 @@
       ALLOWED_STATUSES.has(status) ||
       ALLOWED_STATUSES.has(plan) ||
       (access.allowed === true && ALLOWED_STATUSES.has(status));
-    const entitled = hasValidSession && entitledByPlan;
-    return { cached, access, status, plan, hasValidSession, entitledByPlan, entitled };
+    const runtime = readRuntimeUnlockState();
+    const entitled = (hasValidSession && entitledByPlan) || runtime.entitled;
+    return { cached, access, status, plan, hasValidSession, entitledByPlan, entitled, runtime };
   }
 
   function isEntitled() {
@@ -425,6 +473,10 @@
   }
 
   function renderLockedPreview(panel, viewName, targetLabel) {
+    if (isEntitled()) {
+      clearLockedPreview();
+      return;
+    }
     panel.querySelector(".fuman-entitlement-preview")?.remove();
     panel.classList.add("fuman-entitlement-panel-locked");
     panel.dataset.entitlementLocked = "1";
@@ -438,13 +490,21 @@
   function installLockedPreviewObserver(panel) {
     if (panel.__fumanEntitlementObserver) return;
     panel.__fumanEntitlementObserver = new MutationObserver(() => {
-      if (isEntitled() || panel.dataset.entitlementLocked !== "1" || panel.querySelector(".fuman-entitlement-preview")) return;
+      if (isEntitled()) {
+        clearLockedPreview();
+        return;
+      }
+      if (panel.dataset.entitlementLocked !== "1" || panel.querySelector(".fuman-entitlement-preview")) return;
       renderLockedPreview(panel, panel.dataset.entitlementView || "strategy", panel.dataset.entitlementLabel || "付費功能");
     });
     panel.__fumanEntitlementObserver.observe(panel, { childList: true });
   }
 
   function showLocked(targetLabel, viewName = "strategy", activeLink = null) {
+    if (isEntitled()) {
+      clearLockedPreview();
+      return;
+    }
     ensureStyles();
     clearLockedPreview();
     const normalizedView = PROTECTED_VIEWS.has(viewName) ? viewName : (activeLink?.dataset?.view || "strategy");
@@ -496,7 +556,11 @@
     const state = window.FUMAN_DESKTOP_ROUTE_STATE || {};
     const previous = state.shouldBlockView;
     state.shouldBlockView = function shouldBlockView(viewName, activeLink) {
-      if (!isEntitled() && isProtectedView(viewName, activeLink)) {
+      if (isEntitled()) {
+        clearLockedPreview();
+        return typeof previous === "function" ? previous.call(this, viewName, activeLink) : false;
+      }
+      if (isProtectedView(viewName, activeLink)) {
         showLocked(textOf(activeLink) || viewName || "付費功能", viewName, activeLink);
         return true;
       }
@@ -518,12 +582,30 @@
     // /88 is a public scorecard surface. Membership guard only protects terminal strategy data.
   }
 
+  function reconcileEntitlementState() {
+    syncMemberStatusBadge();
+    if (isEntitled()) clearLockedPreview();
+  }
+
+  function installEntitlementStateDetector() {
+    const reconcile = () => reconcileEntitlementState();
+    window.addEventListener("fuman:membership-content-verified", reconcile);
+    window.addEventListener("fuman:membership-status-refresh", reconcile);
+    window.addEventListener("focus", reconcile);
+    window.addEventListener("pageshow", reconcile);
+    window.addEventListener("storage", reconcile);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", reconcile, { once: true });
+    else requestAnimationFrame(reconcile);
+    window.setInterval(reconcile, 5000);
+  }
+
   sanitizeSavedRoute();
   installProtectedApiBearer();
   installRouteHook();
   installInteractionGuard();
   installScorecardLock();
   installMemberStatusSync();
+  installEntitlementStateDetector();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", markProtectedNav, { once: true });
   else markProtectedNav();
 
@@ -535,6 +617,8 @@
     readAccess,
     membershipStatusModel,
     syncMemberStatusBadge,
+    clearLockedPreview,
+    reconcileEntitlementState,
     handleMemberAuthAction,
     isProtectedLink,
     isProtectedView,
