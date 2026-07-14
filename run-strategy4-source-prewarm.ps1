@@ -164,9 +164,7 @@ try {
       $repairOk = Invoke-Strategy4SourceRepair "resource health $($resourceGate.Status): $($resourceGate.Reason)"
       $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
     } else {
-      $repairAttempted = $true
-      $repairOk = Invoke-Strategy4SourceRepair "scheduled prewarm refresh"
-      $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
+      Write-Log "Strategy4 source already ready; skip heavy repair/import and write ready prewarm receipt. reason=$($resourceGate.Reason)"
     }
 
     if ($resourceGate.PreserveLatest) {
