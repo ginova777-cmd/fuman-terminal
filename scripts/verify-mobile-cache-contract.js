@@ -134,6 +134,9 @@ function checkLocal() {
     issues.push("mobile member status must sit inside the login/logout action cluster");
   }
   requireText(mobile, "data-mobile-auth-lock", "mobile shell must render a locked membership card before data loads");
+  requireText(mobile, 'data-mobile-auth-lock-guard="mobile-auth-lock-guard-20260714-01"', "mobile shell must globally block all tabs and watchlist actions while locked");
+  requireText(mobile, 'html[data-mobile-locked="1"] #tabs{display:none!important}', "mobile shell must hide terminal tabs while membership is locked");
+  requireText(mobile, "MutationObserver", "mobile shell must restore auth lock if a legacy hotfix renders protected content while locked");
   requireText(mobile, "renderAuthGate({checking:true})", "mobile shell must lock immediately while membership is checking");
   requireText(mobile, 'if(active==="ai"){renderAi();loadFragment(active,force).then', "mobile shell must paint AI summary before waiting for fragment HTML");
   requireText(mobile, 'url.includes("?v=")?url:fresh(url)', "mobile fragment fetch must preserve versioned ?v=hash URLs");
