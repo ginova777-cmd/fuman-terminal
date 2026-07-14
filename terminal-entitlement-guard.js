@@ -487,6 +487,17 @@
     installLockedPreviewObserver(panel);
   }
 
+  function reassertLockedPreview(panel, viewName, targetLabel) {
+    const apply = () => {
+      if (isEntitled() || !panel || !document.documentElement.contains(panel)) return;
+      forceActivePanel(panel);
+      if (panel.dataset.entitlementLocked === "1" && panel.querySelector(".fuman-entitlement-preview")) return;
+      renderLockedPreview(panel, viewName || panel.dataset.entitlementView || "strategy", targetLabel || panel.dataset.entitlementLabel || "付費功能");
+    };
+    requestAnimationFrame(apply);
+    setTimeout(apply, 80);
+    setTimeout(apply, 220);
+  }
   function installLockedPreviewObserver(panel) {
     if (panel.__fumanEntitlementObserver) return;
     panel.__fumanEntitlementObserver = new MutationObserver(() => {
@@ -514,6 +525,7 @@
     forceActivePanel(panel);
     requestAnimationFrame(() => forceActivePanel(panel));
     setTimeout(() => forceActivePanel(panel), 180);
+    reassertLockedPreview(panel, normalizedView, targetLabel);
   }
   function blockEvent(event, link) {
     if (isEntitled()) return false;
