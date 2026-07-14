@@ -58,6 +58,8 @@ const STRATEGY_FILTER = String(ARGS.values.get("strategy") || ARGS.values.get("o
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
 
+const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap"]);
+
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
   name: ["name", "stockName", "stock_name", "underlyingName", "cbName", "warrantName"],
@@ -1287,7 +1289,9 @@ async function main() {
   const marketWindow = MARKET_WINDOW;
   const releaseIdentity = await fetchReleaseIdentity();
   const strategies = [];
-  const selectedStrategies = STRATEGIES.filter(strategyMatchesFilter);
+  const selectedStrategies = STRATEGIES
+    .filter((strategy) => !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase()))
+    .filter(strategyMatchesFilter);
   if (!selectedStrategies.length) {
     throw new Error(`No strategy matched --strategy=${STRATEGY_FILTER.join(",")}`);
   }
@@ -1382,3 +1386,4 @@ main().catch((error) => {
   console.error(`[api-unattended] failed: ${payload.blockers[0]}`);
   if (!NO_FAIL) process.exitCode = 1;
 });
+
