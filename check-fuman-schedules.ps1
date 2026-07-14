@@ -85,7 +85,7 @@ $rules = @{
     Detail = @("Watchdog OK.*", "Watchdog rerun completed")
   }
   "run-institution.ps1" = @{
-    Log = "institution-*.log"
+    Log = "institution-20*.log"
     Done = @("Institution scan end")
     Detail = @("Institution scan end")
   }
@@ -258,6 +258,7 @@ function Test-FailureText($text) {
   # Keep real fatal errors strict, but do not let retry-only HTTP 500/timeout lines mark a completed loop as failed.
   $clean = $clean -replace "(?im)^.*transient failure attempt=\d+/\d+:.*retrying in \d+ms.*$", ""
   $clean = $clean -replace "(?im)^.*read skipped: .*HTTP 500.*canceling statement due to statement timeout.*$", ""
+  $clean = $clean -replace "(?im)^.*(?:source|metric) warning: .*?(?:fetch failed|This operation was aborted).*$", ""
   return $clean -match "(?i)(failed with exit code|Error:|exited: 1|UNABLE_TO_VERIFY|fetch failed|This operation was aborted|fatal:|HTTP\s+[45]\d\d)"
 }
 

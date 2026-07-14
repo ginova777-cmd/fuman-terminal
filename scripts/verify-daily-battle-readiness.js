@@ -64,6 +64,14 @@ function bool(value) {
   return value === true;
 }
 
+function readJsonFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function receiptComplete(name) {
   try {
     const receipt = JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "data", "scan-receipts", name), "utf8"));
