@@ -13,6 +13,9 @@
   const SNAPSHOT_PREFIX = "FUMAN_DESKTOP_ROUTE_SNAPSHOT:";
   const SNAPSHOT_MAX_AGE_MS = 10 * 60 * 1000;
   const SNAPSHOT_MAX_CHARS = 850000;
+  const MEMBER_STRATEGY_PREVIEW_PREFIX = "FUMAN_MEMBER_STRATEGY_PREVIEW:";
+  const MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const MEMBER_STRATEGY_PREVIEW_MAX_CHARS = 900000;
   const SNAPSHOT_ROUTES = ["strategy|策略1", "strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
@@ -1412,6 +1415,59 @@
     return rowSignature(canvasStore.get(route)?.rows || canvasState.rows || []);
   }
 
+  function isMemberStrategyPreviewRoute(route) {
+    return route === "strategy|策略2"
+      || route === "strategy|策略3"
+      || route === "strategy|策略4"
+      || route === "strategy|策略5";
+  }
+
+  function hasMemberPreviewToken() {
+    try {
+      return window.FUMAN_MEMBER_BEARER_FETCH_BRIDGE?.hasToken?.() === true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function memberStrategyPreviewKey(route) {
+    return MEMBER_STRATEGY_PREVIEW_PREFIX + route;
+  }
+
+  function writeMemberStrategyPreview(route, rows, meta = null, source = "api", at = Date.now()) {
+    if (!isMemberStrategyPreviewRoute(route) || !Array.isArray(rows) || !rows.length) return false;
+    const item = {
+      version: 1,
+      route,
+      at,
+      source,
+      meta: meta && typeof meta === "object" ? meta : null,
+      rows: rows.slice(0, 300),
+    };
+    try {
+      const raw = JSON.stringify(item);
+      if (raw.length > MEMBER_STRATEGY_PREVIEW_MAX_CHARS) return false;
+      localStorage.setItem(memberStrategyPreviewKey(route), raw);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function readMemberStrategyPreview(route) {
+    if (!isMemberStrategyPreviewRoute(route) || !hasMemberPreviewToken()) return null;
+    try {
+      const raw = localStorage.getItem(memberStrategyPreviewKey(route));
+      if (!raw) return null;
+      const item = JSON.parse(raw);
+      if (item?.route !== route || !Array.isArray(item.rows) || !item.rows.length) return null;
+      if (Date.now() - Number(item.at || 0) > MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS) return null;
+      return item;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function purgeApiOnlyStrategySnapshots() {
     const keys = [...API_ONLY_STRATEGY_ROUTES, ...API_ONLY_FIXED_ROUTE_KEYS];
     keys.forEach((key) => {
@@ -1989,12 +2045,13 @@
     routeSnapshots.set(route, item);
     writeSessionSnapshot(route, item);
     writeIndexedSnapshot(route, item);
+    writeMemberStrategyPreview(route, cleanRows, meta, source, at);
     return cleanRows;
   }
 
   function rememberCanvasEmptyPayload(route, source = "api-empty", at = Date.now(), meta = null) {
     if (!route || !meta || typeof meta !== "object") return false;
-    if (isStrategy2Route(route)) {
+    if (isMemberStrategyPreviewRoute(route)) {
       const existingRows = rowsForRoute(route);
       const shouldPreserve = existingRows.length && (
         meta.ok === false
@@ -2039,6 +2096,11 @@
     if (snapshot?.rows?.length) {
       setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now(), snapshot.meta || null);
       return snapshot.rows;
+    }
+    const memberPreview = readMemberStrategyPreview(route);
+    if (memberPreview?.rows?.length) {
+      setCanvasRows(route, memberPreview.rows, "member-preview-cache", memberPreview.at || Date.now(), memberPreview.meta || null);
+      return memberPreview.rows;
     }
     return [];
   }
