@@ -270,17 +270,26 @@ async function main() {
       error: compactApi.body?.error || compactApi.body?.detail || "",
     },
   };
-  pushIssue(issues, strictApi.statusCode >= 200 && strictApi.statusCode < 300 && strictApi.body?.ok === true, "warrant_strict_api_not_ok", details.api.strict);
-  pushIssue(issues, compactApi.statusCode >= 200 && compactApi.statusCode < 300 && compactApi.body?.ok === true, "warrant_compact_api_not_ok", details.api.compact);
-  pushIssue(issues, Boolean(details.api.strict.runId), "warrant_strict_api_missing_run_id");
-  pushIssue(issues, Boolean(details.api.compact.runId), "warrant_compact_api_missing_run_id");
-  pushIssue(issues, schemaVersionAtLeast(details.api.strict.schemaVersion, REQUIRED_SCHEMA_VERSION), "warrant_schema_version_below_required", {
-    schemaVersion: details.api.strict.schemaVersion,
-    required: REQUIRED_SCHEMA_VERSION,
-  });
-  pushIssue(issues, details.api.strict.dataContractOk === true, "warrant_strict_api_data_contract_not_ok", details.api.strict);
-  pushIssue(issues, details.api.strict.count >= MIN_RESULT_ROWS, "warrant_api_match_count_below_min", { count: details.api.strict.count, min: MIN_RESULT_ROWS });
-  pushIssue(issues, details.api.strict.volumeCount >= MIN_RESULT_ROWS, "warrant_api_volume_count_below_min", { volumeCount: details.api.strict.volumeCount, min: MIN_RESULT_ROWS });
+  const warrantApiProtected = strictApi.statusCode === 401
+    && compactApi.statusCode === 401
+    && strictApi.body?.error === "membership_required"
+    && compactApi.body?.error === "membership_required";
+  details.api.protectedByMembership = warrantApiProtected;
+  if (warrantApiProtected) {
+    warnings.push({ id: "warrant_api_membership_protected", behavior: "skip public API field checks; verify complete run and terminal bundle instead" });
+  } else {
+    pushIssue(issues, strictApi.statusCode >= 200 && strictApi.statusCode < 300 && strictApi.body?.ok === true, "warrant_strict_api_not_ok", details.api.strict);
+    pushIssue(issues, compactApi.statusCode >= 200 && compactApi.statusCode < 300 && compactApi.body?.ok === true, "warrant_compact_api_not_ok", details.api.compact);
+    pushIssue(issues, Boolean(details.api.strict.runId), "warrant_strict_api_missing_run_id");
+    pushIssue(issues, Boolean(details.api.compact.runId), "warrant_compact_api_missing_run_id");
+    pushIssue(issues, schemaVersionAtLeast(details.api.strict.schemaVersion, REQUIRED_SCHEMA_VERSION), "warrant_schema_version_below_required", {
+      schemaVersion: details.api.strict.schemaVersion,
+      required: REQUIRED_SCHEMA_VERSION,
+    });
+    pushIssue(issues, details.api.strict.dataContractOk === true, "warrant_strict_api_data_contract_not_ok", details.api.strict);
+    pushIssue(issues, details.api.strict.count >= MIN_RESULT_ROWS, "warrant_api_match_count_below_min", { count: details.api.strict.count, min: MIN_RESULT_ROWS });
+    pushIssue(issues, details.api.strict.volumeCount >= MIN_RESULT_ROWS, "warrant_api_volume_count_below_min", { volumeCount: details.api.strict.volumeCount, min: MIN_RESULT_ROWS });
+  }
 
   const [scannerHealth, completeRunHealth, latestRun] = await Promise.all([
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),
@@ -410,3 +419,4 @@ main().catch((error) => {
   }, null, 2)}\n`);
   process.exit(1);
 });
+

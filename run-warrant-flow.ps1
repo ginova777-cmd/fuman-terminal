@@ -44,23 +44,31 @@ function Assert-WarrantFlowApi {
   param(
     [switch]$AllowPreviousComplete
   )
-  $endpointKey = "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1"
-  $url = "https://fuman-terminal.vercel.app/api/desktop-route-snapshot?ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $snapshotPayload = $response.Content | ConvertFrom-Json -AsHashtable
-  $payload = $snapshotPayload["endpoints"][$endpointKey]
-  if ($response.StatusCode -ne 200 -or -not $payload -or $payload.ok -ne $true -or -not $payload.runId) {
-    throw "Warrant flow desktop snapshot verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
-  }  if ([int]$payload.count -le 0) { throw "Warrant flow API empty count=$($payload.count)" }
-  $apiUpdatedAtText = [string]($payload.updatedAt ?? $payload.generatedAt)
-  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Warrant flow API missing updatedAt" }
+  $postScanFile = Join-Path $env:FUMAN_RUNTIME_DIR "post-scan-snapshot-refresh-latest.json"
+  if (-not (Test-Path -LiteralPath $postScanFile)) {
+    throw "Warrant flow post-scan snapshot contract missing: $postScanFile"
+  }
+  $postScan = Get-Content -LiteralPath $postScanFile -Raw | ConvertFrom-Json
+  $row = @($postScan.rows) | Where-Object { $_.key -eq "warrant" } | Select-Object -First 1
+  $payload = $row.bundle
+  if ($postScan.ok -ne $true -or -not $row -or $row.runIdAligned -ne $true -or $row.countAligned -ne $true -or -not $payload.runId) {
+    throw "Warrant flow post-scan bundle verification failed ok=$($postScan.ok) runIdAligned=$($row.runIdAligned) countAligned=$($row.countAligned) runId=$($payload.runId)"
+  }
+  if ([int]$payload.count -le 0) { throw "Warrant flow post-scan bundle empty count=$($payload.count)" }
+  $apiUpdatedAtText = [string]($payload.updatedAt)
+  if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Warrant flow post-scan bundle missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
   $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
   if (-not $AllowPreviousComplete -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
-    throw "Warrant flow API did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
+    throw "Warrant flow post-scan bundle did not expose this scan yet: runId=$($payload.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
-  "Warrant flow desktop snapshot verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
-  return $payload
+  "Warrant flow post-scan bundle verified runId=$($payload.runId) count=$($payload.count) cache=$($payload.cacheSource)" >> $log
+  return [pscustomobject]@{
+    runId = [string]$payload.runId
+    count = [int]$payload.count
+    cacheSource = [string]$payload.cacheSource
+    updatedAt = $apiUpdatedAtText
+  }
 }
 
 function Invoke-NodeScan($scriptPath, $label) {
@@ -83,6 +91,22 @@ function Invoke-NodeScan($scriptPath, $label) {
   }
 }
 
+function Invoke-WarrantPostScanSnapshotRefresh {
+  Push-Location "${PSScriptRoot}"
+  try {
+    "=== Warrant flow post-scan snapshot refresh verify $(Get-Date) ===" >> $log
+    $env:FUMAN_POST_SCAN_SNAPSHOT_ROUTES = "warrant"
+    & $nodeExe "scripts\verify-post-scan-snapshot-refresh-contract.js" "--routes=warrant" >> $log 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+      throw "Warrant flow post-scan snapshot refresh verifier failed with exit code $exitCode"
+    }
+    "Warrant flow post-scan snapshot refresh verifier completed." >> $log
+  } finally {
+    Remove-Item Env:FUMAN_POST_SCAN_SNAPSHOT_ROUTES -ErrorAction SilentlyContinue
+    Pop-Location
+  }
+}
 "=== Warrant flow scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
@@ -92,7 +116,6 @@ $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "warrant" -LogPath $l
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   "Warrant flow source gate blocked new publish; preserving latest complete run. $reason" >> $log
-  $verifiedPayload = Assert-WarrantFlowApi -AllowPreviousComplete
   $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
   if (Test-Path -LiteralPath $snapshotScript) {
     & $snapshotScript -Source "warrant-flow" -LogPath $log
@@ -102,6 +125,15 @@ if ($resourceGate.PreserveLatest) {
       Write-WarrantFlowReceipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
       exit $LASTEXITCODE
     }
+  }
+  try {
+    Invoke-WarrantPostScanSnapshotRefresh
+    $verifiedPayload = Assert-WarrantFlowApi -AllowPreviousComplete
+  } catch {
+    "Warrant flow post-scan verification failed while preserving latest: $($_.Exception.Message)" >> $log
+    Write-FumanFlowHealth -Scope warrant -Status publish_delayed -Message "Warrant flow latest complete run preserved but post-scan snapshot refresh failed" -Detail @{ error = $_.Exception.Message; log = $log }
+    Write-WarrantFlowReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during post-scan snapshot refresh"
+    exit 1
   }
   Write-WarrantFlowReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
   Write-FumanFlowHealth -Scope warrant -Status source_stale -Message "Warrant flow resource health blocked new publish; preserved latest complete run" -Detail @{ reason = $reason; log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
@@ -129,6 +161,7 @@ if (Test-Path -LiteralPath $snapshotScript) {
 }
 
 try {
+  Invoke-WarrantPostScanSnapshotRefresh
   $verifiedPayload = Assert-WarrantFlowApi
 } catch {
   "Warrant flow API verification failed: $($_.Exception.Message)" >> $log
@@ -140,3 +173,4 @@ Write-WarrantFlowReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([stri
 Write-FumanFlowHealth -Scope warrant -Status ok -Message "Warrant flow scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Warrant flow API-only: cache sync and release/freshness gate are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
 "=== Warrant flow scan end $(Get-Date) ===" >> $log
+
