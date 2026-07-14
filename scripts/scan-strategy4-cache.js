@@ -611,6 +611,10 @@ async function refreshStrategy4VolumeCacheFromSupabase() {
 
 function runSupabaseHistoryPrewarm() {
   if (!SUPABASE_FIRST) return null;
+  if (process.env.STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM === "1") {
+    console.log("strategy4 supabase-first prewarm skipped: ready prewarm receipt accepted by wrapper");
+    return readJson(HISTORY_PREWARM_STATUS_FILE, null);
+  }
   if (!fs.existsSync(HISTORY_PREWARM_SCRIPT)) {
     console.log(`strategy4 supabase prewarm skipped: missing ${HISTORY_PREWARM_SCRIPT}`);
     return null;

@@ -21,6 +21,31 @@ async function supabase(pathname, init = {}) {
   let json = null; try { json = text ? JSON.parse(text) : null; } catch {}
   return { response, text, json };
 }
+function summarizeCoverage(coverage) {
+  if (!coverage || typeof coverage !== "object") return null;
+  const remainingMissing = Array.isArray(coverage.remainingMissing)
+    ? coverage.remainingMissing.map((item) => ({
+      code: String(item?.code || item?.symbol || ""),
+      lastDate: String(item?.lastDate || ""),
+      rows: Number(item?.rows || 0),
+      source: String(item?.source || ""),
+    })).filter((item) => /^\d{4}$/.test(item.code)).slice(0, 50)
+    : [];
+  return {
+    ok: coverage.ok === true,
+    phase: String(coverage.phase || ""),
+    source: String(coverage.source || ""),
+    universe: Number(coverage.universe || 0),
+    coverageRatio: Number(coverage.coverageRatio || 0),
+    remainingMiss: Number(coverage.remainingMiss || 0),
+    rawRemainingMiss: Number(coverage.rawRemainingMiss || 0),
+    qualityStatus: String(coverage.qualityStatus || ""),
+    acceptedReason: String(coverage.acceptedReason || ""),
+    supabaseVolumeRows: Number(coverage.supabaseVolumeRows || 0),
+    insufficientHistoryCount: Number(coverage.insufficientHistoryCount || 0),
+    remainingMissing,
+  };
+}
 async function main() {
   const latestRun = await supabase(`/rest/v1/${RUNS_TABLE}?${query({ select: "*", strategy: "eq.strategy4", status: "eq.complete", order: "updated_at.desc", limit: 1 })}`);
   const row = Array.isArray(latestRun.json) ? latestRun.json[0] : null;
@@ -31,7 +56,7 @@ async function main() {
   const readbackCount = match ? Number(match[1]) || 0 : 0;
   const resultCount = Number(row.result_count || 0);
   const ok = row.complete === true && String(row.quality_status || "") === "complete" && Number(row.expected_total || 0) > 0 && Number(row.scanned_count || 0) === Number(row.expected_total || 0) && resultCount > 0 && readbackCount === resultCount;
-  const coverage = row.payload?.supabaseCoverage || row.payload?.selfTest?.sourceHealth?.supabaseCoverage || null;
+  const coverage = summarizeCoverage(row.payload?.supabaseCoverage || row.payload?.selfTest?.sourceHealth?.supabaseCoverage || null);
   console.log(JSON.stringify({ ok, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal: Number(row.expected_total || 0), scannedCount: Number(row.scanned_count || 0), resultCount, readbackCount, qualityStatus: row.quality_status || "", complete: row.complete === true, noDataCount: Number(row.no_data_count || 0), errorCount: Number(row.error_count || 0), sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
   if (!ok) process.exitCode = 1;
 }

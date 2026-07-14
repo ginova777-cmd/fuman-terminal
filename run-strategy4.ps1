@@ -3,6 +3,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 $repo = "${PSScriptRoot}"
 $runtime = "C:\fuman-runtime"
+$RuntimeRoot = $runtime
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitPath = "C:\Program Files\Git\cmd"
 $env:Path = "$gitPath;C:\Program Files\nodejs;" + $env:Path
@@ -176,6 +177,18 @@ function Test-Strategy4PrewarmReceiptReady {
   return $ready
 }
 
+function Invoke-Strategy4ScorecardSync {
+  Write-Log "Strategy4 scorecard sync start after Supabase publish."
+  Push-Location $repo
+  try {
+    & npm.cmd run scorecard:sync *>&1 | Tee-Object -FilePath $log -Append
+    $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    if ($scorecardExit -ne 0) { throw "strategy4 scorecard sync exit=$scorecardExit" }
+    Write-Log "Strategy4 scorecard sync ok after Supabase publish."
+  } finally {
+    Pop-Location
+  }
+}
 function Invoke-Strategy4InlineTerminalVerify {
   param([string]$RunId)
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 inline terminal verify missing runId" }
@@ -312,6 +325,7 @@ try {
   $prewarmReceiptReady = Test-Strategy4PrewarmReceiptReady
   if ($prewarmReceiptReady) {
     Write-Log "Strategy4 source prewarm receipt ready for today; skipping in-scan heavy prewarm."
+    $env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM = "1"
   } else {
     Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
   $previousPrewarmBatchSize = $env:STRATEGY4_PREWARM_BATCH_SIZE
@@ -358,6 +372,7 @@ try {
   Remove-Item Env:STRATEGY4_SYNC_PARTIAL -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS -ErrorAction SilentlyContinue
   Remove-Item Env:STRATEGY4_SCAN_STAMP -ErrorAction SilentlyContinue
+  Remove-Item Env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM -ErrorAction SilentlyContinue
 }
 
 if ($scanExit -ne 0) {
@@ -407,6 +422,7 @@ try {
       scanStamp = $strategy4Stamp
       ok = $true
     }
+    Invoke-Strategy4ScorecardSync
     Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
     Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete; inline terminal chain verified")
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
@@ -420,6 +436,7 @@ try {
 }
 
 Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
+Invoke-Strategy4ScorecardSync
 try {
   Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
 } catch {
