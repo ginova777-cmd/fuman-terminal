@@ -26,9 +26,10 @@ const visibleFiles = ["index.html", "index.github.html", ...runtimeFiles];
 mustInclude("terminal-core.js", "script.src = `terminal.js?v=${version}`", "runtime loads terminal.js");
 mustInclude("index.html", "FMN://strategy5.all", "direct main static badge");
 mustInclude("index.html", "策略5主要結果", "direct main static title");
-mustInclude("index.html", "<section class=\"strategy-list\" aria-label=\"Strategy checklist\" hidden>", "static strategy checklist hidden");
+mustNotInclude("index.html", "strategy-list-title", "retired static strategy checklist");
 mustInclude("index.github.html", "FMN://strategy5.all", "direct main github static badge");
 mustInclude("index.github.html", "策略5主要結果", "direct main github static title");
+mustNotInclude("index.github.html", "strategy-list-title", "retired static strategy checklist");
 
 for (const file of runtimeFiles) {
   mustInclude(file, "installStrategyDirectMainEntry", "direct main entry guard");

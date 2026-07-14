@@ -95,22 +95,19 @@
           <header class="strategy-header">
             <div>
               <span class="console-badge">策略控管台</span>
-              <h1>策略模組</h1>
-              <p>左側切換日線、籌碼與高波動策略；右側即時重算符合條件的股票訊號。</p>
+              <h1>策略主要結果</h1>
+              <p>直接顯示目前正式策略結果；側欄可切換其他策略與籌碼模組。</p>
             </div>
             <div class="header-time strategy-time">05/07 17:20</div>
           </header>
           <section class="strategy-terminal" aria-label="Strategy scanner">
-            <section class="strategy-list" aria-label="Strategy checklist">
-              <div class="strategy-list-title">策略清單</div>
-            </section>
 
             <section class="strategy-results">
               <div class="strategy-toolbar">
                 <div>
-                  <span class="console-badge">FMN://strategy.api</span>
-                  <h2>策略模組總覽</h2>
-                  <p id="strategy-summary">點選左側策略，立即篩出命中股票。</p>
+                  <span class="console-badge">FMN://strategy5.all</span>
+                  <h2>策略5主要結果</h2>
+                  <p id="strategy-summary">綜合策略主要結果直接載入；不再停留舊總覽。</p>
                 </div>
                 <div class="strategy-actions">
                   <div class="mode-toggle" aria-label="篩選模式">
@@ -133,7 +130,7 @@
               </label>
 
               <div class="strategy-table" id="strategy-table">
-                <div class="empty-state">正在連線 Supabase API...</div>
+                <div class="empty-state">正在載入策略5主要結果...</div>
               </div>
             </section>
           </section>

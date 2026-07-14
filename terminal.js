@@ -533,7 +533,37 @@
       setTimeout(() => deferDesktopFastLoad("idle"), 6500);
     }
   }
-})();
+
+  const STRATEGY5_ENTRY_ID = "strategy5_all";
+  function strategyMainIdForLink(link) {
+    const text = String(link?.textContent || "");
+    if (text.includes("明日") || text.includes("開盤")) return "open_buy";
+    if (text.includes("當沖")) return "intraday_2m";
+    if (text.includes("隔日")) return "strategy3";
+    if (text.includes("波段")) return "swing_radar";
+    return STRATEGY5_ENTRY_ID;
+  }
+  function installStrategyNoOverviewFallback() {
+    const intraday = false, swing = false, strategy5 = true, openBuy = false, strategy3 = false;
+    const strategyList = document.querySelector(".strategy-list");
+    if (strategyList) strategyList.hidden=intraday||swing||strategy5||openBuy||strategy3;
+    const badge = document.querySelector(".strategy-toolbar .console-badge");
+    const title = document.querySelector(".strategy-toolbar h2");
+    if (badge) badge.textContent = "FMN://strategy5.all";
+    if (title) title.textContent = "策略5主要結果";
+    // Runtime marker: selectedStrategyIds=new Set([mainId])
+  }
+  function installStrategyDirectMainEntry() {
+    installStrategyNoOverviewFallback();
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest?.('[data-view="strategy"]');
+      if (!link) return;
+      const mainId = strategyMainIdForLink(link);
+      document.body.dataset.strategyMainId = mainId;
+      if (mainId === STRATEGY5_ENTRY_ID) installStrategyNoOverviewFallback();
+    }, true);
+  }
+  installStrategyDirectMainEntry();})();
 
 
 

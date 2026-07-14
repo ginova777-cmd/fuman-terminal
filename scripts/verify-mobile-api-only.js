@@ -127,6 +127,10 @@ function checkMobileShell() {
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use no-store /api/mobile-boot as the only boot/latest endpoint");
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must be no-store");
+  requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/signup/logout actions");
+  requireText(mobile, "mobile-logout-button", "mobile shell must expose logout action");
+  requireText(mobile, "data-mobile-auth-lock", "mobile shell must lock content before membership is confirmed");
+  requireText(mobile, "function renderAuthGate", "mobile shell must render a membership gate before protected data");
   requireText(mobile, "boot_hash", "mobile Realtime must compare boot_hash before refetch");
   requireText(mobile, "setInterval(()=>{if(!document.hidden&&active!==\"watch\")load(false)},120000)", "mobile must keep 120s polling fallback only as backup");
   requireText(mobile, "cache.get(k)?.hash===h", "mobile fragments must render from hash contract instead of recalculating data");

@@ -251,6 +251,12 @@ async function main() {
   requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
   requireIncludes("index.html", "membership-lock=20260713-11");
   requireIncludes("mobile.html", "membership-lock=20260713-11");
+  requireIncludes("mobile.html", "mobile-auth-actions");
+  requireIncludes("mobile.html", "mobile-login-link");
+  requireIncludes("mobile.html", "mobile-signup-link");
+  requireIncludes("mobile.html", "mobile-logout-button");
+  requireIncludes("mobile.html", "data-mobile-auth-lock");
+  requireIncludes("mobile.html", "function renderAuthGate");
   requireIncludes("88.html", "membership-lock=20260713-11");
   requireIncludes("api/mobile-fragment.js", "data-mobile-membership-login=\"1\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-orientation-login=\"portrait-landscape\"");
@@ -268,6 +274,8 @@ async function main() {
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");
   requireIncludes("api/terminal-fast-bundle.js", "verifyRequestEntitlement");
   requireIncludes("api/mobile-boot.js", "PUBLIC_FRAGMENT_TABS");
+  requireIncludes("api/mobile-boot.js", "MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS");
+  requireIncludes("api/mobile-boot.js", "membership_locked");
   requireIncludes("api/mobile-fragment.js", "lockedFragment");
   requireIncludes("lib/server-entitlement-guard.js", "DEFAULT_AUTH_SUPABASE_URL");
   requireIncludes("lib/server-entitlement-guard.js", "DEFAULT_AUTH_SUPABASE_KEY");

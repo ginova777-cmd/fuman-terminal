@@ -114,6 +114,9 @@ function checkLocal() {
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use /api/mobile-boot as primary boot endpoint");
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must use no-store plus cache-busting query");
+  requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/signup/logout actions");
+  requireText(mobile, "data-mobile-auth-lock", "mobile shell must render a locked membership card before data loads");
+  requireText(mobile, "renderAuthGate({checking:true})", "mobile shell must lock immediately while membership is checking");
   requireText(mobile, 'url.includes("?v=")?url:fresh(url)', "mobile fragment fetch must preserve versioned ?v=hash URLs");
   requireText(mobile, 'v="+encodeURIComponent', "mobile fragments and analysis must be versioned by hash/updatedAt");
   requireText(mobile, "boot_hash", "mobile realtime must compare boot_hash before fetching");

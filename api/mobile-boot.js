@@ -18,6 +18,9 @@ const TAB_ENDPOINTS = {
   warrant: "/api/warrant-flow-latest",
 };
 const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
+const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = 2500;
+const MOBILE_BOOT_MARKET_TIMEOUT_MS = 2500;
+const MOBILE_BOOT_TAB_TIMEOUT_MS = 4500;
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
@@ -25,7 +28,7 @@ function originFrom(request) {
   return `${proto}://${host}`;
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = 12000) {
+async function fetchJsonWithTimeout(url, timeoutMs = MOBILE_BOOT_TAB_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -39,6 +42,14 @@ async function fetchJsonWithTimeout(url, timeoutMs = 12000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function emptyMarketCore(source = "membership-lock") {
+  return [
+    { key: "twse", label: "加權指數", value: "--", change: "--", detail: "--", source },
+    { key: "otc", label: "櫃買指數", value: "--", change: "--", detail: "--", source },
+    { key: "txf-night", label: "台指期夜盤", value: "--", change: "--", detail: "--", source },
+  ];
 }
 
 function appendQuery(endpoint, params) {
@@ -168,14 +179,73 @@ function normalizeMarketCore(payload) {
 async function buildBoot(request) {
   const origin = originFrom(request);
   const entitlement = await verifyRequestEntitlement(request, { scope: "mobile-boot" });
+  if (!entitlement.ok) {
+    const updatedAt = new Date().toISOString();
+    const lockedHash = `locked-${compactToken(entitlement.reason || "membership")}`;
+    return {
+      ok: true,
+      source: "mobile-boot-api-only",
+      protected: true,
+      membershipRequired: true,
+      protectedReason: entitlement.reason || "membership_required",
+      publicSurfaces: ["auth", "signup", "member-status"],
+      updatedAt,
+      bootHash: lockedHash,
+      marketCalendar: null,
+      marketOpen: null,
+      marketStatus: "membership_locked",
+      closedReason: "",
+      closedReasonText: "",
+      displayTradeDate: "",
+      formalScanSkipped: true,
+      sourceFreshnessRequired: false,
+      preservePreviousGood: true,
+      latestPointerUpdated: false,
+      emptyResultWritten: false,
+      lowPower: {
+        defaultVariant: "locked",
+        lowEndVariant: "locked",
+        disablePrefetchOnLowEnd: true,
+        tabTopLimit: 0,
+        digestPollMs: 60000,
+        fullHtmlBudget: 0,
+        liteHtmlBudget: 0,
+        ultraHtmlBudget: 0,
+      },
+      fragments: {},
+      runs: {},
+      marketCore: emptyMarketCore("membership-lock"),
+      digest: {
+        fragmentVersion: "mobile-api-only-v1",
+        freshness: "membership_locked",
+        aiUpdatedAt: updatedAt,
+        aiHash: lockedHash,
+        liteHash: lockedHash,
+        ultraHash: lockedHash,
+        htmlBytes: 0,
+        liteBytes: 0,
+        ultraBytes: 0,
+        bias: "membership-required",
+      },
+      aiSummary: {
+        bias: "membership-required",
+        sample: 0,
+        up: 0,
+        down: 0,
+        flat: 0,
+        reason: "手機端需登入並開通會員後才顯示完整策略內容",
+      },
+      status: { updatedAt },
+    };
+  }
   const fragmentTabs = entitlement.ok ? FRAGMENT_TABS : PUBLIC_FRAGMENT_TABS;
   const marketCalendarPromise = buildMarketCalendarContract().catch(() => null);
-  const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
+  const snapshot = await readDesktopRouteSnapshot({ timeoutMs: MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS }).catch(() => null);
   const marketPromise = (async () => {
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, MARKET_CORE_ENDPOINT)
       || endpointPayloadFromSnapshot(snapshot?.payload, "/api/market");
     try {
-      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${MARKET_CORE_ENDPOINT}`, 9000);
+      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${MARKET_CORE_ENDPOINT}`, MOBILE_BOOT_MARKET_TIMEOUT_MS);
     } catch {
       payload = null;
     }
@@ -192,7 +262,7 @@ async function buildBoot(request) {
     });
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
     try {
-      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${endpoint}`);
+      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${endpoint}`, MOBILE_BOOT_TAB_TIMEOUT_MS);
     } catch (error) {
       payload = {
         ok: false,
