@@ -2,12 +2,11 @@ const market = require("./market");
 const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const stocks = require("./stocks");
 const terminalHome = require("./terminal-home");
-const openBuyLatest = require("./open-buy-latest");
+const strategy2Latest = require("./strategy2-latest");
 const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const latestSignals = require("./latest-signals");
-const latestStrategy = require("./latest-strategy");
 const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
@@ -383,70 +382,12 @@ function compactSnapshotEndpoints(request, endpoints = {}) {
   return compacted;
 }
 
-function isStrategy1Endpoint(endpoint) {
-  return String(endpoint || "").startsWith("/api/open-buy-latest");
-}
-
 function textFrom(value) {
   if (value == null) return "";
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(textFrom).join(" ");
   if (typeof value === "object") return Object.values(value).map(textFrom).join(" ");
   return String(value);
-}
-
-function isEmptyStrategy1WaitingSnapshot(payload) {
-  if (!payload || typeof payload !== "object") return false;
-  const rows = Array.isArray(payload.matches) ? payload.matches
-    : Array.isArray(payload.rows) ? payload.rows
-      : Array.isArray(payload.records) ? payload.records
-        : [];
-  const count = Number(payload.count ?? payload.total ?? payload.returnedCount ?? rows.length) || 0;
-  if (count > 0 || rows.length > 0) return false;
-  const quality = String(payload.qualityStatus || payload.status || payload.displayMode || "").toLowerCase();
-  const text = textFrom({
-    quality,
-    reason: payload.reason,
-    detail: payload.detail,
-    gate: payload.gate,
-    transport: payload.transport,
-  }).toLowerCase();
-  if (text.includes("previous_2130_carry_forward") || text.includes("previous-2130-carry-forward")) {
-    return false;
-  }
-  const looksWaiting = quality.includes("waiting")
-    || quality.includes("snapshot")
-    || text.includes("waiting_snapshot")
-    || text.includes("not_trading_day")
-    || text.includes("preopen_not_ready")
-    || text.includes("futopt_not_ready")
-    || text.includes("decision");
-  return looksWaiting;
-}
-
-async function repairStrategy1WaitingSnapshot(request, endpoints) {
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy1Endpoint(endpoint) || !isEmptyStrategy1WaitingSnapshot(payload)) continue;
-    const result = await callJson("/api/open-buy-latest", openBuyLatest, request, {
-      ...compactQuery(60),
-      live: "1",
-      strategy1Previous2130Repair: "1",
-    }, 6500);
-    const replacement = result?.payload;
-    const summary = summarize(replacement);
-    if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false || summary.count <= 0) {
-      continue;
-    }
-    endpoints[endpoint] = shapeTopPayload(request, {
-      ...replacement,
-      transport: {
-        ...(replacement.transport || {}),
-        fastBundleRepair: "strategy1-previous-2130-carry-forward",
-        staleSnapshotEndpoint: endpoint,
-        fetchedAt: new Date().toISOString(),
-      },
-    });
-  }
 }
 
 async function repairStrategy5FullSnapshot(request, endpoints) {
@@ -506,12 +447,10 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
   const currentEntry = Object.entries(endpoints || {})
     .find(([endpoint]) => isStrategy2SnapshotEndpoint(endpoint));
   const [currentEndpoint, currentPayload] = currentEntry || ["", null];
-  const result = await callJson("/api/latest-strategy", latestStrategy, request, {
-    key: "strategy2",
-    compact: "1",
-    shell: "1",
-    limit: "80",
+  const result = await callJson("/api/strategy2-latest", strategy2Latest, request, {
+    ...compactQuery(240),
     live: "1",
+    today: "1",
     verify: "1",
     noSnapshot: "1",
   }, 9000);
@@ -530,7 +469,7 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (isStrategy2SnapshotEndpoint(endpoint)) delete endpoints[endpoint];
   });
-  endpoints["/api/latest-strategy?key=strategy2&compact=1&shell=1&limit=80&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+  endpoints["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&today=1&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
     ...replacement,
     transport: {
       ...(replacement.transport || {}),
@@ -612,13 +551,13 @@ async function repairStrategy4LatestSnapshot(request, endpoints) {
 
 function isStrategy2SnapshotEndpoint(endpoint) {
   const value = String(endpoint || "");
-  return value.startsWith("/api/latest-strategy?key=strategy2")
+  return value.startsWith("/api/strategy2-latest")
+    || value.startsWith("/api/latest-strategy?key=strategy2")
     || value.startsWith("/api/latest-strategy") && /[?&]key=strategy2(?:&|$)/.test(value);
 }
 
 function isSoftSnapshotEndpoint(endpoint) {
   return isStrategy2SnapshotEndpoint(endpoint)
-    || isStrategy1Endpoint(endpoint)
     || String(endpoint || "").startsWith("/api/warrant-flow-latest")
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
@@ -628,17 +567,14 @@ function isOptionalLiveSnapshotEndpoint(endpoint) {
 }
 
 function buildSoftSnapshotFallback(endpoint, result, via) {
-  const isOpenBuy = String(endpoint || "").startsWith("/api/open-buy-latest");
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
   const isStrategy2 = isStrategy2SnapshotEndpoint(endpoint);
   const original = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const source = isOpenBuy
-    ? "supabase:strategy1_open_buy_results"
-    : isWarrant
-      ? "supabase:warrant_flow_scan_results"
-      : isStrategy2
-        ? "supabase:strategy2_scan_results"
-        : "supabase:cb_detect_cache";
+  const source = isWarrant
+    ? "supabase:warrant_flow_scan_results"
+    : isStrategy2
+      ? "supabase:strategy2_scan_results"
+      : "supabase:cb_detect_cache";
   const reason = original.detail || original.error || original.reason || "snapshot-soft-fallback";
   return {
     ...original,
@@ -752,7 +688,6 @@ module.exports = async function handler(request, response) {
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
       if (!isReleaseReadbackSnapshot) {
-        await repairStrategy1WaitingSnapshot(request, endpoints);
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
@@ -816,11 +751,10 @@ module.exports = async function handler(request, response) {
     ["/api/terminal-home", terminalHome, {}, 8000],
     ["/api/market", market, compactQuery(24), 4200],
     ["/api/stocks", stocks, { limit: "120", compact: "1", shell: "1" }, 3000],
-    ["/api/open-buy-latest", openBuyLatest, compactQuery(60), 2300],
+    ["/api/strategy2-latest", strategy2Latest, { ...compactQuery(240), today: "1", live: "1" }, 20000],
     ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 8000],
     ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 9000],
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
-    ["/api/latest-strategy?key=strategy2", latestStrategy, { key: "strategy2", compact: "1", shell: "1", limit: "80", live: "1" }, 20000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
     ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],
