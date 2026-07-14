@@ -352,6 +352,7 @@ function normalizeApprovedStrategy2Evidence(value, canonicalPayload) {
 }
 
 function sanitizeStrategy2Endpoints(endpoints = {}) {
+  stripRetiredTerminalEndpoints(endpoints);
   const canonicalRunId = findStrategy2CanonicalRunId(endpoints);
   if (!canonicalRunId) return endpoints;
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
@@ -381,7 +382,16 @@ function compactSnapshotEndpoints(request, endpoints = {}) {
   }
   return compacted;
 }
+function isRetiredTerminalEndpoint(endpoint) {
+  return /^\/api\/(?:open-buy-latest|realtime-radar-latest|heatmap)(?:\?|$)/i.test(String(endpoint || ""));
+}
 
+function stripRetiredTerminalEndpoints(endpoints = {}) {
+  for (const endpoint of Object.keys(endpoints || {})) {
+    if (isRetiredTerminalEndpoint(endpoint)) delete endpoints[endpoint];
+  }
+  return endpoints;
+}
 function textFrom(value) {
   if (value == null) return "";
   if (typeof value === "string") return value;
@@ -799,3 +809,4 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+

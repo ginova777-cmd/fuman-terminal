@@ -49,7 +49,7 @@ const RELEASE_DESKTOP_SNAPSHOT_DATE = "20260713";
 const RELEASE_DESKTOP_SNAPSHOT_UNTIL_DATE = "20260714";
 const RELEASE_DESKTOP_ENDPOINTS = {
   "/api/market?canvas=1&compact=1&shell=1&limit=24": { ok: true, runId: "20260713", date: "20260713", count: 4, source: "release-market-readback", cacheSource: "release-readback" },
-  "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "strategy1-20260709-20260709133027", count: 55, source: "release-strategy-readback", cacheSource: "release-readback" },
+  "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&today=1&live=1": { ok: true, runId: "strategy2-20260714-150846", count: 17, resultCount: 17, source: "release-strategy-readback", cacheSource: "release-readback", evidenceStatus: "complete", publishAllowed: true },
   "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "strategy3-20260713-20260713130531", count: 77, source: "release-strategy-readback", cacheSource: "release-readback" },
   "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1": { ok: true, runId: "strategy4-20260713-20260713095129", count: 70, resultCount: 332, source: "release-strategy-readback", cacheSource: "release-readback" },
   "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1": { ok: true, runId: "strategy5-20260713-20260713135046", count: 66, source: "release-strategy-readback", cacheSource: "release-readback" },
@@ -215,4 +215,5 @@ module.exports = async function handler(request, response) {
   }
 };
 module.exports.releaseReadbackSnapshot = releaseReadbackSnapshot;
+
 
