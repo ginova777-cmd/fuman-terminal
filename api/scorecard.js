@@ -223,7 +223,7 @@ const RELEASE_SOURCE_REPORTS = [
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260713-20260713135046", count: 66, emittedRows: 66, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", runId: "cb-detect-20260713-214529", count: 9, emittedRows: 9, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260713-20260713125504", count: 353, emittedRows: 120, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260714-20260714134242", count: 327, emittedRows: 120, date: "20260714", reason: "scorecard_release_latest_pointer" },
 ];
 
 function taipeiDateKey(date = new Date()) {
@@ -237,37 +237,40 @@ function taipeiDateKey(date = new Date()) {
 
 function releaseSourceReports() {
   const today = taipeiDateKey();
-  const releaseStale = RELEASE_SOURCE_REPORT_DATE < today;
-  const staleReason = releaseStale
-    ? "scorecard_release_source_reports_stale_display_only_previous_good:" + RELEASE_SOURCE_REPORT_DATE + "<" + today
-    : "";
-  return RELEASE_SOURCE_REPORTS.map((report) => ({
-    ...report,
-    statusCode: 200,
-    ok: releaseStale ? false : true,
-    resultCount: cleanNumber(report.count),
-    readbackCount: cleanNumber(report.count),
-    expectedTotal: cleanNumber(report.count),
-    scannedCount: cleanNumber(report.count),
-    sourceDate: compactDateToIso(report.date) || cleanText(report.date),
-    source_date: compactDateToIso(report.date) || cleanText(report.date),
-    tradeDate: compactDateToIso(report.date) || cleanText(report.date),
-    usedDate: compactDateToIso(report.date) || cleanText(report.date),
-    evidenceStatus: releaseStale ? "insufficient" : "complete",
-    unattendedStatus: releaseStale ? "NO" : "YES",
-    publishAllowed: releaseStale ? false : true,
-    latestOverwriteAllowed: false,
-    preservePreviousGood: releaseStale ? true : false,
-    fallbackUsed: releaseStale ? true : false,
-    fallbackAllowed: releaseStale ? false : true,
-    fallbackScope: releaseStale ? ["release-source-report", "display-only-previous-good"] : [],
-    degradedBlocksLatest: releaseStale ? true : false,
-    latestWriteAttempted: false,
-    latestPointerUpdated: false,
-    blockedReason: releaseStale ? staleReason : "",
-    scanner_block_reason: releaseStale ? staleReason : "",
-    reason: releaseStale ? staleReason : report.reason,
-  }));
+  return RELEASE_SOURCE_REPORTS.map((report) => {
+    const reportDate = cleanText(report.date || RELEASE_SOURCE_REPORT_DATE);
+    const releaseStale = reportDate < today;
+    const staleReason = releaseStale
+      ? "scorecard_release_source_reports_stale_display_only_previous_good:" + reportDate + "<" + today
+      : "";
+    return {
+      ...report,
+      statusCode: 200,
+      ok: releaseStale ? false : true,
+      resultCount: cleanNumber(report.count),
+      readbackCount: cleanNumber(report.count),
+      expectedTotal: cleanNumber(report.count),
+      scannedCount: cleanNumber(report.count),
+      sourceDate: compactDateToIso(report.date) || cleanText(report.date),
+      source_date: compactDateToIso(report.date) || cleanText(report.date),
+      tradeDate: compactDateToIso(report.date) || cleanText(report.date),
+      usedDate: compactDateToIso(report.date) || cleanText(report.date),
+      evidenceStatus: releaseStale ? "insufficient" : "complete",
+      unattendedStatus: releaseStale ? "NO" : "YES",
+      publishAllowed: releaseStale ? false : true,
+      latestOverwriteAllowed: false,
+      preservePreviousGood: releaseStale ? true : false,
+      fallbackUsed: releaseStale ? true : false,
+      fallbackAllowed: releaseStale ? false : true,
+      fallbackScope: releaseStale ? ["release-source-report", "display-only-previous-good"] : [],
+      degradedBlocksLatest: releaseStale ? true : false,
+      latestWriteAttempted: false,
+      latestPointerUpdated: false,
+      blockedReason: releaseStale ? staleReason : "",
+      scanner_block_reason: releaseStale ? staleReason : "",
+      reason: releaseStale ? staleReason : report.reason,
+    };
+  });
 }
 const LIGHTWEIGHT_SOURCE_REPORTS = [
   { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },

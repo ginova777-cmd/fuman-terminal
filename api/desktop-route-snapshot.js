@@ -55,7 +55,7 @@ const RELEASE_DESKTOP_ENDPOINTS = {
   "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1": { ok: true, runId: "strategy5-20260713-20260713135046", count: 66, source: "release-strategy-readback", cacheSource: "release-readback" },
   "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "institution-20260713-20260713131707", count: 264, source: "release-chip-readback", cacheSource: "release-readback" },
   "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "cb-detect-20260713-214529", count: 9, source: "release-chip-readback", cacheSource: "release-readback" },
-  "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "warrant-flow-20260713-20260713125504", count: 120, resultCount: 353, source: "release-warrant-readback", cacheSource: "release-readback" },
+  "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60&live=1": { ok: true, runId: "warrant-flow-20260714-20260714134242", count: 120, resultCount: 327, source: "release-warrant-readback", cacheSource: "release-readback", evidenceStatus: "complete", publishAllowed: true },
 };
 
 function taipeiDateKey(date = new Date()) {
