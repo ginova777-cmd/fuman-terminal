@@ -512,6 +512,11 @@
 
       async function persistSession(session) {
         const access = await readAccess(session);
+        writeSessionCache(session, access);
+        return access;
+      }
+
+      function writeSessionCache(session, access) {
         const statusValue = access.allowed ? (access.status || "active") : (access.status || "pending");
         safeSetStorage(AUTH_CACHE_KEY, JSON.stringify({
           at: Date.now(),
@@ -523,7 +528,28 @@
           allowed: access.allowed === true,
           access
         }));
+      }
+
+      function persistSessionFast(session, source) {
+        const access = { status: "checking", allowed: false, source: source || "auth_fast_redirect" };
+        writeSessionCache(session, access);
+        window.setTimeout(() => {
+          readAccess(session).then((nextAccess) => writeSessionCache(session, nextAccess)).catch(() => {});
+        }, 0);
         return access;
+      }
+
+      function shouldFastRedirectAfterAuth() {
+        try {
+          const next = new URL(nextUrl || "/?desktop=1", location.origin);
+          return next.origin === location.origin && next.pathname === "/mobile";
+        } catch {
+          return nextUrl === "/mobile";
+        }
+      }
+
+      function redirectAfterAuth() {
+        location.replace(nextUrl || "/?desktop=1");
       }
 
       function googleAuthorizeUrl() {
@@ -556,16 +582,22 @@
           }
           const session = (await client.auth.getSession()).data?.session;
           if (!session) throw new Error("Google 已回來，但沒有取得登入 session");
-          const access = await persistSession(session);
           const cleanUrl = new URL(location.href);
           cleanUrl.searchParams.delete("code");
           cleanUrl.searchParams.delete("error");
           cleanUrl.searchParams.delete("error_description");
           cleanUrl.hash = "";
           history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+          if (shouldFastRedirectAfterAuth()) {
+            persistSessionFast(session, "google_mobile_fast_redirect");
+            setStatus("Google 登入成功，正在進入手機版...", "good");
+            redirectAfterAuth();
+            return;
+          }
+          const access = await persistSession(session);
           if (access.allowed) {
             setStatus("Google 登入成功，正在進入終端...", "good");
-            location.href = nextUrl;
+            redirectAfterAuth();
             return;
           }
           setStatus("Google 登入成功，但尚未開通策略權限。請等待管理員開通。", "good");
@@ -580,13 +612,19 @@
         if (result.error) throw result.error;
         const session = result.data?.session || (await client.auth.getSession()).data?.session;
         if (!session) throw new Error("登入成功但沒有取得 session，請重新整理後再試。");
+        if (shouldFastRedirectAfterAuth()) {
+          persistSessionFast(session, "password_mobile_fast_redirect");
+          setStatus("登入成功，正在進入手機版...", "good");
+          redirectAfterAuth();
+          return;
+        }
         const access = await persistSession(session);
         if (access.allowed) {
           setStatus("登入成功，會員權限已開通，正在進入終端。", "good");
         } else {
           setStatus("登入成功，正在進入終端；策略內容會先以會員罩顯示，開通後自動解鎖。", "good");
         }
-        location.href = nextUrl;
+        redirectAfterAuth();
       }
 
       async function finishPasswordRecovery() {
@@ -604,7 +642,6 @@
         const result = await client.auth.updateUser({ password: password.value });
         if (result.error) throw result.error;
         const nextSession = (await client.auth.getSession()).data?.session || session;
-        const access = await persistSession(nextSession);
         const cleanUrl = new URL(location.href);
         cleanUrl.searchParams.delete("code");
         cleanUrl.searchParams.delete("type");
@@ -612,8 +649,15 @@
         cleanUrl.searchParams.delete("error_description");
         cleanUrl.hash = "";
         history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+        if (shouldFastRedirectAfterAuth()) {
+          persistSessionFast(nextSession, "recovery_mobile_fast_redirect");
+          setStatus("密碼更新完成，正在進入手機版...", "good");
+          redirectAfterAuth();
+          return;
+        }
+        const access = await persistSession(nextSession);
         setStatus(access.allowed ? "密碼已更新，正在進入終端。" : "密碼已更新，正在進入終端；權限開通後會自動解鎖。", "good");
-        location.href = nextUrl;
+        redirectAfterAuth();
       }
 
       form.addEventListener("submit", async (event) => {

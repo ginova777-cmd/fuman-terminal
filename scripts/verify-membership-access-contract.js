@@ -208,6 +208,13 @@ async function main() {
   requireIncludes("terminal-runtime-config.js", `adminEmails: ["ginova777@gmail.com"]`);
   requireIncludes("auth.html", "accessToken: session?.access_token");
   requireIncludes("auth.html", "expiresAt: session?.expires_at");
+  requireIncludes("auth.html", "function writeSessionCache(session, access)");
+  requireIncludes("auth.html", "function persistSessionFast(session, source)");
+  requireIncludes("auth.html", "shouldFastRedirectAfterAuth()");
+  requireIncludes("auth.html", "google_mobile_fast_redirect");
+  requireIncludes("auth.html", "password_mobile_fast_redirect");
+  requireIncludes("auth.html", "recovery_mobile_fast_redirect");
+  requireIncludes("auth.html", "location.replace(nextUrl || \"/?desktop=1\")");
   requireIncludes("auth.html", "googleAuthorizeUrl()");
   requireIncludes("auth.html", "finishOAuthRedirect()");
   requireIncludes("auth.html", "exchangeCodeForSession(code)");
