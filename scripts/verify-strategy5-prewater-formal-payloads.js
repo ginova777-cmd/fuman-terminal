@@ -81,6 +81,8 @@ function sampleOutput() {
       marginRows: 1800,
       unifiedRows: 1800,
       validAfterExclusionRows: 1800,
+      issuedSharesCount: 1800,
+      volumeAverageCount: 1800,
       minRequiredRows: 1500,
       healthReason: "formal sample chip source ready",
     },
