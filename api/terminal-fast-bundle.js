@@ -706,13 +706,13 @@ module.exports = async function handler(request, response) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
-        await repairStrategy4LatestSnapshot(request, endpoints);
         realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
           timeoutMs: 5500,
           via: "api/terminal-fast-bundle",
           shapePayload: (payload) => shapeTopPayload(request, payload),
         });
       }
+      await repairStrategy4LatestSnapshot(request, endpoints);
       if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
         endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
           cacheSource: "api/terminal-fast-bundle:snapshot-derived",
@@ -816,5 +816,6 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
 
 

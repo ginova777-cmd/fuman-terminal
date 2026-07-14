@@ -40,9 +40,17 @@ function Write-JsonFile($Path, $Payload) {
 }
 
 function Complete-Receipt($Status, $ExitCode, $SourceReady, $Reason, $ResourceGate = $null, $RepairAttempted = $false, $RepairOk = $false) {
+  $isComplete = ($Status -eq "complete" -and $ExitCode -eq 0 -and $SourceReady)
   $payload = [ordered]@{
-    ok = ($Status -eq "complete" -and $ExitCode -eq 0 -and $SourceReady)
+    ok = $isComplete
     status = $Status
+    exitCode = $ExitCode
+    complete = $isComplete
+    qualityStatus = $(if ($isComplete) { "complete" } else { "blocked" })
+    fallback = $false
+    warnings = @()
+    blockingReason = $(if ($isComplete) { "" } else { $Reason })
+    runId = "strategy4-source-prewarm-$($tradeDate.Replace('-', ''))"
     source = "strategy4-source-prewarm"
     tradeDate = $tradeDate
     startedAt = $startedAt

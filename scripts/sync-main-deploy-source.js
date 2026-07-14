@@ -256,6 +256,8 @@ const FILES = [
   "run-strategy3.ps1",
   "run-strategy3-complete-scan.ps1",
   "run-strategy4.ps1",
+  "run-strategy4-source-prewarm.ps1",
+  "install-strategy4-source-prewarm-task.ps1",
   "run-strategy4-postscan-closure.ps1",
   "run-strategy5.ps1",
   "run-strategy5-watchdog.ps1",
@@ -429,6 +431,7 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
+
 
 
 

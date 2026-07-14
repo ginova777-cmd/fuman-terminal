@@ -80,6 +80,22 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
   }
 }
 
+function Invoke-Strategy4ScorecardSourceRefresh($RunId = "") {
+  Write-Log "Strategy4 scorecard/sourceReports refresh start runId=$RunId"
+  $previousExpected = $env:EXPECTED_STRATEGY4_RUN_ID
+  $previousRuntime = $env:FUMAN_RUNTIME_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($RunId)) { $env:EXPECTED_STRATEGY4_RUN_ID = $RunId }
+    $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+    & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $log -Append
+    $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    if ($scorecardExit -ne 0) { throw "scorecard terminal-source refresh exit=$scorecardExit" }
+  } finally {
+    if ($null -ne $previousExpected) { $env:EXPECTED_STRATEGY4_RUN_ID = $previousExpected } else { Remove-Item Env:EXPECTED_STRATEGY4_RUN_ID -ErrorAction SilentlyContinue }
+    if ($null -ne $previousRuntime) { $env:FUMAN_RUNTIME_DIR = $previousRuntime } else { Remove-Item Env:FUMAN_RUNTIME_DIR -ErrorAction SilentlyContinue }
+  }
+  Write-Log "Strategy4 scorecard/sourceReports refresh complete runId=$RunId"
+}
 function Invoke-Strategy4SourceRepair {
   param([string]$Reason = "")
 
@@ -422,7 +438,9 @@ try {
       scanStamp = $strategy4Stamp
       ok = $true
     }
-    Invoke-Strategy4ScorecardSync
+Invoke-Strategy4ScorecardSync
+    Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId)
+    Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId)
     Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
     Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete; inline terminal chain verified")
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
@@ -438,6 +456,7 @@ try {
 Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
 Invoke-Strategy4ScorecardSync
 try {
+  Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId)
   Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
 } catch {
   Write-Log "Strategy4 inline terminal chain verification failed: $($_.Exception.Message)"
@@ -447,6 +466,8 @@ try {
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) @("inline terminal chain verified")
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
+
+
 
 
 
