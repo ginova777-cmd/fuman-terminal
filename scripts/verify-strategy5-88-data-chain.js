@@ -120,7 +120,7 @@ async function main() {
 
   const [latest, bundle] = await Promise.all([
     callInternal(modules.strategy5Latest, "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70", { canvas: "1", compact: "1", shell: "1", live: "1", limit: "70" }),
-    callInternal(modules.terminalFastBundle, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80", { canvas: "1", compact: "1", shell: "1", limit: "80" }),
+    callInternal(modules.terminalFastBundle, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1", { canvas: "1", compact: "1", shell: "1", limit: "80", live: "1" }),
   ]);
   const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy5&live=1", { tab: "strategy5", live: "1" });
   const [scorecard, sourceReports] = await Promise.all([
@@ -128,7 +128,7 @@ async function main() {
     callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }),
   ]);
   const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
-    fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80"),
+    fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1"),
     fetchText("/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70"),
     fetchText("/api/mobile-fragment?tab=strategy5&live=1"),
     fetchText("/api/scorecard?live=1"),

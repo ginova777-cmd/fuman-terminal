@@ -714,6 +714,7 @@ module.exports = async function handler(request, response) {
           shapePayload: (payload) => shapeTopPayload(request, payload),
         });
       }
+      await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy4LatestSnapshot(request, endpoints);
       if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
         endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
@@ -750,6 +751,7 @@ module.exports = async function handler(request, response) {
       }
       const endpoints = {};
       await repairStrategy3LatestSnapshot(request, endpoints);
+      await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy4LatestSnapshot(request, endpoints);
       const missPayload = {
         ...snapshotMissPayload(),
