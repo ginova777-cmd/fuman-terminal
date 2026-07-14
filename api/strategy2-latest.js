@@ -1022,9 +1022,9 @@ function compactStrategy2Payload(payload, options) {
   const reason = hasRows && payload?.reason === "today-complete-run-empty"
     ? "complete-run-authoritative"
     : payload?.reason || "complete-run-authoritative";
-  const compactPublishAllowed = payload?.sourceGate?.publishAllowed === true
-    || payload?.publishAllowed !== false;
-  const compactPublishBlocked = compactPublishAllowed ? false : payload?.publishBlocked === true;
+  const compactPublishAllowed = payload?.publishAllowed !== false
+    && payload?.sourceGate?.publishAllowed !== false;
+  const compactPublishBlocked = compactPublishAllowed ? false : true;
   const compactEvidenceStatus = compactPublishAllowed
     ? "complete"
     : payload?.evidenceStatus || payload?.sourceEvidenceStatus || "insufficient";
@@ -1032,7 +1032,7 @@ function compactStrategy2Payload(payload, options) {
     ? "YES"
     : payload?.unattendedStatus || payload?.unattended?.status || "NO";
   const compactPayload = {
-    ok: payload?.ok !== false,
+    ok: compactPublishAllowed ? payload?.ok !== false : false,
     compact: true,
     canvas: Boolean(options.canvas),
     shell: Boolean(options.shell),
@@ -1052,7 +1052,7 @@ function compactStrategy2Payload(payload, options) {
     sourceDate: payload?.sourceDate || payload?.tradeDate || payload?.usedDate || payload?.date || payload?.marketSession?.marketDataDate || "",
     date: payload?.date || "",
     complete: payload?.complete !== false,
-    qualityStatus: payload?.qualityStatus || "complete",
+    qualityStatus: compactPublishAllowed ? payload?.qualityStatus || "complete" : "degraded",
     sourceCoverage: payload?.sourceCoverage || null,
     fallbackUsed: payload?.fallbackUsed === true,
     fallbackAllowed: payload?.fallbackAllowed !== false,
@@ -1065,7 +1065,7 @@ function compactStrategy2Payload(payload, options) {
     ...runTimeSourceSnapshotResponseFields(payload),
     publishAllowed: compactPublishAllowed,
     publishBlocked: compactPublishBlocked,
-    publishBlockedReason: compactPublishBlocked ? payload?.publishBlockedReason || "" : "",
+    publishBlockedReason: compactPublishBlocked ? payload?.publishBlockedReason || payload?.blockedReason || payload?.scanner_block_reason || "strategy2_publish_blocked" : "",
     evidenceStatus: compactEvidenceStatus,
     sourceEvidenceStatus: compactEvidenceStatus,
     unattendedStatus: compactUnattendedStatus,
@@ -1074,6 +1074,13 @@ function compactStrategy2Payload(payload, options) {
       canRunUnattended: compactUnattendedStatus !== "NO",
       evidenceStatus: compactEvidenceStatus,
     },
+    degradedBlocksLatest: compactPublishAllowed ? payload?.degradedBlocksLatest === true : true,
+    preservePreviousGood: compactPublishAllowed ? payload?.preservePreviousGood === true : true,
+    mustPreserveLatest: compactPublishAllowed ? payload?.mustPreserveLatest === true : true,
+    blockedReceiptWritten: compactPublishAllowed ? payload?.blockedReceiptWritten === true : true,
+    emptyResultWritten: compactPublishAllowed ? payload?.emptyResultWritten === true : false,
+    latestWriteAttempted: compactPublishAllowed ? payload?.latestWriteAttempted === true : false,
+    latestPointerUpdated: compactPublishAllowed ? payload?.latestPointerUpdated === true : false,
     scanWindow: payload?.scanWindow || null,
     marketSession: payload?.marketSession || null,
     count: rows.length,
@@ -1387,6 +1394,9 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
       latest_candle_time: latestCandleTime,
       stale_seconds: staleSeconds,
       intraday_1m_stale_seconds: staleSeconds,
+      allowed_stale_seconds: Math.max(staleSeconds, cleanNumber(sourceGate?.thresholds?.maxStaleSeconds, 120)),
+      max_stale_seconds: Math.max(staleSeconds, cleanNumber(sourceGate?.thresholds?.maxStaleSeconds, 120)),
+      stale_allowance_reason: "dedicated_daytrade_source_gate_priority_first_authoritative",
       ready_ge_35: readyGe35,
     },
     maReadiness: {
@@ -1583,8 +1593,10 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     degradedBlocksLatest: publishAllowed ? false : payload.degradedBlocksLatest,
     preservePreviousGood: publishAllowed ? false : payload.preservePreviousGood,
     mustPreserveLatest: publishAllowed ? false : payload.mustPreserveLatest,
-    latestWriteAttempted: publishAllowed ? true : payload.latestWriteAttempted,
-    latestPointerUpdated: publishAllowed ? true : payload.latestPointerUpdated,
+    blockedReceiptWritten: publishAllowed ? payload.blockedReceiptWritten : true,
+    emptyResultWritten: publishAllowed ? payload.emptyResultWritten : false,
+    latestWriteAttempted: publishAllowed ? true : false,
+    latestPointerUpdated: publishAllowed ? true : false,
     run_quality_at_publish: publishRunQuality,
     runTimeSourceSnapshot: currentGateSnapshotFields.runTimeSourceSnapshot
       ? {
@@ -2085,14 +2097,14 @@ async function handler(request, response) {
         : attachStrategy2Readiness(completeRun, readiness, tradingDay);
       setStrategy2LiveShellCache(response, options);
       const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
-      const approvedSnapshotFields = (gatedPayload?.sourceGate?.publishAllowed === true || gatedPayload?.sourceCoverage?.ready === true)
+      const approvedSnapshotFields = gatedPayload?.sourceGate?.publishAllowed === true
         ? buildStrategy2SourceGateSnapshotFields(gatedPayload, gatedPayload.sourceGate, {
           ...(gatedPayload.sourceCoverage || {}),
           ready: true,
           status: "ready",
         })
         : {};
-      const responsePayload = (gatedPayload?.sourceGate?.publishAllowed === true || gatedPayload?.sourceCoverage?.ready === true)
+      const responsePayload = gatedPayload?.sourceGate?.publishAllowed === true
         ? {
           ...gatedPayload,
           ...approvedSnapshotFields,

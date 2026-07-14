@@ -106,7 +106,7 @@ function isSourceA(source) {
 
 function isSourceOffSessionFailClosed(source) {
   const message = `${source.status} ${source.message}`.toLowerCase();
-  return source.status === "stopped"
+  return ["ok", "stopped", "not_ready"].includes(source.status)
     && message.includes("off-session")
     && source.daytradeGateGrade === "A"
     && source.priorityFreshQuoteCoverage120s >= 0.95
@@ -128,7 +128,7 @@ function isGateA(gate) {
 function isGateFailClosed(gate) {
   return gate.gateGrade !== "A"
     && gate.gateStatus === "not_ready"
-    && ["off_session_not_formal_entry", "source_status_not_ok"].includes(gate.reason)
+    && ["off_session_not_formal_entry", "formal_entry_not_allowed", "source_status_not_ok"].includes(gate.reason)
     && gate.formalEntrySpeedVerdict === "NO";
 }
 
