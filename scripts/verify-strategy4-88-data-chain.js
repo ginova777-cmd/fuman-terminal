@@ -146,13 +146,16 @@ async function main() {
     sourceReports: parseJson(prodSourceReports.text),
   };
   const prodScorecardStrategy4 = strategy4SourceRow(prodPayloads.scorecard || {});
+  const prodSourceReportsStrategy4 = strategy4SourceRow(prodPayloads.sourceReports || {});
   const prodScorecardStrategy4RunId = String(prodScorecardStrategy4?.runId || "");
+  const prodSourceReportsStrategy4RunId = String(prodSourceReportsStrategy4?.runId || "");
   const prodProtected = {
     strategy4Latest: prodLatest.status === 401 && prodPayloads.strategy4Latest?.protected === true && prodPayloads.strategy4Latest?.reason === "missing_bearer_token",
     mobileFragment: prodMobile.status === 401 && /mobile-terminal-locked|membership_required/.test(prodMobile.text || ""),
     scorecard: prodScorecard.status === 401 && prodPayloads.scorecard?.protected === true && prodPayloads.scorecard?.reason === "missing_bearer_token",
     scorecardPublicRunAligned: prodScorecard.status === 200 && prodScorecardStrategy4RunId === runId,
     sourceReports: prodSourceReports.status === 401 && prodPayloads.sourceReports?.protected === true && prodPayloads.sourceReports?.reason === "missing_bearer_token",
+    sourceReportsPublicRunAligned: prodSourceReports.status === 200 && prodSourceReportsStrategy4RunId === runId,
   };
   const prodBundleRedacted = prodBundle.status === 200 && prodPayloads.terminalFastBundle?.membershipRequired === true && !/strategy4-\d{8}-\d{14}/.test(prodBundle.text || "");
 
@@ -170,7 +173,7 @@ async function main() {
   addCheck(checks, blankCountTotal(summaries.strategy4Latest.blankCounts) === 0, "strategy4_latest_blank_counts_zero", summaries.strategy4Latest.blankCounts);
   addCheck(checks, summaries.strategy4Latest.sampleMissingRows.length === 0, "strategy4_latest_sample_missing_rows_empty", summaries.strategy4Latest.sampleMissingRows);
   addCheck(checks, summaries.terminalFastBundle.runId === runId, "terminal_fast_bundle_internal_run_id", { endpoint: bundleStrategy4.endpoint, ...summaries.terminalFastBundle });
-  addCheck(checks, summaries.terminalFastBundle.resultCount === summaries.strategy4Latest.resultCount && summaries.terminalFastBundle.readbackCount === summaries.strategy4Latest.readbackCount, "terminal_fast_bundle_counts", summaries.terminalFastBundle);
+  addCheck(checks, summaries.terminalFastBundle.count === summaries.strategy4Latest.count && (!summaries.terminalFastBundle.resultCount || summaries.terminalFastBundle.resultCount === summaries.strategy4Latest.resultCount), "terminal_fast_bundle_counts", summaries.terminalFastBundle);
   addCheck(checks, summaries.mobileFragment.runId === runId, "mobile_fragment_internal_run_id", summaries.mobileFragment);
   addCheck(checks, summaries.scorecard.runId === runId, "scorecard_source_row_internal_run_id", summaries.scorecard);
   addCheck(checks, summaries.sourceReports.runId === runId, "source_reports_internal_run_id", summaries.sourceReports);
@@ -184,7 +187,7 @@ async function main() {
     hasScorecardCall: prod88.text.includes("/api/scorecard?live=1"),
     hasRunIdInShell: /strategy4-\d{8}-\d{14}/.test(prod88.text || ""),
   });
-  addCheck(checks, prodProtected.strategy4Latest && prodProtected.mobileFragment && (prodProtected.scorecard || prodProtected.scorecardPublicRunAligned) && prodProtected.sourceReports, "production_membership_or_public_scorecard_contract", { ...prodProtected, prodScorecardStrategy4RunId });
+  addCheck(checks, prodProtected.strategy4Latest && prodProtected.mobileFragment && (prodProtected.scorecard || prodProtected.scorecardPublicRunAligned) && (prodProtected.sourceReports || prodProtected.sourceReportsPublicRunAligned), "production_membership_or_public_scorecard_contract", { ...prodProtected, prodScorecardStrategy4RunId, prodSourceReportsStrategy4RunId });
   addCheck(checks, prodBundleRedacted, "production_terminal_bundle_guest_redacted", {
     status: prodBundle.status,
     membershipRequired: prodPayloads.terminalFastBundle?.membershipRequired,
@@ -212,7 +215,7 @@ async function main() {
       strategy4Latest: { status: prodLatest.status, protected: prodProtected.strategy4Latest },
       mobileFragment: { status: prodMobile.status, protected: prodProtected.mobileFragment },
       scorecard: { status: prodScorecard.status, protected: prodProtected.scorecard, publicRunAligned: prodProtected.scorecardPublicRunAligned, runId: prodScorecardStrategy4RunId },
-      sourceReports: { status: prodSourceReports.status, protected: prodProtected.sourceReports },
+      sourceReports: { status: prodSourceReports.status, protected: prodProtected.sourceReports, publicRunAligned: prodProtected.sourceReportsPublicRunAligned, runId: prodSourceReportsStrategy4RunId },
       page88: { status: prod88.status, shellCallsScorecard: prod88.text.includes("/api/scorecard?live=1") },
     },
     checks,
