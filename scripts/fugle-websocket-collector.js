@@ -36,7 +36,15 @@ const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || 60000));
-const STREAMING_RECONNECT_MS = Math.max(3000, Number(process.env.FUGLE_STREAMING_RECONNECT_MS || 10000));
+const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
+  process.env.FUGLE_STREAMING_RECONNECT_INITIAL_MS
+  || process.env.FUGLE_STREAMING_RECONNECT_MS
+  || 1000,
+));
+const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Number(
+  process.env.FUGLE_STREAMING_RECONNECT_MAX_MS
+  || 30000,
+));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
@@ -1122,6 +1130,8 @@ async function runStreamingCollector() {
         subscribeForbiddenLastEvent: lastForbiddenEvent,
         subscribeForbiddenLastChannel: lastForbiddenChannel,
         subscribeForbiddenLastMessage: lastForbiddenMessage,
+        reconnectInitialMs: STREAMING_RECONNECT_INITIAL_MS,
+        reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
         ...extra,
       });
     };
@@ -1224,9 +1234,16 @@ async function runStreamingCollector() {
   });
 
   // eslint-disable-next-line no-constant-condition
+  let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
   while (true) {
+    const runStartedAt = Date.now();
     await runOnce();
-    await new Promise((resolve) => setTimeout(resolve, STREAMING_RECONNECT_MS));
+    const delayMs = reconnectDelayMs;
+    const connectedLongEnough = Date.now() - runStartedAt >= STREAMING_RECONNECT_MAX_MS;
+    reconnectDelayMs = connectedLongEnough
+      ? STREAMING_RECONNECT_INITIAL_MS
+      : Math.min(STREAMING_RECONNECT_MAX_MS, reconnectDelayMs * 2);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
 

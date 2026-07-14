@@ -35,9 +35,23 @@ const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_FUTOPT_STREAM
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_FUTOPT_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_STREAMING_RESUBSCRIBE_MS || 60000));
-const STREAMING_RECONNECT_MS = Math.max(3000, Number(process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_MS || 10000));
+const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
+  process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_INITIAL_MS
+  || process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_MS
+  || 1000,
+));
+const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Number(
+  process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_MAX_MS
+  || 30000,
+));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_STREAMING_STATUS_MS || 5000));
 const CACHE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_WS_CACHE_TTL_MS || 5 * 60 * 1000));
+const STREAMING_AFTER_HOURS_RAW = String(process.env.FUGLE_FUTOPT_STREAMING_AFTER_HOURS || "").trim().toLowerCase();
+const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW)
+  ? true
+  : /^(0|false|no|off)$/.test(STREAMING_AFTER_HOURS_RAW)
+    ? false
+    : null;
 
 let lastMessageAt = "";
 
@@ -236,6 +250,11 @@ function getNotice(payload, text) {
   return { eventName, noticeText: "" };
 }
 
+function buildSubscribeMessage(channel, symbols) {
+  const data = { channel, symbols };
+  if (STREAMING_AFTER_HOURS !== null) data.afterHours = STREAMING_AFTER_HOURS;
+  return { event: "subscribe", data };
+}
 function writeStatus(extra = {}) {
   writeJson(FUGLE_FUTOPT_WS_STATUS_FILE, {
     ok: extra.ok !== false,
@@ -292,11 +311,15 @@ async function run() {
         subscribed: selection.selectedSymbols.length * STREAMING_CHANNELS.length,
         subscribedSymbols: selection.selectedSymbols.length,
         subscribedChannels: STREAMING_CHANNELS.length,
+        afterHours: STREAMING_AFTER_HOURS,
+        afterHoursMode: STREAMING_AFTER_HOURS === null ? "default" : STREAMING_AFTER_HOURS ? "afterhours" : "regular",
         subscribeChunkSize: STREAMING_SUBSCRIBE_CHUNK_SIZE,
         subscribeChunks: chunks.length * STREAMING_CHANNELS.length,
         subscribeChunksSent: chunksSent,
         subscribeCycles: cycles,
         resubscribeEveryMs: STREAMING_RESUBSCRIBE_MS,
+        reconnectInitialMs: STREAMING_RECONNECT_INITIAL_MS,
+        reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
         subscribeForbiddenChunks: forbiddenChunks,
         subscribeForbiddenLastAt: lastForbiddenAt,
         subscribeForbiddenLastMessage: lastForbiddenMessage,
@@ -324,7 +347,7 @@ async function run() {
       cycles += 1;
       for (const channel of STREAMING_CHANNELS) {
         for (const symbols of chunks) {
-          ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbols } }));
+          ws.send(JSON.stringify(buildSubscribeMessage(channel, symbols)));
           chunksSent += 1;
         }
       }
@@ -399,9 +422,16 @@ async function run() {
   });
 
   // eslint-disable-next-line no-constant-condition
+  let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
   while (true) {
+    const runStartedAt = Date.now();
     await runOnce();
-    await new Promise((resolve) => setTimeout(resolve, STREAMING_RECONNECT_MS));
+    const delayMs = reconnectDelayMs;
+    const connectedLongEnough = Date.now() - runStartedAt >= STREAMING_RECONNECT_MAX_MS;
+    reconnectDelayMs = connectedLongEnough
+      ? STREAMING_RECONNECT_INITIAL_MS
+      : Math.min(STREAMING_RECONNECT_MAX_MS, reconnectDelayMs * 2);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
 
