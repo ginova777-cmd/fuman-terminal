@@ -135,7 +135,12 @@ function blankField(row, key) {
     if (Array.isArray(payload.matches)) payload.matches.forEach((signal) => { if (signal) signal.reason = ""; });
   } else if (key === "signals") {
     row.signals = [];
+    row.sourceSignals = [];
+    row.activeMatch = null;
     payload.matches = [];
+    payload.signals = [];
+    payload.sourceSignals = [];
+    payload.activeMatch = null;
   }
   row.payload = payload;
 }
