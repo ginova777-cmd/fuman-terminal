@@ -2210,6 +2210,15 @@
     return desktopFastBundlePromise;
   }
 
+  window.addEventListener("fuman:membership-content-verified", () => {
+    primeDesktopFastBundle(true, "membership-verified").catch(() => undefined);
+  }, { passive: true });
+  window.addEventListener("fuman:membership-status-refresh", () => {
+    if (document.body?.dataset?.membershipToken === "present" || document.body?.dataset?.membershipAccess === "allowed") {
+      primeDesktopFastBundle(true, "membership-refresh").catch(() => undefined);
+    }
+  }, { passive: true });
+
   function primeStrategy2SnapshotFirst(force = false, reason = "boot") {
     if (!strategy2SnapshotFirstEnabled()) return Promise.resolve([]);
     const cached = canvasStore.get("strategy|策略2");
@@ -8032,14 +8041,17 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     switchStrategyViewNow(link);
     markLatency("nav", key);
     const rows = rowsForRoute(key);
-    if (isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken()) {
+    const memberFastHydrate = isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken();
+    if (memberFastHydrate) {
+      setCanvasStatus("已開通會員，優先讀取 fast bundle / previous-good");
       primeDesktopFastBundle(true, "member-route").then(() => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         const bundleRows = rowsForRoute(key);
         if (bundleRows.length) renderStrategyRouteShell(key, "fast-bundle", bundleRows);
       }).catch(() => undefined);
+    } else {
+      renderStrategyRouteShell(link, source, rows);
     }
-    renderStrategyRouteShell(link, source, rows);
     markLatency("shell", key);
     restoreStrategySnapshot(link);
     const snapshotFirst = isStrategy2Route(key) && strategy2SnapshotFirstEnabled();
@@ -8075,7 +8087,7 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
           if (isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
             const fallbackRows = rowsForRoute(key);
             if (fallbackRows.length) scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "previous-good", fallbackRows), "previous-good");
-            else renderStrategyRouteShell(key, "member-pending", []);
+            else setCanvasStatus("已開通會員，保留目前畫面並等待 bundle / previous-good");
           } else {
             scheduleCanvasDraw();
           }

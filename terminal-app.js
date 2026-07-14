@@ -998,15 +998,34 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     applyMemberLocks?.();
     return true;
   }
+  function protectedCacheHasRows(payload){
+    if(!payload||typeof payload!=="object")return false;
+    const direct=normalizeArray?.(payload.rows||payload.matches||payload.results||payload.items||payload.data)||[];
+    if(direct.length)return true;
+    const endpoints=payload.endpoints&&typeof payload.endpoints==="object"?payload.endpoints:null;
+    if(!endpoints)return false;
+    return Object.values(endpoints).some(item=>(normalizeArray?.(item?.rows||item?.matches||item?.results||item?.items||item?.data)||[]).length);
+  }
+  function shouldPurgeProtectedJsonCache(key,value){
+    if(/strategy1|open-buy|realtime-radar|heatmap|latest-strategy\?key=strategy2/i.test(key))return true;
+    const payload=parseJson(value)||null;
+    if(!payload||typeof payload!=="object")return true;
+    const text=[payload.error,payload.reason,payload.protectedReason,payload.qualityStatus,payload.status,payload.cacheSource,payload.source].map(item=>String(item||"")).join(" ");
+    if(/membership_required|missing_bearer|unauthor|401|403|strategy1|open-buy|realtime-radar|heatmap/i.test(text))return true;
+    if(payload.protected===true||payload.membershipRequired===true)return true;
+    if(payload.ok===false&&!protectedCacheHasRows(payload))return true;
+    return false;
+  }
   function purgeProtectedJsonCaches(){
     try{
-      const pattern=/^fuman-json-cache-v1:.*(terminal-fast-bundle|mobile-boot|mobile-fragment|strategy[2-5]-latest|latest-strategy|latest-signals|institution|cb-detect|warrant-flow)/i;
+      const pattern=/^fuman-json-cache-v1:.*(terminal-fast-bundle|mobile-boot|mobile-fragment|strategy[2-5]-latest|latest-strategy|latest-signals|institution|cb-detect|warrant-flow|realtime-radar|heatmap|open-buy)/i;
       const remove=[];
-      for(let index=0;index<localStorage.length;index+=1){const key=localStorage.key(index)||"";if(pattern.test(key))remove.push(key)}
+      for(let index=0;index<localStorage.length;index+=1){const key=localStorage.key(index)||"";if(pattern.test(key)&&shouldPurgeProtectedJsonCache(key,localStorage.getItem(key)))remove.push(key)}
       remove.forEach(key=>localStorage.removeItem(key));
       const indexKey=typeof terminalJsonCacheIndexKey==="function"?terminalJsonCacheIndexKey():"fuman-json-cache-index-v1";
       const cacheIndex=parseJson(localStorage.getItem(indexKey))||{};
-      ["strategy2","strategy3","strategy4","strategy5","chip-trade","cb-detect","warrant-flow","realtime-radar"].forEach(key=>delete cacheIndex[key]);
+      ["strategy1","open-buy","realtime-radar","heatmap"].forEach(key=>delete cacheIndex[key]);
+      remove.forEach(key=>{Object.keys(cacheIndex).forEach(indexKey=>{if(String(cacheIndex[indexKey]?.url||cacheIndex[indexKey]?.key||"").includes(key))delete cacheIndex[indexKey]})});
       localStorage.setItem(indexKey,JSON.stringify(cacheIndex));
     }catch(error){}
   }
