@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260712-quote-source-02";
+  const VERSION = "watchlist-rich-shell-20260714-detail-sync-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -277,7 +277,9 @@
   function ensureMatchIndexForAnalysis(code) {
     if (matchIndexLoaded || matchIndexPromise) return;
     loadMatchIndex().then(() => {
-      if (normalizeCode(code) === selectedCode) renderAnalysis(readRows().find((row) => row.code === selectedCode) || readRows()[0]);
+      if (normalizeCode(code) !== selectedCode) return;
+      const rows = readRows().map(mergeQuote);
+      renderAnalysis(rows.find((row) => row.code === selectedCode) || rows[0]);
     });
   }
 
