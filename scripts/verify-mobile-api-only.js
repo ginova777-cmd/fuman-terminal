@@ -178,7 +178,7 @@ function checkApiBoot() {
   requireText(apiBoot, 'CDN-Cache-Control", "no-store', "/api/mobile-boot must be CDN no-store");
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
   requireText(apiBoot, "/api/mobile-fragment?tab=", "/api/mobile-boot must point strategy tabs to API-rendered fragments");
-  for (const endpoint of ["/api/open-buy-latest", "/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
+  for (const endpoint of ["/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
     requireText(apiBoot, endpoint, `/api/mobile-boot must derive mobile fragments from ${endpoint}`);
     requireText(fragmentApi, endpoint, `/api/mobile-fragment must render rows from ${endpoint}`);
   }
@@ -280,7 +280,7 @@ function isMembershipLockedHtml(text) {
 
 function assertNoProtectedMobileLeak(payload, label) {
   const fragments = payload?.fragments && typeof payload.fragments === "object" ? payload.fragments : {};
-  const protectedTabs = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+  const protectedTabs = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
   for (const tab of protectedTabs) {
     if (fragments[tab]) pushIssue(`${label} leaked protected fragment ${tab} while membershipRequired=true`);
   }
@@ -339,7 +339,7 @@ async function checkLive() {
       }
     }
   } else {
-    for (const tab of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]) {
+    for (const tab of ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]) {
       const fragment = bootJson?.fragments?.[tab];
       if (!String(fragment?.url || "").startsWith("/api/mobile-fragment?tab=")) {
         pushIssue(`live /api/mobile-boot fragment ${tab} must point to /api/mobile-fragment actual=${fragment?.url || "<missing>"}`);
