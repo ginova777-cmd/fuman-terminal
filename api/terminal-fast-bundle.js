@@ -18,6 +18,7 @@ const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cach
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
@@ -673,6 +674,9 @@ module.exports = async function handler(request, response) {
     response.status(405).json({ ok: false, error: "method_not_allowed" });
     return;
   }
+
+  const rate = rateLimitRequest(request, response, { scope: "terminal-fast-bundle", windowMs: 60_000, max: 120 });
+  if (!rate.ok) return sendRateLimited(response, "terminal-fast-bundle", rate);
 
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);

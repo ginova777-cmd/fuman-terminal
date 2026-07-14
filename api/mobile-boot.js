@@ -5,6 +5,7 @@ const {
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const FRAGMENT_TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
 const PUBLIC_FRAGMENT_TABS = [];
@@ -364,6 +365,9 @@ module.exports = function handler(request, response) {
     response.status(405).json({ ok: false, error: "method_not_allowed" });
     return;
   }
+
+  const rate = rateLimitRequest(request, response, { scope: "mobile-boot", windowMs: 60_000, max: 180 });
+  if (!rate.ok) return sendRateLimited(response, "mobile-boot", rate);
 
   buildBoot(request).then((payload) => {
     sendPayload(request, response, 200, payload);

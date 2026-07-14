@@ -6,6 +6,7 @@ const {
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const TAB_CONFIG = {
   ai: {
@@ -679,6 +680,8 @@ module.exports = async function handler(request, response) {
     response.status(405).send("method_not_allowed");
     return;
   }
+  const rate = rateLimitRequest(request, response, { scope: "mobile-fragment", windowMs: 60_000, max: 240 });
+  if (!rate.ok) return sendRateLimited(response, "mobile-fragment", rate);
   const url = new URL(request.url, originFrom(request));
   const tab = String(url.searchParams.get("tab") || "").trim();
   const config = TAB_CONFIG[tab];
