@@ -16,14 +16,6 @@ const MIN_CURRENT_RETAIN_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_CURRENT_
 
 const TASKS = [
   {
-    key: "strategy1",
-    strategy: "策略1開盤入成績單",
-    endpoint: "/api/open-buy-latest",
-    modulePath: "../api/open-buy-latest",
-    arrayKeys: ["matches", "rows", "buyMatches"],
-    limit: 120,
-  },
-  {
     key: "strategy2",
     strategy: "策略2成績單",
     endpoint: "/api/strategy2-latest",
@@ -77,14 +69,6 @@ const TASKS = [
     endpoint: "/api/warrant-flow-latest",
     modulePath: "../api/warrant-flow-latest",
     arrayKeys: ["rows", "matches", "volumeMatches", "singleSignals"],
-    limit: 120,
-  },
-  {
-    key: "realtime-radar",
-    strategy: "即時雷達成績單",
-    endpoint: "/api/realtime-radar-latest",
-    modulePath: "../api/realtime-radar-latest",
-    arrayKeys: ["rows", "cards", "leaders"],
     limit: 120,
   },
 ];
@@ -405,7 +389,6 @@ function clampRealtimeRadarEntryTime(value) {
 }
 
 function fallbackEntryTime(task, payload) {
-  if (task.key === "strategy1") return "21:30";
   if (task.key === "strategy3") return "13:00";
   if (task.key === "strategy4") return "13:30";
   if (task.key === "strategy5") return "14:00";
@@ -429,7 +412,7 @@ function entryTimeOf(task, payload, row) {
         || payload.timestamp,
     );
   }
-  if (["strategy1", "strategy3", "strategy5", "institution", "warrant"].includes(task.key)) {
+  if (["strategy3", "strategy5", "institution", "warrant"].includes(task.key)) {
     return fallbackEntryTime(task, payload);
   }
   const latest = row?.latestRecord && typeof row.latestRecord === "object" ? row.latestRecord : {};
@@ -1050,8 +1033,6 @@ async function main() {
     displayRules: {
       strategyRuleContract: RULE_CONTRACT,
       realtimeRadarWindow: "09:00-13:30",
-      strategy1EntryTime: "21:30",
-      strategy1Settlement: "前一日21:30顯示，當日收盤後結算",
       strategy2Window: "09:00-13:30",
       strategy3EntryTime: "13:00",
       strategy3HighPrice: "隔天高點",
