@@ -3,7 +3,7 @@ const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
-const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260711-03";
+const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260714-detail-sync-01";
 const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
@@ -27,9 +27,8 @@ const STATIC_ASSETS = [
   "/terminal-member-module.js?v=public-terminal-fast-20260630-31",
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260630-31",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260630-31",
-  "/terminal-watchlist-shell.js?v=watchlist-rich-shell-20260711-03",
+  `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
   "/terminal-realtime-radar.css?v=radar-ledger-20260630-02",
-  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260630-31",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260630-31",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260630-31",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260630-31",
@@ -232,7 +231,7 @@ async function purgeOldWatchlistAssets() {
   const requests = await cache.keys();
   await Promise.allSettled(requests.map((request) => {
     const url = new URL(request.url);
-    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH) && !url.search.includes("public-terminal-fast-20260630-31")) return cache.delete(request);
+    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH)) return cache.delete(request);
     if (url.pathname === "/terminal-hotfix.js" && !url.search.includes(WATCHLIST_HOTFIX_BRIDGE_EPOCH)) return cache.delete(request);
     return undefined;
   }));
