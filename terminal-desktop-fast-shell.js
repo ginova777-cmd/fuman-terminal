@@ -148,6 +148,8 @@
     filtered: [],
   };
 
+  installMemberBearerFetchBridge20260714();
+
   installStyle();
   installDesktopThemeToggle();
   purgeApiOnlyStrategySnapshots();
@@ -218,6 +220,76 @@
       else window.setTimeout(fn, 0);
     }, Math.max(0, delay));
   }
+  function installMemberBearerFetchBridge20260714() {
+    if (window.fetch?.__fumanMemberBearerBridge20260714) return;
+    const originalFetch = window.fetch.bind(window);
+    const protectedApiPattern = /^\/api\/(?:open-buy-latest|strategy[2-5]-latest|terminal-fast-bundle|institution-latest|institution-tdcc-breakout-latest|cb-detect-latest|warrant-flow-latest|mobile-boot|mobile-fragment)\b/;
+    const runtimeAuthKey = window.FUMAN_RUNTIME_CONFIG?.authCacheKey || "fuman-terminal-auth-cache-v1";
+    const tokenKeys = [runtimeAuthKey, "fuman-terminal-auth-cache-v1"];
+
+    function extractBearerToken(value, depth = 0) {
+      if (!value || depth > 4) return "";
+      if (typeof value === "string") {
+        const text = value.trim();
+        if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(text)) return text;
+        if (!/^[\[{]/.test(text)) return "";
+        try { return extractBearerToken(JSON.parse(text), depth + 1); } catch (error) { return ""; }
+      }
+      if (typeof value !== "object") return "";
+      const direct = value.access_token || value.accessToken || value.token || value.bearerToken;
+      if (direct) return extractBearerToken(String(direct), depth + 1) || String(direct);
+      return extractBearerToken(value.currentSession, depth + 1)
+        || extractBearerToken(value.session, depth + 1)
+        || extractBearerToken(value.value, depth + 1)
+        || extractBearerToken(value.data, depth + 1);
+    }
+
+    function readMemberBearerToken() {
+      try {
+        for (const key of tokenKeys) {
+          const token = extractBearerToken(localStorage.getItem(key));
+          if (token) return token;
+        }
+        for (let index = 0; index < localStorage.length; index += 1) {
+          const key = localStorage.key(index) || "";
+          if (!/^sb-.+-auth-token$/.test(key)) continue;
+          const token = extractBearerToken(localStorage.getItem(key));
+          if (token) return token;
+        }
+      } catch (error) {}
+      return "";
+    }
+
+    function shouldAttachBearer(input) {
+      const raw = typeof input === "string" ? input : input?.url || "";
+      if (!raw) return false;
+      try {
+        const url = new URL(raw, window.location.origin);
+        return url.origin === window.location.origin && protectedApiPattern.test(url.pathname);
+      } catch (error) {
+        return protectedApiPattern.test(String(raw).split("?")[0]);
+      }
+    }
+
+    function fetchWithMemberBearer(input, init = {}) {
+      if (!shouldAttachBearer(input)) return originalFetch(input, init);
+      const token = readMemberBearerToken();
+      if (!token) return originalFetch(input, init);
+      const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined) || {});
+      if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+      return originalFetch(input, { ...(init || {}), headers });
+    }
+
+    fetchWithMemberBearer.__fumanMemberBearerBridge20260714 = true;
+    fetchWithMemberBearer.__fumanOriginalFetch = originalFetch;
+    window.fetch = fetchWithMemberBearer;
+    window.FUMAN_MEMBER_BEARER_FETCH_BRIDGE = {
+      version: "20260714-fast-shell",
+      hasToken: () => Boolean(readMemberBearerToken()),
+      protectedApiPattern: protectedApiPattern.source,
+    };
+  }
+
 
   function deferWarm(link, source, delay = 160) {
     const route = routeKey(link);
@@ -688,6 +760,16 @@
   function strategyRouteKey(link) {
     const text = (typeof link === "string" ? link : link?.textContent || "").replace(/\s+/g, " ").trim();
     if (typeof link !== "string" && !isStrategyLink(link)) return "";
+    const explicitRoute = typeof link === "string" ? "" : String(link?.dataset?.strategyRoute || "");
+    if (explicitRoute === "open_buy") return "strategy|策略1";
+    if (explicitRoute === "intraday_2m") return "strategy|策略2";
+    if (explicitRoute === "strategy3") return "strategy|策略3";
+    if (explicitRoute === "swing_radar") return "strategy|策略4";
+    if (explicitRoute === "strategy5") return "strategy|策略5";
+    if (text.includes("當沖") || text.includes("intraday_2m")) return "strategy|策略2";
+    if (text.includes("隔日") || text.includes("strategy3")) return "strategy|策略3";
+    if (text.includes("波段") || text.includes("swing_radar")) return "strategy|策略4";
+    if (text.includes("綜合") || text.includes("strategy5")) return "strategy|策略5";
     if (text.includes("策略1")) return "strategy|策略1";
     if (text.includes("策略2")) return "strategy|策略2";
     if (text.includes("策略3")) return "strategy|策略3";

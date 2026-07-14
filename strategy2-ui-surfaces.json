@@ -6,7 +6,7 @@
     "requiredContains": [
       "strategy2:",
       "endpoint: \"/api/strategy2-latest\"",
-      "策略2 當沖"
+      "title: \"當沖\""
     ],
     "verifierRule": "file contains strategy2 tab config and formal /api/strategy2-latest endpoint"
   },
