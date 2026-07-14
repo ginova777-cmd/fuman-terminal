@@ -260,7 +260,7 @@ async function main() {
   requireIncludes("mobile.html", "membership-lock=20260713-11");
   requireIncludes("mobile.html", "mobile-auth-actions");
   requireIncludes("mobile.html", "mobile-login-link");
-  requireIncludes("mobile.html", "mobile-signup-link");
+  requireExcludes("mobile.html", "mobile-signup-link");
   requireIncludes("mobile.html", "mobile-logout-button");
   requireIncludes("mobile.html", "data-mobile-auth-lock");
   requireIncludes("mobile.html", "function renderAuthGate");

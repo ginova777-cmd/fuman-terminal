@@ -114,10 +114,15 @@ function checkLocal() {
 
   requireText(mobile, 'bootUrl="/api/mobile-boot"', "mobile shell must use /api/mobile-boot as primary boot endpoint");
   requireText(mobile, 'fetch(fresh(url),{cache:"no-store",headers:authHeaders()})', "mobile JSON fetches must use no-store plus cache-busting query");
-  requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/signup/logout actions");
+  requireText(mobile, "mobile-auth-actions", "mobile shell must expose login/member/logout actions");
+  rejectText(mobile, "id=\"mobile-signup-link\"", "mobile shell top action cluster must not expose the old signup button");
   requireText(mobile, 'let boot=null,active="strategy2"', "mobile shell must open on the first visible strategy tab after the AI pill is removed");
   requireText(mobile, '.status{display:none', "mobile shell must hide the noisy fresh/API status line");
   requireText(mobile, 'function firstMetricText', "mobile index cards must render value plus change text");
+  requireText(mobile, 'function refreshMarketCore', "mobile shell must asynchronously fill market indexes without blocking membership boot");
+  requireText(mobile, 'normalizeMarketCorePayload', "mobile shell must normalize TWSE/OTC/TXF market payloads");
+  requireText(mobile, '會員:已開通', "mobile member status must use the approved opened label");
+  requireText(mobile, '會員:尚未開通', "mobile member status must use the approved unopened label");
   requireText(mobile, 'market-metric', "mobile index cards must use explicit market metric markup");
   rejectText(mobile, 'data-fragment="ai">AI</button>', "mobile shell must not render the old AI circular tab");
   if (!/id="mobile-auth-actions"[\s\S]*id="mobile-member-state"[\s\S]*id="mobile-logout-button"/.test(mobile)) {
