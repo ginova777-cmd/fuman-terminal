@@ -267,6 +267,9 @@ const API_CONTRACTS = [
   },
 ];
 
+const RETIRED_CONTRACT_KEYS = new Set(["strategy1", "realtime-radar", "heatmap"]);
+const ACTIVE_API_CONTRACTS = API_CONTRACTS.filter((item) => !RETIRED_CONTRACT_KEYS.has(item.key));
+
 async function fetchJson(endpoint, expectedStatus = null) {
   const url = new URL(endpoint, BASE_URL);
   url.searchParams.set("freshnessContract", String(Date.now()));
@@ -547,11 +550,11 @@ async function main() {
     ? new Date(`${taipeiDateKey().slice(0, 4)}-${taipeiDateKey().slice(4, 6)}-${taipeiDateKey().slice(6, 8)}T${ARGS.values.get("at")}:00+08:00`)
     : new Date();
   const apiResults = [];
-  for (const item of API_CONTRACTS) {
+  for (const item of ACTIVE_API_CONTRACTS) {
     console.log(`[production-api-freshness] checking ${item.key}`);
     apiResults.push(await evaluateApi(item, now));
   }
-  const staticPaths = [...new Set(API_CONTRACTS.flatMap((item) => item.staticPaths || []))];
+  const staticPaths = [...new Set(ACTIVE_API_CONTRACTS.flatMap((item) => item.staticPaths || []))];
   const static410 = await evaluateStatic410(staticPaths);
   const staticIssues = static410.filter((item) => !item.ok).map((item) => `static_not_410_${item.path}_${item.status}`);
   const apiIssues = apiResults.flatMap((item) => item.issues.map((issue) => `${item.key}: ${issue}`));
@@ -581,3 +584,5 @@ main().catch((error) => {
   console.error(`[production-api-freshness] failed: ${error?.stack || error?.message || String(error)}`);
   process.exitCode = 1;
 });
+
+

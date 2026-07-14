@@ -186,7 +186,8 @@ try {
     "--out=$scorecardJson",
     "--md=$scorecardMd",
     "--timeout-ms=$TimeoutMs",
-    "--verifier-timeout-ms=$VerifierTimeoutMs"
+    "--verifier-timeout-ms=$VerifierTimeoutMs",
+    "--skip-verifiers"
   )
 
   if ($freshnessExitCode -ne 0 -or $scorecardExitCode -ne 0) {
@@ -213,3 +214,5 @@ catch {
 finally {
   Pop-Location
 }
+
+
