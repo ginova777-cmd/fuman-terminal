@@ -220,7 +220,7 @@ const RELEASE_SOURCE_REPORTS = [
   { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", runId: "strategy2-20260713-210234", count: 35, emittedRows: 35, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260713-20260713135046", count: 66, emittedRows: 66, date: "20260713", reason: "scorecard_release_latest_pointer" },
+  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260714-20260714140711", count: 54, emittedRows: 54, date: "20260714", reason: "scorecard_release_latest_pointer" },
   { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", runId: "cb-detect-20260713-214529", count: 9, emittedRows: 9, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260714-20260714134242", count: 327, emittedRows: 120, date: "20260714", reason: "scorecard_release_latest_pointer" },
