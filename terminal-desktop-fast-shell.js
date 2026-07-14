@@ -16,6 +16,7 @@
   const MEMBER_STRATEGY_PREVIEW_PREFIX = "FUMAN_MEMBER_STRATEGY_PREVIEW:";
   const MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const MEMBER_STRATEGY_PREVIEW_MAX_CHARS = 900000;
+  const RETIRED_SURFACE_CACHE_MIGRATION_KEY = "FUMAN_RETIRED_SURFACE_CACHE_MIGRATION_20260714_01";
   const SNAPSHOT_ROUTES = ["strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
@@ -149,6 +150,7 @@
     filtered: [],
   };
 
+  installRetiredSurfaceCacheMigration20260714();
   installMemberBearerFetchBridge20260714();
 
   installStyle();
@@ -1452,6 +1454,57 @@
       return item;
     } catch (error) {
       return null;
+    }
+  }
+
+
+  function retiredSurfaceCacheNeedle(value) {
+    return /strategy1|策略1|open[-_]?buy|明日開盤|開盤入|realtime[-_]?radar|即時雷達|heatmap|熱力圖|latest-strategy\?key=strategy2/i.test(String(value || ""));
+  }
+
+  function installRetiredSurfaceCacheMigration20260714() {
+    try {
+      if (localStorage.getItem(RETIRED_SURFACE_CACHE_MIGRATION_KEY) === "done") return;
+    } catch (error) {}
+    const clearStore = (store) => {
+      if (!store) return;
+      for (let index = store.length - 1; index >= 0; index -= 1) {
+        let key = "";
+        let value = "";
+        try { key = store.key(index) || ""; } catch (error) { key = ""; }
+        if (!key) continue;
+        try { value = store.getItem(key) || ""; } catch (error) { value = ""; }
+        if (key.startsWith(SNAPSHOT_PREFIX) || retiredSurfaceCacheNeedle(key) || retiredSurfaceCacheNeedle(value)) {
+          try { store.removeItem(key); } catch (error) {}
+        }
+      }
+    };
+    try { clearStore(localStorage); } catch (error) {}
+    try { clearStore(sessionStorage); } catch (error) {}
+    try {
+      localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ viewName: "market", at: Date.now(), source: "retired-surface-cache-migration-20260714" }));
+      localStorage.setItem(RETIRED_SURFACE_CACHE_MIGRATION_KEY, "done");
+    } catch (error) {}
+    try { routeSnapshots.clear(); } catch (error) {}
+    try { canvasStore.clear(); } catch (error) {}
+    try { canvasEmptyStates.clear(); } catch (error) {}
+    try { canvasInflight.clear(); } catch (error) {}
+    try { canvasRouteVersions.clear(); } catch (error) {}
+    try { canvasMetricsCache.clear(); } catch (error) {}
+    try { canvasPreRenderedRoutes.clear(); } catch (error) {}
+    try { marketJsonCache.clear(); } catch (error) {}
+    try { marketJsonInflight.clear(); } catch (error) {}
+    if ("indexedDB" in window) {
+      try {
+        snapshotDbPromise = null;
+        indexedDB.deleteDatabase(SNAPSHOT_DB);
+      } catch (error) {}
+    }
+    if ("caches" in window) {
+      caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
+        const url = request?.url || "";
+        return retiredSurfaceCacheNeedle(name) || retiredSurfaceCacheNeedle(url) ? cache.delete(request) : false;
+      }))))))).catch(() => undefined);
     }
   }
 

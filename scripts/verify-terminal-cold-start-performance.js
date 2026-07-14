@@ -8,10 +8,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROUTES = [
   "market",
-  "heatmap",
   "market-ai",
-  "realtime-radar",
-  "strategy1",
   "strategy2",
   "strategy3",
   "strategy4",
@@ -24,10 +21,7 @@ const DEFAULT_ROUTES = [
 const DEFAULT_STRICT_STRATEGY2_ROUTES = ["strategy2"];
 const ROUTE_BUDGETS_MS = {
   market: 700,
-  heatmap: 900,
   "market-ai": 900,
-  "realtime-radar": 1500,
-  strategy1: 700,
   strategy2: 2500,
   strategy3: 1200,
   strategy4: 1200,
@@ -398,10 +392,7 @@ function collectRows(route) {
 
 const routes = [
   { key: "market", nav: "aside.sidebar a[data-view='market']", rowSelectors: [".metric-card", ".sector-card"] },
-  { key: "heatmap", nav: "aside.sidebar a[data-view='market']", mode: "[data-market-mode='overview']", rowSelectors: [".sector-card"] },
   { key: "market-ai", nav: "aside.sidebar a[data-view='market']", mode: "[data-market-mode='ai']", rowSelectors: [".market-ai-card", ".market-ai-block", ".market-ai-point", ".market-ai-stock-row"] },
-  { key: "realtime-radar", nav: "aside.sidebar a.realtime-radar-nav[data-view='realtime-radar']", rowSelectors: [".radar-signal-card", ".radar-leader-card", ".desktop-route-shell tbody tr", ".desktop-route-shell [data-stock-code]"], allowEmpty: true },
-  { key: "strategy1", nav: "aside.sidebar a[data-view='strategy'] .s1", allowEmpty: true },
   { key: "strategy2", nav: "aside.sidebar a[data-view='strategy'] .s2" },
   { key: "strategy3", nav: "aside.sidebar a[data-view='strategy'] .s3" },
   { key: "strategy4", nav: "aside.sidebar a[data-view='strategy'] .s4" },

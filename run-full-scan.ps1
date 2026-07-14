@@ -21,7 +21,7 @@ $log = Join-Path $logDir ("full-scan-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHm
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $receipts = New-Object System.Collections.Generic.List[object]
 $criticalFailures = New-Object System.Collections.Generic.List[string]
-$strictRequiredStrategies = @("open-buy", "strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
+$strictRequiredStrategies = @("strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
 $env:NOTIFY_FAST_MODE = "1"
 $env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
 $env:NOTIFY_PUSH_RETRIES = "1"
@@ -512,10 +512,6 @@ try {
   Write-ScanLog "scan receipts mode=$(if ($syncReceiptDir) { 'runtime+code-repo' } else { 'runtime-only' })"
 
   Invoke-FullScanDatePreflight
-
-  if (-not $SkipRealtime) {
-    Invoke-ScanTask "realtime-radar" "realtime radar raw refresh" "optional" "scripts\scan-realtime-radar-cache.js" (Join-Path $runtimeRoot "data\realtime-radar-latest.json") @{ REALTIME_RADAR_PATROL_INTERVAL_MS = "3000" }
-  }
   if (-not $SkipStrategy2) {
     Invoke-ScanTask "star-preopen" "STAR preopen raw refresh" "optional" "scripts\scan-star-preopen.js" (Join-Path $runtimeRoot "data\star-preopen-latest.json") @{}
     Invoke-ScanTask "strategy2" "strategy2 intraday raw refresh" "optional" "scripts\scan-intraday-signals.js" (Join-Path $runtimeRoot "data\strategy2-intraday-latest.json") @{
@@ -528,7 +524,6 @@ try {
     }
   }
 
-  Invoke-RunnerTask "open-buy" "open buy full scan" "critical" "run-open-buy.ps1"
   Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"
 
   if (-not $SkipInstitution) {
@@ -588,4 +583,5 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
 

@@ -33,9 +33,7 @@ const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FU
 
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
-  { key: "heatmap", label: "heatmap", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "#market-view .market-mode-tabs [data-market-mode=\"overview\"]", requiredText: ["熱力圖"], requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
   { key: "market-ai", label: "market ai", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "#market-view .market-mode-tabs [data-market-mode=\"ai\"]", requiredText: ["AI 判讀", "操作建議", "風險"] },
-  { key: "strategy1", label: "strategy1", selector: "aside.sidebar a[data-view=\"strategy\"] .s1", expectedRouteKey: "strategy|策略1", expectedPanelId: "strategy-view", allowWaitingEmpty: true, fallbackNeedles: ["策略1-明日開盤入", "21:30初篩", "08:55搓合"] },
   { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
   { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
   { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
@@ -48,7 +46,6 @@ const DESKTOP_ROUTES = [
 
 const MOBILE_ROUTES = [
   { key: "ai", label: "market ai", fragment: "ai" },
-  { key: "strategy1", label: "strategy1", fragment: "strategy1", allowMissingRunId: true, verifyWatchAdd: true },
   { key: "strategy2", label: "strategy2 live", fragment: "strategy2", verifyWatchAdd: true },
   { key: "strategy3", label: "strategy3", fragment: "strategy3", verifyWatchAdd: true },
   { key: "strategy4", label: "strategy4", fragment: "strategy4", verifyWatchAdd: true },
@@ -1480,7 +1477,7 @@ function collectDesktopStats(route) {
     if (actionControls < 3) contractBlockers.push(`watchlist analysis action controls below 3 actual=${actionControls}`);
     if (/尚未同步/.test(status)) contractBlockers.push(`watchlist status still shows unsynced: ${status}`);
   }
-  const unifiedFilterRequiredRoutes = new Set(["strategy1", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+  const unifiedFilterRequiredRoutes = new Set(["strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
   const unifiedFilterBlockers = [];
   if (unifiedFilterRequiredRoutes.has(route.key)) {
     if (!unifiedFilterContract.buttonCount) {
