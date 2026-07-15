@@ -680,23 +680,21 @@ function normalizePayload(row) {
         reason: annotateInstitutionNetText(match.reason),
       };
     }
+    if (chipFields.chipDirection !== "buy") return null;
     return {
       ...match,
-      label: chipFields.chipConfluenceLabel,
-      short: chipFields.chipConfluenceShort,
+      label: "籌碼買超共振",
+      short: "買超共振",
       reason: annotateInstitutionNetText(match.reason) || chipFields.chipNetSummary,
       chipDirection: chipFields.chipDirection,
       chipDirectionLabel: chipFields.chipDirectionLabel,
       chipNetSummary: chipFields.chipNetSummary,
     };
-  });
+  }).filter(Boolean);
   const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
   const normalizedActiveMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : null;
   const activeMatch = normalizedActiveMatch
-    ? matches.find((match) => match.id === normalizedActiveMatch.id) || {
-      ...normalizedActiveMatch,
-      reason: annotateInstitutionNetText(normalizedActiveMatch.reason),
-    }
+    ? matches.find((match) => match.id === normalizedActiveMatch.id) || matches[0] || null
     : matches[0] || null;
   const inst = {
     ...sourceInst,
