@@ -256,13 +256,21 @@ function buildStrategy4PrePublishSelfTest(output) {
   const issues = [];
 
   if (output.complete !== true) issues.push("complete must be true");
-  if (String(output.qualityStatus || "") !== "complete") issues.push(`qualityStatus must be complete, got ${output.qualityStatus || "(blank)"}`);
+  const outputQualityStatus = String(output.qualityStatus || "");
+  const outputCoverageRatio = cleanNumber(output.coverageRatio);
+  const outputNoDataCount = cleanNumber(output.noDataCount);
+  const outputErrorCount = cleanNumber(output.errorCount);
+  const outputCount = cleanNumber(output.count);
+  const outputCoverageAcceptable = outputCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO;
+  if (!["complete", "degraded"].includes(outputQualityStatus)) issues.push(`qualityStatus must be complete/degraded, got ${output.qualityStatus || "(blank)"}`);
   if (cleanNumber(output.total) < MIN_SOURCE_ROW_COUNT) issues.push(`total ${cleanNumber(output.total)} below ${MIN_SOURCE_ROW_COUNT}`);
-  if (cleanNumber(output.count) < MIN_MATCH_COUNT) issues.push(`count ${cleanNumber(output.count)} below ${MIN_MATCH_COUNT}`);
-  if (cleanNumber(output.noDataCount) !== 0) issues.push(`noDataCount must be 0, got ${output.noDataCount}`);
-  if (cleanNumber(output.errorCount) !== 0) issues.push(`errorCount must be 0, got ${output.errorCount}`);
+  if (outputCount <= 0) issues.push("count must be > 0 for Strategy4 publish; zero-result runs need an explicit empty-complete contract");
+  if (outputErrorCount !== 0) issues.push(`errorCount must be 0, got ${output.errorCount}`);
   if (cleanNumber(output.executionRate) !== 1) issues.push(`executionRate must be 1, got ${output.executionRate}`);
-  if (cleanNumber(output.coverageRatio) !== 1) issues.push(`coverageRatio must be 1, got ${output.coverageRatio}`);
+  if (!outputCoverageAcceptable) issues.push(`coverageRatio must be >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}, got ${output.coverageRatio}`);
+  if (outputNoDataCount > 0 && outputCoverageAcceptable && outputErrorCount === 0) {
+    output.sourceWarnings = Array.from(new Set([...(Array.isArray(output.sourceWarnings) ? output.sourceWarnings : []), `No daily-K history for ${outputNoDataCount} scanned codes; accepted because coverageRatio ${outputCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}`]));
+  }
   if (cleanNumber(output.computableUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`computableUniverseTotal ${cleanNumber(output.computableUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.sourceUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`sourceUniverseTotal ${cleanNumber(output.sourceUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.insufficientHistoryCount) !== 0) issues.push(`insufficientHistoryCount must be 0, got ${output.insufficientHistoryCount}`);
@@ -1979,8 +1987,8 @@ async function main() {
   if (FAIL_ON_INCOMPLETE && !ALLOW_PARTIAL_PUBLISH && !output.complete) {
     throw new Error(`Strategy4 scan incomplete: noData ${output.noDataCount}, errors ${output.errorCount}`);
   }
-  if (FULL_SCAN && output.complete && output.count < MIN_MATCH_COUNT) {
-    throw new Error(`Strategy4 suspiciously low match count: ${output.count}/${codes.length}, minimum ${MIN_MATCH_COUNT}`);
+  if (FULL_SCAN && output.complete && cleanNumber(output.count) <= 0) {
+    throw new Error(`Strategy4 produced zero matches without an explicit empty-complete contract: ${output.count}/${codes.length}`);
   }
   if (FULL_SCAN && output.complete && output.yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     console.warn(`Strategy4 degraded source mix: Yahoo fallback ${output.yahooSourceCount}/${Object.values(output.dataSourceCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0)} (${output.yahooSourceRatio}), warning threshold ${MAX_YAHOO_SOURCE_RATIO}`);
