@@ -632,6 +632,38 @@ function applySoftSnapshotFallbacks(results, endpoints, via) {
   }
 }
 
+function findWatchlistEndpoint(endpoints = {}) {
+  return Object.entries(endpoints || {}).find(([endpoint]) => String(endpoint || "").startsWith("/api/watchlist-match-index"));
+}
+
+async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {}) {
+  const endpoint = "/api/watchlist-match-index?compact=1&shell=1&limit=80";
+  const existing = findWatchlistEndpoint(endpoints);
+  if (existing?.[1]?.strategies?.strategy2) return;
+  if (!existing) {
+    endpoints[endpoint] = buildWatchlistMatchIndex(endpoints, {
+      cacheSource: options.cacheSource || "api/terminal-fast-bundle",
+      via: options.via || "api/terminal-fast-bundle",
+      updatedAt: options.updatedAt,
+    });
+  }
+  const current = findWatchlistEndpoint(endpoints);
+  if (current?.[1]?.strategies?.strategy2 && current?.[1]?.ok !== false) return;
+  const direct = await callJson("/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000);
+  if (Number(direct.statusCode || 0) >= 500 || direct.payload?.ok === false) return;
+  if (!direct.payload?.strategies?.strategy2) return;
+  if (current?.[0] && current[0] !== endpoint) delete endpoints[current[0]];
+  endpoints[endpoint] = {
+    ...direct.payload,
+    transport: {
+      ...(direct.payload.transport || {}),
+      fastBundleRepair: "watchlist-match-index-direct-snapshot",
+      via: options.via || "api/terminal-fast-bundle",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function isMiss(item) {
   if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
@@ -716,13 +748,11 @@ module.exports = async function handler(request, response) {
       }
       await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy4LatestSnapshot(request, endpoints);
-      if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
-        endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
-          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
-          via: "api/terminal-fast-bundle:snapshot",
-          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
-        });
-      }
+      await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+        cacheSource: "api/terminal-fast-bundle:snapshot-derived",
+        via: "api/terminal-fast-bundle:snapshot",
+        updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+      });
       sanitizeStrategy2Endpoints(endpoints);
       const payload = {
         ...snapshot.payload,
@@ -789,12 +819,10 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
-  if (!Object.keys(endpoints).some((endpoint) => endpoint.startsWith("/api/watchlist-match-index"))) {
-    endpoints["/api/watchlist-match-index?compact=1&shell=1&limit=80"] = buildWatchlistMatchIndex(endpoints, {
-      cacheSource: "api/terminal-fast-bundle",
-      via: "api/terminal-fast-bundle",
-    });
-  }
+  await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+    cacheSource: "api/terminal-fast-bundle",
+    via: "api/terminal-fast-bundle",
+  });
   sanitizeStrategy2Endpoints(endpoints);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
