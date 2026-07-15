@@ -7347,13 +7347,19 @@
         strategy5WatchlistMatchIndexPromise = null;
       });
   }
-function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
+
+  function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
     const safeCode = String(code || "").match(/\d{4}/)?.[0] || "";
     if (!safeCode) return 0;
+    const chipRowsByCode = strategy5ChipBuyRowsByCode(rows);
     const byCode = strategy5WatchlistEntriesByCode();
-    if (byCode) return normalizeArray(byCode[safeCode]).length;
+    if (byCode) {
+      const entries = normalizeArray(byCode[safeCode]);
+      const chipBoost = chipRowsByCode.has(safeCode) && !strategy5EntryAlreadyHasChipBuy(entries) ? 1 : 0;
+      return entries.length + chipBoost;
+    }
     const local = strategy5LocalConfluenceCounts(rows).get(safeCode);
-    return Math.max(cleanNumber(local?.count), cleanNumber(local?.explicit));
+    return Math.max(cleanNumber(local?.count), cleanNumber(local?.explicit), chipRowsByCode.has(safeCode) ? 1 : 0);
   }
 
   function strategy5TerminalConfluenceRows(fallbackRows = []) {
@@ -7432,20 +7438,36 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
       const code = strategy5ConfluenceCode(row);
       if (code && !firstByCode.has(code)) firstByCode.set(code, row);
     });
-    return [...grouped.entries()].map(([code, item]) => {
-      const source = firstByCode.get(code) || {};
-      const count = Math.max(cleanNumber(item.count), cleanNumber(item.explicit));
+    const chipRowsByCode = strategy5ChipBuyRowsByCode(fallbackRows);
+    const codes = [...new Set([...grouped.keys(), ...chipRowsByCode.keys()])];
+    return codes.map((code) => {
+      const item = grouped.get(code) || { count: 0, explicit: 0 };
+      const chipRow = chipRowsByCode.get(code) || null;
+      const source = chipRow || firstByCode.get(code) || {};
+      const localCount = Math.max(cleanNumber(item.count), cleanNumber(item.explicit));
+      const count = Math.max(localCount, chipRow ? 1 : 0);
+      const labels = [...new Set([
+        ...normalizeArray(source?.signals || source?.matches || source?.tags || source?.signalTags).map((item) => typeof item === "object" ? (item.label || item.short || item.id || item.key) : item).filter(Boolean),
+        chipRow ? "籌碼買超共振" : "",
+      ].filter(Boolean))];
       return {
         ...source,
         code,
         confluenceCount: count,
         terminalConfluenceCount: count,
-        subStrategy: source.subStrategy || "綜合共振",
+        strategy5InternalCount: Math.max(cleanNumber(source.strategy5InternalCount), normalizeArray(source.matches || source.signals).length),
+        subStrategy: "綜合共振",
         subStrategyId: "multi_strategy_confluence",
-        signalLabel: source.signalLabel || "綜合共振",
+        strategyDisplay: "綜合共振",
+        signalLabel: "綜合共振",
+        signalLine: labels.join("、"),
+        tags: labels.length ? labels.slice(0, 7) : source.tags,
+        signalTags: labels.length ? labels.slice(0, 7) : source.signalTags,
+        reason: source.reason || source.chipNetSummary || labels.join("、"),
       };
-    }).filter((row) => strategy5ExplicitConfluenceCount(row) >= 2)
+    }).filter((row) => strategy5ExplicitConfluenceCount(row) >= 2 || strategy5ChipBuyConfluence(row))
       .sort((a, b) => strategy5ExplicitConfluenceCount(b) - strategy5ExplicitConfluenceCount(a)
+        || cleanNumber(b.strategy5InternalCount) - cleanNumber(a.strategy5InternalCount)
         || cleanNumber(b.score) - cleanNumber(a.score)
         || String(a.code).localeCompare(String(b.code), "zh-Hant"))
       .map((row, index) => ({ ...row, rank: index + 1 }));
