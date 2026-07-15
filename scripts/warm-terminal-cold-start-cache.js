@@ -13,15 +13,12 @@ const PROFILE = readArg("profile") || process.env.FUMAN_TERMINAL_WARM_PROFILE ||
 const CORE_ENDPOINTS = [
   ["/api/terminal-fast-bundle?canvas=1&compact=1&shell=1", "fast-bundle"],
   ["/api/market?canvas=1&compact=1&shell=1&limit=24", "market"],
-  ["/api/heatmap?snapshot=1&canvas=1&compact=1&shell=1&limit=36", "heatmap-first"],
   ["/api/market-ai-live?canvas=1&compact=1&shell=1&limit=20", "market-ai"],
-  ["/api/realtime-radar-latest?canvas=1&compact=1&shell=1&limit=80", "realtime-radar"],
   ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&snapshot=1&today=1", "strategy2-snapshot"],
 ];
 
 const FULL_ENDPOINTS = [
   ...CORE_ENDPOINTS,
-  ["/api/realtime-radar-latest?canvas=1&compact=1&shell=1&limit=1200&full=1", "realtime-radar-full"],
   ["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&live=1&today=1", "strategy2-live"],
   ["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60", "strategy3"],
   ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "strategy4"],
@@ -102,3 +99,4 @@ async function warm(pathname, label) {
   console.error(`[warm-terminal] failed ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

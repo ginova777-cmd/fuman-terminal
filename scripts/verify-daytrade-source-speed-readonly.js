@@ -471,25 +471,26 @@ async function main() {
     && (!after0845 || readyMa35 > 0)
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
-  const bObserve = !aReady
+  const formalReady = formalWindow && aReady;
+  const bObserve = !formalReady
     && (sourceAge <= 180 || prioritySourceInjecting)
     && quoteAgeSeconds <= OBSERVATION_MAX_QUOTE_AGE_SECONDS
     && prioritySymbols >= MIN_PRIORITY_SYMBOLS
     && (prioritySourceInjecting || priorityFreshQuoteCoverage120 >= 0.5 || priorityFreshQuotes120 >= 150 || freshQuoteCoverage120 >= 0.5 || freshQuotes120 >= 500)
     && (readyMa20 > 0 || !after0845)
     && (readyMa35 > 0 || !after0845);
-  const cDisplay = !aReady && !bObserve && sourceAge <= 300 && quoteAgeSeconds <= 300 && quotes > 0;
+  const cDisplay = !formalReady && !bObserve && sourceAge <= 300 && quoteAgeSeconds <= 300 && quotes > 0;
 
-  const computedGateGrade = aReady ? "A" : bObserve ? "B" : cDisplay ? "C" : "D";
+  const computedGateGrade = formalReady ? "A" : bObserve ? "B" : cDisplay ? "C" : "D";
   const sourceInjecting = ["ready", "degraded"].includes(quoteStatus) || quoteAgeSeconds <= OBSERVATION_MAX_QUOTE_AGE_SECONDS;
   const sourceStatusGateGrade = sourceStatusInjectingOk ? "A" : sourceStatus === "degraded" || (sourceStatus === "stale" && sourceInjecting) ? "C" : "D";
   const computedPriorityGateGrade = aReady ? "A" : bObserve ? "B" : "D";
   const computedFullMarketGateGrade = freshQuoteCoverage120 >= MIN_FRESH_QUOTE_COVERAGE && freshQuotes120 >= TARGET_FRESH_QUOTES && fullMarketRoundSeconds <= FULL_MARKET_MAX_ROUND_SECONDS ? "A" : "C";
-  const writerGateForFinal = computedPriorityGateGrade === "A" ? "A" : writerGateGrade || "D";
+  const writerGateForFinal = formalReady && computedPriorityGateGrade === "A" ? "A" : writerGateGrade || computedGateGrade;
   const writerPriorityGateForFinal = writerPriorityGateGrade && writerPriorityGateGrade !== "D" ? writerPriorityGateGrade : computedPriorityGateGrade;
-  const speedGateForFinal = daytradeSourceSpeedOk ? "A" : computedPriorityGateGrade;
+  const speedGateForFinal = formalWindow && daytradeSourceSpeedOk ? "A" : computedGateGrade;
   const payloadGateForFinal = missingPayloadFields.length === 0 ? "A" : "D";
-  const gateGrade = getWorstGateGrade([computedPriorityGateGrade, sourceStatusGateGrade, writerGateForFinal, writerPriorityGateForFinal, speedGateForFinal, payloadGateForFinal]);
+  const gateGrade = getWorstGateGrade([computedGateGrade, sourceStatusGateGrade, writerGateForFinal, writerPriorityGateForFinal, speedGateForFinal, payloadGateForFinal]);
   if (writerGateGrade === "A" && computedGateGrade !== "A") {
     issues.push(issue("writer_gate_grade_a_but_evidence_not_a", "critical", { writerGateGrade, computedGateGrade }));
   }

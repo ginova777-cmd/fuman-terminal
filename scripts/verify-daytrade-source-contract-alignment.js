@@ -64,6 +64,7 @@ function normalizeSourceStatus(row) {
     message: stringValue(row?.message),
     updatedAt: stringValue(row?.updated_at),
     daytradeGateGrade: stringValue(payload.daytrade_gate_grade),
+    priorityGateGrade: stringValue(payload.priority_gate_grade),
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(payload.priority_fresh_quote_coverage_120s),
@@ -104,16 +105,15 @@ function isSourceA(source) {
     && source.rateLimitStatus !== "rate_limited";
 }
 
-function isSourceOffSessionFailClosed(source) {
+function isSourceFailClosed(source) {
   const message = `${source.status} ${source.message}`.toLowerCase();
-  return ["ok", "stopped", "not_ready"].includes(source.status)
-    && message.includes("off-session")
-    && source.daytradeGateGrade === "A"
+  return ["ok", "degraded", "stopped", "not_ready"].includes(source.status)
+    && source.daytradeGateGrade !== "A"
     && source.priorityFreshQuoteCoverage120s >= 0.95
     && source.quoteAgeSeconds <= 90
     && source.formalEntryAllowed === false
     && source.scannerCanRunQuoteOnly === true
-    && source.scannerCanRunOpening === true
+    && (source.scannerCanRunOpening === true || message.includes("formal entry not allowed") || message.includes("off-session"))
     && source.rateLimitStatus !== "rate_limited";
 }
 
@@ -134,15 +134,15 @@ function isGateFailClosed(gate) {
 
 function gateVerdict(source, canonicalGate, unattendedGate) {
   const sourceA = isSourceA(source);
-  const sourceOffSession = isSourceOffSessionFailClosed(source);
+  const sourceClosed = isSourceFailClosed(source);
   const canonicalA = isGateA(canonicalGate);
   const unattendedA = isGateA(unattendedGate);
   const canonicalClosed = isGateFailClosed(canonicalGate);
   const unattendedClosed = isGateFailClosed(unattendedGate);
   if (sourceA && canonicalA && unattendedA) return { ok: true, verdict: "A_READY_ALIGNED", mode: "formal_ready", issues: [] };
-  if (sourceOffSession && canonicalClosed && unattendedClosed) return { ok: true, verdict: "OFF_SESSION_FAIL_CLOSED_ALIGNED", mode: "off_session_fail_closed", issues: [] };
+  if (sourceClosed && canonicalClosed && unattendedClosed) return { ok: true, verdict: "FAIL_CLOSED_ALIGNED", mode: "formal_entry_fail_closed", issues: [] };
   const issues = [];
-  if (!sourceA && !sourceOffSession) issues.push("source_status_not_a_or_off_session_fail_closed");
+  if (!sourceA && !sourceClosed) issues.push("source_status_not_a_or_fail_closed");
   if (!canonicalA && !canonicalClosed) issues.push("canonical_gate_not_a_or_fail_closed");
   if (!unattendedA && !unattendedClosed) issues.push("unattended_gate_not_a_or_fail_closed");
   return { ok: false, verdict: "NOT_ALIGNED", mode: "mismatch", issues };

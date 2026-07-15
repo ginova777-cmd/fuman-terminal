@@ -2045,14 +2045,18 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     .map((row) => row.symbol);
   const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
   const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
-  const gateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
+  const formalEntryWindow = !offSession && after0845;
+  const priorityGateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D";
+  const gateGrade = priorityGateA && formalEntryWindow ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
   const message = offSession
     ? `dedicated daytrade source stopped off-session; latest formal entry disabled; quote=${quoteStatus} priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount}`
     : gateGrade === "A"
     ? "dedicated daytrade source priority injecting gate A"
+    : priorityGateGrade === "A" && !formalEntryWindow
+    ? `dedicated daytrade source warmup priority gate A; formal entry not allowed; phase=${phase}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`
     : `dedicated daytrade source ${gateGrade}; status=${status}; quote=${quoteStatus}; preopen=${preopenStatus}; daily=${dailyVolumeStatus}; historical1m=${historical1mWarmupStatus}; today1m=${today1mStatus}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`;
 
   const payload = {
@@ -2061,7 +2065,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     daytrade_gate_grade: gateGrade,
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
-    priority_gate_grade: priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D",
+    priority_gate_grade: priorityGateGrade,
     full_market_gate_grade: fullMarketGateA ? "A" : "C",
     fresh_quote_window_seconds: WINDOW_SECONDS,
     fresh_quotes_120s: freshFull.length,

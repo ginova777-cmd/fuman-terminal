@@ -5,10 +5,10 @@ const {
   buildAndWriteDesktopRouteSnapshot,
   buildDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-builder");
-const {
-  repairRealtimeRadarSnapshotEndpoints,
-  summarizeEndpointPayload,
-} = require("../lib/realtime-radar-snapshot-repair");
+function summarizeEndpointPayload(payload = {}) {
+  const rows = Array.isArray(payload.matches) ? payload.matches : Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.records) ? payload.records : [];
+  return { ok: payload.ok !== false, count: Number(payload.count ?? payload.total ?? rows.length) || 0, runId: payload.runId || payload.transport?.runId || "", updatedAt: payload.updatedAt || payload.generatedAt || payload.finishedAt || "", source: payload.source || payload.cacheSource || payload.transport?.source || "" };
+}
 
 function bearerToken(request) {
   const header = String(request.headers?.authorization || "");
@@ -150,10 +150,6 @@ module.exports = async function handler(request, response) {
       const endpoints = {
         ...(snapshot.payload.endpoints || {}),
       };
-      const realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
-        timeoutMs: 6500,
-        via: "api/desktop-route-snapshot",
-      });
       const summary = {
         ...(snapshot.payload.summary || {}),
       };
@@ -170,7 +166,7 @@ module.exports = async function handler(request, response) {
         summary,
         cacheSource: "supabase:desktop_route_snapshot",
         snapshotHit: true,
-        snapshotRepairs: realtimeRadarRepairs,
+        snapshotRepairs: [],
       });
       return;
     }
@@ -215,5 +211,7 @@ module.exports = async function handler(request, response) {
   }
 };
 module.exports.releaseReadbackSnapshot = releaseReadbackSnapshot;
+
+
 
 
