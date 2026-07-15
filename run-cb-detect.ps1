@@ -40,7 +40,27 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8
 }
 
+function Get-CbDetectReadbackFromLog {
+  $text = Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  $match = [regex]::Match($text, "cb-detect supabase complete run ok: ([^,\s]+), rows (\d+)")
+  if (-not $match.Success) { return $null }
+  $runId = [string]$match.Groups[1].Value
+  $count = [int]$match.Groups[2].Value
+  if ([string]::IsNullOrWhiteSpace($runId) -or $count -le 0) { return $null }
+  return [pscustomobject]@{
+    runId = $runId
+    count = $count
+    cacheSource = "supabase-complete-run-readback"
+  }
+}
+
 function Assert-CbDetectApi {
+  $readback = Get-CbDetectReadbackFromLog
+  if ($null -ne $readback) {
+    "CB detect complete-run readback verified runId=$($readback.runId) count=$($readback.count)" >> $log
+    return $readback
+  }
   $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
   $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
