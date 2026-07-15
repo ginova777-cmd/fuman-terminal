@@ -186,6 +186,55 @@ function cleanNullableNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function signedAmountText(value) {
+  const number = cleanNumber(value);
+  if (number > 0) return "+" + number.toLocaleString("zh-TW");
+  if (number < 0) return "-" + Math.abs(number).toLocaleString("zh-TW");
+  return "0";
+}
+
+function signedNetLabel(value, baseLabel) {
+  const number = cleanNumber(value);
+  if (number > 0) return baseLabel + "買超";
+  if (number < 0) return baseLabel + "賣超";
+  return baseLabel + "持平";
+}
+
+function chipDirection(value) {
+  const number = cleanNumber(value);
+  if (number > 0) return "buy";
+  if (number < 0) return "sell";
+  return "neutral";
+}
+
+function annotateInstitutionNetText(text) {
+  return String(text || "").replace(
+    /(法人合計|外資|投信|自營)\s*([+-]?\d[\d,]*)/g,
+    (_, label, value) => signedNetLabel(value, label) + " " + signedAmountText(value)
+  );
+}
+
+function buildInstitutionDirectionFields(total, foreign, trust, dealer) {
+  const direction = chipDirection(total);
+  const parts = [
+    signedNetLabel(total, "法人合計") + " " + signedAmountText(total),
+    signedNetLabel(foreign, "外資") + " " + signedAmountText(foreign),
+    signedNetLabel(trust, "投信") + " " + signedAmountText(trust),
+  ];
+  if (cleanNumber(dealer) !== 0) parts.push(signedNetLabel(dealer, "自營") + " " + signedAmountText(dealer));
+  return {
+    chipDirection: direction,
+    chipDirectionLabel: direction === "buy" ? "法人買超" : direction === "sell" ? "法人賣超" : "法人中性",
+    chipConfluenceLabel: direction === "buy" ? "籌碼買超共振" : direction === "sell" ? "籌碼賣超共振" : "籌碼中性共振",
+    chipConfluenceShort: direction === "buy" ? "買超共振" : direction === "sell" ? "賣超共振" : "中性共振",
+    institutionNetLabel: signedNetLabel(total, "法人合計"),
+    foreignNetLabel: signedNetLabel(foreign, "外資"),
+    trustNetLabel: signedNetLabel(trust, "投信"),
+    dealerNetLabel: signedNetLabel(dealer, "自營"),
+    chipNetSummary: parts.join("，"),
+  };
+}
+
 function compactDateKey(value) {
   const compact = String(value || "").replace(/\D/g, "").slice(0, 8);
   return /^\d{8}$/.test(compact) ? compact : "";
@@ -616,15 +665,39 @@ function normalizeMatch(match) {
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const rawMatches = Array.isArray(payload.matches || row.signals) ? (payload.matches || row.signals) : [];
-  const matches = rawMatches.map(normalizeMatch).filter(Boolean);
-  const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
-  const activeMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : matches[0] || null;
+  const baseMatches = rawMatches.map(normalizeMatch).filter(Boolean);
   const sourceInst = payload.inst && typeof payload.inst === "object" ? payload.inst : {};
   const percent = cleanNullableNumber(payload.percent ?? payload.changePercent ?? row.change_percent);
   const institutionTotalNet = cleanNumber(payload.institutionTotalNet ?? payload.institution_total_net ?? payload.totalNet ?? payload.total_net ?? sourceInst.total ?? row.institution_total_net ?? row.total_net);
   const foreignNet = cleanNumber(payload.foreignNet ?? payload.foreign_net ?? sourceInst.foreign ?? row.foreign_net);
   const trustNet = cleanNumber(payload.trustNet ?? payload.investmentTrustNet ?? payload.investment_trust_net ?? sourceInst.trust ?? row.trust_net);
   const dealerNet = cleanNumber(payload.dealerNet ?? payload.dealer_net ?? sourceInst.dealer ?? row.dealer_net);
+  const chipFields = buildInstitutionDirectionFields(institutionTotalNet, foreignNet, trustNet, dealerNet);
+  const matches = baseMatches.map((match) => {
+    if (match.id !== "chip_k_confluence") {
+      return {
+        ...match,
+        reason: annotateInstitutionNetText(match.reason),
+      };
+    }
+    return {
+      ...match,
+      label: chipFields.chipConfluenceLabel,
+      short: chipFields.chipConfluenceShort,
+      reason: annotateInstitutionNetText(match.reason) || chipFields.chipNetSummary,
+      chipDirection: chipFields.chipDirection,
+      chipDirectionLabel: chipFields.chipDirectionLabel,
+      chipNetSummary: chipFields.chipNetSummary,
+    };
+  });
+  const activeMatchId = String(payload.activeMatch?.id || payload.activeMatch?.key || payload.activeMatch?.type || "");
+  const normalizedActiveMatch = activeMatchId && !FORBIDDEN_UI_MATCH_IDS.has(activeMatchId) ? normalizeMatch(payload.activeMatch) : null;
+  const activeMatch = normalizedActiveMatch
+    ? matches.find((match) => match.id === normalizedActiveMatch.id) || {
+      ...normalizedActiveMatch,
+      reason: annotateInstitutionNetText(normalizedActiveMatch.reason),
+    }
+    : matches[0] || null;
   const inst = {
     ...sourceInst,
     total: cleanNumber(sourceInst.total ?? institutionTotalNet),
@@ -658,8 +731,16 @@ function normalizePayload(row) {
     investment_trust_net: trustNet,
     dealerNet,
     dealer_net: dealerNet,
+    chipDirection: chipFields.chipDirection,
+    chipDirectionLabel: chipFields.chipDirectionLabel,
+    chipConfluenceLabel: chipFields.chipConfluenceLabel,
+    chipNetSummary: chipFields.chipNetSummary,
+    institutionNetLabel: chipFields.institutionNetLabel,
+    foreignNetLabel: chipFields.foreignNetLabel,
+    trustNetLabel: chipFields.trustNetLabel,
+    dealerNetLabel: chipFields.dealerNetLabel,
     activeMatch,
-    reason: String(payload.reason || row.reason || matches.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
+    reason: annotateInstitutionNetText(payload.reason || row.reason || matches.map((signal) => signal.reason).filter(Boolean).join("；")).trim(),
   };
 }
 
