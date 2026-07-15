@@ -58,7 +58,7 @@ const STRATEGY_FILTER = String(ARGS.values.get("strategy") || ARGS.values.get("o
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
 
-const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap"]);
+const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap", "market-ai"]);
 
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
@@ -1067,7 +1067,7 @@ function isProtectedFailClosedPayload(payload = {}) {
 }
 
 function applyProfileJudgement(strategy, endpointResult, judgement) {
-  if (STRICT_LIVE || !judgement.issues.length) return judgement;
+  if (!judgement.issues.length) return judgement;
   const protectedFailClosed = isProtectedFailClosedPayload(endpointResult.json);
   const membershipProtected = isMembershipProtectedPayload(endpointResult);
   const downgraded = [];
@@ -1084,10 +1084,10 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   if (!downgraded.length) return judgement;
   const staleHint = JSON.stringify(endpointResult.json || {}).slice(0, 1600) + " " + String(endpointResult.text || "");
   const reason = /stale|not_today|fresh_rows_0_below|trading_day_radar_cache_stale|marketDataDate|off.?session/i.test(staleHint)
-    ? "off_session_live_stale"
+    ? (STRICT_LIVE ? "live_surface_stale" : "off_session_live_stale")
     : (protectedFailClosed || membershipProtected)
-      ? "off_session_protected_fail_closed"
-      : "off_session_live_unavailable";
+      ? (STRICT_LIVE ? "membership_protected_fail_closed" : "off_session_protected_fail_closed")
+      : (STRICT_LIVE ? "live_surface_unavailable" : "off_session_live_unavailable");
   return {
     issues: kept,
     warnings: [
@@ -1187,8 +1187,8 @@ async function evaluateStrategy(strategy, context = {}) {
   const warnings = endpointResults.flatMap((item) => item.warnings.map((warning) => `${item.endpoint}: ${warning}`));
   for (const verifier of verifierResults) {
     if (!verifier.ok) {
-      if (!STRICT_LIVE && endpointResults.some((item) => item.warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
-        warnings.push(`off_session_protected_fail_closed:verifier_failed:${verifier.command}`);
+      if (endpointResults.some((item) => item.warnings.some((warning) => /membership_protected_fail_closed|live_surface_stale|live_surface_unavailable|off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
+        warnings.push(`protected_or_live_surface:verifier_failed:${verifier.command}`);
       } else {
         issues.push(`verifier_failed: ${verifier.command}`);
       }
