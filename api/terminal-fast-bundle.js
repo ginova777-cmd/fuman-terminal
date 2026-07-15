@@ -649,7 +649,7 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
   }
   const current = findWatchlistEndpoint(endpoints);
   if (current?.[1]?.strategies?.strategy2 && current?.[1]?.ok !== false) return;
-  const direct = await callJson("/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000);
+  const direct = await callJson("/api/watchlist-match-index", watchlistMatchIndex, request, { compact: "1", shell: "1", limit: "80" }, 3000);
   if (Number(direct.statusCode || 0) >= 500 || direct.payload?.ok === false) return;
   if (!direct.payload?.strategies?.strategy2) return;
   if (current?.[0] && current[0] !== endpoint) delete endpoints[current[0]];
@@ -721,7 +721,15 @@ module.exports = async function handler(request, response) {
       response.status(200).end('');
       return;
     }
-    response.status(200).json(buildFastMembershipLockedBundle(entitlement, marketCalendar));
+    const lockedPayload = buildFastMembershipLockedBundle(entitlement, marketCalendar);
+    await ensureWatchlistMatchIndexEndpoint(request, lockedPayload.endpoints, {
+      cacheSource: "membership-fast-shell",
+      via: "api/terminal-fast-bundle:membership-fast-shell",
+      updatedAt: lockedPayload.updatedAt,
+    });
+    lockedPayload.summary = Object.fromEntries(Object.entries(lockedPayload.endpoints || {}).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)]));
+    lockedPayload.timings = Object.fromEntries(Object.keys(lockedPayload.endpoints || {}).map((endpoint) => [endpoint, endpoint === "/api/watchlist-match-index?compact=1&shell=1&limit=80" ? 3000 : 0]));
+    response.status(200).json(lockedPayload);
     return;
   }
   if (!wantsLive) {
