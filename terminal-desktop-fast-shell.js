@@ -7255,6 +7255,32 @@
     return cleanNumber(row?.terminalConfluenceCount ?? row?.confluenceCount ?? row?.sourceCount ?? row?.totalConfluence ?? row?.hitCount ?? row?.matchCount);
   }
 
+  function strategy5ChipBuyConfluence(row) {
+    const signals = normalizeArray(row?.signals || row?.matches || row?.strategyTags || row?.tags || row?.signalTags)
+      .map((item) => typeof item === "object" ? [item.id, item.key, item.label, item.short, item.reason].filter(Boolean).join(" ") : item)
+      .join(" ");
+    const text = [rowSearchText(row), signals, row?.chipDirection, row?.chipDirectionLabel, row?.chipConfluenceLabel, row?.chipNetSummary]
+      .filter(Boolean)
+      .join(" ");
+    if (/籌碼賣超共振|chipDirection.?sell/i.test(text)) return false;
+    return row?.chipDirection === "buy" || /籌碼買超共振|買超共振|法人合計買超/i.test(text);
+  }
+
+  function strategy5ChipBuyRowsByCode(rows = []) {
+    const map = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const code = strategy5ConfluenceCode(row);
+      if (!code || !strategy5ChipBuyConfluence(row)) return;
+      const current = map.get(code);
+      if (!current || cleanNumber(row?.score) > cleanNumber(current?.score)) map.set(code, row);
+    });
+    return map;
+  }
+
+  function strategy5EntryAlreadyHasChipBuy(entries = []) {
+    return normalizeArray(entries).some((item) => /籌碼買超|買超共振|chip_k_confluence/i.test([item?.key, item?.label, item?.reason, normalizeArray(item?.details).join(" ")].filter(Boolean).join(" ")));
+  }
+
   function strategy5LocalConfluenceCounts(rows = []) {
     const map = new Map();
     (Array.isArray(rows) ? rows : []).forEach((row) => {
@@ -7335,42 +7361,65 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     if (byCode) {
       const names = strategy5WatchlistMatchIndexPayload?.namesByCode || {};
       const quotes = strategy5WatchlistMatchIndexPayload?.quoteByCode || {};
-      return Object.entries(byCode).map(([code, rawEntries]) => {
-        const entries = normalizeArray(rawEntries);
+      const chipRowsByCode = strategy5ChipBuyRowsByCode(fallbackRows);
+      const codes = [...new Set([...Object.keys(byCode || {}), ...chipRowsByCode.keys()])];
+      return codes.map((code) => {
+        const entries = normalizeArray(byCode[code]);
+        const chipRow = chipRowsByCode.get(code) || null;
         const quote = quotes?.[code] || {};
-        const strategy5InternalCount = entries.reduce((max, item) => Math.max(max, cleanNumber(item?.internalCount)), 0);
-        const labels = [...new Set(entries.map((item) => item?.label || item?.key).filter(Boolean))];
-        const details = [...new Set(entries.flatMap((item) => normalizeArray(item?.details)).filter(Boolean))];
+        const chipBoost = chipRow && !strategy5EntryAlreadyHasChipBuy(entries) ? 1 : 0;
+        const terminalConfluenceCount = entries.length + chipBoost;
+        const strategy5InternalCount = Math.max(
+          entries.reduce((max, item) => Math.max(max, cleanNumber(item?.internalCount)), 0),
+          cleanNumber(chipRow?.strategy5InternalCount),
+          normalizeArray(chipRow?.matches || chipRow?.signals).length
+        );
+        const labels = [...new Set([
+          ...entries.map((item) => item?.label || item?.key).filter(Boolean),
+          chipRow ? "籌碼買超共振" : "",
+        ].filter(Boolean))];
+        const details = [...new Set([
+          ...entries.flatMap((item) => normalizeArray(item?.details)).filter(Boolean),
+          chipRow ? (chipRow.reason || chipRow.chipNetSummary || "法人籌碼買超") : "",
+        ].filter(Boolean))];
+        const price = cleanNumber(quote.price || quote.close || chipRow?.price || chipRow?.close);
+        const pctValue = cleanNumber(quote.percent || chipRow?.percent || chipRow?.pct);
+        const volume = cleanNumber(quote.tradeVolume || quote.volume || chipRow?.tradeVolume || chipRow?.volume);
+        const tradeValue = cleanNumber(quote.tradeValue || quote.value || chipRow?.tradeValue || chipRow?.value);
         return {
+          ...(chipRow || {}),
           rank: 0,
           code,
-          title: compactText(names?.[code] || code, 64),
-          pct: cleanNumber(quote.percent) ? `${cleanNumber(quote.percent).toFixed(2)}%` : "",
-          price: cleanNumber(quote.price || quote.close) ? String(cleanNumber(quote.price || quote.close)) : "",
-          volume: cleanNumber(quote.tradeVolume || quote.volume) ? String(cleanNumber(quote.tradeVolume || quote.volume)) : "",
-          tradeValue: cleanNumber(quote.tradeValue || quote.value) ? String(cleanNumber(quote.tradeValue || quote.value)) : "",
-          score: String(Math.round((entries.length * 100) + strategy5InternalCount)),
-          reason: compactText(`${labels.join("、")}｜${details.slice(0, 4).join("、")}`, 180),
-          subStrategy: "多策略共振",
+          title: compactText(chipRow?.title || chipRow?.name || names?.[code] || code, 64),
+          pct: pctValue ? pctValue.toFixed(2) + "%" : "",
+          price: price ? String(price) : "",
+          volume: volume ? String(volume) : "",
+          tradeValue: tradeValue ? String(tradeValue) : "",
+          score: String(Math.round((terminalConfluenceCount * 100) + strategy5InternalCount)),
+          reason: compactText(labels.join("、") + "｜" + details.slice(0, 5).join("、"), 220),
+          subStrategy: "綜合共振",
           subStrategyId: "multi_strategy_confluence",
-          strategyDisplay: "多策略共振",
-          signalLabel: "多策略共振",
+          strategyDisplay: "綜合共振",
+          signalLabel: "綜合共振",
           signalLine: labels.join("、"),
-          signals: entries.slice(0, 6).map((item) => ({
-            id: item?.key || item?.label || "terminal_confluence",
-            label: item?.label || item?.key || "終端策略",
-            reason: normalizeArray(item?.details).slice(0, 3).join("、"),
-          })),
-          tags: labels.slice(0, 6),
-          signalTags: labels.slice(0, 6),
-          confluenceCount: entries.length,
-          terminalConfluenceCount: entries.length,
+          signals: [
+            ...entries.slice(0, 6).map((item) => ({
+              id: item?.key || item?.label || "terminal_confluence",
+              label: item?.label || item?.key || "終端策略",
+              reason: normalizeArray(item?.details).slice(0, 3).join("、"),
+            })),
+            ...(chipRow ? [{ id: "chip_k_confluence", label: "籌碼買超共振", reason: chipRow.reason || chipRow.chipNetSummary || "法人籌碼買超" }] : []),
+          ],
+          tags: labels.slice(0, 7),
+          signalTags: labels.slice(0, 7),
+          confluenceCount: terminalConfluenceCount,
+          terminalConfluenceCount,
           strategy5InternalCount,
-          aiSummary: compactText(`${labels.join("、")}｜全終端出現 ${entries.length} 次`, 180),
-          triggerReason: compactText(details.slice(0, 6).join("、") || labels.join("、"), 160),
-          line: compactText(`${code} ｜${names?.[code] || code}｜全終端出現 ${entries.length} 次｜${labels.join("、")}`, 180),
+          aiSummary: compactText(labels.join("、") + "｜符合 " + terminalConfluenceCount + " 個共振條件", 180),
+          triggerReason: compactText(details.slice(0, 7).join("、") || labels.join("、"), 180),
+          line: compactText(code + " ｜" + (chipRow?.name || names?.[code] || code) + "｜符合 " + terminalConfluenceCount + " 個共振條件｜" + labels.join("、"), 220),
         };
-      }).filter((row) => cleanNumber(row.terminalConfluenceCount) >= 2)
+      }).filter((row) => cleanNumber(row.terminalConfluenceCount) >= 2 || strategy5ChipBuyConfluence(row))
         .sort((a, b) => cleanNumber(b.terminalConfluenceCount) - cleanNumber(a.terminalConfluenceCount)
           || cleanNumber(b.strategy5InternalCount) - cleanNumber(a.strategy5InternalCount)
           || cleanNumber(b.score) - cleanNumber(a.score)
@@ -7391,9 +7440,9 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
         code,
         confluenceCount: count,
         terminalConfluenceCount: count,
-        subStrategy: source.subStrategy || "多策略共振",
+        subStrategy: source.subStrategy || "綜合共振",
         subStrategyId: "multi_strategy_confluence",
-        signalLabel: source.signalLabel || "多策略共振",
+        signalLabel: source.signalLabel || "綜合共振",
       };
     }).filter((row) => strategy5ExplicitConfluenceCount(row) >= 2)
       .sort((a, b) => strategy5ExplicitConfluenceCount(b) - strategy5ExplicitConfluenceCount(a)
@@ -7500,14 +7549,14 @@ function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) 
     const order = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
     fetchStrategy5WatchlistMatchIndexIfNeeded();
     const liveCounts = new Map(strategy5SignalCounts(rows).map((item) => [item.key, item]));
-    const ids = order.filter((id) => id && id !== "multi_strategy_confluence");
+    const ids = order.filter((id) => id && id !== "multi_strategy_confluence" && id !== "chip_k_confluence");
     const counts = ids.length ? ids.map((id) => ({
       key: id,
       label: defs[id]?.short || defs[id]?.label || liveCounts.get(id)?.label || id,
       count: cleanNumber(liveCounts.get(id)?.count),
     })) : [...liveCounts.values()];
     const confluence = strategy5TerminalConfluenceRows(rows).length;
-    return cardsFromCounts([{ key: "multi_strategy_confluence", label: "多策略共振", count: confluence }, ...counts], "Strategy5 細分策略");
+    return cardsFromCounts([{ key: "multi_strategy_confluence", label: "綜合共振", count: confluence }, ...counts], "Strategy5 細分策略");
   }
 
   function institutionOptionCards(rows) {
