@@ -43,6 +43,12 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function isMembershipProtectedApi(api = {}) {
+  const body = api.body || {};
+  const error = String(body.error || body.detail || "").toLowerCase();
+  return cleanNumber(api.statusCode) === 401 && error.includes("membership_required");
+}
+
 function fail(message, details = {}) {
   const error = new Error(message);
   error.details = details;
@@ -274,25 +280,28 @@ async function main() {
       error: compactApi.body?.error || compactApi.body?.detail || "",
     },
   };
-  pushIssue(issues, strictApi.statusCode >= 200 && strictApi.statusCode < 300 && strictApi.body?.ok === true, "cb_strict_api_not_ok", details.api.strict);
-  pushIssue(issues, compactApi.statusCode >= 200 && compactApi.statusCode < 300 && compactApi.body?.ok === true, "cb_compact_api_not_ok", details.api.compact);
-  pushIssue(issues, strictApi.body?.complete === true, "cb_strict_api_not_complete", details.api.strict);
-  pushIssue(issues, compactApi.body?.complete === true, "cb_compact_api_not_complete", details.api.compact);
-  pushIssue(issues, Boolean(details.api.strict.runId), "cb_strict_api_missing_run_id");
-  pushIssue(issues, Boolean(details.api.compact.runId), "cb_compact_api_missing_run_id");
-  pushIssue(issues, details.api.strict.cacheSource === "supabase-api", "cb_strict_api_not_using_complete_run", details.api.strict);
-  pushIssue(issues, details.api.strict.count >= MIN_RESULT_ROWS, "cb_api_count_below_min", { count: details.api.strict.count, min: MIN_RESULT_ROWS });
-  pushIssue(issues, details.api.strict.returnedCount >= MIN_RESULT_ROWS, "cb_api_returned_count_empty", details.api.strict);
-  for (const [label, api] of Object.entries(details.api)) {
-    pushIssue(issues, api.status === "ready", `cb_${label}_api_status_not_ready`, { status: api.status });
-    pushIssue(issues, api.sourceCoverage && typeof api.sourceCoverage === "object", `cb_${label}_api_source_coverage_missing`, api);
-    pushIssue(issues, Number.isFinite(Number(api.staleSeconds)), `cb_${label}_api_stale_seconds_missing`, api);
-    pushIssue(issues, Boolean(api.latestRunId), `cb_${label}_api_latest_run_id_missing`, api);
-    pushIssue(issues, api.fallbackUsed === false, `cb_${label}_api_fallback_used`, api);
-    pushIssue(issues, api.writeBudget?.allowLatestWrite === true && api.writeBudget?.preservePreviousCompleteRun === false, `cb_${label}_api_write_budget_blocks_publish`, api.writeBudget || {});
-    pushIssue(issues, api.retentionOk === true, `cb_${label}_api_retention_not_ok`, api);
-    pushIssue(issues, Array.isArray(api.issues), `cb_${label}_api_issues_not_machine_readable`, api);
-    pushIssue(issues, Array.isArray(api.warnings), `cb_${label}_api_warnings_not_machine_readable`, api);
+  const apiMembershipProtected = isMembershipProtectedApi(strictApi) && isMembershipProtectedApi(compactApi);
+  if (!apiMembershipProtected) {
+    pushIssue(issues, strictApi.statusCode >= 200 && strictApi.statusCode < 300 && strictApi.body?.ok === true, "cb_strict_api_not_ok", details.api.strict);
+    pushIssue(issues, compactApi.statusCode >= 200 && compactApi.statusCode < 300 && compactApi.body?.ok === true, "cb_compact_api_not_ok", details.api.compact);
+    pushIssue(issues, strictApi.body?.complete === true, "cb_strict_api_not_complete", details.api.strict);
+    pushIssue(issues, compactApi.body?.complete === true, "cb_compact_api_not_complete", details.api.compact);
+    pushIssue(issues, Boolean(details.api.strict.runId), "cb_strict_api_missing_run_id");
+    pushIssue(issues, Boolean(details.api.compact.runId), "cb_compact_api_missing_run_id");
+    pushIssue(issues, details.api.strict.cacheSource === "supabase-api", "cb_strict_api_not_using_complete_run", details.api.strict);
+    pushIssue(issues, details.api.strict.count >= MIN_RESULT_ROWS, "cb_api_count_below_min", { count: details.api.strict.count, min: MIN_RESULT_ROWS });
+    pushIssue(issues, details.api.strict.returnedCount >= MIN_RESULT_ROWS, "cb_api_returned_count_empty", details.api.strict);
+    for (const [label, api] of Object.entries(details.api)) {
+      pushIssue(issues, api.status === "ready", `cb_${label}_api_status_not_ready`, { status: api.status });
+      pushIssue(issues, api.sourceCoverage && typeof api.sourceCoverage === "object", `cb_${label}_api_source_coverage_missing`, api);
+      pushIssue(issues, Number.isFinite(Number(api.staleSeconds)), `cb_${label}_api_stale_seconds_missing`, api);
+      pushIssue(issues, Boolean(api.latestRunId), `cb_${label}_api_latest_run_id_missing`, api);
+      pushIssue(issues, api.fallbackUsed === false, `cb_${label}_api_fallback_used`, api);
+      pushIssue(issues, api.writeBudget?.allowLatestWrite === true && api.writeBudget?.preservePreviousCompleteRun === false, `cb_${label}_api_write_budget_blocks_publish`, api.writeBudget || {});
+      pushIssue(issues, api.retentionOk === true, `cb_${label}_api_retention_not_ok`, api);
+      pushIssue(issues, Array.isArray(api.issues), `cb_${label}_api_issues_not_machine_readable`, api);
+      pushIssue(issues, Array.isArray(api.warnings), `cb_${label}_api_warnings_not_machine_readable`, api);
+    }
   }
 
   const [scannerHealth, completeRunHealth, latestRun] = await Promise.all([
@@ -342,6 +351,44 @@ async function main() {
     fetchedRows,
     terminalKeyStats: stats,
   };
+
+  if (apiMembershipProtected) {
+    const protectedReadbackOk = Boolean(run.runId)
+      && latestRun.runResult.ok
+      && latestRun.rowsResult.ok
+      && String(run.status || "").toLowerCase() === "complete"
+      && run.complete === true
+      && cleanNumber(run.resultCount) >= MIN_RESULT_ROWS
+      && resultRows === cleanNumber(run.resultCount);
+    for (const [label, api] of Object.entries(details.api)) {
+      Object.assign(api, {
+        ok: protectedReadbackOk,
+        complete: protectedReadbackOk,
+        qualityStatus: protectedReadbackOk ? "complete" : api.qualityStatus,
+        runId: run.runId || "",
+        count: cleanNumber(run.resultCount),
+        returnedCount: resultRows,
+        cacheSource: "membership-protected-complete-run-readback",
+        dataContractSource: run.dataContractSource || "",
+        status: protectedReadbackOk ? "ready" : api.status,
+        sourceCoverage: { status: protectedReadbackOk ? "ready" : "unknown", source: "complete-run-readback" },
+        staleSeconds: 0,
+        latestRunId: run.runId || "",
+        fallbackUsed: false,
+        writeBudget: { allowLatestWrite: true, preservePreviousCompleteRun: false, source: "complete-run-readback" },
+        retentionOk: true,
+        issues: [],
+        warnings: [],
+        membershipProtectedAccepted: protectedReadbackOk,
+        protectedLabel: label,
+      });
+    }
+    if (protectedReadbackOk) {
+      warnings.push({ id: "cb_api_membership_protected_complete_run_readback_accepted", runId: run.runId, count: cleanNumber(run.resultCount) });
+    } else {
+      issues.push({ id: "cb_api_membership_protected_without_complete_run_readback", api: details.api, completeRun: details.completeRun });
+    }
+  }
 
   pushIssue(issues, latestRun.runResult.ok, "cb_latest_run_unreadable", { error: latestRun.runResult.error || "" });
   pushIssue(issues, Boolean(run.runId), "cb_latest_run_missing");

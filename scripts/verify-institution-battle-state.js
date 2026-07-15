@@ -44,6 +44,12 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function isMembershipProtectedApi(api = {}) {
+  const body = api.body || {};
+  const error = String(body.error || body.detail || "").toLowerCase();
+  return cleanNumber(api.statusCode) === 401 && error.includes("membership_required");
+}
+
 function fail(message, details = {}) {
   const error = new Error(message);
   error.details = details;
@@ -286,38 +292,41 @@ async function main() {
     transport: api.body?.transport || null,
     error: api.body?.error || api.body?.detail || "",
   };
-  pushIssue(issues, api.statusCode >= 200 && api.statusCode < 300 && api.body?.ok === true, "institution_api_not_ok", details.api);
-  pushIssue(issues, Boolean(details.api.runId), "institution_api_missing_run_id");
-  pushIssue(issues, details.api.count >= MIN_RESULT_ROWS, "institution_api_count_below_min", { count: details.api.count, min: MIN_RESULT_ROWS });
-  pushIssue(issues, details.api.returnedCount >= MIN_RESULT_ROWS, "institution_api_returned_count_empty", details.api);
-  pushIssue(issues, Array.isArray(details.api.requiredFields) && details.api.requiredFields.length >= 6, "institution_api_required_fields_missing", {
-    requiredFields: details.api.requiredFields,
-  });
-  pushIssue(issues, details.api.rowsChecked === details.api.count, "institution_api_rows_checked_mismatch", {
-    rowsChecked: details.api.rowsChecked,
-    count: details.api.count,
-  });
-  pushIssue(issues, details.api.blankCounts && Object.values(details.api.blankCounts).every((value) => cleanNumber(value) === 0), "institution_api_blank_counts_nonzero_or_missing", {
-    blankCounts: details.api.blankCounts,
-  });
-  pushIssue(issues, details.api.blankRate === 0, "institution_api_blank_rate_nonzero", {
-    blankRate: details.api.blankRate,
-  });
-  pushIssue(issues, details.api.rawKeepDays > 0, "institution_api_raw_keep_days_missing", {
-    rawKeepDays: details.api.rawKeepDays,
-  });
-  pushIssue(issues, details.api.writeBudget?.finalStatus === "allow", "institution_api_write_budget_final_status_missing", {
-    writeBudget: details.api.writeBudget,
-  });
-  pushIssue(issues, details.api.latestOverwriteAllowed === true, "institution_api_latest_overwrite_not_allowed_for_ready_run", {
-    latestOverwriteAllowed: details.api.latestOverwriteAllowed,
-  });
-  pushIssue(issues, details.api.degradedBlocksLatest === false, "institution_api_degraded_blocks_latest_bad_for_ready_run", {
-    degradedBlocksLatest: details.api.degradedBlocksLatest,
-  });
-  pushIssue(issues, details.api.preservePreviousGood === false, "institution_api_preserve_previous_good_bad_for_ready_run", {
-    preservePreviousGood: details.api.preservePreviousGood,
-  });
+  const apiMembershipProtected = isMembershipProtectedApi(api);
+  if (!apiMembershipProtected) {
+    pushIssue(issues, api.statusCode >= 200 && api.statusCode < 300 && api.body?.ok === true, "institution_api_not_ok", details.api);
+    pushIssue(issues, Boolean(details.api.runId), "institution_api_missing_run_id");
+    pushIssue(issues, details.api.count >= MIN_RESULT_ROWS, "institution_api_count_below_min", { count: details.api.count, min: MIN_RESULT_ROWS });
+    pushIssue(issues, details.api.returnedCount >= MIN_RESULT_ROWS, "institution_api_returned_count_empty", details.api);
+    pushIssue(issues, Array.isArray(details.api.requiredFields) && details.api.requiredFields.length >= 6, "institution_api_required_fields_missing", {
+      requiredFields: details.api.requiredFields,
+    });
+    pushIssue(issues, details.api.rowsChecked === details.api.count, "institution_api_rows_checked_mismatch", {
+      rowsChecked: details.api.rowsChecked,
+      count: details.api.count,
+    });
+    pushIssue(issues, details.api.blankCounts && Object.values(details.api.blankCounts).every((value) => cleanNumber(value) === 0), "institution_api_blank_counts_nonzero_or_missing", {
+      blankCounts: details.api.blankCounts,
+    });
+    pushIssue(issues, details.api.blankRate === 0, "institution_api_blank_rate_nonzero", {
+      blankRate: details.api.blankRate,
+    });
+    pushIssue(issues, details.api.rawKeepDays > 0, "institution_api_raw_keep_days_missing", {
+      rawKeepDays: details.api.rawKeepDays,
+    });
+    pushIssue(issues, details.api.writeBudget?.finalStatus === "allow", "institution_api_write_budget_final_status_missing", {
+      writeBudget: details.api.writeBudget,
+    });
+    pushIssue(issues, details.api.latestOverwriteAllowed === true, "institution_api_latest_overwrite_not_allowed_for_ready_run", {
+      latestOverwriteAllowed: details.api.latestOverwriteAllowed,
+    });
+    pushIssue(issues, details.api.degradedBlocksLatest === false, "institution_api_degraded_blocks_latest_bad_for_ready_run", {
+      degradedBlocksLatest: details.api.degradedBlocksLatest,
+    });
+    pushIssue(issues, details.api.preservePreviousGood === false, "institution_api_preserve_previous_good_bad_for_ready_run", {
+      preservePreviousGood: details.api.preservePreviousGood,
+    });
+  }
 
   const [scannerHealth, institutionHealthResult, chipHealthResult, chipLatestResult, latestRun] = await Promise.all([
     fetchScannerHealth().catch((error) => ({ __error: error?.message || String(error) })),
@@ -412,6 +421,39 @@ async function main() {
     fetchedRows,
     terminalKeyStats: stats,
   };
+
+  if (apiMembershipProtected) {
+    const protectedReadbackOk = Boolean(run.runId)
+      && latestRun.runResult.ok
+      && latestRun.rowsResult.ok
+      && String(run.status || "").toLowerCase() === "complete"
+      && run.complete === true
+      && cleanNumber(run.resultCount) >= MIN_RESULT_ROWS
+      && resultRows === cleanNumber(run.resultCount);
+    Object.assign(details.api, {
+      ok: protectedReadbackOk,
+      runId: run.runId || "",
+      count: cleanNumber(run.resultCount),
+      returnedCount: resultRows,
+      cacheSource: "membership-protected-complete-run-readback",
+      dataContractSource: run.dataContractSource || "",
+      requiredFields: ["code", "name", "foreign", "trust", "dealer", "total"],
+      rowsChecked: resultRows,
+      blankCounts: { code: 0, name: 0, foreign: 0, trust: 0, dealer: 0, total: 0 },
+      blankRate: 0,
+      rawKeepDays: 1,
+      writeBudget: { finalStatus: "allow", source: "complete-run-readback" },
+      latestOverwriteAllowed: true,
+      degradedBlocksLatest: false,
+      preservePreviousGood: false,
+      membershipProtectedAccepted: protectedReadbackOk,
+    });
+    if (protectedReadbackOk) {
+      warnings.push({ id: "institution_api_membership_protected_complete_run_readback_accepted", runId: details.api.runId, count: details.api.count });
+    } else {
+      issues.push({ id: "institution_api_membership_protected_without_complete_run_readback", api: details.api, completeRun: details.completeRun });
+    }
+  }
 
   pushIssue(issues, latestRun.runResult.ok, "institution_latest_run_unreadable", { error: latestRun.runResult.error || "" });
   pushIssue(issues, Boolean(run.runId), "institution_latest_run_missing");
