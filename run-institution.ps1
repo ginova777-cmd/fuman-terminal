@@ -231,12 +231,46 @@ function Invoke-NodeScan($scriptPath, $label) {
   }
 }
 
+function Get-InstitutionReadbackFromLog {
+  $text = Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  $match = [regex]::Match($text, "institution supabase complete-run readback gate ok: ([^,\s]+), rows (\d+)")
+  if (-not $match.Success) { return $null }
+  $runId = [string]$match.Groups[1].Value
+  $count = [int]$match.Groups[2].Value
+  if ([string]::IsNullOrWhiteSpace($runId) -or $count -le 0) { return $null }
+  return [pscustomobject]@{
+    ok = $true
+    runId = $runId
+    count = $count
+    cacheSource = "supabase-complete-run-readback"
+    updatedAt = (Get-Date).ToString("o")
+    membershipProtected = $true
+  }
+}
+
+function Test-InstitutionMembershipProtectedError($Message) {
+  $text = [string]$Message
+  return $text -match "401" -or $text -match "Unauthorized" -or $text -match "membership_required" -or $text -match "missing_bearer_token"
+}
+
 function Assert-InstitutionApi {
   param(
     [switch]$AllowPreviousComplete
   )
   $url = "https://fuman-terminal.vercel.app/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  try {
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+  } catch {
+    if (Test-InstitutionMembershipProtectedError $_.Exception.Message) {
+      $readback = Get-InstitutionReadbackFromLog
+      if ($null -ne $readback) {
+        "Institution API membership protected; accepted Supabase complete-run readback runId=$($readback.runId) count=$($readback.count)" >> $log
+        return $readback
+      }
+    }
+    throw
+  }
   $payload = $response.Content | ConvertFrom-Json
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
     throw "Institution API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
