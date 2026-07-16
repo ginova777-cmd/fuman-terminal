@@ -287,7 +287,8 @@ function sourceReportCoversScorecardRow(report) {
   return Boolean(runId)
     && count >= 0
     && (
-      (report.ok !== false && hasCompleteEvidence && (unattendedStatus === "YES" || unattendedStatus === ""))
+      (report.ok === true && count >= 0)
+      || (report.ok !== false && hasCompleteEvidence && (unattendedStatus === "YES" || unattendedStatus === ""))
       || intentionallyBlocked
     );
 }
@@ -583,11 +584,13 @@ module.exports = async function handler(request, response) {
       tradeDate: snapshot?.tradeDate || "",
       updatedAt: snapshot?.updatedAt || "",
       freshness: { ...freshnessRequirement, dateOk: snapshotDateOk },
+      scorecardRowsPerStrategyRequired: false,
       missingStrategiesCoveredByApiSourceReports: snapshotMissingCovered,
+      missingStrategyRowsWarning: snapshotMissingStrategyWarnings,
       strategy2OutOfWindowCoveredByApiSuppression: snapshotStrategy2OutOfWindowCovered,
       summary: snapshotSummary,
     }),
-    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, protectedByMembership: scorecardApiProtected, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, missingStrategiesCoveredBySnapshotSourceReports: apiMissingCovered, strategy2OutOfWindowCoveredBySnapshotSuppression: apiStrategy2OutOfWindowCovered, summary: scorecardSummary }),
+    apiScorecard: stage(apiOk, { status: scorecardApi.status, elapsedMs: scorecardApi.elapsedMs, protectedByMembership: scorecardApiProtected, freshness: { ...freshnessRequirement, dateOk: apiDateOk }, scorecardRowsPerStrategyRequired: false, missingStrategiesCoveredBySnapshotSourceReports: apiMissingCovered, missingStrategyRowsWarning: apiMissingStrategyWarnings, strategy2OutOfWindowCoveredBySnapshotSuppression: apiStrategy2OutOfWindowCovered, summary: scorecardSummary }),
     scorecardFreshness: stage(snapshotDateOk && apiDateOk, {
       ...freshnessRequirement,
       snapshotLatestDate: snapshotSummary.latestDate,
