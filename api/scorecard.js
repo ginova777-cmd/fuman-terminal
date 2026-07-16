@@ -3,6 +3,7 @@ const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/ma
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
@@ -1773,7 +1774,7 @@ async function handler(request, response) {
   }
 }
 
-module.exports = handler;
+module.exports = withEntitlementRequired(handler, "scorecard");
 module.exports.__test = {
   SCORECARD_REQUIRED_FIELDS,
   buildPayloadFromSnapshotPayload,

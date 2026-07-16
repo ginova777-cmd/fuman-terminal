@@ -1,4 +1,5 @@
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 "use strict";
 
 function createCaptureResponse(resolve) {
@@ -82,4 +83,4 @@ async function handler(request, response) {
   });
 };
 
-module.exports = handler;
+module.exports = withEntitlementRequired(handler, "source-reports");
