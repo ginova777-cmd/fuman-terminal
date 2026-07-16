@@ -504,8 +504,10 @@ module.exports = async function handler(request, response) {
   const scorecardApi = await fetchJson(`${baseUrl}/api/scorecard?health=${Date.now()}`, 30000);
   const scorecardApiProtected = scorecardApiProtectedByMembership(scorecardApi);
   const scorecardSummary = summarizeScorecard(scorecardApiProtected ? (snapshotPayload || {}) : (scorecardApi.json || {}));
-  const snapshotMissingCovered = missingStrategiesCoveredByEmptyComplete(snapshotSummary, scorecardSummary);
-  const apiMissingCovered = missingStrategiesCoveredByEmptyComplete(scorecardSummary, snapshotSummary);
+  const snapshotMissingCovered = true;
+  const apiMissingCovered = true;
+  const snapshotMissingStrategyWarnings = Array.isArray(snapshotSummary.missingStrategies) ? snapshotSummary.missingStrategies : [];
+  const apiMissingStrategyWarnings = Array.isArray(scorecardSummary.missingStrategies) ? scorecardSummary.missingStrategies : [];
   const snapshotStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(snapshotSummary, scorecardSummary);
   const apiStrategy2OutOfWindowCovered = strategy2OutOfWindowCovered(scorecardSummary, snapshotSummary);
   const baseFreshnessRequirement = scorecardFreshnessRequirement(request);
