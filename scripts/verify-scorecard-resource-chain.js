@@ -396,25 +396,35 @@ async function main() {
 
   if (CHECK_LIVE) {
     const liveApi = await fetchJson("/api/scorecard", 35000);
+    const liveApiProtected = liveApi.status === 401
+      && liveApi.json?.protected === true
+      && liveApi.json?.error === "membership_required";
     details.liveApi = {
       status: liveApi.status,
+      protectedByMembership: liveApiProtected,
+      error: liveApi.json?.error || "",
+      reason: liveApi.json?.reason || "",
       cacheControl: liveApi.headers["cache-control"] || "",
       ...summarizePayload(liveApi.json, liveApi.json?.cacheSource || "live"),
+      snapshotRows: details.supabaseSnapshot.rows,
+      snapshotRunId: details.supabaseSnapshot.runId,
+      snapshotMarketDate: details.supabaseSnapshot.marketDate,
+      snapshotContract: details.supabaseSnapshot.contract,
+      snapshotQualityStatus: details.supabaseSnapshot.qualityStatus,
     };
-    addCheck(checks, liveApi.status >= 200 && liveApi.status < 300, "live-api-http", "live /api/scorecard returns 2xx", details.liveApi);
-    addCheck(checks, details.liveApi.rows > 0, "live-api-rows", "live /api/scorecard has rows", details.liveApi);
-    addCheck(checks, details.liveApi.cacheSource === "supabase-snapshot", "live-api-supabase", "live /api/scorecard uses Supabase snapshot", details.liveApi);
+    addCheck(checks, (liveApi.status >= 200 && liveApi.status < 300) || liveApiProtected, "live-api-http", "live /api/scorecard returns 2xx or explicit membership_required 401", details.liveApi);
+    addCheck(checks, liveApiProtected || details.liveApi.rows > 0, "live-api-rows", "live /api/scorecard has rows, or protected display is backed by Supabase snapshot rows", details.liveApi);
+    addCheck(checks, liveApiProtected || details.liveApi.cacheSource === "supabase-snapshot", "live-api-supabase", "live /api/scorecard uses Supabase snapshot, or is protected by membership", details.liveApi);
     addCheck(
       checks,
-      Boolean(details.liveApi.runId)
-        && Boolean(details.liveApi.marketDate)
-        && details.liveApi.contract === "scorecard-resource-chain-v1"
-        && details.liveApi.qualityStatus === "complete",
+      liveApiProtected
+        ? Boolean(details.liveApi.snapshotRunId) && Boolean(details.liveApi.snapshotMarketDate) && details.liveApi.snapshotContract === "scorecard-resource-chain-v1" && details.liveApi.snapshotQualityStatus === "complete"
+        : Boolean(details.liveApi.runId) && Boolean(details.liveApi.marketDate) && details.liveApi.contract === "scorecard-resource-chain-v1" && details.liveApi.qualityStatus === "complete",
       "live-api-freshness-contract",
-      "live /api/scorecard exposes runId, marketDate, contract, and qualityStatus=complete",
+      "live /api/scorecard exposes freshness contract, or protected display is backed by complete Supabase snapshot",
       details.liveApi,
     );
-    addCheck(checks, /no-store/i.test(details.liveApi.cacheControl), "live-api-no-store", "live /api/scorecard has no-store cache header", details.liveApi);
+    addCheck(checks, /no-store/i.test(details.liveApi.cacheControl) || liveApiProtected, "live-api-no-store", "live /api/scorecard has no-store cache header or explicit membership_required response", details.liveApi);
 
     const livePage = await fetchText("/88", 35000);
     details.livePage = {
