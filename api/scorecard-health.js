@@ -5,7 +5,6 @@ const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const SOURCE_ENDPOINTS = [
-  ["strategy1", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=120"],
   ["strategy2", "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240"],
   ["strategy3", "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60"],
   ["strategy4", "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70"],
@@ -15,7 +14,6 @@ const SOURCE_ENDPOINTS = [
   ["cb", "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=120"],
 ];
 const EXPECTED_STRATEGIES = [
-  "策略1開盤入成績單",
   "策略2成績單",
   "策略3隔日沖成績單",
   "策略4成績單",
@@ -25,7 +23,6 @@ const EXPECTED_STRATEGIES = [
   "CB成績單",
 ];
 const STRATEGY_SOURCE_REPORT_KEYS = {
-  "策略1開盤入成績單": "strategy1",
   "策略2成績單": "strategy2",
   "策略3隔日沖成績單": "strategy3",
   "策略4成績單": "strategy4",

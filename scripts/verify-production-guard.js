@@ -17,7 +17,6 @@ const RESERVED_PRODUCTION_ROUTES = [
   "/88",
 ];
 const EXPECTED_SCORECARD_STRATEGIES = [
-  "策略1開盤入成績單",
   "策略2成績單",
   "策略3隔日沖成績單",
   "策略4成績單",
@@ -25,7 +24,6 @@ const EXPECTED_SCORECARD_STRATEGIES = [
   "買賣超成績單",
   "權證成績單",
   "CB成績單",
-  "即時雷達成績單",
 ];
 const REQUIRED_SCORECARD_PAGE_MARKERS = [
   "scorecard-history-date",
