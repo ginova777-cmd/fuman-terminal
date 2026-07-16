@@ -71,6 +71,8 @@ async function verifyProductionProtection() {
     "/api/institution-latest?live=1",
     "/api/cb-detect-latest?live=1",
     "/api/warrant-flow-latest?live=1",
+    "/api/scorecard?live=1",
+    "/api/source-reports?live=1",
   ];
   const protectedRows = [];
   for (const apiPath of protectedPaths) {
@@ -80,7 +82,7 @@ async function verifyProductionProtection() {
       issues.push(`${apiPath} must reject unauthenticated direct access with 401 membership_required; status=${result.status} error=${result.json?.error || ""}`);
     }
   }
-  const publicPaths = ["/", "/auth.html", "/api/market-ai-live", "/api/scorecard?live=1", "/api/source-reports"];
+  const publicPaths = ["/", "/auth.html", "/api/market-ai-live", "/api/scorecard-health?live=1"];
   const publicRows = [];
   for (const apiPath of publicPaths) {
     const result = await fetchJson(`${PRODUCTION_URL}${apiPath}`);
@@ -280,8 +282,8 @@ async function main() {
   requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"signup\"");
   requireIncludes("api/mobile-fragment.js", "/auth.html?mode=login");
   requireIncludes("api/mobile-fragment.js", "/auth.html?mode=signup");
-  requireIncludes("api/scorecard.js", "module.exports = handler;");
-  requireExcludes("api/scorecard.js", "withEntitlementRequired(handler, \"scorecard\")");
+  requireIncludes("api/scorecard.js", "withEntitlementRequired(handler, \"scorecard\")");
+  requireIncludes("api/source-reports.js", "withEntitlementRequired(handler, \"source-reports\")");
   requireExcludes("terminal-entitlement-guard.js", "data-testid=\"scorecard-locked\"");
   requireExcludes("terminal-entitlement-guard.js", "/auth.html?next=%2F88");
   requireIncludes("index.html", "membership-footer=20260713-02");

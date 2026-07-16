@@ -722,13 +722,6 @@ module.exports = async function handler(request, response) {
       return;
     }
     const lockedPayload = buildFastMembershipLockedBundle(entitlement, marketCalendar);
-    await ensureWatchlistMatchIndexEndpoint(request, lockedPayload.endpoints, {
-      cacheSource: "membership-fast-shell",
-      via: "api/terminal-fast-bundle:membership-fast-shell",
-      updatedAt: lockedPayload.updatedAt,
-    });
-    lockedPayload.summary = Object.fromEntries(Object.entries(lockedPayload.endpoints || {}).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)]));
-    lockedPayload.timings = Object.fromEntries(Object.keys(lockedPayload.endpoints || {}).map((endpoint) => [endpoint, endpoint === "/api/watchlist-match-index?compact=1&shell=1&limit=80" ? 3000 : 0]));
     response.status(200).json(lockedPayload);
     return;
   }
