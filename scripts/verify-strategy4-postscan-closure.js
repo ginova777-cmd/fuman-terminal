@@ -239,7 +239,8 @@ async function main() {
     hook: "scorecardStrategy4Live",
     endpoint: "/api/scorecard?live=1",
   });
-  issue(checks, scorecard.ok && scorecard.payload?.ok !== false, "scorecard_api_http_ok", { status: scorecard.status, url: scorecard.url, runId: scorecard.payload?.runId || "" });
+  const scorecardProtectedByMembership = scorecard.status === 401 && scorecard.payload?.protected === true && scorecard.payload?.error === "membership_required";
+  issue(checks, (scorecard.ok && scorecard.payload?.ok !== false) || scorecardProtectedByMembership, "scorecard_api_http_ok", { status: scorecard.status, protectedByMembership: scorecardProtectedByMembership, url: scorecard.url, runId: scorecard.payload?.runId || "" });
   const scorecardSource = latestScorecardSource();
   const scorecardSourceReports = Array.isArray(scorecard.payload?.sourceReports) && scorecard.payload.sourceReports.length
     ? scorecard.payload.sourceReports

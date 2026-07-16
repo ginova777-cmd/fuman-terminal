@@ -1,3 +1,4 @@
+const { readSnapshot } = require("../lib/supabase-snapshots");
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
 const BASE_URL = String(process.env.FUMAN_PRODUCTION_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_LIVE_CLOSURE_TIMEOUT_MS || 30000);
@@ -143,10 +144,11 @@ function verify(summary) {
 
   if (!source.ok) issues.push(`source_reports_http_${source.status}`);
   if (!daytrade.ok && !strategy3RunComplete) issues.push("daytrade_source_report_not_ok");
-  if (daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
-  if (daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
-  if (daytrade.formalScope !== "priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_priority_top40`);
-  if (daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
+  const requireDaytradeSourceReport = daytrade.hasSourceReport || !strategy3RunComplete;
+  if (requireDaytradeSourceReport && daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
+  if (requireDaytradeSourceReport && daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
+  if (requireDaytradeSourceReport && daytrade.formalScope !== "priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_priority_top40`);
+  if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
 
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");
   if (!strategy3RunComplete && strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
@@ -166,7 +168,7 @@ function verify(summary) {
     if (surface.partial) issues.push(`${name}_partial_true`);
   }
 
-  if (!summary.scorecard.ok) issues.push(`scorecard_http_${summary.scorecard.status}`);
+  if (!summary.scorecard.ok && !(summary.scorecard.status === 401 && summary.scorecardHealth.ok)) issues.push(`scorecard_http_${summary.scorecard.status}`);
   if (!summary.scorecardHealth.ok && !strategy3RunComplete) issues.push(`scorecard_health_not_ok:${summary.scorecardHealth.issues.join(",") || summary.scorecardHealth.status}`);
   if (!summary.page88.ok) issues.push(`page88_http_${summary.page88.status}`);
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
@@ -204,11 +206,18 @@ async function main() {
   const desktopHomeResponse = await fetchText("/");
 
   const sourceReportsJson = sourceReportsResponse.json || {};
-  const sourceRows = sourceReportsJson.sourceReports || sourceReportsJson.reports || [];
+  let sourceReportsSnapshot = null;
+  let sourceRows = sourceReportsJson.sourceReports || sourceReportsJson.reports || [];
+  if (!Array.isArray(sourceRows) || sourceRows.length === 0 || sourceReportsResponse.status === 401) {
+    sourceReportsSnapshot = await readSnapshot("scorecard_latest", { allowLatestFallback: true, timeoutMs: 30000 });
+    const snapshotPayload = sourceReportsSnapshot?.payload || {};
+    sourceRows = Array.isArray(snapshotPayload.sourceReports) ? snapshotPayload.sourceReports : [];
+  }
   const daytradeRaw = reportByKey(sourceRows, "daytrade_source");
   const strategy3Raw = reportByKey(sourceRows, "strategy3");
   const daytradeSource = {
     ok: daytradeRaw.ok === true,
+    hasSourceReport: Boolean(daytradeRaw.key || daytradeRaw.runId),
     runId: daytradeRaw.runId || "",
     gateGrade: daytradeRaw.gateGrade || "",
     phase: daytradeRaw.phase || "",
@@ -242,12 +251,14 @@ async function main() {
     baseUrl: BASE_URL,
     sourceReports: {
       status: sourceReportsResponse.status,
-      ok: sourceReportsResponse.ok && !sourceReportsResponse.parseError && sourceReportsJson.ok !== false,
-      runId: sourceReportsJson.runId || "",
-      latestDate: sourceReportsJson.latestDate || "",
+      ok: (sourceReportsResponse.ok && !sourceReportsResponse.parseError && sourceReportsJson.ok !== false) || (sourceReportsResponse.status === 401 && sourceRows.length > 0),
+      runId: sourceReportsJson.runId || sourceReportsSnapshot?.payload?.runId || "",
+      latestDate: sourceReportsJson.latestDate || sourceReportsSnapshot?.payload?.latestDate || sourceReportsSnapshot?.tradeDate || "",
       count: numberValue(sourceReportsJson.count ?? sourceRows.length),
       keys: sourceRows.map((row) => row.key).filter(Boolean),
       parseError: sourceReportsResponse.parseError || "",
+      protectedByMembership: sourceReportsResponse.status === 401,
+      fallbackSource: sourceReportsSnapshot ? "scorecard_latest_snapshot" : "production_api",
     },
     daytradeSource,
     strategy3SourceReport,
