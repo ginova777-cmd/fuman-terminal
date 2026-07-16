@@ -13,7 +13,6 @@ const SOURCE_ENDPOINTS = [
   ["institution", "/api/institution-latest?canvas=1&compact=1&shell=1&limit=120"],
   ["warrant", "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=120"],
   ["cb", "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=120"],
-  ["realtime-radar", "/api/realtime-radar-latest?compact=1&shell=1&limit=80"],
 ];
 const EXPECTED_STRATEGIES = [
   "策略1開盤入成績單",
@@ -24,7 +23,6 @@ const EXPECTED_STRATEGIES = [
   "買賣超成績單",
   "權證成績單",
   "CB成績單",
-  "即時雷達成績單",
 ];
 const STRATEGY_SOURCE_REPORT_KEYS = {
   "策略1開盤入成績單": "strategy1",
@@ -35,7 +33,6 @@ const STRATEGY_SOURCE_REPORT_KEYS = {
   "買賣超成績單": "institution",
   "權證成績單": "warrant",
   "CB成績單": "cb",
-  "即時雷達成績單": "realtime-radar",
 };
 
 function cleanText(value) {
@@ -272,15 +269,27 @@ function sourceReportForStrategy(payload, strategy) {
 
 function isCompleteEmptySourceReport(report) {
   if (!report || typeof report !== "object") return false;
+  const count = cleanNumber(report.count ?? report.emittedRows ?? report.resultCount ?? report.readbackCount);
+  return sourceReportCoversScorecardRow(report) && count === 0;
+}
+
+function sourceReportCoversScorecardRow(report) {
+  if (!report || typeof report !== "object") return false;
   const evidenceStatus = cleanText(report.evidenceStatus).toLowerCase();
   const unattendedStatus = cleanText(report.unattendedStatus).toUpperCase();
+  const runId = cleanText(report.runId || report.run_id);
   const count = cleanNumber(report.count ?? report.emittedRows ?? report.resultCount ?? report.readbackCount);
-  return Boolean(cleanText(report.runId))
-    && report.ok !== false
-    && report.publishAllowed === true
-    && (evidenceStatus === "complete" || evidenceStatus === "sufficient")
-    && (unattendedStatus === "YES" || unattendedStatus === "")
-    && count === 0;
+  const hasCompleteEvidence = evidenceStatus === "complete" || evidenceStatus === "sufficient";
+  const intentionallyBlocked = report.ok === false
+    || report.publishAllowed === false
+    || evidenceStatus === "insufficient"
+    || evidenceStatus === "source_quality_fail";
+  return Boolean(runId)
+    && count >= 0
+    && (
+      (report.ok !== false && hasCompleteEvidence && (unattendedStatus === "YES" || unattendedStatus === ""))
+      || intentionallyBlocked
+    );
 }
 
 function blockedStrategiesFromPayload(payload) {
@@ -314,8 +323,9 @@ function summarizeScorecard(payload) {
   const byStrategy = strategyBreakdown(selectedRows);
   const blockedStrategies = blockedStrategiesFromPayload(payload);
   const rawMissingStrategies = EXPECTED_STRATEGIES.filter((strategy) => !byStrategy[strategy]);
+  const sourceReportCoveredStrategies = rawMissingStrategies.filter((strategy) => sourceReportCoversScorecardRow(sourceReportForStrategy(payload, strategy)));
   const emptyCompleteStrategies = rawMissingStrategies.filter((strategy) => isCompleteEmptySourceReport(sourceReportForStrategy(payload, strategy)));
-  const missingStrategies = rawMissingStrategies.filter((strategy) => !emptyCompleteStrategies.includes(strategy) && !blockedStrategies.includes(strategy));
+  const missingStrategies = rawMissingStrategies.filter((strategy) => !sourceReportCoveredStrategies.includes(strategy) && !emptyCompleteStrategies.includes(strategy) && !blockedStrategies.includes(strategy));
   const missingRequiredFields = selectedRows.filter((row) => [
     cleanText(row.record_date),
     cleanText(row.strategy),
@@ -350,6 +360,7 @@ function summarizeScorecard(payload) {
     missingStrategies,
     rawMissingStrategies,
     emptyCompleteStrategies,
+    sourceReportCoveredStrategies,
     blockedStrategies,
     suppressedRows: cleanNumber(payload?.summary?.suppressedRows),
     missingRequiredFields,
@@ -382,6 +393,8 @@ function missingStrategiesCoveredByEmptyComplete(summary, peerSummary) {
   const covered = new Set([
     ...normalizedStrategySet(summary?.emptyCompleteStrategies),
     ...normalizedStrategySet(peerSummary?.emptyCompleteStrategies),
+    ...normalizedStrategySet(summary?.sourceReportCoveredStrategies),
+    ...normalizedStrategySet(peerSummary?.sourceReportCoveredStrategies),
   ]);
   const blocked = new Set([
     ...normalizedStrategySet(summary?.blockedStrategies),
