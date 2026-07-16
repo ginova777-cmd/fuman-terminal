@@ -19,7 +19,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 const PAGE_SIZE = Math.max(100, Math.min(Number(process.env.STRATEGY3_READY_SNAPSHOT_PAGE_SIZE || 1000), 1000));
 const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
-const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
+const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_FORMAL_MIN_INTRADAY_1M_CANDLES || process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 20));
 const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 
 function readSecret(file) {
@@ -132,7 +132,7 @@ function candleMinutes(value) {
 function sessionReady(status = {}) {
   const count = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
   const continuous = cleanNumber(status.continuous_candle_count);
-  if (status.ready_ge_35 === true || status.ready_ma35_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
+  if (status.ready_ge_20 === true || status.ready_ma20_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
   if (count >= MIN_INTRADAY_1M_CANDLES) return true;
   const minute = candleMinutes(status.latest_candle_time || status.intraday_1m_status_updated_at || status.updated_at);
   return count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE;
@@ -205,7 +205,7 @@ async function main() {
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("v_strategy2_intraday_ready", {
-      select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
+      select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
       order: "latest_candle_time.desc",
     }, { maxRows: 6000 }),
     fetchAllRows("stock_capital_latest", {

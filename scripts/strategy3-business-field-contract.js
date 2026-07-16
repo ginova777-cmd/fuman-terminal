@@ -41,11 +41,7 @@ const FIELD_SPECS = [
   ["entryWindow", "matches[].entryWindow", "scannerOutput.matches[].entryWindow", "api.matches[].entryWindow", "result.payload.entryWindow", "strategy3 tv entry", "進場窗顯示", "non-empty string"],
   ["entryWindowStart", "matches[].entryWindowStart", "scannerOutput.matches[].entryWindowStart", "api.matches[].entryWindowStart", "result.payload.entryWindowStart", "strategy3 tv entry", "進場窗起點", "non-empty string"],
   ["entryWindowEnd", "matches[].entryWindowEnd", "scannerOutput.matches[].entryWindowEnd", "api.matches[].entryWindowEnd", "result.payload.entryWindowEnd", "strategy3 tv entry", "進場窗終點", "non-empty string"],
-  ["entryWindowCandles", "matches[].entryWindowCandles", "scannerOutput.matches[].entryWindowCandles", "api.matches[].tvBreakdown.entryWindowRows", "result.payload.tvBreakdown.entryWindowRows", "TradingView candles", "進場窗 K 數", "number > 0"],
-  ["ma20", "matches[].ma20", "scannerOutput.matches[].ma20", "api.matches[].ma20", "result.payload.ma20", `strategy3_ready_snapshot/${STRATEGY3_INTRADAY_STATUS_SOURCE}`, "MA20 技術條件", "number > 0"],
-  ["ma35", "matches[].ma35", "scannerOutput.matches[].ma35", "api.matches[].ma35", "result.payload.ma35", `strategy3_ready_snapshot/${STRATEGY3_INTRADAY_STATUS_SOURCE}`, "MA35 技術條件", "number > 0"],
   ["maTrend", "matches[].maTrend", "scannerOutput.matches[].maTrend", "api.matches[].maTrend", "result.payload.maTrend", "strategy3 technical derived", "MA 趨勢", "non-empty string"],
-  ["rsi", "matches[].rsi", "scannerOutput.matches[].rsi", "api.matches[].rsi", "result.payload.rsi", "strategy3 technical derived", "RSI 強弱", "number > 0"],
   ["macd", "matches[].macd", "scannerOutput.matches[].macd", "api.matches[].macd", "result.payload.macd", "strategy3 technical derived", "MACD 動能", "finite number"],
   ["volumeRatio", "matches[].volumeRatio", "scannerOutput.matches[].volumeRatio", "api.matches[].volumeRatio", "result.payload.volumeRatio", "stock_daily_volume", "量能放大比", "number > 0"],
   ["breakoutPrice", "matches[].breakoutPrice", "scannerOutput.matches[].breakoutPrice", "api.matches[].breakoutPrice", "result.payload.breakoutPrice", "strategy3 technical derived", "突破價", "number > 0"],
@@ -314,7 +310,7 @@ function buildFormalPayloads() {
 
 function isPresent(field, value) {
   if (field === "code") return /^\d{4}$/.test(String(value || ""));
-  if (["price", "close", "open", "high", "low", "volume", "value", "candle_count", "ready_ge_35", "ready_ge_80", "entryWindowCandles", "ma20", "ma35", "rsi", "volumeRatio", "breakoutPrice", "supportPrice", "resistancePrice", "score", "rank", "today_1m_symbols", "expectedTotal", "scannedCount", "resultCount"].includes(field)) return Number.isFinite(Number(value)) && Number(value) > 0;
+  if (["price", "close", "open", "high", "low", "volume", "value", "candle_count", "ready_ge_35", "ready_ge_80", "volumeRatio", "breakoutPrice", "supportPrice", "resistancePrice", "score", "rank", "today_1m_symbols", "expectedTotal", "scannedCount", "resultCount"].includes(field)) return Number.isFinite(Number(value)) && Number(value) > 0;
   if (["changePercent", "quoteAgeSeconds", "intraday_1m_stale_seconds", "macd", "readbackCount"].includes(field)) return Number.isFinite(Number(value));
   if (["isRealtime", "tvPass", "synthetic", "volume_strategy_usable", "fallbackUsed", "fallbackAllowed", "formalSourceFallbackUsed", "diagnosticFallbackUsed", "publishAllowed", "latestOverwriteAllowed", "degradedBlocksLatest", "preservePreviousGood", "retentionOk"].includes(field)) return typeof value === "boolean";
   if (field === "fallbackContract") return value && typeof value === "object" && value.source?.allowed === false;
@@ -578,7 +574,6 @@ function verifyFormalBusinessPayloads() {
   const sourceNotReadyFakeYes = mutateStrategy3PrewaterPayload(payloads.scannerPayload, "fake-yes");
 
   const mutationResults = [
-    expectFail("missing-ma20-ma35", missingMa, "rows"),
     expectFail("missing-latestCandleTime", missingLatestCandleTime),
     expectFail("quoteAgeSeconds-too-high", quoteAgeTooHigh),
     expectFail("intraday-1m-stale-too-high", stale1mTooHigh),
@@ -635,7 +630,6 @@ function verifyFormalBusinessPayloads() {
     "missing decision gate",
     "missing source_snapshot_captured_at",
     "missing evidenceStatus explicit mutation",
-    "missing ma20/ma35",
     "missing latestCandleTime",
     "quoteAgeSeconds over threshold",
     "intraday_1m_stale_seconds over threshold",

@@ -1,13 +1,15 @@
-"use strict";
+﻿"use strict";
 
 const fs = require("fs");
 const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const MIN_READY_FOR_STRATEGY3 = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
+const MIN_CANDLES_FOR_STRATEGY3 = Math.max(1, Number(process.env.STRATEGY3_FORMAL_MIN_INTRADAY_1M_CANDLES || process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 20));
 const MIN_READY_FOR_STRATEGY2 = Math.max(1, Number(process.env.STRATEGY2_MIN_INTRADAY_1M_READY || 1500));
 const STATUS_VIEW = process.env.STRATEGY2_READINESS_STATUS_VIEW || "v_strategy2_readiness_status";
 const READY_VIEW = process.env.STRATEGY2_INTRADAY_READY_VIEW || "v_strategy2_intraday_ready";
+const DAYTRADE_STATUS_VIEW = process.env.STRATEGY3_DAYTRADE_INTRADAY_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const MISSING_VIEW = process.env.STRATEGY2_READINESS_MISSING_VIEW || "v_strategy2_readiness_missing";
 const RAW_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_intraday_1m";
 
@@ -81,7 +83,7 @@ function numberValue(value) {
 
 function isReady(row) {
   const continuous = numberValue(row.continuous_candle_count ?? row.candle_count);
-  return row.ready_ma35_continuous === true || row.ready_ge_35 === true || continuous >= 35;
+  return row.ready_ma20_continuous === true || row.ready_ge_20 === true || continuous >= MIN_CANDLES_FOR_STRATEGY3;
 }
 
 function latestTime(rows, key) {
@@ -136,7 +138,12 @@ async function main() {
   const status = statusRows[0] || null;
   const readyRows = await getRowsPaged([
     `/rest/v1/${READY_VIEW}`,
-    "?select=symbol,name,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
+    "?select=symbol,name,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
+    "&order=symbol.asc",
+  ].join(""));
+  const daytradeStatusRows = await getRowsPaged([
+    `/rest/v1/${DAYTRADE_STATUS_VIEW}`,
+    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,updated_at",
     "&order=symbol.asc",
   ].join(""));
   const missingRows = await getRows([
@@ -149,14 +156,15 @@ async function main() {
 
   let rawFallback = null;
   const readyCountFromView = readyRows.filter(isReady).length;
+  const daytradeStatusReadyCount = daytradeStatusRows.filter(isReady).length;
   const expectedFromView = readyRows.length;
   const statusReadyCount = numberValue(status?.intraday_1m_ready_count);
   const statusExpected = numberValue(status?.detection_expected_count);
-  if (Math.max(readyCountFromView, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
+  if (Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
     rawFallback = await fetchRawLatestValidDayReadiness().catch((error) => ({ error: error?.message || String(error), readyCount: 0, expected: 0 }));
   }
-  const effectiveReady = Math.max(readyCountFromView, statusReadyCount, numberValue(rawFallback?.readyCount));
-  const expected = Math.max(expectedFromView, statusExpected, numberValue(rawFallback?.expected));
+  const effectiveReady = Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount, numberValue(rawFallback?.readyCount));
+  const expected = Math.max(expectedFromView, daytradeStatusRows.length, statusExpected, numberValue(rawFallback?.expected));
   const strategy3Safe = effectiveReady >= MIN_READY_FOR_STRATEGY3;
   const strategy2Safe = effectiveReady >= Math.min(MIN_READY_FOR_STRATEGY2, expected || MIN_READY_FOR_STRATEGY2);
 
@@ -164,8 +172,9 @@ async function main() {
     ok: strategy3Safe,
     status: strategy3Safe ? "ready_for_strategy3" : "not_ready_for_strategy3",
     checkedAt: new Date().toISOString(),
-    source: rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW,
+    source: daytradeStatusReadyCount >= MIN_READY_FOR_STRATEGY3 ? DAYTRADE_STATUS_VIEW : (rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW),
     statusView: STATUS_VIEW,
+    daytradeStatusView: DAYTRADE_STATUS_VIEW,
     missingView: MISSING_VIEW,
     refreshResult,
     refreshWarning,
@@ -177,11 +186,12 @@ async function main() {
     expectedFromView,
     statusExpected,
     strategy3MinReady: MIN_READY_FOR_STRATEGY3,
+    strategy3MinCandles: MIN_CANDLES_FOR_STRATEGY3,
     strategy2MinReady: MIN_READY_FOR_STRATEGY2,
     strategy3SafeForReuse: strategy3Safe,
     strategy2DaytradeReadyEnough: strategy2Safe,
-    latestCandleTime: latestTime(readyRows, "latest_candle_time") || rawFallback?.latestCandleTime || "",
-    latestStatusUpdatedAt: latestTime(readyRows, "intraday_1m_status_updated_at") || rawFallback?.latestStatusUpdatedAt || "",
+    latestCandleTime: latestTime(daytradeStatusRows, "latest_candle_time") || latestTime(readyRows, "latest_candle_time") || rawFallback?.latestCandleTime || "",
+    latestStatusUpdatedAt: latestTime(daytradeStatusRows, "updated_at") || latestTime(readyRows, "intraday_1m_status_updated_at") || rawFallback?.latestStatusUpdatedAt || "",
     missingSampleCount: missingRows.length,
     missingSample: missingRows.map((row) => ({
       symbol: row.symbol || "",
@@ -190,12 +200,13 @@ async function main() {
       todayCandleCount: numberValue(row.details?.today_candle_count),
       continuousCandleCount: numberValue(row.details?.continuous_candle_count),
       latestCandleTime: row.details?.latest_candle_time || "",
+      readyMa20Continuous: row.details?.ready_ma20_continuous ?? null,
       readyMa35Continuous: row.details?.ready_ma35_continuous ?? null,
     })),
     publishAllowedForStrategy3: strategy3Safe,
     scannerBehaviorForStrategy3: strategy3Safe
       ? "Strategy3 may read and reuse Strategy2 daytrade 1m"
-      : "Strategy3 must preserve previous good and block latest until Strategy2 daytrade 1m ready rows reach threshold",
+      : "Strategy3 must preserve previous good and block latest until Strategy2 daytrade 1m MA20/session-ready rows reach threshold",
     reason: strategy3Safe
       ? `Strategy2 daytrade 1m ready ${effectiveReady}/${expected}; Strategy3 threshold ${MIN_READY_FOR_STRATEGY3}`
       : `Strategy2 daytrade 1m ready ${effectiveReady}/${expected}; below Strategy3 threshold ${MIN_READY_FOR_STRATEGY3}`,

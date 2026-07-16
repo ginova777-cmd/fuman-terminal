@@ -29,6 +29,49 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function taipeiTodayYmd() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}${get("month")}${get("day")}`;
+}
+
+function normalizeYmd(value) {
+  const text = String(value || "").trim();
+  if (/^\d{8}$/.test(text)) return text;
+  const match = text.match(/(\d{4})-?(\d{2})-?(\d{2})/);
+  return match ? `${match[1]}${match[2]}${match[3]}` : "";
+}
+
+function runDateFromState(state = {}) {
+  const payload = state.mergedPayload || {};
+  const api = state.api?.payload || {};
+  const ids = [state.latest?.runId, state.run?.row?.run_id, payload.runId, api.runId];
+  for (const id of ids) {
+    const match = String(id || "").match(/strategy3-(\d{8})/);
+    if (match) return match[1];
+  }
+  for (const value of [
+    payload.tradeDate,
+    payload.marketDate,
+    payload.sourceTradeDate,
+    payload.date,
+    api.tradeDate,
+    api.marketDate,
+    state.latest?.row?.trade_date,
+    state.latest?.row?.market_date,
+    state.run?.row?.trade_date,
+  ]) {
+    const normalized = normalizeYmd(value);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -238,6 +281,9 @@ function verifyState(state, options = {}) {
   }
 
   if (options.expectComplete) {
+    const targetDate = normalizeYmd(options.targetDate || "");
+    const runDate = runDateFromState(state);
+    if (targetDate && !options.allowPreviousComplete && runDate !== targetDate) issues.push(`target_date_mismatch:${runDate || "missing"}/${targetDate}`);
     if (payload.evidenceStatus !== "complete") issues.push(`evidenceStatus_not_complete:${payload.evidenceStatus || "missing"}`);
     if (payload.unattendedStatus !== "YES") issues.push(`unattendedStatus_not_YES:${payload.unattendedStatus || "missing"}`);
     if (payload.publishAllowed !== true && quality.publishAllowed !== true) issues.push("publishAllowed_not_true");
@@ -294,17 +340,21 @@ async function main() {
   const expectBlocked = hasFlag("--expect-blocked");
   const expectComplete = hasFlag("--expect-complete") || (!expectBlocked && !captureBefore);
   const beforeFile = argValue("--compare-before", "");
+  const targetDate = normalizeYmd(argValue("--target-date", process.env.STRATEGY3_TARGET_DATE || process.env.STRATEGY3_TRADE_DATE || taipeiTodayYmd()));
+  const allowPreviousComplete = hasFlag("--allow-previous-complete");
   const before = beforeFile ? safeJson(path.resolve(beforeFile), {}) : null;
   const state = await readLatestState();
   const pointer = latestPointer(state);
   const verification = captureBefore
     ? { ok: true, pointer, issues: [], warnings: ["capture_before_only_no_publish_claim"] }
-    : verifyState(state, { expectBlocked, expectComplete, before });
+    : verifyState(state, { expectBlocked, expectComplete, before, targetDate, allowPreviousComplete });
   const output = {
     ok: verification.ok,
     checkedAt: new Date().toISOString(),
     mode: captureBefore ? "capture-before" : expectBlocked ? "expect-blocked" : "expect-complete",
     readOnly: true,
+    targetDate,
+    allowPreviousComplete,
     latestPointer: pointer,
     verification,
     state: {

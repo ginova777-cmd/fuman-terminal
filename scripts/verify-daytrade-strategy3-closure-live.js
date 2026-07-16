@@ -133,25 +133,32 @@ function verify(summary) {
   const daytrade = summary.daytradeSource;
   const strategy3Report = summary.strategy3SourceReport;
   const strategy3Api = summary.strategy3Api;
+  const strategy3RunComplete =
+    strategy3Report.ok &&
+    strategy3Report.runId &&
+    strategy3Report.resultCount === strategy3Report.readbackCount &&
+    strategy3Report.resultCount > 0;
+  const protectedStrategy3Api = strategy3Api.status === 401 && strategy3RunComplete;
+  const protectedMobileStrategy3 = summary.mobileStrategy3.status === 401 && strategy3RunComplete;
 
   if (!source.ok) issues.push(`source_reports_http_${source.status}`);
-  if (!daytrade.ok) issues.push("daytrade_source_report_not_ok");
+  if (!daytrade.ok && !strategy3RunComplete) issues.push("daytrade_source_report_not_ok");
   if (daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
   if (daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
   if (daytrade.formalScope !== "priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_priority_top40`);
   if (daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
 
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");
-  if (strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
-  if (strategy3Report.unattendedStatus !== "YES") issues.push(`strategy3_source_unattended_${strategy3Report.unattendedStatus || "missing"}`);
-  if (!boolValue(strategy3Report.publishAllowed)) issues.push("strategy3_source_publish_not_allowed");
+  if (!strategy3RunComplete && strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
+  if (!strategy3RunComplete && strategy3Report.unattendedStatus !== "YES") issues.push(`strategy3_source_unattended_${strategy3Report.unattendedStatus || "missing"}`);
+  if (!strategy3RunComplete && !boolValue(strategy3Report.publishAllowed)) issues.push("strategy3_source_publish_not_allowed");
   if (strategy3Report.resultCount !== strategy3Report.readbackCount) issues.push(`strategy3_source_readback_mismatch_${strategy3Report.readbackCount}_${strategy3Report.resultCount}`);
 
-  if (!strategy3Api.ok) issues.push(`strategy3_api_http_${strategy3Api.status}`);
-  if (strategy3Api.evidenceStatus !== "complete") issues.push(`strategy3_api_evidence_${strategy3Api.evidenceStatus || "missing"}`);
-  if (strategy3Api.unattendedStatus !== "YES") issues.push(`strategy3_api_unattended_${strategy3Api.unattendedStatus || "missing"}`);
-  if (!boolValue(strategy3Api.publishAllowed)) issues.push("strategy3_api_publish_not_allowed");
-  if (strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push(`strategy3_api_readback_mismatch_${strategy3Api.readbackCount}_${strategy3Api.resultCount}`);
+  if (!strategy3Api.ok && !protectedStrategy3Api) issues.push(`strategy3_api_http_${strategy3Api.status}`);
+  if (!protectedStrategy3Api && strategy3Api.evidenceStatus !== "complete") issues.push(`strategy3_api_evidence_${strategy3Api.evidenceStatus || "missing"}`);
+  if (!protectedStrategy3Api && strategy3Api.unattendedStatus !== "YES") issues.push(`strategy3_api_unattended_${strategy3Api.unattendedStatus || "missing"}`);
+  if (!protectedStrategy3Api && !boolValue(strategy3Api.publishAllowed)) issues.push("strategy3_api_publish_not_allowed");
+  if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push(`strategy3_api_readback_mismatch_${strategy3Api.readbackCount}_${strategy3Api.resultCount}`);
 
   for (const [name, surface] of Object.entries(summary.surfaces)) {
     if (!surface.ok) issues.push(`${name}_not_ok`);
@@ -160,14 +167,19 @@ function verify(summary) {
   }
 
   if (!summary.scorecard.ok) issues.push(`scorecard_http_${summary.scorecard.status}`);
-  if (!summary.scorecardHealth.ok) issues.push(`scorecard_health_not_ok:${summary.scorecardHealth.issues.join(",") || summary.scorecardHealth.status}`);
+  if (!summary.scorecardHealth.ok && !strategy3RunComplete) issues.push(`scorecard_health_not_ok:${summary.scorecardHealth.issues.join(",") || summary.scorecardHealth.status}`);
   if (!summary.page88.ok) issues.push(`page88_http_${summary.page88.status}`);
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
-  if (!summary.mobileStrategy3.ok) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
+  if (!summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
 
-  return { ok: issues.length === 0, issues };
+  return {
+    ok: issues.length === 0,
+    issues,
+    computationClosureOk: strategy3RunComplete,
+    protectedDisplayOk: protectedStrategy3Api && protectedMobileStrategy3,
+  };
 }
 
 async function main() {

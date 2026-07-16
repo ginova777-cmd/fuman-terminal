@@ -38,7 +38,7 @@ const BLOCKING_STATUSES = new Set(["not_ready", "failed"]);
 const STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S || 0.95);
 const STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS = Number(process.env.STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS || 120);
 const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000);
-const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35);
+const STRATEGY3_MIN_INTRADAY_1M_CANDLES = Number(process.env.STRATEGY3_FORMAL_MIN_INTRADAY_1M_CANDLES || process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 20);
 const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_INTRADAY_STATUS_VIEW = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const STRATEGY4_MIN_DAILY_ROWS = Number(process.env.STRATEGY4_STANDARD_MIN_SOURCE_ROWS || 1500);
@@ -283,7 +283,7 @@ async function fetchStrategy3SessionReadinessStatus() {
     statusRefreshWarning = error?.message || String(error);
   }
   const rows = await supabaseRowsPaged(`/rest/v1/${STRATEGY3_INTRADAY_STATUS_VIEW}?${query({
-    select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma35_continuous",
+    select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ma20_continuous,ready_ma35_continuous",
     order: "latest_candle_time.desc",
   })}`, 1000, 60000);
   const statusRows = Array.isArray(rows) ? rows : [];
@@ -295,7 +295,7 @@ async function fetchStrategy3SessionReadinessStatus() {
     const count = cleanNumber(row.today_candle_count);
     const continuous = cleanNumber(row.continuous_candle_count);
     const minute = candleMinutes(row.latest_candle_time || row.updated_at);
-    if (row.ready_ge_35 === true || row.ready_ma35_continuous === true || continuous >= STRATEGY3_MIN_INTRADAY_1M_CANDLES) return true;
+    if (row.ready_ge_20 === true || row.ready_ma20_continuous === true || continuous >= STRATEGY3_MIN_INTRADAY_1M_CANDLES) return true;
     return count >= STRATEGY3_MIN_INTRADAY_1M_CANDLES
       || (count > 0 && minute != null && minute >= STRATEGY3_SESSION_LATEST_MINUTE);
   });

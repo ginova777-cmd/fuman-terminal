@@ -128,10 +128,10 @@ const SOURCE_DEPENDENCIES = [
   {
     sourceName: "Strategy3 intraday 1m via Strategy2 daytrade",
     tableViewRpc: "v_strategy2_intraday_ready / get_strategy2_intraday_1m_latest_n",
-    requiredColumns: ["symbol", "today_candle_count", "continuous_candle_count", "ready_ge_35", "ready_ma35_continuous", "latest_candle_time"],
+    requiredColumns: ["symbol", "today_candle_count", "continuous_candle_count", "ready_ma20_continuous", "ready_ma35_continuous", "latest_candle_time"],
     freshnessThreshold: "market <= 120s; off-session must carry captured-at evidence",
-    coverageThreshold: "ready_ma35_continuous rows >= 1000; Strategy2 daytrade 1m is the upstream formal source",
-    gradeA: "ready_ma35_continuous rows >= 1000, latest candle present, no market stale",
+    coverageThreshold: "ready_ma20_continuous/session-ready rows >= 1000; Strategy2 daytrade 1m is the upstream formal source",
+    gradeA: "ready_ma20_continuous/session-ready rows >= 1000, latest candle present, no market stale; MA35 is diagnostic only",
     degradedOk: "after-session stale with complete run-time snapshot",
     unacceptable: "market stale, missing latest candle, low ready row count, Strategy3-only 1m refill",
   },

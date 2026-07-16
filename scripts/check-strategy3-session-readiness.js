@@ -5,7 +5,7 @@ const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const MIN_INTRADAY_1M_CANDIDATES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDIDATES || 1000));
-const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 35));
+const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_FORMAL_MIN_INTRADAY_1M_CANDLES || process.env.STRATEGY3_MIN_INTRADAY_1M_CANDLES || 20));
 const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_INTRADAY_STATUS_VIEW = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const STRATEGY3_INTRADAY_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
@@ -149,7 +149,7 @@ function isStrategy3DaytradeReadyRow(row) {
   const count = Number(row.today_candle_count || 0);
   const continuous = Number(row.continuous_candle_count || 0);
   const minute = candleMinutes(row.latest_candle_time || row.intraday_1m_status_updated_at || row.updated_at);
-  if (row.ready_ge_35 === true || row.ready_ma35_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
+  if (row.ready_ge_20 === true || row.ready_ma20_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
   return count >= MIN_INTRADAY_1M_CANDLES || (count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE);
 }
 
@@ -166,7 +166,7 @@ async function main() {
   }
   const rows = await getRowsPaged([
     `/rest/v1/${STRATEGY3_INTRADAY_STATUS_VIEW}`,
-    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma35_continuous",
+    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ma20_continuous,ready_ma35_continuous",
   ].join(""));
   const latestCandleTime = rows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
   const sessionRows = rows.filter(isStrategy3DaytradeReadyRow);
