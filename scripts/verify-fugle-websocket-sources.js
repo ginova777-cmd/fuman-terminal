@@ -19,6 +19,8 @@ const DAYTRADE_WRITER_FILE = path.join(ROOT_DIR, "scripts", "run-daytrade-source
 const STOCK_MAX_SUBSCRIPTIONS = 2000;
 const FUTOPT_MAX_SUBSCRIPTIONS = 2000;
 const STATUS_MAX_AGE_MS = Number(process.env.FUGLE_WS_STATUS_MAX_AGE_MS || 3 * 60 * 1000);
+const TASK_STILL_RUNNING = 267009; // 0x41301
+const TASK_SHARING_VIOLATION = 2147946720; // 0x80070020, usually overlapping scheduled launches.
 
 function readJson(file, fallback = null) {
   try {
@@ -36,6 +38,23 @@ function ageSeconds(value) {
 
 function addIssue(issues, condition, code, details = {}) {
   if (!condition) issues.push({ code, ...details });
+}
+
+function taskLastResultOk(task) {
+  const lastResult = Number(task?.lastResult ?? -999999);
+  if (lastResult === 0 || lastResult === TASK_STILL_RUNNING) return true;
+  if (lastResult === TASK_SHARING_VIOLATION && /^(ready|running)$/i.test(String(task?.state || ""))) {
+    return true;
+  }
+  return false;
+}
+
+function taskResultInterpretation(task) {
+  const lastResult = Number(task?.lastResult ?? -999999);
+  if (lastResult === 0) return "success";
+  if (lastResult === TASK_STILL_RUNNING) return "still_running";
+  if (lastResult === TASK_SHARING_VIOLATION) return "overlap_sharing_violation_treated_as_nonfatal_when_state_ready_or_running";
+  return "unexpected";
 }
 
 function taskState(taskName) {
@@ -239,7 +258,11 @@ function main() {
   for (const task of tasks) {
     addIssue(issues, task.exists, "required_task_missing", task);
     addIssue(issues, /^(ready|running)$/i.test(String(task.state)), "required_task_not_ready_or_running", task);
-    addIssue(issues, task.lastResult === 0, "required_task_last_result_nonzero", task);
+    addIssue(issues, taskLastResultOk(task), "required_task_last_result_nonzero", {
+      ...task,
+      interpretation: taskResultInterpretation(task),
+      allowedResults: [0, TASK_STILL_RUNNING, TASK_SHARING_VIOLATION],
+    });
   }
 
   const report = {
@@ -275,6 +298,13 @@ function main() {
       blocked: recoveryLock.blocked || [],
     },
     tasks,
+    taskResultPolicy: {
+      allowedResults: [
+        { code: 0, meaning: "success" },
+        { code: TASK_STILL_RUNNING, meaning: "task still running / overlap-safe scheduled cadence" },
+        { code: TASK_SHARING_VIOLATION, meaning: "overlapping scheduled launch/file lock; accepted only when task state is Ready or Running" },
+      ],
+    },
     issues,
   };
 
