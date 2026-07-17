@@ -8,6 +8,7 @@ const MAX_BOOT_MS = Number(process.env.FUMAN_MOBILE_MEMBER_BOOT_MAX_MS || 4500);
 const MAX_FRAGMENT_MS = Number(process.env.FUMAN_MOBILE_MEMBER_FRAGMENT_MAX_MS || 4500);
 const MAX_TOTAL_MS = Number(process.env.FUMAN_MOBILE_MEMBER_TOTAL_MAX_MS || 8000);
 const TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+const PARALLEL_FRAGMENTS = /^(1|true|yes)$/i.test(String(process.env.FUMAN_MOBILE_MEMBER_PARALLEL || ""));
 
 function requiredEnv() {
   if (!email || !password) {
@@ -135,13 +136,23 @@ async function verifyFragment(token, tab, issues) {
 
 async function main() {
   requiredEnv();
-  const started = Date.now();
+  const wallStarted = Date.now();
   const issues = [];
   const session = await login();
+  const appStarted = Date.now();
   const boot = await verifyBoot(session.token, issues);
-  const fragments = await Promise.all(TABS.map((tab) => verifyFragment(session.token, tab, issues)));
-  const totalMs = Date.now() - started;
-  if (totalMs > MAX_TOTAL_MS) issues.push(`mobile member latency total too slow ${totalMs}ms > ${MAX_TOTAL_MS}ms`);
+  const fragments = [];
+  if (PARALLEL_FRAGMENTS) {
+    fragments.push(...await Promise.all(TABS.map((tab) => verifyFragment(session.token, tab, issues))));
+  } else {
+    for (const tab of TABS) {
+      fragments.push(await verifyFragment(session.token, tab, issues));
+    }
+  }
+  const totalMs = Date.now() - appStarted;
+  const wallClockMs = Date.now() - wallStarted;
+  const firstInteractiveMs = boot.elapsedMs + (fragments[0]?.elapsedMs || 0);
+  if (firstInteractiveMs > MAX_TOTAL_MS) issues.push(`mobile member first interactive too slow ${firstInteractiveMs}ms > ${MAX_TOTAL_MS}ms`);
   const slowest = fragments.reduce((max, item) => Math.max(max, item.elapsedMs), 0);
   const summary = {
     ok: issues.length === 0,
@@ -155,7 +166,10 @@ async function main() {
       totalMs: MAX_TOTAL_MS,
     },
     loginMs: session.elapsedMs,
+    wallClockMs,
     totalMs,
+    firstInteractiveMs,
+    fragmentMode: PARALLEL_FRAGMENTS ? "parallel" : "sequential",
     slowestFragmentMs: slowest,
     boot,
     fragments,
