@@ -1097,6 +1097,18 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   };
 }
 
+function isExpectedOperationalWarning(endpointResult = {}, warning = "") {
+  const value = String(warning || "");
+  if (/^not_due_/.test(value)) return true;
+  if (/^(off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable):/.test(value)) return true;
+  if (/^membership_protected_fail_closed:/.test(value)) return true;
+  if (endpointResult.dueStatus?.due === false && /^(run_id_missing|updated_at_missing|source_marker_missing)$/.test(value)) return true;
+  if (endpointResult.membershipProtected === true || isMembershipProtectedPayload(endpointResult)) {
+    return /^(run_id_missing|updated_at_missing|source_marker_missing|api_status_|freshness_|allowed_fallback_|membership_protected_fail_closed:)/.test(value);
+  }
+  return false;
+}
+
 async function evaluateStrategy(strategy, context = {}) {
   const endpointResults = [];
   const verifierResults = [];
@@ -1140,6 +1152,7 @@ async function evaluateStrategy(strategy, context = {}) {
       url: response.url,
       httpStatus: response.status,
       httpOk: response.ok,
+      membershipProtected: isMembershipProtectedPayload(response) || String(basic.reason || response.json?.reason || response.json?.error || "").includes("membership_required"),
       rowPath: rowsInfo.path,
       basic,
       freshness,
@@ -1184,11 +1197,19 @@ async function evaluateStrategy(strategy, context = {}) {
     });
   }
   const issues = endpointResults.flatMap((item) => item.issues.map((issue) => `${item.endpoint}: ${issue}`));
-  const warnings = endpointResults.flatMap((item) => item.warnings.map((warning) => `${item.endpoint}: ${warning}`));
+  const warnings = [];
+  const operationalNotes = [];
+  for (const item of endpointResults) {
+    for (const warning of item.warnings) {
+      const formatted = `${item.endpoint}: ${warning}`;
+      if (isExpectedOperationalWarning(item, warning)) operationalNotes.push(formatted);
+      else warnings.push(formatted);
+    }
+  }
   for (const verifier of verifierResults) {
     if (!verifier.ok) {
       if (endpointResults.some((item) => item.warnings.some((warning) => /membership_protected_fail_closed|live_surface_stale|live_surface_unavailable|off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
-        warnings.push(`protected_or_live_surface:verifier_failed:${verifier.command}`);
+        operationalNotes.push(`protected_or_live_surface:verifier_failed:${verifier.command}`);
       } else {
         issues.push(`verifier_failed: ${verifier.command}`);
       }
@@ -1212,6 +1233,7 @@ async function evaluateStrategy(strategy, context = {}) {
     verifierResults,
     issues,
     warnings,
+    operationalNotes,
     needsHumanWatch: issues.length > 0,
     unattendedStatus: issues.length ? "NO" : (!STRICT_LIVE && warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)) ? "OFF_SESSION_PROTECTED" : "YES"),
   };
@@ -1259,8 +1281,8 @@ function writeOutputs(scorecard) {
     `- needsHumanWatch: ${scorecard.needsHumanWatch}`,
     `- blockers: ${scorecard.blockers.length}`,
     "",
-    "| strategy | unattended | rows | blanks | snapshot | issues | warnings | runId | source |",
-    "|---|---:|---:|---:|---:|---:|---:|---|---|",
+    "| strategy | unattended | rows | blanks | snapshot | issues | warnings | notes | runId | source |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---|---|",
   ];
   for (const strategy of scorecard.strategies) {
     const primary = strategy.endpoints[0] || {};
@@ -1272,15 +1294,17 @@ function writeOutputs(scorecard) {
       primary.runtimeSourceSnapshot?.complete === true ? "YES" : "NO",
       strategy.issues.length,
       strategy.warnings.length,
+      strategy.operationalNotes?.length || 0,
       primary.basic?.runId || "--",
       primary.basic?.cacheSource || primary.basic?.dataContractSource || "--",
     ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
   }
   lines.push("");
-  for (const strategy of scorecard.strategies.filter((item) => item.issues.length || item.warnings.length)) {
+  for (const strategy of scorecard.strategies.filter((item) => item.issues.length || item.warnings.length || item.operationalNotes?.length)) {
     lines.push(`## ${strategy.key}`);
     strategy.issues.slice(0, 30).forEach((issue) => lines.push(`- ISSUE: ${issue}`));
     strategy.warnings.slice(0, 30).forEach((warning) => lines.push(`- WARNING: ${warning}`));
+    (strategy.operationalNotes || []).slice(0, 30).forEach((note) => lines.push(`- NOTE: ${note}`));
     for (const endpoint of strategy.endpoints) {
       const missing = endpoint.fieldCompleteness?.sampleMissingRows || [];
       if (missing.length) {
@@ -1315,6 +1339,7 @@ async function main() {
     ...releaseIdentity.warnings.map((warning) => `release: ${warning}`),
     ...strategies.flatMap((strategy) => strategy.warnings.map((warning) => `${strategy.key}: ${warning}`)),
   ];
+  const operationalNotes = strategies.flatMap((strategy) => (strategy.operationalNotes || []).map((note) => `${strategy.key}: ${note}`));
   const scorecard = {
     ok: blockers.length === 0,
     unattendedStatus: blockers.length ? "NO" : (!STRICT_LIVE && warnings.some((warning) => /off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)) ? "OFF_SESSION_PROTECTED" : "YES"),
@@ -1366,11 +1391,12 @@ async function main() {
     strategies,
     blockers,
     warnings,
+    operationalNotes,
     outputFile: OUT_FILE,
     markdownFile: MD_FILE,
   };
   writeOutputs(scorecard);
-  console.log(`[api-unattended] unattendedStatus=${scorecard.unattendedStatus} strategies=${strategies.length} blockers=${blockers.length} warnings=${warnings.length}`);
+  console.log(`[api-unattended] unattendedStatus=${scorecard.unattendedStatus} strategies=${strategies.length} blockers=${blockers.length} warnings=${warnings.length} notes=${operationalNotes.length}`);
   console.log(`[api-unattended] json=${OUT_FILE}`);
   console.log(`[api-unattended] md=${MD_FILE}`);
   if (blockers.length && !NO_FAIL) process.exitCode = 1;
