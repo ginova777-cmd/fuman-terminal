@@ -40,7 +40,7 @@ const COMPUTER_LABEL = ARGS.values.get("computer") || process.env.FUMAN_API_UNAT
 const RUN_VERIFIERS = !ARGS.flags.has("skip-verifiers") && process.env.FUMAN_API_UNATTENDED_SKIP_VERIFIERS !== "1";
 const NO_FAIL = ARGS.flags.has("no-fail") || process.env.FUMAN_API_UNATTENDED_NO_FAIL === "1";
 const TIMEOUT_MS = Math.max(5000, Number(ARGS.values.get("timeout-ms") || process.env.FUMAN_API_UNATTENDED_TIMEOUT_MS || 45000));
-const VERIFIER_TIMEOUT_MS = Math.max(10000, Number(ARGS.values.get("verifier-timeout-ms") || process.env.FUMAN_API_UNATTENDED_VERIFIER_TIMEOUT_MS || 120000));
+const VERIFIER_TIMEOUT_MS = Math.max(10000, Number(ARGS.values.get("verifier-timeout-ms") || process.env.FUMAN_API_UNATTENDED_VERIFIER_TIMEOUT_MS || 45000));
 const MAX_SAMPLE_MISSING = Math.max(1, Number(ARGS.values.get("sample-missing") || 25));
 const CHECKED_AT = new Date();
 const TAIPEI_MINUTE = taipeiMinute(CHECKED_AT);
