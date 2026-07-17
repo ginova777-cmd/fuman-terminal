@@ -22,6 +22,7 @@ const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
 const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = 2500;
 const MOBILE_BOOT_MARKET_TIMEOUT_MS = 900;
 const MOBILE_BOOT_TAB_TIMEOUT_MS = 900;
+const MOBILE_BOOT_CALENDAR_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_CALENDAR_TIMEOUT_MS || 700);
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
@@ -43,6 +44,49 @@ async function fetchJsonWithTimeout(url, timeoutMs = MOBILE_BOOT_TAB_TIMEOUT_MS)
   } finally {
     clearTimeout(timer);
   }
+}
+
+function promiseWithTimeout(promise, timeoutMs, fallback) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), Math.max(1, Number(timeoutMs) || 1));
+    }),
+  ]);
+}
+
+function fastMarketCalendarFallback(reason = "calendar_timeout") {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return {
+    ok: true,
+    contract: "market-calendar-contract-v1",
+    checkedAt: new Date().toISOString(),
+    requestedDate: today,
+    marketDate: today,
+    marketOpen: null,
+    marketStatus: "checking",
+    closedReason: "",
+    closedReasonText: "",
+    finalMarketOpen: null,
+    sourceFreshnessRequired: true,
+    formalScanSkipped: false,
+    skipReason: "",
+    preservePreviousGood: false,
+    latestPointerUpdated: false,
+    emptyResultWritten: false,
+    scannerAction: "calendar_check_deferred",
+    displayMode: "mobile_fast_boot",
+    displayTradeDate: today,
+    evidenceStatus: "pending",
+    unattendedStatus: "YES",
+    reason,
+  };
 }
 
 function emptyMarketCore(source = "membership-lock") {
@@ -255,7 +299,11 @@ async function buildBoot(request) {
     };
   }
   const fragmentTabs = entitlement.ok ? FRAGMENT_TABS : PUBLIC_FRAGMENT_TABS;
-  const marketCalendarPromise = buildMarketCalendarContract().catch(() => null);
+  const marketCalendarPromise = promiseWithTimeout(
+    buildMarketCalendarContract().catch(() => null),
+    MOBILE_BOOT_CALENDAR_TIMEOUT_MS,
+    fastMarketCalendarFallback()
+  );
   const snapshot = await readDesktopRouteSnapshot({ timeoutMs: MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS }).catch(() => null);
   const marketPromise = (async () => {
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, MARKET_CORE_ENDPOINT)

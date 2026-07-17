@@ -183,6 +183,7 @@
     "verify:mobile-cache-contract:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-cache-contract.js --live",
     "verify:mobile-api-only": "node --use-system-ca scripts/verify-mobile-api-only.js",
     "verify:mobile-api-only:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-api-only.js --live",
+    "verify:mobile-member-latency:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-member-latency.js",
     "verify:terminal-ui-e2e": "node --use-system-ca scripts/verify-terminal-ui-e2e.js",
     "verify:realtime-radar-frontend-contract": "node --use-system-ca scripts/verify-realtime-radar-frontend-contract.js",
     "verify:market-ai-dashboard-ui": "node --use-system-ca scripts/verify-terminal-ui-e2e.js --only=market-ai",

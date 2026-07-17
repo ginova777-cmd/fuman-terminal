@@ -26,6 +26,17 @@ const AUTHORITATIVE_GATE = "complete-run-authoritative";
 const STRATEGY2_SOURCE_STATUS_NAME = "fugle_daytrade_source";
 const MARKET_SUMMARY_FILE = "market-summary.json";
 const STOCKS_SLIM_FILE = "stocks-slim.json";
+const STRATEGY2_MARKET_CALENDAR_ATTACH_TIMEOUT_MS = Number(process.env.FUMAN_STRATEGY2_MARKET_CALENDAR_ATTACH_TIMEOUT_MS || 700);
+
+function withTimeout(promise, timeoutMs, fallback = null) {
+  let timer = null;
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timer)),
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), Math.max(1, Number(timeoutMs) || 1));
+    }),
+  ]);
+}
 
 
 function cacheCandidates(file) {
@@ -2038,7 +2049,11 @@ async function fetchCompleteRunPayload(base, marketSession = null, options = nul
 }
 
 async function handler(request, response) {
-  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  const marketCalendar = await withTimeout(
+    buildMarketCalendarContract().catch(() => null),
+    STRATEGY2_MARKET_CALENDAR_ATTACH_TIMEOUT_MS,
+    null
+  );
   installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
