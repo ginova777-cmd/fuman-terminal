@@ -8,6 +8,9 @@ const {
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
+const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
+const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 1800);
+
 const TAB_CONFIG = {
   ai: {
     title: "AI 判讀",
@@ -378,6 +381,27 @@ function hasUsableSnapshotPayload(payload, tab = "") {
     || payload?.run_quality_at_publish?.evidenceStatus === "complete";
 }
 
+function fastWaitingPayload(tab, endpoint, reason = "mobile_fragment_fast_waiting") {
+  const updatedAt = new Date().toISOString();
+  return {
+    ok: true,
+    source: "mobile-fragment-fast-waiting",
+    cacheSource: "mobile-fragment-fast-waiting",
+    reason,
+    runId: waitingRunId({ reason, updatedAt }, tab),
+    updatedAt,
+    endpoint,
+    complete: false,
+    publishAllowed: false,
+    preservePreviousGood: true,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    count: 0,
+    rows: [],
+    matches: [],
+  };
+}
+
 function firstValue(row, keys, fallback = "") {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], row);
@@ -728,7 +752,11 @@ module.exports = async function handler(request, response) {
       ...(tab === "strategy3" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 2500 }).catch(() => null);
+    const snapshot = await readDesktopRouteSnapshot({
+      timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
+      allowStale: tab === "strategy2",
+      maxAgeMs: tab === "strategy2" ? 24 * 60 * 60 * 1000 : undefined,
+    }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
     const payload = !hasUsableSnapshotPayload(snapshotPayload, tab)
 
@@ -737,7 +765,10 @@ module.exports = async function handler(request, response) {
         ? await fetchStrategy4Internal(request, endpoint)
         : tab === "strategy5"
           ? await fetchStrategy5Internal(request, endpoint)
-          : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
+          : tab === "strategy2"
+            ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS, authHeadersFrom(request))
+              .catch((error) => fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout"))
+            : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
