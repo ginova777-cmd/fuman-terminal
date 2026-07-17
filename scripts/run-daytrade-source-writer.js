@@ -108,6 +108,7 @@ const WEBSOCKET_CANDLE_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_WEBSOCKE
 const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_WEBSOCKET_MAX_AGE_MS, 5 * 60 * 1000);
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
 const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
+const REQUIRE_MA35_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_MA35_FOR_FORMAL_ENTRY");
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
 
 function hasFlag(name) {
@@ -1970,13 +1971,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const scannerCanRunOpening = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
-    && readyMa35 >= effectiveMa35Required
+    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required)
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
   const scannerCanRunPreopen = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
-    && readyMa35 >= effectiveMa35Required;
+    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required);
   const scannerCanRunIntraday = scannerCanRunOpening
     && after0900
     && today1mSymbols > 0
@@ -1998,7 +1999,12 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     : "empty";
   const ma20WarmupStatus = readyMa20 >= effectiveMa20Required ? "ready" : readyMa20 > 0 ? "degraded" : "empty";
   const ma35WarmupStatus = readyMa35 >= effectiveMa35Required ? "ready" : readyMa35 > 0 ? "degraded" : "empty";
-  const historical1mWarmupStatus = ma35WarmupStatus === "ready" ? "ready" : readyMa20 > 0 || readyMa35 > 0 ? "degraded" : "empty";
+  const historical1mWarmupStatus = ma20WarmupStatus === "ready"
+    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || ma35WarmupStatus === "ready")
+    ? "ready"
+    : readyMa20 > 0 || readyMa35 > 0
+    ? "degraded"
+    : "empty";
   const today1mStatus = after0900
     ? today1mSymbols > 0 && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS
       ? "ready"
@@ -2206,7 +2212,7 @@ function sourceGateA(values) {
     && (!values.after0830 || values.dailyVolumeStatus === "ready")
     && (!values.after0845 || values.scannerCanRunOpening)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
-    && (!values.after0845 || values.readyMa35 >= (values.effectiveMa35Required || MIN_READY_MA35_CONTINUOUS))
+    && (!values.after0845 || !REQUIRE_MA35_FOR_FORMAL_DAYTRADE || values.readyMa35 >= (values.effectiveMa35Required || MIN_READY_MA35_CONTINUOUS))
     && (!values.after0845 || values.futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
