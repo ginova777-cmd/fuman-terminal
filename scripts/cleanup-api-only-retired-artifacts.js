@@ -158,6 +158,10 @@ const RETIRED_DIRECTORIES = [
 const RUNTIME_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RUNTIME_RETENTION_DAYS || 14);
 const RUNTIME_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_HISTORY_RETENTION_DAYS || 3);
 const LOG_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_LOG_RETENTION_DAYS || 30);
+const RUNTIME_RETIRED_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RETIRED_RETENTION_DAYS || 14);
+const RUNTIME_SCAN_RECEIPT_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_SCAN_RECEIPT_RETENTION_DAYS || 30);
+const RUNTIME_BACKUP_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_BACKUP_RETENTION_DAYS || 14);
+const RUNTIME_TMP_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_TMP_RETENTION_DAYS || 3);
 const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/heatmap-latest.json",
   "data/market-summary.json",
@@ -428,6 +432,79 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
   }
 }
 
+function pruneOldFilesWhere(dir, maxAgeDays, predicate, result, dryRun) {
+  if (!fs.existsSync(dir)) return;
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      pruneOldFilesWhere(target, maxAgeDays, predicate, result, dryRun);
+      try {
+        if (!dryRun && fs.existsSync(target) && fs.readdirSync(target).length === 0) fs.rmdirSync(target);
+      } catch {}
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const stat = fs.statSync(target);
+    if (stat.mtimeMs > cutoff) continue;
+    if (!predicate(target, entry.name)) continue;
+    if (!dryRun) fs.unlinkSync(target);
+    result.deleted.push(target);
+  }
+}
+
+function isBackupLikeRuntimeFile(file, name) {
+  const normalized = String(file || "").replace(/\\/g, "/").toLowerCase();
+  const base = String(name || "").toLowerCase();
+  if (base.endsWith("-latest.json") || base === "latest.json") return false;
+  if (normalized.includes("/data/retired/")) return false;
+  return (
+    /\.bak(?:[-.].*)?$/i.test(base)
+    || /\.backup(?:[-.].*)?$/i.test(base)
+    || /\.retired[-.]/i.test(base)
+    || /\.bad[-.]/i.test(base)
+    || /\.before[-.]/i.test(base)
+    || normalized.includes("/quarantine-stale-")
+  );
+}
+
+function dateKeyFromName(name) {
+  const compact = String(name || "").match(/(?:retired|quarantine|backup|bak|bad|before)[-.]?([0-9]{8})/i)?.[1]
+    || String(name || "").match(/([0-9]{8})/)?.[1]
+    || "";
+  if (!/^20[0-9]{6}$/.test(compact)) return "";
+  return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+}
+
+function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
+  if (!fs.existsSync(dir)) return;
+  const cutoffKey = taipeiDateKey(new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000));
+  const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const target = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      pruneRetiredDataFiles(target, maxAgeDays, result, dryRun);
+      try {
+        if (!dryRun && fs.existsSync(target) && fs.readdirSync(target).length === 0) fs.rmdirSync(target);
+      } catch {}
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const nameDateKey = dateKeyFromName(entry.name);
+    const stat = fs.statSync(target);
+    const isOld = nameDateKey ? nameDateKey < cutoffKey : stat.mtimeMs <= cutoffMs;
+    if (!isOld) continue;
+    if (!dryRun) fs.unlinkSync(target);
+    result.deleted.push(target);
+  }
+}
+
+function isPrunableScanReceipt(file, name) {
+  const base = String(name || "").toLowerCase();
+  if (base.includes("latest")) return false;
+  return base.endsWith(".json") || base.endsWith(".jsonl") || base.endsWith(".log");
+}
+
 function taipeiDateKey(date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -548,6 +625,11 @@ async function main() {
   pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "history"), RUNTIME_HISTORY_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneMatchingDirectories(path.join(args.runtimeRoot, "cache", "fugle"), (name) => /^historical-legacy-mixed-units-/i.test(name), runtimeResult, args.dryRun);
   pruneOldFiles(path.join(args.runtimeRoot, "logs"), LOG_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneOldFiles(path.join(args.runtimeRoot, "tmp"), RUNTIME_TMP_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneRetiredDataFiles(path.join(args.runtimeRoot, "data", "retired"), RUNTIME_RETIRED_RETENTION_DAYS, runtimeResult, args.dryRun);
+  pruneOldFilesWhere(path.join(args.runtimeRoot, "data", "scan-receipts"), RUNTIME_SCAN_RECEIPT_RETENTION_DAYS, isPrunableScanReceipt, runtimeResult, args.dryRun);
+  pruneOldFilesWhere(path.join(args.runtimeRoot, "data"), RUNTIME_BACKUP_RETENTION_DAYS, isBackupLikeRuntimeFile, runtimeResult, args.dryRun);
+  pruneOldFilesWhere(path.join(args.runtimeRoot, "cache"), RUNTIME_BACKUP_RETENTION_DAYS, isBackupLikeRuntimeFile, runtimeResult, args.dryRun);
   pruneStaleRuntimeFrontPageFiles(args.runtimeRoot, runtimeResult, args.dryRun);
 
   const payload = {
