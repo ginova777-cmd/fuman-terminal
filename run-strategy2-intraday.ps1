@@ -74,17 +74,49 @@ function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
 
 function Assert-Strategy2ApiPreserve {
   $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $payload = $response.Content | ConvertFrom-Json -AsHashtable
-  $report = @($payload["sourceReports"]) | Where-Object { $_["key"] -eq "strategy2" } | Select-Object -First 1
-  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
-    throw "Strategy2 preserve scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
+  try {
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
+    $payload = $response.Content | ConvertFrom-Json -AsHashtable
+    $report = @($payload["sourceReports"]) | Where-Object { $_["key"] -eq "strategy2" } | Select-Object -First 1
+    if ($response.StatusCode -eq 200 -and $report -and -not [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
+      $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
+      "Strategy2 preserve scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
+      return [pscustomobject]@{
+        runId = [string]$report["runId"]
+        count = $count
+      }
+    }
+  } catch {
+    "Strategy2 preserve scorecard readback protected/unavailable; falling back to Supabase latest pointer. error=$($_.Exception.Message)" >> $log
   }
-  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
-  "Strategy2 preserve scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
+
+  $nodeScript = @'
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("./lib/server-supabase-key");
+(async () => {
+  const root = process.cwd();
+  const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+  const base = terminalSupabaseUrl({ root, runtimeDir }).replace(/\/+$/, "");
+  const key = terminalSupabaseKey({ root, runtimeDir });
+  const response = await fetch(`${base}/rest/v1/v_strategy2_latest_complete_run?select=run_id,result_count,record_count&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`v_strategy2_latest_complete_run HTTP ${response.status}: ${text.slice(0, 200)}`);
+  const rows = JSON.parse(text || "[]");
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row || !row.run_id) throw new Error("Strategy2 Supabase latest pointer missing run_id");
+  console.log(JSON.stringify({ runId: row.run_id, count: Number(row.result_count || row.record_count || 0) }));
+})().catch((error) => { console.error(error.message || String(error)); process.exit(1); });
+'@
+  $fallbackRaw = $nodeScript | & $nodeExe "--use-system-ca" -
+  if ($LASTEXITCODE -ne 0) {
+    throw "Strategy2 preserve Supabase latest pointer verification failed: $fallbackRaw"
+  }
+  $fallbackPayload = ($fallbackRaw | Out-String).Trim() | ConvertFrom-Json
+  "Strategy2 preserve Supabase latest pointer verified runId=$($fallbackPayload.runId) count=$($fallbackPayload.count)" >> $log
   return [pscustomobject]@{
-    runId = [string]$report["runId"]
-    count = $count
+    runId = [string]$fallbackPayload.runId
+    count = [int]$fallbackPayload.count
   }
 }
 
@@ -119,11 +151,11 @@ $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy2" -LogPath 
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   "Strategy2 source gate blocked new publish; preserving latest complete/live run. $reason" >> $log
-  $verifiedPayload = Assert-Strategy2ApiPreserve
-  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
   if ((Get-TaipeiMinuteOfDay) -lt [int]$env:STRATEGY2_SCAN_START_MINUTES) {
     "Strategy2 source gate is not ready before scan window; keep unattended runner alive and retry at 09:00." >> $log
   } else {
+    $verifiedPayload = Assert-Strategy2ApiPreserve
+    Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
     "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
     exit 0
   }

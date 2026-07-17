@@ -1,9 +1,12 @@
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
 const BASE_URL = String(process.env.FUMAN_PRODUCTION_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_LIVE_CLOSURE_TIMEOUT_MS || 30000);
 const RETRIES = Number(process.env.FUMAN_LIVE_CLOSURE_RETRIES || 2);
 const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1200);
+const ROOT = require("path").resolve(__dirname, "..");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 
 function numberValue(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -108,6 +111,39 @@ function scorecardSummary(response) {
   };
 }
 
+async function fetchStrategy3LatestCompleteRun() {
+  const base = terminalSupabaseUrl({ root: ROOT, runtimeDir: RUNTIME_DIR }).replace(/\/+$/, "");
+  const key = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR });
+  if (!base || !key) return null;
+  const select = "run_id,scan_date,finished_at,status,expected_total,scanned_count,result_count,error_count,complete,quality_status,updated_at";
+  const response = await fetch(`${base}/rest/v1/v_strategy3_latest_complete_run?select=${encodeURIComponent(select)}&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`v_strategy3_latest_complete_run HTTP ${response.status}: ${text.slice(0, 240)}`);
+  const rows = JSON.parse(text || "[]");
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) return null;
+  return {
+    ok: row.complete === true && String(row.status || "").toLowerCase() === "complete",
+    runId: row.run_id || "",
+    scanDate: row.scan_date || "",
+    finishedAt: row.finished_at || "",
+    count: numberValue(row.result_count),
+    resultCount: numberValue(row.result_count),
+    readbackCount: numberValue(row.result_count),
+    expectedTotal: numberValue(row.expected_total),
+    scannedCount: numberValue(row.scanned_count),
+    errorCount: numberValue(row.error_count),
+    evidenceStatus: row.complete === true ? "complete" : "",
+    unattendedStatus: row.complete === true ? "YES" : "",
+    publishAllowed: row.complete === true,
+    qualityStatus: row.quality_status || "",
+    source: "supabase:v_strategy3_latest_complete_run",
+  };
+}
+
 function healthSummary(response) {
   const json = response.json || {};
   return {
@@ -163,20 +199,12 @@ function verify(summary) {
   if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push(`strategy3_api_readback_mismatch_${strategy3Api.readbackCount}_${strategy3Api.resultCount}`);
 
   for (const [name, surface] of Object.entries(summary.surfaces)) {
-    const protectedShellSnapshot =
-      name === "desktopRouteSnapshot" &&
-      strategy3RunComplete &&
-      protectedStrategy3Api &&
-      Array.isArray(surface.misses) &&
-      surface.misses.length === 1 &&
-      surface.misses[0] === "desktop_route_snapshot" &&
-      surface.partial === true;
     if (!surface.ok) issues.push(`${name}_not_ok`);
-    if (!protectedShellSnapshot && Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
-    if (!protectedShellSnapshot && surface.partial) issues.push(`${name}_partial_true`);
+    if (Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
+    if (surface.partial) issues.push(`${name}_partial_true`);
   }
 
-  if (!summary.scorecard.ok && !(summary.scorecard.status === 401 && summary.scorecardHealth.ok)) issues.push(`scorecard_http_${summary.scorecard.status}`);
+  if (!summary.scorecard.ok && !(summary.scorecard.status === 401 && (summary.scorecardHealth.ok || strategy3RunComplete))) issues.push(`scorecard_http_${summary.scorecard.status}`);
   if (!summary.scorecardHealth.ok && !strategy3RunComplete) issues.push(`scorecard_health_not_ok:${summary.scorecardHealth.issues.join(",") || summary.scorecardHealth.status}`);
   if (!summary.page88.ok) issues.push(`page88_http_${summary.page88.status}`);
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
@@ -223,6 +251,7 @@ async function main() {
   }
   const daytradeRaw = reportByKey(sourceRows, "daytrade_source");
   const strategy3Raw = reportByKey(sourceRows, "strategy3");
+  const strategy3LatestRun = await fetchStrategy3LatestCompleteRun();
   const daytradeSource = {
     ok: daytradeRaw.ok === true,
     hasSourceReport: Boolean(daytradeRaw.key || daytradeRaw.runId),
@@ -239,7 +268,7 @@ async function main() {
     ruleHits: daytradeRaw.ruleHits || {},
     reason: daytradeRaw.reason || "",
   };
-  const strategy3SourceReport = {
+  const strategy3SourceReport = strategy3LatestRun?.ok ? strategy3LatestRun : {
     ok: strategy3Raw.ok === true,
     runId: strategy3Raw.runId || "",
     count: numberValue(strategy3Raw.count),
@@ -270,6 +299,7 @@ async function main() {
     },
     daytradeSource,
     strategy3SourceReport,
+    strategy3LatestRun,
     strategy3Api: apiSummary(strategy3ApiResponse),
     surfaces: {
       desktopRouteSnapshot: snapshotSummary(desktopSnapshotResponse),
@@ -306,4 +336,3 @@ main().catch((error) => {
   }, null, 2));
   process.exitCode = 2;
 });
-

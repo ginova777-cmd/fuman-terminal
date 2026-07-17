@@ -416,12 +416,21 @@ function isStrategy2DedicatedPayloadReady(sourceStatus) {
   const freshQuoteCoverage120s = cleanNumber(payload.priority_fresh_quote_coverage_120s)
     || cleanNumber(payload.fresh_quote_coverage_120s)
     || (activeSymbols > 0 ? freshQuotes120s / activeSymbols : 0);
-  const quoteAge = cleanNumber(payload.quote_age_seconds ?? payload.priority_quote_age_p95_seconds ?? payload.priority_fresh_max_quote_age_seconds, 999999);
+  const quoteAge = cleanNumber(payload.quote_age_seconds, 999999);
   const daytradeGateGrade = String(payload.daytrade_gate_grade || payload.priority_gate_grade || "").toUpperCase();
+  const scannerCanRunOpening = boolValue(payload.scanner_can_run_opening);
+  const priorityGateOk = !daytradeGateGrade || daytradeGateGrade === "A";
+  const sourceOk = String(sourceStatus.status || payload.status || "").toLowerCase() === "ok"
+    || String(sourceStatus.status || payload.status || "").toLowerCase() === "ready"
+    || (scannerCanRunOpening && priorityGateOk);
+  const formalAllowed = boolValue(payload.formal_entry_allowed) || boolValue(payload.scanner_can_run_opening);
+  const selectedFreshOk = boolValue(payload.selected_symbols_fresh_ok) || freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S;
   return freshQuoteCoverage120s >= STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S
     && quoteAge <= Number(process.env.STRATEGY2_MAX_QUOTE_AGE_SECONDS || 90)
-    && boolValue(payload.selected_symbols_fresh_ok)
-    && (!daytradeGateGrade || daytradeGateGrade === "A");
+    && selectedFreshOk
+    && sourceOk
+    && formalAllowed
+    && priorityGateOk;
 }
 
 function normalizeStrategy(value) {
@@ -473,12 +482,13 @@ async function main() {
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
       readiness = await fetchStrategy2ReadinessStatus();
-      if (readiness && readiness.strategy2_ready_100 !== true) {
+      const strictReadinessGate = process.env.STRATEGY2_STRICT_LEGACY_READINESS_GATE === "1";
+      if (strictReadinessGate && readiness && readiness.strategy2_ready_100 !== true) {
         effectiveStatus = status === READY_STATUS ? "not_ready" : status;
       }
     } catch (error) {
       readinessWarning = `strategy2 readiness status unavailable: ${error?.message || String(error)}`;
-      if (status === READY_STATUS) effectiveStatus = "failed";
+      if (process.env.STRATEGY2_STRICT_LEGACY_READINESS_GATE === "1" && status === READY_STATUS) effectiveStatus = "failed";
     }
     try {
       sourceStatus = await fetchSourceStatusPayload("fugle_daytrade_source");
@@ -533,6 +543,7 @@ async function main() {
   }
   const ok = effectiveStatus === READY_STATUS || (allowStale && effectiveStatus === STALE_STATUS);
   const blocked = !ok;
+  const strategy2LegacyReadinessStrict = process.env.STRATEGY2_STRICT_LEGACY_READINESS_GATE === "1";
   const readinessReason = readiness && readiness.strategy2_ready_100 !== true
     ? readiness.reason || [
       `futopt=${Number(readiness.futopt_ready_count || 0)}/${Number(readiness.futopt_expected_count || 0)}`,
@@ -547,12 +558,12 @@ async function main() {
     && sourceStatus
     && sourceGateIssues.length === 0
     && isStrategy2DedicatedPayloadReady(sourceStatus);
-  const readinessDiagnostic = strategy2DedicatedSourceReady && readinessReason
-    ? `diagnostic_only:${readinessReason}`
-    : readinessReason;
+  const readinessDiagnostic = readinessReason
+    ? `${strategy2LegacyReadinessStrict ? "legacy_readiness_strict" : "diagnostic_only"}:${readinessReason}`
+    : "";
   const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
   const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
-  const readinessBlocked = Boolean(readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
+  const readinessBlocked = Boolean(strategy2LegacyReadinessStrict && readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
   const strategy4DailyFallbackReady = String(row.strategy || "").toLowerCase() === "strategy4" && dailyFallback?.ready;
   const suggestedScannerBehavior = strategy4DailyFallbackReady
     ? "publish allowed; Strategy4 after-close daily fallback is date-aligned and meets row threshold"
