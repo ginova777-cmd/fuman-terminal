@@ -5,11 +5,14 @@ const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
+const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
 const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 1800);
+const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
+const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
 const TAB_CONFIG = {
   ai: {
@@ -100,6 +103,55 @@ function sendHtml(request, response, statusCode, html, extra = {}) {
     return;
   }
   response.status(statusCode).send(request.method === "HEAD" ? "" : html);
+}
+
+function mobileFragmentSnapshotKey(tab) {
+  return `mobile_fragment_${String(tab || "").replace(/[^a-z0-9_-]/gi, "")}`;
+}
+
+function snapshotPayloadAgeMs(payload) {
+  const time = Date.parse(String(payload?.updatedAt || payload?.generatedAt || payload?.fetchedAt || ""));
+  return Number.isFinite(time) ? Date.now() - time : Infinity;
+}
+
+function htmlMatchesTab(tab, html) {
+  const match = String(html || "").match(/data-mobile-fragment-key=["']([^"']+)/i);
+  return match?.[1] === tab;
+}
+
+async function readMobileFragmentHtmlSnapshot(tab) {
+  const snapshot = await readSnapshot(mobileFragmentSnapshotKey(tab), {
+    allowLatestFallback: true,
+    timeoutMs: MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS,
+  }).catch(() => null);
+  const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  if (!payload?.html || !htmlMatchesTab(tab, payload.html)) return null;
+  if (snapshotPayloadAgeMs(payload) > MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS) return null;
+  return {
+    html: payload.html,
+    runId: payload.runId || "",
+    updatedAt: payload.updatedAt || snapshot.updatedAt || "",
+  };
+}
+
+function writeMobileFragmentHtmlSnapshot(tab, html, payload = {}) {
+  if (!tab || !htmlMatchesTab(tab, html)) return;
+  const runId = extractRunId(payload, tab);
+  const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || new Date().toISOString();
+  upsertSnapshot(mobileFragmentSnapshotKey(tab), {
+    ok: true,
+    tab,
+    html,
+    runId,
+    updatedAt,
+    generatedAt: new Date().toISOString(),
+    source: "api/mobile-fragment",
+  }, {
+    snapshotId: runId || `${tab}-${Date.now()}`,
+    source: "mobile-fragment-html",
+    reason: "mobile-fragment-fast-readback",
+    timeoutMs: 5000,
+  }).catch(() => {});
 }
 
 function lockedFragment(tab) {
@@ -741,6 +793,12 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
+    const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab);
+    if (htmlSnapshot?.html) {
+      response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
+      sendHtml(request, response, 200, htmlSnapshot.html, { tab, snapshotHit: true, runId: htmlSnapshot.runId });
+      return;
+    }
   }
   try {
     const endpoint = appendQuery(config.endpoint, {
@@ -771,6 +829,7 @@ module.exports = async function handler(request, response) {
             : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
+    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
