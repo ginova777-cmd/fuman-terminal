@@ -361,6 +361,23 @@ function isEmptyStrategy1WaitingSnapshot(payload) {
   return /waiting|snapshot|not_trading_day|preopen_not_ready|futopt_not_ready|decision/i.test(text);
 }
 
+function snapshotCount(payload) {
+  return Number(payload?.count ?? payload?.displayCount ?? payload?.resultCount ?? payload?.result_count ?? payload?.total ?? 0) || 0;
+}
+
+function hasUsableSnapshotPayload(payload, tab = "") {
+  if (!payload || typeof payload !== "object" || payload.ok === false) return false;
+  const runId = extractRunId(payload, tab);
+  if (/waiting|snapshot-not-ready|not-ready/i.test(runId)) return false;
+  const rows = normalizeRows(payload, tab);
+  if (rows.length > 0) return true;
+  if (snapshotCount(payload) > 0) return true;
+  return payload.complete === true
+    || payload.publishAllowed === true
+    || payload.evidenceStatus === "complete"
+    || payload?.run_quality_at_publish?.evidenceStatus === "complete";
+}
+
 function firstValue(row, keys, fallback = "") {
   for (const key of keys) {
     const value = key.split(".").reduce((obj, part) => obj?.[part], row);
@@ -711,11 +728,9 @@ module.exports = async function handler(request, response) {
       ...(tab === "strategy3" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
-    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 30000 }).catch(() => null);
+    const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 2500 }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab === "strategy3" || tab === "strategy4" || tab === "strategy5";
-    const payload = forceLivePayload
-      || !snapshotPayload
+    const payload = !hasUsableSnapshotPayload(snapshotPayload, tab)
 
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? (tab === "strategy4"
