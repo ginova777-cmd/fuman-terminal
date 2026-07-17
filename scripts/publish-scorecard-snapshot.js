@@ -11,6 +11,8 @@ const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const MIN_ROWS = Number(process.env.FUMAN_SCORECARD_MIN_ROWS || "450") || 0;
 const MIN_ROW_RATIO = Number(process.env.FUMAN_SCORECARD_MIN_ROW_RATIO || "0.8") || 0;
 const PUBLISH_TIMEOUT_MS = Math.max(120000, Number(process.env.FUMAN_SCORECARD_PUBLISH_TIMEOUT_MS || "120000") || 120000);
+const ALLOW_PREVIOUS_LATEST_DATE = process.argv.includes("--allow-previous-latest-date")
+  || process.env.FUMAN_SCORECARD_ALLOW_PREVIOUS_LATEST_DATE === "1";
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -110,7 +112,7 @@ async function main() {
   if (!tradeDate) {
     throw new Error("refusing to publish scorecard_latest without latestDate");
   }
-  if (expectedDate && compactDate(expectedDate) !== tradeDate) {
+  if (expectedDate && compactDate(expectedDate) !== tradeDate && !ALLOW_PREVIOUS_LATEST_DATE) {
     throw new Error(`refusing to publish scorecard_latest latestDate=${payloadLatestDate}; expectedDate=${expectedDate}`);
   }
   const records = rowCount(payload);

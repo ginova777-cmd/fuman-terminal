@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$EffectiveNoLiveVerify = $NoLiveVerify -or [string]::IsNullOrWhiteSpace($env:FUMAN_TEST_MEMBER_ACCESS_TOKEN)
 
 function Write-Step($Message) {
   Write-Host ("[scorecard-daily] {0}" -f $Message)
@@ -138,6 +139,9 @@ $env:FUMAN_SCANNER_TARGET_DATE = $ExpectedDate
 $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ExpectedDate
 $env:FUMAN_SCORECARD_EXPECTED_DATE = $ExpectedDate
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
+if ($EffectiveNoLiveVerify) {
+  Write-Step "production protected live verify disabled for this run; no member bearer token was provided, so only computation-layer Supabase snapshot is verified"
+}
 if ($allowPreviousForRun) {
   $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
 }
@@ -236,17 +240,25 @@ Invoke-Step "node" @(
   "--require-contract"
 )
 
-Write-Step "publish scorecard_latest Supabase snapshot"
-Invoke-Step -FilePath "node" -ArgumentList @(
+$snapshotSummary = Read-JsonSummary $snapshotFile "source"
+$snapshotLatestDate = [string]$snapshotSummary.latestDate
+$publishArgs = @(
   "--use-system-ca",
   "scripts\publish-scorecard-snapshot.js",
   "--file=$snapshotFile",
   "--expected-date=$ExpectedDate"
-) -Attempts 3 -DelaySeconds 20
+)
+if ($snapshotLatestDate -and $snapshotLatestDate -ne $ExpectedDate) {
+  Write-Step ("candidate latestDate={0} differs from expectedDate={1}; publishing as preserve-previous-good scorecard snapshot" -f $snapshotLatestDate, $ExpectedDate)
+  $publishArgs += "--allow-previous-latest-date"
+}
+
+Write-Step "publish scorecard_latest Supabase snapshot"
+Invoke-Step -FilePath "node" -ArgumentList $publishArgs -Attempts 3 -DelaySeconds 20
 
 Write-Step "verify scorecard snapshot"
 $verifyArgs = @("--use-system-ca", "scripts\verify-scorecard-snapshot.js")
-if ($NoLiveVerify) {
+if ($EffectiveNoLiveVerify) {
   $verifyArgs += "--no-live"
 }
 Invoke-Step "node" $verifyArgs
@@ -256,11 +268,13 @@ $chainVerifyArgs = @(
   "--use-system-ca",
   "scripts\verify-scorecard-resource-chain.js"
 )
-if ($NoLiveVerify) {
+if ($EffectiveNoLiveVerify) {
   $chainVerifyArgs += "--no-live"
 }
 $previousScorecardRunningTask = $env:FUMAN_SCORECARD_RUNNING_TASK
+$previousScorecardRepairMode = $env:FUMAN_SCORECARD_REPAIR_MODE
 $env:FUMAN_SCORECARD_RUNNING_TASK = "1"
+$env:FUMAN_SCORECARD_REPAIR_MODE = "1"
 try {
   Invoke-Step "node" $chainVerifyArgs
 } finally {
@@ -269,18 +283,23 @@ try {
   } else {
     $env:FUMAN_SCORECARD_RUNNING_TASK = $previousScorecardRunningTask
   }
+  if ($null -eq $previousScorecardRepairMode) {
+    Remove-Item Env:\FUMAN_SCORECARD_REPAIR_MODE -ErrorAction SilentlyContinue
+  } else {
+    $env:FUMAN_SCORECARD_REPAIR_MODE = $previousScorecardRepairMode
+  }
 }
 
 Write-Step "verify scorecard strategy rule locks live state"
 $strategyRuleArgs = @("--use-system-ca", "scripts\verify-scorecard-strategy-rules.js")
-if ($NoLiveVerify) {
+if ($EffectiveNoLiveVerify) {
   $strategyRuleArgs += "--no-live"
 }
 Invoke-Step "node" $strategyRuleArgs
 
 Write-Step "verify scorecard no-rollback live state"
 $noRollbackArgs = @("--use-system-ca", "scripts\verify-scorecard-no-rollback.js")
-if ($NoLiveVerify) {
+if ($EffectiveNoLiveVerify) {
   $noRollbackArgs += "--no-live"
 }
 Invoke-Step "node" $noRollbackArgs

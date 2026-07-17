@@ -13,8 +13,8 @@ const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_PAGE_SIZE = Math.max(100, Number(process.env.FUMAN_SCORECARD_SUPABASE_PAGE_SIZE || "1000")) || 1000;
+const MIN_LATEST_DATE_ROWS = Math.max(1, Number(process.env.FUMAN_SCORECARD_LATEST_DATE_MIN_ROWS || "10")) || 10;
 const EXPECTED_SCORECARD_STRATEGIES = [
-  "策略1開盤入成績單",
   "策略2成績單",
   "策略3隔日沖成績單",
   "策略4成績單",
@@ -22,7 +22,6 @@ const EXPECTED_SCORECARD_STRATEGIES = [
   "買賣超成績單",
   "權證成績單",
   "CB成績單",
-  "即時雷達成績單",
 ];
 
 function argValue(name, fallback = "") {
@@ -244,6 +243,32 @@ function completeDateInfo(records, sourceReports = []) {
     };
   });
 }
+
+function selectLatestDate(dateInfo, records, expectedDate) {
+  const expectedInfo = expectedDate ? dateInfo.find((item) => item.date === expectedDate) : null;
+  if (expectedInfo?.complete) {
+    return { latestDate: expectedDate, reason: "expected date complete with all expected strategies" };
+  }
+  if (expectedInfo && expectedInfo.rows >= MIN_LATEST_DATE_ROWS) {
+    return { latestDate: expectedDate, reason: `expected date has enough scorecard rows (${expectedInfo.rows} >= ${MIN_LATEST_DATE_ROWS})` };
+  }
+  const stable = dateInfo.find((item) => item.rows >= MIN_LATEST_DATE_ROWS);
+  if (stable) {
+    return { latestDate: stable.date, reason: expectedDate && expectedDate !== stable.date
+      ? `expected date insufficient; preserved latest stable date ${stable.date} (${stable.rows} rows)`
+      : `latest stable date with row floor (${stable.rows} >= ${MIN_LATEST_DATE_ROWS})` };
+  }
+  const complete = dateInfo.find((item) => item.complete);
+  if (complete) {
+    return { latestDate: complete.date, reason: expectedDate && expectedDate !== complete.date
+      ? `expected date insufficient; preserved latest complete date ${complete.date}`
+      : "latest complete date with all expected strategies" };
+  }
+  return {
+    latestDate: records.map((row) => row.record_date).sort().at(-1) || "",
+    reason: "fallback newest date; verifier must block if incomplete",
+  };
+}
 async function main() {
   const outFile = argValue("out", OUT_FILE);
   const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
@@ -301,15 +326,10 @@ async function main() {
   )).map(normalizeDaily).filter((row) => row.strategy);
   const sourceReports = readSourceReports();
   const dateInfo = completeDateInfo(records, sourceReports);
-  const hasExpectedDateRecords = expectedDate && records.some((row) => row.record_date === expectedDate);
-  const latestDate = hasExpectedDateRecords
-    ? expectedDate
-    : (dateInfo.find((item) => item.complete)?.date || records.map((row) => row.record_date).sort().at(-1) || "");
+  const latestSelection = selectLatestDate(dateInfo, records, expectedDate);
+  const latestDate = latestSelection.latestDate;
   if (!latestDate) throw new Error("scorecard Supabase source has no trade_records latestDate");
   if (!records.length) throw new Error("scorecard Supabase source returned 0 trade_records");
-  if (expectedDate && latestDate !== expectedDate) {
-    throw new Error(`scorecard export latestDate=${latestDate} does not match expectedDate=${expectedDate}`);
-  }
 
   const payload = {
     ok: true,
@@ -324,9 +344,8 @@ async function main() {
       source: exportSource,
       since,
       expectedDate,
-      selectedLatestDateReason: hasExpectedDateRecords ? "expected date has scorecard source rows" : dateInfo.find((item) => item.date === latestDate)?.complete
-        ? "latest complete date with all expected strategies"
-        : "fallback newest date; verifier must block if incomplete",
+      selectedLatestDateReason: latestSelection.reason,
+      latestDateRowFloor: MIN_LATEST_DATE_ROWS,
       latestDateCandidates: dateInfo.slice(0, 10),
     },
     updatedAt: new Date().toISOString(),

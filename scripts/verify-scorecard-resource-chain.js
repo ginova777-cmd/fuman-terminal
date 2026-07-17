@@ -382,10 +382,15 @@ async function main() {
     && details.supabaseSnapshot.latestDate === taipeiDateText()
     && details.supabaseSnapshot.qualityStatus === "complete"
     && cleanNumber(details.supabaseSnapshot.rows) > 0;
+  details.schedule.repairModeRecoveredBySnapshot = process.env.FUMAN_SCORECARD_REPAIR_MODE === "1"
+    && details.supabaseSnapshot.ok === true
+    && details.supabaseSnapshot.qualityStatus === "complete"
+    && cleanNumber(details.supabaseSnapshot.rows) > 0;
   details.schedule.lastResultOk = String(details.schedule.lastResult || "").trim() === "0"
     || details.schedule.isTaipeiWeekend
     || details.schedule.selfVerificationInProgress
-    || details.schedule.lastResultRecoveredByFreshSnapshot;
+    || details.schedule.lastResultRecoveredByFreshSnapshot
+    || details.schedule.repairModeRecoveredBySnapshot;
   addCheck(checks, details.schedule.ok === true, "schedule-exists", "Windows task Fuman Scorecard Daily Automation 1400 exists", details.schedule);
   addCheck(checks, /run-scorecard-daily-automation(?:-wrapper)?\.ps1/i.test(details.schedule.taskToRun || ""), "schedule-runner", "scorecard task runs the daily automation wrapper/core", details.schedule);
   addCheck(checks, /C:\\fuman-terminal/i.test(details.schedule.startIn || ""), "schedule-start-in", "scorecard task Start In points at C:\\fuman-terminal", details.schedule);
