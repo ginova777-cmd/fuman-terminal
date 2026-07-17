@@ -5,6 +5,15 @@ const {
   buildAndWriteDesktopRouteSnapshot,
   buildDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-builder");
+const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+
+const ADMIN_EMAILS = new Set(
+  String(process.env.FUMAN_ADMIN_EMAILS || "ginova777@gmail.com")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 function summarizeEndpointPayload(payload = {}) {
   const rows = Array.isArray(payload.matches) ? payload.matches : Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.records) ? payload.records : [];
   return { ok: payload.ok !== false, count: Number(payload.count ?? payload.total ?? rows.length) || 0, runId: payload.runId || payload.transport?.runId || "", updatedAt: payload.updatedAt || payload.generatedAt || payload.finishedAt || "", source: payload.source || payload.cacheSource || payload.transport?.source || "" };
@@ -16,7 +25,12 @@ function bearerToken(request) {
   return match ? match[1].trim() : "";
 }
 
-function canRefresh(request) {
+function isAdminEntitlement(entitlement) {
+  const email = String(entitlement?.user?.email || entitlement?.access?.email || "").trim().toLowerCase();
+  return Boolean(entitlement?.ok && email && ADMIN_EMAILS.has(email));
+}
+
+async function canRefresh(request) {
   const secret = process.env.CRON_SECRET
     || process.env.FUMAN_CRON_SECRET
     || process.env.SCHEDULE_DISPATCH_SECRET
@@ -29,7 +43,9 @@ function canRefresh(request) {
     || bearerToken(request)
     || ""
   );
-  return provided === secret || request.headers?.["x-vercel-cron"] === "1";
+  if (provided === secret || request.headers?.["x-vercel-cron"] === "1") return true;
+  const entitlement = await verifyRequestEntitlement(request, { scope: "desktop-route-snapshot-refresh" });
+  return isAdminEntitlement(entitlement);
 }
 
 function livePreviewEnabled(request) {
@@ -180,7 +196,7 @@ module.exports = async function handler(request, response) {
     }
   }
 
-  if (wantsRefresh && !canRefresh(request)) {
+  if (wantsRefresh && !(await canRefresh(request))) {
     response.status(401).json({ ok: false, error: "unauthorized_snapshot_refresh" });
     return;
   }

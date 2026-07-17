@@ -1,4 +1,12 @@
 const { buildAndWriteDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-builder");
+const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+
+const ADMIN_EMAILS = new Set(
+  String(process.env.FUMAN_ADMIN_EMAILS || "ginova777@gmail.com")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 function bearerToken(request) {
   const header = String(request.headers?.authorization || "");
@@ -6,7 +14,12 @@ function bearerToken(request) {
   return match ? match[1].trim() : "";
 }
 
-function authorized(request) {
+function isAdminEntitlement(entitlement) {
+  const email = String(entitlement?.user?.email || entitlement?.access?.email || "").trim().toLowerCase();
+  return Boolean(entitlement?.ok && email && ADMIN_EMAILS.has(email));
+}
+
+async function authorized(request) {
   const secret = process.env.CRON_SECRET
     || process.env.FUMAN_CRON_SECRET
     || process.env.SCHEDULE_DISPATCH_SECRET
@@ -19,7 +32,9 @@ function authorized(request) {
     || bearerToken(request)
     || ""
   );
-  return provided === secret || request.headers?.["x-vercel-cron"] === "1";
+  if (provided === secret || request.headers?.["x-vercel-cron"] === "1") return true;
+  const entitlement = await verifyRequestEntitlement(request, { scope: "desktop-route-snapshot-refresh" });
+  return isAdminEntitlement(entitlement);
 }
 
 module.exports = async function handler(request, response) {
@@ -32,7 +47,7 @@ module.exports = async function handler(request, response) {
     response.status(405).json({ ok: false, error: "method_not_allowed" });
     return;
   }
-  if (!authorized(request)) {
+  if (!(await authorized(request))) {
     response.status(401).json({ ok: false, error: "unauthorized_snapshot_refresh" });
     return;
   }
