@@ -590,7 +590,19 @@ function esc(value) {
   }[char]));
 }
 
+function membershipDisplayReason(reason = "") {
+  const text = String(reason || "");
+  if (/missing_bearer_token|membership_required|invalid_or_expired_token/i.test(text)) {
+    return "尚未登入或會員權限未開通";
+  }
+  if (/membership_not_enabled/i.test(text)) {
+    return "會員權限尚未開通";
+  }
+  return "需要會員登入與開通權限";
+}
+
 function renderMembershipLock(reason = "missing_bearer_token") {
+  const displayReason = membershipDisplayReason(reason);
   payload = null;
   byId("subtitle").textContent = "此成績單已啟用會員權限；登入並開通後即可讀取完整資料。";
   byId("metrics").innerHTML = "";
@@ -611,7 +623,7 @@ function renderMembershipLock(reason = "missing_bearer_token") {
           <p>輔滿成績單屬於會員保護資料。請登入已開通帳號，或先註冊後由管理員開通權限。這不是水源失敗，也不是策略沒有運算。</p>
           <div class="lock-grid">
             <div class="lock-card"><span>目前狀態</span><strong>需要登入</strong></div>
-            <div class="lock-card"><span>保護原因</span><strong>${esc(reason || "membership_required")}</strong></div>
+            <div class="lock-card"><span>保護原因</span><strong>${esc(displayReason)}</strong></div>
             <div class="lock-card"><span>公開內容</span><strong>市場總覽 / AI 判讀</strong></div>
           </div>
           <div class="lock-actions">
