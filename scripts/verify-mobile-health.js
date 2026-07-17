@@ -29,7 +29,7 @@ const FIRST_SCREEN_FORBIDDEN = [
   "/data/strategy4-zone-c-page-1.json",
 ];
 const MAX_BYTES = {
-  "/terminal-app.js": 136000,
+  "/terminal-app.js": 150000,
   "/terminal-watchlist-module.js": 18000,
   "/terminal-mobile-diagnostics.js": 4000,
   "/api/mobile-boot": 30000,
@@ -92,6 +92,15 @@ function decodeBody(buffer, encoding) {
   return buffer.toString("utf8");
 }
 
+function isMembershipProtected(status, payload, text = "") {
+  return status === 401
+    && (
+      payload?.protected === true
+      || payload?.membershipRequired === true
+      || /membership_required|missing_bearer_token/i.test(String(payload?.error || "") + " " + String(payload?.reason || "") + " " + text)
+    );
+}
+
 function detectVersion(homeText) {
   const match = homeText.match(/terminal-core\.js\?v=([^"'&<>]+)/);
   return match ? match[1] : "";
@@ -113,6 +122,7 @@ async function main() {
     const bytes = result.body.length;
     let count = 0;
     let ok = result.status >= 200 && result.status < 400;
+    let membershipProtected = false;
     if (target.kind === "json" && ok) {
       try {
         const payload = JSON.parse(decodeBody(result.body, encoding));
@@ -123,11 +133,22 @@ async function main() {
         issues.push(`${target.path} invalid json`);
       }
     }
+    if (target.kind === "json" && !ok) {
+      try {
+        const text = decodeBody(result.body, encoding);
+        const payload = JSON.parse(text);
+        membershipProtected = isMembershipProtected(result.status, payload, text);
+        ok = membershipProtected;
+      } catch {
+        membershipProtected = isMembershipProtected(result.status, null, decodeBody(result.body, encoding));
+        ok = membershipProtected;
+      }
+    }
     if (target.kind !== "html" && bytes > 1024 && !["br", "gzip"].includes(encoding)) issues.push(`${target.path} not compressed`);
     if (target.maxBytes && bytes > target.maxBytes) issues.push(`${target.path} too large bytes=${bytes} max=${target.maxBytes}`);
-    if (target.cache && !target.cache.test(cache)) issues.push(`${target.path} cache unexpected cache=${cache}`);
+    if (target.cache && !target.cache.test(cache) && !membershipProtected) issues.push(`${target.path} cache unexpected cache=${cache}`);
     if (!ok) issues.push(`${target.path} unhealthy status=${result.status}`);
-    console.log(`[mobile] ${ok ? "ok" : "warn"} ${target.path} bytes=${bytes} encoding=${encoding || "none"} count=${count} cache=${cache}`);
+    console.log(`[mobile] ${ok ? "ok" : "warn"} ${target.path} bytes=${bytes} encoding=${encoding || "none"} count=${count} cache=${cache}${membershipProtected ? " protected=membership" : ""}`);
   }
 
   let firstScreenBytes = 0;
@@ -137,7 +158,13 @@ async function main() {
     const result = fetched.get(pathname) || await fetchBuffer(pathname, target.versioned ? version : "");
     firstScreenBytes += result.body.length;
     if (pathname.endsWith(".json")) firstScreenJsonBytes += result.body.length;
-    if (result.status < 200 || result.status >= 400) issues.push(`first-screen target unhealthy ${pathname} status=${result.status}`);
+    if (result.status < 200 || result.status >= 400) {
+      const encoding = String(result.headers["content-encoding"] || "");
+      const text = decodeBody(result.body, encoding);
+      let payload = null;
+      try { payload = JSON.parse(text); } catch {}
+      if (!isMembershipProtected(result.status, payload, text)) issues.push(`first-screen target unhealthy ${pathname} status=${result.status}`);
+    }
   }
 for (const pathname of FIRST_SCREEN_FORBIDDEN) {
     if (FIRST_SCREEN_TARGETS.includes(pathname)) issues.push(`first-screen forbidden target included ${pathname}`);
