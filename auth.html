@@ -99,6 +99,47 @@
       overflow: auto;
       scrollbar-width: thin;
     }
+    body[data-auth-mode="forgot"] main {
+      grid-template-columns: minmax(320px, 344px);
+      justify-content: center;
+      width: min(100%, calc(100% - 40px));
+      padding-top: 86px;
+    }
+    body[data-auth-mode="forgot"] .brand-panel,
+    body[data-auth-mode="forgot"] .auth-tabs,
+    body[data-auth-mode="forgot"] #passwordField,
+    body[data-auth-mode="forgot"] #guestLogin,
+    body[data-auth-mode="forgot"] #googleFallbackNotice {
+      display: none;
+    }
+    body[data-auth-mode="forgot"] .auth-card {
+      width: min(344px, 100%);
+      padding: 26px 28px 0;
+      max-height: none;
+      overflow: visible;
+    }
+    .auth-heading {
+      display: none;
+      text-align: center;
+      margin: 0 0 18px;
+    }
+    .auth-heading h2 {
+      margin: 0;
+      color: #007986;
+      font-size: 30px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .auth-heading p {
+      margin: 10px 0 0;
+      color: #475569;
+      font-size: 13px;
+      line-height: 1.7;
+      font-weight: 800;
+    }
+    body[data-auth-mode="forgot"] .auth-heading {
+      display: block;
+    }
     .auth-tabs {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -240,6 +281,36 @@
       color: var(--text);
       border: 1px solid var(--line);
     }
+    body[data-auth-mode="forgot"] .quick-action.secondary {
+      grid-template-columns: 42px 1fr auto 18px;
+      min-height: 52px;
+      padding: 8px 12px;
+    }
+    body[data-auth-mode="forgot"] .quick-action.secondary .quick-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #e2fbf8;
+    }
+    .connected-badge {
+      display: none;
+      width: max-content;
+      margin-top: 0;
+      border: 1px solid rgba(15, 143, 134, .35);
+      border-radius: 999px;
+      background: #dff8ee;
+      color: var(--brand-2);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    body[data-auth-mode="forgot"] .connected-badge {
+      display: inline-flex;
+    }
+    body[data-auth-mode="forgot"] #googleActionNote,
+    body[data-auth-mode="forgot"] #status:empty {
+      display: none;
+    }
     .quick-icon {
       display: grid;
       place-items: center;
@@ -309,6 +380,7 @@
       }
       h1 { font-size: 56px; }
       .auth-card { max-height: none; }
+      body[data-auth-mode="forgot"] main { padding-top: 32px; }
       footer { position: static; padding: 0 20px 24px; }
     }
   </style>
@@ -326,8 +398,12 @@
         <button class="active" type="button" data-auth-mode="login">登入</button>
         <button type="button" data-auth-mode="signup">註冊</button>
       </div>
+      <header class="auth-heading" id="authHeading">
+        <h2 id="authTitle">重設密碼</h2>
+        <p id="authDescription">輸入帳號信箱。如果帳號存在，我們會寄出一封限時重設信。</p>
+      </header>
 
-      <form id="authForm" class="auth-form">
+      <form id="authForm" class="auth-form" novalidate>
         <label>
           <span class="label-row"><span>電子郵件 / 帳號</span></span>
           <span class="field">
@@ -337,7 +413,7 @@
           </span>
         </label>
 
-        <label>
+        <label id="passwordField">
           <span class="label-row"><span id="passwordLabel">密碼</span><a href="#" id="forgotPassword">忘記密碼？</a></span>
           <span class="field">
             <span aria-hidden="true">▢</span>
@@ -365,10 +441,11 @@
 
       <a class="quick-action secondary" id="googleLogin" target="_top" href="https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html">
         <span class="quick-icon">G</span>
-        <span><strong>使用 Google 申請開通</strong><small>可用 Google 帳號申請；完成後依會員權限啟用</small></span>
+        <span><strong id="googleActionTitle">使用 Google 申請開通</strong><small id="googleActionNote">可用 Google 帳號申請；完成後依會員權限啟用</small></span>
+        <span class="connected-badge" id="googleConnectedBadge">已連線</span>
         <span>›</span>
       </a>
-      <p class="status good" style="margin:8px 0 0">
+      <p class="status good" id="googleFallbackNotice" style="margin:8px 0 0">
         若上方沒有跳轉，請點
         <a id="googleFallbackLink" target="_top" href="https://jxnqyqnigsppqsxinlrq.supabase.co/auth/v1/authorize?provider=google&redirect_to=https%3A%2F%2Ffuman-terminal.vercel.app%2Fauth.html">這裡直接開啟 Google 申請</a>
       </p>
@@ -443,12 +520,17 @@
       const captcha = document.querySelector("#captcha");
       const status = document.querySelector("#status");
       const submit = document.querySelector("#submitButton");
+      const authTitle = document.querySelector("#authTitle");
+      const authDescription = document.querySelector("#authDescription");
       const passwordLabel = document.querySelector("#passwordLabel");
       const forgotPassword = document.querySelector("#forgotPassword");
+      const passwordField = document.querySelector("#passwordField");
       const captchaPanel = document.querySelector("#captchaPanel");
       const tabs = [...document.querySelectorAll("[data-auth-mode]")];
       const switchText = document.querySelector("#switchText");
       const switchMode = document.querySelector("#switchMode");
+      const googleActionTitle = document.querySelector("#googleActionTitle");
+      const googleActionNote = document.querySelector("#googleActionNote");
       const authParams = new URLSearchParams(location.search);
       const nextUrl = authParams.get("next") || "/?desktop=1";
       let mode = "login";
@@ -465,21 +547,44 @@
 
       function applyMode(next) {
         mode = next;
+        document.body.dataset.authMode = mode;
         tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
         const resetMode = mode === "reset";
-        submit.textContent = resetMode ? "更新密碼" : mode === "signup" ? "註冊" : "登入";
-        switchText.textContent = resetMode ? "已想起密碼？" : mode === "signup" ? "已經有帳號？" : "還沒有帳號？";
-        switchMode.textContent = resetMode ? "回登入" : mode === "signup" ? "立即登入" : "立即註冊帳號";
+        const forgotMode = mode === "forgot";
+        submit.textContent = resetMode ? "更新密碼" : forgotMode ? "寄出重設信" : mode === "signup" ? "註冊" : "登入";
+        switchText.textContent = resetMode || forgotMode ? "想起密碼了？" : mode === "signup" ? "已經有帳號？" : "還沒有帳號？";
+        switchMode.textContent = resetMode || forgotMode ? "回到登入" : mode === "signup" ? "立即登入" : "立即註冊帳號";
+        email.placeholder = forgotMode ? "name@company.com" : "you@example.com";
         passwordLabel.textContent = resetMode ? "新密碼" : "密碼";
         password.placeholder = resetMode ? "請輸入新密碼" : "請輸入密碼";
         password.autocomplete = resetMode || mode === "signup" ? "new-password" : "current-password";
-        forgotPassword.hidden = resetMode;
+        forgotPassword.hidden = resetMode || forgotMode;
         email.required = !resetMode;
+        password.required = !resetMode && !forgotMode;
+        if (passwordField) passwordField.hidden = forgotMode;
         captcha.required = !resetMode;
         captchaPanel.hidden = resetMode;
-        setStatus(resetMode
+        if (authTitle) authTitle.textContent = resetMode ? "更新密碼" : "重設密碼";
+        if (authDescription) {
+          authDescription.textContent = resetMode
+            ? "請輸入新密碼。更新完成後會自動導回終端。"
+            : "輸入帳號信箱。如果帳號存在，我們會寄出一封限時重設信。";
+        }
+        if (googleActionTitle) googleActionTitle.textContent = forgotMode ? "使用 Google 登入" : "使用 Google 申請開通";
+        if (googleActionNote) googleActionNote.textContent = forgotMode ? "可用 Google 帳號直接登入" : "可用 Google 帳號申請；完成後依會員權限啟用";
+        setStatus(forgotMode ? "" : resetMode
           ? "請輸入新密碼，送出後會更新帳號密碼並回到終端。"
           : mode === "signup" ? "註冊後需開通權限，才會解鎖策略與成績單。" : "請登入；未開通權限時仍可用訪客模式查看公開市場總覽。");
+      }
+
+      async function sendPasswordResetEmail() {
+        if (!client) return setStatus("登入服務尚未載入，請重新整理後再試。", "error");
+        if (!email.value.trim()) return setStatus("請先輸入 Email。", "error");
+        if (!captcha.checked) return setStatus("請先完成您是人類的驗證。", "error");
+        const redirect = new URL("/auth.html", location.origin);
+        redirect.searchParams.set("next", nextUrl || "/?desktop=1");
+        const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: redirect.toString() });
+        setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
       }
 
       async function readAccess(session) {
@@ -688,6 +793,20 @@
           }
           return;
         }
+        if (mode === "forgot") {
+          submit.disabled = true;
+          setStatus("正在寄出重設密碼信...");
+          try {
+            await sendPasswordResetEmail();
+          } catch (error) {
+            setStatus(error?.message || "重設密碼信寄送失敗，請稍後再試。", "error");
+          } finally {
+            submit.disabled = false;
+          }
+          return;
+        }
+        if (!email.value.trim()) return setStatus("請先輸入 Email。", "error");
+        if (!password.value || password.value.length < 6) return setStatus("密碼至少需要 6 個字元。", "error");
         if (!captcha.checked) return setStatus("請先完成您是人類的驗證。", "error");
         submit.disabled = true;
         setStatus(mode === "signup" ? "註冊中..." : "登入中...");
@@ -729,11 +848,7 @@
       });
       document.querySelector("#forgotPassword").addEventListener("click", async (event) => {
         event.preventDefault();
-        if (!client || !email.value.trim()) return setStatus("請先輸入 Email，再點忘記密碼。", "error");
-        const redirect = new URL("/auth.html", location.origin);
-        redirect.searchParams.set("next", nextUrl || "/?desktop=1");
-        const result = await client.auth.resetPasswordForEmail(email.value.trim(), { redirectTo: redirect.toString() });
-        setStatus(result.error ? result.error.message : "重設密碼信已送出，請到信箱確認。", result.error ? "error" : "good");
+        applyMode("forgot");
       });
       document.querySelector("#googleLogin").addEventListener("click", (event) => {
         event.preventDefault();
@@ -746,7 +861,7 @@
       });
       document.querySelector("#googleLogin").href = googleAuthorizeUrl();
       document.querySelector("#googleFallbackLink").href = googleAuthorizeUrl();
-      applyMode(isPasswordRecoveryUrl() ? "reset" : authParams.get("mode") === "signup" ? "signup" : "login");
+      applyMode(isPasswordRecoveryUrl() ? "reset" : authParams.get("mode") === "signup" ? "signup" : authParams.get("mode") === "forgot" ? "forgot" : "login");
       void finishOAuthRedirect();
     })();
   </script>
