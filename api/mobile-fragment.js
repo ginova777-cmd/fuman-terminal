@@ -293,7 +293,7 @@ function isEvidenceLikeRow(row) {
 }
 
 function isValidBusinessRow(row, tab = "") {
-  if (!row || typeof row !== "object" || isEvidenceLikeRow(row)) return false;
+  if (!row || typeof row !== "object") return false;
   if (tab === "cb") {
     const cbCode = String(firstValue(row, ["cbCode", "cb_code", "convertibleBondCode", "bondCode", "symbol", "code"], "")).trim();
     const stockCode = String(firstValue(row, ["stockCode", "stock_id", "stockId", "underlyingCode", "code"], "")).trim();
@@ -308,7 +308,7 @@ function isValidBusinessRow(row, tab = "") {
     const warrantCode = String(firstValue(row, ["warrantCode", "symbol"], "")).trim();
     return /^\d{4}$/.test(code) || /^\d{5,6}$/.test(warrantCode);
   }
-  return true;
+  return !isEvidenceLikeRow(row);
 }
 function normalizeRows(payload, tab = "") {
   const rows = arrayAt(payload, [
