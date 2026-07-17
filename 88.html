@@ -288,6 +288,73 @@
       border-color: rgba(255, 122, 144, .55);
       color: var(--bad);
     }
+    .scorecard-member-lock {
+      margin: 42px auto 0;
+      width: min(760px, 100%);
+      border: 1px solid rgba(255, 155, 69, .72);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255, 155, 69, .12), rgba(20, 26, 34, .96));
+      padding: 22px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
+    }
+    body[data-theme="sun"] .scorecard-member-lock {
+      background: linear-gradient(135deg, rgba(255, 247, 237, .98), rgba(255, 255, 255, .98));
+      box-shadow: 0 16px 48px rgba(15, 23, 42, .12);
+    }
+    .scorecard-member-lock h2 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+    .scorecard-member-lock p {
+      line-height: 1.7;
+      margin: 0 0 16px;
+    }
+    .scorecard-member-lock .lock-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .scorecard-member-lock .lock-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 12px;
+    }
+    .scorecard-member-lock .lock-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .scorecard-member-lock .lock-card strong {
+      display: block;
+      margin-top: 8px;
+      color: var(--text);
+      font-size: 18px;
+    }
+    .scorecard-member-lock .lock-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .scorecard-member-lock .lock-actions a,
+    .scorecard-member-lock .lock-actions button {
+      border: 1px solid rgba(255, 155, 69, .65);
+      border-radius: 8px;
+      background: var(--brand);
+      color: var(--button-text);
+      padding: 11px 14px;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .scorecard-member-lock .lock-actions .ghost {
+      background: var(--soft);
+      color: var(--text);
+    }
     .entry-panel,
     .audit-panel {
       margin: 14px 0;
@@ -395,6 +462,9 @@
       .grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+      .scorecard-member-lock .lock-grid {
+        grid-template-columns: 1fr;
+      }
       .card strong {
         font-size: 22px;
       }
@@ -490,6 +560,26 @@ const resultFilters = [
   ["flat", "平盤"],
 ];
 
+function authUrl(mode = "login") {
+  const url = new URL("/auth.html", location.origin);
+  url.searchParams.set("mode", mode);
+  url.searchParams.set("next", `${location.pathname}${location.search}${location.hash}`);
+  return url.toString();
+}
+
+function isMembershipFailure(response, bodyOrError) {
+  const text = [
+    bodyOrError?.error,
+    bodyOrError?.reason,
+    bodyOrError?.code,
+    bodyOrError?.message,
+    String(bodyOrError || ""),
+  ].join(" ");
+  return response?.status === 401
+    || bodyOrError?.protected === true
+    || /membership_required|missing_bearer_token|invalid_or_expired_token|membership_not_enabled/i.test(text);
+}
+
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -498,6 +588,43 @@ function esc(value) {
     "\"": "&quot;",
     "'": "&#39;",
   }[char]));
+}
+
+function renderMembershipLock(reason = "missing_bearer_token") {
+  payload = null;
+  byId("subtitle").textContent = "此成績單已啟用會員權限；登入並開通後即可讀取完整資料。";
+  byId("metrics").innerHTML = "";
+  byId("sourceStatus").hidden = true;
+  byId("scorecardSourceReports").hidden = true;
+  byId("scorecardStrategy4Live").hidden = true;
+  byId("auditPanel").hidden = true;
+  byId("strategySummary").innerHTML = "";
+  byId("tabs").innerHTML = "";
+  byId("resultPills").innerHTML = "";
+  byId("footer").textContent = "會員保護啟動：只遮住顯示與 protected API；水源、scanner、snapshot 與策略運算不受影響。";
+  byId("rows").innerHTML = `
+    <tr>
+      <td colspan="9">
+        <section class="scorecard-member-lock" data-testid="scorecard-membership-lock" data-membership-required="1">
+          <div class="badge">FUMAN MEMBER</div>
+          <h2>會員權限尚未開通</h2>
+          <p>輔滿成績單屬於會員保護資料。請登入已開通帳號，或先註冊後由管理員開通權限。這不是水源失敗，也不是策略沒有運算。</p>
+          <div class="lock-grid">
+            <div class="lock-card"><span>目前狀態</span><strong>需要登入</strong></div>
+            <div class="lock-card"><span>保護原因</span><strong>${esc(reason || "membership_required")}</strong></div>
+            <div class="lock-card"><span>公開內容</span><strong>市場總覽 / AI 判讀</strong></div>
+          </div>
+          <div class="lock-actions">
+            <a href="${esc(authUrl("login"))}">登入 / 開通權限</a>
+            <a class="ghost" href="${esc(authUrl("signup"))}">註冊會員</a>
+            <a class="ghost" href="/">回市場總覽</a>
+            <button class="ghost" type="button" data-retry-scorecard>重新檢查權限</button>
+          </div>
+        </section>
+      </td>
+    </tr>
+  `;
+  byId("rows").querySelector("[data-retry-scorecard]")?.addEventListener("click", () => load(activeDate));
 }
 
 function markerValue(text, key) {
@@ -1150,10 +1277,18 @@ async function load(date = "") {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
     const response = await fetch(`/api/scorecard?live=1&t=${Date.now()}${dateQuery}`, { cache: "no-store" });
     payload = await response.json();
+    if (isMembershipFailure(response, payload)) {
+      renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);
+      return;
+    }
     if (!payload.ok) throw new Error(payload.reason || payload.error || "scorecard unavailable");
     activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
     render();
   } catch (error) {
+    if (isMembershipFailure(null, error)) {
+      renderMembershipLock(error.reason || error.message || "membership_required");
+      return;
+    }
     byId("subtitle").textContent = "成績單資料暫時無法讀取";
     byId("rows").innerHTML = `<tr><td colspan="13" class="empty">${esc(error.message || error)}</td></tr>`;
   }
