@@ -19,10 +19,10 @@ const TAB_ENDPOINTS = {
   warrant: "/api/warrant-flow-latest",
 };
 const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
-const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS || 1200);
-const MOBILE_BOOT_MARKET_TIMEOUT_MS = 900;
-const MOBILE_BOOT_TAB_TIMEOUT_MS = 900;
-const MOBILE_BOOT_CALENDAR_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_CALENDAR_TIMEOUT_MS || 700);
+const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS || 650);
+const MOBILE_BOOT_MARKET_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_MARKET_TIMEOUT_MS || 650);
+const MOBILE_BOOT_TAB_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_TAB_TIMEOUT_MS || 650);
+const MOBILE_BOOT_CALENDAR_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_CALENDAR_TIMEOUT_MS || 450);
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
