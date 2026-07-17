@@ -115,10 +115,14 @@ function assertProductionMirrorPolicy() {
 }
 
 function assertProductionMirrorClean() {
+  const mirrorRoot = process.env.FUMAN_PRODUCTION_MIRROR_ROOT || process.env.FUMAN_DEPLOY_SOURCE_DIR || ROOT;
   const mirrorGuard = spawnSync(process.execPath, ["scripts/verify-production-mirror-guard.js"], {
     cwd: ROOT,
     encoding: "utf8",
-    env: process.env,
+    env: {
+      ...process.env,
+      FUMAN_PRODUCTION_MIRROR_ROOT: mirrorRoot,
+    },
     windowsHide: true,
   });
   if (mirrorGuard.status === 0) return;
