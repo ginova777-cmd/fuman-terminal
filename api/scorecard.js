@@ -8,6 +8,10 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
+const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1200) || 1200);
+const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
+let staticSnapshotCache = null;
+const payloadMemoryCache = new Map();
 const FORMAL_STRATEGY_ENDPOINTS = {
   "策略2成績單": "/api/strategy2-latest?live=1",
   "策略3隔日沖成績單": "/api/strategy3-latest?live=1",
@@ -50,6 +54,7 @@ function sanitizeScorecardSourceQuery(sourceQuery = {}) {
         byStrategy,
         missingStrategies,
         strategies: Object.keys(byStrategy).length || candidate.strategies || 0,
+        complete: Array.isArray(missingStrategies) ? missingStrategies.length === 0 : candidate.complete === true,
       };
     })
     : sourceQuery.latestDateCandidates;
@@ -1597,6 +1602,42 @@ function historyDates(records) {
     .reverse();
 }
 
+function candidateIsoDate(value) {
+  const compact = cleanText(value?.date || value?.summary_date || value).replace(/\D/g, "").slice(0, 8);
+  if (!/^\d{8}$/.test(compact)) return "";
+  return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+}
+
+function activeStrategyCount(rows) {
+  return new Set((Array.isArray(rows) ? rows : [])
+    .map((row) => cleanText(row.strategy))
+    .filter((strategy) => strategy && !isRetiredScorecardSurfaceName(strategy))).size;
+}
+
+function defaultScorecardDate(payload, allRecords, dates) {
+  const sourceQuery = sanitizeScorecardSourceQuery(payload?.sourceQuery || {});
+  const candidates = Array.isArray(sourceQuery.latestDateCandidates) ? sourceQuery.latestDateCandidates : [];
+  for (const candidate of candidates) {
+    const date = candidateIsoDate(candidate);
+    if (!date || !dates.includes(date)) continue;
+    const rows = allRecords.filter((row) => cleanText(row.record_date) === date);
+    if (!rows.length) continue;
+    const missing = Array.isArray(candidate.missingStrategies)
+      ? candidate.missingStrategies.filter((strategy) => !isRetiredScorecardSurfaceName(strategy))
+      : [];
+    const completeAfterRetired = missing.length === 0;
+    if (completeAfterRetired && activeStrategyCount(rows) >= 5) return date;
+  }
+  const payloadDate = isoDate(payload?.latestDate || payload?.marketDate || "");
+  if (payloadDate && dates.includes(payloadDate)) {
+    const rows = allRecords.filter((row) => cleanText(row.record_date) === payloadDate);
+    if (activeStrategyCount(rows) >= 5) return payloadDate;
+  }
+  return dates
+    .map((date) => ({ date, rows: allRecords.filter((row) => cleanText(row.record_date) === date) }))
+    .sort((a, b) => activeStrategyCount(b.rows) - activeStrategyCount(a.rows) || b.rows.length - a.rows.length || b.date.localeCompare(a.date))[0]?.date || "";
+}
+
 function summarize(records, dailyRows, latestDate) {
   const rows = Array.isArray(records) ? records : [];
   const wins = rows.filter((row) => cleanNumber(row.pnl) > 0).length;
@@ -1648,7 +1689,7 @@ function blockedSourceReports(sourceReports) {
 function selectPayloadDate(payload, requestedDate = "") {
   const allRecords = (Array.isArray(payload?.records) ? payload.records : []).filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const dates = historyDates(allRecords);
-  const selectedDate = dates.includes(requestedDate) ? requestedDate : (isoDate(payload?.latestDate) || dates[0] || "");
+  const selectedDate = dates.includes(requestedDate) ? requestedDate : (defaultScorecardDate(payload, allRecords, dates) || dates[0] || "");
   const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
   const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
     .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
@@ -1724,8 +1765,15 @@ function buildPayloadFromSnapshotPayload(snapshotPayload, options = {}) {
 }
 
 function readStaticSnapshot(reason = "scorecard_static_snapshot") {
-  const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
-  const payload = JSON.parse(raw);
+  const stat = fs.statSync(SNAPSHOT_FILE);
+  if (!staticSnapshotCache || staticSnapshotCache.mtimeMs !== stat.mtimeMs) {
+    const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
+    staticSnapshotCache = {
+      mtimeMs: stat.mtimeMs,
+      payload: JSON.parse(raw),
+    };
+  }
+  const payload = staticSnapshotCache.payload;
   return withScorecardContract({
     ok: payload.ok !== false,
     ...payload,
@@ -1734,10 +1782,19 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
   }, "degraded", reason);
 }
 
-async function buildPayload(requestedDate = "") {
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, { allowLatestFallback: true, timeoutMs: 8000 }).catch(() => null);
+async function buildPayload(requestedDate = "", options = {}) {
+  const liveSourceReports = options.liveSourceReports === true;
+  const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
+  const cached = payloadMemoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
+
+  const snapshot = await readSnapshot(SNAPSHOT_KEY, {
+    allowLatestFallback: true,
+    timeoutMs: Number(options.timeoutMs || SCORECARD_SNAPSHOT_TIMEOUT_MS) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
+  }).catch(() => null);
+  let payload;
   if (snapshot?.payload && typeof snapshot.payload === "object") {
-    const payload = await withLiveSourceReports(withScorecardContract({
+    const basePayload = withScorecardContract({
       ok: snapshot.payload.ok !== false,
       ...snapshot.payload,
       source: snapshot.payload.source || "supabase:scorecard_snapshot",
@@ -1748,10 +1805,14 @@ async function buildPayload(requestedDate = "") {
         updatedAt: snapshot.updatedAt || "",
         source: snapshot.source || "",
       },
-    }, "complete"));
-    return selectPayloadDate(payload, requestedDate);
+    }, "complete");
+    payload = selectPayloadDate(liveSourceReports ? await withLiveSourceReports(basePayload) : basePayload, requestedDate);
+  } else {
+    const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
+    payload = selectPayloadDate(liveSourceReports ? await withLiveSourceReports(basePayload) : basePayload, requestedDate);
   }
-  return selectPayloadDate(await withLiveSourceReports(readStaticSnapshot("supabase_scorecard_snapshot_missing")), requestedDate);
+  payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
+  return payload;
 }
 
 async function handler(request, response) {
@@ -1766,7 +1827,8 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const payload = attachMarketCalendar(await buildPayload(requestedDate), marketCalendar);
+    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {
@@ -1783,5 +1845,6 @@ module.exports.__test = {
   summarizeAudit,
   selectPayloadDate,
   withScorecardContract,
+  buildPayload,
 };
 
