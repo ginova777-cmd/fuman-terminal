@@ -138,7 +138,11 @@ function moduleRow(row = {}) {
   if (sourceDate !== EXPECTED_DATE) issues.push(`manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
   if (fallback) issues.push("manifest_fallback_true");
   if (receipt.status !== "complete" || receipt.complete !== true) issues.push(`manifest_scanner_not_complete:${receipt.status || "missing"}`);
-  if (scorecard.membershipProtected) issues.push("manifest_scorecard_unauthenticated_readback_only");
+  const scorecard88Protection = scorecard.membershipProtected
+    ? "membership-protected"
+    : scorecard.runId
+      ? "readback"
+      : "not-read";
   return {
     key: row.key,
     label: row.label,
@@ -152,6 +156,7 @@ function moduleRow(row = {}) {
     resultCount: Number(firstPresent(api.count, terminal.count, desktop.count, supabase.count, receipt.matches, 0)) || 0,
     readbackCount: Number(firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0,
     runIds,
+    scorecard88Protection,
     ok: issues.length === 0 && complete,
     issues,
   };
@@ -170,7 +175,7 @@ function markdown(manifest) {
   lines.push("| module | runId | tradeDate | sourceDate | complete | fallback | resultCount | API/Desktop/Mobile/88 | issues |");
   lines.push("|---|---|---:|---:|---:|---:|---:|---|---|");
   for (const row of manifest.modules) {
-    lines.push(`| ${row.label || row.key} | ${row.runId || "--"} | ${row.tradeDate || "--"} | ${row.sourceDate || "--"} | ${row.complete} | ${row.fallback} | ${row.resultCount} | api=${row.runIds.productionApi || "--"}<br>desktop=${row.runIds.desktop || "--"}<br>mobile=${row.runIds.mobile || "--"}<br>88=${row.runIds.scorecard88 || "--"} | ${row.issues.join("<br>") || "OK"} |`);
+    lines.push(`| ${row.label || row.key} | ${row.runId || "--"} | ${row.tradeDate || "--"} | ${row.sourceDate || "--"} | ${row.complete} | ${row.fallback} | ${row.resultCount} | api=${row.runIds.productionApi || "--"}<br>desktop=${row.runIds.desktop || "--"}<br>mobile=${row.runIds.mobile || "--"}<br>88=${row.runIds.scorecard88 || row.scorecard88Protection || "--"} | ${row.issues.join("<br>") || "OK"} |`);
   }
   return lines.join("\\n");
 }
@@ -251,10 +256,4 @@ main().catch((error) => {
   console.error(`[daily-terminal-run-manifest] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
-
-
-
-
 
