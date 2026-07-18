@@ -101,6 +101,22 @@ function runIdFromMobile(text) {
   return String(text || "").match(/data-run-id="([^"]+)"/)?.[1] || "";
 }
 
+function compactDate(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function dateFromRunId(runId) {
+  return String(runId || "").match(/-(\d{8})-/)?.[1] || "";
+}
+
+function expectedDateArg() {
+  return compactDate(
+    process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length)
+    || process.env.FUMAN_EXPECTED_DATE
+    || ""
+  );
+}
+
 async function runProtectedE2EClosure(config) {
   const outDir = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || config.outDir);
   const checks = [];
@@ -123,10 +139,24 @@ async function runProtectedE2EClosure(config) {
   const internalPayload = internalLatest.payload || {};
   const latestSummary = summarizeLatestPayload(internalPayload);
   const expectedRunId = String(latestSummary.runId || "");
+  const expectedDate = expectedDateArg();
+  const runIdDate = dateFromRunId(expectedRunId);
+  const tradeDate = compactDate(internalPayload.tradeDate || internalPayload.trade_date || internalPayload.marketDate || internalPayload.market_date || internalPayload.run_quality_at_publish?.tradeDate || "");
+  const sourceDataDate = compactDate(internalPayload.sourceDate || internalPayload.source_date || internalPayload.usedDate || internalPayload.used_date || internalPayload.marketSession?.marketDataDate || internalPayload.marketSession?.market_data_date || internalPayload.sourceCoverage?.sourceDate || internalPayload.dataFreshness?.sourceDate || "");
+  const sourceSnapshotDate = compactDate(latestSummary.sourceSnapshotCapturedAt || internalPayload.source_snapshot_captured_at || "");
 
   check(checks, internalLatest.internalVerify === true, "compute_layer_uses_internal_verify_not_public_guest", { module: config.apiModule, status: internalLatest.status });
   check(checks, internalLatest.ok && internalPayload.ok === true, "compute_latest_payload_ok", { status: internalLatest.status, latestSummary });
   check(checks, config.runIdPattern.test(expectedRunId), "compute_latest_run_id_present", { expectedRunId, latestSummary });
+  if (expectedDate) {
+    check(checks, runIdDate === expectedDate, "compute_latest_run_id_date_matches_expected", { expectedDate, runIdDate, expectedRunId });
+    if (tradeDate) check(checks, tradeDate === expectedDate, "compute_latest_trade_date_matches_expected", { expectedDate, tradeDate });
+    if (sourceDataDate) {
+      check(checks, sourceDataDate === expectedDate, "compute_latest_source_date_matches_expected", { expectedDate, sourceDataDate, sourceDate: internalPayload.sourceDate || internalPayload.usedDate || internalPayload.marketSession?.marketDataDate || "" });
+    } else if (sourceSnapshotDate) {
+      check(checks, sourceSnapshotDate === expectedDate, "compute_latest_source_snapshot_date_matches_expected", { expectedDate, sourceSnapshotDate, sourceSnapshotCapturedAt: latestSummary.sourceSnapshotCapturedAt || internalPayload.source_snapshot_captured_at || "" });
+    }
+  }
   check(checks, internalPayload.qualityStatus === "complete" || internalPayload.status === "ready", "compute_latest_quality_complete_or_ready", latestSummary);
   check(checks, internalPayload.publishAllowed === true || internalPayload.run_quality_at_publish?.publishAllowed === true, "compute_latest_publish_allowed", latestSummary);
   check(checks, internalPayload.evidenceStatus === "complete", "compute_latest_evidence_complete", latestSummary);
@@ -182,6 +212,11 @@ async function runProtectedE2EClosure(config) {
     membershipAware: true,
     rule: "membership gates only protect production display/data access; compute layer uses internal verified API payload and must not be inferred from guest 401",
     expectedRunId,
+    expectedDate,
+    runIdDate,
+    tradeDate,
+    sourceDataDate,
+    sourceSnapshotDate,
     endpoints,
     computeLayer: {
       status: internalLatest.status,

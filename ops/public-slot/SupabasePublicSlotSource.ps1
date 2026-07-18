@@ -574,6 +574,21 @@ function Write-PublicSlotPreopenSnapshot {
   Invoke-PublicSlotUpsert -Table "fugle_preopen_snapshot" -OnConflict "symbol" -Rows @($normalized)
 }
 
+function Get-PublicSlotPreopenCheckpointKey {
+  param([string]$ObservedAtIso)
+
+  if ([string]::IsNullOrWhiteSpace($ObservedAtIso)) { return $null }
+  try {
+    $observed = [datetimeoffset]::Parse($ObservedAtIso, [Globalization.CultureInfo]::InvariantCulture)
+    $taipeiZone = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+    $taipei = [TimeZoneInfo]::ConvertTime($observed, $taipeiZone)
+    if ($taipei.Hour -eq 8 -and $taipei.Minute -in @(55, 58, 59)) {
+      return $taipei.ToString("HH:mm")
+    }
+  } catch {
+  }
+  return $null
+}
 function Write-PublicSlotPreopenSnapshotHistory {
   param([Parameter(Mandatory = $true)][object[]]$Rows)
 
@@ -586,10 +601,15 @@ function Write-PublicSlotPreopenSnapshotHistory {
   $hasUpdatedAtColumn = Test-PublicSlotColumnAvailable -Table "fugle_preopen_snapshot_history" -Column "updated_at"
   $normalized = foreach ($row in $Rows) {
     $observedAt = if ($row.observed_at) { ConvertTo-IsoUtc $row.observed_at } else { $now }
+    $checkpointKey = Get-PublicSlotPreopenCheckpointKey -ObservedAtIso $observedAt
     $payload = ConvertTo-PublicSlotPayloadHashtable $row.payload
     if (-not $payload.ContainsKey("volume_unit")) { $payload["volume_unit"] = "lots" }
     if (-not $payload.ContainsKey("time_standard")) { $payload["time_standard"] = "UTC" }
     $payload["writer_observed_at"] = $observedAt
+    $payload["preopen_checkpoint_contract"] = "preopen_checkpoint_history_v1"
+    $payload["preopen_checkpoint_required_keys"] = @("08:55", "08:58", "08:59")
+    $payload["preopen_checkpoint_key"] = if ($checkpointKey) { $checkpointKey } else { "none" }
+    $payload["preopen_checkpoint_present"] = [bool]$checkpointKey
     if ($row.updated_at) { $payload["quote_updated_at"] = ConvertTo-IsoUtc $row.updated_at }
     $out = @{
       symbol = [string]$row.symbol

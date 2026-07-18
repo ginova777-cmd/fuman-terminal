@@ -4454,6 +4454,13 @@ do {
     $dailyVolumeOk = ($script:ApiUniverseStats.avg_volume5_eligible -gt 0)
     $futoptOk = ($combinedFutoptQuoteRows.Count -gt 0 -and $futoptStockQuoteComplete)
     $preopenOk = ($preopenRows.Count -gt 0)
+    $preopenCheckpointSummary = $null
+    $preopenCheckpointReadyCount = 0
+    $preopenCheckpointRequiredCount = 3
+    $preopenCheckpointStatus = "verifier_only"
+    $preopenCheckpointReason = "checkpoint summary is checked by verify:daytrade-preopen-checkpoints, not by the hot writer loop"
+    $preopenCheckpointAllPresent = $false
+    $preopenCheckpointRequired = ((Get-Date).TimeOfDay -ge ([TimeSpan]::Parse("08:59:00")))
     $preopenHistoryOk = ($preopenRows.Count -gt 0)
     if ($session -eq "preopen") {
       $intraday1mOk = (($intradayStats.intraday_1m_rows_today -gt 0) -or ($direct1mRows.Count -gt 0))

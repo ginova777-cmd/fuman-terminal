@@ -143,6 +143,27 @@ async function buildPreflight(options = {}) {
     marketCalendar: contract
   };
 
+  const allowClosedTargetRepair = process.env.FUMAN_ALLOW_CLOSED_TARGET_REPAIR === "1" && requestedTarget && scannerTargetDate === contract.displayTradeDate;
+  if (!contract.marketOpen && allowClosedTargetRepair) {
+    return {
+      ...base,
+      action: "allow_closed_target_repair",
+      status: "ready",
+      complete: true,
+      formalScanSkipped: false,
+      closedTargetRepair: true,
+      sourceFreshnessRequired: false,
+      preservePreviousGood: false,
+      latestPointerUpdated: false,
+      emptyResultWritten: false,
+      publishAllowed: true,
+      evidenceStatus: "complete",
+      unattendedStatus: "REPAIR_ALLOWED",
+      reason: "closed_day_target_repair_allowed",
+      exitCode: 0
+    };
+  }
+
   if (!contract.marketOpen) {
     return {
       ...base,

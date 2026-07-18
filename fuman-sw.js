@@ -1,4 +1,5 @@
 const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-10";
+const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260717-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -43,7 +44,6 @@ const STATIC_ASSETS = [
 // Legacy static data patterns are cache hygiene only. Formal mobile data must
 // come from /api/mobile-boot and /api/mobile-fragment, never from /data/*.json.
 const LEGACY_STATIC_DATA_PATTERNS = [
-  /\/api\/terminal-fast-bundle/i,
   /\/data\/mobile-boot\.json/i,
   /\/data\/mobile-analysis\/[^/]+\.json/i,
 ];
@@ -51,7 +51,6 @@ const LEGACY_STATIC_DATA_PATTERNS = [
 const NETWORK_FIRST_DATA_PATTERNS = [];
 
 const PREFETCH_CORE_DATA_ASSETS = [
-  "/api/terminal-fast-bundle",
   "/api/mobile-boot",
 ];
 
@@ -66,6 +65,10 @@ const PREFETCH_DATA_ASSETS = [
 ];
 
 const LIVE_PATTERNS = [
+  /\/api\/terminal-fast-bundle/i,
+  /\/api\/desktop-route-snapshot/i,
+  /\/api\/scorecard/i,
+  /\/api\/source-reports/i,
   /\/api\/realtime/i,
   /\/api\/scan-/i,
   /\/api\/open-buy-latest/i,

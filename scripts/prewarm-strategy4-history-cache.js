@@ -73,6 +73,19 @@ function flagTrue(value) {
   return text === "true" || text === "1" || text === "yes" || text === "y";
 }
 
+function normalizeIsoDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const digits = text.replace(/\D/g, "").slice(0, 8);
+  return digits.length === 8 ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : "";
+}
+
+function scannerTargetIsoDate() {
+  return normalizeIsoDate(process.env.STRATEGY4_HISTORY_TO_DATE || process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_TERMINAL_TARGET_TRADE_DATE || process.env.FUMAN_EXPECTED_DATE || "");
+}
+
+
 function isoDateDaysAgo(days) {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -656,7 +669,7 @@ async function fetchSupabaseUniverse() {
 
 async function main() {
   const from = isoDateDaysAgo(HISTORY_LOOKBACK_DAYS);
-  const to = new Date().toISOString().slice(0, 10);
+  const to = scannerTargetIsoDate() || new Date().toISOString().slice(0, 10);
   let universe = await fetchSupabaseUniverse();
   if (!universe.length) {
     const payload = await callStocksHandler();

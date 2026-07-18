@@ -72,6 +72,18 @@ function Write-Strategy2Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy2.json") -Encoding utf8
 }
 
+function Assert-Strategy2SupabaseLatest {
+  $js = 'const m=require("./lib/server-supabase-key");(async()=>{const root=process.cwd();const runtimeDir=process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime";const base=m.terminalSupabaseUrl({root,runtimeDir}).replace(/\/+$/,"");const key=m.terminalSupabaseKey({root,runtimeDir});const response=await fetch(base+"/rest/v1/v_strategy2_latest_complete_run?select=run_id,result_count,record_count&limit=1",{headers:{apikey:key,Authorization:"Bearer "+key,Accept:"application/json"}});const text=await response.text();if(!response.ok)throw new Error("v_strategy2_latest_complete_run HTTP "+response.status+": "+text.slice(0,200));const rows=JSON.parse(text||"[]");const row=Array.isArray(rows)?rows[0]:null;if(!row||!row.run_id)throw new Error("Strategy2 Supabase latest pointer missing run_id");console.log(JSON.stringify({runId:row.run_id,count:Number(row.result_count||row.record_count||0)}));})().catch(e=>{console.error(e.message||String(e));process.exit(1);});'
+  $text = & $nodeExe -e $js
+  if ($LASTEXITCODE -ne 0) { throw "Strategy2 Supabase latest pointer verification failed" }
+  $payload = ($text | Select-Object -Last 1) | ConvertFrom-Json
+  "Strategy2 Supabase latest pointer verified runId=$($payload.runId) count=$($payload.count)" >> $log
+  return [pscustomobject]@{
+    runId = [string]$payload.runId
+    count = [int]$payload.count
+  }
+}
+
 function Assert-Strategy2ApiPreserve {
   $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   try {
@@ -86,40 +98,12 @@ function Assert-Strategy2ApiPreserve {
         count = $count
       }
     }
+    throw "sourceReport missing runId"
   } catch {
-    "Strategy2 preserve scorecard readback protected/unavailable; falling back to Supabase latest pointer. error=$($_.Exception.Message)" >> $log
-  }
-
-  $nodeScript = @'
-const { terminalSupabaseKey, terminalSupabaseUrl } = require("./lib/server-supabase-key");
-(async () => {
-  const root = process.cwd();
-  const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-  const base = terminalSupabaseUrl({ root, runtimeDir }).replace(/\/+$/, "");
-  const key = terminalSupabaseKey({ root, runtimeDir });
-  const response = await fetch(`${base}/rest/v1/v_strategy2_latest_complete_run?select=run_id,result_count,record_count&limit=1`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`v_strategy2_latest_complete_run HTTP ${response.status}: ${text.slice(0, 200)}`);
-  const rows = JSON.parse(text || "[]");
-  const row = Array.isArray(rows) ? rows[0] : null;
-  if (!row || !row.run_id) throw new Error("Strategy2 Supabase latest pointer missing run_id");
-  console.log(JSON.stringify({ runId: row.run_id, count: Number(row.result_count || row.record_count || 0) }));
-})().catch((error) => { console.error(error.message || String(error)); process.exit(1); });
-'@
-  $fallbackRaw = $nodeScript | & $nodeExe "--use-system-ca" -
-  if ($LASTEXITCODE -ne 0) {
-    throw "Strategy2 preserve Supabase latest pointer verification failed: $fallbackRaw"
-  }
-  $fallbackPayload = ($fallbackRaw | Out-String).Trim() | ConvertFrom-Json
-  "Strategy2 preserve Supabase latest pointer verified runId=$($fallbackPayload.runId) count=$($fallbackPayload.count)" >> $log
-  return [pscustomobject]@{
-    runId = [string]$fallbackPayload.runId
-    count = [int]$fallbackPayload.count
+    "Strategy2 protected scorecard readback unavailable ($($_.Exception.Message)); falling back to service-role Supabase latest pointer readback." >> $log
+    return Assert-Strategy2SupabaseLatest
   }
 }
-
 function Get-TaipeiMinuteOfDay {
   $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
   $now = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
@@ -131,15 +115,71 @@ function Test-Strategy2ScanWindow {
   return $minute -ge [int]$env:STRATEGY2_SCAN_START_MINUTES -and $minute -le [int]$env:STRATEGY2_SCAN_END_MINUTES
 }
 
+function Get-Strategy2TaipeiDateKey {
+  $override = [string]($env:STRATEGY2_REPAIR_DATE)
+  if ([string]::IsNullOrWhiteSpace($override)) { $override = [string]($env:FUMAN_EXPECTED_DATE) }
+  if ($override -match '^\d{8}$') { return $override }
+  if ($override -match '^\d{4}-\d{2}-\d{2}$') { return ($override -replace '-', '') }
+  $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
+  $now = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
+  return $now.ToString("yyyyMMdd")
+}
+
+function Get-Strategy2RunIdDate($RunId) {
+  $text = [string]$RunId
+  if ($text -match 'strategy2-(\d{8})') { return $Matches[1] }
+  return ""
+}
+
+function Invoke-Strategy2AfterWindowRepair($Reason) {
+  $targetDate = Get-Strategy2TaipeiDateKey
+  $latest = Assert-Strategy2SupabaseLatest
+  $latestDate = Get-Strategy2RunIdDate $latest.runId
+  if ($latestDate -eq $targetDate) {
+    "Strategy2 after-window latest already matches target date $targetDate runId=$($latest.runId); preserving latest." >> $log
+    Write-Strategy2Receipt "complete" 0 $true ([int]$latest.count) ([string]$latest.runId) @($Reason) $Reason $true $true
+    return $true
+  }
+
+  "Strategy2 latest run date mismatch after window latest=$($latest.runId) latestDate=$latestDate targetDate=$targetDate; starting after-window 1m replay repair." >> $log
+  $env:STRATEGY2_REPLAY_DATE = $targetDate
+  & $nodeExe "scripts\replay-strategy2-full-window-from-1m.js" >> $log 2>&1
+  $replayExit = $LASTEXITCODE
+  if ($replayExit -ne 0) {
+    Write-Strategy2Receipt "failed" $replayExit $false 0 ([string]$latest.runId) @("after-window 1m replay failed exit=$replayExit", $Reason) "after-window 1m replay failed"
+    exit $replayExit
+  }
+
+  $env:STRATEGY2_COMPLETE_RUN_SOURCE_FILE = Join-Path $env:FUMAN_DATA_DIR "strategy2-intraday-latest.json"
+  $env:STRATEGY2_AFTER_WINDOW_REPAIR_PUBLISH = "1"
+  & $nodeExe "scripts\publish-strategy2-complete-run.js" >> $log 2>&1
+  $publishExit = $LASTEXITCODE
+  if ($publishExit -ne 0) {
+    Write-Strategy2Receipt "failed" $publishExit $false 0 ([string]$latest.runId) @("after-window complete-run publish failed exit=$publishExit", $Reason) "after-window complete-run publish failed"
+    exit $publishExit
+  }
+
+  $after = Assert-Strategy2SupabaseLatest
+  $afterDate = Get-Strategy2RunIdDate $after.runId
+  if ($afterDate -ne $targetDate) {
+    Write-Strategy2Receipt "failed" 1 $false 0 ([string]$after.runId) @("after-window repair produced run date $afterDate, expected $targetDate", $Reason) "after-window repair did not produce target-date run"
+    exit 1
+  }
+  Write-Strategy2Receipt "complete" 0 $true ([int]$after.count) ([string]$after.runId) @("after-window 1m replay repair complete", $Reason)
+  return $true
+}
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy2 intraday patrol" -LogPath $log
 $currentMinute = Get-TaipeiMinuteOfDay
+if ($env:STRATEGY2_FORCE_AFTER_WINDOW_REPAIR -eq "1") {
+  $currentMinute = [int]$env:STRATEGY2_SCAN_END_MINUTES + 1
+  "Strategy2 forcing after-window repair path by STRATEGY2_FORCE_AFTER_WINDOW_REPAIR=1" >> $log
+}
 if ($currentMinute -gt [int]$env:STRATEGY2_SCAN_END_MINUTES) {
-  $reason = "after Strategy2 scan window; preserve latest and do not publish"
-  "Strategy2 off-session skip: $reason" >> $log
-  $verifiedPayload = Assert-Strategy2ApiPreserve
-  Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
+  $reason = "after Strategy2 scan window; verify or repair latest run before preserving previous good"
+  "Strategy2 off-session after-window check: $reason" >> $log
+  Invoke-Strategy2AfterWindowRepair $reason | Out-Null
   "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
   exit 0
 }
@@ -150,9 +190,9 @@ if ($currentMinute -lt [int]$env:STRATEGY2_SCAN_START_MINUTES) {
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy2" -LogPath $log
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
-  "Strategy2 source gate blocked new publish; preserving latest complete/live run. $reason" >> $log
+  "Strategy2 source gate blocked new publish. $reason" >> $log
   if ((Get-TaipeiMinuteOfDay) -lt [int]$env:STRATEGY2_SCAN_START_MINUTES) {
-    "Strategy2 source gate is not ready before scan window; keep unattended runner alive and retry at 09:00." >> $log
+    "Strategy2 source gate is not ready before scan window; keep unattended runner alive and retry at 09:00 without writing preserved-latest receipt." >> $log
   } else {
     $verifiedPayload = Assert-Strategy2ApiPreserve
     Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
@@ -177,4 +217,3 @@ $verifiedPayload = Assert-Strategy2ApiPreserve
 Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
-

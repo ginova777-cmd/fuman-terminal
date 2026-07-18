@@ -270,13 +270,18 @@ function staleStrategy5SnapshotReason(payload) {
   return "";
 }
 
+function chipFormalLatestTradeDate(sourceHealth = {}) {
+  return compactDateKey(sourceHealth.unified_latest_trade_date || sourceHealth.unifiedLatestTradeDate)
+    || compactDateKey(sourceHealth.institutional_latest_trade_date || sourceHealth.institutionalLatestTradeDate || sourceHealth.institutionLatestDate)
+    || compactDateKey(sourceHealth.latest_trade_date || sourceHealth.latestTradeDate || sourceHealth.chipLatestTradeDate);
+}
+
 function resolveStrategy5SourceDate(run, scanDate, chipSourceHealth = null) {
   const payloadHealth = run?.payload?.sourceHealth && typeof run.payload.sourceHealth === "object" ? run.payload.sourceHealth : {};
   const healthStatus = String(chipSourceHealth?.coverage_status || "").toLowerCase();
-  const liveHealthDate = ["ready", "ok"].includes(healthStatus) ? compactDateKey(chipSourceHealth?.latest_trade_date) : "";
+  const liveHealthDate = ["ready", "ok"].includes(healthStatus) ? chipFormalLatestTradeDate(chipSourceHealth) : "";
   return liveHealthDate
-    || compactDateKey(payloadHealth.chipLatestTradeDate)
-    || compactDateKey(payloadHealth.institutionLatestDate)
+    || chipFormalLatestTradeDate(payloadHealth)
     || compactDateKey(run?.payload?.sourceDate)
     || compactDateKey(run?.payload?.usedDate)
     || compactDateKey(scanDate);
@@ -475,7 +480,7 @@ function strategy5RunTimeSourceEvidence({ run, sourceHealth, sourceDate, apiStat
 function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount, expectedTotal, scannedCount, returnedCount }) {
   const checkedAt = new Date().toISOString();
   const coverageStatus = String(chipSourceHealth?.coverage_status || "").toLowerCase();
-  const latestTradeDate = compactDateKey(chipSourceHealth?.latest_trade_date);
+  const latestTradeDate = chipFormalLatestTradeDate(chipSourceHealth || {});
   const ageDays = dateAgeDays(sourceDate);
   const minRows = cleanNumber(chipSourceHealth?.min_required_rows) || 1500;
   const institutionalRows = cleanNumber(chipSourceHealth?.institutional_rows);
@@ -511,7 +516,8 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
     today,
     sourceDate,
     sourceDateIso: isoDateKey(sourceDate),
-    latestTradeDate: chipSourceHealth?.latest_trade_date || "",
+    latestTradeDate: chipSourceHealth?.unified_latest_trade_date || chipSourceHealth?.institutional_latest_trade_date || chipSourceHealth?.latest_trade_date || "",
+    rawLatestTradeDate: chipSourceHealth?.latest_trade_date || "",
     latestTradeDateKey: latestTradeDate,
     ageDays,
     maxAgeDays: MAX_CHIP_SOURCE_AGE_DAYS,
@@ -539,7 +545,8 @@ function buildStrategy5ApiState({ run, sourceDate, chipSourceHealth, resultCount
       dailyVolumeFresh: null,
       dailyVolumeRequired: false,
       chipCoverageStatus: chipSourceHealth?.coverage_status || "",
-      chipLatestTradeDate: chipSourceHealth?.latest_trade_date || "",
+      chipLatestTradeDate: chipSourceHealth?.unified_latest_trade_date || chipSourceHealth?.institutional_latest_trade_date || chipSourceHealth?.latest_trade_date || "",
+      rawChipLatestTradeDate: chipSourceHealth?.latest_trade_date || "",
       chipAgeDays: ageDays,
       institutionalRows,
       marginRows,
@@ -888,8 +895,8 @@ function strategy5PublishableRunIssue(run, rows = []) {
   const matchCounts = strategy5RowMatchCounts(rows);
   if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) return `issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`;
   if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) return `volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`;
-  if (!marginShortAlignmentOk) return "margin_short_source_date_mismatch";
-  if (cleanNumber(matchCounts.volume_turnover_breakout) <= 0) return "volume_turnover_breakout_empty";
+  // Margin-short alignment and volume-turnover hits are sub-strategy evidence, not global publish blockers.
+  // A zero-result volume-turnover branch must not hide other valid Strategy5 matches.
   return "";
 }
 function validateCompleteRun(run, readbackCount, options = {}) {

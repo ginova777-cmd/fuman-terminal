@@ -23,6 +23,7 @@ const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const FINMIND_DAILY_SOURCE = "supabase:finmind_daily_ohlcv";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
 const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
+const STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO || 0.95);
 const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE, LEGACY_LOTS_SOURCE]);
 const STRATEGY4_REQUIRED_FIELDS = [
   "code",
@@ -110,6 +111,27 @@ function cleanNumber(value) {
 function isAllowedDataContractSource(value) {
   const source = String(value || "").trim();
   return !source || ALLOWED_DATA_CONTRACT_SOURCES.has(source);
+}
+
+function isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, fallbackUsed) {
+  const expectedTotal = cleanNumber(run?.expected_total);
+  const scannedCount = cleanNumber(run?.scanned_count);
+  const resultCount = cleanNumber(run?.result_count);
+  const noDataCount = cleanNumber(run?.no_data_count);
+  const errorCount = cleanNumber(run?.error_count);
+  const coverageRatio = cleanNumber(supabaseCoverage?.coverageRatio);
+  const remainingMiss = cleanNumber(supabaseCoverage?.remainingMiss);
+  const hasAcceptedCoverage = coverageRatio >= STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO
+    && (remainingMiss === 0 || remainingMiss === noDataCount);
+  return run?.complete === true
+    && String(run?.status || "") === "complete"
+    && ["complete", "degraded"].includes(String(qualityStatus || ""))
+    && expectedTotal > 0
+    && scannedCount === expectedTotal
+    && resultCount > 0
+    && errorCount === 0
+    && fallbackUsed === false
+    && (String(qualityStatus || "") === "complete" || hasAcceptedCoverage);
 }
 
 function parseRequestOptions(request) {
@@ -260,11 +282,8 @@ function buildStrategy4GateContract(rows, run, matches) {
   const fallbackUsed = false;
   const fallbackScope = Array.isArray(runPayload.fallbackScope) ? runPayload.fallbackScope : [];
   const fallbackDetails = Array.isArray(runPayload.fallbackDetails) ? runPayload.fallbackDetails : [];
-  const retentionOk = run?.complete === true
-    && String(run?.status || "") === "complete"
-    && qualityStatus === "complete"
-    && cleanNumber(run?.result_count) > 0
-    && fallbackUsed === false;
+  const acceptedTargetDateCompleteRun = isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, fallbackUsed);
+  const retentionOk = acceptedTargetDateCompleteRun;
   const gateIssues = Array.isArray(gate?.issues) ? gate.issues : [];
   const gateWarnings = Array.isArray(gate?.warnings) ? gate.warnings : [];
   const dailyVolumeFreshness = supabaseCoverage?.coverageRatio ?? (supabaseCoverage?.qualityStatus === "complete" ? 1 : null);
@@ -299,6 +318,15 @@ function buildStrategy4GateContract(rows, run, matches) {
   };
   const warnings = [
     ...gateWarnings,
+    ...(qualityStatus === "degraded" && acceptedTargetDateCompleteRun ? [{
+      severity: "warning",
+      id: "strategy4-degraded-complete-coverage-accepted",
+      message: "Strategy4 full target-date scan completed with accepted coverage; no-data rows are disclosed without rolling back latest.",
+      coverageRatio: cleanNumber(supabaseCoverage?.coverageRatio),
+      noDataCount: cleanNumber(run?.no_data_count),
+      remainingMiss: cleanNumber(supabaseCoverage?.remainingMiss),
+      minCoverageRatio: STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO,
+    }] : []),
     ...(gate ? [] : [{ severity: "warning", id: "strategy4-publish-gate-snapshot-missing", message: "latest complete run predates Strategy4 publish gate snapshot; next scanner run will persist gate evidence" }]),
   ];
   return {
@@ -320,6 +348,9 @@ function buildStrategy4GateContract(rows, run, matches) {
     publishAllowed,
     mustPreserveLatest: !publishAllowed,
     gate,
+  acceptedTargetDateCompleteRun,
+    acceptedCoverageRatio: cleanNumber(supabaseCoverage?.coverageRatio),
+    acceptedCoverageRemainingMiss: cleanNumber(supabaseCoverage?.remainingMiss),
   };
 }
 
@@ -364,6 +395,9 @@ function buildPayload(rows, total, run = null, options = {}) {
     resultCount,
     readbackCount,
     publishAllowed: gateContract.publishAllowed,
+    acceptedTargetDateCompleteRun: gateContract.acceptedTargetDateCompleteRun,
+    acceptedCoverageRatio: gateContract.acceptedCoverageRatio,
+    acceptedCoverageRemainingMiss: gateContract.acceptedCoverageRemainingMiss,
     fallbackUsed: gateContract.fallbackUsed,
     fallbackScope: gateContract.fallbackScope,
     fallbackAllowed: gateContract.fallbackAllowed,
@@ -391,6 +425,9 @@ function buildPayload(rows, total, run = null, options = {}) {
     generatedAt: String(first.generated_at || first.scan_time || first.updated_at || new Date().toISOString()),
     updatedAt: String(first.scan_time || first.updated_at || new Date().toISOString()),
     scanStamp: scanDate,
+    tradeDate: scanDate,
+    sourceDate: scanDate,
+    usedDate: scanDate,
     complete: Boolean(first.complete),
     latestRunId: gateContract.latestRunId,
     fallbackUsed: gateContract.fallbackUsed,

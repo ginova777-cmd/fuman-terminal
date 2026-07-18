@@ -49,6 +49,19 @@ function argValue(name, fallback = "") {
   return arg ? arg.slice(prefix.length) : fallback;
 }
 
+function normalizeIsoDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const digits = text.replace(/\D/g, "").slice(0, 8);
+  return digits.length === 8 ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : "";
+}
+
+function scannerTargetIsoDate() {
+  return normalizeIsoDate(process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_TERMINAL_TARGET_TRADE_DATE || process.env.FUMAN_EXPECTED_DATE || "");
+}
+
+
 function tradingDayProbeDate() {
   const text = String(process.env.STRATEGY2_TRADING_DAY_DATE || "").trim();
   if (!text) return new Date();
@@ -158,16 +171,17 @@ async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
   }
 }
 
-async function latestDateAndCount(table, dateField = "trade_date") {
+async function latestDateAndCount(table, dateField = "trade_date", countDate = "") {
   const rows = await supabaseRequest(
     "GET",
     `/rest/v1/${table}?${query({ select: dateField, order: `${dateField}.desc`, limit: 1 })}`,
     undefined,
     30000
   );
-  const latestDate = Array.isArray(rows) && rows[0] ? String(rows[0][dateField] || "") : "";
-  if (!latestDate) return { table, latestDate: "", rowCount: 0 };
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(dateField)}&${dateField}=eq.${encodeURIComponent(latestDate)}`, {
+  const latestDate = Array.isArray(rows) && rows[0] ? normalizeIsoDate(rows[0][dateField]) : "";
+  const selectedDate = normalizeIsoDate(countDate) || latestDate;
+  if (!selectedDate) return { table, latestDate: "", selectedDate: "", rowCount: 0 };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(dateField)}&${dateField}=eq.${encodeURIComponent(selectedDate)}`, {
     method: "HEAD",
     headers: {
       apikey: SUPABASE_KEY,
@@ -178,28 +192,47 @@ async function latestDateAndCount(table, dateField = "trade_date") {
   if (!response.ok) throw new Error(`${table} count HTTP ${response.status}`);
   const range = response.headers.get("content-range") || "";
   const match = range.match(/\/(\d+)$/);
-  return { table, latestDate, rowCount: match ? Number(match[1]) || 0 : 0 };
+  return { table, latestDate, selectedDate, rowCount: match ? Number(match[1]) || 0 : 0 };
 }
 
+
 async function fetchStrategy4DailyFallbackStatus(targetDate = "") {
-  const finmind = await latestDateAndCount("finmind_daily_ohlcv", "trade_date");
-  const dateAligned = Boolean(finmind.latestDate) && (!targetDate || finmind.latestDate === targetDate);
-  const ready = finmind.rowCount >= STRATEGY4_MIN_DAILY_ROWS && dateAligned;
+  const normalizedTargetDate = normalizeIsoDate(targetDate || scannerTargetIsoDate());
+  const stockDaily = await latestDateAndCount("stock_daily_volume", "trade_date", normalizedTargetDate);
+  const stockDateAligned = Boolean(stockDaily.selectedDate) && (!normalizedTargetDate || stockDaily.selectedDate === normalizedTargetDate);
+  const stockReady = stockDateAligned && stockDaily.rowCount >= STRATEGY4_MIN_DAILY_ROWS;
+  let finmind = null;
+  let finmindReady = false;
+  let finmindDateAligned = false;
+  if (!stockReady) {
+    try {
+      finmind = await latestDateAndCount("finmind_daily_ohlcv", "trade_date", normalizedTargetDate);
+      finmindDateAligned = Boolean(finmind.selectedDate) && (!normalizedTargetDate || finmind.selectedDate === normalizedTargetDate);
+      finmindReady = finmindDateAligned && finmind.rowCount >= STRATEGY4_MIN_DAILY_ROWS;
+    } catch (error) {
+      finmind = { table: "finmind_daily_ohlcv", latestDate: "", selectedDate: normalizedTargetDate, rowCount: 0, error: error?.message || String(error) };
+    }
+  }
+  const ready = stockReady || finmindReady;
+  const primary = stockReady ? stockDaily : (finmindReady ? finmind : stockDaily);
+  const sourceName = stockReady ? "stock_daily_volume" : (finmindReady ? "finmind_daily_ohlcv" : "stock_daily_volume");
   return {
     ready,
     status: ready ? READY_STATUS : "not_ready",
-    requiredSource: "finmind_daily_ohlcv",
-    latestDate: finmind.latestDate,
-    rowCount: finmind.rowCount,
+    requiredSource: sourceName,
+    latestDate: primary.latestDate,
+    selectedDate: primary.selectedDate,
+    rowCount: primary.rowCount,
     minRequiredRows: STRATEGY4_MIN_DAILY_ROWS,
-    targetDate,
-    dateAligned,
+    targetDate: normalizedTargetDate,
+    dateAligned: stockReady ? stockDateAligned : (finmindReady ? finmindDateAligned : stockDateAligned),
+    stockDaily,
+    finmind,
     reason: ready
-      ? `finmind_daily_ohlcv latest_trade_date=${finmind.latestDate}; rows_on_latest_date=${finmind.rowCount}`
-      : `finmind_daily_ohlcv latest_trade_date=${finmind.latestDate || "missing"} target_trade_date=${targetDate || "unknown"} rows_on_latest_date=${finmind.rowCount} dateAligned=${dateAligned} minRequiredRows=${STRATEGY4_MIN_DAILY_ROWS}`,
+      ? `${sourceName} target_trade_date=${normalizedTargetDate || "latest"}; rows_on_selected_date=${primary.rowCount}`
+      : `stock_daily_volume latest_trade_date=${stockDaily.latestDate || "missing"} target_trade_date=${normalizedTargetDate || "unknown"} rows_on_selected_date=${stockDaily.rowCount} dateAligned=${stockDateAligned} minRequiredRows=${STRATEGY4_MIN_DAILY_ROWS}`,
   };
 }
-
 function query(params = {}) {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -525,7 +558,7 @@ async function main() {
   }
   if (String(row.strategy || "").toLowerCase() === "strategy4" && effectiveStatus !== READY_STATUS) {
     try {
-      dailyFallback = await fetchStrategy4DailyFallbackStatus(String(row.latest_date || ""));
+      dailyFallback = await fetchStrategy4DailyFallbackStatus(scannerTargetIsoDate() || String(row.latest_date || ""));
       if (dailyFallback.ready) {
         effectiveStatus = READY_STATUS;
       }

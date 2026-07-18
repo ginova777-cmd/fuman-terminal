@@ -12,6 +12,7 @@ const READY_VIEW = process.env.STRATEGY2_INTRADAY_READY_VIEW || "v_strategy2_int
 const DAYTRADE_STATUS_VIEW = process.env.STRATEGY3_DAYTRADE_INTRADAY_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const MISSING_VIEW = process.env.STRATEGY2_READINESS_MISSING_VIEW || "v_strategy2_readiness_missing";
 const RAW_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_intraday_1m";
+const DAYTRADE_SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 
 function readSecret(file) {
   try {
@@ -76,6 +77,24 @@ async function getRowsPaged(baseRoute, pageSize = 1000, maxRows = 10000) {
   return rows;
 }
 
+async function getRowsSafe(route, warningLabel, warnings) {
+  try {
+    return await getRows(route);
+  } catch (error) {
+    warnings.push({ source: warningLabel, error: error?.message || String(error) });
+    return [];
+  }
+}
+
+async function getRowsPagedSafe(baseRoute, warningLabel, warnings, pageSize = 1000, maxRows = 10000) {
+  try {
+    return await getRowsPaged(baseRoute, pageSize, maxRows);
+  } catch (error) {
+    warnings.push({ source: warningLabel, error: error?.message || String(error) });
+    return [];
+  }
+}
+
 function numberValue(value) {
   const number = Number(String(value ?? "").replace(/[,%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
@@ -125,7 +144,30 @@ async function fetchRawLatestValidDayReadiness() {
   };
 }
 
+async function fetchDaytradeSourcePayloadReadiness(warnings) {
+  const rows = await getRowsSafe(
+    `/rest/v1/source_status?source_name=eq.${encodeURIComponent(DAYTRADE_SOURCE_NAME)}&select=source_name,status,updated_at,payload&limit=1`,
+    "source_status:fugle_daytrade_source",
+    warnings,
+  );
+  const row = rows[0] || {};
+  const payload = row.payload || {};
+  return {
+    source: "source_status:fugle_daytrade_source.payload",
+    status: row.status || "",
+    updatedAt: row.updated_at || "",
+    readyCount: numberValue(payload.ready_ma20_continuous),
+    expected: numberValue(payload.active_symbols || payload.today_1m_symbols),
+    todaySymbols: numberValue(payload.today_1m_symbols),
+    todayRows: numberValue(payload.today_1m_rows),
+    staleSeconds: numberValue(payload.intraday_1m_stale_seconds, 999999),
+    latestCandleTime: payload.latest_candle_time || "",
+    latestStatusUpdatedAt: row.updated_at || "",
+  };
+}
+
 async function main() {
+  const warnings = [];
   let refreshResult = null;
   let refreshWarning = "";
   try {
@@ -134,25 +176,25 @@ async function main() {
     refreshWarning = error?.message || String(error);
   }
 
-  const statusRows = await getRows(`/rest/v1/${STATUS_VIEW}?select=*&limit=1`);
+  const statusRows = await getRowsSafe(`/rest/v1/${STATUS_VIEW}?select=*&limit=1`, STATUS_VIEW, warnings);
   const status = statusRows[0] || null;
-  const readyRows = await getRowsPaged([
+  const sourceStatusReadiness = await fetchDaytradeSourcePayloadReadiness(warnings);
+  const readyRows = await getRowsPagedSafe([
     `/rest/v1/${READY_VIEW}`,
     "?select=symbol,name,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
     "&order=symbol.asc",
-  ].join(""));
-  const daytradeStatusRows = await getRowsPaged([
+  ].join(""), READY_VIEW, warnings);
+  const daytradeStatusRows = await getRowsPagedSafe([
     `/rest/v1/${DAYTRADE_STATUS_VIEW}`,
     "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,updated_at",
-    "&order=symbol.asc",
-  ].join(""));
-  const missingRows = await getRows([
+  ].join(""), DAYTRADE_STATUS_VIEW, warnings, 500, 5000);
+  const missingRows = await getRowsSafe([
     `/rest/v1/${MISSING_VIEW}`,
     "?select=checked_at,gate,symbol,name,missing_reason,details",
     "&gate=eq.09%3A00_13%3A30_intraday_1m",
     "&order=symbol.asc",
     "&limit=25",
-  ].join(""));
+  ].join(""), MISSING_VIEW, warnings);
 
   let rawFallback = null;
   const readyCountFromView = readyRows.filter(isReady).length;
@@ -163,8 +205,20 @@ async function main() {
   if (Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
     rawFallback = await fetchRawLatestValidDayReadiness().catch((error) => ({ error: error?.message || String(error), readyCount: 0, expected: 0 }));
   }
-  const effectiveReady = Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount, numberValue(rawFallback?.readyCount));
-  const expected = Math.max(expectedFromView, daytradeStatusRows.length, statusExpected, numberValue(rawFallback?.expected));
+  const effectiveReady = Math.max(
+    readyCountFromView,
+    daytradeStatusReadyCount,
+    statusReadyCount,
+    numberValue(rawFallback?.readyCount),
+    numberValue(sourceStatusReadiness.readyCount),
+  );
+  const expected = Math.max(
+    expectedFromView,
+    daytradeStatusRows.length,
+    statusExpected,
+    numberValue(rawFallback?.expected),
+    numberValue(sourceStatusReadiness.expected),
+  );
   const strategy3Safe = effectiveReady >= MIN_READY_FOR_STRATEGY3;
   const strategy2Safe = effectiveReady >= Math.min(MIN_READY_FOR_STRATEGY2, expected || MIN_READY_FOR_STRATEGY2);
 
@@ -178,9 +232,11 @@ async function main() {
     missingView: MISSING_VIEW,
     refreshResult,
     refreshWarning,
+    warnings,
     expected,
     readyCount: effectiveReady,
     rawLatestValidDay: rawFallback,
+    sourceStatusReadiness,
     readyCountFromView,
     statusReadyCount,
     expectedFromView,

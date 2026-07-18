@@ -5,6 +5,27 @@ const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.ve
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/strategy4-postscan-closure");
 const REQUIRE_LIVE_BLOCKED = process.argv.includes("--require-live-blocked");
+const MIN_ACCEPTED_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO || 0.95);
+
+function compactDate(value) {
+  const text = String(value || "");
+  if (!text) return "";
+  if (/^\d{8}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.replace(/\D/g, "");
+  return text.replace(/\D/g, "").slice(0, 8);
+}
+
+function dateFromRunId(runId) {
+  return String(runId || "").match(/-(\d{8})-/)?.[1] || "";
+}
+
+function expectedDateArg() {
+  return compactDate(
+    process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length)
+    || process.env.FUMAN_EXPECTED_DATE
+    || ""
+  );
+}
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
@@ -200,9 +221,18 @@ async function main() {
   const bundlePayload = internalBundle.payload || bundle.payload || {};
   const runId = String(payload.runId || payload.latestRunId || "");
   const latestSummary = summarizeStrategy4(payload);
+  const expectedDate = expectedDateArg();
+  const runIdDate = dateFromRunId(runId);
+  const tradeDate = compactDate(payload.tradeDate || payload.trade_date || payload.marketDate || payload.market_date || payload.sourceDate || payload.source_date || payload.date || payload.usedDate || payload.used_date || "");
+  const sourceSnapshotDate = compactDate(payload.source_snapshot_captured_at || payload.sourceSnapshotCapturedAt || latestSummary.sourceSnapshotCapturedAt || "");
 
   issue(checks, (latest.ok && payload.ok !== false) || (latestProtectedByMembership && internalLatest.status === 200 && payload.ok !== false), "production_strategy4_latest_http_ok", { status: latest.status, protectedByMembership: latestProtectedByMembership, internalStatus: internalLatest.status, url: latest.url });
   issue(checks, Boolean(runId), "production_strategy4_latest_run_id_present", latestSummary);
+  if (expectedDate) {
+    issue(checks, runIdDate === expectedDate, "production_strategy4_run_id_date_matches_expected", { expectedDate, runIdDate, runId });
+    if (tradeDate) issue(checks, tradeDate === expectedDate, "production_strategy4_trade_date_matches_expected", { expectedDate, tradeDate });
+    if (sourceSnapshotDate) issue(checks, sourceSnapshotDate === expectedDate, "production_strategy4_source_snapshot_date_matches_expected", { expectedDate, sourceSnapshotDate, sourceSnapshotCapturedAt: payload.source_snapshot_captured_at || payload.sourceSnapshotCapturedAt || latestSummary.sourceSnapshotCapturedAt || "" });
+  }
   issue(checks, payload.qualityStatus === "complete", "production_strategy4_quality_complete", latestSummary);
   issue(checks, payload.publishAllowed !== false && payload.run_quality_at_publish?.publishAllowed !== false, "production_strategy4_publish_allowed", latestSummary);
   issue(checks, payload.fallbackUsed === false && payload.fallbackAllowed === false && payload.fallbackContract === "strategy4-fallback-disclosure-v1", "production_strategy4_fallback_hidden_formal", latestSummary);
@@ -296,6 +326,10 @@ async function main() {
     readOnly: true,
     endpoints,
     runId,
+    expectedDate,
+    runIdDate,
+    tradeDate,
+    sourceSnapshotDate,
     latestSummary,
     surfaces: {
       productionApi: { status: latest.status, runId },

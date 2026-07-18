@@ -807,7 +807,7 @@ module.exports = async function handler(request, response) {
       compact: 1,
       shell: 1,
       limit: 60,
-      ...(tab === "strategy3" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
+      ...(tab !== "ai" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({
@@ -816,7 +816,9 @@ module.exports = async function handler(request, response) {
       maxAgeMs: tab === "strategy2" ? 24 * 60 * 60 * 1000 : undefined,
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const payload = !hasUsableSnapshotPayload(snapshotPayload, tab)
+    const forceLivePayload = tab !== "ai";
+    const payload = forceLivePayload
+      || !hasUsableSnapshotPayload(snapshotPayload, tab)
 
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
       ? (tab === "strategy4"
@@ -836,3 +838,5 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+
+

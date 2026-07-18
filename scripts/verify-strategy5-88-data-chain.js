@@ -96,6 +96,15 @@ function summarizeStrategy5(row = {}) {
   };
 }
 
+function runIdTime(value) {
+  const match = String(value || "").match(/^strategy5-\d{8}-(\d{14})$/);
+  return match ? Number(match[1]) : 0;
+}
+
+function newestRunId(...values) {
+  return values.filter(Boolean).sort((a, b) => runIdTime(b) - runIdTime(a))[0] || "";
+}
+
 function receiptRunId() {
   try {
     const receipt = JSON.parse(fs.readFileSync(RECEIPT_PATH, "utf8"));
@@ -146,7 +155,8 @@ async function main() {
     scorecard: summarizeStrategy5(scorecardStrategy5 || {}),
     sourceReports: summarizeStrategy5(sourceReportsStrategy5 || {}),
   };
-  const runId = EXPECTED_RUN_ID || receiptRunId() || summaries.strategy5Latest.runId || summaries.sourceReports.runId;
+  const receiptExpectedRunId = receiptRunId();
+  const runId = EXPECTED_RUN_ID || newestRunId(summaries.strategy5Latest.runId, summaries.sourceReports.runId, summaries.scorecard.runId, summaries.terminalFastBundle.runId, summaries.mobileFragment.runId, receiptExpectedRunId);
   const prodPayloads = {
     terminalFastBundle: parseJson(prodBundle.text),
     strategy5Latest: parseJson(prodLatest.text),

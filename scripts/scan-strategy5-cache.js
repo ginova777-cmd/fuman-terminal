@@ -270,8 +270,8 @@ function buildStrategy5CorePublishQuality(output = {}) {
   const issues = [];
   if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) issues.push(`issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`);
   if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) issues.push(`volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`);
-  if (!marginShortAlignmentOk) issues.push("margin_short_source_date_mismatch");
-  if (volumeTurnoverCount <= 0) issues.push("volume_turnover_breakout_empty");
+  // Margin-short alignment and volume-turnover hits are sub-strategy evidence, not global publish blockers.
+  // When this sub-strategy has no eligible rows, Strategy5 can still publish other formal matches as a complete run.
   return {
     ok: issues.length === 0,
     reason: issues.join(";"),

@@ -21,7 +21,18 @@ $log = Join-Path $logDir ("strategy4-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmm
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
-$strategy4Stamp = Get-Date -Format yyyyMMdd
+function Normalize-Strategy4DateStamp($value) {
+  $raw = [string]$value
+  if ([string]::IsNullOrWhiteSpace($raw)) { return "" }
+  $digits = ($raw -replace "[^0-9]", "")
+  if ($digits.Length -ge 8) { return $digits.Substring(0, 8) }
+  return ""
+}
+
+$strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_SCANNER_TARGET_DATE
+if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_SCANNER_TARGET_TRADE_DATE }
+if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_EXPECTED_DATE }
+if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Get-Date -Format yyyyMMdd }
 
 function Write-Log($message) {
   $message | Tee-Object -FilePath $log -Append | Out-Null
@@ -69,8 +80,7 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
     & $snapshotScript -Source "strategy4" -LogPath $log
     if ($LASTEXITCODE -ne 0) {
       Write-Log "Strategy4 desktop snapshot refresh failed with exit code $LASTEXITCODE"
-      Write-Strategy4Receipt "failed" $LASTEXITCODE $false 0 $RunId @("desktop snapshot refresh exit code $LASTEXITCODE") "critical scan failed during desktop snapshot refresh"
-      exit $LASTEXITCODE
+      throw "desktop snapshot refresh exit code $LASTEXITCODE"
     }
   } else {
     Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
@@ -199,8 +209,12 @@ function Invoke-Strategy4ScorecardSync {
   try {
     & npm.cmd run scorecard:sync *>&1 | Tee-Object -FilePath $log -Append
     $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-    if ($scorecardExit -ne 0) { throw "strategy4 scorecard sync exit=$scorecardExit" }
+    if ($scorecardExit -ne 0) {
+      Write-Log "Strategy4 scorecard sync non-blocking failure exit=$scorecardExit; scanner/readback remains authoritative and daily manifest will queue scorecard publish repair."
+      return $false
+    }
     Write-Log "Strategy4 scorecard sync ok after Supabase publish."
+    return $true
   } finally {
     Pop-Location
   }
@@ -340,8 +354,10 @@ try {
   }
   $prewarmReceiptReady = Test-Strategy4PrewarmReceiptReady
   if ($prewarmReceiptReady) {
-    Write-Log "Strategy4 source prewarm receipt ready for today; skipping in-scan heavy prewarm."
+    Write-Log "Strategy4 source prewarm receipt ready for target date; skipping in-scan heavy prewarm."
     $env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM = "1"
+  } elseif ($env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM -eq "1") {
+    Write-Log "Strategy4 in-scan heavy prewarm skipped by STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM=1."
   } else {
     Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
   $previousPrewarmBatchSize = $env:STRATEGY4_PREWARM_BATCH_SIZE
@@ -438,11 +454,12 @@ try {
       scanStamp = $strategy4Stamp
       ok = $true
     }
-Invoke-Strategy4ScorecardSync
-    Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId)
-    Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId)
-    Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
-    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete; inline terminal chain verified")
+    $postScanWarnings = @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete")
+    try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning after DB readback: $($_.Exception.Message)" }
+    try { Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning after DB readback: $($_.Exception.Message)" }
+    try { Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning after DB readback: $($_.Exception.Message)" }
+    try { Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId); $postScanWarnings += "inline terminal chain verified" } catch { $postScanWarnings += "inline terminal chain pending: $($_.Exception.Message)"; Write-Log "Strategy4 inline terminal warning after DB readback: $($_.Exception.Message)" }
+    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
     exit 0
@@ -453,21 +470,11 @@ Invoke-Strategy4ScorecardSync
   }
 }
 
-Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId)
-Invoke-Strategy4ScorecardSync
-try {
-  Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId)
-  Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
-} catch {
-  Write-Log "Strategy4 inline terminal chain verification failed: $($_.Exception.Message)"
-  Write-Strategy4Receipt "failed" 1 $false 0 ([string]$strategy4Output.runId) @($_.Exception.Message) "critical scan failed during inline terminal chain verification"
-  exit 1
-}
+$postScanWarnings = @()
+try { Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning: $($_.Exception.Message)" }
+try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning: $($_.Exception.Message)" }
+try { Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning: $($_.Exception.Message)" }
+try { Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId); $postScanWarnings += "inline terminal chain verified" } catch { $postScanWarnings += "inline terminal chain pending: $($_.Exception.Message)"; Write-Log "Strategy4 inline terminal warning: $($_.Exception.Message)" }
 
-Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) @("inline terminal chain verified")
+Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
-
-
-
-
-

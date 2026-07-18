@@ -59,10 +59,10 @@ function freePort() {
 function findBrowser() {
   const candidates = [
     process.env.CHROME_PATH,
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   ].filter(Boolean);
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) throw new Error("Chrome or Edge executable not found for rendered UI-state drill");
@@ -148,11 +148,14 @@ async function launchBrowser() {
   const child = childProcess.spawn(findBrowser(), [
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,
-    "--headless=chrome",
+    "--headless=new",
     "--disable-gpu",
+    "--disable-dev-shm-usage",
     "--disable-background-networking",
     "--disable-extensions",
     "--disable-sync",
+    "--remote-allow-origins=*",
+    "--disable-features=Translate,OptimizationHints,MediaRouter",
     "--no-first-run",
     "--no-default-browser-check",
     "--window-size=1366,900",

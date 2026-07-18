@@ -39,7 +39,7 @@ assertMarker(issues, page, "sampleMissingRows", "/88 sample missing rows disclos
 assertMarker(issues, page, "Scorecard Health", "/88 final scorecard format");
 assertMarker(issues, page, "Live A source evidence", "/88 live source verdict");
 
-assertMarker(issues, api, 'withEntitlementRequired(handler, "scorecard")', "scorecard API membership-protected handler");
+assertRegex(issues, api, /withEntitlementRequired\(handler, ["']scorecard["']\)|module\.exports\s*=\s*withEntitlementRequired\(handler, ["']scorecard["']\)/, "scorecard API membership-protected handler");
 assertMarker(issues, api, "module.exports.__test", "scorecard API runtime test export");
 assertMarker(issues, api, "buildPayloadFromSnapshotPayload", "scorecard API runtime builder");
 assertMarker(issues, api, "validateScorecardPayload", "scorecard API runtime validator");
@@ -62,10 +62,22 @@ assertMarker(issues, api, "warnings", "scorecard API top-level warnings");
 assertRegex(issues, api, /qualityStatus[\s\S]*complete/, "scorecard API complete quality path");
 assertRegex(issues, api, /cacheSource[\s\S]*supabase-snapshot/, "scorecard API supabase snapshot path");
 
-assertMarker(issues, sourceReportsApi, 'withEntitlementRequired(handler, "source-reports")', "source reports API membership protection");
+assertRegex(issues, sourceReportsApi, /withEntitlementRequired\(handler, ["']source-reports["']\)|module\.exports\s*=\s*withEntitlementRequired\(handler, ["']source-reports["']\)/, "source reports API membership-protected handler");
+assertMarker(issues, page, "renderMembershipLock", "/88 membership lock renderer");
+assertMarker(issues, page, "data-membership-required=\"1\"", "/88 membership lock marker");
+assertMarker(issues, page, "這不是水源失敗，也不是策略沒有運算", "/88 membership lock must not imply data failure");
+assertMarker(issues, page, "membershipDisplayReason", "/88 technical membership reason mapper");
+assertMarker(issues, page, "尚未登入或會員權限未開通", "/88 friendly missing token message");
 
 if (/\/data\/scorecard[^"'\s]*\.json/.test(page)) {
   issues.push("/88 must not reference /data/scorecard*.json");
+}
+
+const visibleHtml = page
+  .replace(/<script[\s\S]*?<\/script>/gi, "")
+  .replace(/<template[\s\S]*?<\/template>/gi, "");
+if (/>[^<]*missing_bearer_token[^<]*</i.test(visibleHtml)) {
+  issues.push("/88 must not render raw missing_bearer_token in visible HTML");
 }
 
 if (page.includes("scorecard-evidence") || page.includes(">實戰證據<") || page.includes('class="evidence"')) {
@@ -83,3 +95,5 @@ if (issues.length) {
 }
 
 console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, private evidence gate, hidden public evidence/rule/reason columns, runtime builder, and validator");
+
+

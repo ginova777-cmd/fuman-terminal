@@ -6,7 +6,7 @@ async function readScorecardPayload(request) {
   const scorecard = require("./scorecard");
   if (scorecard.__test?.buildPayload) {
     return scorecard.__test.buildPayload(request.query?.date || request.query?.record_date || "", {
-      liveSourceReports: false,
+      liveSourceReports: request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
       timeoutMs: 800,
     });
   }

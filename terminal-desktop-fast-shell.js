@@ -1,10 +1,10 @@
 (function () {
   if (
-    window.__fumanDesktopFastShell === "20260627-route-switch-06"
+    window.__fumanDesktopFastShell === "20260717-no-protected-snapshot-01"
     && window.__fumanDesktopFastShellApiOnlyPoll === "20260625-10"
     && window.__fumanOriginalDesktopMarket === "20260625-api-only"
   ) return;
-  window.__fumanDesktopFastShell = "20260627-route-switch-06";
+  window.__fumanDesktopFastShell = "20260717-no-protected-snapshot-01";
   window.__fumanDesktopFastShellApiOnlyPoll = "20260625-10";
 
   const NAV_SELECTOR = "[data-view]:not([data-member-tab])";
@@ -17,6 +17,7 @@
   const MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS = 12 * 60 * 60 * 1000;
   const MEMBER_STRATEGY_PREVIEW_MAX_CHARS = 900000;
   const RETIRED_SURFACE_CACHE_MIGRATION_KEY = "FUMAN_RETIRED_SURFACE_CACHE_MIGRATION_20260714_01";
+  const PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY = "FUMAN_PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_20260717_01";
   const SNAPSHOT_ROUTES = ["strategy|策略2", "strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const API_ONLY_STRATEGY_ROUTES = ["strategy|策略3", "strategy|策略4", "strategy|策略5"];
   const LIVE_API_STRATEGY_ROUTES = ["strategy|策略2"];
@@ -156,6 +157,7 @@
   installStyle();
   installDesktopThemeToggle();
   purgeApiOnlyStrategySnapshots();
+  installProtectedRouteSnapshotRetirement20260717();
   installCanvasThemeObserver();
   installRouteSnapshots();
   installFixedPageSnapshots();
@@ -1110,12 +1112,7 @@
   }
 
   function strategy2SnapshotFirstEnabled() {
-    try {
-      const params = new URLSearchParams(window.location.search || "");
-      if (/^(1|true|yes)$/i.test(params.get(STRATEGY2_SNAPSHOT_FIRST_PARAM) || "")) return true;
-      if (/^(1|true|yes)$/i.test(sessionStorage.getItem("fuman-strategy2-snapshot-first") || "")) return true;
-    } catch (error) {}
-    return window.FUMAN_RUNTIME_CONFIG?.strategy2SnapshotFirst === true;
+    return false;
   }
 
   function endpointForRoute(route) {
@@ -1136,6 +1133,15 @@
 
   function isFixedDomRoute(route) {
     return isChipTradeRoute(route) || isCbDetectRoute(route) || isWarrantFlowRoute(route);
+  }
+
+  function isProtectedDataRoute(route) {
+    const key = String(route || "");
+    return isStrategyRoute(key) || key === CHIP_TRADE_ROUTE || key === CB_DETECT_ROUTE || key === "warrant-flow|權證走向";
+  }
+
+  function protectedDataRouteKeys() {
+    return [...new Set([...SNAPSHOT_ROUTES, ...FIXED_ROUTE_KEYS].filter(isProtectedDataRoute))];
   }
 
   function cleanupFixedDomRouteShells() {
@@ -1512,7 +1518,7 @@
   }
 
   function purgeApiOnlyStrategySnapshots() {
-    const keys = [...API_ONLY_STRATEGY_ROUTES, ...API_ONLY_FIXED_ROUTE_KEYS];
+    const keys = [...new Set([...API_ONLY_STRATEGY_ROUTES, ...API_ONLY_FIXED_ROUTE_KEYS, ...protectedDataRouteKeys()])];
     keys.forEach((key) => {
       try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
       routeSnapshots.delete(key);
@@ -1529,6 +1535,45 @@
     }).catch(() => undefined);
   }
 
+  function installProtectedRouteSnapshotRetirement20260717() {
+    const keys = protectedDataRouteKeys();
+    const clearRuntime = () => {
+      keys.forEach((key) => {
+        try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
+        routeSnapshots.delete(key);
+        canvasStore.delete(key);
+        canvasEmptyStates.delete(key);
+        canvasInflight.delete(key);
+        canvasRouteVersions.delete(key);
+        canvasMetricsCache.delete(key);
+        canvasPreRenderedRoutes.delete(key);
+      });
+      try { sessionStorage.removeItem("fuman-strategy2-snapshot-first"); } catch (error) {}
+    };
+    clearRuntime();
+    try {
+      if (localStorage.getItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY) === "done") return;
+      localStorage.setItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY, "done");
+    } catch (error) {}
+    if ("indexedDB" in window) {
+      openSnapshotDb().then((db) => {
+        if (!db) return;
+        try {
+          const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+          keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+        } catch (error) {}
+      }).catch(() => undefined);
+    }
+    if ("caches" in window) {
+      caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
+        const url = request?.url || "";
+        return /terminal-fast-bundle|desktop-route-snapshot|strategy[2-5]-latest|institution-latest|cb-detect-latest|warrant-flow-latest/i.test(url)
+          ? cache.delete(request)
+          : false;
+      }))))))).catch(() => undefined);
+    }
+  }
+
   function canvasOptionsForRoute(route) {
     return CANVAS_ROUTE_OPTIONS[route] || { limit: 60, ttl: CANVAS_REFRESH_TTL_MS };
   }
@@ -1538,7 +1583,6 @@
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
-    const strategy2SnapshotFirst = isStrategy2Route(route) && strategy2SnapshotFirstEnabled() && !withBust;
     const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     const query = new URLSearchParams({
       canvas: "1",
@@ -1547,8 +1591,7 @@
       limit: String(Math.max(minLimit, Math.min(maxLimit, options.limit || 60))),
     });
     if (options.full || isRealtimeRadarRoute(route)) query.set("full", "1");
-    if (strategy2SnapshotFirst) query.set("snapshot", "1");
-    else if (options.live) query.set("live", "1");
+    if (options.live) query.set("live", "1");
     if (options.verify) query.set("verify", "1");
     if (options.noSnapshot) query.set("noSnapshot", "1");
     if (options.today) query.set("today", "1");
@@ -2126,6 +2169,14 @@
 
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
+    if (isProtectedDataRoute(route)) {
+      const source = String(memory?.source || "");
+      const age = Date.now() - Number(memory?.at || 0);
+      if (memory?.rows?.length && /^api(?:-|$)|^api-only-poll/.test(source) && age <= Number(canvasOptionsForRoute(route).ttl || CANVAS_REFRESH_TTL_MS)) {
+        return memory.rows;
+      }
+      return [];
+    }
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
     const snapshot = routeSnapshots.get(route);
     if (isStrategyRoute(route) && !isApiBackedSnapshotItem(snapshot)) return [];
@@ -2199,8 +2250,8 @@
     if (!force && desktopFastBundlePromise) return desktopFastBundlePromise;
     if (!force && now - desktopFastBundleAt < 45000) return Promise.resolve(0);
     desktopFastBundleAt = now;
-    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1${force ? `&t=${now}` : ""}`;
-    desktopFastBundlePromise = fetch(url, { cache: force ? "no-store" : "default", priority: force ? "high" : "auto" })
+    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
+    desktopFastBundlePromise = fetch(url, { cache: "no-store", priority: force ? "high" : "auto" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => primeRowsFromFastBundle(payload, `bundle-${reason}`))
       .catch(() => 0)
@@ -2525,13 +2576,13 @@
     const options = canvasOptionsForRoute(route);
     const ttl = Number(options.ttl || CANVAS_REFRESH_TTL_MS);
     const bypassRouteCache = isChipTradeRoute(route) && Boolean(canvasState.signalFilter);
-    if (!force && !bypassRouteCache && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
+    if (!isProtectedDataRoute(route) && !force && !bypassRouteCache && cached?.rows?.length && Date.now() - Number(cached.at || 0) < ttl) {
       return Promise.resolve(cached.rows);
     }
     const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
     const url = compactCanvasUrlForRoute(route, force);
-    const task = fetch(url, { cache: force ? "no-store" : "default" })
+    const task = fetch(url, { cache: isProtectedDataRoute(route) || force ? "no-store" : "default" })
       .then(async (response) => {
         let payload = null;
         try { payload = await response.json(); } catch (error) {}

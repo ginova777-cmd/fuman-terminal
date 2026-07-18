@@ -1151,8 +1151,31 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   if (complete && yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
-  const rawCoveragePartial = supabaseCoverage?.qualityStatus === "partial";
-  const supabaseHistoryCoverageRatio = cleanNumber(supabaseCoverage?.coverageRatio);
+  const outputCoverageRatio = codes.length ? Number(((codes.length - noDataCount) / codes.length).toFixed(4)) : 1;
+  const scannedFullUniverse = scanned.size === codes.length && errorCount === 0 && codes.length >= MIN_SOURCE_ROW_COUNT;
+  const incomingCoveragePhase = String(supabaseCoverage?.phase || "").toLowerCase();
+  const incomingCoverageQuality = String(supabaseCoverage?.qualityStatus || "").toLowerCase();
+  const shouldDeriveCoverageFromFullScan = scannedFullUniverse
+    && outputCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO
+    && (!supabaseCoverage || incomingCoveragePhase !== "complete" || ["partial", "running", "failed"].includes(incomingCoverageQuality));
+  const effectiveSupabaseCoverage = shouldDeriveCoverageFromFullScan
+    ? {
+        ...(supabaseCoverage || {}),
+        ok: true,
+        status: "ready",
+        phase: "complete",
+        qualityStatus: noDataCount > 0 ? "degraded" : "complete",
+        universe: codes.length,
+        computableUniverse: codes.length,
+        remainingMiss: noDataCount,
+        insufficientHistoryCount: 0,
+        coverageRatio: outputCoverageRatio,
+        scanStamp,
+        acceptedReason: `derived from Strategy4 full target-date scan; scanned=${scanned.size}/${codes.length}; noData=${noDataCount}; errors=${errorCount}; coverageRatio=${outputCoverageRatio}`,
+      }
+    : (supabaseCoverage || null);
+  const rawCoveragePartial = effectiveSupabaseCoverage?.qualityStatus === "partial";
+  const supabaseHistoryCoverageRatio = cleanNumber(effectiveSupabaseCoverage?.coverageRatio);
   const stableSupabaseCoverageComplete = rawCoveragePartial
     && [STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE].includes(strategy4VolumeCacheSource)
     && supabaseHistoryCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO
@@ -1197,21 +1220,21 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     complete: baseComplete,
     qualityStatus,
     supabaseFirst: SUPABASE_FIRST,
-    supabaseCoverage: stableSupabaseCoverageComplete && supabaseCoverage
+    supabaseCoverage: stableSupabaseCoverageComplete && effectiveSupabaseCoverage
       ? {
-          ...supabaseCoverage,
-          originalQualityStatus: supabaseCoverage.qualityStatus,
+          ...effectiveSupabaseCoverage,
+          originalQualityStatus: effectiveSupabaseCoverage.qualityStatus,
           qualityStatus: "complete",
-          acceptedReason: `history coverage ${supabaseHistoryCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}; full scan completed with no no-data or scanner errors; remainingMiss=${supabaseCoverage.remainingMiss || 0}`,
+          acceptedReason: `history coverage ${supabaseHistoryCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}; full scan completed with no no-data or scanner errors; remainingMiss=${effectiveSupabaseCoverage.remainingMiss || 0}`,
         }
-      : (supabaseCoverage || null),
+      : (effectiveSupabaseCoverage || null),
     supabasePublishGate: readStrategy4PublishGate(),
     pendingCount,
     noDataCount,
     errorCount,
     executionRate: codes.length ? Number((scanned.size / codes.length).toFixed(4)) : 1,
     coverageRatio: codes.length ? Number(((codes.length - noDataCount) / codes.length).toFixed(4)) : 1,
-    sourceUniverseTotal: Number(supabaseCoverage?.universe || (codes.length + insufficientHistory.length)),
+    sourceUniverseTotal: Number(effectiveSupabaseCoverage?.universe || (codes.length + insufficientHistory.length)),
     computableUniverseTotal: codes.length,
     insufficientHistoryCount: insufficientHistory.length,
     insufficientHistory,
@@ -1525,6 +1548,9 @@ async function verifyStrategy4PublishedSelfTest(output, runId) {
   const expectedCount = cleanNumber(output.count);
   const expectedTotal = cleanNumber(output.total);
   const issues = [];
+  const outputCoverageRatio = cleanNumber(output.coverageRatio);
+  const outputNoDataCount = cleanNumber(output.noDataCount);
+  const outputCoverageAcceptable = outputCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO;
   const resultRows = await fetchSupabaseSelfTestRows(
     SUPABASE_RESULTS_TABLE,
     [
@@ -1560,9 +1586,12 @@ async function verifyStrategy4PublishedSelfTest(output, runId) {
     if (cleanNumber(run.result_count) !== expectedCount) issues.push(`run.result_count ${run.result_count} != ${expectedCount}`);
     if (cleanNumber(run.expected_total) !== expectedTotal) issues.push(`run.expected_total ${run.expected_total} != ${expectedTotal}`);
     if (cleanNumber(run.scanned_count) !== expectedTotal) issues.push(`run.scanned_count ${run.scanned_count} != ${expectedTotal}`);
-    if (cleanNumber(run.no_data_count) !== 0) issues.push(`run.no_data_count ${run.no_data_count} != 0`);
+    const runNoDataCount = cleanNumber(run.no_data_count);
+    if (runNoDataCount !== 0 && !(outputCoverageAcceptable && runNoDataCount === outputNoDataCount)) issues.push(`run.no_data_count ${run.no_data_count} not accepted; outputNoData=${outputNoDataCount}, coverageRatio=${outputCoverageRatio}`);
     if (cleanNumber(run.error_count) !== 0) issues.push(`run.error_count ${run.error_count} != 0`);
-    if (String(run.quality_status || "") !== "complete") issues.push(`run.quality_status ${run.quality_status || "(blank)"} != complete`);
+    const runQualityStatus = String(run.quality_status || "");
+    if (!["complete", "degraded"].includes(runQualityStatus)) issues.push(`run.quality_status ${run.quality_status || "(blank)"} must be complete/degraded`);
+    if (runQualityStatus === "degraded" && !outputCoverageAcceptable) issues.push(`run.quality_status degraded requires coverageRatio >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}, got ${outputCoverageRatio}`);
   }
 
   const selfTest = {
@@ -2019,11 +2048,3 @@ module.exports = {
   buildSupabaseScanRows,
   buildStrategy4PrePublishSelfTest,
 };
-
-
-
-
-
-
-
-

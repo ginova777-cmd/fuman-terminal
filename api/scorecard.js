@@ -1290,6 +1290,21 @@ function maxSourceReportDate(reports) {
   return Math.max(0, ...(Array.isArray(reports) ? reports.map(sourceReportDateValue) : []));
 }
 
+function readRuntimeTerminalScorecardPayload() {
+  const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+  const candidates = [
+    path.join(runtimeDir, "data", "scorecard-terminal-current.json"),
+    path.join(process.cwd(), "data", "scorecard-terminal-current.json"),
+  ];
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (payload && typeof payload === "object") return payload;
+    } catch {}
+  }
+  return null;
+}
 function alignPayloadDateWithSourceReports(payload) {
   const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
   const reportDate = maxSourceReportDate(reports);
@@ -1326,8 +1341,15 @@ async function withFreshStrategySourceReports(payload) {
     if (daytradeReport.runId) nextPayload = mergeSourceReport(nextPayload, daytradeReport);
   } catch {}
   return nextPayload;
-}async function withLiveSourceReports(payload) {
+}
+
+async function withLiveSourceReports(payload) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+    .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
+      && !isRetiredScorecardSurfaceName(report?.strategy)
+      && !isRetiredScorecardSurfaceName(report?.endpoint));
+  const runtimePayload = readRuntimeTerminalScorecardPayload();
+  const runtimeReports = (Array.isArray(runtimePayload?.sourceReports) ? runtimePayload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
@@ -1347,7 +1369,20 @@ async function withFreshStrategySourceReports(payload) {
   }
   const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
   const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
+  const runtimeComplete = runtimeReports.length >= 7 && runtimeReports.every((report) => !isBlank(report?.runId));
   const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId));
+  if (runtimeComplete && maxSourceReportDate(runtimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
+    const runtimeDate = cleanText(runtimePayload?.latestDate || runtimePayload?.marketDate || runtimePayload?.selectedDate || payload?.latestDate);
+    const runtimeBase = {
+      ...payload,
+      ...runtimePayload,
+      latestDate: runtimeDate || runtimePayload?.latestDate || payload?.latestDate,
+      marketDate: runtimeDate || runtimePayload?.marketDate || payload?.marketDate,
+      selectedDate: runtimeDate || runtimePayload?.selectedDate || payload?.selectedDate,
+      sourceReportsSource: "runtime-scorecard-terminal-current",
+    };
+    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
+  }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
     return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
@@ -1827,7 +1862,7 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const liveSourceReports = request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
     const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
@@ -1847,4 +1882,3 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
-

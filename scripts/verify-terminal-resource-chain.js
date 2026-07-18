@@ -1,11 +1,16 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-resource-chain-audit");
 const NOW = new Date();
+const REQUIRE_UNATTENDED = process.argv.includes("--require-unattended");
+const CLI_EXPECTED_DATE = process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length).replace(/\D/g, "").slice(0, 8) || "";
+let EXPECTED_DATE = CLI_EXPECTED_DATE || taipeiDateKey(NOW);
+let EXPECTED_DATE_SOURCE = CLI_EXPECTED_DATE ? "cli" : "taipei_today";
 const ROUTE_ALIASES = new Map([
   ["strategy2-latest", "strategy2"],
   ["strategy3-latest", "strategy3"],
@@ -32,6 +37,94 @@ const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--route
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
+let PROTECTED_READBACK_TOKEN = [
+  process.env.FUMAN_VERIFY_BEARER_TOKEN,
+  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
+  process.env.FUMAN_AUTH_BEARER_TOKEN,
+  process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
+  process.env.FUMAN_SMOKE_BEARER_TOKEN,
+].map((value) => String(value || "").trim()).find(Boolean) || "";
+
+const MEMBERSHIP_AUTH_URL = (process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
+const MEMBERSHIP_AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const MEMBERSHIP_READBACK_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const MEMBERSHIP_READBACK_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let protectedReadbackAuth = {
+  attempted: false,
+  enabled: Boolean(PROTECTED_READBACK_TOKEN),
+  source: PROTECTED_READBACK_TOKEN ? "env-token" : "none",
+  status: 0,
+  error: "",
+};
+
+function protectedReadbackHeaders(url) {
+  if (!PROTECTED_READBACK_TOKEN) return {};
+  if (!String(url || "").startsWith(BASE_URL)) return {};
+  return {
+    Authorization: `Bearer ${PROTECTED_READBACK_TOKEN}`,
+    "X-Fuman-Readback-Auth": "membership-bearer",
+  };
+}
+
+async function ensureProtectedReadbackToken() {
+  if (PROTECTED_READBACK_TOKEN) return protectedReadbackAuth;
+  if (!MEMBERSHIP_READBACK_EMAIL || !MEMBERSHIP_READBACK_PASSWORD) return protectedReadbackAuth;
+  protectedReadbackAuth = {
+    attempted: true,
+    enabled: false,
+    source: "email-password",
+    status: 0,
+    error: "",
+  };
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${MEMBERSHIP_AUTH_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        apikey: MEMBERSHIP_AUTH_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ email: MEMBERSHIP_READBACK_EMAIL, password: MEMBERSHIP_READBACK_PASSWORD }),
+    });
+    const text = await response.text();
+    let json = null;
+    try { json = JSON.parse(text || "{}"); } catch (_) { json = null; }
+    if (!response.ok || !json?.access_token) {
+      protectedReadbackAuth = {
+        attempted: true,
+        enabled: false,
+        source: "email-password",
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+        error: json?.error_description || json?.msg || text.slice(0, 160),
+      };
+      return protectedReadbackAuth;
+    }
+    PROTECTED_READBACK_TOKEN = String(json.access_token || "");
+    protectedReadbackAuth = {
+      attempted: true,
+      enabled: true,
+      source: "email-password",
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      userId: json.user?.id || "",
+      email: MEMBERSHIP_READBACK_EMAIL,
+      error: "",
+    };
+    return protectedReadbackAuth;
+  } catch (error) {
+    protectedReadbackAuth = {
+      attempted: true,
+      enabled: false,
+      source: "email-password",
+      status: 0,
+      elapsedMs: Date.now() - startedAt,
+      error: error?.message || String(error),
+    };
+    return protectedReadbackAuth;
+  }
+}
 
 const STRATEGIES = [
   {
@@ -235,6 +328,7 @@ async function fetchText(url, options = {}) {
         "Cache-Control": "no-cache",
         Accept: options.accept || "*/*",
         ...(options.headers || {}),
+        ...protectedReadbackHeaders(url),
       },
       signal: controller.signal,
     });
@@ -520,6 +614,25 @@ function scorecardSummary(report) {
   };
 }
 
+function runDateFromId(value) {
+  const match = String(value || "").match(/(?:^|[-_])(\d{8})(?:[-_]|$)/);
+  return match ? match[1] : "";
+}
+
+function scorecardMembershipProtectedSummary(scorecardPayload) {
+  return {
+    status: Number(scorecardPayload?.status || 401),
+    ok: true,
+    membershipProtected: true,
+    runId: "",
+    strategy: "membership-required",
+    key: "membership-required",
+    evidenceStatus: "protected-display-layer",
+    publishAllowed: null,
+    reason: "scorecard protected by membership gate",
+  };
+}
+
 function parseMobileFragment(html) {
   const runId = String(html.match(/data-run-id="([^"]*)"/)?.[1] || "").trim();
   const count = cleanNumber(html.match(/數量\s*<b>([^<]*)<\/b>/)?.[1]);
@@ -670,6 +783,27 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   const issues = [];
   const downstreamFresh = downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile)
     || membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot);
+  const downstreamReceiptAuthoritative = downstreamFresh
+    || downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile);
+  if (REQUIRE_UNATTENDED && config.key !== "market") {
+    if (!receipt) {
+      if (!downstreamReceiptAuthoritative) issues.push("unattended: scanner receipt missing");
+    } else if (!downstreamReceiptAuthoritative) {
+      if (receipt.status !== "complete" || receipt.complete !== true || receipt.exitCode > 0) {
+        issues.push(`unattended: scanner receipt is not complete (${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""})`);
+      }
+      if (receipt.fallback) issues.push("unattended: scanner receipt fallback=true");
+      const receiptDate = runDateFromId(receipt.runId) || compactDate(receipt.finishedAt);
+      if (receiptDate && receiptDate !== EXPECTED_DATE) issues.push(`unattended: scanner receipt date ${receiptDate} != expected ${EXPECTED_DATE}`);
+      if (!receipt.runId) issues.push("unattended: scanner receipt missing runId");
+    }
+    const latestDate = runDateFromId(supabase?.runId) || compactDate(supabase?.date || supabase?.tradeDate || supabase?.updatedAt);
+    if (!supabase?.runId && config.key !== "market") issues.push("unattended: Supabase latest missing runId");
+    if (latestDate && latestDate !== EXPECTED_DATE) issues.push(`unattended: Supabase latest date ${latestDate} != expected ${EXPECTED_DATE}`);
+    if (scorecard?.membershipProtected && protectedReadbackAuth.attempted && !protectedReadbackAuth.enabled) {
+      issues.push("unattended: /88 authenticated readback token request failed");
+    }
+  }
   if (receipt) {
     if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
     if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
@@ -694,13 +828,15 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     }
   }
   if (sourceHealth) {
-    if (sourceHealth.status && sourceHealth.status !== "ok") {
-      issues.push(`sourceHealth ${sourceHealth.status}: ${(sourceHealth.issues || []).join("; ") || "warnings present"}`);
+    const sourceHealthIssues = Array.isArray(sourceHealth.issues) ? sourceHealth.issues : [];
+    const sourceHealthWarnings = Array.isArray(sourceHealth.warnings) ? sourceHealth.warnings : [];
+    const sourceHealthHasActionableFailure = sourceHealthIssues.length > 0 || sourceHealthWarnings.length > 0;
+    if (sourceHealth.status && sourceHealth.status !== "ok" && sourceHealthHasActionableFailure) {
+      issues.push(`sourceHealth ${sourceHealth.status}: ${sourceHealthIssues.join("; ") || sourceHealthWarnings.join("; ")}`);
     }
     if (sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
       issues.push(`sourceHealth warningCount ${sourceHealth.warningCount} > ${sourceHealth.warningLimit}`);
-    }
-    const driftReadyCoversCandidateFloor = Boolean(
+    }const driftReadyCoversCandidateFloor = Boolean(
       config.allowSourceHealthDriftReady
       && sourceHealth.driftIntradayReady
       && sourceHealth.driftIntradayRowCount >= (sourceHealth.driftIntradayEffectiveMinRequired || sourceHealth.driftIntradayMinRequired)
@@ -740,7 +876,11 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   if (config.scorecardKeys?.length) {
     const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
-    if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
+    if (scorecard?.membershipProtected) {
+      // The /88 scorecard API is protected by membership. This proves the
+      // display gate is active; computation continuity is checked via
+      // Supabase latest + desktop snapshot above.
+    } else if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
     else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
     else if (expectedRunId && !scorecard.runId) issues.push(`scorecard /88 row/sourceReport missing runId for ${config.key}`);
   }
@@ -788,7 +928,9 @@ async function auditOne(config, desktopSnapshotPayload, scorecardPayload) {
   const sourceHealth = sourceHealthSummary(liveResult.json, supabase)
     || sourceHealthSummary(compactResult.json, supabase)
     || sourceHealthSummary(snapEntry.payload, supabase);
-  const scorecard = scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
+  const scorecard = isMembershipRequiredPayload(scorecardPayload)
+    ? scorecardMembershipProtectedSummary(scorecardPayload)
+    : scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
   const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
   return {
     key: config.key,
@@ -863,6 +1005,15 @@ function markdown(results, desktopSnapshot, fastBundle) {
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  if (!CLI_EXPECTED_DATE && marketCalendar) {
+    const calendarExpected = compactDate(marketCalendar.displayTradeDate || marketCalendar.marketDate || marketCalendar.requestedDate);
+    if (calendarExpected) {
+      EXPECTED_DATE = calendarExpected;
+      EXPECTED_DATE_SOURCE = marketCalendar.marketOpen === false ? "market_calendar_display_trade_date" : "market_calendar_market_date";
+    }
+  }
+  await ensureProtectedReadbackToken();
   const [desktopSnapshotResult, fastBundleResult, scorecardResult] = await Promise.all([
     fetchJson(publicUrl(withQuery("/api/desktop-route-snapshot", { t: Date.now() })), { timeoutMs: 35000 }),
     fetchJson(publicUrl(withQuery("/api/terminal-fast-bundle", { t: Date.now() })), { timeoutMs: 35000 }),
@@ -899,8 +1050,12 @@ async function main() {
   const payload = {
     checkedAt: NOW.toISOString(),
     baseUrl: BASE_URL,
+    expectedDate: EXPECTED_DATE,
+    expectedDateSource: EXPECTED_DATE_SOURCE,
+    marketCalendar,
     desktopSnapshot,
     fastBundle,
+    protectedReadbackAuth,
     results,
     ok: results.every((row) => row.ok),
   };

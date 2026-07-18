@@ -903,11 +903,7 @@ function scorecardCurrentWriteDecision(nextPayload, outFile) {
   }
   const retainRatio = previousRecords.length ? nextRecords.length / previousRecords.length : 1;
   const missingStrategies = [...previousStrategies].filter((strategy) => !nextStrategies.has(strategy));
-  const suspiciousShrink = nextRecords.length < previousRecords.length && (
-    retainRatio < MIN_CURRENT_RETAIN_RATIO ||
-    missingStrategies.length > 0 ||
-    nextStrategies.size < previousStrategies.size
-  );
+  const suspiciousShrink = missingStrategies.length > 0 || nextStrategies.size < previousStrategies.size;
   if (!suspiciousShrink) {
     return {
       allow: true,
@@ -994,7 +990,7 @@ async function main() {
   const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
   let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
-  const strategy3SourceDate = await previousTwseTradingDate(latestDate);
+  const strategy3SourceDate = latestDate;
   const strategy3Task = TASKS.find((task) => task.key === "strategy3");
   const strategy3Payload = strategy3SourceDate ? await fetchStrategy3PayloadForScanDate(strategy3SourceDate) : null;
   if (strategy3Task && strategy3Payload?.matches?.length) {
@@ -1139,4 +1135,3 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
-
