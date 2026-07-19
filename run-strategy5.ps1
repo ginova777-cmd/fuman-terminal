@@ -41,25 +41,6 @@ function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy5.json") -Encoding utf8
 }
 
-function Assert-Strategy5Api {
-  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
-  $report = @($scorecard["sourceReports"]) | Where-Object { $_["key"] -eq "strategy5" } | Select-Object -First 1
-  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
-    throw "Strategy5 scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
-  }
-  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
-  if ($count -le 0) { throw "Strategy5 scorecard sourceReport empty count=$count" }
-  "Strategy5 scorecard sourceReport verified runId=$($report["runId"]) count=$count" >> $log
-  return [pscustomobject]@{
-    runId = [string]$report["runId"]
-    count = $count
-    cacheSource = "scorecard-source-report"
-  }
-}
-
-
 function Invoke-Strategy5InlineTerminalVerify {
   $outDir = Join-Path $env:FUMAN_DATA_DIR "strategy5-88-data-chain"
   New-Item -ItemType Directory -Force -Path $outDir | Out-Null
