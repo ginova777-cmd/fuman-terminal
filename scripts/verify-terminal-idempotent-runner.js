@@ -36,8 +36,11 @@ function verifyCurrent(issues) {
       assert(action.executable !== true, "auth_action_must_not_execute", action, issues);
     }
     if (String(action.state || "").includes("SCAN")) {
-      assert(action.executionGuard === "scanner_requires_apply_scanners" || action.executionGuard === "scanner_apply_enabled", "scanner_action_guard_invalid", action, issues);
+      assert(["scanner_requires_apply_scanners", "scanner_apply_enabled", "formal_scan_not_allowed_by_policy"].includes(action.executionGuard), "scanner_action_guard_invalid", action, issues);
       assert(action.commands.some((cmd) => String(cmd.label || "").includes("terminal-water-root")), "scanner_action_missing_water_root_precheck", action, issues);
+      if (action.executionGuard === "formal_scan_not_allowed_by_policy") {
+        assert(action.executable !== true, "scanner_policy_block_must_not_execute", action, issues);
+      }
     }
     if (String(action.state || "").includes("PUBLISH")) {
       assert(action.commands.some((cmd) => String(cmd.label || "").includes("daily-terminal-run")), "publish_action_missing_manifest_refresh", action, issues);

@@ -12,6 +12,7 @@ const IDEMPOTENCY_CONTRACT = {
     "every_job_has_receipt_file",
     "auth_jobs_never_auto_execute",
     "scanner_jobs_require_water_root_and_apply_scanners",
+    "scanner_jobs_require_policy_formal_scan_allowed",
     "publish_jobs_require_manifest_canary_gate",
   ],
 };
@@ -115,12 +116,20 @@ function planForJob(job = {}, policy = {}) {
   }
 
   if (state.includes("SCAN")) {
+    const formalScanAllowed = policyDecision.formalScanAllowed === true || policy.actionMatrix?.formalScan?.allowed === true;
+    if (!formalScanAllowed) {
+      base.executionGuard = "formal_scan_not_allowed_by_policy";
+      base.executable = false;
+      base.commands.push(npmRun("verify:terminal-water-root"));
+      base.notes.push("Scanner reruns are blocked unless Autonomous Ops Policy explicitly allows formalScan.");
+      return base;
+    }
     base.executionGuard = APPLY_SCANNERS ? "scanner_apply_enabled" : "scanner_requires_apply_scanners";
     base.executable = APPLY_SCANNERS;
     base.commands.push(npmRun("verify:terminal-water-root"));
     const scannerCommand = scannerStepForKey(key, job.command);
     if (scannerCommand) base.commands.push(scannerCommand);
-    base.notes.push("Scanner reruns are idempotent-only and require --apply --apply-scanners.");
+    base.notes.push("Scanner reruns are idempotent-only, require --apply --apply-scanners, and require policy formalScanAllowed=true.");
     return base;
   }
 
@@ -281,17 +290,18 @@ function markdown(plan) {
 }
 
 function selfTest() {
-  const policy = { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false } };
+  const policy = { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: true } };
   const cases = [
     { name: "auth-block", job: { key: "strategy4", state: "BLOCKED_AUTH", blocker: "401" }, expectedExecutable: false, expectedGuard: "blocked_auth" },
     { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_check" },
     { name: "scan-dry", job: { key: "strategy3", state: "FAILED_SCAN" }, expectedExecutable: APPLY_SCANNERS, expectedGuard: APPLY_SCANNERS ? "scanner_apply" : "scanner_requires" },
+    { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy3", state: "FAILED_SCAN" }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
     { name: "display", job: { key: "strategy5", state: "FAILED_DISPLAY" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
     { name: "publish-blocked", job: { key: "scorecard", state: "FAILED_PUBLISH" }, expectedExecutable: false, expectedGuard: "manifest_not_green" },
   ];
   const failures = [];
   for (const item of cases) {
-    const action = planForJob(item.job, policy);
+    const action = planForJob(item.job, item.policy || policy);
     if (action.executable !== item.expectedExecutable) failures.push(`${item.name}: executable ${action.executable} != ${item.expectedExecutable}`);
     if (!action.executionGuard.includes(item.expectedGuard)) failures.push(`${item.name}: guard ${action.executionGuard} missing ${item.expectedGuard}`);
   }
