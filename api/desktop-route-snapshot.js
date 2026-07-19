@@ -6,6 +6,7 @@ const {
   buildDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const ADMIN_EMAILS = new Set(
   String(process.env.FUMAN_ADMIN_EMAILS || "ginova777@gmail.com")
@@ -115,6 +116,43 @@ function releaseReadbackSnapshot() {
   };
 }
 
+
+async function shouldUseMarketClosedPreviousGood() {
+  try {
+    const calendar = await buildMarketCalendarContract();
+    return Boolean(
+      calendar?.marketOpen === false
+      && (calendar?.displayMode === "market_closed_previous_good" || calendar?.formalScanSkipped === true || calendar?.preservePreviousGood === true)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function snapshotResponsePayload(snapshot, extra = {}) {
+  const endpoints = {
+    ...(snapshot.payload.endpoints || {}),
+  };
+  const summary = {
+    ...(snapshot.payload.summary || {}),
+  };
+  for (const endpoint of Object.keys(summary)) {
+    if (!endpoints[endpoint]) delete summary[endpoint];
+  }
+  for (const [endpoint, payload] of Object.entries(endpoints)) {
+    summary[endpoint] = summarizeEndpointPayload(payload);
+  }
+  return {
+    ok: snapshot.payload.ok !== false,
+    ...snapshot.payload,
+    ...extra,
+    endpoints,
+    summary,
+    snapshotHit: true,
+    snapshotRepairs: [],
+  };
+}
+
 function readMissPayload(reason = "desktop_route_snapshot_unavailable") {
   return {
     ok: true,
@@ -157,35 +195,33 @@ module.exports = async function handler(request, response) {
       response.status(200).json(releaseSnapshot);
       return;
     }
+
     const snapshot = await readDesktopRouteSnapshot({ timeoutMs: 8000 });
     if (snapshot?.payload) {
       if (request.method === "HEAD") {
         response.status(200).end("");
         return;
       }
-      const endpoints = {
-        ...(snapshot.payload.endpoints || {}),
-      };
-      const summary = {
-        ...(snapshot.payload.summary || {}),
-      };
-      for (const endpoint of Object.keys(summary)) {
-        if (!endpoints[endpoint]) delete summary[endpoint];
-      }
-      for (const [endpoint, payload] of Object.entries(endpoints)) {
-        summary[endpoint] = summarizeEndpointPayload(payload);
-      }
-      response.status(200).json({
-        ok: snapshot.payload.ok !== false,
-        ...snapshot.payload,
-        endpoints,
-        summary,
+      response.status(200).json(snapshotResponsePayload(snapshot, {
         cacheSource: "supabase:desktop_route_snapshot",
-        snapshotHit: true,
-        snapshotRepairs: [],
-      });
+      }));
       return;
     }
+
+    const staleSnapshot = await readDesktopRouteSnapshot({ timeoutMs: 8000, allowStale: true });
+    if (staleSnapshot?.payload && await shouldUseMarketClosedPreviousGood()) {
+      if (request.method === "HEAD") {
+        response.status(200).end("");
+        return;
+      }
+      response.status(200).json(snapshotResponsePayload(staleSnapshot, {
+        cacheSource: "supabase:desktop_route_snapshot:market_closed_previous_good",
+        marketClosedPreviousGood: true,
+        reason: "market_closed_previous_good_stale_snapshot_allowed",
+      }));
+      return;
+    }
+
     if (!livePreviewEnabled(request) && !liveReadFallbackEnabled(request)) {
       if (request.method === "HEAD") {
         response.status(204).end("");
@@ -227,7 +263,3 @@ module.exports = async function handler(request, response) {
   }
 };
 module.exports.releaseReadbackSnapshot = releaseReadbackSnapshot;
-
-
-
-
