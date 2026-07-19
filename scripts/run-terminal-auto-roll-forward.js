@@ -4,6 +4,17 @@ const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-roll-forward");
+const RECEIPT_DIR = path.join(OUT_DIR, "receipts");
+const IDEMPOTENCY_CONTRACT = {
+  contract: "terminal-idempotent-runner-v1",
+  invariants: [
+    "every_job_has_idempotency_key",
+    "every_job_has_receipt_file",
+    "auth_jobs_never_auto_execute",
+    "scanner_jobs_require_water_root_and_apply_scanners",
+    "publish_jobs_require_manifest_canary_gate",
+  ],
+};
 const APPLY = process.argv.includes("--apply");
 const APPLY_SCANNERS = process.argv.includes("--apply-scanners");
 const SELF_TEST = process.argv.includes("--self-test");
@@ -50,6 +61,18 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function safeId(value) {
+  return String(value || "unknown").replace(/[^a-zA-Z0-9._:-]+/g, "_").slice(0, 180);
+}
+
+function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING") {
+  return safeId(job.idempotencyKey || [currentTradeDate(), key, state, job.blocker || "none"].join(":"));
+}
+
+function receiptFileFor(action = {}) {
+  return path.join(RECEIPT_DIR, `${safeId(action.idempotencyKey || action.key || action.label)}.json`);
+}
+
 function normalizeJobs(orchestrator = {}, queue = []) {
   if (Array.isArray(queue) && queue.length) return queue;
   if (Array.isArray(orchestrator.jobQueue)) return orchestrator.jobQueue;
@@ -71,7 +94,11 @@ function planForJob(job = {}, policy = {}) {
     executionGuard: "not_classified",
     commands: [],
     notes: [],
+    idempotencyKey: actionIdempotencyKey(job, key, state),
+    receiptFile: "",
+    receiptRequired: true,
   };
+  base.receiptFile = receiptFileFor(base);
 
   if (state.includes("AUTH")) {
     base.executionGuard = "blocked_auth_requires_service_token_repair";
@@ -168,6 +195,7 @@ function buildPlan({ orchestrator, policy, queue }) {
     executableJobs: executable.length,
     blockedJobs: blocked.length,
     actions,
+    idempotencyContract: IDEMPOTENCY_CONTRACT,
     decision: decide(actions, policy),
   };
 }
@@ -217,6 +245,7 @@ function decide(actions, policy) {
 
 async function writeOutputs(plan, executed = []) {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  await fs.promises.mkdir(RECEIPT_DIR, { recursive: true });
   const payload = { ...plan, executed };
   const jsonFile = path.join(OUT_DIR, "terminal-auto-roll-forward.json");
   const mdFile = path.join(OUT_DIR, "terminal-auto-roll-forward.md");
@@ -236,10 +265,10 @@ function markdown(plan) {
   lines.push(`- reason: ${plan.decision.reason}`);
   lines.push("");
   lines.push("## Actions");
-  lines.push("| priority | module | state | executable | guard | commands | blocker |");
-  lines.push("|---:|---|---|---:|---|---|---|");
+  lines.push("| priority | module | state | executable | guard | idempotencyKey | receipt | commands | blocker |");
+  lines.push("|---:|---|---|---:|---|---|---|---|---|");
   for (const action of plan.actions) {
-    lines.push(`| ${action.priority} | ${action.label} | ${action.state} | ${action.executable} | ${action.executionGuard} | ${action.commands.map(printable).join("<br>") || "--"} | ${action.blocker || "--"} |`);
+    lines.push(`| ${action.priority} | ${action.label} | ${action.state} | ${action.executable} | ${action.executionGuard} | ${action.idempotencyKey || "--"} | ${action.receiptFile || "--"} | ${action.commands.map(printable).join("<br>") || "--"} | ${action.blocker || "--"} |`);
   }
   lines.push("");
   lines.push("## Executed");
@@ -291,7 +320,7 @@ async function main() {
     }
     for (const action of plan.actions.filter((item) => item.executable)) {
       for (const command of action.commands) {
-        const result = runCommand(command);
+        const result = { ...runCommand(command), key: action.key, idempotencyKey: action.idempotencyKey, receiptFile: action.receiptFile };
         executed.push(result);
         if (!result.ok) {
           await writeOutputs(plan, executed);
