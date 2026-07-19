@@ -2,8 +2,8 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T04:55:08.998Z",
-  "checkedAt": "2026-07-19T04:55:05.808Z",
+  "generatedAt": "2026-07-19T06:04:04.920Z",
+  "checkedAt": "2026-07-19T06:04:02.384Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
   "unattendedStatus": "YES",
@@ -33,7 +33,7 @@
     "canaryPublish": {
       "ok": true,
       "status": "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD",
-      "reason": "market_closed_preserve_previous_good_do_not_publish_new_scorecard"
+      "reason": ""
     },
     "runIdClosure": {
       "ok": true,
@@ -228,6 +228,14 @@
       "runid_trade_date_mismatch_blocks_publish",
       "zero_result_complete_is_success_empty_source_is_not"
     ]
+  },
+  "canaryPublish": {
+    "contract": "terminal-canary-publish-v1",
+    "ok": true,
+    "status": "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD",
+    "scorecardPublishAllowed": false,
+    "reason": "",
+    "tradeDate": "20260717"
   },
   "rollForward": {
     "mode": "dry-run",

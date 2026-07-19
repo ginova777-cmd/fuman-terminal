@@ -5,6 +5,7 @@ const { buildPreflight } = require("./check-full-scan-date-preflight");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-control-plane");
+const CANARY_FILE = path.join(ROOT, "outputs", "terminal-canary-publish", "terminal-canary-publish.json");
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const REQUIRE_UNATTENDED = process.argv.includes("--require-unattended");
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
@@ -109,6 +110,16 @@ function canaryPublishGate(manifest = {}, policy = {}) {
   };
 }
 
+function compactCanaryArtifact(canary = {}) {
+  return {
+    ok: canary.ok === true,
+    status: canary.status || "",
+    scorecardPublishAllowed: canary.scorecardPublishAllowed === true,
+    reason: Array.isArray(canary.issues) && canary.issues.length ? canary.issues[0] : (canary.reason || ""),
+    tradeDate: compactDate(canary.tradeDate),
+    source: "terminal-canary-publish-artifact",
+  };
+}
 function runIdClosureGate(manifest = {}, expectedDate = "") {
   const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
   const rows = modules.map((row) => {
@@ -223,12 +234,14 @@ async function main() {
     commands.push(runNode(["--use-system-ca", "scripts/write-daily-terminal-run-manifest.js", `--expected-date=${EXPECTED_DATE}`], "daily-terminal-run-manifest"));
     commands.push(runNode(["--use-system-ca", "scripts/write-terminal-orchestrator-state.js", "--from-existing", `--expected-date=${EXPECTED_DATE}`], "terminal-orchestrator-state"));
     commands.push(runNode(["--use-system-ca", "scripts/write-autonomous-ops-policy.js"], "autonomous-ops-policy"));
+    commands.push(runNode(["scripts/verify-terminal-canary-publish.js"], "terminal-canary-publish"));
   }
   const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
   const orchestrator = readJson(path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-orchestrator-state.json"), {});
   const policy = readJson(path.join(ROOT, "outputs", "autonomous-ops-policy", "autonomous-ops-policy.json"), {});
   const waterRoot = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
-  const canary = canaryPublishGate(manifest, policy);
+  const canaryArtifact = readJson(CANARY_FILE, null);
+  const canary = canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy);
   const closure = runIdClosureGate(manifest, EXPECTED_DATE);
   const rollForward = autoRollForwardGate(orchestrator, policy);
   const decision = decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward });

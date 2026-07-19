@@ -1,0 +1,222 @@
+const fs = require("fs");
+const path = require("path");
+
+const ROOT = path.resolve(__dirname, "..");
+const OUT_DIR = path.resolve(argValue("--out", "outputs/terminal-canary-publish"));
+const MANIFEST_FILE = path.resolve(argValue("--manifest", path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json")));
+const SCORECARD_FILE = path.resolve(argValue("--scorecard", path.join(ROOT, "data", "scorecard-latest.json")));
+
+function argValue(name, fallback = "") {
+  const prefix = `${name}=`;
+  const found = process.argv.find((arg) => arg.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
+}
+
+function readJson(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function compactDate(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function lower(value) {
+  return clean(value).toLowerCase();
+}
+
+function marketClosedPreviousGood(manifest = {}) {
+  const bits = [
+    manifest.waterRoot?.status,
+    manifest.waterRoot?.reason,
+    manifest.blocker,
+    manifest.status,
+  ].map(lower).join(" ");
+  return bits.includes("market_closed");
+}
+
+function sourceReportsByKey(scorecard = {}) {
+  const map = new Map();
+  for (const row of Array.isArray(scorecard.sourceReports) ? scorecard.sourceReports : []) {
+    const key = lower(row.key || row.strategyKey || row.sourceKey);
+    if (key) map.set(key, row);
+  }
+  return map;
+}
+
+function hasFallbackSignal(row = {}) {
+  const text = lower([
+    row.reason,
+    row.error,
+    row.fallbackReason,
+    row.cacheSource,
+    row.source,
+    row.status,
+    row.qualityStatus,
+  ].join(" "));
+  return row.fallback === true
+    || row.fallbackUsed === true
+    || row.publishAllowed === false
+    || text.includes("fallback")
+    || text.includes("stale")
+    || text.includes("previous_good");
+}
+
+function validateCanary(manifest, scorecard, options = {}) {
+  const issues = [];
+  const tradeDate = compactDate(manifest.tradeDate);
+  const scorecardDate = compactDate(scorecard.latestDate || scorecard.marketDate || scorecard.summary?.latestDate);
+  const closed = marketClosedPreviousGood(manifest);
+  const reports = sourceReportsByKey(scorecard);
+  const modules = (Array.isArray(manifest.modules) ? manifest.modules : []).filter((row) => row.key && row.key !== "market");
+
+  if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
+  if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
+  if (!tradeDate) issues.push("manifest_tradeDate_missing");
+  if (scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+  if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
+  if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
+  if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
+  if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
+  if (!closed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
+    issues.push(`manifest_not_green:${manifest.unattendedStatus || "missing"}`);
+  }
+
+  for (const row of modules) {
+    const key = lower(row.key);
+    const report = reports.get(key);
+    if (!report) {
+      issues.push(`sourceReport_missing:${row.key}`);
+      continue;
+    }
+    const reportRunId = clean(report.runId || report.run_id);
+    const expectedRunId = clean(row.runId);
+    const reportDate = compactDate(report.date || report.tradeDate || report.marketDate || report.updatedAt || reportRunId);
+    if (!expectedRunId) issues.push(`manifest_module_runId_missing:${row.key}`);
+    if (reportRunId !== expectedRunId) issues.push(`sourceReport_runId_mismatch:${row.key}:${reportRunId || "missing"}!=${expectedRunId || "missing"}`);
+    if (reportDate !== tradeDate) issues.push(`sourceReport_date_mismatch:${row.key}:${reportDate || "missing"}!=${tradeDate || "missing"}`);
+    if (report.ok !== true) issues.push(`sourceReport_not_ok:${row.key}`);
+    if (Number(report.statusCode || 200) >= 400) issues.push(`sourceReport_http_bad:${row.key}:${report.statusCode}`);
+    if (!closed && hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
+    if (!closed && (row.ok !== true || row.complete !== true || row.fallback === true)) {
+      issues.push(`manifest_module_not_publishable:${row.key}`);
+    }
+  }
+
+  const publishAllowed = issues.length === 0 && !closed;
+  return {
+    ok: issues.length === 0,
+    contract: "terminal-canary-publish-v1",
+    checkedAt: new Date().toISOString(),
+    status: closed ? "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD" : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
+    scorecardPublishAllowed: publishAllowed,
+    marketClosedPreviousGood: closed,
+    tradeDate,
+    manifest: {
+      ok: manifest.ok === true,
+      unattendedStatus: manifest.unattendedStatus || "",
+      modules: modules.length,
+      blocker: manifest.blocker || "",
+    },
+    scorecard: {
+      ok: scorecard.ok === true,
+      latestDate: scorecard.latestDate || scorecard.summary?.latestDate || "",
+      records: Array.isArray(scorecard.records) ? scorecard.records.length : 0,
+      sourceReports: Array.isArray(scorecard.sourceReports) ? scorecard.sourceReports.length : 0,
+      cacheSource: scorecard.cacheSource || "",
+    },
+    issues,
+    mode: options.mode || "artifact",
+  };
+}
+
+function markdown(payload) {
+  const lines = [];
+  lines.push("# Terminal Canary Publish");
+  lines.push("");
+  lines.push(`- checkedAt: ${payload.checkedAt}`);
+  lines.push(`- tradeDate: ${payload.tradeDate}`);
+  lines.push(`- status: ${payload.status}`);
+  lines.push(`- scorecardPublishAllowed: ${payload.scorecardPublishAllowed}`);
+  lines.push(`- marketClosedPreviousGood: ${payload.marketClosedPreviousGood}`);
+  lines.push(`- issues: ${payload.issues.join("; ") || "none"}`);
+  lines.push("");
+  lines.push("## Evidence");
+  lines.push(`- manifest: ok=${payload.manifest.ok} unattended=${payload.manifest.unattendedStatus} modules=${payload.manifest.modules}`);
+  lines.push(`- scorecard: ok=${payload.scorecard.ok} latestDate=${payload.scorecard.latestDate} records=${payload.scorecard.records} sourceReports=${payload.scorecard.sourceReports}`);
+  return `${lines.join("\n")}\n`;
+}
+
+function selfTests() {
+  const manifest = {
+    contract: "daily-terminal-run-manifest-v1",
+    tradeDate: "20260717",
+    ok: true,
+    unattendedStatus: "YES",
+    modules: [
+      { key: "strategy2", runId: "strategy2-20260717-a", ok: true, complete: true, fallback: false },
+      { key: "strategy3", runId: "strategy3-20260717-a", ok: true, complete: true, fallback: false },
+    ],
+  };
+  const scorecard = {
+    ok: true,
+    contract: "scorecard-resource-chain-v1",
+    qualityStatus: "complete",
+    latestDate: "2026-07-17",
+    records: [{ strategy: "x" }],
+    sourceReports: [
+      { key: "strategy2", ok: true, statusCode: 200, runId: "strategy2-20260717-a", date: "20260717" },
+      { key: "strategy3", ok: true, statusCode: 200, runId: "strategy3-20260717-a", date: "20260717" },
+    ],
+  };
+  const cases = [
+    { name: "green", mutate: (m, s) => [m, s], expectOk: true },
+    { name: "missing-report", mutate: (m, s) => [m, { ...s, sourceReports: s.sourceReports.slice(0, 1) }], expectOk: false, issue: "sourceReport_missing:strategy3" },
+    { name: "runid-mismatch", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], runId: "old" }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_runId_mismatch:strategy2" },
+    { name: "fallback-report", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], fallbackUsed: true }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_fallback_or_stale:strategy2" },
+  ];
+  const failures = [];
+  for (const item of cases) {
+    const [m, s] = item.mutate(JSON.parse(JSON.stringify(manifest)), JSON.parse(JSON.stringify(scorecard)));
+    const result = validateCanary(m, s, { mode: `self-test:${item.name}` });
+    const hasIssue = item.issue ? result.issues.some((issue) => issue.includes(item.issue)) : true;
+    if (result.ok !== item.expectOk || !hasIssue) failures.push({ name: item.name, result });
+  }
+  return failures;
+}
+
+async function main() {
+  const manifest = readJson(MANIFEST_FILE);
+  const scorecard = readJson(SCORECARD_FILE);
+  const payload = validateCanary(manifest, scorecard);
+  const selfTestFailures = selfTests();
+  if (selfTestFailures.length) {
+    payload.ok = false;
+    payload.issues.push(`self_test_failed:${selfTestFailures.map((item) => item.name).join(",")}`);
+    payload.selfTestFailures = selfTestFailures;
+  }
+  await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  const jsonFile = path.join(OUT_DIR, "terminal-canary-publish.json");
+  const mdFile = path.join(OUT_DIR, "terminal-canary-publish.md");
+  await fs.promises.writeFile(jsonFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await fs.promises.writeFile(mdFile, markdown(payload), "utf8");
+  console.log(JSON.stringify({
+    ok: payload.ok,
+    status: payload.status,
+    scorecardPublishAllowed: payload.scorecardPublishAllowed,
+    tradeDate: payload.tradeDate,
+    issues: payload.issues,
+    output: jsonFile,
+  }, null, 2));
+  if (!payload.ok) process.exitCode = 1;
+}
+
+main().catch((error) => {
+  console.error(`[terminal-canary-publish] failed: ${error.stack || error.message || error}`);
+  process.exit(1);
+});
+
+module.exports = { validateCanary, selfTests };

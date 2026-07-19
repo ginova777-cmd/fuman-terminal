@@ -16,7 +16,7 @@
     "scorecard:export-source": "node --use-system-ca scripts/export-scorecard-supabase-source.js",
     "scorecard:source:ops": "node --use-system-ca scripts/scorecard-source-supabase-ops.js",
     "scorecard:publish:raw": "node --use-system-ca scripts/publish-scorecard-snapshot.js",
-    "scorecard:publish": "node scripts/guard-daily-manifest-before-scorecard-publish.js && npm run scorecard:publish:raw",
+    "scorecard:publish": "node scripts/verify-terminal-canary-publish.js && node scripts/guard-daily-manifest-before-scorecard-publish.js && npm run scorecard:publish:raw",
     "verify:scorecard": "node --use-system-ca scripts/verify-scorecard-snapshot.js",
     "verify:scorecard-chain": "node --use-system-ca scripts/verify-scorecard-resource-chain.js",
     "verify:scorecard-ui-e2e": "node --use-system-ca scripts/verify-scorecard-ui-e2e.js",
@@ -308,9 +308,10 @@
     "verify:terminal-auto-roll-forward": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --self-test",
     "ops:status:export": "node scripts/export-terminal-ops-status-snapshot.js",
     "verify:terminal-ops-status-api": "node --use-system-ca scripts/verify-terminal-ops-status-api.js",
-    "verify:terminal-unattended-root": "npm run verify:terminal-control-plane && npm run verify:terminal-state-machine-contract && npm run verify:terminal-auto-roll-forward && npm run verify:autonomous-ops-action-matrix && npm run ops:status:export && npm run verify:terminal-ops-status-api",
+    "verify:terminal-unattended-root": "npm run verify:terminal-control-plane && npm run verify:terminal-state-machine-contract && npm run verify:terminal-canary-publish && npm run verify:terminal-auto-roll-forward && npm run verify:autonomous-ops-action-matrix && npm run ops:status:export && npm run verify:terminal-ops-status-api",
     "verify:autonomous-ops-action-matrix": "node scripts/verify-autonomous-ops-action-matrix.js",
-    "verify:terminal-state-machine-contract": "node scripts/verify-terminal-state-machine-contract.js"
+    "verify:terminal-state-machine-contract": "node scripts/verify-terminal-state-machine-contract.js",
+    "verify:terminal-canary-publish": "node scripts/verify-terminal-canary-publish.js"
   },
   "engines": {
     "node": "24.x"
