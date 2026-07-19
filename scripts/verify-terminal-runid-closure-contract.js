@@ -62,8 +62,13 @@ function marketClosedPreviousGood(manifest = {}, controlPlane = {}) {
     controlPlane.decision?.state,
     controlPlane.decision?.reason,
     controlPlane.canaryPublish?.status,
+    manifest.unattendedStatus,
   ].map((value) => String(value || "").toLowerCase()).join(" ");
-  return text.includes("market_closed") || text.includes("previous_good");
+  return text.includes("market_closed") || text.includes("previous_good") || text.includes("wait_source_window");
+}
+
+function acceptableManifestStatus(status, closedPreviousGood) {
+  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD");
 }
 
 function validateModule(row, manifest, controlPlane, issues) {
@@ -144,7 +149,8 @@ async function main() {
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_missing");
   if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) issues.push("manifest_modules_missing");
   if (manifest.ok !== true) issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
-  if (manifest.unattendedStatus !== "YES") issues.push(`manifest_unattended_not_yes:${manifest.unattendedStatus || "missing"}`);
+  const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
+  if (!acceptableManifestStatus(manifest.unattendedStatus, closedPreviousGood)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
 
   const controlPlaneAccepted = controlPlane.contract === "terminal-control-plane-v1"
     && controlPlane.dailyManifest?.ok === true
@@ -156,7 +162,6 @@ async function main() {
   if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
   if (controlPlane.runIdClosure?.ok !== true) issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
 
-  const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
   if (closedPreviousGood && controlPlane.canaryPublish?.scorecardPublishAllowed === true) {
     issues.push("market_closed_scorecard_publish_allowed_true");
   }

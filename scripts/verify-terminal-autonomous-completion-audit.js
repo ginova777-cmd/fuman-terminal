@@ -230,7 +230,7 @@ function verifyInvariants(artifacts, issues) {
   for (const key of REQUIRED_ACTIVE_MODULES) {
     assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
   }
-  assert(manifest?.unattendedStatus === "YES", issues, "manifest_unattended_not_yes", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker });
+  assert(acceptableCompletionStatus(manifest?.unattendedStatus, closed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
   assert(manifest?.ok === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker });
 
   const jobQueue = Array.isArray(orchestrator?.jobQueue) ? orchestrator.jobQueue : [];

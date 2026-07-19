@@ -65,6 +65,25 @@ function bool(value) {
   return value === true;
 }
 
+function isPreviousGoodHoldWaterRoot(water = {}) {
+  const bits = [
+    water.status,
+    water.reason,
+    water.marketCalendar?.row?.displayMode,
+    water.marketCalendar?.row?.skipReason,
+    water.marketCalendar?.row?.reason,
+    water.sourceStatus?.summary?.status,
+    water.sourceStatus?.summary?.message,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return water.preservePreviousGood === true
+    || water.formalScanSkipped === true
+    || water.marketCalendar?.row?.preservePreviousGood === true
+    || bits.includes("previous_good")
+    || bits.includes("wait_source_window")
+    || bits.includes("skip_formal_scan")
+    || bits.includes("market_closed");
+}
+
 function moduleRow(row = {}) {
   let receipt = row.receipt || {};
   const supabase = row.supabase || {};
@@ -216,6 +235,7 @@ async function main() {
   if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
+  const previousGoodHold = issues.length === 0 && isPreviousGoodHoldWaterRoot(water);
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
     checkedAt: new Date().toISOString(),
@@ -227,11 +247,14 @@ async function main() {
       reason: water.reason || "",
       sourceStatus: water.sourceStatus?.summary || null,
       canonicalGate: water.canonicalGate?.summary || null,
+      previousGoodHold,
     },
     commands,
     modules,
     ok: issues.length === 0,
-    unattendedStatus: issues.length === 0 ? "YES" : "NO",
+    previousGoodHold,
+    freshUnattended: issues.length === 0 && !previousGoodHold,
+    unattendedStatus: issues.length === 0 ? (previousGoodHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
     blocker: issues[0] || "",
     issues,
   };

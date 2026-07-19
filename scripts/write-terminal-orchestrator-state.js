@@ -69,9 +69,16 @@ function isMarketClosedPreviousGood(manifest = {}, marketCalendar = null) {
   const reason = String(manifest.waterRoot?.reason || manifest.blocker || "").toLowerCase();
   const sourceStatus = String(manifest.waterRoot?.sourceStatus?.status || "").toLowerCase();
   const message = String(manifest.waterRoot?.sourceStatus?.message || "").toLowerCase();
+  const status = String(manifest.waterRoot?.status || manifest.unattendedStatus || "").toLowerCase();
   return Boolean(
-    marketCalendar?.marketOpen === false
-    && (sourceStatus === "stopped" || reason.includes("stopped") || message.includes("off-session"))
+    manifest.previousGoodHold === true
+    || manifest.waterRoot?.previousGoodHold === true
+    || status.includes("previous_good")
+    || status.includes("wait_source_window")
+    || reason.includes("previous_good")
+    || reason.includes("wait_source_window")
+    || (marketCalendar?.marketOpen === false
+      && (sourceStatus === "stopped" || reason.includes("stopped") || message.includes("off-session")))
   );
 }
 
@@ -299,7 +306,7 @@ async function main() {
     stateMachineContract: STATE_MACHINE_CONTRACT,
     marketClosedPreviousGood: isMarketClosedPreviousGood(manifest, marketCalendar),
     overallState: overallState(manifest, moduleStates, marketCalendar),
-    unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? "YES" : "NO",
+    unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? (isMarketClosedPreviousGood(manifest, marketCalendar) ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
     blocker: isMarketClosedPreviousGood(manifest, marketCalendar) ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (manifest.blocker || jobQueue[0]?.blocker || ""),
     modules: moduleStates,
     jobQueue,
@@ -311,7 +318,7 @@ async function main() {
   await fs.promises.writeFile(queueFile, JSON.stringify(jobQueue, null, 2));
   await fs.promises.writeFile(mdFile, markdown(state));
   console.log(JSON.stringify({
-    ok: state.unattendedStatus === "YES",
+    ok: state.unattendedStatus === "YES" || state.unattendedStatus === "PREVIOUS_GOOD_HOLD",
     unattendedStatus: state.unattendedStatus,
     overallState: state.overallState,
     tradeDate: state.tradeDate,
@@ -320,7 +327,7 @@ async function main() {
     output: stateFile,
     queue: queueFile,
   }, null, 2));
-  if (state.unattendedStatus !== "YES") process.exitCode = 1;
+  if (state.unattendedStatus !== "YES" && state.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
 }
 
 main().catch((error) => {

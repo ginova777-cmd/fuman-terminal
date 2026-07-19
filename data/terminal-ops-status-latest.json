@@ -2,8 +2,8 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T17:30:47.958Z",
-  "checkedAt": "2026-07-19T17:30:37.938Z",
+  "generatedAt": "2026-07-19T18:13:39.671Z",
+  "checkedAt": "2026-07-19T18:13:24.506Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -23,7 +23,7 @@
     "stateMachine": {
       "ok": true,
       "status": "CLOSED",
-      "reason": ""
+      "reason": "market_closed_previous_good"
     },
     "dailyManifest": {
       "ok": true,
