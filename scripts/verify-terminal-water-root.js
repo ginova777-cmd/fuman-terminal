@@ -159,6 +159,15 @@ function isMarketClosedPreviousGood(payload) {
   const sourcePhase = String(source.phase || "").toLowerCase();
   const gatePhase = String(gate.phase || "").toLowerCase();
   const message = `${source.message || ""} ${gate.reason || ""}`.toLowerCase();
+  const displayMode = String(calendar.displayMode || "").toLowerCase();
+  const skipReason = String(calendar.skipReason || "").toLowerCase();
+  const waitingSourceWindow = Boolean(
+    calendar.marketOpen === true
+    && calendar.sourceFreshnessRequired === false
+    && calendar.formalScanSkipped === true
+    && (displayMode === "trading_day_wait_source_window_previous_good" || skipReason.includes("before_formal_source_window"))
+  );
+  if (waitingSourceWindow) return true;
   return Boolean(
     (calendar.marketOpen === false || calendar.formalScanSkipped === true || calendar.sourceFreshnessRequired === false)
     && (calendar.sourceFreshnessRequired === false || calendar.formalScanSkipped === true || calendar.displayMode === "market_closed_previous_good" || calendar.displayMode === "trading_day_wait_source_window_previous_good")

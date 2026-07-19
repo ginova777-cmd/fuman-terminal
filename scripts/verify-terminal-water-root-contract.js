@@ -161,7 +161,34 @@ const cases = [
       payload.canonicalGate.row.formal_entry_allowed = false;
       payload.canonicalGate.row.formal_entry_speed_verdict = "NO";
     },
-  },  {
+  },
+  {
+    name: "trading_day_wait_source_window_accepts_warmup_degraded",
+    expectOk: true,
+    expectClosed: true,
+    expectIssues: [],
+    mutate: (payload) => {
+      payload.required.tradingDay = false;
+      payload.required.formalNow = false;
+      payload.marketCalendar.row.isTradingDay = true;
+      payload.marketCalendar.row.marketOpen = true;
+      payload.marketCalendar.row.sourceFreshnessRequired = false;
+      payload.marketCalendar.row.formalScanSkipped = true;
+      payload.marketCalendar.row.displayMode = "trading_day_wait_source_window_previous_good";
+      payload.marketCalendar.row.scannerAction = "skip_formal_scan";
+      payload.marketCalendar.row.skipReason = "trading_day_before_formal_source_window";
+      payload.sourceStatus.row.status = "degraded";
+      payload.sourceStatus.row.message = "dedicated daytrade source warmup; priority preserved";
+      payload.sourceStatus.row.payload.status = "degraded";
+      payload.sourceStatus.row.payload.phase = "warmup_0600_0829";
+      payload.sourceStatus.row.payload.priority_fresh_quote_coverage_120s = 0.4;
+      payload.sourceStatus.row.payload.formal_entry_allowed = false;
+      payload.canonicalGate.row.phase = "before_formal_source_window";
+      payload.canonicalGate.row.formal_entry_allowed = false;
+      payload.canonicalGate.row.formal_entry_speed_verdict = "NO";
+    },
+  },
+  {
     name: "formal_blocks_low_priority_quote_coverage",
     expectOk: false,
     expectIssues: ["priority_quote_coverage_low"],
