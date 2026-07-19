@@ -7,6 +7,7 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-orchestrator");
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
 const FROM_EXISTING = process.argv.includes("--from-existing");
+const SELF_TEST = process.argv.includes("--self-test");
 const LIFECYCLE_STATES = ["PENDING", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
 const FAILURE_STATES = ["BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH"];
 const STATE_MACHINE_CONTRACT = {
@@ -109,14 +110,14 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     state = "FAILED_SCAN";
     layer.push("scanner");
     blocker = row.issues?.[0] || "scanner_not_complete";
-  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage", "date mismatch", "tradedate_mismatch", "sourcedate_mismatch")) {
-    state = "BLOCKED_SOURCE";
-    layer.push("source");
-    blocker = manifest.waterRoot?.reason || row.issues?.[0] || "source_not_ready";
   } else if (has(text, "scorecard", "publish")) {
     state = "FAILED_PUBLISH";
     layer.push("publish", "scorecard88");
     blocker = row.issues?.[0] || "scorecard_publish_not_closed";
+  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage", "date mismatch", "tradedate_mismatch", "sourcedate_mismatch")) {
+    state = "BLOCKED_SOURCE";
+    layer.push("source");
+    blocker = manifest.waterRoot?.reason || row.issues?.[0] || "source_not_ready";
   } else if (has(text, "authenticated readback", "membership")) {
     state = "FAILED_DISPLAY";
     layer.push("display", "auth_readback");
@@ -243,6 +244,99 @@ function overallState(manifest, moduleStates, marketCalendar = null) {
   return "DEGRADED_PREVIOUS_GOOD";
 }
 
+function selfTest() {
+  const closedMarket = { marketOpen: false };
+  const waterBlockedManifest = { waterRoot: { ok: false, reason: "source_root_not_ready" } };
+  const cases = [
+    {
+      name: "closed_module_has_no_job",
+      row: { key: "strategy2", label: "Strategy2", ok: true, complete: true, fallback: false, runId: "strategy2-20260717-good", runIds: { scanner: "x", productionApi: "x", desktop: "x", mobile: "x", scorecard88: "x" }, issues: [] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "CLOSED",
+      expectedJob: false,
+    },
+    {
+      name: "auth_401_becomes_manual_job",
+      row: { key: "strategy4", label: "Strategy4", ok: false, complete: false, issues: ["401 Unauthorized while syncing scorecard"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "BLOCKED_AUTH",
+      expectedJob: true,
+      expectedRetry: { maxAttempts: 0, manualRepairRequired: true },
+    },
+    {
+      name: "source_not_ready_becomes_water_recheck_only",
+      row: { key: "strategy2", label: "Strategy2", ok: false, complete: false, issues: ["source not_ready coverage low"] },
+      manifest: waterBlockedManifest,
+      expectedState: "BLOCKED_SOURCE",
+      expectedJob: true,
+      expectedCommand: "npm run verify:terminal-water-root",
+    },
+    {
+      name: "scanner_failure_requires_water_root",
+      row: { key: "strategy3", label: "Strategy3", ok: false, complete: false, issues: ["scanner receipt failed exit=1"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "FAILED_SCAN",
+      expectedJob: true,
+      requiresWaterRootOk: true,
+    },
+    {
+      name: "scorecard_missing_becomes_publish_job",
+      row: { key: "warrant", label: "Warrant", ok: false, complete: false, issues: ["scorecard sourceReport missing row"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "FAILED_PUBLISH",
+      expectedJob: true,
+      requiresWaterRootOk: true,
+    },
+    {
+      name: "display_auth_readback_not_backend_auth",
+      row: { key: "cb", label: "CB", ok: false, complete: false, issues: ["authenticated readback token not armed"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "FAILED_DISPLAY",
+      expectedJob: true,
+    },
+    {
+      name: "fallback_previous_good_is_degraded_job",
+      row: { key: "strategy5", label: "Strategy5", ok: false, complete: true, fallback: true, issues: ["previous good fallback used"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "DEGRADED_PREVIOUS_GOOD",
+      expectedJob: true,
+    },
+    {
+      name: "market_closed_previous_good_does_not_become_source_block",
+      row: { key: "institution", label: "Institution", ok: true, complete: true, fallback: false, runId: "institution-20260717-good", issues: [] },
+      manifest: { previousGoodHold: true, waterRoot: { ok: false, reason: "market_closed_previous_good", sourceStatus: { status: "stopped", message: "off-session" } } },
+      marketCalendar: closedMarket,
+      expectedState: "CLOSED",
+      expectedJob: false,
+    },
+  ];
+  const failures = [];
+  const results = cases.map((item) => {
+    const classification = classifyModule(item.row, item.manifest || {}, item.marketCalendar || null);
+    const lifecycleStage = lifecycleStageForRow(item.row, classification, item.manifest || {}, item.marketCalendar || null);
+    const stateRow = { ...item.row, ...classification, lifecycleStage };
+    const job = jobForRow(stateRow, stateRow);
+    if (classification.state !== item.expectedState) failures.push(`${item.name}: state ${classification.state} != ${item.expectedState}`);
+    if (Boolean(job) !== item.expectedJob) failures.push(`${item.name}: job ${Boolean(job)} != ${item.expectedJob}`);
+    if (item.expectedRetry && job) {
+      for (const [key, value] of Object.entries(item.expectedRetry)) {
+        if (job.retryPolicy?.[key] !== value) failures.push(`${item.name}: retryPolicy.${key} ${job.retryPolicy?.[key]} != ${value}`);
+      }
+    }
+    if (item.expectedCommand && job?.command !== item.expectedCommand) failures.push(`${item.name}: command ${job?.command} != ${item.expectedCommand}`);
+    if (item.requiresWaterRootOk !== undefined && job?.requiresWaterRootOk !== item.requiresWaterRootOk) failures.push(`${item.name}: requiresWaterRootOk ${job?.requiresWaterRootOk} != ${item.requiresWaterRootOk}`);
+    return {
+      name: item.name,
+      state: classification.state,
+      lifecycleStage,
+      jobState: job?.state || "none",
+      command: job?.command || "",
+      retryPolicy: job?.retryPolicy || null,
+      blocker: job?.blocker || classification.blocker || "",
+    };
+  });
+  return { ok: failures.length === 0, contract: "terminal-orchestrator-state-self-test-v1", caseCount: cases.length, failures, results };
+}
 function markdown(state) {
   const lines = [];
   lines.push("# Terminal Orchestrator State");
@@ -270,6 +364,12 @@ function markdown(state) {
 }
 
 async function main() {
+  if (SELF_TEST) {
+    const result = selfTest();
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exit(1);
+    return;
+  }
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   if (!EXPECTED_DATE) {
