@@ -308,7 +308,7 @@
     "verify:terminal-auto-roll-forward": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --self-test",
     "ops:status:export": "node scripts/export-terminal-ops-status-snapshot.js",
     "verify:terminal-ops-status-api": "node --use-system-ca scripts/verify-terminal-ops-status-api.js",
-    "verify:terminal-unattended-root": "npm run ops:predictive-preflight && npm run verify:terminal-predictive-preflight && npm run verify:terminal-state-machine-contract && npm run verify:terminal-auto-roll-forward && npm run verify:terminal-idempotent-runner && npm run manifest:daily-terminal-run && npm run orchestrator:state:from-existing && npm run policy:autonomous-ops && npm run verify:terminal-canary-publish && npm run verify:terminal-control-plane:from-existing && npm run verify:terminal-runid-closure && npm run verify:manifest-publish-wiring && npm run verify:backend-auth-isolation && npm run verify:backend-service-token-schedule && npm run verify:autonomous-ops-action-matrix && npm run ops:notification:plan && npm run verify:autonomous-ops-notification-policy && npm run ops:status:export && npm run verify:terminal-ops-status-api && npm run verify:terminal-autonomous-completion-audit && npm run verify:terminal-ops-production-live",
+    "verify:terminal-unattended-root": "npm run ops:predictive-preflight && npm run verify:terminal-predictive-preflight && npm run verify:terminal-state-machine-contract && npm run verify:terminal-auto-roll-forward && npm run verify:terminal-idempotent-runner && npm run manifest:daily-terminal-run && npm run orchestrator:state:from-existing && npm run policy:autonomous-ops && npm run verify:terminal-canary-publish && npm run verify:terminal-control-plane:from-existing && npm run verify:terminal-runid-closure && npm run verify:manifest-publish-wiring && npm run verify:backend-auth-isolation && npm run verify:backend-service-token-schedule && npm run verify:autonomous-ops-action-matrix && npm run ops:notification:plan && npm run verify:autonomous-ops-notification-policy && npm run ops:status:export && npm run verify:terminal-ops-status-api && npm run verify:terminal-autonomous-completion-audit && npm run verify:terminal-ops-production-live && npm run ops:production-unattended-readiness-report && npm run verify:production-unattended-readiness-report",
     "verify:autonomous-ops-action-matrix": "node scripts/verify-autonomous-ops-action-matrix.js",
     "verify:terminal-state-machine-contract": "node scripts/verify-terminal-state-machine-contract.js",
     "verify:terminal-canary-publish": "node scripts/verify-terminal-canary-publish.js",
@@ -324,7 +324,9 @@
     "verify:backend-service-token-schedule": "node scripts/verify-backend-service-token-schedule-contract.js",
     "verify:terminal-runid-closure": "node scripts/verify-terminal-runid-closure-contract.js",
     "orchestrator:state:from-existing": "node --use-system-ca scripts/write-terminal-orchestrator-state.js --from-existing",
-    "verify:terminal-control-plane:from-existing": "node --use-system-ca scripts/write-terminal-control-plane.js --require-unattended --from-existing"
+    "verify:terminal-control-plane:from-existing": "node --use-system-ca scripts/write-terminal-control-plane.js --require-unattended --from-existing",
+    "ops:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js",
+    "verify:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js --verify-only"
   },
   "engines": {
     "node": "24.x"

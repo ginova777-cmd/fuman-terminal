@@ -47,6 +47,8 @@ const REQUIRED_SCRIPTS = [
   "ops:status:export",
   "verify:terminal-ops-status-api",
   "verify:terminal-autonomous-completion-audit",
+  "ops:production-unattended-readiness-report",
+  "verify:production-unattended-readiness-report",
 ];
 
 const DREAM_LAYERS = [
@@ -161,6 +163,8 @@ function verifyPackageScripts(pkg, issues) {
     "verify:autonomous-ops-notification-policy",
     "verify:terminal-ops-status-api",
     "verify:terminal-autonomous-completion-audit",
+    "ops:production-unattended-readiness-report",
+    "verify:production-unattended-readiness-report",
   ]) {
     assert(root.includes(required), issues, `root_gate_missing:${required}`, { root });
   }
