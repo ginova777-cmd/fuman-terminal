@@ -101,6 +101,15 @@ function buildReleaseIdentity(productionLive) {
 }
 
 function buildWaterRoot(waterRoot) {
+  const sourceProbe = (waterRoot?.sourceStatus && typeof waterRoot.sourceStatus === "object")
+    ? waterRoot.sourceStatus
+    : (waterRoot?.probes || []).find((probe) => probe?.name === "source_status") || {};
+  const sourceRow = sourceProbe?.row || sourceProbe;
+  const sourcePayload = sourceRow?.payload || {};
+  const canonicalProbe = (waterRoot?.canonicalGate && typeof waterRoot.canonicalGate === "object")
+    ? waterRoot.canonicalGate
+    : (waterRoot?.probes || []).find((probe) => probe?.name === "canonical_gate") || {};
+  const canonicalRow = canonicalProbe?.row || canonicalProbe;
   return {
     command: "npm run verify:terminal-water-root",
     artifact: FILES.waterRoot,
@@ -114,11 +123,18 @@ function buildWaterRoot(waterRoot) {
     displayTradeDate: waterRoot?.marketCalendar?.row?.displayTradeDate || "",
     formalScanSkipped: waterRoot?.marketCalendar?.row?.formalScanSkipped === true,
     preservePreviousGood: waterRoot?.marketCalendar?.row?.preservePreviousGood === true,
-    sourceStatus: waterRoot?.sourceStatus || waterRoot?.waterRoot?.sourceStatus || "",
-    sourceGate: waterRoot?.gate || "",
-    priorityFreshQuoteCoverage120s: waterRoot?.priorityFreshQuoteCoverage120s ?? waterRoot?.waterRoot?.priorityFreshQuoteCoverage120s ?? "",
-    quoteAgeSeconds: waterRoot?.quoteAgeSeconds ?? "",
-    intraday1mStaleSeconds: waterRoot?.intraday1mStaleSeconds ?? "",
+    sourceStatus: sourceRow?.status || (typeof waterRoot?.sourceStatus === "string" ? waterRoot.sourceStatus : ""),
+    sourceMessage: sourceRow?.message || "",
+    sourceGate: waterRoot?.gate || canonicalRow?.canonical_gate_grade || canonicalRow?.gate || sourcePayload?.daytrade_gate_grade || "",
+    sourcePhase: sourcePayload?.phase || canonicalRow?.phase || "",
+    formalEntryAllowed: sourcePayload?.formal_entry_allowed === true || canonicalRow?.formal_entry_allowed === true,
+    scannerCanRunOpening: sourcePayload?.scanner_can_run_opening === true || canonicalRow?.scanner_can_run_opening === true,
+    priorityFreshQuoteCoverage120s: waterRoot?.priorityFreshQuoteCoverage120s ?? sourcePayload?.priority_fresh_quote_coverage_120s ?? canonicalRow?.priority_fresh_quote_coverage_120s ?? "",
+    quoteAgeSeconds: waterRoot?.quoteAgeSeconds ?? sourcePayload?.quote_age_seconds ?? canonicalRow?.quote_age_seconds ?? "",
+    intraday1mStaleSeconds: waterRoot?.intraday1mStaleSeconds ?? sourcePayload?.intraday_1m_stale_seconds ?? "",
+    dailyVolumeStatus: sourcePayload?.daily_volume_status || "",
+    priorityPoolSymbols: sourcePayload?.priority_pool_symbols ?? "",
+    motherPoolSymbols: sourcePayload?.mother_pool_symbols ?? "",
   };
 }
 
