@@ -302,7 +302,11 @@
     "verify:terminal-autonomous-ops": "node --use-system-ca scripts/write-autonomous-ops-policy.js --require-unattended",
     "control:terminal": "node --use-system-ca scripts/write-terminal-control-plane.js",
     "verify:terminal-control-plane": "node --use-system-ca scripts/write-terminal-control-plane.js --require-unattended",
-    "verify:terminal-unattended-root": "npm run verify:terminal-control-plane"
+    "rollforward:terminal": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js",
+    "rollforward:terminal:apply": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --apply",
+    "rollforward:terminal:apply-scanners": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --apply --apply-scanners",
+    "verify:terminal-auto-roll-forward": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --self-test",
+    "verify:terminal-unattended-root": "npm run verify:terminal-control-plane && npm run verify:terminal-auto-roll-forward"
   },
   "engines": {
     "node": "24.x"
