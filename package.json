@@ -198,7 +198,7 @@
     "manifest:daily-terminal-run": "node --use-system-ca scripts/write-daily-terminal-run-manifest.js",
     "verify:daily-terminal-run-manifest": "node scripts/guard-daily-manifest-before-scorecard-publish.js",
     "scorecard:publish:manifest-gated": "npm run scorecard:publish",
-    "verify:terminal-unattended-root": "npm run manifest:daily-terminal-run && npm run orchestrator:state",
+    "verify:terminal-unattended-root": "npm run manifest:daily-terminal-run && npm run orchestrator:state && npm run policy:autonomous-ops",
     "verify:terminal-source-contracts": "node --use-system-ca scripts/verify-terminal-source-contracts.js",
     "verify:terminal-fields": "node --use-system-ca scripts/verify-terminal-field-completeness.js",
     "verify:strategy4-standard-gate": "node --use-system-ca scripts/verify-strategy4-standard-gate.js",
@@ -298,7 +298,9 @@
     "verify:daytrade-preopen-checkpoints:ready": "node --use-system-ca scripts/verify-daytrade-preopen-checkpoints.js --require-ready",
     "orchestrator:state": "node --use-system-ca scripts/write-terminal-orchestrator-state.js",
     "verify:terminal-orchestrator": "npm run orchestrator:state",
-    "verify:terminal-resource-chain:member": "node --use-system-ca scripts/verify-terminal-resource-chain.js --require-unattended"
+    "verify:terminal-resource-chain:member": "node --use-system-ca scripts/verify-terminal-resource-chain.js --require-unattended",
+    "policy:autonomous-ops": "node --use-system-ca scripts/write-autonomous-ops-policy.js",
+    "verify:terminal-autonomous-ops": "node --use-system-ca scripts/write-autonomous-ops-policy.js --require-unattended"
   },
   "engines": {
     "node": "24.x"
