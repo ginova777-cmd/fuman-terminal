@@ -2,8 +2,8 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T07:10:03.709Z",
-  "checkedAt": "2026-07-19T07:09:58.784Z",
+  "generatedAt": "2026-07-19T07:36:00.236Z",
+  "checkedAt": "2026-07-19T07:35:55.900Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
   "unattendedStatus": "YES",
@@ -150,6 +150,19 @@
     }
   ],
   "jobQueue": [],
+  "predictivePreflight": {
+    "contract": "terminal-predictive-preflight-v1",
+    "ok": true,
+    "state": "MARKET_CLOSED_SKIP_SCAN",
+    "action": "skip_formal_scan",
+    "reason": "weekend",
+    "scannerTargetDate": "20260719",
+    "displayTradeDate": "20260717",
+    "formalScanAllowed": false,
+    "preservePreviousGood": true,
+    "publishAllowed": false,
+    "issues": []
+  },
   "stateMachineContract": {
     "contract": "terminal-state-machine-v1",
     "lifecycle": [

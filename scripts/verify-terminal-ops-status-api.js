@@ -51,6 +51,9 @@ async function main() {
   assert(Array.isArray(payload.modules) && payload.modules.length >= 7, "modules_missing", { modules: payload.modules?.length }, issues);
   assert(payload.modules.every((row) => row.runId && row.ok === true), "module_runid_or_ok_missing", { modules: payload.modules }, issues);
   assert(payload.gates?.runIdClosure?.ok === true, "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
+  assert(payload.gates?.predictivePreflight?.status, "predictive_preflight_gate_missing", { gate: payload.gates?.predictivePreflight }, issues);
+  assert(payload.predictivePreflight?.contract === "terminal-predictive-preflight-v1", "predictive_preflight_contract_missing", { predictivePreflight: payload.predictivePreflight }, issues);
+  assert(payload.predictivePreflight?.scannerTargetDate, "predictive_preflight_scanner_target_missing", { predictivePreflight: payload.predictivePreflight }, issues);
   assert(payload.gates?.dailyManifest?.ok === true, "daily_manifest_gate_not_ok", { gate: payload.gates?.dailyManifest }, issues);
   assert(payload.gates?.canaryPublish?.status, "canary_publish_gate_missing", { gate: payload.gates?.canaryPublish }, issues);
   assert(payload.canaryPublish?.contract === "terminal-canary-publish-v1", "canary_publish_contract_missing", { canaryPublish: payload.canaryPublish }, issues);

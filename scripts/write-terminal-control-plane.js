@@ -6,6 +6,7 @@ const { buildPreflight } = require("./check-full-scan-date-preflight");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-control-plane");
 const CANARY_FILE = path.join(ROOT, "outputs", "terminal-canary-publish", "terminal-canary-publish.json");
+const PREDICTIVE_PREFLIGHT_FILE = path.join(ROOT, "outputs", "terminal-predictive-preflight", "terminal-predictive-preflight.json");
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const REQUIRE_UNATTENDED = process.argv.includes("--require-unattended");
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
@@ -225,7 +226,10 @@ function markdown(payload) {
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
-  const preflight = await buildPreflight({});
+  const predictiveArtifact = readJson(PREDICTIVE_PREFLIGHT_FILE, null);
+  const preflight = predictiveArtifact?.contract === "terminal-predictive-preflight-v1" && predictiveArtifact.rawPreflight
+    ? predictiveArtifact.rawPreflight
+    : await buildPreflight({});
   if (!EXPECTED_DATE) {
     EXPECTED_DATE = compactDate(preflight.marketCalendar?.displayTradeDate || preflight.displayTradeDate || preflight.scannerTargetDate || taipeiDateKey());
   }

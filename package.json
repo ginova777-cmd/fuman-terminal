@@ -308,13 +308,15 @@
     "verify:terminal-auto-roll-forward": "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --self-test",
     "ops:status:export": "node scripts/export-terminal-ops-status-snapshot.js",
     "verify:terminal-ops-status-api": "node --use-system-ca scripts/verify-terminal-ops-status-api.js",
-    "verify:terminal-unattended-root": "npm run verify:terminal-control-plane && npm run verify:terminal-state-machine-contract && npm run verify:terminal-auto-roll-forward && npm run verify:terminal-idempotent-runner && npm run verify:terminal-canary-publish && npm run verify:autonomous-ops-action-matrix && npm run ops:notification:plan && npm run verify:autonomous-ops-notification-policy && npm run ops:status:export && npm run verify:terminal-ops-status-api",
+    "verify:terminal-unattended-root": "npm run ops:predictive-preflight && npm run verify:terminal-predictive-preflight && npm run verify:terminal-control-plane && npm run verify:terminal-state-machine-contract && npm run verify:terminal-auto-roll-forward && npm run verify:terminal-idempotent-runner && npm run verify:terminal-canary-publish && npm run verify:autonomous-ops-action-matrix && npm run ops:notification:plan && npm run verify:autonomous-ops-notification-policy && npm run ops:status:export && npm run verify:terminal-ops-status-api",
     "verify:autonomous-ops-action-matrix": "node scripts/verify-autonomous-ops-action-matrix.js",
     "verify:terminal-state-machine-contract": "node scripts/verify-terminal-state-machine-contract.js",
     "verify:terminal-canary-publish": "node scripts/verify-terminal-canary-publish.js",
     "verify:terminal-idempotent-runner": "node scripts/verify-terminal-idempotent-runner.js",
     "ops:notification:plan": "node scripts/write-autonomous-ops-notification-plan.js",
-    "verify:autonomous-ops-notification-policy": "node scripts/verify-autonomous-ops-notification-policy.js"
+    "verify:autonomous-ops-notification-policy": "node scripts/verify-autonomous-ops-notification-policy.js",
+    "ops:predictive-preflight": "node scripts/write-terminal-predictive-preflight.js",
+    "verify:terminal-predictive-preflight": "node scripts/verify-terminal-predictive-preflight.js"
   },
   "engines": {
     "node": "24.x"
