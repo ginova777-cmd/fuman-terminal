@@ -13,6 +13,7 @@ const IDEMPOTENCY_CONTRACT = {
     "auth_jobs_never_auto_execute",
     "scanner_jobs_require_water_root_and_apply_scanners",
     "scanner_jobs_require_policy_formal_scan_allowed",
+    "completed_action_receipts_skip_reexecution",
     "publish_jobs_require_manifest_canary_gate",
   ],
 };
@@ -72,6 +73,42 @@ function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING") {
 
 function receiptFileFor(action = {}) {
   return path.join(RECEIPT_DIR, `${safeId(action.idempotencyKey || action.key || action.label)}.json`);
+}
+
+function readActionReceipt(action = {}) {
+  if (!action.receiptFile) return null;
+  const receipt = readJson(action.receiptFile, null);
+  if (!receipt || receipt.contract !== "terminal-auto-roll-forward-action-receipt-v1") return null;
+  if (receipt.idempotencyKey !== action.idempotencyKey) return null;
+  return receipt;
+}
+
+function completedReceipt(action = {}) {
+  const receipt = readActionReceipt(action);
+  return receipt?.ok === true && receipt?.status === "complete" ? receipt : null;
+}
+
+async function writeActionReceipt(action = {}, status = "complete", results = [], extra = {}) {
+  if (!action.receiptFile) return null;
+  const payload = {
+    contract: "terminal-auto-roll-forward-action-receipt-v1",
+    checkedAt: new Date().toISOString(),
+    key: action.key || "",
+    label: action.label || action.key || "",
+    state: action.state || "",
+    executionGuard: action.executionGuard || "",
+    idempotencyKey: action.idempotencyKey || "",
+    status,
+    ok: status === "complete",
+    skipped: extra.skipped === true,
+    blocker: action.blocker || "",
+    commands: action.commands.map(printable),
+    results,
+    ...extra,
+  };
+  await fs.promises.mkdir(path.dirname(action.receiptFile), { recursive: true });
+  await fs.promises.writeFile(action.receiptFile, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  return payload;
 }
 
 function normalizeJobs(orchestrator = {}, queue = []) {
@@ -305,6 +342,25 @@ function selfTest() {
     if (action.executable !== item.expectedExecutable) failures.push(`${item.name}: executable ${action.executable} != ${item.expectedExecutable}`);
     if (!action.executionGuard.includes(item.expectedGuard)) failures.push(`${item.name}: guard ${action.executionGuard} missing ${item.expectedGuard}`);
   }
+  const fakeAction = {
+    key: "self-test",
+    label: "self-test",
+    state: "FAILED_DISPLAY",
+    executionGuard: "display_snapshot_readback_only",
+    commands: [],
+    idempotencyKey: "self-test-key",
+    receiptFile: path.join(OUT_DIR, "self-test-receipt.json"),
+  };
+  const fakeReceipt = {
+    contract: "terminal-auto-roll-forward-action-receipt-v1",
+    idempotencyKey: "self-test-key",
+    ok: true,
+    status: "complete",
+  };
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(fakeAction.receiptFile, JSON.stringify(fakeReceipt) + "\n", "utf8");
+  if (!completedReceipt(fakeAction)) failures.push("completedReceipt did not accept matching complete receipt");
+  fs.rmSync(fakeAction.receiptFile, { force: true });
   return { ok: failures.length === 0, failures };
 }
 
@@ -329,15 +385,34 @@ async function main() {
       process.exit(1);
     }
     for (const action of plan.actions.filter((item) => item.executable)) {
+      const previousReceipt = completedReceipt(action);
+      if (previousReceipt) {
+        executed.push({
+          label: `idempotent-skip:${action.key}`,
+          command: "receipt-skip",
+          exitCode: 0,
+          ok: true,
+          skipped: true,
+          key: action.key,
+          idempotencyKey: action.idempotencyKey,
+          receiptFile: action.receiptFile,
+          previousCheckedAt: previousReceipt.checkedAt || "",
+        });
+        continue;
+      }
+      const actionResults = [];
       for (const command of action.commands) {
         const result = { ...runCommand(command), key: action.key, idempotencyKey: action.idempotencyKey, receiptFile: action.receiptFile };
+        actionResults.push(result);
         executed.push(result);
         if (!result.ok) {
+          await writeActionReceipt(action, "failed", actionResults, { failedCommand: result.command });
           await writeOutputs(plan, executed);
           console.error(`[auto-roll-forward] command failed: ${result.command}`);
           process.exit(1);
         }
       }
+      await writeActionReceipt(action, "complete", actionResults);
     }
   }
 

@@ -27,7 +27,16 @@ function verifyCurrent(issues) {
 
   assert(rollForward.contract === "terminal-auto-roll-forward-v1", "roll_forward_contract_mismatch", { contract: rollForward.contract }, issues);
   assert(rollForward.idempotencyContract?.contract === "terminal-idempotent-runner-v1", "idempotency_contract_missing", { idempotencyContract: rollForward.idempotencyContract }, issues);
-  assert(Array.isArray(rollForward.idempotencyContract?.invariants) && rollForward.idempotencyContract.invariants.includes("every_job_has_idempotency_key"), "idempotency_invariants_missing", { idempotencyContract: rollForward.idempotencyContract }, issues);
+  const invariants = Array.isArray(rollForward.idempotencyContract?.invariants) ? rollForward.idempotencyContract.invariants : [];
+  assert(invariants.includes("every_job_has_idempotency_key"), "idempotency_invariants_missing", { idempotencyContract: rollForward.idempotencyContract }, issues);
+  assert(invariants.includes("completed_action_receipts_skip_reexecution"), "idempotency_receipt_skip_invariant_missing", { idempotencyContract: rollForward.idempotencyContract }, issues);
+
+  for (const result of Array.isArray(rollForward.executed) ? rollForward.executed : []) {
+    if (result.skipped === true) {
+      assert(Boolean(result.receiptFile), "executed_skipped_missing_receipt_file", result, issues);
+      assert(Boolean(result.idempotencyKey), "executed_skipped_missing_idempotency_key", result, issues);
+    }
+  }
 
   for (const action of actions) {
     assert(Boolean(action.idempotencyKey), "action_missing_idempotency_key", action, issues);
@@ -58,6 +67,7 @@ function verifySynthetic(issues) {
     { state: "BLOCKED_AUTH", executable: false, idempotencyKey: "20260717:strategy4:auth", receiptFile: "r.json" },
     { state: "FAILED_SCAN", executable: false, executionGuard: "scanner_requires_apply_scanners", idempotencyKey: "20260717:strategy3:scan", receiptFile: "r.json", commands: [{ label: "npm:verify:terminal-water-root" }] },
     { state: "FAILED_PUBLISH", executable: false, idempotencyKey: "20260717:scorecard:publish", receiptFile: "r.json", commands: [{ label: "npm:manifest:daily-terminal-run" }] },
+    { state: "FAILED_DISPLAY", executable: true, idempotencyKey: "20260717:strategy5:display", receiptFile: "display.json", skipped: true },
   ];
   for (const action of synthetic) {
     assert(Boolean(action.idempotencyKey), "synthetic_missing_idempotency_key", action, issues);
@@ -66,6 +76,7 @@ function verifySynthetic(issues) {
   assert(synthetic[0].executable === false, "synthetic_auth_executable", synthetic[0], issues);
   assert(synthetic[1].commands.some((cmd) => cmd.label.includes("terminal-water-root")), "synthetic_scan_missing_water_root", synthetic[1], issues);
   assert(synthetic[2].commands.some((cmd) => cmd.label.includes("daily-terminal-run")), "synthetic_publish_missing_manifest", synthetic[2], issues);
+  assert(Boolean(synthetic[3].receiptFile) && Boolean(synthetic[3].idempotencyKey), "synthetic_skipped_missing_receipt", synthetic[3], issues);
 }
 
 function main() {
