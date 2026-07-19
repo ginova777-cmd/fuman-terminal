@@ -149,12 +149,14 @@ function verifyPackageScripts(pkg, issues) {
   const root = scripts["verify:terminal-unattended-root"] || "";
   for (const required of [
     "ops:predictive-preflight",
+    "verify:terminal-water-root",
     "verify:terminal-control-plane",
     "verify:terminal-state-machine-contract",
     "verify:terminal-auto-roll-forward",
     "verify:terminal-idempotent-runner",
     "manifest:daily-terminal-run",
     "verify:terminal-canary-publish",
+    "verify:terminal-resource-chain:unattended",
     "verify:manifest-publish-wiring",
     "verify:terminal-runid-closure",
     "verify:backend-auth-isolation",
