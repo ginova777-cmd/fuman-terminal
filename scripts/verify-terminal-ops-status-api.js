@@ -54,6 +54,10 @@ async function main() {
   assert(payload.gates?.dailyManifest?.ok === true, "daily_manifest_gate_not_ok", { gate: payload.gates?.dailyManifest }, issues);
   assert(payload.gates?.canaryPublish?.status, "canary_publish_gate_missing", { gate: payload.gates?.canaryPublish }, issues);
   assert(payload.canaryPublish?.contract === "terminal-canary-publish-v1", "canary_publish_contract_missing", { canaryPublish: payload.canaryPublish }, issues);
+  assert(payload.gates?.notificationPolicy?.status, "notification_policy_gate_missing", { gate: payload.gates?.notificationPolicy }, issues);
+  assert(payload.notificationPlan?.contract === "autonomous-ops-notification-plan-v1", "notification_plan_contract_missing", { notificationPlan: payload.notificationPlan }, issues);
+  assert(typeof payload.notificationPlan?.required === "boolean", "notification_plan_required_not_boolean", { notificationPlan: payload.notificationPlan }, issues);
+  assert(payload.notificationPlan?.dedupeKey, "notification_plan_dedupe_key_missing", { notificationPlan: payload.notificationPlan }, issues);
   assert(payload.stateMachineContract?.contract === "terminal-state-machine-v1", "state_machine_contract_missing", { stateMachineContract: payload.stateMachineContract }, issues);
   assert(Array.isArray(payload.stateMachineContract?.lifecycle) && payload.stateMachineContract.lifecycle.includes("DISPLAY_VERIFIED"), "state_machine_lifecycle_incomplete", { stateMachineContract: payload.stateMachineContract }, issues);
   assert(payload.actionMatrix?.contract === "autonomous-ops-action-matrix-v1", "action_matrix_missing", { actionMatrix: payload.actionMatrix }, issues);
