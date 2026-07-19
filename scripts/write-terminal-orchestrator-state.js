@@ -7,6 +7,22 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-orchestrator");
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
 const FROM_EXISTING = process.argv.includes("--from-existing");
+const LIFECYCLE_STATES = ["PENDING", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
+const FAILURE_STATES = ["BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH"];
+const STATE_MACHINE_CONTRACT = {
+  contract: "terminal-state-machine-v1",
+  lifecycle: LIFECYCLE_STATES,
+  failureStates: FAILURE_STATES,
+  terminalStates: ["CLOSED", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
+  invariants: [
+    "water_root_must_pass_before_scanner_publish",
+    "scanner_receipt_runid_must_equal_supabase_latest_pointer",
+    "production_api_desktop_mobile_88_must_share_runid",
+    "fallback_or_previous_good_cannot_publish_today_success",
+    "auth_blocker_requires_manual_service_token_repair",
+    "market_closed_skips_formal_scan_and_preserves_previous_good",
+  ],
+};
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -143,6 +159,34 @@ function nextActionForState(state, row = {}) {
   return "none";
 }
 
+function lifecycleStageForRow(row = {}, classification = {}, manifest = {}, marketCalendar = null) {
+  if (classification.state && classification.state !== "CLOSED") return classification.state;
+  const runIds = row.runIds || {};
+  const waterClosed = isMarketClosedPreviousGood(manifest, marketCalendar);
+  if (row.ok === true && row.complete === true && row.fallback !== true) return "CLOSED";
+  if (runIds.desktop || runIds.mobile || runIds.scorecard88) return "DISPLAY_VERIFIED";
+  if (runIds.productionApi || runIds.supabase || row.publishAllowed === true) return "PUBLISHED";
+  if (runIds.scanner || row.runId) return "SCANNED";
+  if (manifest.waterRoot?.ok === true || waterClosed) return "WATER_OK";
+  return "PENDING";
+}
+
+function retryPolicyForState(state) {
+  const policies = {
+    BLOCKED_AUTH: { maxAttempts: 0, backoffSeconds: 0, fuseAfterAttempts: 0, autoRetry: false, manualRepairRequired: true },
+    BLOCKED_SOURCE: { maxAttempts: 12, backoffSeconds: 60, fuseAfterAttempts: 12, autoRetry: true, manualRepairRequired: false },
+    FAILED_SCAN: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
+    FAILED_PUBLISH: { maxAttempts: 2, backoffSeconds: 120, fuseAfterAttempts: 2, autoRetry: true, manualRepairRequired: false },
+    DEGRADED_PREVIOUS_GOOD: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
+    FAILED_DISPLAY: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
+  };
+  return policies[state] || { maxAttempts: 1, backoffSeconds: 120, fuseAfterAttempts: 1, autoRetry: false, manualRepairRequired: false };
+}
+
+function idempotencyKeyFor(row = {}, classification = {}) {
+  const raw = [EXPECTED_DATE || "latest", row.key || "unknown", classification.state || "PENDING", classification.blocker || "none"].join(":");
+  return raw.replace(/[^a-zA-Z0-9:_-]+/g, "_").slice(0, 180);
+}
 function jobForRow(row, classification) {
   if (classification.state === "CLOSED") return null;
   const command = commandFor(row.key, classification.state);
@@ -156,6 +200,9 @@ function jobForRow(row, classification) {
     blocker: classification.blocker,
     nextAction: classification.nextAction,
     command,
+    idempotencyKey: idempotencyKeyFor(row, classification),
+    retryPolicy: retryPolicyForState(classification.state),
+    requiresWaterRootOk: ["FAILED_SCAN", "FAILED_PUBLISH", "DEGRADED_PREVIOUS_GOOD", "FAILED_DISPLAY"].includes(classification.state),
     expectedDate: EXPECTED_DATE,
     runId: row.runId || "",
     runIds: row.runIds || {},
@@ -233,6 +280,7 @@ async function main() {
     return {
       ...row,
       ...classification,
+      lifecycleStage: lifecycleStageForRow(row, classification, manifest, marketCalendar),
     };
   });
   const jobQueue = moduleStates
@@ -248,6 +296,7 @@ async function main() {
     waterRoot: manifest.waterRoot || null,
     commands,
     marketCalendar,
+    stateMachineContract: STATE_MACHINE_CONTRACT,
     marketClosedPreviousGood: isMarketClosedPreviousGood(manifest, marketCalendar),
     overallState: overallState(manifest, moduleStates, marketCalendar),
     unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? "YES" : "NO",

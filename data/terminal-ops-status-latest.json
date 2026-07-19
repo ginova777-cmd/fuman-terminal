@@ -2,8 +2,8 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T04:19:56.114Z",
-  "checkedAt": "2026-07-19T04:19:54.458Z",
+  "generatedAt": "2026-07-19T04:55:08.998Z",
+  "checkedAt": "2026-07-19T04:55:05.808Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
   "unattendedStatus": "YES",
@@ -145,6 +145,45 @@
     }
   ],
   "jobQueue": [],
+  "stateMachineContract": {
+    "contract": "terminal-state-machine-v1",
+    "lifecycle": [
+      "PENDING",
+      "WATER_OK",
+      "RUNNING",
+      "SCANNED",
+      "PUBLISHED",
+      "DISPLAY_VERIFIED",
+      "CLOSED"
+    ],
+    "failureStates": [
+      "BLOCKED_SOURCE",
+      "BLOCKED_AUTH",
+      "FAILED_SCAN",
+      "FAILED_PUBLISH",
+      "FAILED_DISPLAY",
+      "DEGRADED_PREVIOUS_GOOD",
+      "BLOCKED_RUNID_MISMATCH",
+      "BLOCKED_DATE_MISMATCH"
+    ],
+    "terminalStates": [
+      "CLOSED",
+      "DEGRADED_PREVIOUS_GOOD",
+      "BLOCKED_SOURCE",
+      "BLOCKED_AUTH",
+      "FAILED_SCAN",
+      "FAILED_PUBLISH",
+      "FAILED_DISPLAY"
+    ],
+    "invariants": [
+      "water_root_must_pass_before_scanner_publish",
+      "scanner_receipt_runid_must_equal_supabase_latest_pointer",
+      "production_api_desktop_mobile_88_must_share_runid",
+      "fallback_or_previous_good_cannot_publish_today_success",
+      "auth_blocker_requires_manual_service_token_repair",
+      "market_closed_skips_formal_scan_and_preserves_previous_good"
+    ]
+  },
   "actionMatrix": {
     "contract": "autonomous-ops-action-matrix-v1",
     "opsState": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
