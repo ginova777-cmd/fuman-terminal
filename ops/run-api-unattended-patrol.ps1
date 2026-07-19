@@ -33,7 +33,7 @@ function Invoke-Step {
   Add-Content -LiteralPath $script:LogFile -Value ("[{0}] STEP {1}" -f (Get-Date -Format o), $Name)
   Add-Content -LiteralPath $script:LogFile -Value ("> {0} {1}" -f $Command, ($Arguments -join " "))
 
-  & $Command @Arguments 2>&1 | Tee-Object -FilePath $script:LogFile -Append
+  $null = & $Command @Arguments 2>&1 | Tee-Object -FilePath $script:LogFile -Append
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
   if ($exitCode -ne 0) {
     throw "step $Name failed with exit code $exitCode"
@@ -51,7 +51,7 @@ function Invoke-OptionalStep {
   Add-Content -LiteralPath $script:LogFile -Value ("[{0}] OPTIONAL STEP {1}" -f (Get-Date -Format o), $Name)
   Add-Content -LiteralPath $script:LogFile -Value ("> {0} {1}" -f $Command, ($Arguments -join " "))
 
-  & $Command @Arguments 2>&1 | Tee-Object -FilePath $script:LogFile -Append
+  $null = & $Command @Arguments 2>&1 | Tee-Object -FilePath $script:LogFile -Append
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
   if ($exitCode -ne 0) {
     Add-Content -LiteralPath $script:LogFile -Value ("[{0}] OPTIONAL STEP {1} recorded blocker exit={2}; preserving latest and continuing patrol" -f (Get-Date -Format o), $Name, $exitCode)
@@ -214,5 +214,4 @@ catch {
 finally {
   Pop-Location
 }
-
 
