@@ -238,6 +238,7 @@ function buildProductionLive(productionLive) {
     desktopArtifactVersion: productionLive?.desktopArtifactVersion || "",
     mobileArtifactVersion: productionLive?.mobileArtifactVersion || "",
     scorecardShellVersion: productionLive?.scorecardShellVersion || "",
+    authenticatedReadback: productionLive?.authenticatedReadback || { mode: "legacy-missing", ok: false, enabled: false, endpoints: [] },
     issues: productionLive?.issues || [],
   };
 }
@@ -326,6 +327,8 @@ function classifyPasses(payload) {
   if (payload.productionLiveOpsReadback.terminalFastBundle.ok) productionLivePasses.push("Desktop fast bundle returns redacted locked shell for unauthenticated users.");
   if (payload.productionLiveOpsReadback.mobileBoot.ok) productionLivePasses.push("Mobile boot returns redacted locked shell for unauthenticated users.");
   if (payload.productionLiveOpsReadback.shell88?.ok) productionLivePasses.push("/88 shell loads and contains membership lock hook.");
+  const authReadback = payload.productionLiveOpsReadback.authenticatedReadback || {};
+  if (authReadback.enabled && authReadback.ok) productionLivePasses.push(`Authenticated protected readback PASS: ${(authReadback.endpoints || []).map((row) => `${row.name}:${row.status}:${row.runIdCount}`).join(" / ")}.`);
 
   if (payload.waterRoot.ok) nonProductionOrPreviousGoodPasses.push(`Water Root local/live artifact PASS in ${payload.waterRoot.status || "unknown"} mode.`);
   if (payload.dailyManifest.ok) nonProductionOrPreviousGoodPasses.push(`Daily Manifest PASS for tradeDate ${payload.dailyManifest.tradeDate}.`);
@@ -333,6 +336,7 @@ function classifyPasses(payload) {
   if (payload.autoRollForward.ok) nonProductionOrPreviousGoodPasses.push(`Auto Roll Forward ${payload.autoRollForward.mode || "dry-run"} PASS with ${payload.autoRollForward.jobs} queued jobs.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
   if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
+  if (!authReadback.enabled) nonProductionOrPreviousGoodPasses.push(`Authenticated protected readback is ${authReadback.mode || "not_armed"}; run with member token/email to prove protected API runId display after login.`);
   return { productionLivePasses, nonProductionOrPreviousGoodPasses };
 }
 
@@ -360,6 +364,7 @@ function remainingConditions(payload) {
   conditions.push("Each active module must produce a same-day scanner receipt and runId or a formal zero-result complete receipt.");
   conditions.push("Daily Manifest must remain green with fallback=false for all publishable modules.");
   conditions.push("Canary Publish must allow scorecard publish only after manifest is green.");
+  if (!payload.productionLiveOpsReadback.authenticatedReadback?.enabled) conditions.push("Authenticated protected readback must be armed with a member token/email before claiming protected display closure.");
   conditions.push("Production API / desktop / mobile / /88 readback must show the same module runId after authentication.");
   conditions.push("Any source/auth/scan/publish/display blocker must create a job queue item or explicit preserve-previous-good state.");
   return conditions;
@@ -402,6 +407,8 @@ function markdown(payload) {
   lines.push(`- /88 shell: status=${payload.productionLiveOpsReadback.shell88?.status || "--"}; ok=${payload.productionLiveOpsReadback.shell88?.ok || false}; shellVersion=${payload.productionLiveOpsReadback.scorecardShellVersion || "--"}`);
   lines.push(`- desktop artifact version: ${payload.productionLiveOpsReadback.desktopArtifactVersion}`);
   lines.push(`- mobile artifact version: ${payload.productionLiveOpsReadback.mobileArtifactVersion}`);
+  const authReadback = payload.productionLiveOpsReadback.authenticatedReadback || {};
+  lines.push(`- authenticated protected readback: mode=${authReadback.mode || "--"}; enabled=${authReadback.enabled === true}; ok=${authReadback.ok === true}; endpoints=${(authReadback.endpoints || []).map((row) => `${row.name}:${row.status}:${row.runIdCount}`).join(" / ") || "--"}`);
   lines.push("");
   lines.push("## 6. Windows Task / Service Token Audit");
   lines.push(`- command: ${payload.windowsTaskAndServiceTokenAudit.command}`);
@@ -441,6 +448,7 @@ function verifyPayload(payload, issues) {
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
   if (payload.dailyManifest.ok !== true) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
+  if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
   if (payload.windowsTaskAndServiceTokenAudit.ok !== true) issue(issues, "service_token_schedule_not_ok");
   if (payload.autoRollForward.ok !== true) issue(issues, "auto_roll_forward_not_ok");
   if (!payload.productionLivePasses.length) issue(issues, "production_live_passes_missing");

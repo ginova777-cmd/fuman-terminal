@@ -10,6 +10,18 @@ const OUT_DIR = path.join(ROOT, "outputs", "terminal-ops-production-live");
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_TIMEOUT_MS || 25000);
 const EXPECTED_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA || git(["rev-parse", "HEAD"]).stdout);
+const AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
+const AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let MEMBER_BEARER_TOKEN = [
+  process.env.FUMAN_VERIFY_BEARER_TOKEN,
+  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
+  process.env.FUMAN_AUTH_BEARER_TOKEN,
+  process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
+  process.env.FUMAN_SMOKE_BEARER_TOKEN,
+].map((value) => String(value || "").trim()).find(Boolean) || "";
+const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || ""));
 
 const DIRECT_PROTECTED_ENDPOINTS = [
   { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
@@ -130,6 +142,132 @@ function cacheControl(headers = {}) {
 
 function noStore(headers = {}) {
   return /no-store/i.test(cacheControl(headers));
+}
+
+function protectedReadbackHeaders() {
+  if (!MEMBER_BEARER_TOKEN) return {};
+  return {
+    authorization: `Bearer ${MEMBER_BEARER_TOKEN}`,
+    "x-fuman-readback-auth": "membership-bearer",
+  };
+}
+
+async function ensureMemberToken() {
+  if (MEMBER_BEARER_TOKEN) return { attempted: false, enabled: true, source: "env-token", status: 0, error: "" };
+  if (!MEMBER_EMAIL || !MEMBER_PASSWORD) return { attempted: false, enabled: false, source: "none", status: 0, error: "protected readback token not armed" };
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${AUTH_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        apikey: AUTH_KEY,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({ email: MEMBER_EMAIL, password: MEMBER_PASSWORD }),
+    });
+    const text = await response.text();
+    const payload = parseJson(text);
+    if (!response.ok || !payload?.access_token) {
+      return {
+        attempted: true,
+        enabled: false,
+        source: "email-password",
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+        error: payload?.error_description || payload?.msg || String(text || "").slice(0, 160),
+      };
+    }
+    MEMBER_BEARER_TOKEN = String(payload.access_token || "");
+    return {
+      attempted: true,
+      enabled: true,
+      source: "email-password",
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      userId: payload.user?.id || "",
+      email: MEMBER_EMAIL,
+      error: "",
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      enabled: false,
+      source: "email-password",
+      status: 0,
+      elapsedMs: Date.now() - startedAt,
+      error: error?.message || String(error),
+    };
+  }
+}
+
+function membershipError(payload = {}) {
+  return payload?.error === "membership_required" || payload?.membershipRequired === true;
+}
+
+function collectRunIds(value, out = new Set()) {
+  if (value == null) return out;
+  if (typeof value === "string") {
+    for (const match of value.matchAll(/\b(?:strategy2|strategy3|strategy4|strategy5|institution|cb-detect|warrant-flow)-\d{8}[\w-]*/g)) out.add(match[0]);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectRunIds(item, out);
+    return out;
+  }
+  if (typeof value === "object") {
+    for (const item of Object.values(value)) collectRunIds(item, out);
+  }
+  return out;
+}
+
+async function verifyAuthenticatedProtectedReadback(issues) {
+  const auth = await ensureMemberToken();
+  const result = {
+    attempted: auth.attempted,
+    enabled: auth.enabled,
+    source: auth.source,
+    status: auth.status,
+    error: auth.error || "",
+    endpoints: [],
+    ok: true,
+  };
+  if (!auth.enabled) {
+    result.ok = !REQUIRE_PROTECTED_READBACK;
+    result.mode = "not_armed";
+    if (REQUIRE_PROTECTED_READBACK) issues.push({ issue: "authenticated_protected_readback_not_armed", details: auth });
+    return result;
+  }
+  result.mode = "authenticated-readback";
+  const targets = [
+    { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
+    { name: "scorecard", path: "/api/scorecard?live=1" },
+    { name: "source_reports", path: "/api/source-reports?live=1" },
+    { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70" },
+    { name: "mobile_boot", path: "/api/mobile-boot" },
+  ];
+  for (const target of targets) {
+    const response = await fetchText(target.path, { headers: protectedReadbackHeaders() });
+    const payload = parseJson(response.body);
+    const runIds = Array.from(collectRunIds(payload || response.body)).sort();
+    const row = {
+      name: target.name,
+      path: target.path,
+      status: response.status,
+      ok: response.status === 200 && !membershipError(payload || {}),
+      membershipRequired: membershipError(payload || {}),
+      runIds,
+      runIdCount: runIds.length,
+      noStore: noStore(response.headers),
+      error: payload?.error || "",
+      reason: memberLockReason(payload),
+    };
+    if (!row.ok) issues.push({ issue: `authenticated_protected_endpoint_not_open:${target.name}`, details: row });
+    result.endpoints.push(row);
+  }
+  result.ok = result.endpoints.every((row) => row.ok);
+  return result;
 }
 
 function hasShortLockedCache(headers = {}) {
@@ -300,6 +438,12 @@ function markdown(payload) {
     lines.push(`| ${row.name} | ${row.mode} | ${row.status} | ${row.ok} | ${row.reason || row.error || "--"} | ${row.artifactVersion || "--"} |`);
   }
   lines.push("");
+  lines.push("## Authenticated Protected Readback");
+  lines.push(`- mode: ${payload.authenticatedReadback?.mode || "--"}`);
+  lines.push(`- ok: ${payload.authenticatedReadback?.ok}`);
+  lines.push(`- source: ${payload.authenticatedReadback?.source || "--"}`);
+  lines.push(`- endpoints: ${(payload.authenticatedReadback?.endpoints || []).map((row) => `${row.name}:${row.status}:${row.runIdCount}`).join(" / ") || "--"}`);
+  lines.push("");
   lines.push("## Shells");
   lines.push("| path | status | ok | shellVersion |");
   lines.push("|---|---:|---:|---|");
@@ -317,6 +461,7 @@ async function main() {
   for (const item of REDACTED_LOCKED_ENDPOINTS) {
     protectedEndpoints.push(await verifyRedactedLockedEndpoint(item, issues));
   }
+  const authenticatedReadback = await verifyAuthenticatedProtectedReadback(issues);
   const shells = [];
   shells.push(await verifyShell("/", ["terminal-core.js"], issues));
   shells.push(await verifyShell("/88", ["FUMAN SCORECARD", "/api/scorecard", "scorecard-membership-lock"], issues));
@@ -330,6 +475,7 @@ async function main() {
     expectedSha: EXPECTED_SHA,
     release,
     protectedEndpoints,
+    authenticatedReadback,
     shells,
     desktopArtifactVersion: protectedEndpoints.find((row) => row.name === "terminal_fast_bundle")?.artifactVersion || "",
     mobileArtifactVersion: protectedEndpoints.find((row) => row.name === "mobile_boot")?.artifactVersion || "",
@@ -348,6 +494,7 @@ async function main() {
     baseUrl: payload.baseUrl,
     releaseSha: payload.release.gitSha,
     protectedEndpoints: payload.protectedEndpoints.map((row) => `${row.name}:${row.status}:${row.mode}:${row.ok}`),
+    authenticatedReadback: `${payload.authenticatedReadback.mode || ""}:${payload.authenticatedReadback.ok}:${payload.authenticatedReadback.endpoints?.length || 0}`,
     shellCount: payload.shells.length,
     desktopArtifactVersion: payload.desktopArtifactVersion || "",
     mobileArtifactVersion: payload.mobileArtifactVersion || "",
