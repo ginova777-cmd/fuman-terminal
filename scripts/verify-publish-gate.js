@@ -423,8 +423,20 @@ if (!packageJson.scripts?.["scorecard:sync"] || !/run-scorecard-daily-automation
 if (/run-scorecard-snapshot\.ps1/.test(String(packageJson.scripts?.["scorecard:sync"] || ""))) {
   issues.push("package.json scripts.scorecard:sync must not call retired run-scorecard-snapshot.ps1");
 }
-if (!packageJson.scripts?.["scorecard:publish"] || !/publish-scorecard-snapshot\.js/.test(packageJson.scripts["scorecard:publish"])) {
+const scorecardPublishScript = String(packageJson.scripts?.["scorecard:publish"] || "");
+const scorecardPublishRawScript = String(packageJson.scripts?.["scorecard:publish:raw"] || "");
+if (!scorecardPublishScript) {
   issues.push("package.json missing scripts.scorecard:publish");
+} else {
+  if (!/guard-daily-manifest-before-scorecard-publish\.js/.test(scorecardPublishScript)) {
+    issues.push("package.json scripts.scorecard:publish must require Daily Manifest gate before publish");
+  }
+  if (!/scorecard:publish:raw/.test(scorecardPublishScript)) {
+    issues.push("package.json scripts.scorecard:publish must delegate to scorecard:publish:raw");
+  }
+}
+if (!/publish-scorecard-snapshot\.js/.test(scorecardPublishRawScript)) {
+  issues.push("package.json missing scripts.scorecard:publish:raw");
 }
 if (!packageJson.scripts?.["scorecard:export-source"] || !/export-scorecard-supabase-source\.js/.test(packageJson.scripts["scorecard:export-source"])) {
   issues.push("package.json missing scripts.scorecard:export-source Supabase source exporter");
