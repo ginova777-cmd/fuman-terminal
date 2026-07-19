@@ -51,6 +51,14 @@ function sh(args, fallback = "") {
   }
 }
 
+function runNodeScript(script, args = []) {
+  execFileSync(process.execPath, ["--use-system-ca", script, ...args], {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: process.env,
+  });
+}
+
 function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
@@ -476,6 +484,8 @@ function verifyPayload(payload, issues) {
 
 async function main() {
   const verifyOnly = process.argv.includes("--verify-only");
+  const refreshProductionLive = process.argv.includes("--refresh-production-live") || process.argv.includes("--refresh-live");
+  const requireProtectedReadback = process.argv.includes("--require-protected-readback");
   const reportFile = path.join(OUT_DIR, "production-unattended-readiness-report.json");
   if (verifyOnly) {
     const payload = readJson(reportFile, null);
@@ -488,6 +498,10 @@ async function main() {
   }
 
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  if (refreshProductionLive) {
+    const args = requireProtectedReadback ? ["--require-protected-readback"] : [];
+    runNodeScript(path.join("scripts", "verify-terminal-ops-production-live.js"), args);
+  }
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});
   const resourceChain = readJson(FILES.resourceChain, {});
