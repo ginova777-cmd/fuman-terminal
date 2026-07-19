@@ -21,7 +21,7 @@ let MEMBER_BEARER_TOKEN = [
   process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
   process.env.FUMAN_SMOKE_BEARER_TOKEN,
 ].map((value) => String(value || "").trim()).find(Boolean) || "";
-const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || ""));
+const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || "")) || process.argv.includes("--require-protected-readback");
 
 const DIRECT_PROTECTED_ENDPOINTS = [
   { name: "terminal_ops_status", path: "/api/terminal-ops-status" },

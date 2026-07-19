@@ -316,6 +316,19 @@ function isPreviousGoodWaterRoot(payload = {}) {
   const text = `${payload.waterRoot?.status || ""} ${payload.waterRoot?.reason || ""}`.toLowerCase();
   return text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
 }
+
+function authenticatedReadbackOk(payload = {}) {
+  const auth = payload.productionLiveOpsReadback?.authenticatedReadback || {};
+  return auth.enabled === true
+    && auth.ok === true
+    && Array.isArray(auth.endpoints)
+    && auth.endpoints.length > 0
+    && auth.endpoints.every((row) => row?.ok === true && Number(row?.status) === 200);
+}
+
+function requiresAuthenticatedReadbackForReady(payload = {}) {
+  return !isPreviousGoodWaterRoot(payload);
+}
 function classifyPasses(payload) {
   const productionLivePasses = [];
   const nonProductionOrPreviousGoodPasses = [];
@@ -364,7 +377,7 @@ function remainingConditions(payload) {
   conditions.push("Each active module must produce a same-day scanner receipt and runId or a formal zero-result complete receipt.");
   conditions.push("Daily Manifest must remain green with fallback=false for all publishable modules.");
   conditions.push("Canary Publish must allow scorecard publish only after manifest is green.");
-  if (!payload.productionLiveOpsReadback.authenticatedReadback?.enabled) conditions.push("Authenticated protected readback must be armed with a member token/email before claiming protected display closure.");
+  if (!authenticatedReadbackOk(payload)) conditions.push("Authenticated protected readback must PASS with a member token/email before claiming protected display closure.");
   conditions.push("Production API / desktop / mobile / /88 readback must show the same module runId after authentication.");
   conditions.push("Any source/auth/scan/publish/display blocker must create a job queue item or explicit preserve-previous-good state.");
   return conditions;
@@ -449,6 +462,7 @@ function verifyPayload(payload, issues) {
   if (payload.dailyManifest.ok !== true) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
+  if (requiresAuthenticatedReadbackForReady(payload) && !authenticatedReadbackOk(payload)) issue(issues, "production_live_authenticated_readback_required_for_ready", { authenticatedReadback: payload.productionLiveOpsReadback.authenticatedReadback });
   if (payload.windowsTaskAndServiceTokenAudit.ok !== true) issue(issues, "service_token_schedule_not_ok");
   if (payload.autoRollForward.ok !== true) issue(issues, "auto_roll_forward_not_ok");
   if (!payload.productionLivePasses.length) issue(issues, "production_live_passes_missing");

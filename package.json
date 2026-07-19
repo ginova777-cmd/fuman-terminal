@@ -320,6 +320,8 @@
     "verify:terminal-predictive-preflight": "node scripts/verify-terminal-predictive-preflight.js",
     "verify:terminal-autonomous-completion-audit": "node scripts/verify-terminal-autonomous-completion-audit.js",
     "verify:terminal-ops-production-live": "node --use-system-ca scripts/verify-terminal-ops-production-live.js",
+    "verify:terminal-ops-production-live:authenticated": "node --use-system-ca scripts/verify-terminal-ops-production-live.js --require-protected-readback",
+    "ops:production-unattended-readiness-report:authenticated": "npm run verify:terminal-ops-production-live:authenticated && npm run ops:production-unattended-readiness-report && npm run verify:production-unattended-readiness-report",
     "verify:manifest-publish-wiring": "node scripts/verify-manifest-publish-wiring.js",
     "verify:backend-auth-isolation": "node scripts/verify-backend-auth-isolation.js",
     "verify:backend-service-token-schedule": "node scripts/verify-backend-service-token-schedule-contract.js",
