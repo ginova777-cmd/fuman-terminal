@@ -32,7 +32,11 @@ function isMarketClosedPreviousGood(manifest = {}, orchestrator = {}, waterRoot 
     waterRoot.reason,
   ].map(lower).join(" ");
   return bits.includes("market_closed_previous_good")
-    || bits.includes("market_closed_formal_scan_skipped_preserve_previous_good");
+    || bits.includes("market_closed_formal_scan_skipped_preserve_previous_good")
+    || bits.includes("trading_day_wait_source_window_previous_good")
+    || bits.includes("trading_day_outside_formal_source_window_preserve_previous_good")
+    || bits.includes("wait_source_window")
+    || bits.includes("previous_good");
 }
 
 function runIdDate(runId) {
@@ -129,13 +133,13 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
   if (marketClosedPreviousGood && manifestOk && allModulesClosed) {
     return {
       opsState: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-      unattendedStatus: "YES",
+      unattendedStatus: "PREVIOUS_GOOD_HOLD",
       formalScanAllowed: false,
       scorecardPublishAllowed: false,
       terminalSnapshotAllowed: true,
       autoRecoveryAllowed: true,
       action: "preserve_last_trading_day_and_wait_next_open",
-      reason: "market_closed_previous_good",
+      reason: "previous_good_hold_wait_source_window_or_market_closed",
     };
   }
   if (!waterOk || hasSourceBlock) {
@@ -388,7 +392,7 @@ async function main() {
     modules: modules.map((row) => ({ key: row.key, state: row.state, displayMode: row.displayMode, runId: row.runId })),
     output: jsonFile,
   }, null, 2));
-  if (REQUIRE_UNATTENDED && decision.unattendedStatus !== "YES") process.exitCode = 1;
+  if (REQUIRE_UNATTENDED && decision.unattendedStatus !== "YES" && decision.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
 }
 
 if (require.main === module) {

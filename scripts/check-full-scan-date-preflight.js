@@ -164,21 +164,21 @@ async function buildPreflight(options = {}) {
     };
   }
 
-  if (!contract.marketOpen) {
+  if (!contract.sourceFreshnessRequired || contract.formalScanSkipped === true) {
     return {
       ...base,
       action: "skip_formal_scan",
-      status: "market_closed",
+      status: contract.marketOpen ? "waiting_source_window" : "market_closed",
       complete: true,
       formalScanSkipped: true,
       sourceFreshnessRequired: false,
       preservePreviousGood: true,
       latestPointerUpdated: false,
       emptyResultWritten: false,
-      evidenceStatus: "market_closed",
-      unattendedStatus: "SKIPPED_MARKET_CLOSED",
-      reason: contract.closedReason || "market_closed",
-      exitCode: 10
+      evidenceStatus: contract.marketOpen ? "waiting_source_window" : "market_closed",
+      unattendedStatus: contract.marketOpen ? "WAITING_SOURCE_WINDOW" : "SKIPPED_MARKET_CLOSED",
+      reason: contract.skipReason || contract.closedReason || "market_closed",
+      exitCode: contract.marketOpen ? 11 : 10
     };
   }
 
@@ -255,6 +255,3 @@ module.exports = {
   normalizeDate: isoDate,
   taipeiDate
 };
-
-
-

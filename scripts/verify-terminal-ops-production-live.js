@@ -261,7 +261,10 @@ async function verifyShell(pathname, markers, issues) {
 function localOpsStatusSummary(issues) {
   const payload = readJson(path.join(ROOT, "data", "terminal-ops-status-latest.json"), {});
   assert(payload.contract === "terminal-ops-status-v1", issues, "local_ops_status_contract_missing", { contract: payload.contract });
-  assert(payload.unattendedStatus === "YES", issues, "local_ops_status_unattended_not_yes", { unattendedStatus: payload.unattendedStatus, reason: payload.reason });
+  const previousGoodHold = payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
+    && payload.canaryPublish?.scorecardPublishAllowed === false;
+  assert(payload.unattendedStatus === "YES" || previousGoodHold, issues, "local_ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason });
   assert(payload.actionMatrix?.protectedInvariants?.includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "local_ops_status_membership_invariant_missing", {
     protectedInvariants: payload.actionMatrix?.protectedInvariants,
   });

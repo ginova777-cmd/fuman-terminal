@@ -29,6 +29,15 @@ function assert(condition, issue, details, issues) {
   if (!condition) issues.push({ issue, details });
 }
 
+function isAcceptableOpsStatus(payload) {
+  if (payload.unattendedStatus === "YES") return true;
+  return payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
+    && payload.canaryPublish?.scorecardPublishAllowed === false
+    && payload.predictivePreflight?.preservePreviousGood === true
+    && payload.predictivePreflight?.formalScanAllowed === false;
+}
+
 async function main() {
   const api = require("../api/terminal-ops-status");
   const issues = [];
@@ -47,7 +56,7 @@ async function main() {
 
   assert(internal.statusCode === 200, "internal_status_not_200", { statusCode: internal.statusCode, body: payload }, issues);
   assert(payload.contract === "terminal-ops-status-v1", "contract_mismatch", { contract: payload.contract }, issues);
-  assert(payload.unattendedStatus === "YES", "unattended_not_yes", { unattendedStatus: payload.unattendedStatus, reason: payload.reason }, issues);
+  assert(isAcceptableOpsStatus(payload), "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason }, issues);
   assert(Array.isArray(payload.modules) && payload.modules.length >= 7, "modules_missing", { modules: payload.modules?.length }, issues);
   assert(payload.modules.every((row) => row.runId && row.ok === true), "module_runid_or_ok_missing", { modules: payload.modules }, issues);
   assert(payload.gates?.runIdClosure?.ok === true, "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);

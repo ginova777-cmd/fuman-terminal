@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-water-root");
@@ -96,23 +97,16 @@ async function query(name, pathname, params = {}, options = {}) {
 }
 
 async function marketCalendar() {
-  const url = new URL("/api/market-calendar", BASE_URL);
-  url.searchParams.set("t", String(Date.now()));
   const startedAt = Date.now();
   try {
-    const response = await fetch(url, { cache: "no-store" });
-    const text = await response.text();
-    let json = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {}
+    const row = await buildMarketCalendarContract({});
     return {
       name: "market_calendar",
-      ok: response.ok,
-      status: response.status,
+      ok: row.ok === true,
+      status: 200,
       elapsedMs: Date.now() - startedAt,
-      row: json,
-      error: response.ok ? "" : text.slice(0, 240),
+      row,
+      error: row.ok === true ? "" : String(row.error || row.closedReason || "market_calendar_not_ok"),
     };
   } catch (error) {
     return {
@@ -166,8 +160,8 @@ function isMarketClosedPreviousGood(payload) {
   const gatePhase = String(gate.phase || "").toLowerCase();
   const message = `${source.message || ""} ${gate.reason || ""}`.toLowerCase();
   return Boolean(
-    calendar.marketOpen === false
-    && (calendar.sourceFreshnessRequired === false || calendar.formalScanSkipped === true || calendar.displayMode === "market_closed_previous_good")
+    (calendar.marketOpen === false || calendar.formalScanSkipped === true || calendar.sourceFreshnessRequired === false)
+    && (calendar.sourceFreshnessRequired === false || calendar.formalScanSkipped === true || calendar.displayMode === "market_closed_previous_good" || calendar.displayMode === "trading_day_wait_source_window_previous_good")
     && (sourceStatus === "stopped" || sourcePhase.includes("after") || gatePhase.includes("after") || message.includes("off-session"))
   );
 }
@@ -313,9 +307,15 @@ async function main() {
   payload.marketClosedPreviousGood = isMarketClosedPreviousGood(payload);
   payload.issues = statusIssues(payload);
   payload.ok = payload.issues.length === 0;
-  payload.status = payload.ok ? (payload.marketClosedPreviousGood ? "market_closed_previous_good" : "ready") : "blocked";
+  const previousGoodHoldStatus = payload.marketCalendar?.row?.marketOpen === true
+    ? "trading_day_wait_source_window_previous_good"
+    : "market_closed_previous_good";
+  const previousGoodHoldReason = payload.marketCalendar?.row?.marketOpen === true
+    ? "trading_day_outside_formal_source_window_preserve_previous_good"
+    : "market_closed_formal_scan_skipped_preserve_previous_good";
+  payload.status = payload.ok ? (payload.marketClosedPreviousGood ? previousGoodHoldStatus : "ready") : "blocked";
   payload.reason = payload.ok
-    ? (payload.marketClosedPreviousGood ? "market_closed_formal_scan_skipped_preserve_previous_good" : "terminal_water_root_ready")
+    ? (payload.marketClosedPreviousGood ? previousGoodHoldReason : "terminal_water_root_ready")
     : payload.issues[0];
 
   const jsonFile = path.join(OUT_DIR, "terminal-water-root.json");
@@ -352,4 +352,3 @@ module.exports = {
   isMarketClosedPreviousGood,
   statusIssues,
 };
-

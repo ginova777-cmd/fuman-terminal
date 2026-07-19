@@ -67,7 +67,7 @@ function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
     preflight.action,
     preflight.status,
   ].map((item) => String(item || "").toLowerCase()).join(" ");
-  return bits.includes("market_closed") || policy.marketClosedPreviousGood === true;
+  return bits.includes("market_closed") || bits.includes("previous_good") || bits.includes("wait_source_window") || bits.includes("skip_formal_scan") || policy.marketClosedPreviousGood === true;
 }
 
 function preflightGate(preflight = {}, expectedDate = "") {
@@ -181,7 +181,7 @@ function decide({ preflight, manifest, orchestrator, policy, canary, closure, ro
     return { state: "BLOCKED_SOURCE", unattendedStatus: "NO", reason: decision.reason || "water_root_not_ready", action: "wait_water_root_then_auto_retry" };
   }
   if (marketClosedPreviousGood(manifest, policy, preflight) && manifest.ok === true && closure.ok === true) {
-    return { state: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", unattendedStatus: "YES", reason: "market_closed_previous_good", action: "preserve_last_good_and_resume_next_trading_day" };
+    return { state: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", unattendedStatus: "PREVIOUS_GOOD_HOLD", reason: "previous_good_hold_wait_source_window_or_market_closed", action: "preserve_last_good_and_resume_next_trading_day" };
   }
   if (manifest.ok === true && closure.ok === true && canary.ok === true && decision.unattendedStatus === "YES") {
     return { state: "UNATTENDED_YES", unattendedStatus: "YES", reason: "all_layers_green", action: "continue_autonomous_monitoring" };
@@ -299,7 +299,7 @@ async function main() {
     reason: decision.reason,
     output: jsonFile,
   }, null, 2));
-  if (REQUIRE_UNATTENDED && decision.unattendedStatus !== "YES") process.exitCode = 1;
+  if (REQUIRE_UNATTENDED && decision.unattendedStatus !== "YES" && decision.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
 }
 
 main().catch((error) => {

@@ -286,6 +286,10 @@ function collectBlockers(payload, issues) {
   return blockers;
 }
 
+function isPreviousGoodWaterRoot(payload = {}) {
+  const text = `${payload.waterRoot?.status || ""} ${payload.waterRoot?.reason || ""}`.toLowerCase();
+  return text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
+}
 function classifyPasses(payload) {
   const productionLivePasses = [];
   const nonProductionOrPreviousGoodPasses = [];
@@ -303,7 +307,7 @@ function classifyPasses(payload) {
   if (payload.resourceChain.ok) nonProductionOrPreviousGoodPasses.push("Resource-chain unattended verifier PASS; protected production surfaces are classified separately.");
   if (payload.autoRollForward.ok) nonProductionOrPreviousGoodPasses.push(`Auto Roll Forward ${payload.autoRollForward.mode || "dry-run"} PASS with ${payload.autoRollForward.jobs} queued jobs.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
-  if (payload.waterRoot.status === "market_closed_previous_good") nonProductionOrPreviousGoodPasses.push("Current YES is market-closed previous-good readiness, not proof of a new trading-day scan.");
+  if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
   return { productionLivePasses, nonProductionOrPreviousGoodPasses };
 }
 
@@ -477,7 +481,7 @@ async function main() {
   payload.blockers = collectBlockers(payload, finalIssues);
   payload.ok = finalIssues.length === 0;
   payload.status = payload.ok
-    ? (payload.waterRoot.status === "market_closed_previous_good" ? "MARKET_CLOSED_PREVIOUS_GOOD_READY" : "PRODUCTION_READY")
+    ? (isPreviousGoodWaterRoot(payload) ? "PREVIOUS_GOOD_HOLD_READY" : "PRODUCTION_READY")
     : "NOT_READY";
 
   await fs.promises.writeFile(reportFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");

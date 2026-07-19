@@ -35,7 +35,7 @@ function marketClosedPreviousGood(manifest = {}) {
     manifest.blocker,
     manifest.status,
   ].map(lower).join(" ");
-  return bits.includes("market_closed");
+  return bits.includes("market_closed") || bits.includes("previous_good") || bits.includes("wait_source_window") || bits.includes("skip_formal_scan");
 }
 
 function sourceReportsByKey(scorecard = {}) {

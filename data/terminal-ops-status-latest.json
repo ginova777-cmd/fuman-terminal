@@ -2,28 +2,28 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T07:36:00.236Z",
-  "checkedAt": "2026-07-19T07:35:55.900Z",
+  "generatedAt": "2026-07-19T17:30:47.958Z",
+  "checkedAt": "2026-07-19T17:30:37.938Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-  "unattendedStatus": "YES",
+  "unattendedStatus": "PREVIOUS_GOOD_HOLD",
   "action": "preserve_last_good_and_resume_next_trading_day",
-  "reason": "market_closed_previous_good",
+  "reason": "previous_good_hold_wait_source_window_or_market_closed",
   "gates": {
     "predictivePreflight": {
       "ok": true,
       "status": "MARKET_CLOSED_SKIP_SCAN",
-      "reason": "weekend"
+      "reason": "trading_day_before_formal_source_window"
     },
     "waterRoot": {
       "ok": true,
-      "status": "market_closed_previous_good",
-      "reason": "market_closed_formal_scan_skipped_preserve_previous_good"
+      "status": "trading_day_wait_source_window_previous_good",
+      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
     },
     "stateMachine": {
       "ok": true,
       "status": "CLOSED",
-      "reason": "market_closed_previous_good"
+      "reason": ""
     },
     "dailyManifest": {
       "ok": true,
@@ -53,7 +53,7 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-      "reason": "market_closed_previous_good"
+      "reason": "previous_good_hold_wait_source_window_or_market_closed"
     }
   },
   "modules": [
@@ -153,10 +153,10 @@
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
-    "state": "MARKET_CLOSED_SKIP_SCAN",
+    "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
     "action": "skip_formal_scan",
-    "reason": "weekend",
-    "scannerTargetDate": "20260719",
+    "reason": "trading_day_before_formal_source_window",
+    "scannerTargetDate": "20260720",
     "displayTradeDate": "20260717",
     "formalScanAllowed": false,
     "preservePreviousGood": true,

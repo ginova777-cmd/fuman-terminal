@@ -92,6 +92,10 @@ function assert(condition, issues, issue, details = {}) {
   if (!condition) issues.push({ issue, details });
 }
 
+function acceptableCompletionStatus(value, closed) {
+  if (value === "YES") return true;
+  return closed === true && value === "PREVIOUS_GOOD_HOLD";
+}
 function fileEvidence(name, file, expectedContract, payload, issues) {
   const exists = fs.existsSync(file);
   assert(exists, issues, `${name}_artifact_missing`, { file });
@@ -242,7 +246,7 @@ function verifyInvariants(artifacts, issues) {
   assert((rollForward?.idempotencyContract?.invariants || []).includes("publish_jobs_require_manifest_canary_gate"), issues, "idempotency_publish_canary_gate_missing", { idempotencyContract: rollForward?.idempotencyContract });
 
   assert(controlPlane?.runIdClosure?.ok === true, issues, "control_plane_runid_closure_not_ok", { runIdClosure: controlPlane?.runIdClosure });
-  assert(controlPlane?.decision?.unattendedStatus === "YES", issues, "control_plane_unattended_not_yes", { decision: controlPlane?.decision });
+  assert(acceptableCompletionStatus(controlPlane?.decision?.unattendedStatus, closed), issues, "control_plane_not_fresh_yes_or_previous_good_hold", { decision: controlPlane?.decision, closed });
   assert(policy?.actionMatrix?.contract === "autonomous-ops-action-matrix-v1", issues, "action_matrix_missing", { actionMatrix: policy?.actionMatrix });
   const protectedInvariants = policy?.actionMatrix?.protectedInvariants || [];
   for (const required of [
@@ -258,7 +262,7 @@ function verifyInvariants(artifacts, issues) {
   assert(typeof notificationPlan?.notification?.required === "boolean", issues, "notification_required_not_boolean", { notification: notificationPlan?.notification });
   assert(Boolean(notificationPlan?.notification?.dedupeKey), issues, "notification_dedupe_key_missing", { notification: notificationPlan?.notification });
 
-  assert(opsStatus?.unattendedStatus === "YES", issues, "ops_status_unattended_not_yes", { unattendedStatus: opsStatus?.unattendedStatus, reason: opsStatus?.reason });
+  assert(acceptableCompletionStatus(opsStatus?.unattendedStatus, closed), issues, "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: opsStatus?.unattendedStatus, reason: opsStatus?.reason, closed });
   assert(opsStatus?.gates?.predictivePreflight?.status, issues, "ops_status_predictive_gate_missing", { gates: opsStatus?.gates });
   assert(opsStatus?.gates?.notificationPolicy?.status, issues, "ops_status_notification_gate_missing", { gates: opsStatus?.gates });
   assert((opsStatus?.actionMatrix?.protectedInvariants || []).includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "ops_status_membership_invariant_missing", { actionMatrix: opsStatus?.actionMatrix });

@@ -140,6 +140,28 @@ const cases = [
     },
   },
   {
+    name: "trading_day_wait_source_window_preserves_previous_good",
+    expectOk: true,
+    expectClosed: true,
+    expectIssues: [],
+    mutate: (payload) => {
+      payload.required.tradingDay = false;
+      payload.required.formalNow = false;
+      payload.marketCalendar.row.isTradingDay = true;
+      payload.marketCalendar.row.marketOpen = true;
+      payload.marketCalendar.row.sourceFreshnessRequired = false;
+      payload.marketCalendar.row.formalScanSkipped = true;
+      payload.marketCalendar.row.displayMode = "trading_day_wait_source_window_previous_good";
+      payload.marketCalendar.row.scannerAction = "skip_formal_scan";
+      payload.marketCalendar.row.skipReason = "trading_day_before_formal_source_window";
+      payload.sourceStatus.row.status = "stopped";
+      payload.sourceStatus.row.payload.status = "stopped";
+      payload.sourceStatus.row.payload.phase = "before_formal_source_window";
+      payload.canonicalGate.row.phase = "before_formal_source_window";
+      payload.canonicalGate.row.formal_entry_allowed = false;
+      payload.canonicalGate.row.formal_entry_speed_verdict = "NO";
+    },
+  },  {
     name: "formal_blocks_low_priority_quote_coverage",
     expectOk: false,
     expectIssues: ["priority_quote_coverage_low"],
@@ -266,4 +288,3 @@ const output = {
 
 console.log(JSON.stringify(output, null, 2));
 if (!output.ok) process.exitCode = 1;
-

@@ -26,7 +26,7 @@ function runMutationChecks(issues) {
     },
     {
       name: "market_closed",
-      decision: { opsState: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", unattendedStatus: "YES", formalScanAllowed: false, scorecardPublishAllowed: false, terminalSnapshotAllowed: true, autoRecoveryAllowed: true, action: "preserve", reason: "market_closed_previous_good" },
+      decision: { opsState: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", unattendedStatus: "PREVIOUS_GOOD_HOLD", formalScanAllowed: false, scorecardPublishAllowed: false, terminalSnapshotAllowed: true, autoRecoveryAllowed: true, action: "preserve", reason: "previous_good_hold" },
       extra: { marketClosedPreviousGood: true },
       expect: (m) => m.formalScan.allowed === false && m.publish.allowed === false && m.terminalDisplay.mode === "market_closed_previous_good" && m.notify.required === false,
     },

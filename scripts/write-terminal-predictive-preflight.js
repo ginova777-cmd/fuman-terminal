@@ -20,7 +20,8 @@ function normalizePredictivePreflight(raw = {}) {
   const displayTradeDate = compactDate(raw.displayTradeDate || raw.marketCalendar?.displayTradeDate || raw.marketDate);
   const taipeiToday = compactDate(raw.taipeiToday || raw.marketCalendar?.requestedDate);
   const marketDate = compactDate(raw.marketDate || raw.marketCalendar?.marketDate);
-  const marketClosed = action === "skip_formal_scan" || status === "market_closed" || raw.marketOpen === false;
+  const waitingSourceWindow = action === "skip_formal_scan" && raw.marketOpen === true && raw.sourceFreshnessRequired !== true;
+  const marketClosed = (action === "skip_formal_scan" && !waitingSourceWindow) || status === "market_closed" || raw.marketOpen === false;
   const closedRepair = action === "allow_closed_target_repair" || raw.closedTargetRepair === true;
   const formalScanAllowed = action === "allow_formal_scan" || closedRepair;
   const failClosed = raw.ok !== true || action === "fail_closed" || status === "failed";
@@ -28,6 +29,7 @@ function normalizePredictivePreflight(raw = {}) {
   let state = "BLOCKED_DATE_PREFLIGHT";
   if (formalScanAllowed && !failClosed) state = closedRepair ? "CLOSED_TARGET_REPAIR_ALLOWED" : "READY_FOR_FORMAL_SCAN";
   if (marketClosed && !closedRepair) state = "MARKET_CLOSED_SKIP_SCAN";
+  if (waitingSourceWindow && !closedRepair) state = "TRADING_DAY_WAIT_SOURCE_WINDOW";
   if (failClosed) state = "BLOCKED_DATE_PREFLIGHT";
 
   const issues = [];
@@ -46,9 +48,10 @@ function normalizePredictivePreflight(raw = {}) {
 
   const ok = issues.length === 0 && (
     (formalScanAllowed && raw.publishAllowed === true && raw.evidenceStatus === "complete")
+    || (waitingSourceWindow && raw.preservePreviousGood === true && raw.formalScanSkipped === true && raw.publishAllowed !== true)
     || (marketClosed && raw.preservePreviousGood === true && raw.formalScanSkipped === true)
     || (closedRepair && raw.publishAllowed === true)
-    || (failClosed && raw.publishAllowed === false && raw.preservePreviousGood === true)
+    || (failClosed && raw.publishAllowed !== true && raw.preservePreviousGood === true)
   );
 
   return {

@@ -13,7 +13,7 @@ function main() {
     jobs: status.jobQueue.length,
     output: DATA_FILE,
   }, null, 2));
-  if (status.unattendedStatus !== "YES") process.exitCode = 1;
+  if (status.unattendedStatus !== "YES" && status.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
 }
 
 main();

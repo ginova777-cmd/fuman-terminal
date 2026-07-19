@@ -11,7 +11,7 @@ function policyFor(opsState, notifyRequired, extra = {}) {
     tradeDate: "20260717",
     decision: {
       opsState,
-      unattendedStatus: opsState === "UNATTENDED_YES" || opsState === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" ? "YES" : "NO",
+      unattendedStatus: opsState === "UNATTENDED_YES" ? "YES" : (opsState === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" ? "PREVIOUS_GOOD_HOLD" : "NO"),
       formalScanAllowed: opsState === "UNATTENDED_YES",
       scorecardPublishAllowed: opsState === "UNATTENDED_YES",
       terminalSnapshotAllowed: true,
