@@ -24,6 +24,7 @@ const REQUIRED_SCRIPTS = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
   "verify:terminal-water-root",
+  "verify:terminal-water-root-contract",
   "orchestrator:state",
   "orchestrator:state:from-existing",
   "verify:terminal-state-machine-contract",
@@ -150,6 +151,7 @@ function verifyPackageScripts(pkg, issues) {
   for (const required of [
     "ops:predictive-preflight",
     "verify:terminal-water-root",
+    "verify:terminal-water-root-contract",
     "verify:terminal-control-plane",
     "verify:terminal-state-machine-contract",
     "verify:terminal-auto-roll-forward",
@@ -347,3 +349,4 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-completion-audit] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

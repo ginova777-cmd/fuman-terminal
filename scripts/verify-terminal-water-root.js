@@ -337,8 +337,19 @@ async function main() {
   if (!payload.ok) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(`[terminal-water-root] failed: ${error.stack || error.message || error}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`[terminal-water-root] failed: ${error.stack || error.message || error}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  asNumber,
+  compactDate,
+  sourceStatusSummary,
+  gateSummary,
+  isMarketClosedPreviousGood,
+  statusIssues,
+};
 
