@@ -242,6 +242,42 @@ Invoke-Step "node" @(
 
 $snapshotSummary = Read-JsonSummary $snapshotFile "source"
 $snapshotLatestDate = [string]$snapshotSummary.latestDate
+
+Write-Step "refresh daily manifest before scorecard publish"
+$manifestArgs = @(
+  "--use-system-ca",
+  "scripts\write-daily-terminal-run-manifest.js",
+  "--expected-date=$ExpectedDate"
+)
+if (-not $allowPreviousForRun) {
+  $manifestArgs += "--require-formal-now"
+}
+Invoke-Step "node" $manifestArgs
+
+Write-Step "verify scorecard canary against daily manifest"
+Invoke-Step "node" @(
+  "--use-system-ca",
+  "scripts\verify-terminal-canary-publish.js",
+  "--scorecard=$snapshotFile"
+)
+
+$canaryFile = Join-Path $ProjectRoot "outputs\terminal-canary-publish\terminal-canary-publish.json"
+$canaryPayload = Read-JsonFile $canaryFile
+$guardTradeDate = [string]$canaryPayload.tradeDate
+if (-not $guardTradeDate) {
+  $guardTradeDate = $snapshotLatestDate
+}
+$guardArgs = @(
+  "scripts\guard-daily-manifest-before-scorecard-publish.js",
+  "--expected-date=$guardTradeDate"
+)
+if ($allowPreviousForRun) {
+  $guardArgs += "--allow-degraded"
+}
+
+Write-Step "guard scorecard publish with daily manifest"
+Invoke-Step "node" $guardArgs
+
 $publishArgs = @(
   "--use-system-ca",
   "scripts\publish-scorecard-snapshot.js",
