@@ -138,8 +138,26 @@ function buildWaterRoot(waterRoot) {
   };
 }
 
+function endpointRunId(row = {}, ...paths) {
+  for (const path of paths) {
+    const value = path.split(".").reduce((current, key) => current?.[key], row);
+    if (value) return value;
+  }
+  return "";
+}
+
+function endpointStatus(row = {}, ...paths) {
+  for (const path of paths) {
+    const value = path.split(".").reduce((current, key) => current?.[key], row);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+}
+
 function buildResourceChain(resourceChain) {
-  const rows = Array.isArray(resourceChain?.rows) ? resourceChain.rows : [];
+  const rows = Array.isArray(resourceChain?.rows)
+    ? resourceChain.rows
+    : (Array.isArray(resourceChain?.results) ? resourceChain.results.filter((row) => row.key !== "market") : []);
   return {
     command: "npm run verify:terminal-resource-chain:unattended",
     artifact: FILES.resourceChain,
@@ -149,17 +167,21 @@ function buildResourceChain(resourceChain) {
     rowCount: rows.length,
     rows: rows.map((row) => ({
       key: row.key,
+      label: row.label || row.key || "",
       ok: row.ok === true,
-      liveRunId: row.liveRunId || "",
-      desktopRunId: row.desktopRunId || "",
-      mobileRunId: row.mobileRunId || "",
-      scorecardRunId: row.scorecardRunId || "",
+      receiptRunId: endpointRunId(row, "receipt.runId"),
+      supabaseRunId: endpointRunId(row, "supabase.runId"),
+      liveRunId: endpointRunId(row, "live.runId", "terminalApi.runId", "liveRunId"),
+      desktopRunId: endpointRunId(row, "desktopSnapshot.runId", "terminalApi.runId", "desktopRunId"),
+      mobileRunId: endpointRunId(row, "mobileFragment.runId", "mobileRunId"),
+      scorecardRunId: endpointRunId(row, "scorecard.runId", "scorecardRunId"),
+      scorecardStatus: endpointStatus(row, "scorecard.status", "scorecard.error", "scorecardRunId"),
+      membershipProtected: row.scorecard?.membershipProtected === true || /membership|required|bearer/i.test(String(row.scorecard?.error || row.scorecardRunId || "")),
       issues: row.issues || [],
     })),
-    membershipProtectedSummary: resourceChain?.membershipProtectedSummary || null,
+    membershipProtectedSummary: resourceChain?.protectedReadbackAuth || resourceChain?.membershipProtectedSummary || null,
   };
 }
-
 function buildManifest(manifest) {
   const modules = Array.isArray(manifest?.modules) ? manifest.modules : [];
   return {
@@ -272,6 +294,9 @@ function collectBlockers(payload, issues) {
   })) {
     if (section.ok !== true) blockers.push({ blocker: `${key}_not_ok`, severity: "critical" });
   }
+  if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) {
+    blockers.push({ blocker: "resource_chain_rows_missing_in_report", severity: "critical" });
+  }
   for (const row of payload.dailyManifest.modules || []) {
     if (row.ok !== true) blockers.push({ blocker: `manifest_module_not_ok:${row.key}`, severity: "critical", issues: row.issues });
     if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
@@ -360,7 +385,7 @@ function markdown(payload) {
   lines.push("## 3. Resource Chain");
   lines.push(`- command: ${payload.resourceChain.command}`);
   lines.push(`- ok/expectedDate/rowCount: ${payload.resourceChain.ok} / ${payload.resourceChain.expectedDate} / ${payload.resourceChain.rowCount}`);
-  for (const row of payload.resourceChain.rows) lines.push(`- ${row.key}: ok=${row.ok}; desktop=${row.desktopRunId || "--"}; mobile=${row.mobileRunId || "--"}; scorecard=${row.scorecardRunId || "--"}; issues=${(row.issues || []).join(",") || "none"}`);
+  for (const row of payload.resourceChain.rows) lines.push(`- ${row.key}: ok=${row.ok}; receipt=${row.receiptRunId || "--"}; supabase=${row.supabaseRunId || "--"}; live=${row.liveRunId || "--"}; desktop=${row.desktopRunId || "--"}; mobile=${row.mobileRunId || "--"}; scorecard=${row.scorecardRunId || row.scorecardStatus || "--"}; protected=${row.membershipProtected}; issues=${(row.issues || []).join(",") || "none"}`);
   lines.push("");
   lines.push("## 4. Daily Manifest");
   lines.push(`- command: ${payload.dailyManifest.command}`);
@@ -413,6 +438,7 @@ function verifyPayload(payload, issues) {
   if (payload.releaseIdentity.releaseSha !== payload.releaseIdentity.headSha) issue(issues, "release_sha_not_current_head");
   if (payload.waterRoot.ok !== true) issue(issues, "water_root_not_ok");
   if (payload.resourceChain.ok !== true) issue(issues, "resource_chain_not_ok");
+  if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
   if (payload.dailyManifest.ok !== true) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
   if (payload.windowsTaskAndServiceTokenAudit.ok !== true) issue(issues, "service_token_schedule_not_ok");
