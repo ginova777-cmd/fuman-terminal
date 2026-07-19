@@ -1,0 +1,155 @@
+{
+  "ok": true,
+  "contract": "terminal-ops-status-v1",
+  "source": "runtime-output-artifacts",
+  "generatedAt": "2026-07-19T03:16:20.214Z",
+  "checkedAt": "2026-07-19T03:16:19.084Z",
+  "tradeDate": "20260717",
+  "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+  "unattendedStatus": "YES",
+  "action": "preserve_last_good_and_resume_next_trading_day",
+  "reason": "market_closed_previous_good",
+  "gates": {
+    "predictivePreflight": {
+      "ok": true,
+      "status": "MARKET_CLOSED_SKIP_SCAN",
+      "reason": "weekend"
+    },
+    "waterRoot": {
+      "ok": true,
+      "status": "market_closed_previous_good",
+      "reason": "market_closed_formal_scan_skipped_preserve_previous_good"
+    },
+    "stateMachine": {
+      "ok": true,
+      "status": "CLOSED",
+      "reason": "market_closed_previous_good"
+    },
+    "dailyManifest": {
+      "ok": true,
+      "status": "GREEN",
+      "reason": ""
+    },
+    "canaryPublish": {
+      "ok": true,
+      "status": "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD",
+      "reason": "market_closed_preserve_previous_good_do_not_publish_new_scorecard"
+    },
+    "runIdClosure": {
+      "ok": true,
+      "status": "CLOSED",
+      "reason": ""
+    },
+    "autoRollForward": {
+      "ok": true,
+      "status": "IDLE_NO_RETRY_NEEDED",
+      "reason": ""
+    },
+    "autonomousOpsPolicy": {
+      "ok": true,
+      "status": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+      "reason": "market_closed_previous_good"
+    }
+  },
+  "modules": [
+    {
+      "key": "strategy2",
+      "label": "策略2 即時",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "strategy2-20260717-052121",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "strategy3",
+      "label": "策略3",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "strategy3-20260717-20260717050304",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "strategy4",
+      "label": "策略4",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "strategy4-20260717-20260718153948",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "strategy5",
+      "label": "策略5",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "strategy5-20260717-20260717165236",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "institution",
+      "label": "買賣超",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "institution-20260717-20260717131544",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "cb",
+      "label": "CB",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "cb-detect-20260717-214511",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    },
+    {
+      "key": "warrant",
+      "label": "權證走向",
+      "ok": true,
+      "complete": true,
+      "fallback": false,
+      "runId": "warrant-flow-20260717-20260717125037",
+      "tradeDate": "20260717",
+      "sourceDate": "20260717",
+      "resultCount": 0,
+      "runIdClosureOk": true,
+      "issue": ""
+    }
+  ],
+  "jobQueue": [],
+  "rollForward": {
+    "mode": "dry-run",
+    "state": "IDLE_NO_RETRY_NEEDED",
+    "jobs": 0,
+    "executableJobs": 0,
+    "blockedJobs": 0
+  }
+}
