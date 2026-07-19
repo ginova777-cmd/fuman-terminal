@@ -52,6 +52,9 @@ async function main() {
   assert(payload.modules.every((row) => row.runId && row.ok === true), "module_runid_or_ok_missing", { modules: payload.modules }, issues);
   assert(payload.gates?.runIdClosure?.ok === true, "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
   assert(payload.gates?.dailyManifest?.ok === true, "daily_manifest_gate_not_ok", { gate: payload.gates?.dailyManifest }, issues);
+  assert(payload.actionMatrix?.contract === "autonomous-ops-action-matrix-v1", "action_matrix_missing", { actionMatrix: payload.actionMatrix }, issues);
+  assert(payload.actionMatrix?.terminalDisplay?.allowed === true, "action_matrix_terminal_display_not_allowed", { actionMatrix: payload.actionMatrix }, issues);
+  assert(Array.isArray(payload.actionMatrix?.protectedInvariants) && payload.actionMatrix.protectedInvariants.includes("membership_auth_only_gates_display_not_scanner_compute"), "action_matrix_membership_invariant_missing", { actionMatrix: payload.actionMatrix }, issues);
   assert(unauth.statusCode === 401 && unauth.body?.error === "membership_required", "unauth_not_membership_protected", { statusCode: unauth.statusCode, body: unauth.body }, issues);
   assert(/no-store/i.test(String(internal.headers["cache-control"] || "")), "missing_no_store_header", { headers: internal.headers }, issues);
 

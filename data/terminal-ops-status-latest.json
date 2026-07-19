@@ -2,8 +2,8 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T03:25:27.655Z",
-  "checkedAt": "2026-07-19T03:25:26.650Z",
+  "generatedAt": "2026-07-19T04:19:56.114Z",
+  "checkedAt": "2026-07-19T04:19:54.458Z",
   "tradeDate": "20260717",
   "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
   "unattendedStatus": "YES",
@@ -145,6 +145,51 @@
     }
   ],
   "jobQueue": [],
+  "actionMatrix": {
+    "contract": "autonomous-ops-action-matrix-v1",
+    "opsState": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+    "severity": "info",
+    "stopMode": "market_closed",
+    "formalScan": {
+      "allowed": false,
+      "mode": "skip_formal_scan",
+      "reason": "market_closed_preserve_previous_good"
+    },
+    "publish": {
+      "allowed": false,
+      "canaryRequired": true,
+      "mode": "do_not_publish_new_scorecard",
+      "reason": "market_closed_previous_good"
+    },
+    "terminalDisplay": {
+      "allowed": true,
+      "mode": "market_closed_previous_good",
+      "reason": "show_last_trading_day_with_market_closed_banner"
+    },
+    "rollForward": {
+      "allowed": true,
+      "mode": "idle_until_next_trading_day",
+      "reason": "resume_automatically_next_open"
+    },
+    "notify": {
+      "required": false,
+      "channel": "ops_alert",
+      "kind": "none",
+      "dedupeKey": "MARKET_CLOSED:20260717",
+      "reason": "expected_market_closed_state"
+    },
+    "operatorAction": "no_action_wait_next_open",
+    "automationAction": "preserve_previous_good_and_resume_next_trading_day",
+    "protectedInvariants": [
+      "membership_auth_only_gates_display_not_scanner_compute",
+      "fallback_or_previous_good_never_counts_as_today_publish_success",
+      "scorecard_publish_requires_manifest_green",
+      "scanner_run_requires_water_root_ready_or_market_open_gate",
+      "auth_blocker_is_never_auto_fixed",
+      "runid_trade_date_mismatch_blocks_publish",
+      "zero_result_complete_is_success_empty_source_is_not"
+    ]
+  },
   "rollForward": {
     "mode": "dry-run",
     "state": "IDLE_NO_RETRY_NEEDED",

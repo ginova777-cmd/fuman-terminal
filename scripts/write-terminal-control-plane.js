@@ -265,6 +265,7 @@ async function main() {
       unattendedStatus: policy.decision?.unattendedStatus || "",
       reason: policy.decision?.reason || "",
       action: policy.decision?.action || "",
+      actionMatrix: policy.actionMatrix || null,
     },
     decision,
   };
