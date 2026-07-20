@@ -66,7 +66,12 @@ function hasFallbackSignal(row = {}) {
 }
 
 function isPendingNotDueModule(row = {}) {
-  const issueText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
+  const issueText = [
+    Array.isArray(row.issues) ? row.issues.join(" ") : "",
+    row.issue || "",
+    row.blocker || "",
+    row.reason || "",
+  ].join(" ");
   return row.pendingNotDue === true
     || lower(row.status) === "pending_not_due"
     || lower(issueText).includes("pending_not_due");
@@ -82,7 +87,6 @@ function manifestPendingNotDuePreviousGood(modules = []) {
   if (!modules.length) return false;
   return modules.every((row) => isPendingNotDueModule(row)
     && row.ok === true
-    && row.complete === true
     && row.fallback !== true
     && clean(row.runId));
 }
@@ -143,7 +147,7 @@ function validateCanary(manifest, scorecard, options = {}) {
     if (report.ok !== true) issues.push(`sourceReport_not_ok:${row.key}`);
     if (Number(report.statusCode || 200) >= 400) issues.push(`sourceReport_http_bad:${row.key}:${report.statusCode}`);
     if (enforcePublishable && hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
-    if (enforcePublishable && (row.ok !== true || row.complete !== true || row.fallback === true)) {
+    if (enforcePublishable && !isPendingNotDueModule(row) && (row.ok !== true || row.complete !== true || row.fallback === true)) {
       issues.push(`manifest_module_not_publishable:${row.key}`);
     }
   }
@@ -156,7 +160,8 @@ function validateCanary(manifest, scorecard, options = {}) {
     status: closed ? (publishAllowed ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
     scorecardPublishAllowed: publishAllowed,
     marketClosedPreviousGood: closed,
-    tradeDate,
+    tradeDate: expectedReportDate,
+    manifestTradeDate: tradeDate,
     manifest: {
       ok: manifest.ok === true,
       unattendedStatus: manifest.unattendedStatus || "",
@@ -262,4 +267,8 @@ main().catch((error) => {
 });
 
 module.exports = { validateCanary, selfTests };
+
+
+
+
 

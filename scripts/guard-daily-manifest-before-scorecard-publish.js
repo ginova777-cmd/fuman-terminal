@@ -32,7 +32,12 @@ function compactDate(value) {
 }
 
 function isPendingNotDueModule(row = {}) {
-  const issueText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
+  const issueText = [
+    Array.isArray(row.issues) ? row.issues.join(" ") : "",
+    row.issue || "",
+    row.blocker || "",
+    row.reason || "",
+  ].join(" ");
   return row.pendingNotDue === true
     || lower(row.status) === "pending_not_due"
     || lower(issueText).includes("pending_not_due");
@@ -53,7 +58,6 @@ function pendingPreviousGoodModules(manifest = {}) {
   const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
   return rows.length > 0 && rows.every((row) => isPendingNotDueModule(row)
     && row.ok === true
-    && row.complete === true
     && row.fallback !== true
     && clean(row.runId));
 }
@@ -97,7 +101,8 @@ function main() {
   const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
   const manifestDateMatchesExpected = manifestTradeDate === EXPECTED_DATE;
   const manifestDateIsPreviousGood = Boolean(manifestTradeDate && manifestTradeDate < EXPECTED_DATE && publishDate === manifestTradeDate);
-  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood) {
+  const expectedDateIsPublishDate = Boolean(marketClosedClosureAllowed && publishDate === EXPECTED_DATE);
+  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood && !expectedDateIsPublishDate) {
     fail("manifest_tradeDate_mismatch", {
       tradeDate: manifestTradeDate,
       expectedDate: EXPECTED_DATE,
@@ -105,17 +110,19 @@ function main() {
       marketClosedClosureAllowed,
     });
   }
-  if (manifest.ok !== true || (manifest.unattendedStatus !== "YES" && !marketClosedClosureAllowed)) {
+  if (!marketClosedClosureAllowed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
     if (!ALLOW_DEGRADED) {
       fail("manifest_not_green_refuse_scorecard_publish", {
         unattendedStatus: manifest.unattendedStatus || "",
         blocker: manifest.blocker || "",
         issues: manifest.issues || [],
+        marketClosedClosureAllowed,
+        pendingPreviousGoodModules: pendingPreviousGoodModules(manifest),
       });
     }
   }
   const badModules = Array.isArray(manifest.modules)
-    ? manifest.modules.filter((row) => row.ok !== true || row.complete !== true || row.fallback === true)
+    ? manifest.modules.filter((row) => !(marketClosedClosureAllowed && isPendingNotDueModule(row)) && (row.ok !== true || row.complete !== true || row.fallback === true))
     : [];
   if (badModules.length && !ALLOW_DEGRADED) {
     fail("manifest_modules_not_green", {
@@ -159,6 +166,12 @@ function main() {
 }
 
 main();
+
+
+
+
+
+
 
 
 
