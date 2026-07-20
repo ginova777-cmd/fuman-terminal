@@ -95,6 +95,7 @@ function writerFingerprint(row = {}) {
 
 function failureCode(failure) {
   const text = String(failure || "");
+  if (text.startsWith("task_missed:")) return `TASK_MISSED_${text.split(":")[1] || "UNKNOWN"}`.toUpperCase();
   if (text.includes("natural_schedule_evidence")) return "MISSING_NATURAL_SCHEDULE_EVIDENCE";
   if (text.includes("manual_verification_only")) return "MANUAL_VERIFICATION_ONLY";
   if (text.includes("priorityPoolSymbols") || text.includes("priority_pool_symbols")) return "PRIORITY_POOL_NOT_40";
@@ -125,6 +126,59 @@ function previousUnattendedYes(tradeDate) {
   return row.unattended_yes || row.unattendedYes || "UNKNOWN";
 }
 
+
+function nextTaipeiRunAt(hour, minute) {
+  const now = new Date();
+  const parts = taipeiDateParts(now);
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
+  const candidate = new Date(`${today}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+08:00`);
+  if (candidate.getTime() > now.getTime()) return candidate.toISOString();
+  return new Date(candidate.getTime() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+function buildOpsPolicy({ yes, failedPhase, failureCodes, previousUnattendedYes, selfHeal, selfHealRecovered }) {
+  const uniqueCodes = [...new Set(failureCodes || [])];
+  const firstCode = uniqueCodes[0] || null;
+  const taskMissed = uniqueCodes.some((code) => String(code).startsWith("TASK_MISSED_"));
+  const sourceNotReady = uniqueCodes.some((code) => [
+    "PRIORITY_POOL_NOT_40",
+    "PRIORITY_COVERAGE_LT_095",
+    "QUOTE_STALE",
+    "INTRADAY_1M_NOT_FRESH",
+    "DAILY_VOLUME_NOT_READY",
+    "SCANNER_OPENING_FALSE",
+    "FORMAL_VERDICT_NO",
+  ].includes(code));
+  const incidentStatus = yes ? "NONE" : "OPEN";
+  const policyDecision = yes ? "ALLOW_FORMAL_SCAN" : "FAIL_CLOSED_PRESERVE_PREVIOUS_GOOD";
+  const selfHealAction = yes
+    ? "NO_ACTION"
+    : (taskMissed ? "QUEUE_TASK_MISSED_DIAGNOSTIC_ONLY_DO_NOT_BACKFILL_NATURAL" : "QUEUE_SOURCE_RECHECK_DO_NOT_BACKFILL_NATURAL");
+  return {
+    policy_decision: policyDecision,
+    scanner_action: yes ? "ALLOW_SCANNER_OPENING" : "BLOCK_SCANNER_OPENING",
+    publish_action: yes ? "ALLOW_TODAY_FORMAL_PUBLISH" : "PREVIOUS_GOOD_ONLY",
+    latest_action: yes ? "ALLOW_LATEST_UPDATE" : "BLOCK_LATEST_UPDATE",
+    incident_status: incidentStatus,
+    incident_severity: yes ? "NONE" : (taskMissed ? "CRITICAL" : "HIGH"),
+    incident_reason_code: firstCode,
+    incident_reason_codes: uniqueCodes,
+    first_failed_phase: failedPhase[0] || null,
+    self_heal_action: selfHealAction,
+    self_heal_does_not_count_as_natural: true,
+    self_heal_recovered: Boolean(selfHealRecovered),
+    next_retry_at: yes ? null : nextTaipeiRunAt(7, 0),
+    next_retry_policy: yes ? "NONE" : "next natural 0700/0845/0900 evidence required; manual retry cannot set unattended YES",
+    owner_message: yes
+      ? "當沖暖機三段自然 evidence 全綠，可宣告 unattended YES。"
+      : `當沖暖機 fail-closed：${failedPhase[0] || "unknown"} failed, code=${firstCode || "UNKNOWN"}; preserve previous good, do not enter formal scan.`,
+    previous_unattended_yes: previousUnattendedYes,
+    auto_recovered: previousUnattendedYes === "NO" && yes,
+    regressed_today: previousUnattendedYes === "YES" && !yes,
+    source_not_ready: sourceNotReady,
+    task_missed: taskMissed,
+  };
+}
 function normalizedEvidence(phase, row) {
   return {
     phase,
@@ -153,6 +207,7 @@ function normalizedEvidence(phase, row) {
 function phaseFailures(phase, row, tradeDate) {
   const failures = [];
   const evidence = normalizedEvidence(phase, row);
+  if (row.__read_error) failures.push(`task_missed:${phase}`);
   if (row.__read_error) failures.push(`missing_or_invalid_artifact:${row.__read_error}`);
   if (evidence.trade_date !== tradeDate) failures.push(`trade_date:${evidence.trade_date || "missing"}`);
   if (!evidence.naturalScheduleEvidence) failures.push("natural_schedule_evidence_missing_or_false");
@@ -241,6 +296,15 @@ function buildSummary(expectedTradeDate, runId) {
   }
   const yes = failedChecks.length === 0;
   const previous_unattended_yes = previousUnattendedYes(expectedTradeDate);
+  const uniqueFailureCodes = [...new Set(failureCodes)];
+  const opsPolicy = buildOpsPolicy({
+    yes,
+    failedPhase,
+    failureCodes: uniqueFailureCodes,
+    previousUnattendedYes: previous_unattended_yes,
+    selfHeal: Object.values(phaseReports).some((report) => report.evidence.selfHeal),
+    selfHealRecovered: Object.values(phaseReports).some((report) => report.evidence.selfHealRecovered),
+  });
   const summary = {
     summary_type: "daytrade_warmup_unattended_summary_v1",
     ok: yes,
@@ -260,12 +324,19 @@ function buildSummary(expectedTradeDate, runId) {
     first_failed_phase: failedPhase[0] || null,
     failed_checks: failedChecks,
     failure_reasons: failedChecks,
-    failure_codes: [...new Set(failureCodes)],
+    failure_codes: uniqueFailureCodes,
     self_heal: Object.values(phaseReports).some((report) => report.evidence.selfHeal),
     self_heal_recovered: Object.values(phaseReports).some((report) => report.evidence.selfHealRecovered),
     preserve_previous_good: !yes,
     previous_unattended_yes,
     regressed_today: previous_unattended_yes === "YES" && !yes,
+    auto_recovered: previous_unattended_yes === "NO" && yes,
+    ops_policy: opsPolicy,
+    policy_decision: opsPolicy.policy_decision,
+    incident_status: opsPolicy.incident_status,
+    incident_reason_codes: opsPolicy.incident_reason_codes,
+    next_retry_at: opsPolicy.next_retry_at,
+    owner_message: opsPolicy.owner_message,
     formal_entry_allowed: yes,
     formal_entry_speed_verdict: yes ? "YES" : "NO",
     latest_update_allowed: yes,
@@ -294,8 +365,9 @@ function main() {
   if (summary.artifact_paths.final_runtime) files.push(summary.artifact_paths.final_runtime, summary.artifact_paths.final_production);
   if (!summary.ok) summary.blocked_receipt_paths = writeBlockedReceipt(summary);
   for (const file of files) writeJson(file, summary);
-  console.log(JSON.stringify({ ok: summary.ok, unattended_yes: summary.unattended_yes, first_failed_phase: summary.first_failed_phase, failure_codes: summary.failure_codes, summary: summary.artifact_paths.summary_runtime }, null, 2));
+  console.log(JSON.stringify({ ok: summary.ok, unattended_yes: summary.unattended_yes, policy_decision: summary.policy_decision, first_failed_phase: summary.first_failed_phase, failure_codes: summary.failure_codes, incident_status: summary.incident_status, next_retry_at: summary.next_retry_at, summary: summary.artifact_paths.summary_runtime }, null, 2));
   process.exitCode = summary.ok ? 0 : 1;
 }
 
 main();
+
