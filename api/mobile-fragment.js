@@ -126,6 +126,8 @@ async function readMobileFragmentHtmlSnapshot(tab) {
   }).catch(() => null);
   const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
   if (!payload?.html || !htmlMatchesTab(tab, payload.html)) return null;
+  const snapshotRunId = String(payload.runId || "");
+  if (/waiting|aborted|mobile-fragment-fast-waiting/i.test(`${snapshotRunId} ${payload.html}`)) return null;
   if (snapshotPayloadAgeMs(payload) > MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS) return null;
   return {
     html: payload.html,
@@ -841,6 +843,7 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+
 
 
 
