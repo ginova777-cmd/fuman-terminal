@@ -1345,6 +1345,18 @@ async function withFreshStrategySourceReports(payload) {
     if (strategy5Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy5Report);
   } catch {}
   try {
+    const institutionReport = buildInstitutionSourceReport(await callInstitutionLatest());
+    if (institutionReport.runId) nextPayload = mergeSourceReport(nextPayload, institutionReport);
+  } catch {}
+  try {
+    const cbReport = buildCbSourceReport(await callCbDetectLatest());
+    if (cbReport.runId) nextPayload = mergeSourceReport(nextPayload, cbReport);
+  } catch {}
+  try {
+    const warrantReport = buildWarrantSourceReport(await callWarrantLatest());
+    if (warrantReport.runId) nextPayload = mergeSourceReport(nextPayload, warrantReport);
+  } catch {}
+  try {
     const daytradeReport = await buildDaytradeSourceReport();
     if (daytradeReport.runId) nextPayload = mergeSourceReport(nextPayload, daytradeReport);
   } catch {}

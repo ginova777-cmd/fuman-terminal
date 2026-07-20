@@ -222,6 +222,14 @@ function collectRunIds(value, out = new Set()) {
   return out;
 }
 
+function endpointRunIds(targetName, payload, body) {
+  if ((targetName === "scorecard" || targetName === "source_reports") && payload && typeof payload === "object") {
+    const reports = payload.sourceReports || payload.source_reports || payload.reports;
+    return Array.from(collectRunIds(Array.isArray(reports) ? reports : [])).sort();
+  }
+  return Array.from(collectRunIds(payload || body)).sort();
+}
+
 async function verifyAuthenticatedProtectedReadback(issues) {
   const auth = await ensureMemberToken();
   const result = {
@@ -250,7 +258,7 @@ async function verifyAuthenticatedProtectedReadback(issues) {
   for (const target of targets) {
     const response = await fetchText(target.path, { headers: protectedReadbackHeaders() });
     const payload = parseJson(response.body);
-    const runIds = Array.from(collectRunIds(payload || response.body)).sort();
+    const runIds = endpointRunIds(target.name, payload, response.body);
     const row = {
       name: target.name,
       path: target.path,
