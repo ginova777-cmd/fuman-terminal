@@ -124,6 +124,12 @@ function isMarketAiHeatmapDegradedIssue(message) {
 function isMarketAiSnapshotFallbackIssue(message) {
   return /market-ai-live source mismatch: scan-data-bundle|market-ai-live cacheSource mismatch: supabase:market_snapshots|market-ai heatmapTradeDate stale|market-ai staleSources: AI cache|market-ai sourceIssues:.*(熱力圖水源無回應|AI cache 非今日資料)|market-ai marketSession\.stale=true: awaiting-today-market-data|market-ai heatmapUsable=false/i.test(String(message || ""));
 }
+function isSimpleMarketAiIndexReport(body = {}) {
+  const freshness = body.dataFreshness || {};
+  return body.source === "market-ai-index-report"
+    && body.cacheSource === "api/market-ai-live"
+    && (freshness.heatmapDisabled === true || body.heatmap?.disabled === true);
+}
 function liveContractIssueTarget(clock, issues, warnings) {
   return shouldRequireToday(clock, false) ? issues : warnings;
 }
@@ -218,17 +224,23 @@ async function checkMarketAiLiveContract(clock, marketCalendar = null) {
   const issues = [];
   const warnings = [];
   const liveMessages = todayRequired ? issues : warnings;
+  const simpleIndexReport = isSimpleMarketAiIndexReport(body);
 
   if (result.status < 200 || result.status >= 300 || body.ok === false) {
     issues.push(`market-ai-live unhealthy HTTP ${result.status}: ${body.error || "ok=false"}`);
   }
-  if (body.source !== "live-api-bundle") liveMessages.push(`market-ai-live source mismatch: ${body.source || "(missing)"}`);
+  if (body.source !== "live-api-bundle") {
+    if (simpleIndexReport) warnings.push("market-ai simplified index report active; heatmap/radar disabled by product decision");
+    else liveMessages.push(`market-ai-live source mismatch: ${body.source || "(missing)"}`);
+  }
   if (body.cacheSource !== "api/market-ai-live") liveMessages.push(`market-ai-live cacheSource mismatch: ${body.cacheSource || "(missing)"}`);
   if (todayRequired && dashboardTradeDate !== clock.ymd) issues.push(`market-ai dashboardTradeDate stale: live=${dashboardTradeDate || "(missing)"} today=${clock.ymd}`);
-  if (todayRequired && heatmapTradeDate !== clock.ymd) issues.push(`market-ai heatmapTradeDate stale: live=${heatmapTradeDate || "(missing)"} today=${clock.ymd}`);
-  if (todayRequired && freshness.heatmapUsable !== true) issues.push(`market-ai heatmapUsable=false`);
-  if (staleSources.length) liveMessages.push(`market-ai staleSources: ${staleSources.join("; ")}`);
-  if (sourceIssues.length) liveMessages.push(`market-ai sourceIssues: ${sourceIssues.join("; ")}`);
+  if (!simpleIndexReport) {
+    if (todayRequired && heatmapTradeDate !== clock.ymd) issues.push(`market-ai heatmapTradeDate stale: live=${heatmapTradeDate || "(missing)"} today=${clock.ymd}`);
+    if (todayRequired && freshness.heatmapUsable !== true) issues.push(`market-ai heatmapUsable=false`);
+    if (staleSources.length) liveMessages.push(`market-ai staleSources: ${staleSources.join("; ")}`);
+    if (sourceIssues.length) liveMessages.push(`market-ai sourceIssues: ${sourceIssues.join("; ")}`);
+  }
   if (todayRequired && body.marketSession?.stale === true) {
     issues.push(`market-ai marketSession.stale=true: ${body.marketSession?.reason || ""}`);
   }
@@ -345,7 +357,11 @@ async function main() {
   const b = bundle.body || {};
   if (bundle.status < 200 || bundle.status >= 300 || b.ok === false) pushLiveContractIssue(clock, issues, warnings, `terminal-fast-bundle unhealthy HTTP ${bundle.status}`);
   if (isMembershipRedactedBundle(b)) {
-    if (Number(Object.keys(b.endpoints || {}).length) < 3) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle public endpoint count too low for membership-redacted payload");
+    if (b.ok !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle membership shell ok is not true");
+    if (b.snapshotHit !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle membership shell snapshotHit is not true");
+    if (b.partial !== false) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle membership shell partial is not false");
+    if (b.cacheSource !== "membership-fast-shell") pushLiveContractIssue(clock, issues, warnings, `terminal-fast-bundle membership shell cacheSource mismatch: ${b.cacheSource || "(missing)"}`);
+    if (endpointHasStrategy2(b.endpoints || {})) issues.push("terminal-fast-bundle membership shell leaked strategy2 cold endpoint");
   } else {
     if (b.snapshotHit !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotHit is not true");
     if (b.snapshotFresh !== true) pushLiveContractIssue(clock, issues, warnings, "terminal-fast-bundle snapshotFresh is not true");

@@ -165,7 +165,7 @@ async function readSnapshotForHealth(request) {
     maxAgeMs: SNAPSHOT_MAX_AGE_MS,
   }), SNAPSHOT_READ_TIMEOUT_MS + 500, null);
   if (snapshot?.payload) return { snapshot, fallback: false, error: "" };
-  if (process.env.FUMAN_PRODUCTION_HEALTH_ENABLE_LIVE_SNAPSHOT_FALLBACK !== "1") {
+  if (process.env.FUMAN_PRODUCTION_HEALTH_ENABLE_LIVE_SNAPSHOT_FALLBACK === "0") {
     return { snapshot: null, fallback: false, error: "desktop_route_snapshot_read_miss" };
   }
   try {
