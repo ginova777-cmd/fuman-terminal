@@ -17,6 +17,11 @@ const SNAPSHOT_READ_TIMEOUT_MS = Number(
   || 8000
 );
 const CHECK_STRATEGY2_LIVE = process.env.FUMAN_PRODUCTION_HEALTH_CHECK_STRATEGY2_LIVE === "1";
+const LIVE_SNAPSHOT_FALLBACK_ENABLED = process.env.FUMAN_PRODUCTION_HEALTH_ENABLE_LIVE_SNAPSHOT_FALLBACK !== "0";
+const SNAPSHOT_HEALTH_TIMEOUT_MS = Number(
+  process.env.FUMAN_PRODUCTION_HEALTH_SNAPSHOT_BUILD_TIMEOUT_MS
+  || (LIVE_SNAPSHOT_FALLBACK_ENABLED ? 30000 : SNAPSHOT_READ_TIMEOUT_MS + 1000)
+);
 
 function createCaptureResponse(resolve, label) {
   let settled = false;
@@ -165,7 +170,7 @@ async function readSnapshotForHealth(request) {
     maxAgeMs: SNAPSHOT_MAX_AGE_MS,
   }), SNAPSHOT_READ_TIMEOUT_MS + 500, null);
   if (snapshot?.payload) return { snapshot, fallback: false, error: "" };
-  if (process.env.FUMAN_PRODUCTION_HEALTH_ENABLE_LIVE_SNAPSHOT_FALLBACK === "0") {
+  if (!LIVE_SNAPSHOT_FALLBACK_ENABLED) {
     return { snapshot: null, fallback: false, error: "desktop_route_snapshot_read_miss" };
   }
   try {
@@ -218,7 +223,7 @@ module.exports = async function handler(request, response) {
 
   const issues = [];
   const [snapshotRead, strategy2] = await Promise.all([
-    withTimeout(readSnapshotForHealth(request), SNAPSHOT_READ_TIMEOUT_MS + 1000, () => ({ snapshot: null, fallback: false, error: "desktop_route_snapshot_hard_timeout" })),
+    withTimeout(readSnapshotForHealth(request), SNAPSHOT_HEALTH_TIMEOUT_MS, () => ({ snapshot: null, fallback: false, error: "desktop_route_snapshot_hard_timeout" })),
     CHECK_STRATEGY2_LIVE ? callJson("/api/strategy2-latest", strategy2Latest, {
       canvas: "1",
       compact: "1",
