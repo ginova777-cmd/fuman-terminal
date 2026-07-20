@@ -679,8 +679,10 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
 }
 
 function hasEndpointPrefix(endpoints = {}, prefix) {
+  const expectedPath = new URL(String(prefix || "/"), "https://fuman.local").pathname;
   return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
-    if (!String(endpoint || "").startsWith(prefix)) return false;
+    const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+    if (path !== expectedPath) return false;
     return payload && typeof payload === "object" && payload.ok !== false;
   });
 }
