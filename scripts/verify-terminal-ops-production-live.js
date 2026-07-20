@@ -9,6 +9,8 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-ops-production-live");
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_TIMEOUT_MS || 25000);
+const RETRY_ATTEMPTS = Math.max(1, Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_ATTEMPTS || 3));
+const RETRY_BACKOFF_MS = Math.max(0, Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_RETRY_BACKOFF_MS || 1200));
 const EXPECTED_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA || git(["rev-parse", "HEAD"]).stdout);
 const AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
 const AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
@@ -96,7 +98,7 @@ function absoluteUrl(pathname) {
   return `${BASE_URL}${appendFreshParam(pathname)}`;
 }
 
-function fetchText(pathname, options = {}, redirects = 0) {
+function fetchTextOnce(pathname, options = {}, redirects = 0) {
   const url = absoluteUrl(pathname);
   const headers = {
     "cache-control": "no-cache",
@@ -109,7 +111,7 @@ function fetchText(pathname, options = {}, redirects = 0) {
       if ([301, 302, 303, 307, 308].includes(Number(res.statusCode)) && location && redirects < 5) {
         res.resume();
         const nextUrl = new URL(location, url).toString();
-        fetchText(nextUrl, options, redirects + 1).then(resolve, reject);
+        fetchTextOnce(nextUrl, options, redirects + 1).then(resolve, reject);
         return;
       }
       let body = "";
@@ -122,6 +124,39 @@ function fetchText(pathname, options = {}, redirects = 0) {
     req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
     req.on("error", reject);
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryableFetchError(error) {
+  return /timeout|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i.test(error?.message || String(error || ""));
+}
+
+async function fetchText(pathname, options = {}, redirects = 0) {
+  const attempts = [];
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
+    const startedAt = Date.now();
+    try {
+      const result = await fetchTextOnce(pathname, options, redirects);
+      attempts.push({ attempt, ok: true, status: result.status, elapsedMs: Date.now() - startedAt });
+      return {
+        ...result,
+        attempts,
+        attemptCount: attempt,
+        recoveredAfterRetry: attempt > 1,
+      };
+    } catch (error) {
+      attempts.push({ attempt, ok: false, status: 0, elapsedMs: Date.now() - startedAt, error: error?.message || String(error) });
+      if (attempt >= RETRY_ATTEMPTS || !retryableFetchError(error)) {
+        error.fetchAttempts = attempts;
+        throw error;
+      }
+      await sleep(RETRY_BACKOFF_MS * attempt);
+    }
+  }
+  throw new Error(`fetch failed ${pathname}`);
 }
 
 function parseJson(text) {
@@ -368,6 +403,8 @@ async function verifyReleaseManifest(issues) {
     deploymentUrl: payload?.deploymentUrl || "",
     branch: payload?.branch || "",
     noStore: noStore(result.headers),
+    attemptCount: result.attemptCount || 1,
+    recoveredAfterRetry: result.recoveredAfterRetry === true,
   };
 }
 
@@ -394,6 +431,8 @@ async function verifyDirectProtectedEndpoint(item, issues) {
     error: payload?.error || "",
     reason: memberLockReason(payload),
     noStore: noStore(result.headers),
+    attemptCount: result.attemptCount || 1,
+    recoveredAfterRetry: result.recoveredAfterRetry === true,
     ok: isProtected && noStore(result.headers),
   };
 }
@@ -426,6 +465,8 @@ async function verifyRedactedLockedEndpoint(item, issues) {
     reason: memberLockReason(payload),
     leaks,
     cacheControl: cacheControl(result.headers),
+    attemptCount: result.attemptCount || 1,
+    recoveredAfterRetry: result.recoveredAfterRetry === true,
     ok: isLocked && hasShortLockedCache(result.headers),
     artifactVersion: payload?.bootHash || payload?.digest?.fragmentVersion || payload?.cacheSource || payload?.source || "",
     updatedAt: payload?.updatedAt || payload?.status?.updatedAt || "",
@@ -448,6 +489,8 @@ async function verifyShell(pathname, markers, issues) {
     ok: result.status === 200 && markers.every((marker) => body.includes(marker)) && !/>[^<]*missing_bearer_token[^<]*</i.test(visibleHtml),
     markers,
     shellVersion: body.match(/(?:version|cache|membership-lock)=([0-9A-Za-z._-]+)/)?.[1] || "",
+    attemptCount: result.attemptCount || 1,
+    recoveredAfterRetry: result.recoveredAfterRetry === true,
   };
 }
 
@@ -567,3 +610,4 @@ main().catch((error) => {
   console.error(`[terminal-ops-production-live] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

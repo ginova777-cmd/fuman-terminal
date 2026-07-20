@@ -72,6 +72,11 @@ assert(dailyRunner.includes("--allow-degraded"), "daily_runner_guard_missing_clo
 assert(rollForward.includes('npmRun("scorecard:publish")'), "roll_forward_publish_not_using_manifest_gated_script");
 assert(orchestrator.includes("npm run manifest:daily-terminal-run && npm run scorecard:publish"), "orchestrator_publish_repair_not_manifest_then_publish");
 assert(unattendedRoot.includes("verify:manifest-publish-wiring"), "unattended_root_missing_manifest_publish_wiring_gate", { unattendedRoot });
+assertOrdered(unattendedRoot, [
+  "policy:autonomous-ops",
+  "rollforward:terminal",
+  "verify:terminal-canary-publish:live",
+], "unattended_root_rollforward_plan");
 
 const payload = {
   ok: issues.length === 0,
