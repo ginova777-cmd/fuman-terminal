@@ -224,29 +224,40 @@ function Assert-Strategy3CompleteApi {
   param(
     [switch]$AllowPreviousComplete
   )
-  $url = "https://fuman-terminal.vercel.app/api/scorecard?live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-  $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45
-  $scorecard = $response.Content | ConvertFrom-Json -AsHashtable
-  $report = @($scorecard["sourceReports"]) | Where-Object { $_["key"] -eq "strategy3" } | Select-Object -First 1
-  if ($response.StatusCode -ne 200 -or -not $report -or [string]::IsNullOrWhiteSpace([string]$report["runId"])) {
-    throw "Strategy3 scorecard sourceReport verification failed status=$($response.StatusCode) runId=$($report["runId"])"
+  $args = @("scripts\verify-strategy3-live-readback.js", "--expect-complete")
+  if ($AllowPreviousComplete) { $args += "--allow-previous-complete" }
+  $output = & $nodeExe "--use-system-ca" @args 2>&1
+  $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+  $text = ($output | Out-String).Trim()
+  $readback = $null
+  try {
+    $readback = $text | ConvertFrom-Json -AsHashtable
+  } catch {
+    throw "Strategy3 internal Supabase readback produced invalid JSON exit=$exitCode text=$($text.Substring(0, [Math]::Min(500, $text.Length)))"
   }
-  $runId = [string]$report["runId"]
+  if ($exitCode -ne 0 -or -not $readback["ok"]) {
+    $issueText = ""
+    if ($readback -and $readback["verification"] -and $readback["verification"]["issues"]) {
+      $issueText = (@($readback["verification"]["issues"]) -join "; ")
+    }
+    if (-not $issueText) { $issueText = [string]$readback["error"]; if (-not $issueText) { $issueText = "internal_readback_failed" } }
+    throw "Strategy3 internal Supabase readback failed exit=$exitCode issues=$issueText"
+  }
+  $pointer = $readback["latestPointer"]
+  $runId = [string]$pointer["runId"]
   $today = Get-TaipeiTodayYmd
-  $usedDate = if ($runId -match "strategy3-(\d{8})") { $Matches[1] } else { Convert-DateTextToYmd $report["date"] }
-  $count = if ($null -ne $report["count"]) { [int]$report["count"] } else { 0 }
-  if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 scorecard sourceReport stale; usedDate=$usedDate today=$today" }
-  if ($AllowPreviousComplete -and ([string]::IsNullOrWhiteSpace($usedDate) -or $usedDate -gt $today)) { throw "Strategy3 scorecard sourceReport invalid latest complete date; usedDate=$usedDate today=$today" }
-  $allowZeroCompleteToday = (-not $AllowPreviousComplete) -and $usedDate -eq $today
-  if ($count -le 0 -and -not $allowZeroCompleteToday) { throw "Strategy3 scorecard sourceReport empty; count=$count" }
+  $usedDate = if ($runId -match "strategy3-(\d{8})") { $Matches[1] } else { [string]$readback["targetDate"] }
+  $count = if ($null -ne $pointer["resultCount"]) { [int]$pointer["resultCount"] } else { 0 }
+  if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 Supabase latest pointer stale; usedDate=$usedDate today=$today" }
+  if ($count -le 0 -and -not ((-not $AllowPreviousComplete) -and $usedDate -eq $today)) { throw "Strategy3 Supabase latest pointer empty; count=$count" }
   $payload = [pscustomobject]@{
     usedDate = $usedDate
     count = $count
-    cacheSource = "supabase-api"
+    cacheSource = "supabase-internal-readback"
     runId = $runId
     transport = [pscustomobject]@{ gate = "run_id" }
   }
-  Write-Strategy3CompleteLog "Strategy3 scorecard sourceReport verified: usedDate=$usedDate count=$count runId=$runId cacheSource=supabase-api gate=run_id"
+  Write-Strategy3CompleteLog "Strategy3 internal Supabase readback verified: usedDate=$usedDate count=$count runId=$runId cacheSource=supabase-internal-readback gate=run_id"
   return $payload
 }
 
@@ -360,4 +371,3 @@ if (Test-Path -LiteralPath $snapshotScript) {
 
 Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
-

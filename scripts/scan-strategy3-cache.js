@@ -805,6 +805,18 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
     cleanNumber(quoteCheck.rowCount),
     cleanNumber(intradayCheck.rowCount)
   );
+  const intradayDriftReady = intradayCheck.status === "ready"
+    && cleanNumber(intradayCheck.rowCount) >= cleanNumber(intradayCheck.minRequired || STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS);
+  const intradayDriftLatestCandleTime = String(intradayCheck.latestCandleTime || "");
+  const intradayDriftStaleSeconds = intradayDriftLatestCandleTime && Number.isFinite(Date.parse(intradayDriftLatestCandleTime))
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(intradayDriftLatestCandleTime)) / 1000))
+    : null;
+  const effectiveIntradayStaleSeconds = intradayDriftReady && intradayDriftStaleSeconds !== null
+    ? Math.min(cleanNumber(staleSeconds), cleanNumber(intradayDriftStaleSeconds))
+    : staleSeconds;
+  const effectiveLatestCandleTime = intradayDriftReady && intradayDriftLatestCandleTime
+    ? intradayDriftLatestCandleTime
+    : latestCandleTime;
   const driftQuoteCoverage = driftActiveSymbols > 0
     ? Math.min(1, cleanNumber(quoteCheck.rowCount) / driftActiveSymbols)
     : freshQuoteCoverage120s;
@@ -840,10 +852,12 @@ async function fetchStrategy3SourceCoverageSnapshot(sourceDriftHealth = {}) {
     ready_ma20_continuous_symbols: effectiveReadyMa20,
     ready_ma35_continuous: effectiveReadyMa35,
     ready_ma35_continuous_symbols: effectiveReadyMa35,
-    latest_candle_time: latestCandleTime,
-    latestCandleTime,
-    intraday_1m_stale_seconds: staleSeconds,
-    intraday1mStaleSeconds: staleSeconds,
+    latest_candle_time: effectiveLatestCandleTime,
+    latestCandleTime: effectiveLatestCandleTime,
+    intraday_1m_stale_seconds: effectiveIntradayStaleSeconds,
+    intraday1mStaleSeconds: effectiveIntradayStaleSeconds,
+    source_intraday_1m_stale_seconds: staleSeconds,
+    drift_intraday_1m_stale_seconds: intradayDriftStaleSeconds,
     preopenRows,
     preopenExpected,
     preopenCoverage,
@@ -2898,7 +2912,3 @@ module.exports = {
   validateStrategy3PrePublish,
   writeStrategy3BlockedReceipt,
 };
-
-
-
-

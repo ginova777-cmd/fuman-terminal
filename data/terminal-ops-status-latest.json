@@ -2,13 +2,13 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-20T04:52:35.541Z",
-  "checkedAt": "2026-07-20T04:52:33.927Z",
+  "generatedAt": "2026-07-20T07:18:31.998Z",
+  "checkedAt": "2026-07-20T07:17:19.057Z",
   "tradeDate": "20260720",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "NO",
   "action": "wait_until_next_strategy_due_time",
-  "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30",
+  "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
   "gates": {
     "predictivePreflight": {
       "ok": true,
@@ -17,18 +17,18 @@
     },
     "waterRoot": {
       "ok": true,
-      "status": "ready",
-      "reason": "terminal_water_root_ready"
+      "status": "trading_day_wait_source_window_previous_good",
+      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
     },
     "stateMachine": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
+      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "dailyManifest": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
+      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "canaryPublish": {
       "ok": true,
@@ -53,7 +53,7 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
+      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     }
   },
   "modules": [
@@ -74,14 +74,14 @@
       "key": "strategy3",
       "label": "策略3",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
-      "runId": "strategy3-20260717-20260717050304",
-      "tradeDate": "20260717",
-      "sourceDate": "20260717",
+      "runId": "strategy3-20260720-20260720061726",
+      "tradeDate": "20260720",
+      "sourceDate": "20260720",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:13:05"
+      "issue": ""
     },
     {
       "key": "strategy4",
@@ -94,7 +94,7 @@
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:16:10"
+      "issue": "pending_not_due:16:00"
     },
     {
       "key": "strategy5",
@@ -107,7 +107,7 @@
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:21:40"
+      "issue": "pending_not_due:21:00"
     },
     {
       "key": "institution",
@@ -120,7 +120,7 @@
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:14:20"
+      "issue": "pending_not_due:21:00"
     },
     {
       "key": "cb",
@@ -133,7 +133,7 @@
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:14:30"
+      "issue": "pending_not_due:21:25"
     },
     {
       "key": "warrant",
@@ -146,7 +146,7 @@
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:14:30"
+      "issue": "pending_not_due:20:30"
     }
   ],
   "jobQueue": [],
@@ -212,7 +212,7 @@
     "formalScan": {
       "allowed": false,
       "mode": "wait_until_due_time",
-      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
+      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "publish": {
       "allowed": false,

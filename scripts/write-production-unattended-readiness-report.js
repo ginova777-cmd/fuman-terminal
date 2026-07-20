@@ -75,6 +75,13 @@ function issue(issues, code, details = {}) {
   issues.push({ code, details });
 }
 
+function formatIssue(row) {
+  if (typeof row === "string") return row;
+  if (!row || typeof row !== "object") return String(row || "");
+  const code = row.issue || row.code || row.name || row.reason || row.error || "unknown_issue";
+  const details = row.details && typeof row.details === "object" ? JSON.stringify(row.details) : (row.details || "");
+  return details ? `${code}:${details}` : String(code);
+}
 function summarizeEndpoint(row = {}) {
   return {
     name: row.name || "",
@@ -311,10 +318,10 @@ function collectBlockers(payload, issues) {
     if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
   }
   for (const row of payload.productionLiveOpsReadback.issues || []) {
-    blockers.push({ blocker: `production_live_issue:${row}`, severity: "critical" });
+    blockers.push({ blocker: `production_live_issue:${formatIssue(row)}`, severity: "critical" });
   }
   for (const row of payload.windowsTaskAndServiceTokenAudit.issues || []) {
-    blockers.push({ blocker: `service_token_schedule_issue:${row.issue || row}`, severity: "critical" });
+    blockers.push({ blocker: `service_token_schedule_issue:${formatIssue(row)}`, severity: "critical" });
   }
   for (const row of issues) blockers.push({ blocker: row.code, severity: "critical", details: row.details });
   return blockers;

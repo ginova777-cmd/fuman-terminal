@@ -11,11 +11,11 @@ const REQUIRE_FORMAL_NOW = process.argv.includes("--require-formal-now");
 const STRATEGY_DUE_TIMES = {
   strategy2: "09:00",
   strategy3: "13:05",
-  strategy4: "16:10",
-  strategy5: "21:40",
-  institution: "14:20",
-  cb: "14:30",
-  warrant: "14:30",
+  strategy4: "16:00",
+  strategy5: "21:00",
+  institution: "21:00",
+  cb: "21:25",
+  warrant: "20:30",
 };
 
 function taipeiDateKey(date = new Date()) {

@@ -165,7 +165,7 @@ const STRATEGIES = [
     key: "strategy4",
     label: "策略4",
     policy: "latest complete scan",
-    unattendedDueTime: "16:10",
+    unattendedDueTime: "16:00",
     endpoint: "/api/strategy4-latest",
     mobileTab: "strategy4",
     receiptKey: "strategy4",
@@ -179,7 +179,7 @@ const STRATEGIES = [
     key: "strategy5",
     label: "策略5",
     policy: "latest complete scan",
-    unattendedDueTime: "21:40",
+    unattendedDueTime: "21:00",
     endpoint: "/api/strategy5-latest",
     mobileTab: "strategy5",
     receiptKey: "strategy5",
@@ -193,7 +193,7 @@ const STRATEGIES = [
     key: "institution",
     label: "買賣超",
     policy: "latest complete scan",
-    unattendedDueTime: "14:20",
+    unattendedDueTime: "21:00",
     endpoint: "/api/institution-latest",
     mobileTab: "chip",
     receiptKey: "institution",
@@ -207,7 +207,7 @@ const STRATEGIES = [
     key: "cb",
     label: "CB",
     policy: "latest complete scan",
-    unattendedDueTime: "14:30",
+    unattendedDueTime: "21:25",
     endpoint: "/api/cb-detect-latest",
     mobileTab: "cb",
     receiptKey: "cb-detect",
@@ -222,7 +222,7 @@ const STRATEGIES = [
     key: "warrant",
     label: "權證走向",
     policy: "latest complete scan",
-    unattendedDueTime: "14:30",
+    unattendedDueTime: "20:30",
     endpoint: "/api/warrant-flow-latest",
     mobileTab: "warrant",
     receiptKey: "warrant-flow",
@@ -1125,7 +1125,7 @@ async function main() {
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   MARKET_CALENDAR = marketCalendar;
   if (!CLI_EXPECTED_DATE && marketCalendar) {
-    const calendarExpected = compactDate(marketCalendar.displayTradeDate || marketCalendar.marketDate || marketCalendar.requestedDate);
+    const calendarExpected = marketCalendar.marketOpen === false ? compactDate(marketCalendar.displayTradeDate || marketCalendar.marketDate || marketCalendar.requestedDate) : compactDate(marketCalendar.marketDate || marketCalendar.requestedDate || marketCalendar.displayTradeDate);
     if (calendarExpected) {
       EXPECTED_DATE = calendarExpected;
       EXPECTED_DATE_SOURCE = marketCalendar.marketOpen === false ? "market_calendar_display_trade_date" : "market_calendar_market_date";

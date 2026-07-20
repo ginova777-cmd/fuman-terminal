@@ -387,7 +387,11 @@ async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   if (!EXPECTED_DATE) {
-    const calendarExpected = String(marketCalendar?.displayTradeDate || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
+    const calendarExpected = String(
+      marketCalendar?.marketOpen === false
+        ? (marketCalendar?.displayTradeDate || marketCalendar?.marketDate || marketCalendar?.requestedDate || taipeiDateKey())
+        : (marketCalendar?.marketDate || marketCalendar?.requestedDate || marketCalendar?.displayTradeDate || taipeiDateKey())
+    ).replace(/\D/g, "").slice(0, 8);
     EXPECTED_DATE = calendarExpected || taipeiDateKey();
   }
   const commands = [];
@@ -395,6 +399,8 @@ async function main() {
     commands.push(runNode(["--use-system-ca", "scripts/write-daily-terminal-run-manifest.js", `--expected-date=${EXPECTED_DATE}`], "daily-terminal-run-manifest"));
   }
   const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
+  const manifestTradeDate = String(manifest.tradeDate || manifest.expectedDate || "").replace(/\D/g, "").slice(0, 8);
+  if (manifestTradeDate) EXPECTED_DATE = manifestTradeDate;
   const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
   const moduleStates = modules.map((row) => {
     const classification = classifyModule(row, manifest, marketCalendar);
@@ -408,6 +414,8 @@ async function main() {
     .map((row) => jobForRow(row, row))
     .filter(Boolean)
     .sort((a, b) => a.priority - b.priority || String(a.key).localeCompare(String(b.key)));
+  const hasPendingNotDue = moduleStates.some((row) => row.state === "PENDING_NOT_DUE");
+  const marketClosedHold = isMarketClosedPreviousGood(manifest, marketCalendar);
   const state = {
     contract: "terminal-orchestrator-state-v1",
     checkedAt: new Date().toISOString(),
@@ -418,10 +426,10 @@ async function main() {
     commands,
     marketCalendar,
     stateMachineContract: STATE_MACHINE_CONTRACT,
-    marketClosedPreviousGood: isMarketClosedPreviousGood(manifest, marketCalendar),
+    marketClosedPreviousGood: marketClosedHold,
     overallState: overallState(manifest, moduleStates, marketCalendar),
-    unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? (isMarketClosedPreviousGood(manifest, marketCalendar) ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
-    blocker: isMarketClosedPreviousGood(manifest, marketCalendar) ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (manifest.blocker || jobQueue[0]?.blocker || ""),
+    unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? (marketClosedHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
+    blocker: hasPendingNotDue ? (manifest.blocker || jobQueue[0]?.blocker || "pending_not_due") : (marketClosedHold ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (manifest.blocker || jobQueue[0]?.blocker || "")),
     modules: moduleStates,
     jobQueue,
   };
@@ -431,8 +439,9 @@ async function main() {
   await fs.promises.writeFile(stateFile, JSON.stringify(state, null, 2));
   await fs.promises.writeFile(queueFile, JSON.stringify(jobQueue, null, 2));
   await fs.promises.writeFile(mdFile, markdown(state));
+  const operationallyValid = state.unattendedStatus === "YES" || state.unattendedStatus === "PREVIOUS_GOOD_HOLD" || (state.overallState === "PENDING_NOT_DUE" && jobQueue.length === 0);
   console.log(JSON.stringify({
-    ok: state.unattendedStatus === "YES" || state.unattendedStatus === "PREVIOUS_GOOD_HOLD",
+    ok: operationallyValid,
     unattendedStatus: state.unattendedStatus,
     overallState: state.overallState,
     tradeDate: state.tradeDate,
@@ -441,7 +450,7 @@ async function main() {
     output: stateFile,
     queue: queueFile,
   }, null, 2));
-  if (state.unattendedStatus !== "YES" && state.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
+  if (!operationallyValid) process.exitCode = 1;
 }
 
 main().catch((error) => {

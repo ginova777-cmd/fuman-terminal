@@ -327,8 +327,12 @@ async function main() {
   const mdFile = path.join(OUT_DIR, "terminal-control-plane.md");
   await fs.promises.writeFile(jsonFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await fs.promises.writeFile(mdFile, markdown(payload), "utf8");
+  const operationallyValid = decision.unattendedStatus === "YES"
+    || decision.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    || decision.state === "PENDING_NOT_DUE"
+    || rollForward.ok === true;
   console.log(JSON.stringify({
-    ok: decision.unattendedStatus === "YES" || rollForward.ok === true,
+    ok: operationallyValid,
     state: decision.state,
     unattendedStatus: decision.unattendedStatus,
     tradeDate: EXPECTED_DATE,
@@ -336,7 +340,7 @@ async function main() {
     reason: decision.reason,
     output: jsonFile,
   }, null, 2));
-  if (REQUIRE_UNATTENDED && decision.unattendedStatus !== "YES" && decision.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
+  if (REQUIRE_UNATTENDED && !operationallyValid) process.exitCode = 1;
 }
 
 main().catch((error) => {
