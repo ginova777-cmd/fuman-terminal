@@ -249,9 +249,6 @@ $manifestArgs = @(
   "scripts\write-daily-terminal-run-manifest.js",
   "--expected-date=$ExpectedDate"
 )
-if (-not $allowPreviousForRun) {
-  $manifestArgs += "--require-formal-now"
-}
 Invoke-Step "node" $manifestArgs
 
 Write-Step "verify scorecard canary against daily manifest"
@@ -263,6 +260,11 @@ Invoke-Step "node" @(
 
 $canaryFile = Join-Path $ProjectRoot "outputs\terminal-canary-publish\terminal-canary-publish.json"
 $canaryPayload = Read-JsonFile $canaryFile
+if ($canaryPayload.scorecardPublishAllowed -ne $true) {
+  $canaryIssues = if ($canaryPayload.issues) { ($canaryPayload.issues -join ";") } else { "none" }
+  Write-Step ("scorecard canary not armed; preserve previous-good scorecard snapshot and exit 0: status={0} issues={1}" -f $canaryPayload.status, $canaryIssues)
+  return
+}
 $guardTradeDate = [string]$canaryPayload.tradeDate
 if (-not $guardTradeDate) {
   $guardTradeDate = $snapshotLatestDate

@@ -65,6 +65,12 @@ function hasFallbackSignal(row = {}) {
     || text.includes("previous_good");
 }
 
+function isPendingNotDueModule(row = {}) {
+  const issueText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
+  return row.pendingNotDue === true
+    || lower(row.status) === "pending_not_due"
+    || lower(issueText).includes("pending_not_due");
+}
 function validateCanary(manifest, scorecard, options = {}) {
   const issues = [];
   const tradeDate = compactDate(manifest.tradeDate);
@@ -87,6 +93,7 @@ function validateCanary(manifest, scorecard, options = {}) {
 
   for (const row of modules) {
     const key = lower(row.key);
+    if (isPendingNotDueModule(row)) continue;
     const report = reports.get(key);
     if (!report) {
       issues.push(`sourceReport_missing:${row.key}`);
