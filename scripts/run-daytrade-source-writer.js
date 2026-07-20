@@ -978,7 +978,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     quoteFresh: ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS,
     fieldCoverage: {
       quote: Boolean(quoteMap?.has(symbol)),
-      changePercent: changePercent !== 0,
+      changePercent: Number.isFinite(changePercent),
       totalVolume: totalVolume > 0,
       tradeValue: tradeValue > 0,
       avgVolume5: avgVolume5 > 0,
@@ -2053,6 +2053,20 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const formalEntryWindow = !offSession && after0845;
+  const openingBoostActive = phase === "opening_boost_0845_0859"
+    && quoteFetchAllowedForPhase(phase)
+    && FETCH_ENABLED
+    && !offSession;
+  const openingBoostEffective = openingBoostActive
+    && (prioritySourceInjecting || selectedSymbolsFreshOk || fetchResult.fetched > 0);
+  const openingBoostScope = openingBoostActive ? "priority_top40" : "inactive";
+  const openingBoostReason = openingBoostActive
+    ? prioritySourceInjecting
+      ? "priority_source_injecting"
+      : fetchResult.fetched > 0
+      ? "priority_fetch_in_progress"
+      : "opening_boost_waiting_for_priority_freshness"
+    : `phase_${phase}`;
   const priorityGateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D";
   const gateGrade = priorityGateA && formalEntryWindow ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
@@ -2121,6 +2135,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
     formal_scope: "priority_top40",
+    opening_boost_active: openingBoostActive,
+    opening_boost_effective: openingBoostEffective,
+    opening_boost_scope: openingBoostScope,
+    opening_boost_reason: openingBoostReason,
     mother_pool_rule_version: "daytrade_mother_pool_rank_overlap_20260709",
     mother_pool_symbols: priorityRows.length,
     mother_pool_source: "dynamic_daytrade_mother_pool",
@@ -2486,7 +2504,13 @@ async function tick() {
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
   fetchResult.errors = [...(fetchResult.errors || []), ...nonFatalWriteErrors];
-  if (fetchResult.rows.length) await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
+  if (fetchResult.rows.length) {
+    await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
+    for (const row of fetchResult.rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (symbol) quoteMap.set(symbol, row);
+    }
+  }
 
   let nextState = { ...state };
   if (fetchResult.rateLimited) {
@@ -2528,6 +2552,9 @@ async function tick() {
     status: result.status,
     offSession,
     formalEntryAllowed: Boolean(result.payload.formal_entry_allowed),
+    openingBoostActive: Boolean(result.payload.opening_boost_active),
+    openingBoostEffective: Boolean(result.payload.opening_boost_effective),
+    openingBoostScope: result.payload.opening_boost_scope,
     priorityPoolSymbols: result.payload.priority_pool_symbols,
     motherPoolSymbols: result.payload.mother_pool_symbols,
     motherPoolMinSymbols: MOTHER_POOL_MIN_SYMBOLS,
@@ -2613,6 +2640,8 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
+
+
 
 
 

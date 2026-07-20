@@ -4,7 +4,7 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
-const SQL_FILE = path.join(ROOT, "ops", "public-slot", "DaytradeSourceCanonicalGateAlignmentPatch_20260707.sql");
+const SQL_FILE = path.join(ROOT, "ops", "public-slot", "DaytradeSourceCanonicalGatePriorityFirstPatch_20260708.sql");
 
 function readSecret(name) {
   for (const file of [

@@ -63,6 +63,9 @@ const REQUIRED_PAYLOAD_FIELDS = [
   "selected_symbols_fresh_ok",
   "priority_pool_symbols",
   "formal_scope",
+  "opening_boost_active",
+  "opening_boost_effective",
+  "opening_boost_scope",
   "mother_pool_symbols",
   "mother_pool_source",
   "mother_pool_rule_version",
@@ -358,6 +361,8 @@ async function main() {
   const futoptMapped = numberValue(payloadValue(payload, ["futopt_stock_mapped"], 0));
   const futoptThisLoop = numberValue(payloadValue(payload, ["futopt_stock_this_loop", "futopt_stock_quotes_this_loop"], 0));
   const openingBoostActive = boolValue(payloadValue(payload, ["opening_boost_active"], false));
+  const openingBoostEffective = boolValue(payloadValue(payload, ["opening_boost_effective"], openingBoostActive && prioritySourceInjecting));
+  const openingBoostScope = stringValue(payloadValue(payload, ["opening_boost_scope"], ""));
   const restQuoteRateLimited = boolValue(payloadValue(payload, ["rest_quote_rate_limited"], false));
   const collectorRateLimited = boolValue(payloadValue(payload, ["collector_adaptive_rate_limited", "adaptive_rate_limited"], false));
   const collectorAdaptiveRpm = numberValue(payloadValue(payload, ["collector_adaptive_rpm", "adaptive_rpm"], 0));
@@ -392,6 +397,7 @@ async function main() {
   const after0845 = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0900 = ["opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const formalWindow = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
+  const inOpeningBoostWindow = phase === "opening_boost_0845_0859";
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
 
   if (sourceAge > MAX_SOURCE_AGE_SECONDS) (prioritySourceInjecting ? warnings : issues).push(issue("source_status_stale", prioritySourceInjecting ? "warning" : "critical", { ageSeconds: sourceAge, max: MAX_SOURCE_AGE_SECONDS, prioritySourceInjecting, rule: "quote/preopen injection keeps warmup A; source row age is freshness telemetry" }));
@@ -442,7 +448,10 @@ async function main() {
   if (after0845 && readyMa35 <= 0) issues.push(issue("ma35_continuous_not_ready_for_daytrade", "critical", { readyMa35Continuous: readyMa35, min: 1 }));
   if (after0845 && futoptMapped < MIN_FUTOPT_MAPPED) issues.push(issue("futopt_stock_mapping_missing_for_daytrade", "critical", { futoptStockMapped: futoptMapped, min: MIN_FUTOPT_MAPPED }));
   if (after0845 && futoptThisLoop <= 0) warnings.push(issue("futopt_stock_quote_this_loop_zero", "warning", { futoptStockThisLoop: futoptThisLoop, phase }));
-  if (after0845 && !openingBoostActive && !prioritySourceInjecting) issues.push(issue("opening_boost_inactive_while_priority_not_injecting", "critical", { openingBoostActive, prioritySourceInjecting, priorityFreshQuotes120, minInjectingQuotes: MIN_PRIORITY_INJECTING_QUOTES }));
+  if (inOpeningBoostWindow && !openingBoostActive) issues.push(issue("opening_boost_flag_false_in_0845_window", "critical", { openingBoostActive, phase, rule: "08:45-08:59 must expose opening_boost_active=true for PS1/readback." }));
+  if (inOpeningBoostWindow && openingBoostActive && openingBoostScope !== "priority_top40") issues.push(issue("opening_boost_scope_not_priority_top40", "critical", { openingBoostScope, required: "priority_top40" }));
+  if (inOpeningBoostWindow && !openingBoostEffective && !prioritySourceInjecting) issues.push(issue("opening_boost_not_effective_for_priority_pool", "critical", { openingBoostEffective, prioritySourceInjecting, priorityFreshQuotes120, minInjectingQuotes: MIN_PRIORITY_INJECTING_QUOTES }));
+  if (after0845 && !openingBoostActive && !prioritySourceInjecting) issues.push(issue("priority_injection_inactive_after_0845", "critical", { openingBoostActive, prioritySourceInjecting, priorityFreshQuotes120, minInjectingQuotes: MIN_PRIORITY_INJECTING_QUOTES }));
   if (after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) issues.push(issue("intraday_1m_stale_for_daytrade", "critical", { intraday1mStaleSeconds, max: MAX_INTRADAY_1M_STALE_SECONDS, status: intraday1mStatus, today1mSymbols, today1mRows }));
   if ((restQuoteRateLimited || collectorRateLimited) && !prioritySourceInjecting) issues.push(issue("rate_limited_while_priority_not_injecting", "critical", { restQuoteRateLimited, collectorRateLimited, collectorPriorityOnly, collector429WindowCount, prioritySourceInjecting, priorityFreshQuotes120 }));
   if (cooldownRemainingSeconds > 0) issues.push(issue("daytrade_rate_limit_cooldown_active", "critical", { cooldownUntil, cooldownRemainingSeconds }));
@@ -633,6 +642,8 @@ async function main() {
       futoptStockMapped: futoptMapped,
       futoptStockThisLoop: futoptThisLoop,
       openingBoostActive,
+      openingBoostEffective,
+      openingBoostScope,
       restQuoteRateLimited,
       collectorRateLimited,
       collectorPriorityOnly,

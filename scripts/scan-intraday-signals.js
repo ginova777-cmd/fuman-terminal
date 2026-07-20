@@ -765,6 +765,41 @@ function buildStrategy2CompleteRunId(report) {
   return `strategy2-${ymd}-${parts.hour}${parts.minute}${parts.second}`;
 }
 
+function writeStrategy2LivePublishReceipt(report, runId, source = "scan-intraday-signals.js") {
+  const receiptDir = dataPath("scan-receipts");
+  fs.mkdirSync(receiptDir, { recursive: true });
+  const records = Array.isArray(report.records) ? report.records : [];
+  const events = Array.isArray(report.events) ? report.events : [];
+  const matches = cleanNumber(report.entryCount || report.aCount || events.length || records.length);
+  const now = new Date().toISOString();
+  const receipt = {
+    strategy: "strategy2",
+    label: "strategy2 intraday live publish",
+    tier: "critical",
+    startedAt: report.startedAt || report.generatedAt || report.updatedAt || now,
+    finishedAt: now,
+    status: report.ok === false ? "failed" : "complete",
+    exitCode: report.ok === false ? 1 : 0,
+    scanned: records.length,
+    total: records.length,
+    matches,
+    complete: report.ok !== false,
+    qualityStatus: report.qualityStatus || "complete",
+    fallback: false,
+    preservedLatest: false,
+    publishBlocked: false,
+    runId,
+    marketDate: String(report.date || "").replace(/\D/g, ""),
+    updatedAt: report.updatedAt || report.generatedAt || now,
+    payloadPath: "supabase:strategy2_latest",
+    source,
+    warnings: [],
+    blockingReason: "",
+    log: "run_id=" + runId + "; source=" + source,
+  };
+  fs.writeFileSync(path.join(receiptDir, "strategy2.json"), JSON.stringify(receipt, null, 2) + "\n", "utf8");
+  return receipt;
+}
 function buildStrategy2RealtimePayload(report, runId) {
   return {
     strategy: "strategy2",
@@ -1041,6 +1076,9 @@ async function upsertStrategy2LatestToSupabase(report) {
     console.warn(`strategy2_latest upsert skipped: ${error?.message || String(error)}`);
   }
   const completeOk = await publishStrategy2CompleteRunToSupabase({ supabaseUrl, publishKey: serviceKey, report: completePayload });
+  if (latestOk && completeOk) {
+    writeStrategy2LivePublishReceipt(completePayload, runId, "scan-intraday-signals.js:strategy2_latest+complete_run");
+  }
   return latestOk && completeOk;
 }
 
@@ -4032,3 +4070,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
