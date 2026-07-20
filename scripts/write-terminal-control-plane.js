@@ -58,6 +58,13 @@ function unique(values) {
 }
 
 function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
+  const manifestWaterReady = manifest.waterRoot?.ok === true && /ready|ok/.test(String(manifest.waterRoot?.status || "").toLowerCase());
+  const preflightReady = preflight.ok === true && preflight.action !== "skip_formal_scan" && preflight.status !== "market_closed";
+  const marketOpen = preflight.marketCalendar?.marketOpen === true
+    || preflight.marketCalendar?.tradingDayOpen === true
+    || preflight.marketCalendar?.row?.marketOpen === true
+    || preflight.marketCalendar?.row?.tradingDayOpen === true;
+  if (manifestWaterReady || preflightReady || marketOpen) return false;
   const bits = [
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
@@ -68,6 +75,15 @@ function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
     preflight.status,
   ].map((item) => String(item || "").toLowerCase()).join(" ");
   return bits.includes("market_closed") || bits.includes("previous_good") || bits.includes("wait_source_window") || bits.includes("skip_formal_scan") || policy.marketClosedPreviousGood === true;
+}
+
+function resolveExpectedDateFromPreflight(preflight = {}) {
+  const marketClosed = String(preflight.action || "") === "skip_formal_scan" || String(preflight.status || "") === "market_closed";
+  const scannerTargetDate = compactDate(preflight.scannerTargetDate || preflight.scannerTargetTradeDate || preflight.marketCalendar?.scannerTargetDate || preflight.marketCalendar?.row?.scannerTargetDate);
+  const displayTradeDate = compactDate(preflight.displayTradeDate || preflight.marketCalendar?.displayTradeDate || preflight.marketCalendar?.row?.displayTradeDate);
+  if (!marketClosed && scannerTargetDate) return scannerTargetDate;
+  if (marketClosed && displayTradeDate) return displayTradeDate;
+  return scannerTargetDate || displayTradeDate || taipeiDateKey();
 }
 
 function preflightGate(preflight = {}, expectedDate = "") {
@@ -124,6 +140,19 @@ function compactCanaryArtifact(canary = {}) {
 function runIdClosureGate(manifest = {}, expectedDate = "") {
   const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
   const rows = modules.map((row) => {
+    if (row.pendingNotDue === true) {
+      return {
+        key: row.key,
+        label: row.label || row.key,
+        ok: true,
+        pendingNotDue: true,
+        runId: row.runId || "",
+        runDate: runIdDate(row.runId || ""),
+        uniqueRunIds: [],
+        expectedDate,
+        issue: row.issues?.[0] || "pending_not_due",
+      };
+    }
     const ids = row.runIds || {};
     const raw = [row.runId, ids.scanner, ids.supabase, ids.productionApi, ids.desktop, ids.mobile, ids.scorecard88]
       .filter((value) => value && !String(value).includes("membership-protected") && !String(value).includes("not-read"));
@@ -142,9 +171,10 @@ function runIdClosureGate(manifest = {}, expectedDate = "") {
     };
   });
   const bad = rows.filter((row) => !row.ok);
+  const pending = rows.filter((row) => row.pendingNotDue === true);
   return {
-    ok: bad.length === 0 && rows.length > 0,
-    status: bad.length === 0 && rows.length > 0 ? "CLOSED" : "BLOCKED_RUNID_CLOSURE",
+    ok: bad.length === 0 && pending.length === 0 && rows.length > 0,
+    status: pending.length > 0 ? "PENDING_NOT_DUE" : (bad.length === 0 && rows.length > 0 ? "CLOSED" : "BLOCKED_RUNID_CLOSURE"),
     modules: rows,
     blockers: bad.map((row) => `${row.key}:${row.issue}`),
   };
@@ -176,6 +206,9 @@ function decide({ preflight, manifest, orchestrator, policy, canary, closure, ro
   const decision = policy.decision || {};
   if (decision.opsState === "BLOCKED_AUTH") {
     return { state: "BLOCKED_AUTH", unattendedStatus: "NO", reason: decision.reason || "auth_blocker", action: "fix_service_token_or_membership_layer" };
+  }
+  if (decision.opsState === "PENDING_NOT_DUE" || manifest.blocker?.startsWith?.("pending_not_due")) {
+    return { state: "PENDING_NOT_DUE", unattendedStatus: "NO", reason: manifest.blocker || decision.reason || "pending_not_due", action: "wait_until_next_strategy_due_time" };
   }
   if (decision.opsState === "BLOCKED_SOURCE") {
     return { state: "BLOCKED_SOURCE", unattendedStatus: "NO", reason: decision.reason || "water_root_not_ready", action: "wait_water_root_then_auto_retry" };
@@ -231,7 +264,7 @@ async function main() {
     ? predictiveArtifact.rawPreflight
     : await buildPreflight({});
   if (!EXPECTED_DATE) {
-    EXPECTED_DATE = compactDate(preflight.marketCalendar?.displayTradeDate || preflight.displayTradeDate || preflight.scannerTargetDate || taipeiDateKey());
+    EXPECTED_DATE = resolveExpectedDateFromPreflight(preflight);
   }
   const commands = [];
   if (!FROM_EXISTING) {
@@ -244,6 +277,10 @@ async function main() {
   const orchestrator = readJson(path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-orchestrator-state.json"), {});
   const policy = readJson(path.join(ROOT, "outputs", "autonomous-ops-policy", "autonomous-ops-policy.json"), {});
   const waterRoot = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
+  if (!process.argv.some((arg) => arg.startsWith("--expected-date="))) {
+    const manifestDate = compactDate(manifest.tradeDate || waterRoot.expectedDate || waterRoot.displayTradeDate || "");
+    if (manifestDate) EXPECTED_DATE = manifestDate;
+  }
   const canaryArtifact = readJson(CANARY_FILE, null);
   const canary = canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy);
   const closure = runIdClosureGate(manifest, EXPECTED_DATE);
@@ -268,7 +305,7 @@ async function main() {
     },
     dailyManifest: {
       ok: manifest.ok === true,
-      status: manifest.ok === true ? "GREEN" : "BLOCKED",
+      status: manifest.ok === true ? "GREEN" : (manifest.blocker?.startsWith?.("pending_not_due") ? "PENDING_NOT_DUE" : "BLOCKED"),
       unattendedStatus: manifest.unattendedStatus || "",
       blocker: manifest.blocker || "",
       modules: Array.isArray(manifest.modules) ? manifest.modules.length : 0,

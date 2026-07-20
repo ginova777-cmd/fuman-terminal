@@ -8,13 +8,13 @@ const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out=")
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const SELF_TEST = process.argv.includes("--self-test");
-const LIFECYCLE_STATES = ["PENDING", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
+const LIFECYCLE_STATES = ["PENDING", "PENDING_NOT_DUE", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
 const FAILURE_STATES = ["BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH"];
 const STATE_MACHINE_CONTRACT = {
   contract: "terminal-state-machine-v1",
   lifecycle: LIFECYCLE_STATES,
   failureStates: FAILURE_STATES,
-  terminalStates: ["CLOSED", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
+  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
   invariants: [
     "water_root_must_pass_before_scanner_publish",
     "scanner_receipt_runid_must_equal_supabase_latest_pointer",
@@ -91,6 +91,17 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
   let state = "PENDING";
   let blocker = "";
 
+  if (row.pendingNotDue === true || has(text, "pending_not_due")) {
+    return {
+      state: "PENDING_NOT_DUE",
+      layer: ["schedule"],
+      blocker: row.issues?.[0] || "pending_not_due",
+      nextAction: "wait_until_strategy_due_time",
+      retryable: true,
+      priority: 85,
+    };
+  }
+
   if (row.ok === true && row.complete === true && row.fallback !== true) {
     return {
       state: "CLOSED",
@@ -152,6 +163,7 @@ function priorityForState(state) {
     FAILED_PUBLISH: 40,
     DEGRADED_PREVIOUS_GOOD: 50,
     FAILED_DISPLAY: 60,
+    PENDING_NOT_DUE: 85,
     PENDING: 70,
     CLOSED: 90,
   }[state] || 80;
@@ -168,6 +180,7 @@ function nextActionForState(state, row = {}) {
 }
 
 function lifecycleStageForRow(row = {}, classification = {}, manifest = {}, marketCalendar = null) {
+  if (classification.state === "PENDING_NOT_DUE") return "PENDING_NOT_DUE";
   if (classification.state && classification.state !== "CLOSED") return classification.state;
   const runIds = row.runIds || {};
   const waterClosed = isMarketClosedPreviousGood(manifest, marketCalendar);
@@ -196,7 +209,7 @@ function idempotencyKeyFor(row = {}, classification = {}) {
   return raw.replace(/[^a-zA-Z0-9:_-]+/g, "_").slice(0, 180);
 }
 function jobForRow(row, classification) {
-  if (classification.state === "CLOSED") return null;
+  if (classification.state === "CLOSED" || classification.state === "PENDING_NOT_DUE") return null;
   const command = commandFor(row.key, classification.state);
   return {
     key: row.key,
@@ -237,6 +250,7 @@ function commandFor(key, state) {
 
 function overallState(manifest, moduleStates, marketCalendar = null) {
   if (manifest.ok === true && moduleStates.every((row) => row.state === "CLOSED")) return "CLOSED";
+  if (moduleStates.some((row) => row.state === "PENDING_NOT_DUE")) return "PENDING_NOT_DUE";
   if ((manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar)) || moduleStates.some((row) => row.state === "BLOCKED_SOURCE")) return "BLOCKED_SOURCE";
   if (moduleStates.some((row) => row.state === "BLOCKED_AUTH")) return "BLOCKED_AUTH";
   if (moduleStates.some((row) => row.state === "FAILED_SCAN")) return "FAILED_SCAN";
@@ -434,12 +448,3 @@ main().catch((error) => {
   console.error(`[terminal-orchestrator-state] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-

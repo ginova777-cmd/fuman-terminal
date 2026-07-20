@@ -29,8 +29,17 @@ function assert(condition, issue, details, issues) {
   if (!condition) issues.push({ issue, details });
 }
 
+function isPendingNotDue(payload) {
+  return payload.unattendedStatus === "NO"
+    && payload.state === "PENDING_NOT_DUE"
+    && payload.gates?.dailyManifest?.status === "PENDING_NOT_DUE"
+    && payload.gates?.runIdClosure?.status === "PENDING_NOT_DUE"
+    && payload.actionMatrix?.stopMode === "wait_schedule";
+}
+
 function isAcceptableOpsStatus(payload) {
   if (payload.unattendedStatus === "YES") return true;
+  if (isPendingNotDue(payload)) return true;
   return payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
     && payload.canaryPublish?.scorecardPublishAllowed === false
@@ -59,11 +68,11 @@ async function main() {
   assert(isAcceptableOpsStatus(payload), "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason }, issues);
   assert(Array.isArray(payload.modules) && payload.modules.length >= 7, "modules_missing", { modules: payload.modules?.length }, issues);
   assert(payload.modules.every((row) => row.runId && row.ok === true), "module_runid_or_ok_missing", { modules: payload.modules }, issues);
-  assert(payload.gates?.runIdClosure?.ok === true, "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
+  assert(payload.gates?.runIdClosure?.ok === true || isPendingNotDue(payload), "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
   assert(payload.gates?.predictivePreflight?.status, "predictive_preflight_gate_missing", { gate: payload.gates?.predictivePreflight }, issues);
   assert(payload.predictivePreflight?.contract === "terminal-predictive-preflight-v1", "predictive_preflight_contract_missing", { predictivePreflight: payload.predictivePreflight }, issues);
   assert(payload.predictivePreflight?.scannerTargetDate, "predictive_preflight_scanner_target_missing", { predictivePreflight: payload.predictivePreflight }, issues);
-  assert(payload.gates?.dailyManifest?.ok === true, "daily_manifest_gate_not_ok", { gate: payload.gates?.dailyManifest }, issues);
+  assert(payload.gates?.dailyManifest?.ok === true || isPendingNotDue(payload), "daily_manifest_gate_not_ok", { gate: payload.gates?.dailyManifest }, issues);
   assert(payload.gates?.canaryPublish?.status, "canary_publish_gate_missing", { gate: payload.gates?.canaryPublish }, issues);
   assert(payload.canaryPublish?.contract === "terminal-canary-publish-v1", "canary_publish_contract_missing", { canaryPublish: payload.canaryPublish }, issues);
   assert(payload.gates?.notificationPolicy?.status, "notification_policy_gate_missing", { gate: payload.gates?.notificationPolicy }, issues);

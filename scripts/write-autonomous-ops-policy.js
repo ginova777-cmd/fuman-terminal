@@ -22,6 +22,9 @@ function unique(values) {
 }
 
 function isMarketClosedPreviousGood(manifest = {}, orchestrator = {}, waterRoot = {}) {
+  const rootReady = waterRoot.ok === true && /ready|ok/.test(lower(waterRoot.status));
+  const rootOpen = waterRoot.marketCalendar?.marketOpen === true || waterRoot.marketCalendar?.tradingDayOpen === true;
+  if (rootReady || rootOpen) return false;
   const bits = [
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
@@ -46,6 +49,23 @@ function runIdDate(runId) {
 
 function modulePolicy(row = {}, context = {}) {
   const issues = Array.isArray(row.issues) ? row.issues : [];
+  if (row.pendingNotDue === true || issues.some((issue) => String(issue || "").includes("pending_not_due"))) {
+    return {
+      key: row.key,
+      label: row.label || row.key,
+      state: "PENDING_NOT_DUE",
+      runId: row.runId || "",
+      resultCount: Number(row.resultCount || 0),
+      zeroResultComplete: false,
+      runIdAligned: true,
+      allowPublish: false,
+      allowTerminalDisplay: true,
+      preservePreviousGood: true,
+      displayMode: "pending_not_due_previous_good",
+      blockers: issues,
+      requiredClosure: row.runIds || {},
+    };
+  }
   const runIds = row.runIds || {};
   const allRunIds = unique([row.runId, runIds.scanner, runIds.supabase, runIds.productionApi, runIds.desktop, runIds.mobile, runIds.scorecard88]);
   const closed = row.ok === true && row.complete === true && row.fallback !== true && issues.length === 0;
@@ -117,6 +137,7 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
   const allModulesClosed = modules.every((row) => row.state === "CLOSED" || (marketClosedPreviousGood && row.displayMode === "market_closed_previous_good"));
   const hasAuthBlock = jobQueue.some((job) => String(job.state || "").includes("AUTH"));
   const hasSourceBlock = jobQueue.some((job) => String(job.state || "").includes("SOURCE"));
+  const hasPendingNotDue = modules.some((row) => row.state === "PENDING_NOT_DUE");
 
   if (hasAuthBlock) {
     return {
@@ -154,6 +175,19 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
       reason: manifest.waterRoot?.reason || waterRoot.reason || jobQueue[0]?.blocker || "water_root_not_ready",
     };
   }
+  if (waterOk && hasPendingNotDue && jobQueue.length === 0) {
+    return {
+      opsState: "PENDING_NOT_DUE",
+      unattendedStatus: "NO",
+      formalScanAllowed: false,
+      scorecardPublishAllowed: false,
+      terminalSnapshotAllowed: true,
+      autoRecoveryAllowed: true,
+      action: "wait_until_next_strategy_due_time",
+      reason: manifest.blocker || "pending_not_due",
+    };
+  }
+
   if (manifestOk && allModulesClosed && jobQueue.length === 0) {
     return {
       opsState: "UNATTENDED_YES",
@@ -187,6 +221,7 @@ function buildActionMatrix({ decision = {}, manifest = {}, orchestrator = {}, wa
   const marketClosed = opsState === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" || marketClosedPreviousGood;
   const unattended = opsState === "UNATTENDED_YES";
   const degraded = opsState === "DEGRADED_RETRY_QUEUE";
+  const pending = opsState === "PENDING_NOT_DUE";
   const tradeDate = manifest.tradeDate || "unknown";
 
   const base = {
@@ -224,6 +259,21 @@ function buildActionMatrix({ decision = {}, manifest = {}, orchestrator = {}, wa
       notify: { required: false, channel: "ops_alert", kind: "none", dedupeKey: `UNATTENDED_YES:${tradeDate}`, reason: "no_operator_attention_needed" },
       operatorAction: "continue_autonomous_monitoring",
       automationAction: "monitor_only",
+    };
+  }
+
+  if (pending) {
+    return {
+      ...base,
+      severity: "info",
+      stopMode: "wait_schedule",
+      formalScan: { allowed: false, mode: "wait_until_due_time", reason: decision.reason || "pending_not_due" },
+      publish: { allowed: false, canaryRequired: true, mode: "do_not_publish_until_all_due_modules_closed", reason: "manifest_pending_not_due" },
+      terminalDisplay: { allowed: true, mode: "previous_good_until_due_time", reason: "show_last_good_until_strategy_due_time" },
+      rollForward: { allowed: true, mode: "schedule_wait", reason: "auto_continue_when_due" },
+      notify: { required: false, channel: "ops_alert", kind: "none", dedupeKey: `PENDING_NOT_DUE:${tradeDate}`, reason: "expected_schedule_wait" },
+      operatorAction: "wait_until_next_strategy_due_time",
+      automationAction: "resume_when_due_time_arrives",
     };
   }
 

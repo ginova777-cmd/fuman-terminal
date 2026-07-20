@@ -151,6 +151,55 @@ function gateSummary(row = {}) {
   };
 }
 
+function intradayStatusSummary(row = {}, checkedAt = new Date().toISOString()) {
+  const updatedAt = row.updated_at || row.intraday_1m_status_updated_at || row.latest_candle_time || "";
+  const explicitAge = asNumber(row.latest_candle_age_seconds ?? row.intraday_1m_stale_seconds ?? row.stale_seconds, NaN);
+  const checkedMs = Date.parse(checkedAt);
+  const updatedMs = Date.parse(updatedAt);
+  const computedAge = Number.isFinite(checkedMs) && Number.isFinite(updatedMs)
+    ? Math.max(0, Math.round((checkedMs - updatedMs) / 1000))
+    : 999999;
+  return {
+    hasTodayData: row.has_today_data === true || asNumber(row.today_candle_count) > 0,
+    todayCandleCount: asNumber(row.today_candle_count),
+    latestCandleTime: row.latest_candle_time || "",
+    updatedAt,
+    latestCandleAgeSeconds: Number.isFinite(explicitAge) ? explicitAge : computedAge,
+    updatedAgeSeconds: computedAge,
+    readyMa20Continuous: row.ready_ma20_continuous === true || row.ready_ge_20 === true,
+    readyMa35Continuous: row.ready_ma35_continuous === true || row.ready_ge_35 === true,
+  };
+}
+
+function effectiveSourceOperational(payload) {
+  const required = payload.required;
+  const source = payload.sourceStatus.summary;
+  const intraday = payload.intraday1m.summary || {};
+  const daily = payload.dailyVolume.row || {};
+  const intradayAge = Math.min(
+    source.intraday1mStaleSeconds,
+    asNumber(intraday.latestCandleAgeSeconds, 999999),
+    asNumber(intraday.updatedAgeSeconds, 999999),
+  );
+  const sourceStatusOk = ["ok", "ready"].includes(source.status);
+  const objectiveOk = Boolean(
+    source.priorityFreshQuoteCoverage120s >= required.priorityCoverage
+    && source.quoteAgeSeconds <= required.quoteAgeSeconds
+    && intraday.hasTodayData === true
+    && intradayAge <= required.intraday1mStaleSeconds
+    && (!required.dailyVolume || ["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase()))
+  );
+  return {
+    ok: sourceStatusOk || objectiveOk,
+    sourceStatusOk,
+    objectiveOk,
+    intraday1mStaleSeconds: intradayAge,
+    sourceIntraday1mStaleSeconds: source.intraday1mStaleSeconds,
+    intradayStatusAgeSeconds: asNumber(intraday.latestCandleAgeSeconds, 999999),
+    intradayStatusUpdatedAgeSeconds: asNumber(intraday.updatedAgeSeconds, 999999),
+    reason: sourceStatusOk ? "source_status_ok" : (objectiveOk ? "objective_water_metrics_ready_source_status_lagging" : "source_status_and_objective_metrics_not_ready"),
+  };
+}
 function isMarketClosedPreviousGood(payload) {
   const calendar = payload.marketCalendar?.row || {};
   const source = payload.sourceStatus?.summary || {};
@@ -180,6 +229,8 @@ function statusIssues(payload) {
   const source = payload.sourceStatus.summary;
   const gate = payload.canonicalGate.summary;
   const intraday = payload.intraday1m.row || {};
+  const intradaySummary = payload.intraday1m.summary || {};
+  const effective = payload.effectiveSource || effectiveSourceOperational(payload);
   const daily = payload.dailyVolume.row || {};
   const motherRows = payload.motherPool.rowCount;
   const priorityRows = payload.priorityTop40.rowCount;
@@ -194,13 +245,13 @@ function statusIssues(payload) {
   if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
     return issues;
   }
-  if (!["ok", "ready"].includes(source.status)) issues.push(`source_status_not_ready:${source.status || "missing"}`);
+  if (!effective.ok) issues.push(`source_status_not_ready:${source.status || "missing"}`);
   if (source.priorityFreshQuoteCoverage120s < required.priorityCoverage) {
     issues.push(`priority_quote_coverage_low:${source.priorityFreshQuoteCoverage120s}`);
   }
   if (source.quoteAgeSeconds > required.quoteAgeSeconds) issues.push(`quote_age_too_old:${source.quoteAgeSeconds}`);
-  if (source.intraday1mStaleSeconds > required.intraday1mStaleSeconds) {
-    issues.push(`intraday_1m_stale:${source.intraday1mStaleSeconds}`);
+  if (effective.intraday1mStaleSeconds > required.intraday1mStaleSeconds) {
+    issues.push(`intraday_1m_stale:${effective.intraday1mStaleSeconds}`);
   }
   if (required.dailyVolume && !["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase())) {
     issues.push(`daily_volume_not_ready:${source.dailyVolumeStatus || daily.status || "missing"}`);
@@ -214,7 +265,8 @@ function statusIssues(payload) {
     if (gate.formalEntryAllowed !== true) issues.push("formal_entry_allowed_false");
     if (gate.scannerCanRunOpening !== true) issues.push("scanner_can_run_opening_false");
   }
-  if (intraday.today_candle_count !== undefined && asNumber(intraday.today_candle_count) <= 0) {
+  const intradayHasTodayData = intradaySummary.hasTodayData === true || asNumber(intraday.today_candle_count) > 0;
+  if ((intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
     issues.push("intraday_1m_today_candle_count_zero");
   }
   return issues;
@@ -298,8 +350,9 @@ async function main() {
     }),
   ]);
   const probes = [sourceStatus, canonicalGate, motherPool, priorityTop40, intraday1m, dailyVolume];
+  const checkedAt = new Date().toISOString();
   const payload = {
-    checkedAt: new Date().toISOString(),
+    checkedAt,
     expectedDate: EXPECTED_DATE,
     baseUrl: BASE_URL,
     supabaseProject: SUPABASE_URL,
@@ -310,10 +363,11 @@ async function main() {
     canonicalGate: { ...canonicalGate, summary: gateSummary(canonicalGate.row || {}) },
     motherPool,
     priorityTop40,
-    intraday1m,
+    intraday1m: { ...intraday1m, summary: intradayStatusSummary(intraday1m.row || {}, checkedAt) },
     dailyVolume,
   };
   payload.marketClosedPreviousGood = isMarketClosedPreviousGood(payload);
+  payload.effectiveSource = effectiveSourceOperational(payload);
   payload.issues = statusIssues(payload);
   payload.ok = payload.issues.length === 0;
   const previousGoodHoldStatus = payload.marketCalendar?.row?.marketOpen === true
@@ -340,7 +394,9 @@ async function main() {
     gate: payload.canonicalGate.summary.canonicalGateGrade,
     priorityFreshQuoteCoverage120s: payload.sourceStatus.summary.priorityFreshQuoteCoverage120s,
     quoteAgeSeconds: payload.sourceStatus.summary.quoteAgeSeconds,
-    intraday1mStaleSeconds: payload.sourceStatus.summary.intraday1mStaleSeconds,
+    intraday1mStaleSeconds: payload.effectiveSource.intraday1mStaleSeconds,
+    sourceIntraday1mStaleSeconds: payload.effectiveSource.sourceIntraday1mStaleSeconds,
+    intradayStatusAgeSeconds: payload.effectiveSource.intradayStatusAgeSeconds,
     output: jsonFile,
   }, null, 2));
   if (!payload.ok) process.exitCode = 1;

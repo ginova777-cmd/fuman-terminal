@@ -13,7 +13,8 @@ function main() {
     jobs: status.jobQueue.length,
     output: DATA_FILE,
   }, null, 2));
-  if (status.unattendedStatus !== "YES" && status.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
+  const expectedWaitingState = status.state === "PENDING_NOT_DUE" || String(status.reason || "").startsWith("pending_not_due");
+  if (!expectedWaitingState && status.unattendedStatus !== "YES" && status.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
 }
 
 main();

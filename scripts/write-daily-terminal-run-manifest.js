@@ -8,6 +8,15 @@ let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date=
 const REQUESTED_DATE = EXPECTED_DATE;
 const SKIP_RUN = process.argv.includes("--from-existing");
 const REQUIRE_FORMAL_NOW = process.argv.includes("--require-formal-now");
+const STRATEGY_DUE_TIMES = {
+  strategy2: "09:00",
+  strategy3: "13:05",
+  strategy4: "16:10",
+  strategy5: "21:40",
+  institution: "14:20",
+  cb: "14:30",
+  warrant: "14:30",
+};
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -26,6 +35,39 @@ function readJson(file, fallback = null) {
   }
 }
 
+
+function taipeiMinuteOfDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return Number(parts.hour || 0) * 60 + Number(parts.minute || 0);
+}
+
+function minuteFromClock(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function scheduleStatusForKey(key) {
+  const dueTime = STRATEGY_DUE_TIMES[key] || "00:00";
+  const dueMinute = minuteFromClock(dueTime);
+  const currentMinute = taipeiMinuteOfDay();
+  const pendingNotDue = dueMinute !== null && currentMinute < dueMinute;
+  return {
+    dueTime,
+    currentMinute,
+    dueMinute,
+    pendingNotDue,
+    status: pendingNotDue ? "PENDING_NOT_DUE" : "DUE",
+  };
+}
 function runDateFromId(value) {
   const match = String(value || "").match(/(?:^|[-_])(\d{8})(?:[-_]|$)/);
   return match ? match[1] : "";
@@ -84,7 +126,27 @@ function isPreviousGoodHoldWaterRoot(water = {}) {
     || bits.includes("market_closed");
 }
 
+
+function resolveExpectedDateFromWater(water = {}, fallbackDate = EXPECTED_DATE) {
+  const targetDate = compactDate(
+    water.expectedDate
+    || water.scannerTargetDate
+    || water.scannerTargetTradeDate
+    || water.marketCalendar?.row?.scannerTargetDate
+    || water.marketCalendar?.row?.targetTradeDate
+  );
+  const displayTradeDate = compactDate(water.marketCalendar?.row?.displayTradeDate || water.displayTradeDate || "");
+  const marketOpen = water.marketCalendar?.row?.marketOpen === true
+    || water.marketCalendar?.row?.tradingDayOpen === true
+    || water.marketCalendar?.marketOpen === true
+    || water.marketCalendar?.tradingDayOpen === true;
+  const waterReady = water.ok === true && /ready|ok/.test(String(water.status || "").toLowerCase());
+  if ((marketOpen || waterReady || REQUIRE_FORMAL_NOW) && targetDate) return targetDate;
+  if (displayTradeDate && !REQUIRE_FORMAL_NOW) return displayTradeDate;
+  return compactDate(fallbackDate || taipeiDateKey());
+}
 function moduleRow(row = {}) {
+  const scheduleStatus = scheduleStatusForKey(row.key);
   let receipt = row.receipt || {};
   const supabase = row.supabase || {};
   const supabaseDate = firstPresent(runDateFromId(supabase.runId), compactDate(supabase.tradeDate || supabase.date || supabase.updatedAt));
@@ -151,12 +213,13 @@ function moduleRow(row = {}) {
   };
   const runIdValues = Object.values(runIds).filter(Boolean);
   const uniqueRunIds = [...new Set(runIdValues)];
-  if (uniqueRunIds.length > 1) issues.push(`manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
-  if (!runId) issues.push("manifest_missing_runId");
-  if (tradeDate !== EXPECTED_DATE) issues.push(`manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
-  if (sourceDate !== EXPECTED_DATE) issues.push(`manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
-  if (fallback) issues.push("manifest_fallback_true");
-  if (receipt.status !== "complete" || receipt.complete !== true) issues.push(`manifest_scanner_not_complete:${receipt.status || "missing"}`);
+  const pendingNotDue = scheduleStatus.pendingNotDue === true && tradeDate !== EXPECTED_DATE;
+  if (!pendingNotDue && uniqueRunIds.length > 1) issues.push(`manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
+  if (!pendingNotDue && !runId) issues.push("manifest_missing_runId");
+  if (!pendingNotDue && tradeDate !== EXPECTED_DATE) issues.push(`manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
+  if (!pendingNotDue && sourceDate !== EXPECTED_DATE) issues.push(`manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
+  if (!pendingNotDue && fallback) issues.push("manifest_fallback_true");
+  if (!pendingNotDue && (receipt.status !== "complete" || receipt.complete !== true)) issues.push(`manifest_scanner_not_complete:${receipt.status || "missing"}`);
   const scorecard88Protection = scorecard.membershipProtected
     ? "membership-protected"
     : scorecard.runId
@@ -176,8 +239,11 @@ function moduleRow(row = {}) {
     readbackCount: Number(firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0,
     runIds,
     scorecard88Protection,
-    ok: issues.length === 0 && complete,
-    issues,
+    scheduleStatus,
+    pendingNotDue,
+    status: pendingNotDue ? "PENDING_NOT_DUE" : ((issues.length === 0 && complete) ? "CLOSED" : "BLOCKED"),
+    ok: pendingNotDue ? true : (issues.length === 0 && complete),
+    issues: pendingNotDue ? [`pending_not_due:${scheduleStatus.dueTime}`] : issues,
   };
 }
 
@@ -212,8 +278,7 @@ async function main() {
     if (REQUIRE_FORMAL_NOW) waterArgs.push("--require-formal-now");
     commands.push(runNode(waterArgs, "terminal-water-root"));
     const waterAfterRoot = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
-    const displayTradeDate = compactDate(waterAfterRoot.marketCalendar?.row?.displayTradeDate || waterAfterRoot.displayTradeDate || "");
-    if (displayTradeDate && !REQUIRE_FORMAL_NOW) EXPECTED_DATE = displayTradeDate;
+    EXPECTED_DATE = resolveExpectedDateFromWater(waterAfterRoot, EXPECTED_DATE);
     commands.push(runNode([
       "--use-system-ca",
       "scripts/verify-terminal-resource-chain.js",
@@ -224,8 +289,7 @@ async function main() {
   }
 
   const water = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
-  const displayTradeDate = compactDate(water.marketCalendar?.row?.displayTradeDate || water.displayTradeDate || "");
-  if (displayTradeDate && !REQUIRE_FORMAL_NOW) EXPECTED_DATE = displayTradeDate;
+  EXPECTED_DATE = resolveExpectedDateFromWater(water, EXPECTED_DATE);
   const chain = readJson(path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json"), {});
   const modules = Array.isArray(chain.results)
     ? chain.results.filter((row) => row.key !== "market").map(moduleRow)
@@ -235,7 +299,8 @@ async function main() {
   if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
-  const previousGoodHold = issues.length === 0 && isPreviousGoodHoldWaterRoot(water);
+  const pendingModules = modules.filter((item) => item.pendingNotDue === true);
+  const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
     checkedAt: new Date().toISOString(),
@@ -251,11 +316,12 @@ async function main() {
     },
     commands,
     modules,
-    ok: issues.length === 0,
+    pendingModules: pendingModules.map((row) => ({ key: row.key, dueTime: row.scheduleStatus?.dueTime || "", runId: row.runId || "" })),
+    ok: issues.length === 0 && pendingModules.length === 0,
     previousGoodHold,
-    freshUnattended: issues.length === 0 && !previousGoodHold,
-    unattendedStatus: issues.length === 0 ? (previousGoodHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
-    blocker: issues[0] || "",
+    freshUnattended: issues.length === 0 && pendingModules.length === 0 && !previousGoodHold,
+    unattendedStatus: issues.length === 0 && pendingModules.length === 0 ? (previousGoodHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
+    blocker: issues[0] || (pendingModules.length ? `pending_not_due:${pendingModules.map((row) => `${row.key}@${row.scheduleStatus?.dueTime || ""}`).join(",")}` : ""),
     issues,
   };
   const dateFile = path.join(OUT_DIR, `daily-terminal-run-${EXPECTED_DATE}.json`);
@@ -272,11 +338,10 @@ async function main() {
     modules: manifest.modules.map((row) => ({ key: row.key, ok: row.ok, runId: row.runId, issue: row.issues[0] || "" })),
     output: latestFile,
   }, null, 2));
-  if (!manifest.ok) process.exitCode = 1;
+  if (issues.length > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {
   console.error(`[daily-terminal-run-manifest] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-

@@ -337,6 +337,12 @@ function authenticatedReadbackOk(payload = {}) {
 function requiresAuthenticatedReadbackForReady(payload = {}) {
   return !isPreviousGoodWaterRoot(payload);
 }
+
+function resourceChainProtectedReadbackOk(payload = {}) {
+  const auth = payload.resourceChain?.membershipProtectedSummary || {};
+  return auth.enabled === true && !auth.error;
+}
+
 function classifyPasses(payload) {
   const productionLivePasses = [];
   const nonProductionOrPreviousGoodPasses = [];
@@ -411,6 +417,8 @@ function markdown(payload) {
   lines.push("## 3. Resource Chain");
   lines.push(`- command: ${payload.resourceChain.command}`);
   lines.push(`- ok/expectedDate/rowCount: ${payload.resourceChain.ok} / ${payload.resourceChain.expectedDate} / ${payload.resourceChain.rowCount}`);
+  const chainAuth = payload.resourceChain.membershipProtectedSummary || {};
+  lines.push(`- protected readback auth: source=${chainAuth.source || "--"}; attempted=${chainAuth.attempted === true}; enabled=${chainAuth.enabled === true}; status=${chainAuth.status || 0}; error=${chainAuth.error || ""}`);
   for (const row of payload.resourceChain.rows) lines.push(`- ${row.key}: ok=${row.ok}; receipt=${row.receiptRunId || "--"}; supabase=${row.supabaseRunId || "--"}; live=${row.liveRunId || "--"}; desktop=${row.desktopRunId || "--"}; mobile=${row.mobileRunId || "--"}; scorecard=${row.scorecardRunId || row.scorecardStatus || "--"}; protected=${row.membershipProtected}; issues=${(row.issues || []).join(",") || "none"}`);
   lines.push("");
   lines.push("## 4. Daily Manifest");
@@ -467,6 +475,7 @@ function verifyPayload(payload, issues) {
   if (payload.waterRoot.ok !== true) issue(issues, "water_root_not_ok");
   if (payload.resourceChain.ok !== true) issue(issues, "resource_chain_not_ok");
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
+  if (payload.productionLiveOpsReadback?.authenticatedReadback?.enabled === true && !resourceChainProtectedReadbackOk(payload)) issue(issues, "resource_chain_authenticated_readback_missing_or_not_armed", { membershipProtectedSummary: payload.resourceChain.membershipProtectedSummary });
   if (payload.dailyManifest.ok !== true) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
@@ -485,7 +494,8 @@ function verifyPayload(payload, issues) {
 async function main() {
   const verifyOnly = process.argv.includes("--verify-only");
   const refreshProductionLive = process.argv.includes("--refresh-production-live") || process.argv.includes("--refresh-live");
-  const requireProtectedReadback = process.argv.includes("--require-protected-readback");
+  const requireProtectedReadback = process.argv.includes("--require-protected-readback") || /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || ""));
+  const refreshResourceChain = process.argv.includes("--refresh-resource-chain") || requireProtectedReadback;
   const reportFile = path.join(OUT_DIR, "production-unattended-readiness-report.json");
   if (verifyOnly) {
     const payload = readJson(reportFile, null);
@@ -501,6 +511,20 @@ async function main() {
   if (refreshProductionLive) {
     const args = requireProtectedReadback ? ["--require-protected-readback"] : [];
     runNodeScript(path.join("scripts", "verify-terminal-ops-production-live.js"), args);
+  }
+    if (refreshResourceChain) {
+    const preWaterRoot = readJson(FILES.waterRoot, {});
+    const preManifest = readJson(FILES.manifest, {});
+    const refreshExpectedDate = compactDate(
+      preWaterRoot?.expectedDate
+      || preWaterRoot?.marketCalendar?.row?.displayTradeDate
+      || preWaterRoot?.marketCalendar?.displayTradeDate
+      || preWaterRoot?.displayTradeDate
+      || preManifest?.tradeDate
+    );
+    const resourceArgs = ["--require-unattended"];
+    if (refreshExpectedDate) resourceArgs.push(`--expected-date=${refreshExpectedDate}`);
+    runNodeScript(path.join("scripts", "verify-terminal-resource-chain.js"), resourceArgs);
   }
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});

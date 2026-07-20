@@ -1,34 +1,34 @@
 {
-  "ok": true,
+  "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-19T18:13:39.671Z",
-  "checkedAt": "2026-07-19T18:13:24.506Z",
-  "tradeDate": "20260717",
-  "state": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-  "unattendedStatus": "PREVIOUS_GOOD_HOLD",
-  "action": "preserve_last_good_and_resume_next_trading_day",
-  "reason": "previous_good_hold_wait_source_window_or_market_closed",
+  "generatedAt": "2026-07-20T04:52:35.541Z",
+  "checkedAt": "2026-07-20T04:52:33.927Z",
+  "tradeDate": "20260720",
+  "state": "PENDING_NOT_DUE",
+  "unattendedStatus": "NO",
+  "action": "wait_until_next_strategy_due_time",
+  "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30",
   "gates": {
     "predictivePreflight": {
       "ok": true,
-      "status": "MARKET_CLOSED_SKIP_SCAN",
-      "reason": "trading_day_before_formal_source_window"
+      "status": "READY",
+      "reason": "date_preflight_ready"
     },
     "waterRoot": {
       "ok": true,
-      "status": "trading_day_wait_source_window_previous_good",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
+      "status": "ready",
+      "reason": "terminal_water_root_ready"
     },
     "stateMachine": {
-      "ok": true,
-      "status": "CLOSED",
-      "reason": "market_closed_previous_good"
+      "ok": false,
+      "status": "PENDING_NOT_DUE",
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
     },
     "dailyManifest": {
-      "ok": true,
-      "status": "GREEN",
-      "reason": ""
+      "ok": false,
+      "status": "PENDING_NOT_DUE",
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
     },
     "canaryPublish": {
       "ok": true,
@@ -41,8 +41,8 @@
       "reason": ""
     },
     "runIdClosure": {
-      "ok": true,
-      "status": "CLOSED",
+      "ok": false,
+      "status": "PENDING_NOT_DUE",
       "reason": ""
     },
     "autoRollForward": {
@@ -52,8 +52,8 @@
     },
     "autonomousOpsPolicy": {
       "ok": true,
-      "status": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-      "reason": "previous_good_hold_wait_source_window_or_market_closed"
+      "status": "PENDING_NOT_DUE",
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
     }
   },
   "modules": [
@@ -63,9 +63,9 @@
       "ok": true,
       "complete": true,
       "fallback": false,
-      "runId": "strategy2-20260717-052121",
-      "tradeDate": "20260717",
-      "sourceDate": "20260717",
+      "runId": "strategy2-20260720-120027",
+      "tradeDate": "20260720",
+      "sourceDate": "20260720",
       "resultCount": 0,
       "runIdClosureOk": true,
       "issue": ""
@@ -74,99 +74,100 @@
       "key": "strategy3",
       "label": "策略3",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "strategy3-20260717-20260717050304",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:13:05"
     },
     {
       "key": "strategy4",
       "label": "策略4",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "strategy4-20260717-20260718153948",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:16:10"
     },
     {
       "key": "strategy5",
       "label": "策略5",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "strategy5-20260717-20260717165236",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:21:40"
     },
     {
       "key": "institution",
       "label": "買賣超",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "institution-20260717-20260717131544",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:14:20"
     },
     {
       "key": "cb",
       "label": "CB",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "cb-detect-20260717-214511",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:14:30"
     },
     {
       "key": "warrant",
       "label": "權證走向",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "runId": "warrant-flow-20260717-20260717125037",
       "tradeDate": "20260717",
       "sourceDate": "20260717",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": ""
+      "issue": "pending_not_due:14:30"
     }
   ],
   "jobQueue": [],
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
-    "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
-    "action": "skip_formal_scan",
-    "reason": "trading_day_before_formal_source_window",
+    "state": "READY_FOR_FORMAL_SCAN",
+    "action": "allow_formal_scan",
+    "reason": "date_preflight_ready",
     "scannerTargetDate": "20260720",
-    "displayTradeDate": "20260717",
-    "formalScanAllowed": false,
-    "preservePreviousGood": true,
-    "publishAllowed": false,
+    "displayTradeDate": "20260720",
+    "formalScanAllowed": true,
+    "preservePreviousGood": false,
+    "publishAllowed": true,
     "issues": []
   },
   "stateMachineContract": {
     "contract": "terminal-state-machine-v1",
     "lifecycle": [
       "PENDING",
+      "PENDING_NOT_DUE",
       "WATER_OK",
       "RUNNING",
       "SCANNED",
@@ -186,6 +187,7 @@
     ],
     "terminalStates": [
       "CLOSED",
+      "PENDING_NOT_DUE",
       "DEGRADED_PREVIOUS_GOOD",
       "BLOCKED_SOURCE",
       "BLOCKED_AUTH",
@@ -204,39 +206,39 @@
   },
   "actionMatrix": {
     "contract": "autonomous-ops-action-matrix-v1",
-    "opsState": "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+    "opsState": "PENDING_NOT_DUE",
     "severity": "info",
-    "stopMode": "market_closed",
+    "stopMode": "wait_schedule",
     "formalScan": {
       "allowed": false,
-      "mode": "skip_formal_scan",
-      "reason": "market_closed_preserve_previous_good"
+      "mode": "wait_until_due_time",
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:10,strategy5@21:40,institution@14:20,cb@14:30,warrant@14:30"
     },
     "publish": {
       "allowed": false,
       "canaryRequired": true,
-      "mode": "do_not_publish_new_scorecard",
-      "reason": "market_closed_previous_good"
+      "mode": "do_not_publish_until_all_due_modules_closed",
+      "reason": "manifest_pending_not_due"
     },
     "terminalDisplay": {
       "allowed": true,
-      "mode": "market_closed_previous_good",
-      "reason": "show_last_trading_day_with_market_closed_banner"
+      "mode": "previous_good_until_due_time",
+      "reason": "show_last_good_until_strategy_due_time"
     },
     "rollForward": {
       "allowed": true,
-      "mode": "idle_until_next_trading_day",
-      "reason": "resume_automatically_next_open"
+      "mode": "schedule_wait",
+      "reason": "auto_continue_when_due"
     },
     "notify": {
       "required": false,
       "channel": "ops_alert",
       "kind": "none",
-      "dedupeKey": "MARKET_CLOSED:20260717",
-      "reason": "expected_market_closed_state"
+      "dedupeKey": "PENDING_NOT_DUE:20260720",
+      "reason": "expected_schedule_wait"
     },
-    "operatorAction": "no_action_wait_next_open",
-    "automationAction": "preserve_previous_good_and_resume_next_trading_day",
+    "operatorAction": "wait_until_next_strategy_due_time",
+    "automationAction": "resume_when_due_time_arrives",
     "protectedInvariants": [
       "membership_auth_only_gates_display_not_scanner_compute",
       "fallback_or_previous_good_never_counts_as_today_publish_success",

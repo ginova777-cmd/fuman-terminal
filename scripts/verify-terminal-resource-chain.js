@@ -132,6 +132,7 @@ const STRATEGIES = [
     key: "strategy2",
     label: "策略2 即時",
     policy: "same-day live",
+    unattendedDueTime: "09:00",
     endpoint: "/api/strategy2-latest",
     mobileTab: "strategy2",
     receiptKey: "strategy2",
@@ -139,12 +140,14 @@ const STRATEGIES = [
     resultTable: "strategy2_scan_results",
     resultStrategy: "strategy2",
     allowMissingDesktopSnapshot: true,
+    allowReceiptDriftWhenDownstreamFresh: true,
     scorecardKeys: ["strategy2","策略2成績單","策略2當沖成績單","策略2"],
   },
   {
     key: "strategy3",
     label: "策略3",
     policy: "latest complete scan",
+    unattendedDueTime: "13:05",
     endpoint: "/api/strategy3-latest",
     mobileTab: "strategy3",
     receiptKey: "strategy3",
@@ -162,6 +165,7 @@ const STRATEGIES = [
     key: "strategy4",
     label: "策略4",
     policy: "latest complete scan",
+    unattendedDueTime: "16:10",
     endpoint: "/api/strategy4-latest",
     mobileTab: "strategy4",
     receiptKey: "strategy4",
@@ -175,6 +179,7 @@ const STRATEGIES = [
     key: "strategy5",
     label: "策略5",
     policy: "latest complete scan",
+    unattendedDueTime: "21:40",
     endpoint: "/api/strategy5-latest",
     mobileTab: "strategy5",
     receiptKey: "strategy5",
@@ -188,6 +193,7 @@ const STRATEGIES = [
     key: "institution",
     label: "買賣超",
     policy: "latest complete scan",
+    unattendedDueTime: "14:20",
     endpoint: "/api/institution-latest",
     mobileTab: "chip",
     receiptKey: "institution",
@@ -201,6 +207,7 @@ const STRATEGIES = [
     key: "cb",
     label: "CB",
     policy: "latest complete scan",
+    unattendedDueTime: "14:30",
     endpoint: "/api/cb-detect-latest",
     mobileTab: "cb",
     receiptKey: "cb-detect",
@@ -215,6 +222,7 @@ const STRATEGIES = [
     key: "warrant",
     label: "權證走向",
     policy: "latest complete scan",
+    unattendedDueTime: "14:30",
     endpoint: "/api/warrant-flow-latest",
     mobileTab: "warrant",
     receiptKey: "warrant-flow",
@@ -271,6 +279,44 @@ function compactDate(value) {
   return "";
 }
 
+function taipeiMinuteOfDay(date = NOW) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function minuteFromClock(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function scheduleStatusForConfig(config) {
+  if (!REQUIRE_UNATTENDED || !config?.unattendedDueTime || config.key === "market") {
+    return { state: "not_required", dueTime: config?.unattendedDueTime || "", pendingNotDue: false };
+  }
+  const todayKey = taipeiDateKey(NOW);
+  const dueMinute = minuteFromClock(config.unattendedDueTime);
+  if (dueMinute === null || EXPECTED_DATE !== todayKey) {
+    return { state: "date_locked", dueTime: config.unattendedDueTime, pendingNotDue: false };
+  }
+  const nowMinute = taipeiMinuteOfDay(NOW);
+  if (nowMinute < dueMinute) {
+    return {
+      state: "pending_not_due",
+      dueTime: config.unattendedDueTime,
+      pendingNotDue: true,
+      minutesUntilDue: dueMinute - nowMinute,
+    };
+  }
+  return { state: "due_elapsed", dueTime: config.unattendedDueTime, pendingNotDue: false };
+}
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
@@ -785,6 +831,24 @@ function downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, c
     && (config.allowMissingDesktopSnapshot || cleanNumber(snapshot.count || snapshot.returnedCount) > 0);
 }
 
+function allowedStrategy2IntradayReceiptDrift(config, receipt, supabase, live, compact, mobile) {
+  if (config?.key !== "strategy2") return false;
+  if (!receipt || receipt.status !== "complete" || receipt.complete !== true || receipt.fallback || receipt.exitCode > 0) return false;
+  if (!supabase?.ok || !supabase.runId) return false;
+  const receiptDate = runDateFromId(receipt.runId) || compactDate(receipt.finishedAt);
+  const latestDate = runDateFromId(supabase.runId) || compactDate(supabase.date || supabase.tradeDate || supabase.updatedAt);
+  if (receiptDate !== EXPECTED_DATE || latestDate !== EXPECTED_DATE) return false;
+  if (live && !live.membershipProtected) {
+    if (live.status >= 500 || live.ok === false || live.runId !== supabase.runId) return false;
+    if (cleanNumber(live.count || live.returnedCount) <= 0) return false;
+  }
+  if (compact && !compact.membershipProtected) {
+    if (compact.status >= 500 || compact.ok === false || compact.runId !== supabase.runId) return false;
+    if (cleanNumber(compact.count || compact.returnedCount) <= 0) return false;
+  }
+  if (mobile && mobile.runId && !String(mobile.runId).includes("waiting") && mobile.runId !== supabase.runId) return false;
+  return true;
+}
 function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile) {
   const expectedRunId = supabase?.runId || "";
   const expectedDate = supabase?.date || live?.date || compact?.date || "";
@@ -809,31 +873,34 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
 
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile, scorecard) {
   const issues = [];
+  const scheduleStatus = scheduleStatusForConfig(config);
+  const pendingNotDue = scheduleStatus.pendingNotDue === true;
   const downstreamFresh = previousGoodHoldSupabaseAuthoritative(config, supabase)
+    || allowedStrategy2IntradayReceiptDrift(config, receipt, supabase, live, compact, mobile)
     || downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile)
     || membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot);
   const downstreamReceiptAuthoritative = downstreamFresh
     || downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile);
   if (REQUIRE_UNATTENDED && config.key !== "market") {
     if (!receipt) {
-      if (!downstreamReceiptAuthoritative) issues.push("unattended: scanner receipt missing");
-    } else if (!downstreamReceiptAuthoritative) {
+      if (!downstreamReceiptAuthoritative && !pendingNotDue) issues.push("unattended: scanner receipt missing");
+    } else if (!downstreamReceiptAuthoritative && !pendingNotDue) {
       if (receipt.status !== "complete" || receipt.complete !== true || receipt.exitCode > 0) {
         issues.push(`unattended: scanner receipt is not complete (${receipt.status || "unknown"} exit=${receipt.exitCode ?? ""})`);
       }
       if (receipt.fallback) issues.push("unattended: scanner receipt fallback=true");
       const receiptDate = runDateFromId(receipt.runId) || compactDate(receipt.finishedAt);
-      if (receiptDate && receiptDate !== EXPECTED_DATE) issues.push(`unattended: scanner receipt date ${receiptDate} != expected ${EXPECTED_DATE}`);
-      if (!receipt.runId) issues.push("unattended: scanner receipt missing runId");
+      if (receiptDate && receiptDate !== EXPECTED_DATE && !pendingNotDue) issues.push(`unattended: scanner receipt date ${receiptDate} != expected ${EXPECTED_DATE}`);
+      if (!receipt.runId && !pendingNotDue) issues.push("unattended: scanner receipt missing runId");
     }
     const latestDate = runDateFromId(supabase?.runId) || compactDate(supabase?.date || supabase?.tradeDate || supabase?.updatedAt);
-    if (!supabase?.runId && config.key !== "market") issues.push("unattended: Supabase latest missing runId");
-    if (latestDate && latestDate !== EXPECTED_DATE) issues.push(`unattended: Supabase latest date ${latestDate} != expected ${EXPECTED_DATE}`);
+    if (!supabase?.runId && config.key !== "market" && !pendingNotDue) issues.push("unattended: Supabase latest missing runId");
+    if (latestDate && latestDate !== EXPECTED_DATE && !pendingNotDue) issues.push(`unattended: Supabase latest date ${latestDate} != expected ${EXPECTED_DATE}`);
     if (scorecard?.membershipProtected && protectedReadbackAuth.attempted && !protectedReadbackAuth.enabled) {
       issues.push("unattended: /88 authenticated readback token request failed");
     }
   }
-  if (receipt) {
+  if (receipt && !pendingNotDue) {
     if (receipt.status === "missing") issues.push(`scanner receipt missing: ${receipt.key}`);
     if (receipt.status === "failed" || receipt.complete === false || receipt.exitCode > 0) {
       if (!downstreamFresh && !downstreamReadyDespiteReceiptWarning(config, receipt, supabase, live, compact, snapshot, mobile)) {
@@ -978,11 +1045,13 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
   const scorecard = isMembershipRequiredPayload(scorecardPayload)
     ? scorecardMembershipProtectedSummary(scorecardPayload)
     : scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
+  const scheduleStatus = scheduleStatusForConfig(config);
   const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
   return {
     key: config.key,
     label: config.label,
     policy: config.policy,
+    scheduleStatus,
     receipt,
     sourceHealth,
     endpoint,
@@ -1010,9 +1079,10 @@ function markdown(results, desktopSnapshot, fastBundle) {
   lines.push(`- Desktop snapshot: status=${desktopSnapshot.status} fresh=${desktopSnapshot.summary?.snapshotFresh ?? ""} updatedAt=${desktopSnapshot.summary?.updatedAt || ""} endpointCount=${desktopSnapshot.summary?.endpointCount || 0}`);
   lines.push(`- Terminal fast bundle: status=${fastBundle.status} fresh=${fastBundle.summary?.snapshotFresh ?? ""} updatedAt=${fastBundle.summary?.updatedAt || ""} endpointCount=${fastBundle.summary?.endpointCount || 0}`);
   lines.push("");
-  lines.push("| 項目 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop artifact | mobile fragment | /88 row/sourceReport | 判定 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---|");
+  lines.push("| 項目 | 排程狀態 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop artifact | mobile fragment | /88 row/sourceReport | 判定 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|");
   for (const row of results) {
+    const schedule = row.scheduleStatus ? `${row.scheduleStatus.state || "--"}<br>${row.scheduleStatus.dueTime || "--"}` : "n/a";
     const receipt = row.receipt
       ? `${row.receipt.status || "--"}<br>${row.receipt.runId || "--"}<br>${row.receipt.finishedAt || "--"}`
       : "n/a";
@@ -1033,7 +1103,7 @@ function markdown(results, desktopSnapshot, fastBundle) {
       ? `${row.mobileFragment.status || "--"} ${row.mobileFragment.runId || "--"}<br>${row.mobileFragment.count ?? "--"}`
       : "n/a";
     const scorecard = row.scorecard ? `${row.scorecard.status || "--"} ${row.scorecard.runId || "--"}<br>${row.scorecard.strategy || row.scorecard.key || row.scorecard.error || "--"}` : "n/a";
-    lines.push(`| ${row.label} | ${receipt} | ${sourceHealth} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${scorecard} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
+    lines.push(`| ${row.label} | ${schedule} | ${receipt} | ${sourceHealth} | ${sup} | ${live} | ${term} | ${snap} | ${mob} | ${scorecard} | ${row.ok ? "OK" : row.issues.join("<br>")} |`);
   }
   lines.push("");
   lines.push("## Top Rows");
