@@ -8,13 +8,24 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = String(process.env.FUMAN_AUDIT_BASE_URL || process.env.FUMAN_API_UNATTENDED_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const OUT_FILE = path.resolve(process.env.FUMAN_PRODUCTION_API_FRESHNESS_CONTRACT_FILE || path.join(ROOT, "outputs", "production-api-freshness-contract.json"));
 const TIMEOUT_MS = Math.max(5000, Number(process.env.FUMAN_PRODUCTION_API_FRESHNESS_TIMEOUT_MS || 25000));
-const MEMBER_BEARER_TOKEN = [
+let MEMBER_BEARER_TOKEN = [
   process.env.FUMAN_VERIFY_BEARER_TOKEN,
   process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
   process.env.FUMAN_AUTH_BEARER_TOKEN,
   process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
   process.env.FUMAN_SMOKE_BEARER_TOKEN,
 ].map((value) => String(value || "").trim()).find(Boolean) || "";
+const MEMBERSHIP_AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
+const MEMBERSHIP_AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const MEMBERSHIP_READBACK_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const MEMBERSHIP_READBACK_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let membershipReadbackAuth = {
+  attempted: false,
+  enabled: Boolean(MEMBER_BEARER_TOKEN),
+  source: MEMBER_BEARER_TOKEN ? "env-token" : "none",
+  status: 0,
+  error: "",
+};
 
 function parseArgs(argv) {
   const values = new Map();
@@ -180,6 +191,66 @@ function realtimeRadarEvidence(payload = {}) {
   return { ...evidence, missingFields };
 }
 
+async function ensureMemberBearerToken() {
+  if (MEMBER_BEARER_TOKEN) return membershipReadbackAuth;
+  if (!MEMBERSHIP_READBACK_EMAIL || !MEMBERSHIP_READBACK_PASSWORD) return membershipReadbackAuth;
+  membershipReadbackAuth = {
+    attempted: true,
+    enabled: false,
+    source: "email-password",
+    status: 0,
+    error: "",
+  };
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${MEMBERSHIP_AUTH_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        apikey: MEMBERSHIP_AUTH_KEY,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({ email: MEMBERSHIP_READBACK_EMAIL, password: MEMBERSHIP_READBACK_PASSWORD }),
+    });
+    const text = await response.text();
+    let json = null;
+    try { json = JSON.parse(text || "{}"); } catch (_) { json = null; }
+    if (!response.ok || !json?.access_token) {
+      membershipReadbackAuth = {
+        attempted: true,
+        enabled: false,
+        source: "email-password",
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+        error: json?.error_description || json?.msg || text.slice(0, 160),
+      };
+      return membershipReadbackAuth;
+    }
+    MEMBER_BEARER_TOKEN = String(json.access_token || "");
+    membershipReadbackAuth = {
+      attempted: true,
+      enabled: true,
+      source: "email-password",
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      userId: json.user?.id || "",
+      email: MEMBERSHIP_READBACK_EMAIL,
+      error: "",
+    };
+    return membershipReadbackAuth;
+  } catch (error) {
+    membershipReadbackAuth = {
+      attempted: true,
+      enabled: false,
+      source: "email-password",
+      status: 0,
+      elapsedMs: Date.now() - startedAt,
+      error: error?.message || String(error),
+    };
+    return membershipReadbackAuth;
+  }
+}
 function isMembershipProtectedResponse(response = {}, payload = {}) {
   return response.status === 401
     && payload?.protected === true
@@ -575,6 +646,7 @@ async function main() {
   const now = ARGS.values.has("at")
     ? new Date(`${taipeiDateKey().slice(0, 4)}-${taipeiDateKey().slice(4, 6)}-${taipeiDateKey().slice(6, 8)}T${ARGS.values.get("at")}:00+08:00`)
     : new Date();
+  const membershipAuth = await ensureMemberBearerToken();
   const apiResults = [];
   for (const item of ACTIVE_API_CONTRACTS) {
     console.log(`[production-api-freshness] checking ${item.key}`);
@@ -595,6 +667,15 @@ async function main() {
     nonTradingDayWeekend: isTaipeiWeekend(now),
     productionUrl: BASE_URL,
     requirement: "production API must expose tradeDate=today after due window, run-time source snapshot evidence, sourceCoverage ready, fallback disclosure, and retired static JSON 410",
+    membershipAuth: {
+      attempted: membershipAuth.attempted,
+      enabled: membershipAuth.enabled,
+      source: membershipAuth.source,
+      status: membershipAuth.status,
+      elapsedMs: membershipAuth.elapsedMs || 0,
+      email: membershipAuth.email || "",
+      error: membershipAuth.error || "",
+    },
     apiResults,
     static410,
     blockers,
