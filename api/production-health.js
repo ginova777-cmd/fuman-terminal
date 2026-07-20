@@ -245,7 +245,8 @@ module.exports = async function handler(request, response) {
   buildIssue(payload.partial === false, "desktop route snapshot partial", issues);
   const minimumEndpointCount = payload.cacheSource === "release-readback-snapshot" ? 8 : 10;
   buildIssue(endpointCount >= minimumEndpointCount, `desktop route snapshot endpoint count too low: ${endpointCount} (min ${minimumEndpointCount})`, issues);
-  buildIssue(!hasStrategy2Snapshot, "strategy2 must not be stored in cold desktop snapshot", issues);
+  const liveReadonlyHealthSnapshot = payload.cacheSource === "production-health-live-readonly";
+  buildIssue(!hasStrategy2Snapshot || liveReadonlyHealthSnapshot, "strategy2 must not be stored in cold desktop snapshot", issues);
   const strategy2Ok = CHECK_STRATEGY2_LIVE ? strategy2HealthOk(strategy2.statusCode, strategy2Payload) : true;
   buildIssue(strategy2Ok, "strategy2 live endpoint unhealthy", issues);
   if (CHECK_STRATEGY2_LIVE) buildIssue(!/desktop_route_snapshot/i.test(strategy2CacheSource), "strategy2 live endpoint is reading desktop snapshot", issues);
