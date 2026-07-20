@@ -270,25 +270,39 @@ function sanitizeStrategy2RunIds(value, canonicalRunId) {
   return value;
 }
 
-function findStrategy2CanonicalRunId(endpoints = {}) {
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (runId.startsWith("strategy2-")) return runId;
-  }
-  return "";
+function strategy2RunIdSortKey(runId) {
+  const match = String(runId || "").trim().match(/^strategy2-(\d{8})-(\d+)/);
+  if (!match) return "";
+  return `${match[1]}-${String(match[2]).padStart(14, "0")}`;
 }
 
-function findApprovedStrategy2CanonicalPayload(endpoints = {}) {
+function latestStrategy2Candidate(candidates = []) {
+  return candidates
+    .filter((candidate) => String(candidate?.runId || "").startsWith("strategy2-"))
+    .sort((a, b) => strategy2RunIdSortKey(b.runId).localeCompare(strategy2RunIdSortKey(a.runId)))[0] || null;
+}
+
+function findStrategy2CanonicalRunId(endpoints = {}) {
+  const candidates = [];
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
     const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
     if (!runId.startsWith("strategy2-")) continue;
-    if (payload?.publishAllowed === true && payload?.evidenceStatus === "complete") return payload;
+    candidates.push({ runId, payload, endpoint, approved: payload?.publishAllowed === true && payload?.evidenceStatus === "complete" });
   }
-  return null;
+  return (latestStrategy2Candidate(candidates.filter((candidate) => candidate.approved)) || latestStrategy2Candidate(candidates))?.runId || "";
 }
 
+function findApprovedStrategy2CanonicalPayload(endpoints = {}) {
+  const candidates = [];
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
+    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
+    if (!runId.startsWith("strategy2-")) continue;
+    if (payload?.publishAllowed === true && payload?.evidenceStatus === "complete") candidates.push({ runId, payload, endpoint });
+  }
+  return latestStrategy2Candidate(candidates)?.payload || null;
+}
 function normalizeApprovedStrategy2Evidence(value, canonicalPayload) {
   const canonicalRunId = String(canonicalPayload?.runId || canonicalPayload?.transport?.runId || "").trim();
   if (!canonicalRunId.startsWith("strategy2-")) return value;
@@ -781,6 +795,7 @@ module.exports = async function handler(request, response) {
         return;
       }
       const endpoints = {};
+      await repairStrategy2LatestSnapshot(request, endpoints);
       await repairStrategy3LatestSnapshot(request, endpoints);
       await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy4LatestSnapshot(request, endpoints);

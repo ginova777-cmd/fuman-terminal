@@ -266,6 +266,28 @@ async function verifyAuthenticatedProtectedReadback(issues) {
     if (!row.ok) issues.push({ issue: `authenticated_protected_endpoint_not_open:${target.name}`, details: row });
     result.endpoints.push(row);
   }
+
+  const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
+  const expectedRunIds = new Set(reference?.runIds || []);
+  if (expectedRunIds.size) {
+    for (const row of result.endpoints) {
+      if (!row.runIds.length) continue;
+      const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId));
+      row.unexpectedRunIds = unexpectedRunIds;
+      if (unexpectedRunIds.length) {
+        row.ok = false;
+        issues.push({
+          issue: `authenticated_protected_endpoint_has_stale_or_unexpected_run_id:${row.name}`,
+          details: {
+            endpoint: row.path,
+            unexpectedRunIds,
+            expectedRunIds: Array.from(expectedRunIds).sort(),
+          },
+        });
+      }
+    }
+  }
+
   result.ok = result.endpoints.every((row) => row.ok);
   return result;
 }
