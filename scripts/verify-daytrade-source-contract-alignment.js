@@ -23,6 +23,10 @@ function numberValue(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function hasValue(object, key) {
+  return object && Object.prototype.hasOwnProperty.call(object, key) && object[key] !== null && object[key] !== undefined && object[key] !== "";
+}
+
 function stringValue(value) {
   if (value === null || value === undefined) return "";
   return String(value);
@@ -68,6 +72,9 @@ function normalizeSourceStatus(row) {
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(payload.priority_fresh_quote_coverage_120s),
+    hasPriorityPoolSymbols: hasValue(payload, "priority_pool_symbols"),
+    hasPriorityFreshQuoteCoverage120s: hasValue(payload, "priority_fresh_quote_coverage_120s"),
+    hasScannerCanRunOpening: hasValue(payload, "scanner_can_run_opening"),
     quoteAgeSeconds: numberValue(payload.quote_age_seconds, 999999),
     formalEntryAllowed: boolValue(payload.formal_entry_allowed),
     scannerCanRunQuoteOnly: boolValue(payload.scanner_can_run_quote_only),
@@ -83,7 +90,12 @@ function normalizeGate(row) {
     gateGrade: stringValue(row?.canonical_gate_grade || row?.daytrade_gate_grade || row?.gate_grade || row?.gate),
     gateStatus: stringValue(row?.canonical_gate_status || row?.gate_status || row?.status),
     reason: stringValue(row?.reason || row?.canonical_reason || row?.scanner_block_reason),
+    priorityPoolSymbols: numberValue(row?.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(row?.priority_fresh_quote_coverage_120s),
+    scannerCanRunOpening: boolValue(row?.scanner_can_run_opening),
+    hasPriorityPoolSymbols: hasValue(row, "priority_pool_symbols"),
+    hasPriorityFreshQuoteCoverage120s: hasValue(row, "priority_fresh_quote_coverage_120s"),
+    hasScannerCanRunOpening: hasValue(row, "scanner_can_run_opening"),
     quoteAgeSeconds: numberValue(row?.quote_age_seconds, 999999),
     freshQuotes120s: numberValue(row?.fresh_quotes_120s),
     scorecardRequiredOkCount: numberValue(row?.scorecard_required_ok_count),
@@ -97,10 +109,14 @@ function normalizeGate(row) {
 function isSourceA(source) {
   return source.status === "ok"
     && source.daytradeGateGrade === "A"
+    && source.hasPriorityPoolSymbols === true
+    && source.priorityPoolSymbols === 40
+    && source.hasPriorityFreshQuoteCoverage120s === true
     && source.priorityFreshQuoteCoverage120s >= 0.95
     && source.quoteAgeSeconds <= 90
     && source.formalEntryAllowed === true
     && source.scannerCanRunQuoteOnly === true
+    && source.hasScannerCanRunOpening === true
     && source.scannerCanRunOpening === true
     && source.rateLimitStatus !== "rate_limited";
 }
@@ -120,7 +136,12 @@ function isSourceFailClosed(source) {
 function isGateA(gate) {
   return gate.gateGrade === "A"
     && ["ready", "ok", "yes", ""].includes(gate.gateStatus.toLowerCase())
+    && gate.hasPriorityPoolSymbols === true
+    && gate.priorityPoolSymbols === 40
+    && gate.hasPriorityFreshQuoteCoverage120s === true
     && gate.priorityFreshQuoteCoverage120s >= 0.95
+    && gate.hasScannerCanRunOpening === true
+    && gate.scannerCanRunOpening === true
     && gate.quoteAgeSeconds <= 90
     && gate.formalEntrySpeedVerdict === "YES";
 }
@@ -166,6 +187,13 @@ async function main() {
   const unattendedGate = normalizeGate(firstObject(unattendedRows));
   const alignment = gateVerdict(sourceStatus, canonicalGate, unattendedGate);
   const issues = [...alignment.issues];
+  for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
+    if (item.hasPriorityPoolSymbols !== true) issues.push(`${label}_priority_pool_symbols_missing`);
+    if (item.priorityPoolSymbols !== 40) issues.push(`${label}_priority_pool_symbols_not_40`);
+    if (item.hasPriorityFreshQuoteCoverage120s !== true) issues.push(`${label}_priority_fresh_quote_coverage_120s_missing`);
+    if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
+    if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
+  }
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
 
@@ -188,3 +216,4 @@ main().catch((error) => {
   console.error(`[daytrade-source-contract-alignment] ${error.message}`);
   process.exitCode = 2;
 });
+
