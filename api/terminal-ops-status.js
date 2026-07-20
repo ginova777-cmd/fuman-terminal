@@ -4,8 +4,20 @@ const { buildLatestOpsStatus, mergeLiveSourceReports } = require("../lib/termina
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 
-async function buildLiveOverlayPayload(payload) {
-  if (process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "0") return payload;
+async function buildLiveOverlayPayload(payload, request = {}) {
+  const query = request.query || {};
+  const liveOverlayRequested = query.liveOverlay === "1" || query.strictLiveReports === "1" || process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "1";
+  if (!liveOverlayRequested || process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "0") {
+    return {
+      ...payload,
+      liveOverlay: {
+        ok: true,
+        source: "daily-manifest-base",
+        reason: liveOverlayRequested ? "live_overlay_disabled" : "live_overlay_not_requested",
+        checkedAt: new Date().toISOString(),
+      },
+    };
+  }
   try {
     const scorecard = require("./scorecard");
     const buildPayload = scorecard?.__test?.buildPayload;
@@ -51,7 +63,7 @@ async function handler(request, response) {
     return;
   }
   let payload = buildLatestOpsStatus();
-  payload = await buildLiveOverlayPayload(payload);
+  payload = await buildLiveOverlayPayload(payload, request);
   const status = payload.state === "ARTIFACT_MISSING" ? 503 : 200;
   response.status(status).json(payload);
 }
