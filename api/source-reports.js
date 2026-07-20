@@ -8,7 +8,7 @@ async function readScorecardPayload(request) {
     return scorecard.__test.buildPayload(request.query?.date || request.query?.record_date || "", {
       liveSourceReports: request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
       noCache: request.query?.live === "1" || request.query?.noCache === "1" || request.query?.refresh === "1",
-      timeoutMs: Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 2500),
+      timeoutMs: Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 7000),
     });
   }
   throw new Error("scorecard_build_payload_unavailable");

@@ -9,6 +9,10 @@ const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_late
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1200) || 1200);
+const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
+  SCORECARD_SNAPSHOT_TIMEOUT_MS,
+  Number(process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 7000) || 7000
+);
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
@@ -1846,7 +1850,7 @@ async function buildPayload(requestedDate = "", options = {}) {
 
   const snapshot = await readSnapshot(SNAPSHOT_KEY, {
     allowLatestFallback: true,
-    timeoutMs: Number(options.timeoutMs || SCORECARD_SNAPSHOT_TIMEOUT_MS) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
+    timeoutMs: Number(options.timeoutMs || (noCache ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS)) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
   }).catch(() => null);
   let payload;
   if (snapshot?.payload && typeof snapshot.payload === "object") {

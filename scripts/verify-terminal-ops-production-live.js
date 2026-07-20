@@ -230,6 +230,22 @@ function endpointRunIds(targetName, payload, body) {
   return Array.from(collectRunIds(payload || body)).sort();
 }
 
+function runIdDateScore(runIds = []) {
+  const dates = runIds
+    .map((runId) => {
+      const match = String(runId || "").match(/20\d{6}/);
+      return match ? Number(match[0]) : 0;
+    })
+    .filter(Boolean);
+  return dates.length ? Math.min(...dates) : 0;
+}
+
+function selectAuthenticatedRunIdReference(endpoints = []) {
+  return endpoints
+    .filter((row) => row.ok && row.runIds.length >= 7)
+    .map((row) => ({ ...row, runIdDateScore: runIdDateScore(row.runIds) }))
+    .sort((a, b) => b.runIdDateScore - a.runIdDateScore || b.runIds.length - a.runIds.length || String(a.name).localeCompare(String(b.name)))[0] || null;
+}
 async function verifyAuthenticatedProtectedReadback(issues) {
   const auth = await ensureMemberToken();
   const result = {
@@ -275,27 +291,36 @@ async function verifyAuthenticatedProtectedReadback(issues) {
     result.endpoints.push(row);
   }
 
-  const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
+  const reference = selectAuthenticatedRunIdReference(result.endpoints);
+  result.reference = reference ? {
+    name: reference.name,
+    path: reference.path,
+    runIds: reference.runIds,
+    runIdDateScore: reference.runIdDateScore,
+  } : null;
   const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
     for (const row of result.endpoints) {
       if (!row.runIds.length) continue;
       const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId));
+      const missingRunIds = Array.from(expectedRunIds).filter((runId) => !row.runIds.includes(runId));
       row.unexpectedRunIds = unexpectedRunIds;
-      if (unexpectedRunIds.length) {
+      row.missingRunIds = missingRunIds;
+      if (unexpectedRunIds.length || missingRunIds.length) {
         row.ok = false;
         issues.push({
-          issue: `authenticated_protected_endpoint_has_stale_or_unexpected_run_id:${row.name}`,
+          issue: `authenticated_protected_endpoint_run_id_mismatch:${row.name}`,
           details: {
             endpoint: row.path,
+            referenceEndpoint: reference.name,
             unexpectedRunIds,
+            missingRunIds,
             expectedRunIds: Array.from(expectedRunIds).sort(),
           },
         });
       }
     }
   }
-
   result.ok = result.endpoints.every((row) => row.ok);
   return result;
 }
