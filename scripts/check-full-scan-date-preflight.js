@@ -143,6 +143,14 @@ async function buildPreflight(options = {}) {
     marketCalendar: contract
   };
 
+  const normalizedLabel = String(label || "").toLowerCase();
+  const afterCloseProfile = options.afterCloseProfile === true
+    || argValue("--after-close-profile", "") === "1"
+    || process.env.FUMAN_AFTER_CLOSE_SCAN_PROFILE === "1"
+    || normalizedLabel === "strategy4";
+  const allowAfterCloseProfile = afterCloseProfile
+    && contract.marketOpen === true
+    && contract.marketStatus === "after_formal_source_window";
   const allowClosedTargetRepair = process.env.FUMAN_ALLOW_CLOSED_TARGET_REPAIR === "1" && requestedTarget && scannerTargetDate === contract.displayTradeDate;
   if (!contract.marketOpen && allowClosedTargetRepair) {
     return {
@@ -164,7 +172,7 @@ async function buildPreflight(options = {}) {
     };
   }
 
-  if (!contract.sourceFreshnessRequired || contract.formalScanSkipped === true) {
+  if ((!contract.sourceFreshnessRequired || contract.formalScanSkipped === true) && !allowAfterCloseProfile) {
     return {
       ...base,
       action: "skip_formal_scan",
@@ -215,18 +223,19 @@ async function buildPreflight(options = {}) {
 
   return {
     ...base,
-    action: "allow_formal_scan",
+    action: allowAfterCloseProfile ? "allow_after_close_scan" : "allow_formal_scan",
     status: "ready",
     complete: true,
     formalScanSkipped: false,
-    sourceFreshnessRequired: true,
+    sourceFreshnessRequired: allowAfterCloseProfile ? false : true,
+    afterCloseProfile: allowAfterCloseProfile,
     preservePreviousGood: false,
     latestPointerUpdated: false,
     emptyResultWritten: false,
     publishAllowed: true,
     evidenceStatus: "complete",
     unattendedStatus: "YES",
-    reason: "date_preflight_ready",
+    reason: allowAfterCloseProfile ? "date_preflight_ready_after_close_profile" : "date_preflight_ready",
     exitCode: 0
   };
 }
@@ -255,3 +264,6 @@ module.exports = {
   normalizeDate: isoDate,
   taipeiDate
 };
+
+
+
