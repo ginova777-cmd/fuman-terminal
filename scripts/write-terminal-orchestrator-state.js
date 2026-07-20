@@ -117,6 +117,10 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     state = "BLOCKED_AUTH";
     layer.push("auth");
     blocker = "backend_service_token_missing_or_invalid";
+  } else if (has(text, "manifest_tradedate_mismatch", "manifest_sourcedate_mismatch", "rundate_mismatch")) {
+    state = "FAILED_SCAN";
+    layer.push("scanner", "date");
+    blocker = row.issues?.[0] || "due_elapsed_no_today_run";
   } else if (has(text, "scanner receipt", "scanner_not_complete", "failed exit")) {
     state = "FAILED_SCAN";
     layer.push("scanner");
@@ -314,6 +318,14 @@ function selfTest() {
       manifest: { waterRoot: { ok: true } },
       expectedState: "DEGRADED_PREVIOUS_GOOD",
       expectedJob: true,
+    },
+    {
+      name: "due_elapsed_previous_day_run_becomes_scan_job",
+      row: { key: "strategy3", label: "Strategy3", ok: false, complete: false, pendingNotDue: false, runId: "strategy3-20260720-old", issues: ["manifest_tradeDate_mismatch:20260720!=20260721"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "FAILED_SCAN",
+      expectedJob: true,
+      requiresWaterRootOk: true,
     },
     {
       name: "market_closed_previous_good_does_not_become_source_block",
