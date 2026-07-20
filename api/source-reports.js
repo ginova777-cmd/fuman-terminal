@@ -7,7 +7,7 @@ async function readScorecardPayload(request) {
   if (scorecard.__test?.buildPayload) {
     return scorecard.__test.buildPayload(request.query?.date || request.query?.record_date || "", {
       liveSourceReports: request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
-      timeoutMs: 800,
+      timeoutMs: Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 2500),
     });
   }
   throw new Error("scorecard_build_payload_unavailable");
@@ -50,3 +50,4 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "source-reports");
+
