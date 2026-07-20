@@ -331,10 +331,10 @@
     "verify:terminal-control-plane:from-existing": "node --use-system-ca scripts/write-terminal-control-plane.js --require-unattended --from-existing",
     "ops:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js",
     "ops:production-unattended-readiness-report:fresh": "node scripts/write-production-unattended-readiness-report.js --refresh-production-live",
-    "verify:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js --verify-only"
+    "verify:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js --verify-only",
+    "verify:daytrade-warmup-unattended": "node --use-system-ca scripts/verify-daytrade-warmup-unattended.js"
   },
   "engines": {
     "node": "24.x"
   }
 }
-
