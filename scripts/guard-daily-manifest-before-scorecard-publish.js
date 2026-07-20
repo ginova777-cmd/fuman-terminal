@@ -23,6 +23,41 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function lower(value) {
+  return clean(value).toLowerCase();
+}
+
+function compactDate(value) {
+  return clean(value).replace(/\D/g, "").slice(0, 8);
+}
+
+function isPendingNotDueModule(row = {}) {
+  const issueText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
+  return row.pendingNotDue === true
+    || lower(row.status) === "pending_not_due"
+    || lower(issueText).includes("pending_not_due");
+}
+
+function runIdDate(row = {}) {
+  const raw = clean(row.runId || row.run_id || row.latestRunId || "");
+  const match = raw.match(/20\d{6}/);
+  return match ? match[0] : "";
+}
+
+function previousGoodDate(manifest = {}) {
+  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
+  return rows.map(runIdDate).filter(Boolean).sort().pop() || "";
+}
+
+function pendingPreviousGoodModules(manifest = {}) {
+  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
+  return rows.length > 0 && rows.every((row) => isPendingNotDueModule(row)
+    && row.ok === true
+    && row.complete === true
+    && row.fallback !== true
+    && clean(row.runId));
+}
+
 function modulesGreen(manifest = {}) {
   const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
   return rows.length > 0 && rows.every((row) => row.ok === true
@@ -32,9 +67,10 @@ function modulesGreen(manifest = {}) {
 }
 
 function allowMarketClosedClosurePublish(manifest = {}) {
-  return manifest.ok === true
+  return (manifest.ok === true
     && String(manifest.unattendedStatus || "") === "PREVIOUS_GOOD_HOLD"
-    && modulesGreen(manifest);
+    && modulesGreen(manifest))
+    || pendingPreviousGoodModules(manifest);
 }
 
 function readJson(file) {
@@ -56,10 +92,19 @@ function main() {
   if (String(manifest.contract || "") !== "daily-terminal-run-manifest-v1") {
     fail("manifest_contract_invalid", { contract: manifest.contract || "" });
   }
-  if (String(manifest.tradeDate || "") !== EXPECTED_DATE) {
-    fail("manifest_tradeDate_mismatch", { tradeDate: manifest.tradeDate || "", expectedDate: EXPECTED_DATE });
-  }
+  const manifestTradeDate = String(manifest.tradeDate || "");
   const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
+  const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
+  const manifestDateMatchesExpected = manifestTradeDate === EXPECTED_DATE;
+  const manifestDateIsPreviousGood = Boolean(manifestTradeDate && manifestTradeDate < EXPECTED_DATE && publishDate === manifestTradeDate);
+  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood) {
+    fail("manifest_tradeDate_mismatch", {
+      tradeDate: manifestTradeDate,
+      expectedDate: EXPECTED_DATE,
+      publishDate,
+      marketClosedClosureAllowed,
+    });
+  }
   if (manifest.ok !== true || (manifest.unattendedStatus !== "YES" && !marketClosedClosureAllowed)) {
     if (!ALLOW_DEGRADED) {
       fail("manifest_not_green_refuse_scorecard_publish", {
@@ -86,8 +131,12 @@ function main() {
   if (String(canary.contract || "") !== "terminal-canary-publish-v1") {
     fail("canary_publish_contract_invalid", { contract: canary.contract || "", canary: CANARY_FILE });
   }
-  if (String(canary.tradeDate || "") !== EXPECTED_DATE) {
-    fail("canary_publish_tradeDate_mismatch", { tradeDate: canary.tradeDate || "", expectedDate: EXPECTED_DATE });
+  if (String(canary.tradeDate || "") !== publishDate) {
+    fail("canary_publish_tradeDate_mismatch", {
+      tradeDate: canary.tradeDate || "",
+      expectedDate: publishDate,
+      manifestDate: EXPECTED_DATE,
+    });
   }
   if (canary.ok !== true) {
     fail("canary_publish_not_green", { status: canary.status || "", issues: canary.issues || [] });
@@ -110,3 +159,7 @@ function main() {
 }
 
 main();
+
+
+
+
