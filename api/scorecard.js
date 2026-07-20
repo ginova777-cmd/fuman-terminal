@@ -1329,6 +1329,14 @@ function alignPayloadDateWithSourceReports(payload) {
 async function withFreshStrategySourceReports(payload) {
   let nextPayload = payload;
   try {
+    const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
+    if (strategy2Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy2Report);
+  } catch {}
+  try {
+    const strategy3Report = buildStrategy3SourceReport(await callStrategy3Latest());
+    if (strategy3Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy3Report);
+  } catch {}
+  try {
     const strategy4Report = buildStrategy4SourceReport(await callStrategy4Latest());
     if (strategy4Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy4Report);
   } catch {}
