@@ -8,6 +8,13 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = String(process.env.FUMAN_AUDIT_BASE_URL || process.env.FUMAN_API_UNATTENDED_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const OUT_FILE = path.resolve(process.env.FUMAN_PRODUCTION_API_FRESHNESS_CONTRACT_FILE || path.join(ROOT, "outputs", "production-api-freshness-contract.json"));
 const TIMEOUT_MS = Math.max(5000, Number(process.env.FUMAN_PRODUCTION_API_FRESHNESS_TIMEOUT_MS || 25000));
+const MEMBER_BEARER_TOKEN = [
+  process.env.FUMAN_VERIFY_BEARER_TOKEN,
+  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
+  process.env.FUMAN_AUTH_BEARER_TOKEN,
+  process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
+  process.env.FUMAN_SMOKE_BEARER_TOKEN,
+].map((value) => String(value || "").trim()).find(Boolean) || "";
 
 function parseArgs(argv) {
   const values = new Map();
@@ -173,6 +180,12 @@ function realtimeRadarEvidence(payload = {}) {
   return { ...evidence, missingFields };
 }
 
+function isMembershipProtectedResponse(response = {}, payload = {}) {
+  return response.status === 401
+    && payload?.protected === true
+    && payload?.error === "membership_required";
+}
+
 function dueStatus(item, now = new Date()) {
   if (isTaipeiWeekend(now)) {
     return {
@@ -278,7 +291,7 @@ async function fetchJson(endpoint, expectedStatus = null) {
   try {
     const response = await fetch(url, {
       cache: "no-store",
-      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      headers: { Accept: "application/json", "Cache-Control": "no-cache", ...(MEMBER_BEARER_TOKEN ? { authorization: `Bearer ${MEMBER_BEARER_TOKEN}`, "x-fuman-readback-auth": "membership-bearer" } : {}) },
       signal: controller.signal,
     });
     const text = await response.text();
@@ -470,6 +483,7 @@ async function evaluateApi(item, now) {
     text: error?.message || String(error),
   }));
   const payload = response.json || {};
+  const membershipProtected = isMembershipProtectedResponse(response, payload);
   const today = taipeiDateKey(now);
   const tradeDate = payloadTradeDate(payload, today);
   const sourceCoverage = sourceCoverageReady(payload);
@@ -477,6 +491,18 @@ async function evaluateApi(item, now) {
   const runtimeSnapshot = runtimeSourceSnapshot(payload);
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
   const radarEvidence = item.key === "realtime-radar" ? realtimeRadarEvidence(payload) : null;
+  if (membershipProtected && !MEMBER_BEARER_TOKEN) {
+    result.evidence = {
+      httpStatus: response.status,
+      membershipProtected: true,
+      reason: payload.reason || payload.error || "membership_required",
+      scope: payload.scope || item.key,
+      today,
+      responseText: response.text,
+    };
+    result.warnings.push(due.due ? "membership_protected_readback_requires_bearer_token" : "not_due_membership_protected_readback_requires_bearer_token");
+    return result;
+  }
   result.evidence = {
     httpStatus: response.status,
     apiOk: payload?.ok,
