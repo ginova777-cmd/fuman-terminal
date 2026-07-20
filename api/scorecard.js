@@ -1827,9 +1827,10 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
 
 async function buildPayload(requestedDate = "", options = {}) {
   const liveSourceReports = options.liveSourceReports === true;
+  const noCache = options.noCache === true || liveSourceReports;
   const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
   const cached = payloadMemoryCache.get(cacheKey);
-  if (cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
+  if (!noCache && cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
 
   const snapshot = await readSnapshot(SNAPSHOT_KEY, {
     allowLatestFallback: true,
@@ -1854,7 +1855,7 @@ async function buildPayload(requestedDate = "", options = {}) {
     const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
     payload = selectPayloadDate(liveSourceReports ? await withLiveSourceReports(basePayload) : basePayload, requestedDate);
   }
-  payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
+  if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
 }
 
@@ -1871,7 +1872,8 @@ async function handler(request, response) {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
     const liveSourceReports = request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
-    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports }), marketCalendar);
+    const noCache = liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
+    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, noCache }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {

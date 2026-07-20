@@ -18,6 +18,25 @@ function taipeiDateKey(date = new Date()) {
   }).format(date).replace(/\D/g, "");
 }
 
+
+function clean(value) {
+  return String(value ?? "").trim();
+}
+
+function modulesGreen(manifest = {}) {
+  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
+  return rows.length > 0 && rows.every((row) => row.ok === true
+    && row.complete === true
+    && row.fallback !== true
+    && clean(row.runId));
+}
+
+function allowMarketClosedClosurePublish(manifest = {}) {
+  return manifest.ok === true
+    && String(manifest.unattendedStatus || "") === "PREVIOUS_GOOD_HOLD"
+    && modulesGreen(manifest);
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
@@ -40,7 +59,8 @@ function main() {
   if (String(manifest.tradeDate || "") !== EXPECTED_DATE) {
     fail("manifest_tradeDate_mismatch", { tradeDate: manifest.tradeDate || "", expectedDate: EXPECTED_DATE });
   }
-  if (manifest.ok !== true || manifest.unattendedStatus !== "YES") {
+  const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
+  if (manifest.ok !== true || (manifest.unattendedStatus !== "YES" && !marketClosedClosureAllowed)) {
     if (!ALLOW_DEGRADED) {
       fail("manifest_not_green_refuse_scorecard_publish", {
         unattendedStatus: manifest.unattendedStatus || "",

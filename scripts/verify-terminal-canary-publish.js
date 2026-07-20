@@ -71,6 +71,13 @@ function isPendingNotDueModule(row = {}) {
     || lower(row.status) === "pending_not_due"
     || lower(issueText).includes("pending_not_due");
 }
+
+function manifestFullyClosed(manifest = {}, modules = []) {
+  if (manifest.ok !== true) return false;
+  if (!modules.length) return false;
+  return modules.every((row) => isPendingNotDueModule(row)
+    || (row.ok === true && row.complete === true && row.fallback !== true && clean(row.runId)));
+}
 function validateCanary(manifest, scorecard, options = {}) {
   const issues = [];
   const tradeDate = compactDate(manifest.tradeDate);
@@ -87,8 +94,13 @@ function validateCanary(manifest, scorecard, options = {}) {
   if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
   if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
   if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
+  const allowMarketClosedPublish = closed && manifestFullyClosed(manifest, modules);
+  const enforcePublishable = !closed || allowMarketClosedPublish;
   if (!closed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
     issues.push(`manifest_not_green:${manifest.unattendedStatus || "missing"}`);
+  }
+  if (closed && !allowMarketClosedPublish) {
+    issues.push(`manifest_market_closed_not_publishable:${manifest.unattendedStatus || "missing"}`);
   }
 
   for (const row of modules) {
@@ -107,18 +119,18 @@ function validateCanary(manifest, scorecard, options = {}) {
     if (reportDate !== tradeDate) issues.push(`sourceReport_date_mismatch:${row.key}:${reportDate || "missing"}!=${tradeDate || "missing"}`);
     if (report.ok !== true) issues.push(`sourceReport_not_ok:${row.key}`);
     if (Number(report.statusCode || 200) >= 400) issues.push(`sourceReport_http_bad:${row.key}:${report.statusCode}`);
-    if (!closed && hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
-    if (!closed && (row.ok !== true || row.complete !== true || row.fallback === true)) {
+    if (enforcePublishable && hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
+    if (enforcePublishable && (row.ok !== true || row.complete !== true || row.fallback === true)) {
       issues.push(`manifest_module_not_publishable:${row.key}`);
     }
   }
 
-  const publishAllowed = issues.length === 0 && !closed;
+  const publishAllowed = issues.length === 0 && (!closed || allowMarketClosedPublish);
   return {
     ok: issues.length === 0,
     contract: "terminal-canary-publish-v1",
     checkedAt: new Date().toISOString(),
-    status: closed ? "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD" : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
+    status: closed ? (publishAllowed ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
     scorecardPublishAllowed: publishAllowed,
     marketClosedPreviousGood: closed,
     tradeDate,
