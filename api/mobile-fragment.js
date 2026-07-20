@@ -10,7 +10,7 @@ const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
-const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 1800);
+const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 7000);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
@@ -828,7 +828,9 @@ module.exports = async function handler(request, response) {
           ? await fetchStrategy5Internal(request, endpoint)
           : tab === "strategy2"
             ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS, authHeadersFrom(request))
-              .catch((error) => fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout"))
+              .catch((error) => (hasUsableSnapshotPayload(snapshotPayload, tab)
+                ? snapshotPayload
+                : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
@@ -839,6 +841,8 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+
+
 
 
 
