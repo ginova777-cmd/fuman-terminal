@@ -1887,8 +1887,8 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const liveSourceReports = request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
-    const noCache = liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
+    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const noCache = request.query?.live === "1" || liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
     const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, noCache }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
