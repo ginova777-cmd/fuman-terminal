@@ -24,7 +24,7 @@ let MEMBER_BEARER_TOKEN = [
 const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || "")) || process.argv.includes("--require-protected-readback");
 
 const DIRECT_PROTECTED_ENDPOINTS = [
-  { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
+  { name: "terminal_ops_status", path: "/api/terminal-ops-status?liveOverlay=1" },
   { name: "scorecard", path: "/api/scorecard?live=1" },
   { name: "source_reports", path: "/api/source-reports?live=1" },
 ];
@@ -265,7 +265,7 @@ async function verifyAuthenticatedProtectedReadback(issues) {
   }
   result.mode = "authenticated-readback";
   const targets = [
-    { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
+    { name: "terminal_ops_status", path: "/api/terminal-ops-status?liveOverlay=1" },
     { name: "scorecard", path: "/api/scorecard?live=1" },
     { name: "source_reports", path: "/api/source-reports?live=1" },
     { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70" },

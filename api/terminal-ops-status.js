@@ -32,7 +32,7 @@ async function buildLiveOverlayPayload(payload, request = {}) {
         },
       };
     }
-    const timeoutMs = Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 2500);
+    const timeoutMs = Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 7000);
     const liveScorecard = await buildPayload("", { liveSourceReports: true, timeoutMs });
     return mergeLiveSourceReports(payload, liveScorecard);
   } catch (error) {
