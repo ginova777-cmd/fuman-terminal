@@ -237,6 +237,7 @@ const STRATEGIES = [
     label: "市場總覽",
     policy: "same-day live",
     endpoint: "/api/market",
+    allowMissingDesktopSnapshot: true,
   },
 ];
 
