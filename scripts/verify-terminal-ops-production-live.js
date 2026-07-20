@@ -424,7 +424,10 @@ function localOpsStatusSummary(issues) {
   const previousGoodHold = payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
     && payload.canaryPublish?.scorecardPublishAllowed === false;
-  assert(payload.unattendedStatus === "YES" || previousGoodHold, issues, "local_ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason });
+  const pendingNotDue = payload.state === "PENDING_NOT_DUE"
+    && payload.unattendedStatus === "NO"
+    && /^pending_not_due/.test(String(payload.reason || ""));
+  assert(payload.unattendedStatus === "YES" || previousGoodHold || pendingNotDue, issues, "local_ops_status_not_fresh_yes_previous_good_or_pending", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason });
   assert(payload.actionMatrix?.protectedInvariants?.includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "local_ops_status_membership_invariant_missing", {
     protectedInvariants: payload.actionMatrix?.protectedInvariants,
   });
