@@ -1850,10 +1850,14 @@ async function buildPayload(requestedDate = "", options = {}) {
         source: snapshot.source || "",
       },
     }, "complete");
-    payload = selectPayloadDate(liveSourceReports ? await withLiveSourceReports(basePayload) : basePayload, requestedDate);
+    payload = liveSourceReports
+      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      : selectPayloadDate(basePayload, requestedDate);
   } else {
     const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
-    payload = selectPayloadDate(liveSourceReports ? await withLiveSourceReports(basePayload) : basePayload, requestedDate);
+    payload = liveSourceReports
+      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      : selectPayloadDate(basePayload, requestedDate);
   }
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
