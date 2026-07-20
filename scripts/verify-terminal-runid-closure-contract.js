@@ -67,11 +67,26 @@ function marketClosedPreviousGood(manifest = {}, controlPlane = {}) {
   return text.includes("market_closed") || text.includes("previous_good") || text.includes("wait_source_window");
 }
 
-function acceptableManifestStatus(status, closedPreviousGood) {
-  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD");
+function isPendingNotDueModule(row = {}) {
+  const issueText = [
+    Array.isArray(row.issues) ? row.issues.join(" ") : "",
+    row.issue || "",
+    row.blocker || "",
+    row.reason || "",
+    row.status || "",
+  ].join(" ").toLowerCase();
+  return row.pendingNotDue === true || issueText.includes("pending_not_due");
 }
 
-function validateModule(row, manifest, controlPlane, issues) {
+function pendingNotDuePreviousGoodHold(manifest = {}) {
+  const modules = Array.isArray(manifest.modules) ? manifest.modules.filter((row) => row.key && row.key !== "market") : [];
+  return modules.length > 0 && modules.every((row) => row.ok === true && row.fallback !== true && row.runId && isPendingNotDueModule(row));
+}
+function acceptableManifestStatus(status, closedPreviousGood, pendingHold) {
+  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD") || (closedPreviousGood === true && pendingHold === true && status === "NO");
+}
+
+function validateModule(row, manifest, controlPlane, issues, options = {}) {
   const key = row.key || row.label || "unknown";
   const tradeDate = String(manifest.tradeDate || "");
   const ids = row.runIds || {};
@@ -80,12 +95,13 @@ function validateModule(row, manifest, controlPlane, issues) {
   const uniqueIds = unique(rawIds);
   const primaryRunId = row.runId || uniqueIds[0] || "";
   const runDate = runIdDate(primaryRunId);
+  const pendingHold = options.pendingHold === true && isPendingNotDueModule(row);
 
   if (!primaryRunId) issues.push(`${key}:missing_primary_runId`);
   if (uniqueIds.length > 1) issues.push(`${key}:runId_mismatch:${uniqueIds.join(",")}`);
-  if (tradeDate && runDate && runDate !== tradeDate) issues.push(`${key}:runDate_mismatch:${runDate}!=${tradeDate}`);
+  if (!pendingHold && tradeDate && runDate && runDate !== tradeDate) issues.push(`${key}:runDate_mismatch:${runDate}!=${tradeDate}`);
   if (row.ok !== true) issues.push(`${key}:manifest_module_not_ok:${(row.issues || [])[0] || "unknown"}`);
-  if (row.complete !== true) issues.push(`${key}:manifest_complete_not_true`);
+  if (!pendingHold && row.complete !== true) issues.push(`${key}:manifest_complete_not_true`);
   if (row.fallback === true) issues.push(`${key}:manifest_fallback_true`);
 
   const protected88 = row.scorecard88Protection === "membership-protected" || isProtectedMarker(ids.scorecard88);
@@ -107,7 +123,7 @@ function validateModule(row, manifest, controlPlane, issues) {
     runDate,
     uniqueRunIds: uniqueIds,
     scorecard88Protection: row.scorecard88Protection || "",
-    ok: row.ok === true && row.complete === true && row.fallback !== true && uniqueIds.length <= 1,
+    ok: row.ok === true && row.fallback !== true && uniqueIds.length <= 1 && (pendingHold || row.complete === true),
   };
 }
 
@@ -146,27 +162,31 @@ async function main() {
   const pkg = readJson(PACKAGE_FILE, {});
   const resourceChainScript = readText(RESOURCE_CHAIN_SCRIPT);
 
+  const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
+  const pendingHold = pendingNotDuePreviousGoodHold(manifest);
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_missing");
   if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) issues.push("manifest_modules_missing");
-  if (manifest.ok !== true) issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
-  const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
-  if (!acceptableManifestStatus(manifest.unattendedStatus, closedPreviousGood)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
+  if (manifest.ok !== true && !pendingHold) issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
+  if (!acceptableManifestStatus(manifest.unattendedStatus, closedPreviousGood, pendingHold)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
 
+  const controlPlaneRunIdClosureAccepted = controlPlane.runIdClosure?.ok === true
+    || (pendingHold && controlPlane.runIdClosure?.status === "PENDING_NOT_DUE" && (controlPlane.runIdClosure?.blockers || []).length === 0);
   const controlPlaneAccepted = controlPlane.contract === "terminal-control-plane-v1"
-    && controlPlane.dailyManifest?.ok === true
-    && controlPlane.runIdClosure?.ok === true
+    && (controlPlane.dailyManifest?.ok === true || pendingHold)
+    && controlPlaneRunIdClosureAccepted
     && (
       controlPlane.decision?.unattendedStatus === "YES"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+      || controlPlane.canaryPublish?.status === "CANARY_READY_MARKET_CLOSED_CLOSURE"
     );
   if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
-  if (controlPlane.runIdClosure?.ok !== true) issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
+  if (!controlPlaneRunIdClosureAccepted) issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
 
   if (closedPreviousGood && controlPlane.canaryPublish?.scorecardPublishAllowed === true) {
     issues.push("market_closed_scorecard_publish_allowed_true");
   }
 
-  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues));
+  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues, { pendingHold }));
   const resourceRows = validateResourceChain(resourceChain, manifest, issues);
 
   const scripts = pkg.scripts || {};

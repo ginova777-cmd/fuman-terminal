@@ -5,6 +5,19 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(argValue("--out", "outputs/terminal-canary-publish"));
 const MANIFEST_FILE = path.resolve(argValue("--manifest", path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json")));
 const SCORECARD_FILE = path.resolve(argValue("--scorecard", path.join(ROOT, "data", "scorecard-latest.json")));
+const LIVE_MODE = process.argv.includes("--live") || /^(1|true|yes)$/i.test(String(process.env.FUMAN_CANARY_LIVE || ""));
+const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
+const AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
+const AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let MEMBER_BEARER_TOKEN = [
+  process.env.FUMAN_VERIFY_BEARER_TOKEN,
+  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
+  process.env.FUMAN_AUTH_BEARER_TOKEN,
+  process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
+  process.env.FUMAN_SMOKE_BEARER_TOKEN,
+].map((value) => String(value || "").trim()).find(Boolean) || "";
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -16,6 +29,54 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function freshUrl(pathname) {
+  if (/^https?:\/\//i.test(pathname)) return pathname;
+  const separator = pathname.includes("?") ? "&" : "?";
+  return `${BASE_URL}${pathname}${separator}canaryLive=${Date.now()}`;
+}
+
+async function ensureMemberToken() {
+  if (MEMBER_BEARER_TOKEN) return { ok: true, source: "env-token", status: 0, error: "" };
+  if (!MEMBER_EMAIL || !MEMBER_PASSWORD) return { ok: false, source: "none", status: 0, error: "protected readback token not armed" };
+  const response = await fetch(`${AUTH_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { apikey: AUTH_KEY, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ email: MEMBER_EMAIL, password: MEMBER_PASSWORD }),
+  });
+  const body = await response.text();
+  const payload = parseJson(body);
+  if (!response.ok || !payload?.access_token) {
+    return { ok: false, source: "email-password", status: response.status, error: payload?.error_description || payload?.msg || body.slice(0, 160) };
+  }
+  MEMBER_BEARER_TOKEN = String(payload.access_token || "");
+  return { ok: true, source: "email-password", status: response.status, error: "" };
+}
+
+async function readLiveScorecard() {
+  const auth = await ensureMemberToken();
+  if (!auth.ok) throw new Error(`live_scorecard_auth_failed:${auth.status || 0}:${auth.error}`);
+  const response = await fetch(freshUrl("/api/scorecard?live=1"), {
+    cache: "no-store",
+    headers: {
+      authorization: `Bearer ${MEMBER_BEARER_TOKEN}`,
+      "x-fuman-readback-auth": "membership-bearer",
+      accept: "application/json",
+    },
+  });
+  const body = await response.text();
+  const payload = parseJson(body);
+  if (!response.ok || !payload) throw new Error(`live_scorecard_read_failed:${response.status}:${body.slice(0, 160)}`);
+  return { payload, readback: { status: response.status, authSource: auth.source } };
+}
 function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
@@ -152,12 +213,13 @@ function validateCanary(manifest, scorecard, options = {}) {
     }
   }
 
-  const publishAllowed = issues.length === 0 && (!closed || allowMarketClosedPublish);
+  const closureOk = issues.length === 0 && (!closed || allowMarketClosedPublish);
+  const publishAllowed = issues.length === 0 && !closed;
   return {
-    ok: issues.length === 0,
+    ok: closureOk,
     contract: "terminal-canary-publish-v1",
     checkedAt: new Date().toISOString(),
-    status: closed ? (publishAllowed ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
+    status: closed ? (closureOk ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
     scorecardPublishAllowed: publishAllowed,
     marketClosedPreviousGood: closed,
     tradeDate: expectedReportDate,
@@ -237,8 +299,17 @@ function selfTests() {
 
 async function main() {
   const manifest = readJson(MANIFEST_FILE);
-  const scorecard = readJson(SCORECARD_FILE);
-  const payload = validateCanary(manifest, scorecard);
+  let scorecard = readJson(SCORECARD_FILE);
+  let mode = "artifact";
+  let liveReadback = null;
+  if (LIVE_MODE) {
+    const live = await readLiveScorecard();
+    scorecard = live.payload;
+    mode = "production-live";
+    liveReadback = live.readback;
+  }
+  const payload = validateCanary(manifest, scorecard, { mode });
+  if (liveReadback) payload.liveReadback = liveReadback;
   const selfTestFailures = selfTests();
   if (selfTestFailures.length) {
     payload.ok = false;
@@ -267,8 +338,3 @@ main().catch((error) => {
 });
 
 module.exports = { validateCanary, selfTests };
-
-
-
-
-

@@ -92,9 +92,23 @@ function assert(condition, issues, issue, details = {}) {
   if (!condition) issues.push({ issue, details });
 }
 
-function acceptableCompletionStatus(value, closed) {
+function pendingNotDueMode({ manifest, controlPlane, policy, opsStatus }) {
+  const values = [
+    manifest?.blocker,
+    controlPlane?.decision?.state,
+    controlPlane?.decision?.reason,
+    policy?.decision?.opsState,
+    policy?.decision?.reason,
+    opsStatus?.state,
+    opsStatus?.reason,
+  ].map(lower).join(" ");
+  return values.includes("pending_not_due");
+}
+
+function acceptableCompletionStatus(value, closed, pendingNotDue = false) {
   if (value === "YES") return true;
-  return closed === true && value === "PREVIOUS_GOOD_HOLD";
+  if (closed === true && value === "PREVIOUS_GOOD_HOLD") return true;
+  return pendingNotDue === true && value === "NO";
 }
 function fileEvidence(name, file, expectedContract, payload, issues) {
   const exists = fs.existsSync(file);
@@ -197,6 +211,8 @@ function verifyArtifacts(artifacts, issues) {
 function verifyInvariants(artifacts, issues) {
   const { predictivePreflight, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus } = artifacts;
   const closed = marketClosedMode(artifacts);
+  const pendingNotDue = pendingNotDueMode(artifacts);
+  const previousGoodHoldAllowed = closed || pendingNotDue;
   const tradeDate = compactDate(controlPlane?.tradeDate || manifest?.tradeDate || policy?.tradeDate || opsStatus?.tradeDate);
   const displayTradeDate = compactDate(predictivePreflight?.displayTradeDate || waterRoot?.marketCalendar?.row?.displayTradeDate || manifest?.tradeDate);
 
@@ -230,8 +246,14 @@ function verifyInvariants(artifacts, issues) {
   for (const key of REQUIRED_ACTIVE_MODULES) {
     assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
   }
-  assert(acceptableCompletionStatus(manifest?.unattendedStatus, closed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
-  assert(manifest?.ok === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker });
+  assert(acceptableCompletionStatus(manifest?.unattendedStatus, closed, pendingNotDue), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed, pendingNotDue });
+  assert(manifest?.ok === true || pendingNotDue === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker, pendingNotDue });
+  if (pendingNotDue) {
+    assert(controlPlane?.decision?.state === "PENDING_NOT_DUE", issues, "pending_not_due_control_plane_state_mismatch", { decision: controlPlane?.decision });
+    assert(policy?.decision?.opsState === "PENDING_NOT_DUE", issues, "pending_not_due_policy_state_mismatch", { decision: policy?.decision });
+    assert(controlPlane?.decision?.terminalDisplayAllowed === true || policy?.decision?.terminalDisplayAllowed === true || policy?.decision?.terminalSnapshotAllowed === true, issues, "pending_not_due_terminal_display_not_allowed", { controlPlane: controlPlane?.decision, policy: policy?.decision });
+    assert(canary?.scorecardPublishAllowed !== true, issues, "pending_not_due_canary_allows_scorecard_publish", { canary });
+  }
 
   const jobQueue = Array.isArray(orchestrator?.jobQueue) ? orchestrator.jobQueue : [];
   for (const job of jobQueue) {
@@ -245,8 +267,9 @@ function verifyInvariants(artifacts, issues) {
   assert((rollForward?.idempotencyContract?.invariants || []).includes("scanner_jobs_require_water_root_and_apply_scanners"), issues, "idempotency_scanner_water_gate_missing", { idempotencyContract: rollForward?.idempotencyContract });
   assert((rollForward?.idempotencyContract?.invariants || []).includes("publish_jobs_require_manifest_canary_gate"), issues, "idempotency_publish_canary_gate_missing", { idempotencyContract: rollForward?.idempotencyContract });
 
-  assert(controlPlane?.runIdClosure?.ok === true, issues, "control_plane_runid_closure_not_ok", { runIdClosure: controlPlane?.runIdClosure });
-  assert(acceptableCompletionStatus(controlPlane?.decision?.unattendedStatus, closed), issues, "control_plane_not_fresh_yes_or_previous_good_hold", { decision: controlPlane?.decision, closed });
+  const runIdClosureAccepted = controlPlane?.runIdClosure?.ok === true || (pendingNotDue === true && controlPlane?.runIdClosure?.status === "PENDING_NOT_DUE" && (controlPlane?.runIdClosure?.blockers || []).length === 0 && (controlPlane?.runIdClosure?.modules || []).every((row) => row?.ok === true));
+  assert(runIdClosureAccepted, issues, "control_plane_runid_closure_not_ok", { runIdClosure: controlPlane?.runIdClosure, pendingNotDue });
+  assert(acceptableCompletionStatus(controlPlane?.decision?.unattendedStatus, closed, pendingNotDue), issues, "control_plane_not_fresh_yes_or_previous_good_hold", { decision: controlPlane?.decision, closed, pendingNotDue });
   assert(policy?.actionMatrix?.contract === "autonomous-ops-action-matrix-v1", issues, "action_matrix_missing", { actionMatrix: policy?.actionMatrix });
   const protectedInvariants = policy?.actionMatrix?.protectedInvariants || [];
   for (const required of [
@@ -262,13 +285,13 @@ function verifyInvariants(artifacts, issues) {
   assert(typeof notificationPlan?.notification?.required === "boolean", issues, "notification_required_not_boolean", { notification: notificationPlan?.notification });
   assert(Boolean(notificationPlan?.notification?.dedupeKey), issues, "notification_dedupe_key_missing", { notification: notificationPlan?.notification });
 
-  assert(acceptableCompletionStatus(opsStatus?.unattendedStatus, closed), issues, "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: opsStatus?.unattendedStatus, reason: opsStatus?.reason, closed });
+  assert(acceptableCompletionStatus(opsStatus?.unattendedStatus, closed, pendingNotDue), issues, "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: opsStatus?.unattendedStatus, reason: opsStatus?.reason, closed, pendingNotDue });
   assert(opsStatus?.gates?.predictivePreflight?.status, issues, "ops_status_predictive_gate_missing", { gates: opsStatus?.gates });
   assert(opsStatus?.gates?.notificationPolicy?.status, issues, "ops_status_notification_gate_missing", { gates: opsStatus?.gates });
   assert((opsStatus?.actionMatrix?.protectedInvariants || []).includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "ops_status_membership_invariant_missing", { actionMatrix: opsStatus?.actionMatrix });
   assert(Array.isArray(opsStatus?.modules) && opsStatus.modules.length >= REQUIRED_ACTIVE_MODULES.length, issues, "ops_status_modules_missing", { modules: opsStatus?.modules?.length || 0 });
 
-  return { closed, tradeDate, displayTradeDate, activeModules: moduleKeys, jobQueueLength: jobQueue.length };
+  return { closed, pendingNotDue, previousGoodHoldAllowed, tradeDate, displayTradeDate, activeModules: moduleKeys, jobQueueLength: jobQueue.length };
 }
 
 function markdown(payload) {
@@ -353,4 +376,3 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-completion-audit] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-

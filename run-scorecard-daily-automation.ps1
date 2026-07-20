@@ -249,6 +249,9 @@ $manifestArgs = @(
   "scripts\write-daily-terminal-run-manifest.js",
   "--expected-date=$ExpectedDate"
 )
+if (-not $allowPreviousForRun) {
+  $manifestArgs += "--require-formal-now"
+}
 Invoke-Step "node" $manifestArgs
 
 Write-Step "verify scorecard canary against daily manifest"

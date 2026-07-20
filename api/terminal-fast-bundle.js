@@ -678,6 +678,41 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
   };
 }
 
+function hasEndpointPrefix(endpoints = {}, prefix) {
+  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
+    if (!String(endpoint || "").startsWith(prefix)) return false;
+    return payload && typeof payload === "object" && payload.ok !== false;
+  });
+}
+
+async function ensureDesktopRequiredEndpoint(request, endpoints, spec, options = {}) {
+  if (hasEndpointPrefix(endpoints, spec.prefix || spec.endpoint)) return;
+  const result = await callJson(spec.endpoint, spec.handler, request, spec.query || {}, spec.timeoutMs || 5000);
+  if (Number(result?.statusCode || 0) >= 400) return;
+  const payload = result?.payload;
+  if (!payload || typeof payload !== "object" || payload.ok === false) return;
+  endpoints[buildEndpoint(spec.endpoint, spec.query || {})] = shapeTopPayload(request, {
+    ...payload,
+    transport: {
+      ...(payload.transport || {}),
+      fastBundleRepair: spec.repair || "desktop-required-endpoint",
+      via: options.via || "api/terminal-fast-bundle",
+      fetchedAt: new Date().toISOString(),
+    },
+  });
+}
+
+async function ensureDesktopRequiredEndpoints(request, endpoints, options = {}) {
+  const specs = [
+    { endpoint: "/api/market", prefix: "/api/market", handler: market, query: compactQuery(24), timeoutMs: 4200, repair: "market-required-endpoint" },
+    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 6500, repair: "institution-required-endpoint" },
+    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 6500, repair: "cb-required-endpoint" },
+    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 9000, repair: "warrant-required-endpoint" },
+  ];
+  for (const spec of specs) {
+    await ensureDesktopRequiredEndpoint(request, endpoints, spec, options);
+  }
+}
 function isMiss(item) {
   if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
@@ -768,6 +803,7 @@ module.exports = async function handler(request, response) {
         via: "api/terminal-fast-bundle:snapshot",
         updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
       });
+      await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot" });
       sanitizeStrategy2Endpoints(endpoints);
       const payload = {
         ...snapshot.payload,
@@ -799,6 +835,7 @@ module.exports = async function handler(request, response) {
       await repairStrategy3LatestSnapshot(request, endpoints);
       await repairStrategy5FullSnapshot(request, endpoints);
       await repairStrategy4LatestSnapshot(request, endpoints);
+      await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-miss" });
       const missPayload = {
         ...snapshotMissPayload(),
         endpoints,
@@ -864,6 +901,3 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
-
-
-

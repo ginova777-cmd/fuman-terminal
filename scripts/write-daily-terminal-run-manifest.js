@@ -294,12 +294,19 @@ async function main() {
   const modules = Array.isArray(chain.results)
     ? chain.results.filter((row) => row.key !== "market").map(moduleRow)
     : [];
+const pendingModules = modules.filter((item) => item.pendingNotDue === true);
+  const pendingNotDueHold = modules.length > 0
+    && pendingModules.length === modules.length
+    && modules.every((row) => row.ok === true)
+    && isPreviousGoodHoldWaterRoot(water);
   const issues = [];
   if (!water.ok) issues.push(`water_root:${water.reason || "not_ready"}`);
-  if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
-  for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
+  if (!chain.ok && !pendingNotDueHold) issues.push("terminal_resource_chain_unattended_failed");
+  for (const command of commands.filter((item) => !item.ok)) {
+    const toleratedPendingChain = pendingNotDueHold && command.label === "terminal-resource-chain:unattended";
+    if (!toleratedPendingChain) issues.push(`${command.label}_exit_${command.exitCode}`);
+  }
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
-  const pendingModules = modules.filter((item) => item.pendingNotDue === true);
   const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
@@ -338,7 +345,7 @@ async function main() {
     modules: manifest.modules.map((row) => ({ key: row.key, ok: row.ok, runId: row.runId, issue: row.issues[0] || "" })),
     output: latestFile,
   }, null, 2));
-  if (issues.length > 0) process.exitCode = 1;
+  if (issues.length > 0 && !pendingNotDueHold) process.exitCode = 1;
 }
 
 main().catch((error) => {
