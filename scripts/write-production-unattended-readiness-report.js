@@ -228,6 +228,11 @@ function buildManifest(manifest) {
   };
 }
 
+function isPendingNotDueManifest(payload = {}) {
+  const manifest = payload.dailyManifest || payload;
+  const blocker = String(manifest.blocker || "").toLowerCase();
+  return manifest.ok !== true && blocker.startsWith("pending_not_due:");
+}
 function buildProductionLive(productionLive) {
   return {
     command: "npm run verify:terminal-ops-production-live",
@@ -308,7 +313,10 @@ function collectBlockers(payload, issues) {
     windowsTaskAndServiceTokenAudit: payload.windowsTaskAndServiceTokenAudit,
     autoRollForward: payload.autoRollForward,
   })) {
-    if (section.ok !== true) blockers.push({ blocker: `${key}_not_ok`, severity: "critical" });
+    if (section.ok !== true) {
+      if (key === "dailyManifest" && isPendingNotDueManifest(payload)) blockers.push({ blocker: section.blocker || "pending_not_due", severity: "info" });
+      else blockers.push({ blocker: `${key}_not_ok`, severity: "critical" });
+    }
   }
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) {
     blockers.push({ blocker: "resource_chain_rows_missing_in_report", severity: "critical" });
@@ -483,7 +491,7 @@ function verifyPayload(payload, issues) {
   if (payload.resourceChain.ok !== true) issue(issues, "resource_chain_not_ok");
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
   if (payload.productionLiveOpsReadback?.authenticatedReadback?.enabled === true && !resourceChainProtectedReadbackOk(payload)) issue(issues, "resource_chain_authenticated_readback_missing_or_not_armed", { membershipProtectedSummary: payload.resourceChain.membershipProtectedSummary });
-  if (payload.dailyManifest.ok !== true) issue(issues, "manifest_not_ok");
+  if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
   if (requiresAuthenticatedReadbackForReady(payload) && !authenticatedReadbackOk(payload)) issue(issues, "production_live_authenticated_readback_required_for_ready", { authenticatedReadback: payload.productionLiveOpsReadback.authenticatedReadback });
@@ -573,9 +581,11 @@ async function main() {
   payload.issues = finalIssues;
   payload.blockers = collectBlockers(payload, finalIssues);
   payload.ok = finalIssues.length === 0;
-  payload.status = payload.ok
-    ? (isPreviousGoodWaterRoot(payload) ? "PREVIOUS_GOOD_HOLD_READY" : "PRODUCTION_READY")
-    : "NOT_READY";
+  payload.status = isPendingNotDueManifest(payload)
+    ? "PENDING_NOT_DUE"
+    : (payload.ok
+      ? (isPreviousGoodWaterRoot(payload) ? "PREVIOUS_GOOD_HOLD_READY" : "PRODUCTION_READY")
+      : "NOT_READY");
 
   await fs.promises.writeFile(reportFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await fs.promises.writeFile(path.join(OUT_DIR, "production-unattended-readiness-report.md"), markdown(payload), "utf8");
