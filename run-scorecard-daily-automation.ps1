@@ -13,6 +13,66 @@ function Write-Step($Message) {
   Write-Host ("[scorecard-daily] {0}" -f $Message)
 }
 
+function Enable-ProtectedReadbackCredential($ProjectRoot) {
+  if (-not [string]::IsNullOrWhiteSpace($env:FUMAN_TEST_MEMBER_ACCESS_TOKEN)) {
+    return [pscustomobject]@{ enabled = $true; source = "FUMAN_TEST_MEMBER_ACCESS_TOKEN"; reason = "ok" }
+  }
+
+  $tokenEnvNames = @(
+    "FUMAN_VERIFY_BEARER_TOKEN",
+    "FUMAN_MEMBERSHIP_BEARER_TOKEN",
+    "FUMAN_AUTH_BEARER_TOKEN",
+    "FUMAN_SMOKE_BEARER_TOKEN"
+  )
+  foreach ($name in $tokenEnvNames) {
+    $value = [string](Get-Item -Path ("Env:\" + $name) -ErrorAction SilentlyContinue).Value
+    if (-not [string]::IsNullOrWhiteSpace($value)) {
+      $env:FUMAN_TEST_MEMBER_ACCESS_TOKEN = $value
+      return [pscustomobject]@{ enabled = $true; source = $name; reason = "ok" }
+    }
+  }
+
+  $helper = Join-Path $ProjectRoot "lib\protected-readback-credential.js"
+  if (-not (Test-Path -LiteralPath $helper)) {
+    return [pscustomobject]@{ enabled = $false; source = "none"; reason = "protected_readback_helper_missing" }
+  }
+
+  $script = @"
+const helper = require(process.argv[1]);
+helper.resolveProtectedReadbackCredential({ timeoutMs: 20000 })
+  .then((result) => {
+    const payload = {
+      ok: !!result.ok,
+      enabled: !!result.enabled,
+      source: String(result.source || ''),
+      reason: String(result.reason || ''),
+      status: Number(result.status || 0),
+      token: result.token ? String(result.token) : ''
+    };
+    console.log(Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'));
+  })
+  .catch((error) => {
+    const payload = { ok: false, enabled: false, source: 'none', reason: 'protected_readback_helper_error', status: 0, token: '', error: error && error.message ? error.message : String(error) };
+    console.log(Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'));
+  });
+"@
+
+  $encoded = (& node --use-system-ca -e $script $helper | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($encoded)) {
+    return [pscustomobject]@{ enabled = $false; source = "none"; reason = "protected_readback_helper_exit_$LASTEXITCODE" }
+  }
+  try {
+    $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded)) | ConvertFrom-Json
+  } catch {
+    return [pscustomobject]@{ enabled = $false; source = "none"; reason = "protected_readback_helper_invalid_json" }
+  }
+  if ($json.ok -and $json.enabled -and -not [string]::IsNullOrWhiteSpace([string]$json.token)) {
+    $env:FUMAN_TEST_MEMBER_ACCESS_TOKEN = [string]$json.token
+    return [pscustomobject]@{ enabled = $true; source = [string]$json.source; reason = "ok" }
+  }
+  return [pscustomobject]@{ enabled = $false; source = [string]$json.source; reason = [string]$json.reason }
+}
+
 function Invoke-Step($FilePath, $ArgumentList, [int]$Attempts = 1, [int]$DelaySeconds = 15) {
   $attemptLimit = [Math]::Max(1, $Attempts)
   for ($attempt = 1; $attempt -le $attemptLimit; $attempt++) {
@@ -133,14 +193,18 @@ if (-not $ExpectedDate) {
   $ExpectedDate = Get-TaipeiDate
 }
 
+$protectedReadbackCredential = Enable-ProtectedReadbackCredential $ProjectRoot
+$EffectiveNoLiveVerify = $NoLiveVerify -or [string]::IsNullOrWhiteSpace($env:FUMAN_TEST_MEMBER_ACCESS_TOKEN)
 $tradingDayStatus = Get-TradingDayStatus $ProjectRoot
 $allowPreviousForRun = $AllowPreviousTradeDate -or (-not [bool]$tradingDayStatus.isTradingDay)
 $env:FUMAN_SCANNER_TARGET_DATE = $ExpectedDate
 $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ExpectedDate
 $env:FUMAN_SCORECARD_EXPECTED_DATE = $ExpectedDate
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
-if ($EffectiveNoLiveVerify) {
-  Write-Step "production protected live verify disabled for this run; no member bearer token was provided, so only computation-layer Supabase snapshot is verified"
+if ($protectedReadbackCredential.enabled) {
+  Write-Step ("protected readback credential armed source={0}" -f $protectedReadbackCredential.source)
+} elseif ($EffectiveNoLiveVerify) {
+  Write-Step ("production protected live verify disabled for this run; no member bearer token was provided, so only computation-layer Supabase snapshot is verified reason={0}" -f $protectedReadbackCredential.reason)
 }
 if ($allowPreviousForRun) {
   $env:FUMAN_SCORECARD_ALLOW_STALE = "1"
@@ -255,14 +319,26 @@ if (-not $allowPreviousForRun) {
 Invoke-Step "node" $manifestArgs
 
 Write-Step "verify scorecard canary against daily manifest"
-Invoke-Step "node" @(
-  "--use-system-ca",
-  "scripts\verify-terminal-canary-publish.js",
-  "--scorecard=$snapshotFile"
-)
-
 $canaryFile = Join-Path $ProjectRoot "outputs\terminal-canary-publish\terminal-canary-publish.json"
+& node --use-system-ca "scripts\verify-terminal-canary-publish.js" "--scorecard=$snapshotFile"
+$canaryExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+if (-not (Test-Path -LiteralPath $canaryFile)) {
+  throw "terminal canary publish receipt missing after exit $canaryExitCode"
+}
 $canaryPayload = Read-JsonFile $canaryFile
+if ($canaryExitCode -ne 0) {
+  $expectedCanaryWaitStatuses = @(
+    "CANARY_WAITING_PENDING_NOT_DUE",
+    "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+  )
+  $canaryStatus = [string]$canaryPayload.status
+  $canaryIssues = if ($canaryPayload.issues) { ($canaryPayload.issues -join ";") } else { "none" }
+  if (($expectedCanaryWaitStatuses -contains $canaryStatus) -and $canaryPayload.scorecardPublishAllowed -ne $true) {
+    Write-Step ("scorecard canary expected wait; preserve previous-good scorecard snapshot and exit 0: status={0} issues={1}" -f $canaryStatus, $canaryIssues)
+    return
+  }
+  throw ("scorecard canary failed with exit code {0}: status={1} issues={2}" -f $canaryExitCode, $canaryStatus, $canaryIssues)
+}
 if ($canaryPayload.scorecardPublishAllowed -ne $true) {
   $canaryIssues = if ($canaryPayload.issues) { ($canaryPayload.issues -join ";") } else { "none" }
   Write-Step ("scorecard canary not armed; preserve previous-good scorecard snapshot and exit 0: status={0} issues={1}" -f $canaryPayload.status, $canaryIssues)

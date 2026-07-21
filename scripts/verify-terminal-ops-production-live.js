@@ -4,29 +4,21 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+  resolveProtectedReadbackCredential,
+  protectedReadbackHeaders: credentialReadbackHeaders,
+  publicCredentialSummary,
+} = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-ops-production-live");
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const TIMEOUT_MS = Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_TIMEOUT_MS || 25000);
-const RETRY_ATTEMPTS = Math.max(1, Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_ATTEMPTS || 3));
-const RETRY_BACKOFF_MS = Math.max(0, Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_RETRY_BACKOFF_MS || 1200));
 const EXPECTED_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA || git(["rev-parse", "HEAD"]).stdout);
-const AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co").replace(/\/+$/, "");
-const AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
-const MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
-const MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
-let MEMBER_BEARER_TOKEN = [
-  process.env.FUMAN_VERIFY_BEARER_TOKEN,
-  process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
-  process.env.FUMAN_AUTH_BEARER_TOKEN,
-  process.env.FUMAN_TEST_MEMBER_ACCESS_TOKEN,
-  process.env.FUMAN_SMOKE_BEARER_TOKEN,
-].map((value) => String(value || "").trim()).find(Boolean) || "";
 const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || "")) || process.argv.includes("--require-protected-readback");
 
 const DIRECT_PROTECTED_ENDPOINTS = [
-  { name: "terminal_ops_status", path: "/api/terminal-ops-status?liveOverlay=1" },
+  { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
   { name: "scorecard", path: "/api/scorecard?live=1" },
   { name: "source_reports", path: "/api/source-reports?live=1" },
 ];
@@ -98,7 +90,7 @@ function absoluteUrl(pathname) {
   return `${BASE_URL}${appendFreshParam(pathname)}`;
 }
 
-function fetchTextOnce(pathname, options = {}, redirects = 0) {
+function fetchText(pathname, options = {}, redirects = 0) {
   const url = absoluteUrl(pathname);
   const headers = {
     "cache-control": "no-cache",
@@ -111,7 +103,7 @@ function fetchTextOnce(pathname, options = {}, redirects = 0) {
       if ([301, 302, 303, 307, 308].includes(Number(res.statusCode)) && location && redirects < 5) {
         res.resume();
         const nextUrl = new URL(location, url).toString();
-        fetchTextOnce(nextUrl, options, redirects + 1).then(resolve, reject);
+        fetchText(nextUrl, options, redirects + 1).then(resolve, reject);
         return;
       }
       let body = "";
@@ -124,39 +116,6 @@ function fetchTextOnce(pathname, options = {}, redirects = 0) {
     req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
     req.on("error", reject);
   });
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function retryableFetchError(error) {
-  return /timeout|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up/i.test(error?.message || String(error || ""));
-}
-
-async function fetchText(pathname, options = {}, redirects = 0) {
-  const attempts = [];
-  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt += 1) {
-    const startedAt = Date.now();
-    try {
-      const result = await fetchTextOnce(pathname, options, redirects);
-      attempts.push({ attempt, ok: true, status: result.status, elapsedMs: Date.now() - startedAt });
-      return {
-        ...result,
-        attempts,
-        attemptCount: attempt,
-        recoveredAfterRetry: attempt > 1,
-      };
-    } catch (error) {
-      attempts.push({ attempt, ok: false, status: 0, elapsedMs: Date.now() - startedAt, error: error?.message || String(error) });
-      if (attempt >= RETRY_ATTEMPTS || !retryableFetchError(error)) {
-        error.fetchAttempts = attempts;
-        throw error;
-      }
-      await sleep(RETRY_BACKOFF_MS * attempt);
-    }
-  }
-  throw new Error(`fetch failed ${pathname}`);
 }
 
 function parseJson(text) {
@@ -177,64 +136,6 @@ function cacheControl(headers = {}) {
 
 function noStore(headers = {}) {
   return /no-store/i.test(cacheControl(headers));
-}
-
-function protectedReadbackHeaders() {
-  if (!MEMBER_BEARER_TOKEN) return {};
-  return {
-    authorization: `Bearer ${MEMBER_BEARER_TOKEN}`,
-    "x-fuman-readback-auth": "membership-bearer",
-  };
-}
-
-async function ensureMemberToken() {
-  if (MEMBER_BEARER_TOKEN) return { attempted: false, enabled: true, source: "env-token", status: 0, error: "" };
-  if (!MEMBER_EMAIL || !MEMBER_PASSWORD) return { attempted: false, enabled: false, source: "none", status: 0, error: "protected readback token not armed" };
-  const startedAt = Date.now();
-  try {
-    const response = await fetch(`${AUTH_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        apikey: AUTH_KEY,
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify({ email: MEMBER_EMAIL, password: MEMBER_PASSWORD }),
-    });
-    const text = await response.text();
-    const payload = parseJson(text);
-    if (!response.ok || !payload?.access_token) {
-      return {
-        attempted: true,
-        enabled: false,
-        source: "email-password",
-        status: response.status,
-        elapsedMs: Date.now() - startedAt,
-        error: payload?.error_description || payload?.msg || String(text || "").slice(0, 160),
-      };
-    }
-    MEMBER_BEARER_TOKEN = String(payload.access_token || "");
-    return {
-      attempted: true,
-      enabled: true,
-      source: "email-password",
-      status: response.status,
-      elapsedMs: Date.now() - startedAt,
-      userId: payload.user?.id || "",
-      email: MEMBER_EMAIL,
-      error: "",
-    };
-  } catch (error) {
-    return {
-      attempted: true,
-      enabled: false,
-      source: "email-password",
-      status: 0,
-      elapsedMs: Date.now() - startedAt,
-      error: error?.message || String(error),
-    };
-  }
 }
 
 function membershipError(payload = {}) {
@@ -265,45 +166,16 @@ function endpointRunIds(targetName, payload, body) {
   return Array.from(collectRunIds(payload || body)).sort();
 }
 
-function runIdDateScore(runIds = []) {
-  const dates = runIds
-    .map((runId) => {
-      const match = String(runId || "").match(/20\d{6}/);
-      return match ? Number(match[0]) : 0;
-    })
-    .filter(Boolean);
-  return dates.length ? Math.min(...dates) : 0;
-}
-
-function selectAuthenticatedRunIdReference(endpoints = []) {
-  return endpoints
-    .filter((row) => row.ok && row.runIds.length >= 7)
-    .map((row) => ({ ...row, runIdDateScore: runIdDateScore(row.runIds) }))
-    .sort((a, b) => b.runIdDateScore - a.runIdDateScore || b.runIds.length - a.runIds.length || String(a.name).localeCompare(String(b.name)))[0] || null;
-}
-function authenticatedRunIdDriftPolicy() {
-  const payload = readJson(path.join(ROOT, "data", "terminal-ops-status-latest.json"), {});
-  const pendingNotDue = payload.state === "PENDING_NOT_DUE"
-    && payload.unattendedStatus === "NO"
-    && /^pending_not_due/.test(String(payload.reason || ""));
-  if (pendingNotDue) {
-    return {
-      allowDrift: true,
-      mode: "pending_not_due_allows_scorecard_previous_good",
-      reason: payload.reason || "pending_not_due",
-    };
-  }
-  return { allowDrift: false, mode: "strict_same_runid", reason: payload.reason || "" };
-}
-
 async function verifyAuthenticatedProtectedReadback(issues) {
-  const auth = await ensureMemberToken();
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: TIMEOUT_MS });
+  const auth = publicCredentialSummary(credential);
   const result = {
     attempted: auth.attempted,
     enabled: auth.enabled,
     source: auth.source,
     status: auth.status,
     error: auth.error || "",
+    reason: auth.reason || "",
     endpoints: [],
     ok: true,
   };
@@ -315,14 +187,14 @@ async function verifyAuthenticatedProtectedReadback(issues) {
   }
   result.mode = "authenticated-readback";
   const targets = [
-    { name: "terminal_ops_status", path: "/api/terminal-ops-status?liveOverlay=1" },
+    { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
     { name: "scorecard", path: "/api/scorecard?live=1" },
     { name: "source_reports", path: "/api/source-reports?live=1" },
     { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70" },
     { name: "mobile_boot", path: "/api/mobile-boot" },
   ];
   for (const target of targets) {
-    const response = await fetchText(target.path, { headers: protectedReadbackHeaders() });
+    const response = await fetchText(target.path, { headers: credentialReadbackHeaders(credential) });
     const payload = parseJson(response.body);
     const runIds = endpointRunIds(target.name, payload, response.body);
     const row = {
@@ -341,43 +213,27 @@ async function verifyAuthenticatedProtectedReadback(issues) {
     result.endpoints.push(row);
   }
 
-  const reference = selectAuthenticatedRunIdReference(result.endpoints);
-  result.reference = reference ? {
-    name: reference.name,
-    path: reference.path,
-    runIds: reference.runIds,
-    runIdDateScore: reference.runIdDateScore,
-  } : null;
-  const runIdDriftPolicy = authenticatedRunIdDriftPolicy();
-  result.runIdComparisonMode = runIdDriftPolicy.mode;
-  result.runIdComparisonReason = runIdDriftPolicy.reason;
+  const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
   const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
     for (const row of result.endpoints) {
       if (!row.runIds.length) continue;
       const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId));
-      const missingRunIds = Array.from(expectedRunIds).filter((runId) => !row.runIds.includes(runId));
       row.unexpectedRunIds = unexpectedRunIds;
-      row.missingRunIds = missingRunIds;
-      if (unexpectedRunIds.length || missingRunIds.length) {
-        row.runIdDriftAllowed = runIdDriftPolicy.allowDrift;
-        row.runIdComparisonMode = runIdDriftPolicy.mode;
-        if (!runIdDriftPolicy.allowDrift) {
-          row.ok = false;
-          issues.push({
-            issue: `authenticated_protected_endpoint_run_id_mismatch:${row.name}`,
-            details: {
-              endpoint: row.path,
-              referenceEndpoint: reference.name,
-              unexpectedRunIds,
-              missingRunIds,
-              expectedRunIds: Array.from(expectedRunIds).sort(),
-            },
-          });
-        }
+      if (unexpectedRunIds.length) {
+        row.ok = false;
+        issues.push({
+          issue: `authenticated_protected_endpoint_has_stale_or_unexpected_run_id:${row.name}`,
+          details: {
+            endpoint: row.path,
+            unexpectedRunIds,
+            expectedRunIds: Array.from(expectedRunIds).sort(),
+          },
+        });
       }
     }
   }
+
   result.ok = result.endpoints.every((row) => row.ok);
   return result;
 }
@@ -425,8 +281,6 @@ async function verifyReleaseManifest(issues) {
     deploymentUrl: payload?.deploymentUrl || "",
     branch: payload?.branch || "",
     noStore: noStore(result.headers),
-    attemptCount: result.attemptCount || 1,
-    recoveredAfterRetry: result.recoveredAfterRetry === true,
   };
 }
 
@@ -453,8 +307,6 @@ async function verifyDirectProtectedEndpoint(item, issues) {
     error: payload?.error || "",
     reason: memberLockReason(payload),
     noStore: noStore(result.headers),
-    attemptCount: result.attemptCount || 1,
-    recoveredAfterRetry: result.recoveredAfterRetry === true,
     ok: isProtected && noStore(result.headers),
   };
 }
@@ -487,8 +339,6 @@ async function verifyRedactedLockedEndpoint(item, issues) {
     reason: memberLockReason(payload),
     leaks,
     cacheControl: cacheControl(result.headers),
-    attemptCount: result.attemptCount || 1,
-    recoveredAfterRetry: result.recoveredAfterRetry === true,
     ok: isLocked && hasShortLockedCache(result.headers),
     artifactVersion: payload?.bootHash || payload?.digest?.fragmentVersion || payload?.cacheSource || payload?.source || "",
     updatedAt: payload?.updatedAt || payload?.status?.updatedAt || "",
@@ -511,8 +361,6 @@ async function verifyShell(pathname, markers, issues) {
     ok: result.status === 200 && markers.every((marker) => body.includes(marker)) && !/>[^<]*missing_bearer_token[^<]*</i.test(visibleHtml),
     markers,
     shellVersion: body.match(/(?:version|cache|membership-lock)=([0-9A-Za-z._-]+)/)?.[1] || "",
-    attemptCount: result.attemptCount || 1,
-    recoveredAfterRetry: result.recoveredAfterRetry === true,
   };
 }
 

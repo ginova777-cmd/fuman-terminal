@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "unattended_yes": "NO",
+  "trade_date": "2026-07-21",
+  "run_id": "fixture-warmup-no",
+  "failure_codes": [
+    "PRIORITY_COVERAGE_LT_095",
+    "INTRADAY_1M_NOT_FRESH"
+  ],
+  "failed_checks": [
+    "0845:priorityFreshQuoteCoverage120s:0.183_lt_0.95",
+    "0900:intraday_1m_stale_seconds_gt_120"
+  ],
+  "artifact_paths": {
+    "summary_production": "fixtures/daytrade-warmup-self-heal-no-summary.json"
+  }
+}

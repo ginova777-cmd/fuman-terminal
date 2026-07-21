@@ -13,7 +13,6 @@ const REQUIRED_ACTIVE_TASKS = [
   "Fuman Strategy5 Cache 2100",
   "Fuman API Unattended Scorecard",
   "Fuman Public Slot Shared Source Watchdog",
-  "Fuman Terminal Autonomous Root Monitor",
 ];
 
 const SERVICE_KEY_MARKERS = [
@@ -80,7 +79,7 @@ function verifyScheduleRegistry(issues) {
   for (const task of REQUIRED_ACTIVE_TASKS) {
     if (!activeTasks.includes(task)) addIssue(issues, `schedule_active_task_missing:${task}`, { task });
   }
-  for (const task of ["Fuman Scorecard Daily Automation 1400", "Fuman Public Slot Shared Source Watchdog", "Fuman Terminal Autonomous Root Monitor"]) {
+  for (const task of ["Fuman Scorecard Daily Automation 1400", "Fuman Public Slot Shared Source Watchdog"]) {
     const allowed = allowedResults[task] || [];
     if (!allowed.includes(0)) addIssue(issues, `schedule_allowed_result_missing_zero:${task}`, { task, allowed });
     if (!allowed.includes(267009)) addIssue(issues, `schedule_allowed_result_missing_running_267009:${task}`, { task, allowed });
@@ -136,6 +135,8 @@ function verifyMembershipLayering(issues) {
   const helper = readText("scripts/e2e-membership-closure-utils.js");
   const resourceChain = readText("scripts/verify-terminal-resource-chain.js");
   const opsLive = readText("scripts/verify-terminal-ops-production-live.js");
+  const protectedCredential = readText("lib/protected-readback-credential.js");
+  const protectedCredentialVerifier = readText("scripts/verify-protected-readback-credential.js");
   const rollForward = readText("scripts/run-terminal-auto-roll-forward.js");
   const orchestrator = readText("scripts/write-terminal-orchestrator-state.js");
 
@@ -145,6 +146,9 @@ function verifyMembershipLayering(issues) {
   requireText(issues, "scripts/verify-terminal-resource-chain.js", resourceChain, "protectedReadbackAuth", "resource_chain_missing_protected_readback_split");
   requireText(issues, "scripts/verify-terminal-resource-chain.js", resourceChain, "membershipProtectedSummary", "resource_chain_missing_membership_protected_summary");
   requireText(issues, "scripts/verify-terminal-ops-production-live.js", opsLive, "direct_protected_endpoint_not_membership_required", "ops_live_missing_membership_required_assertion");
+  requireText(issues, "lib/protected-readback-credential.js", protectedCredential, "resolveProtectedReadbackCredential", "protected_credential_lib_missing_resolver");
+  requireText(issues, "lib/protected-readback-credential.js", protectedCredential, "FUMAN_PROTECTED_READBACK_CREDENTIAL_FILE", "protected_credential_lib_missing_runtime_file_env");
+  requireText(issues, "scripts/verify-protected-readback-credential.js", protectedCredentialVerifier, "protected-readback-credential-v1", "protected_credential_verifier_missing_contract");
   requireText(issues, "scripts/run-terminal-auto-roll-forward.js", rollForward, "Auth failures are never auto-executed", "rollforward_missing_auth_manual_repair_rule");
   requireText(issues, "scripts/write-terminal-orchestrator-state.js", orchestrator, "BLOCKED_AUTH", "orchestrator_missing_blocked_auth_state");
   requireText(issues, "scripts/write-terminal-orchestrator-state.js", orchestrator, "verify service token env", "orchestrator_missing_service_token_repair_action");
@@ -153,43 +157,8 @@ function verifyMembershipLayering(issues) {
     internalVerifyBypass: entitlement.includes("fumanInternalVerify === true"),
     resourceChainMemberReadbackSplit: resourceChain.includes("protectedReadbackAuth"),
     blockedAuthManualRepair: rollForward.includes("Auth failures are never auto-executed"),
-  };
-}
-
-function verifyAutonomousRootRunner(issues) {
-  const runner = readText("run-terminal-autonomous-root.ps1");
-  const installer = readText("scripts/install-terminal-autonomous-root-task.ps1");
-  const runnerMarkers = [
-    "terminal-autonomous-root-runner-v1",
-    "ops:predictive-preflight",
-    "verify:terminal-water-root",
-    "manifest:daily-terminal-run",
-    "orchestrator:state:from-existing",
-    "policy:autonomous-ops",
-    "rollforward:terminal:apply",
-    "rollforward:terminal:apply-scanners",
-    "verify:terminal-canary-publish:live",
-    "verify:terminal-control-plane:from-existing",
-    "verify:terminal-resource-chain:unattended",
-    "verify:terminal-runid-closure",
-    "verify:terminal-ops-production-live",
-    "ops:production-unattended-readiness-report:fresh",
-    "send-workflow-alert.js",
-    "IDLE_NO_RETRY_NEEDED",
-  ];
-  for (const marker of runnerMarkers) {
-    requireText(issues, "run-terminal-autonomous-root.ps1", runner, marker, `autonomous_root_runner_missing_marker:${marker}`);
-  }
-  const installerMarkers = ["Fuman Terminal Autonomous Root Monitor", "Register-ScheduledTask", "08:55", "22:00", "-ApplyScanners"];
-  for (const marker of installerMarkers) {
-    requireText(issues, "scripts/install-terminal-autonomous-root-task.ps1", installer, marker, `autonomous_root_installer_missing_marker:${marker}`);
-  }
-  return {
-    runnerExists: Boolean(runner),
-    installerExists: Boolean(installer),
-    hasApplyScanners: runner.includes("rollforward:terminal:apply-scanners"),
-    hasFailureAlert: runner.includes("send-workflow-alert.js"),
-    installerRegistersTask: installer.includes("Register-ScheduledTask"),
+    protectedCredentialRuntimeFile: protectedCredential.includes("FUMAN_PROTECTED_READBACK_CREDENTIAL_FILE"),
+    protectedCredentialVerifier: protectedCredentialVerifier.includes("protected-readback-credential-v1"),
   };
 }
 
@@ -202,18 +171,22 @@ function verifyPackageWiring(issues) {
   if (!String(scripts["verify:backend-service-token-schedule"] || "").includes("verify-backend-service-token-schedule-contract.js")) {
     addIssue(issues, "package_missing_verify_backend_service_token_schedule");
   }
+  if (!String(scripts["verify:protected-readback-credential"] || "").includes("verify-protected-readback-credential.js")) {
+    addIssue(issues, "package_missing_verify_protected_readback_credential");
+  }
+  if (!String(scripts["verify:protected-readback-credential-contract"] || "").includes("verify-protected-readback-credential-contract.js")) {
+    addIssue(issues, "package_missing_verify_protected_readback_credential_contract");
+  }
   const root = String(scripts["verify:terminal-unattended-root"] || "");
-  if (!String(scripts["ops:autonomous-root"] || "").includes("run-terminal-autonomous-root.ps1")) addIssue(issues, "package_missing_ops_autonomous_root");
-  if (!String(scripts["ops:autonomous-root:apply-scanners"] || "").includes("-ApplyScanners")) addIssue(issues, "package_missing_ops_autonomous_root_apply_scanners");
-  if (!String(scripts["install:terminal-autonomous-root-task"] || "").includes("install-terminal-autonomous-root-task.ps1")) addIssue(issues, "package_missing_install_terminal_autonomous_root_task");
-  for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure"]) {
+  for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure", "verify:protected-readback-credential-contract", "verify:protected-readback-credential"]) {
     if (!root.includes(required)) addIssue(issues, `terminal_unattended_root_missing:${required}`, { root });
   }
   return {
     hasBackendAuthIsolation: Boolean(scripts["verify:backend-auth-isolation"]),
     hasBackendServiceTokenSchedule: Boolean(scripts["verify:backend-service-token-schedule"]),
     rootIncludesBackendServiceTokenSchedule: root.includes("verify:backend-service-token-schedule"),
-    hasAutonomousRootRunner: Boolean(scripts["ops:autonomous-root"]),
+    rootIncludesProtectedReadbackCredential: root.includes("verify:protected-readback-credential"),
+    rootIncludesProtectedReadbackCredentialContract: root.includes("verify:protected-readback-credential-contract"),
   };
 }
 
@@ -229,15 +202,14 @@ async function main() {
     scorecardRunner: verifyScorecardRunner(issues),
     strategyWrappers: verifyStrategyWrappers(issues),
     membershipLayering: verifyMembershipLayering(issues),
-    autonomousRootRunner: verifyAutonomousRootRunner(issues),
     packageWiring: verifyPackageWiring(issues),
     guarantees: [
       "backend scanner/publisher uses service role or internal verified API, not member browser session",
       "membership_required 401 protects display only and is not scanner compute failure",
       "scorecard publish is daily-manifest gated and can run without member live readback",
       "BLOCKED_AUTH jobs require service token repair and are never auto-executed as fake success",
+      "protected readback credential has a shared env/runtime-file/login resolver and a live hard gate",
       "schedule running result 0x41301 is classified separately from failed scanner output",
-      "autonomous root monitor runs deterministic root steps once, then readback-only closure after due windows",
     ],
     issues,
   };

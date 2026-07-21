@@ -1,0 +1,124 @@
+{
+  "contract": "daytrade-warmup-schedule-self-heal-contract-v1",
+  "naturalEvidenceTasks": [
+    {
+      "name": "Fuman Daytrade Source Gate 0700",
+      "time": "07:00",
+      "expectedTriggers": [
+        "07:00"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeUnattendedGate.ps1",
+        "-Phase 0700"
+      ]
+    },
+    {
+      "name": "Fuman Daytrade Source Gate 0845",
+      "time": "08:45",
+      "expectedTriggers": [
+        "08:45"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeUnattendedGate.ps1",
+        "-Phase 0845"
+      ]
+    },
+    {
+      "name": "Fuman Daytrade Source Gate 0900",
+      "time": "09:00",
+      "expectedTriggers": [
+        "09:00"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeUnattendedGate.ps1",
+        "-Phase 0900"
+      ]
+    }
+  ],
+  "finalVerdictTask": {
+    "name": "Fuman Daytrade Source Final Verdict 0912",
+    "time": "09:12",
+    "expectedTriggers": [
+      "09:12"
+    ],
+    "allowedResults": [
+      0,
+      267011
+    ],
+    "expectedCommandContains": [
+      "Run-DaytradeFinalVerdict.ps1"
+    ],
+    "runtimeScript": "C:/fuman-runtime/ops/Run-DaytradeFinalVerdict.ps1",
+    "runtimeMustContain": [
+      "daytrade-warmup:root:apply",
+      "--expected-date=$TradeDate"
+    ]
+  },
+  "rewaterTasks": [
+    {
+      "name": "Fuman Daytrade Source Writer 0600-1330",
+      "time": "06:00-13:30",
+      "expectedTriggers": [
+        "06:00"
+      ],
+      "allowedResults": [
+        0,
+        267009,
+        2147946720,
+        -2147020576
+      ]
+    },
+    {
+      "name": "Fuman Fugle Daytrade Watchdog Every Minute",
+      "time": "07:00-13:35",
+      "expectedTriggers": [
+        "07:00"
+      ],
+      "allowedResults": [
+        0,
+        267009,
+        2147946720,
+        -2147020576
+      ]
+    }
+  ],
+  "requiredPackageScripts": [
+    "verify:daytrade-warmup-root",
+    "daytrade-warmup:root",
+    "daytrade-warmup:root:apply",
+    "daytrade-warmup:self-heal",
+    "daytrade-warmup:self-heal:apply",
+    "verify:daytrade-warmup-self-heal",
+    "verify:daytrade-warmup-self-heal:fixture"
+  ],
+  "excludedFromWarmupGate": [
+    "membership",
+    "terminal_ui",
+    "/88",
+    "desktop",
+    "mobile"
+  ],
+  "invariants": [
+    "natural_gate_tasks_exist_and_are_readonly",
+    "final_verdict_task_exists_at_0912",
+    "final_verdict_runs_root_apply_after_original_verdict",
+    "writer_and_watchdog_rewater_tasks_exist",
+    "allowed_results_do_not_hide_missing_natural_evidence",
+    "warmup_root_and_self_heal_scripts_are_wired",
+    "membership_ui_88_desktop_mobile_are_excluded_from_warmup_gate",
+    "self_heal_can_rewater_but_cannot_backfill_natural_schedule_evidence",
+    "rewater_actions_must_be_idempotent",
+    "rewater_must_be_followed_by_verification",
+    "self_heal_apply_failure_keeps_unattended_no",
+    "success_requires_rewater_verification_not_action_exit_only"
+  ]
+}

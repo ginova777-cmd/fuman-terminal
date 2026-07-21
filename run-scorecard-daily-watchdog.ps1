@@ -71,6 +71,30 @@ isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || 'C:/fuma
   return ($json | ConvertFrom-Json)
 }
 
+function Read-JsonFileOrNull($Path) {
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+}
+
+function Test-ExpectedManifestWait($ProjectRoot) {
+  $manifestFile = Join-Path $ProjectRoot "outputs\daily-terminal-run\daily-terminal-run-latest.json"
+  $canaryFile = Join-Path $ProjectRoot "outputs\terminal-canary-publish\terminal-canary-publish.json"
+  $manifest = Read-JsonFileOrNull $manifestFile
+  $canary = Read-JsonFileOrNull $canaryFile
+  $manifestBlocker = if ($null -ne $manifest) { [string]$manifest.blocker } else { "" }
+  $canaryStatus = if ($null -ne $canary) { [string]$canary.status } else { "" }
+  $expectedCanaryStatuses = @(
+    "CANARY_WAITING_PENDING_NOT_DUE",
+    "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+  )
+  return (($manifestBlocker -match "pending_not_due") -or (($expectedCanaryStatuses -contains $canaryStatus) -and $canary.scorecardPublishAllowed -ne $true))
+}
 function Read-ScorecardApi($BaseUrl) {
   $script = @"
 const base = process.argv[1].replace(/\/+$/, '');
@@ -155,6 +179,9 @@ try {
     } elseif ($after.ok -and $after.runId -and $after.qualityStatus -eq "complete" -and [int]$after.records -gt 0) {
       $status = "preserved_previous_trade_date"
       Write-Log ("preserve previous complete scorecard latest; expectedDate={0} latestDate={1} marketDate={2} runId={3} records={4}" -f $expectedDate, $after.latestDate, $after.marketDate, $after.runId, $after.records)
+    } elseif (Test-ExpectedManifestWait $ProjectRoot) {
+      $status = "expected_wait_no_publish"
+      Write-Log "expected manifest/canary wait; preserve previous scorecard without marking watchdog failed"
     } else {
       throw "scorecard still stale after watchdog repair; expectedDate=$expectedDate latestDate=$($after.latestDate) marketDate=$($after.marketDate)"
     }
@@ -166,7 +193,7 @@ try {
   Write-Log ("FAILED watchdog: {0}" -f $errorText)
 } finally {
   $receipt = [ordered]@{
-    ok = ($status -eq "ok" -or $status -eq "repaired" -or $status -eq "preserved_previous_trade_date" -or $status -eq "skipped_non_trading_day")
+    ok = ($status -eq "ok" -or $status -eq "repaired" -or $status -eq "preserved_previous_trade_date" -or $status -eq "expected_wait_no_publish" -or $status -eq "skipped_non_trading_day")
     status = $status
     source = "scorecard-daily-watchdog"
     startedAt = $startedAt

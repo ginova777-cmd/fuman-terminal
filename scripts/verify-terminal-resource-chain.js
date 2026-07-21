@@ -2,6 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
+const { normalizeStrategyScanReceipt } = require("../lib/strategy-scan-receipt-contract");
+const {
+  resolveProtectedReadbackCredential,
+  publicCredentialSummary,
+} = require("../lib/protected-readback-credential");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -68,65 +73,11 @@ function protectedReadbackHeaders(url) {
 }
 
 async function ensureProtectedReadbackToken() {
-  if (PROTECTED_READBACK_TOKEN) return protectedReadbackAuth;
-  if (!MEMBERSHIP_READBACK_EMAIL || !MEMBERSHIP_READBACK_PASSWORD) return protectedReadbackAuth;
-  protectedReadbackAuth = {
-    attempted: true,
-    enabled: false,
-    source: "email-password",
-    status: 0,
-    error: "",
-  };
-  const startedAt = Date.now();
-  try {
-    const response = await fetch(`${MEMBERSHIP_AUTH_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        apikey: MEMBERSHIP_AUTH_KEY,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ email: MEMBERSHIP_READBACK_EMAIL, password: MEMBERSHIP_READBACK_PASSWORD }),
-    });
-    const text = await response.text();
-    let json = null;
-    try { json = JSON.parse(text || "{}"); } catch (_) { json = null; }
-    if (!response.ok || !json?.access_token) {
-      protectedReadbackAuth = {
-        attempted: true,
-        enabled: false,
-        source: "email-password",
-        status: response.status,
-        elapsedMs: Date.now() - startedAt,
-        error: json?.error_description || json?.msg || text.slice(0, 160),
-      };
-      return protectedReadbackAuth;
-    }
-    PROTECTED_READBACK_TOKEN = String(json.access_token || "");
-    protectedReadbackAuth = {
-      attempted: true,
-      enabled: true,
-      source: "email-password",
-      status: response.status,
-      elapsedMs: Date.now() - startedAt,
-      userId: json.user?.id || "",
-      email: MEMBERSHIP_READBACK_EMAIL,
-      error: "",
-    };
-    return protectedReadbackAuth;
-  } catch (error) {
-    protectedReadbackAuth = {
-      attempted: true,
-      enabled: false,
-      source: "email-password",
-      status: 0,
-      elapsedMs: Date.now() - startedAt,
-      error: error?.message || String(error),
-    };
-    return protectedReadbackAuth;
-  }
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+  if (credential.token) PROTECTED_READBACK_TOKEN = credential.token;
+  protectedReadbackAuth = publicCredentialSummary(credential);
+  return protectedReadbackAuth;
 }
-
 const STRATEGIES = [
   {
     key: "strategy2",
@@ -237,7 +188,6 @@ const STRATEGIES = [
     label: "市場總覽",
     policy: "same-day live",
     endpoint: "/api/market",
-    allowMissingDesktopSnapshot: true,
   },
 ];
 
@@ -326,12 +276,13 @@ function cleanNumber(value) {
 function receiptSummary(receiptKey) {
   if (!receiptKey) return null;
   const file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
-  const row = readJsonFile(file);
-  if (!row) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  const raw = readJsonFile(file);
+  if (!raw) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  const row = normalizeStrategyScanReceipt(raw, { key: receiptKey, strategy: receiptKey });
   const preservedLatest = row.preservedLatest === true && row.publishBlocked === true && Boolean(String(row.runId || ""));
   const fallback = row.fallback === true && !preservedLatest;
   return {
-    ok: row.status === "complete" && row.complete !== false && !fallback,
+    ok: row.status === "complete" && row.complete !== false && !fallback && row.publishAllowed !== false && row.preservePreviousGood !== true,
     key: receiptKey,
     file,
     status: String(row.status || ""),
@@ -339,6 +290,16 @@ function receiptSummary(receiptKey) {
     fallback,
     preservedLatest,
     publishBlocked: row.publishBlocked === true,
+    preservePreviousGood: row.preservePreviousGood === true,
+    publishAllowed: row.publishAllowed === true,
+    latestOverwriteAllowed: row.latestOverwriteAllowed === true,
+    latestWriteAttempted: row.latestWriteAttempted === true,
+    latestPointerUpdated: row.latestPointerUpdated === true,
+    blockedReceiptWritten: row.blockedReceiptWritten === true,
+    degradedBlocksLatest: row.degradedBlocksLatest === true,
+    evidenceStatus: row.evidenceStatus || "",
+    unattendedStatus: row.unattendedStatus || "",
+    run_quality_at_publish: row.run_quality_at_publish || null,
     startedAt: row.startedAt || "",
     finishedAt: row.finishedAt || "",
     exitCode: row.exitCode,
@@ -347,7 +308,7 @@ function receiptSummary(receiptKey) {
     matches: cleanNumber(row.matches),
     qualityStatus: row.qualityStatus || "",
     runId: String(row.runId || ""),
-    blockingReason: row.blockingReason || "",
+    blockingReason: row.blockingReason || row.blockedReason || row.scanner_block_reason || "",
     warnings: Array.isArray(row.warnings) ? row.warnings : [],
     log: row.log || "",
   };
@@ -897,8 +858,11 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     const latestDate = runDateFromId(supabase?.runId) || compactDate(supabase?.date || supabase?.tradeDate || supabase?.updatedAt);
     if (!supabase?.runId && config.key !== "market" && !pendingNotDue) issues.push("unattended: Supabase latest missing runId");
     if (latestDate && latestDate !== EXPECTED_DATE && !pendingNotDue) issues.push(`unattended: Supabase latest date ${latestDate} != expected ${EXPECTED_DATE}`);
-    if (scorecard?.membershipProtected && protectedReadbackAuth.attempted && !protectedReadbackAuth.enabled) {
-      issues.push("unattended: /88 authenticated readback token request failed");
+    if (scorecard?.membershipProtected && config.scorecardKeys?.length && !pendingNotDue) {
+      if (!protectedReadbackAuth.enabled) {
+        const suffix = protectedReadbackAuth.attempted ? ` (${protectedReadbackAuth.source || "auth"} status=${protectedReadbackAuth.status || 0} ${protectedReadbackAuth.error || ""})` : " (token not armed)";
+        issues.push(`unattended: /88 authenticated readback required${suffix}`.trim());
+      }
     }
   }
   if (receipt && !pendingNotDue) {

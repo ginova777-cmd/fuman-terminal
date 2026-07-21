@@ -23,23 +23,29 @@ function unique(values) {
 
 function isMarketClosedPreviousGood(manifest = {}, orchestrator = {}, waterRoot = {}) {
   const rootReady = waterRoot.ok === true && /ready|ok/.test(lower(waterRoot.status));
-  const rootOpen = waterRoot.marketCalendar?.marketOpen === true || waterRoot.marketCalendar?.tradingDayOpen === true;
+  const rootOpen = waterRoot.marketCalendar?.marketOpen === true
+    || waterRoot.marketCalendar?.tradingDayOpen === true
+    || waterRoot.marketCalendar?.row?.marketOpen === true
+    || waterRoot.marketCalendar?.row?.tradingDayOpen === true
+    || orchestrator.marketCalendar?.marketOpen === true
+    || orchestrator.marketCalendar?.tradingDayOpen === true;
   if (rootReady || rootOpen) return false;
   const bits = [
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
     manifest.blocker,
-    orchestrator.blocker,
     orchestrator.overallState,
+    orchestrator.blocker,
     waterRoot.status,
     waterRoot.reason,
+    waterRoot.marketCalendar?.row?.skipReason,
+    waterRoot.marketCalendar?.row?.marketStatus,
   ].map(lower).join(" ");
+  const tradingDayWait = bits.includes("trading_day") || bits.includes("wait_source_window");
+  if (tradingDayWait) return false;
   return bits.includes("market_closed_previous_good")
     || bits.includes("market_closed_formal_scan_skipped_preserve_previous_good")
-    || bits.includes("trading_day_wait_source_window_previous_good")
-    || bits.includes("trading_day_outside_formal_source_window_preserve_previous_good")
-    || bits.includes("wait_source_window")
-    || bits.includes("previous_good");
+    || bits.includes("market_closed");
 }
 
 function runIdDate(runId) {
@@ -132,11 +138,13 @@ function modulePolicy(row = {}, context = {}) {
 
 function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPreviousGood }) {
   const jobQueue = Array.isArray(orchestrator.jobQueue) ? orchestrator.jobQueue : [];
-  const waterOk = manifest.waterRoot?.ok === true || waterRoot.ok === true;
+  const sourceFreshnessRequired = orchestrator.marketCalendar?.sourceFreshnessRequired !== false;
+  const waterOk = manifest.waterRoot?.ok === true || waterRoot.ok === true || sourceFreshnessRequired === false;
   const manifestOk = manifest.ok === true;
   const allModulesClosed = modules.every((row) => row.state === "CLOSED" || (marketClosedPreviousGood && row.displayMode === "market_closed_previous_good"));
   const hasAuthBlock = jobQueue.some((job) => String(job.state || "").includes("AUTH"));
   const hasSourceBlock = jobQueue.some((job) => String(job.state || "").includes("SOURCE"));
+  const hasScanRetry = jobQueue.some((job) => String(job.state || "").includes("SCAN"));
   const hasPendingNotDue = modules.some((row) => row.state === "PENDING_NOT_DUE");
 
   if (hasAuthBlock) {
@@ -203,12 +211,12 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
   return {
     opsState: "DEGRADED_RETRY_QUEUE",
     unattendedStatus: "NO",
-    formalScanAllowed: false,
+    formalScanAllowed: waterOk && hasScanRetry,
     scorecardPublishAllowed: false,
     terminalSnapshotAllowed: true,
     autoRecoveryAllowed: true,
-    action: "run_job_queue_until_manifest_green",
-    reason: manifest.blocker || jobQueue[0]?.blocker || "manifest_not_green",
+    action: hasScanRetry ? "run_scanner_retry_queue_until_manifest_green" : "run_job_queue_until_manifest_green",
+    reason: jobQueue[0]?.blocker || manifest.blocker || "manifest_not_green",
   };
 }
 
@@ -327,7 +335,7 @@ function buildActionMatrix({ decision = {}, manifest = {}, orchestrator = {}, wa
       ...base,
       severity: "warning",
       stopMode: "retry_queue_hold_publish",
-      formalScan: { allowed: false, mode: "retry_queue_pending", reason: decision.reason || "manifest_not_green" },
+      formalScan: { allowed: decision.formalScanAllowed === true, mode: decision.formalScanAllowed === true ? "scanner_retry_queue" : "retry_queue_pending", reason: decision.reason || "manifest_not_green" },
       publish: { allowed: false, canaryRequired: true, mode: "blocked_until_retry_queue_green", reason: "manifest_not_green" },
       terminalDisplay: { allowed: true, mode: "previous_good_degraded", reason: "blocked_jobs_pending" },
       rollForward: { allowed: true, mode: "safe_retry_queue", reason: "retry_only_retryable_jobs" },

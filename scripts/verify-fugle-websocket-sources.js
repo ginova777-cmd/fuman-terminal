@@ -148,7 +148,7 @@ function summarizeFinMindPolicy(stockStatus, sharedConfig) {
     }));
   return {
     contract: "finmind-diagnostic-only-v1",
-    formalDaytradeAllowedSources: ["fugle-websocket-trades", "fugle-websocket-aggregates", "fugle-websocket-candles", "fugle-rest-collector"],
+    formalDaytradeAllowedSources: ["fugle-websocket-trades", "fugle-websocket-aggregates", "fugle-websocket-candles"],
     finmindAllowedUses: ["low_frequency_diagnostic", "after_hours_backfill", "history_daily_fill"],
     finmindFormalPublishBlocked: stockStatus?.finmindFormalPublishAllowed === false,
     finmindFallbackBlocksLatest: stockStatus?.finmindFallbackBlocksLatest === true,

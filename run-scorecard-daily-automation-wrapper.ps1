@@ -26,6 +26,30 @@ function Write-Log($Message) {
   Write-Host $line
   Add-Content -LiteralPath $script:LogFile -Value $line -Encoding utf8
 }
+function Read-JsonFileOrNull($Path) {
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return $null
+  }
+  try {
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+}
+
+function Test-ExpectedCanaryWait($ProjectRoot) {
+  $canaryFile = Join-Path $ProjectRoot "outputs\terminal-canary-publish\terminal-canary-publish.json"
+  $payload = Read-JsonFileOrNull $canaryFile
+  if ($null -eq $payload) {
+    return $false
+  }
+  $status = [string]$payload.status
+  $expectedStatuses = @(
+    "CANARY_WAITING_PENDING_NOT_DUE",
+    "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+  )
+  return (($expectedStatuses -contains $status) -and $payload.scorecardPublishAllowed -ne $true)
+}
 
 $stamp = Get-TaipeiStamp
 $logDir = Join-Path $RuntimeRoot "logs"
@@ -133,6 +157,12 @@ try {
   }
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
   if ($exitCode -ne 0) {
+    if (Test-ExpectedCanaryWait $ProjectRoot) {
+      $status = "expected_wait_no_publish"
+      Write-Log ("EXPECTED WAIT scorecard daily automation wrapper: core exitCode={0}; canary not armed and previous-good preserved" -f $exitCode)
+      $exitCode = 0
+      return
+    }
     throw "core runner failed with exit code $exitCode"
   }
   $status = "ok"
@@ -148,7 +178,7 @@ try {
   Remove-Item -LiteralPath $lockFile -ErrorAction SilentlyContinue
   $finishedAt = (Get-Date).ToString("o")
   $receipt = [ordered]@{
-    ok = ($status -eq "ok")
+    ok = ($status -eq "ok" -or $status -eq "expected_wait_no_publish")
     status = $status
     source = "scorecard-daily-automation-wrapper"
     startedAt = $startedAt
@@ -169,6 +199,6 @@ try {
   Write-JsonFile $datedReceiptFile $receipt
 }
 
-if ($status -ne "ok") {
+if ($status -ne "ok" -and $status -ne "expected_wait_no_publish") {
   exit ([int]$exitCode)
 }

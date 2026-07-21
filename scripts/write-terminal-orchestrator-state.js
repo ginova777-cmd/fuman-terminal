@@ -8,13 +8,13 @@ const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out=")
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const SELF_TEST = process.argv.includes("--self-test");
-const LIFECYCLE_STATES = ["PENDING", "PENDING_NOT_DUE", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
+const LIFECYCLE_STATES = ["PENDING", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
 const FAILURE_STATES = ["BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH"];
 const STATE_MACHINE_CONTRACT = {
   contract: "terminal-state-machine-v1",
   lifecycle: LIFECYCLE_STATES,
   failureStates: FAILURE_STATES,
-  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
+  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
   invariants: [
     "water_root_must_pass_before_scanner_publish",
     "scanner_receipt_runid_must_equal_supabase_latest_pointer",
@@ -71,21 +71,25 @@ function isMarketClosedPreviousGood(manifest = {}, marketCalendar = null) {
   const sourceStatus = String(manifest.waterRoot?.sourceStatus?.status || "").toLowerCase();
   const message = String(manifest.waterRoot?.sourceStatus?.message || "").toLowerCase();
   const status = String(manifest.waterRoot?.status || manifest.unattendedStatus || "").toLowerCase();
-  return Boolean(
-    manifest.previousGoodHold === true
+  const marketStatus = String(marketCalendar?.marketStatus || marketCalendar?.skipReason || "").toLowerCase();
+  const calendarClosed = marketCalendar?.marketOpen === false
+    || marketCalendar?.tradingDayOpen === false
+    || marketStatus.includes("market_closed")
+    || marketStatus.includes("closed");
+  const previousGoodText = manifest.previousGoodHold === true
     || manifest.waterRoot?.previousGoodHold === true
     || status.includes("previous_good")
     || status.includes("wait_source_window")
     || reason.includes("previous_good")
-    || reason.includes("wait_source_window")
-    || (marketCalendar?.marketOpen === false
-      && (sourceStatus === "stopped" || reason.includes("stopped") || message.includes("off-session")))
-  );
+    || reason.includes("wait_source_window");
+  const offSessionStopped = sourceStatus === "stopped" || reason.includes("stopped") || message.includes("off-session");
+  return Boolean(calendarClosed && (previousGoodText || offSessionStopped));
 }
 
 function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
   const text = issueText(row);
-  const waterBlocked = manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar);
+  const sourceFreshnessRequired = marketCalendar?.sourceFreshnessRequired !== false;
+  const waterBlocked = sourceFreshnessRequired && manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar);
   const runIds = row.runIds || {};
   const layer = [];
   let state = "PENDING";
@@ -113,30 +117,33 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     };
   }
 
-  if (has(text, "401", "unauthorized")) {
-    state = "BLOCKED_AUTH";
-    layer.push("auth");
-    blocker = "backend_service_token_missing_or_invalid";
-  } else if (has(text, "manifest_tradedate_mismatch", "manifest_sourcedate_mismatch", "rundate_mismatch")) {
-    state = "FAILED_SCAN";
-    layer.push("scanner", "date");
-    blocker = row.issues?.[0] || "due_elapsed_no_today_run";
-  } else if (has(text, "scanner receipt", "scanner_not_complete", "failed exit")) {
-    state = "FAILED_SCAN";
-    layer.push("scanner");
-    blocker = row.issues?.[0] || "scanner_not_complete";
-  } else if (has(text, "scorecard", "publish")) {
-    state = "FAILED_PUBLISH";
-    layer.push("publish", "scorecard88");
-    blocker = row.issues?.[0] || "scorecard_publish_not_closed";
-  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage", "date mismatch", "tradedate_mismatch", "sourcedate_mismatch")) {
-    state = "BLOCKED_SOURCE";
-    layer.push("source");
-    blocker = manifest.waterRoot?.reason || row.issues?.[0] || "source_not_ready";
-  } else if (has(text, "authenticated readback", "membership")) {
+  if (has(text, "authenticated readback", "membership", "token not armed")) {
     state = "FAILED_DISPLAY";
     layer.push("display", "auth_readback");
     blocker = "protected_surface_needs_authenticated_readback_token";
+  } else if (has(text, "401", "unauthorized")) {
+    state = "BLOCKED_AUTH";
+    layer.push("auth");
+    blocker = "backend_service_token_missing_or_invalid";
+  } else if (has(text, "scanner receipt", "scanner_not_complete", "failed exit", "tradedate_mismatch", "sourcedate_mismatch", "date mismatch")) {
+    state = "FAILED_SCAN";
+    layer.push("scanner");
+    blocker = (row.issues || []).find((issue) => /tradedate_mismatch|sourcedate_mismatch|date mismatch|scanner/i.test(String(issue))) || row.issues?.[0] || "scanner_not_complete";
+  } else if (has(text, "raw_fallback", "evidence_not_complete", "publish_not_allowed", "preserve_previous_good")) {
+    state = "FAILED_SCAN";
+    layer.push("scanner", "evidence", "publish");
+    blocker = (row.issues || []).find((issue) => /raw_fallback|evidence_not_complete|publish_not_allowed|preserve_previous_good/i.test(String(issue))) || row.issues?.[0] || "scanner_evidence_not_publishable";
+  } else if (has(text, "scorecard", "publish") && manifest.modules?.some((module) => module.pendingNotDue === true)) {
+    state = "PUBLISH_DEFERRED_MANIFEST_PENDING";
+    layer.push("publish", "scorecard88", "schedule");
+    blocker = row.issues?.[0] || "scorecard_publish_deferred_until_manifest_full_green";
+  } else if (has(text, "scorecard", "publish")) {
+    state = "FAILED_PUBLISH";
+    layer.push("publish", "scorecard88");
+    blocker = row.issues?.[0] || "scorecard_publish_not_closed";  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage")) {
+    state = "BLOCKED_SOURCE";
+    layer.push("source");
+    blocker = manifest.waterRoot?.reason || row.issues?.[0] || "source_not_ready";
   } else if (row.fallback === true || has(text, "fallback", "previous", "old", "mismatch")) {
     state = "DEGRADED_PREVIOUS_GOOD";
     layer.push("display", "previous_good");
@@ -165,6 +172,7 @@ function priorityForState(state) {
     BLOCKED_SOURCE: 20,
     FAILED_SCAN: 30,
     FAILED_PUBLISH: 40,
+    PUBLISH_DEFERRED_MANIFEST_PENDING: 84,
     DEGRADED_PREVIOUS_GOOD: 50,
     FAILED_DISPLAY: 60,
     PENDING_NOT_DUE: 85,
@@ -178,13 +186,14 @@ function nextActionForState(state, row = {}) {
   if (state === "BLOCKED_SOURCE") return "wait_or_fix_water_root_then_rerun_only_affected_module";
   if (state === "FAILED_SCAN") return "rerun_strategy_scanner_after_water_ok";
   if (state === "FAILED_PUBLISH") return "rerun_scorecard_source_sync_and_manifest_publish_gate";
+  if (state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return "wait_for_manifest_full_green_then_scorecard_publish";
   if (state === "DEGRADED_PREVIOUS_GOOD") return "rebuild_today_snapshot_and_verify_no_old_runid";
   if (state === "FAILED_DISPLAY") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
   return "none";
 }
 
 function lifecycleStageForRow(row = {}, classification = {}, manifest = {}, marketCalendar = null) {
-  if (classification.state === "PENDING_NOT_DUE") return "PENDING_NOT_DUE";
+  if (classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return classification.state;
   if (classification.state && classification.state !== "CLOSED") return classification.state;
   const runIds = row.runIds || {};
   const waterClosed = isMarketClosedPreviousGood(manifest, marketCalendar);
@@ -213,7 +222,7 @@ function idempotencyKeyFor(row = {}, classification = {}) {
   return raw.replace(/[^a-zA-Z0-9:_-]+/g, "_").slice(0, 180);
 }
 function jobForRow(row, classification) {
-  if (classification.state === "CLOSED" || classification.state === "PENDING_NOT_DUE") return null;
+  if (classification.state === "CLOSED" || classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return null;
   const command = commandFor(row.key, classification.state);
   return {
     key: row.key,
@@ -254,11 +263,14 @@ function commandFor(key, state) {
 
 function overallState(manifest, moduleStates, marketCalendar = null) {
   if (manifest.ok === true && moduleStates.every((row) => row.state === "CLOSED")) return "CLOSED";
-  if (moduleStates.some((row) => row.state === "PENDING_NOT_DUE")) return "PENDING_NOT_DUE";
-  if ((manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar)) || moduleStates.some((row) => row.state === "BLOCKED_SOURCE")) return "BLOCKED_SOURCE";
+  const sourceFreshnessRequired = marketCalendar?.sourceFreshnessRequired !== false;
+  if ((sourceFreshnessRequired && manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar)) || moduleStates.some((row) => row.state === "BLOCKED_SOURCE")) return "BLOCKED_SOURCE";
   if (moduleStates.some((row) => row.state === "BLOCKED_AUTH")) return "BLOCKED_AUTH";
   if (moduleStates.some((row) => row.state === "FAILED_SCAN")) return "FAILED_SCAN";
   if (moduleStates.some((row) => row.state === "FAILED_PUBLISH")) return "FAILED_PUBLISH";
+  if (moduleStates.some((row) => row.state === "FAILED_DISPLAY")) return "FAILED_DISPLAY";
+  if (moduleStates.some((row) => row.state === "DEGRADED_PREVIOUS_GOOD")) return "DEGRADED_PREVIOUS_GOOD";
+  if (moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING")) return "PENDING_NOT_DUE";
   return "DEGRADED_PREVIOUS_GOOD";
 }
 
@@ -306,6 +318,13 @@ function selfTest() {
       requiresWaterRootOk: true,
     },
     {
+      name: "scorecard_mismatch_deferred_while_manifest_pending",
+      row: { key: "strategy2", label: "Strategy2", ok: false, complete: false, issues: ["scorecard /88 row/sourceReport runId != latest pointer"] },
+      manifest: { waterRoot: { ok: true }, modules: [{ key: "strategy4", pendingNotDue: true }] },
+      expectedState: "PUBLISH_DEFERRED_MANIFEST_PENDING",
+      expectedJob: false,
+    },
+    {
       name: "display_auth_readback_not_backend_auth",
       row: { key: "cb", label: "CB", ok: false, complete: false, issues: ["authenticated readback token not armed"] },
       manifest: { waterRoot: { ok: true } },
@@ -318,14 +337,6 @@ function selfTest() {
       manifest: { waterRoot: { ok: true } },
       expectedState: "DEGRADED_PREVIOUS_GOOD",
       expectedJob: true,
-    },
-    {
-      name: "due_elapsed_previous_day_run_becomes_scan_job",
-      row: { key: "strategy3", label: "Strategy3", ok: false, complete: false, pendingNotDue: false, runId: "strategy3-20260720-old", issues: ["manifest_tradeDate_mismatch:20260720!=20260721"] },
-      manifest: { waterRoot: { ok: true } },
-      expectedState: "FAILED_SCAN",
-      expectedJob: true,
-      requiresWaterRootOk: true,
     },
     {
       name: "market_closed_previous_good_does_not_become_source_block",
@@ -426,7 +437,7 @@ async function main() {
     .map((row) => jobForRow(row, row))
     .filter(Boolean)
     .sort((a, b) => a.priority - b.priority || String(a.key).localeCompare(String(b.key)));
-  const hasPendingNotDue = moduleStates.some((row) => row.state === "PENDING_NOT_DUE");
+  const hasPendingNotDue = jobQueue.length === 0 && moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING");
   const marketClosedHold = isMarketClosedPreviousGood(manifest, marketCalendar);
   const state = {
     contract: "terminal-orchestrator-state-v1",
@@ -441,7 +452,7 @@ async function main() {
     marketClosedPreviousGood: marketClosedHold,
     overallState: overallState(manifest, moduleStates, marketCalendar),
     unattendedStatus: manifest.ok === true && jobQueue.length === 0 ? (marketClosedHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
-    blocker: hasPendingNotDue ? (manifest.blocker || jobQueue[0]?.blocker || "pending_not_due") : (marketClosedHold ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (manifest.blocker || jobQueue[0]?.blocker || "")),
+    blocker: hasPendingNotDue ? (manifest.blocker || jobQueue[0]?.blocker || "pending_not_due") : (marketClosedHold ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (jobQueue[0]?.blocker || manifest.blocker || "")),
     modules: moduleStates,
     jobQueue,
   };

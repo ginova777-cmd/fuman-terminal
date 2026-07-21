@@ -1,10 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { classifyReason } = require("../lib/terminal-reason-code-classifier");
+const { visibleCredentialState } = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-roll-forward");
 const RECEIPT_DIR = path.join(OUT_DIR, "receipts");
+const PROTECTED_READBACK_CREDENTIAL_FILE = path.join(ROOT, "outputs", "protected-readback-credential", "protected-readback-credential.json");
+const WATER_ROOT_FILE = path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json");
 const IDEMPOTENCY_CONTRACT = {
   contract: "terminal-idempotent-runner-v1",
   invariants: [
@@ -12,9 +16,11 @@ const IDEMPOTENCY_CONTRACT = {
     "every_job_has_receipt_file",
     "auth_jobs_never_auto_execute",
     "scanner_jobs_require_water_root_and_apply_scanners",
+    "scanner_jobs_require_current_water_root_ok",
     "scanner_jobs_require_policy_formal_scan_allowed",
     "completed_action_receipts_skip_reexecution",
     "publish_jobs_require_manifest_canary_gate",
+    "deferred_publish_jobs_never_auto_execute",
   ],
 };
 const APPLY = process.argv.includes("--apply");
@@ -23,6 +29,30 @@ const SELF_TEST = process.argv.includes("--self-test");
 const ALLOW_DEGRADED_PUBLISH = process.argv.includes("--allow-degraded-publish");
 const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
 
+
+function compactReasonClassification(input = {}) {
+  const classification = classifyReason(input);
+  const codes = Array.isArray(classification.codes) ? classification.codes : [];
+  return {
+    reasonCodes: codes.map((row) => row.code).filter(Boolean),
+    primaryReasonCode: classification.primaryCode || codes[0]?.code || "",
+    reasonActions: [...new Set(codes.map((row) => row.action).filter(Boolean))],
+    reasonLayers: [...new Set(codes.map((row) => row.layer).filter(Boolean))],
+    reasonSeverity: codes.some((row) => row.severity === "critical") ? "critical" : codes[0]?.severity || "",
+    reasonUnknown: classification.unknown === true,
+  };
+}
+
+function buildReasonCodeSummary(actions = []) {
+  return {
+    contract: "terminal-roll-forward-reason-code-summary-v1",
+    ok: actions.every((row) => row.reasonUnknown !== true),
+    actions: actions.length,
+    unknownActions: actions.filter((row) => row.reasonUnknown === true).length,
+    criticalActions: actions.filter((row) => row.reasonSeverity === "critical").length,
+    codes: [...new Set(actions.flatMap((row) => row.reasonCodes || []))].sort(),
+  };
+}
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -32,10 +62,12 @@ function readJson(file, fallback) {
 }
 
 function runCommand(step) {
-  const result = spawnSync(step.command, step.args || [], {
+  const command = String(step.command || "");
+  const result = spawnSync(command, step.args || [], {
     cwd: ROOT,
     encoding: "utf8",
     env: { ...process.env },
+    shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(command),
   });
   return {
     label: step.label,
@@ -63,8 +95,53 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function protectedReadbackCredentialArmed() {
+  try {
+    const state = visibleCredentialState();
+    if (state.tokenArmed === true) return true;
+    if (state.emailArmed === true && state.passwordArmed === true) return true;
+  } catch {
+    // Fall back to the verifier artifact below.
+  }
+  const credential = readJson(PROTECTED_READBACK_CREDENTIAL_FILE, {});
+  return credential?.ok === true && credential?.armed === true;
+}
+
+function waterRootFormalEntryAllowed(waterRoot = {}) {
+  const canonical = waterRoot.canonicalGate || {};
+  const sourcePayload = waterRoot.sourceStatus?.row?.payload || waterRoot.sourceStatus?.payload || {};
+  const sourceRow = waterRoot.sourceStatus?.row || waterRoot.sourceStatus || {};
+  return canonical.formalEntryAllowed === true
+    || canonical.formal_entry_allowed === true
+    || sourcePayload.formal_entry_allowed === true
+    || sourceRow.formalEntryAllowed === true
+    || sourceRow.formal_entry_allowed === true;
+}
+
+function scannerWaterRootGate(waterRoot = null) {
+  const artifact = waterRoot || readJson(WATER_ROOT_FILE, null);
+  if (!artifact) {
+    return { ok: false, guard: "water_root_artifact_missing_scanner_blocked", reason: "water_root_artifact_missing" };
+  }
+  if (artifact.ok !== true) {
+    return { ok: false, guard: "water_root_not_ok_scanner_blocked", reason: artifact.reason || artifact.status || "water_root_not_ok" };
+  }
+  if (!waterRootFormalEntryAllowed(artifact)) {
+    return { ok: false, guard: "formal_entry_not_allowed_by_water_root", reason: artifact.reason || artifact.status || "formal_entry_not_allowed" };
+  }
+  return { ok: true, guard: "water_root_ok_formal_entry_allowed", reason: "ok" };
+}
+function requiresProtectedReadbackCredential(action = {}) {
+  const codes = Array.isArray(action.reasonCodes) ? action.reasonCodes : [];
+  const text = `${action.blocker || ""} ${action.nextAction || ""} ${(action.notes || []).join(" ")}`.toLowerCase();
+  return codes.includes("AUTH_PROTECTED_READBACK_NOT_ARMED")
+    || text.includes("protected_surface_needs_authenticated_readback_token")
+    || text.includes("authenticated_readback")
+    || text.includes("membership");
+}
+
 function safeId(value) {
-  return String(value || "unknown").replace(/[^a-zA-Z0-9._:-]+/g, "_").slice(0, 180);
+  return String(value || "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 180);
 }
 
 function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING") {
@@ -117,7 +194,7 @@ function normalizeJobs(orchestrator = {}, queue = []) {
   return [];
 }
 
-function planForJob(job = {}, policy = {}) {
+function planForJob(job = {}, policy = {}, options = {}) {
   const state = String(job.state || "PENDING");
   const key = String(job.key || "unknown");
   const policyDecision = policy.decision || {};
@@ -135,6 +212,7 @@ function planForJob(job = {}, policy = {}) {
     idempotencyKey: actionIdempotencyKey(job, key, state),
     receiptFile: "",
     receiptRequired: true,
+    ...compactReasonClassification({ key, label: job.label || key, state, blocker: job.blocker || "", nextAction: job.nextAction || "" }),
   };
   base.receiptFile = receiptFileFor(base);
 
@@ -154,19 +232,35 @@ function planForJob(job = {}, policy = {}) {
 
   if (state.includes("SCAN")) {
     const formalScanAllowed = policyDecision.formalScanAllowed === true || policy.actionMatrix?.formalScan?.allowed === true;
+    const scannerApply = options.applyScanners === true || APPLY_SCANNERS;
+    const waterGate = scannerWaterRootGate(options.waterRoot || null);
+    base.commands.push(npmRun("verify:terminal-water-root"));
+    if (!waterGate.ok) {
+      base.executionGuard = waterGate.guard;
+      base.executable = false;
+      base.notes.push(`Scanner reruns are blocked until current Water Root PASS and formal entry is allowed: ${waterGate.reason}`);
+      return base;
+    }
     if (!formalScanAllowed) {
       base.executionGuard = "formal_scan_not_allowed_by_policy";
       base.executable = false;
-      base.commands.push(npmRun("verify:terminal-water-root"));
       base.notes.push("Scanner reruns are blocked unless Autonomous Ops Policy explicitly allows formalScan.");
       return base;
     }
-    base.executionGuard = APPLY_SCANNERS ? "scanner_apply_enabled" : "scanner_requires_apply_scanners";
-    base.executable = APPLY_SCANNERS;
-    base.commands.push(npmRun("verify:terminal-water-root"));
+    base.executionGuard = scannerApply ? "scanner_apply_enabled" : "scanner_requires_apply_scanners";
+    base.executable = scannerApply;
     const scannerCommand = scannerStepForKey(key, job.command);
     if (scannerCommand) base.commands.push(scannerCommand);
-    base.notes.push("Scanner reruns are idempotent-only, require --apply --apply-scanners, and require policy formalScanAllowed=true.");
+    base.notes.push("Scanner reruns are idempotent-only, require current Water Root PASS, formal entry allowed, --apply --apply-scanners, and policy formalScanAllowed=true.");
+    return base;
+  }
+
+  if (state === "PUBLISH_DEFERRED_MANIFEST_PENDING") {
+    base.executionGuard = "manifest_pending_publish_deferred";
+    base.executable = false;
+    base.commands.push(npmRun("manifest:daily-terminal-run"));
+    base.commands.push(npmRun("verify:daily-terminal-run-manifest"));
+    base.notes.push("Scorecard publish waits until every due module reaches full Manifest green; no publish is executed while later modules are pending/not-due.");
     return base;
   }
 
@@ -182,6 +276,13 @@ function planForJob(job = {}, policy = {}) {
   }
 
   if (state.includes("DISPLAY") || state.includes("DEGRADED") || state.includes("PREVIOUS")) {
+    if (requiresProtectedReadbackCredential(base) && !protectedReadbackCredentialArmed()) {
+      base.executable = false;
+      base.executionGuard = "protected_readback_credential_not_armed";
+      base.commands.push(npmRun("verify:protected-readback-credential"));
+      base.notes.push("Protected display readback cannot auto-execute until the member readback credential is armed; this is a manual secret repair, not a scanner retry.");
+      return base;
+    }
     base.executable = true;
     base.executionGuard = "display_snapshot_readback_only";
     base.commands.push(npmRun("snapshot:desktop"));
@@ -224,6 +325,24 @@ function currentTradeDate() {
   return String(manifest.tradeDate || "").replace(/\D/g, "").slice(0, 8) || "latest";
 }
 
+function buildSafeRecoveryPreview(jobs = [], policy = {}) {
+  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true }));
+  const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
+  const executable = actions.filter((action) => action.executable);
+  const decision = decide(actions, policy);
+  return {
+    contract: "terminal-safe-recovery-preview-v1",
+    ok: decision.ok === true,
+    state: decision.state || "",
+    reason: decision.reason || "",
+    executableJobs: executable.length,
+    blockedJobs: blocked.length,
+    executableKeys: executable.map((row) => row.key),
+    blockedKeys: blocked.map((row) => row.key),
+    commandHint: executable.length ? "node --use-system-ca scripts/run-terminal-auto-roll-forward.js --apply --apply-scanners" : "",
+    reasonCodeSummary: buildReasonCodeSummary(actions),
+  };
+}
 function buildPlan({ orchestrator, policy, queue }) {
   const jobs = normalizeJobs(orchestrator, queue).sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
   const actions = jobs.map((job) => planForJob(job, policy));
@@ -242,6 +361,8 @@ function buildPlan({ orchestrator, policy, queue }) {
     blockedJobs: blocked.length,
     actions,
     idempotencyContract: IDEMPOTENCY_CONTRACT,
+    reasonCodeSummary: buildReasonCodeSummary(actions),
+    safeRecoveryPreview: buildSafeRecoveryPreview(jobs, policy),
     decision: decide(actions, policy),
   };
 }
@@ -263,7 +384,35 @@ function decide(actions, policy) {
       applyAllowed: false,
     };
   }
-  const auth = actions.find((action) => action.state.includes("AUTH"));
+
+  const executable = actions.filter((action) => action.executable === true);
+  const blocked = actions.filter((action) => action.executable !== true && action.state !== "CLOSED");
+  const authBlocked = blocked.filter((action) => action.state.includes("AUTH") || requiresProtectedReadbackCredential(action));
+  const nonAuthBlocked = blocked.filter((action) => !authBlocked.includes(action));
+
+  if (executable.length && authBlocked.length) {
+    return {
+      ok: true,
+      state: APPLY ? "PARTIAL_AUTO_ROLL_FORWARD_APPLY_ARMED_WITH_AUTH_BLOCKERS" : "PARTIAL_AUTO_ROLL_FORWARD_DRY_RUN_READY_WITH_AUTH_BLOCKERS",
+      reason: "safe_jobs_ready_auth_jobs_manual",
+      applyAllowed: true,
+      partial: true,
+      executableJobs: executable.length,
+      blockedJobs: blocked.length,
+    };
+  }
+  if (executable.length && nonAuthBlocked.length) {
+    return {
+      ok: true,
+      state: APPLY ? "PARTIAL_AUTO_ROLL_FORWARD_APPLY_ARMED_WITH_BLOCKERS" : "PARTIAL_AUTO_ROLL_FORWARD_DRY_RUN_READY_WITH_BLOCKERS",
+      reason: `safe_jobs_ready_blocked:${nonAuthBlocked[0].key}:${nonAuthBlocked[0].executionGuard}`,
+      applyAllowed: true,
+      partial: true,
+      executableJobs: executable.length,
+      blockedJobs: blocked.length,
+    };
+  }
+  const auth = authBlocked[0];
   if (auth) {
     return {
       ok: false,
@@ -272,7 +421,7 @@ function decide(actions, policy) {
       applyAllowed: false,
     };
   }
-  const unhandled = actions.find((action) => !action.executable);
+  const unhandled = nonAuthBlocked[0];
   if (unhandled) {
     return {
       ok: false,
@@ -288,7 +437,6 @@ function decide(actions, policy) {
     applyAllowed: true,
   };
 }
-
 async function writeOutputs(plan, executed = []) {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
   await fs.promises.mkdir(RECEIPT_DIR, { recursive: true });
@@ -328,19 +476,40 @@ function markdown(plan) {
 
 function selfTest() {
   const policy = { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: true } };
+  const waterOkFixture = { ok: true, canonicalGate: { formalEntryAllowed: true } };
+  const waterBlockedFixture = { ok: false, status: "blocked", reason: "canonical_gate_not_A:D" };
+  const waterFormalEntryBlockedFixture = { ok: true, canonicalGate: { formalEntryAllowed: false }, reason: "formal_entry_allowed_false" };
   const cases = [
     { name: "auth-block", job: { key: "strategy4", state: "BLOCKED_AUTH", blocker: "401" }, expectedExecutable: false, expectedGuard: "blocked_auth" },
     { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_check" },
-    { name: "scan-dry", job: { key: "strategy3", state: "FAILED_SCAN" }, expectedExecutable: APPLY_SCANNERS, expectedGuard: APPLY_SCANNERS ? "scanner_apply" : "scanner_requires" },
-    { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy3", state: "FAILED_SCAN" }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
+    { name: "scan-dry", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture }, expectedExecutable: APPLY_SCANNERS, expectedGuard: APPLY_SCANNERS ? "scanner_apply" : "scanner_requires" },
+    { name: "scan-water-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "water_root_not_ok_scanner_blocked" },
+    { name: "scan-formal-entry-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_entry_not_allowed_by_water_root" },
+    { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
     { name: "display", job: { key: "strategy5", state: "FAILED_DISPLAY" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
+    { name: "display-auth-unarmed", job: { key: "strategy2", state: "FAILED_DISPLAY", blocker: "protected_surface_needs_authenticated_readback_token", nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback" }, expectedExecutable: protectedReadbackCredentialArmed(), expectedGuard: protectedReadbackCredentialArmed() ? "display_snapshot" : "protected_readback_credential_not_armed" },
     { name: "publish-blocked", job: { key: "scorecard", state: "FAILED_PUBLISH" }, expectedExecutable: false, expectedGuard: "manifest_not_green" },
+    { name: "publish-deferred", job: { key: "scorecard", state: "PUBLISH_DEFERRED_MANIFEST_PENDING" }, expectedExecutable: false, expectedGuard: "manifest_pending_publish_deferred" },
   ];
   const failures = [];
   for (const item of cases) {
-    const action = planForJob(item.job, item.policy || policy);
+    const action = planForJob(item.job, item.policy || policy, item.options || {});
     if (action.executable !== item.expectedExecutable) failures.push(`${item.name}: executable ${action.executable} != ${item.expectedExecutable}`);
     if (!action.executionGuard.includes(item.expectedGuard)) failures.push(`${item.name}: guard ${action.executionGuard} missing ${item.expectedGuard}`);
+    if (!Array.isArray(action.reasonCodes) || action.reasonCodes.length === 0 || action.reasonUnknown === true) failures.push(`${item.name}: reason codes missing or unknown`);
+  }
+  const partialDecision = decide([
+    { key: "strategy4", state: "FAILED_SCAN", executable: true, blocker: "manifest_raw_fallback_true", executionGuard: "scanner_apply_enabled" },
+    { key: "strategy2", state: "FAILED_DISPLAY", executable: false, blocker: "protected_surface_needs_authenticated_readback_token", executionGuard: "protected_readback_credential_not_armed", reasonCodes: ["AUTH_PROTECTED_READBACK_NOT_ARMED"] },
+  ], policy);
+  if (partialDecision.ok !== true || !String(partialDecision.state || "").includes("PARTIAL_AUTO_ROLL_FORWARD")) {
+    failures.push(`partial decision did not allow safe recovery beside auth blocker: ${partialDecision.state}`);
+  }
+  const authOnlyDecision = decide([
+    { key: "strategy2", state: "FAILED_DISPLAY", executable: false, blocker: "protected_surface_needs_authenticated_readback_token", executionGuard: "protected_readback_credential_not_armed", reasonCodes: ["AUTH_PROTECTED_READBACK_NOT_ARMED"] },
+  ], policy);
+  if (authOnlyDecision.ok !== false || authOnlyDecision.state !== "BLOCKED_AUTH_MANUAL_REPAIR_REQUIRED") {
+    failures.push(`auth-only decision did not fail closed: ${authOnlyDecision.state}`);
   }
   const fakeAction = {
     key: "self-test",
@@ -367,10 +536,13 @@ function selfTest() {
 async function main() {
   if (SELF_TEST) {
     const result = selfTest();
-    if (!result.ok) {
-      console.error(JSON.stringify(result, null, 2));
-      process.exit(1);
-    }
+    console.log(JSON.stringify({
+      ok: result.ok,
+      contract: "terminal-auto-roll-forward-self-test-v1",
+      failures: result.failures,
+    }, null, 2));
+    if (!result.ok) process.exit(1);
+    return;
   }
   const orchestrator = readJson(path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-orchestrator-state.json"), {});
   const queue = readJson(path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-job-queue.json"), []);

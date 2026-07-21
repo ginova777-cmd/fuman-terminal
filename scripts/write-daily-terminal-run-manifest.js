@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { normalizeStrategyScanReceipt } = require("../lib/strategy-scan-receipt-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/daily-terminal-run");
@@ -107,6 +108,29 @@ function bool(value) {
   return value === true;
 }
 
+function addUniqueIssue(issues, issue) {
+  const value = String(issue || "").trim();
+  if (value && !issues.includes(value)) issues.push(value);
+}
+
+function isMembershipGateSurface(surface = {}) {
+  const bits = [
+    surface.error,
+    surface.reason,
+    surface.cacheSource,
+    surface.transportSource,
+    surface.key,
+    surface.strategy,
+    surface.evidenceStatus,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return surface.membershipProtected === true
+    || Number(surface.status) === 401
+    || bits.includes("membership-required")
+    || bits.includes("membership_required")
+    || bits.includes("membership-gate")
+    || bits.includes("protected-display-layer");
+}
+
 function isPreviousGoodHoldWaterRoot(water = {}) {
   const bits = [
     water.status,
@@ -124,6 +148,26 @@ function isPreviousGoodHoldWaterRoot(water = {}) {
     || bits.includes("wait_source_window")
     || bits.includes("skip_formal_scan")
     || bits.includes("market_closed");
+}
+function isSoftWaterRootIssue(water = {}) {
+  const row = water.marketCalendar?.row || {};
+  const bits = [
+    water.status,
+    water.reason,
+    row.marketStatus,
+    row.skipReason,
+    row.displayMode,
+    row.evidenceStatus,
+    row.unattendedStatus,
+    water.canonicalGate?.summary?.phase,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return water.ok !== true
+    && row.sourceFreshnessRequired === false
+    && (row.formalSourceWindowOpen === false || row.formalScanSkipped === true)
+    && (bits.includes("after_formal_source_window")
+      || bits.includes("after_daytrade_window")
+      || bits.includes("wait_source_window")
+      || bits.includes("previous_good"));
 }
 
 
@@ -147,29 +191,9 @@ function resolveExpectedDateFromWater(water = {}, fallbackDate = EXPECTED_DATE) 
 }
 function moduleRow(row = {}) {
   const scheduleStatus = scheduleStatusForKey(row.key);
-  let receipt = row.receipt || {};
+  let receipt = normalizeStrategyScanReceipt(row.receipt || {}, { key: row.key, strategy: row.key }) || {};
   const supabase = row.supabase || {};
   const supabaseDate = firstPresent(runDateFromId(supabase.runId), compactDate(supabase.tradeDate || supabase.date || supabase.updatedAt));
-  const supabaseCompleteRun = supabase.ok === true
-    && supabase.runId
-    && supabaseDate === EXPECTED_DATE
-    && ["ok", "complete", "ready"].includes(String(supabase.qualityStatus || supabase.status || "").toLowerCase());
-  const supabaseSupersedesReceipt = supabaseCompleteRun
-    && supabase.runId
-    && receipt.runId
-    && String(supabase.runId) > String(receipt.runId);
-  if (supabaseCompleteRun && (runDateFromId(receipt.runId) !== EXPECTED_DATE || supabaseSupersedesReceipt)) {
-    receipt = {
-      ...receipt,
-      status: "complete",
-      complete: true,
-      fallback: false,
-      runId: supabase.runId,
-      matches: Number(firstPresent(supabase.count, supabase.resultCount, receipt.matches, 0)) || 0,
-      qualityStatus: supabase.qualityStatus || "complete",
-      supersededBySupabaseLatestCompleteRun: true,
-    };
-  }
   const api = row.live || {};
   const terminal = row.terminalApi || {};
   const desktop = row.desktopSnapshot || {};
@@ -191,18 +215,64 @@ function moduleRow(row = {}) {
     tradeDate,
   );
   let issues = Array.isArray(row.issues) ? [...row.issues] : [];
-  if (receipt.supersededBySupabaseLatestCompleteRun === true) {
-    issues = issues.filter((issue) => !/scanner receipt|manifest_scanner|manifest_runId_mismatch|receipt date/i.test(String(issue || "")));
+  const protectedReadbackBlocked = isMembershipGateSurface(api)
+    || isMembershipGateSurface(terminal)
+    || isMembershipGateSurface(mobile)
+    || isMembershipGateSurface(scorecard)
+    || issues.some((issue) => /authenticated readback|required|membership/i.test(String(issue || "")));
+  const nonReceiptRunIds = [supabase.runId, api.runId, terminal.runId, desktop.runId, mobile.runId, scorecard.runId].filter(Boolean);
+  const uniqueNonReceiptRunIds = [...new Set(nonReceiptRunIds)];
+  const formalLatestCanSupersedeReceipt = receipt.runId === ""
+    && receipt.status !== "complete"
+    && uniqueNonReceiptRunIds.length === 1
+    && uniqueNonReceiptRunIds[0] === runId
+    && runDateFromId(runId) === EXPECTED_DATE
+    && tradeDate === EXPECTED_DATE
+    && sourceDate === EXPECTED_DATE
+    && (api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true || scorecard.publishAllowed === true)
+    && [api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, scorecard.evidenceStatus].some((value) => String(value || "") === "complete")
+    && api.fallbackUsed !== true
+    && terminal.fallbackUsed !== true
+    && desktop.fallbackUsed !== true
+    && scorecard.fallbackUsed !== true
+    && String(api.cacheSource || terminal.cacheSource || desktop.cacheSource || scorecard.cacheSource || "").includes("fallback") === false;
+  if (formalLatestCanSupersedeReceipt) {
+    receipt = normalizeStrategyScanReceipt({
+      strategy: row.key,
+      status: "complete",
+      complete: true,
+      exitCode: 0,
+      fallback: false,
+      runId,
+      matches: Number(firstPresent(api.count, terminal.count, desktop.count, supabase.count, scorecard.count, 0)) || 0,
+      publishAllowed: true,
+      preservePreviousGood: false,
+      evidenceStatus: "complete",
+      unattendedStatus: "YES",
+      normalizationSource: "formal_latest_complete_run_supersedes_no_runid_receipt_v1",
+      supersededReceiptStatus: receipt.status || "",
+      supersededReceiptReason: receipt.blockingReason || receipt.blockedReason || receipt.scanner_block_reason || "",
+    }, { key: row.key, strategy: row.key }) || receipt;
   }
-  const fallback = bool(receipt.fallback)
+  const rawFallback = bool(receipt.fallback)
+    || receipt.preservePreviousGood === true
     || api.fallbackUsed === true
     || terminal.fallbackUsed === true
     || desktop.fallbackUsed === true
     || String(api.cacheSource || terminal.cacheSource || desktop.cacheSource || "").includes("fallback");
+  const fallback = protectedReadbackBlocked && desktop.runId && desktop.count > 0
+    ? false
+    : rawFallback;
+  const effectiveEvidenceStatus = firstPresent(receipt.evidenceStatus, api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, "");
+  const effectivePublishAllowed = receipt.publishAllowed === true || api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true;
+  const preservePreviousGood = receipt.preservePreviousGood === true || api.preservePreviousGood === true || terminal.preservePreviousGood === true || desktop.preservePreviousGood === true;
   const complete = receipt.complete === true
     && receipt.status === "complete"
+    && receipt.evidenceStatus === "complete"
+    && effectivePublishAllowed === true
+    && preservePreviousGood !== true
     && !fallback
-    && (row.ok === true || receipt.supersededBySupabaseLatestCompleteRun === true)
+    && row.ok === true
     && runId
     && tradeDate === EXPECTED_DATE
     && sourceDate === EXPECTED_DATE;
@@ -217,20 +287,21 @@ function moduleRow(row = {}) {
   const runIdValues = Object.values(runIds).filter(Boolean);
   const uniqueRunIds = [...new Set(runIdValues)];
   const pendingNotDue = scheduleStatus.pendingNotDue === true && tradeDate !== EXPECTED_DATE;
-  if (!pendingNotDue && uniqueRunIds.length > 1) issues.push(`manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
-  if (!pendingNotDue && !runId) issues.push("manifest_missing_runId");
-  if (!pendingNotDue && tradeDate !== EXPECTED_DATE) issues.push(`manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
-  if (!pendingNotDue && sourceDate !== EXPECTED_DATE) issues.push(`manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
-  if (!pendingNotDue && fallback) issues.push("manifest_fallback_true");
-  if (!pendingNotDue && (receipt.status !== "complete" || receipt.complete !== true)) issues.push(`manifest_scanner_not_complete:${receipt.status || "missing"}`);
+  if (!pendingNotDue && uniqueRunIds.length > 1) addUniqueIssue(issues, `manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
+  if (!pendingNotDue && !runId) addUniqueIssue(issues, "manifest_missing_runId");
+  if (!pendingNotDue && tradeDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
+  if (!pendingNotDue && sourceDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
+  if (!pendingNotDue && fallback) addUniqueIssue(issues, "manifest_fallback_true");
+  if (!pendingNotDue && rawFallback) addUniqueIssue(issues, "manifest_raw_fallback_true");
+  if (!pendingNotDue && (receipt.status !== "complete" || receipt.complete !== true)) addUniqueIssue(issues, `manifest_scanner_not_complete:${receipt.status || "missing"}`);
+  if (!pendingNotDue && effectiveEvidenceStatus !== "complete") addUniqueIssue(issues, `manifest_evidence_not_complete:${effectiveEvidenceStatus || "missing"}`);
+  if (!pendingNotDue && effectivePublishAllowed !== true) addUniqueIssue(issues, "manifest_publish_not_allowed");
+  if (!pendingNotDue && preservePreviousGood === true) addUniqueIssue(issues, "manifest_preserve_previous_good_true");
   const scorecard88Protection = scorecard.membershipProtected
     ? "membership-protected"
     : scorecard.runId
       ? "readback"
       : "not-read";
-  const scannerResultCount = Number(firstPresent(receipt.matches, receipt.resultCount, receipt.count, 0)) || 0;
-  const liveResultCount = Number(firstPresent(api.count, api.resultCount, terminal.count, terminal.resultCount, desktop.count, desktop.resultCount, supabase.count, supabase.resultCount, 0)) || 0;
-  const liveReadbackCount = Number(firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0;
   return {
     key: row.key,
     label: row.label,
@@ -239,12 +310,18 @@ function moduleRow(row = {}) {
     sourceDate,
     complete,
     fallback,
-    evidenceStatus: firstPresent(api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, receipt.evidenceStatus, ""),
-    publishAllowed: api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true || (complete && receipt.publishBlocked !== true),
-    resultCount: liveResultCount || scannerResultCount,
-    readbackCount: liveReadbackCount,
+    rawFallback,
+    evidenceStatus: effectiveEvidenceStatus,
+    publishAllowed: effectivePublishAllowed,
+    resultCount: Number(protectedReadbackBlocked
+      ? firstPresent(desktop.count, desktop.returnedCount, supabase.count, receipt.matches, api.count, terminal.count, 0)
+      : firstPresent(api.count, terminal.count, desktop.count, supabase.count, receipt.matches, 0)) || 0,
+    readbackCount: Number(protectedReadbackBlocked
+      ? firstPresent(desktop.readbackCount, desktop.returnedCount, desktop.count, terminal.readbackCount, api.readbackCount, 0)
+      : firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0,
     runIds,
     scorecard88Protection,
+    protectedReadbackBlocked,
     scheduleStatus,
     pendingNotDue,
     status: pendingNotDue ? "PENDING_NOT_DUE" : ((issues.length === 0 && complete) ? "CLOSED" : "BLOCKED"),
@@ -300,19 +377,14 @@ async function main() {
   const modules = Array.isArray(chain.results)
     ? chain.results.filter((row) => row.key !== "market").map(moduleRow)
     : [];
-const pendingModules = modules.filter((item) => item.pendingNotDue === true);
-  const pendingNotDueHold = modules.length > 0
-    && pendingModules.length === modules.length
-    && modules.every((row) => row.ok === true)
-    && isPreviousGoodHoldWaterRoot(water);
   const issues = [];
-  if (!water.ok) issues.push(`water_root:${water.reason || "not_ready"}`);
-  if (!chain.ok && !pendingNotDueHold) issues.push("terminal_resource_chain_unattended_failed");
-  for (const command of commands.filter((item) => !item.ok)) {
-    const toleratedPendingChain = pendingNotDueHold && command.label === "terminal-resource-chain:unattended";
-    if (!toleratedPendingChain) issues.push(`${command.label}_exit_${command.exitCode}`);
-  }
+  const softWaterRootIssue = isSoftWaterRootIssue(water);
+  const waterRootIssue = !water.ok ? `water_root:${water.reason || "not_ready"}` : "";
+  if (waterRootIssue && !softWaterRootIssue) issues.push(waterRootIssue);
+  for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
+  if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
+  const pendingModules = modules.filter((item) => item.pendingNotDue === true);
   const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
@@ -326,6 +398,7 @@ const pendingModules = modules.filter((item) => item.pendingNotDue === true);
       sourceStatus: water.sourceStatus?.summary || null,
       canonicalGate: water.canonicalGate?.summary || null,
       previousGoodHold,
+      softIssueIgnored: softWaterRootIssue ? waterRootIssue : "",
     },
     commands,
     modules,
@@ -351,7 +424,7 @@ const pendingModules = modules.filter((item) => item.pendingNotDue === true);
     modules: manifest.modules.map((row) => ({ key: row.key, ok: row.ok, runId: row.runId, issue: row.issues[0] || "" })),
     output: latestFile,
   }, null, 2));
-  if (issues.length > 0 && !pendingNotDueHold) process.exitCode = 1;
+  if (issues.length > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {
