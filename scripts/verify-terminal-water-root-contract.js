@@ -262,7 +262,11 @@ const cases = [
     name: "formal_blocks_intraday_today_candle_zero",
     expectOk: false,
     expectIssues: ["intraday_1m_today_candle_count_zero"],
-    mutate: (payload) => { payload.intraday1m.row.today_candle_count = 0; },
+    mutate: (payload) => {
+      payload.intraday1m.row.today_candle_count = 0;
+      delete payload.sourceStatus.row.payload.intraday_1m_stale_seconds;
+      delete payload.sourceStatus.row.intraday_1m_stale_seconds;
+    },
   },
   {
     name: "market_closed_forced_formal_blocks",

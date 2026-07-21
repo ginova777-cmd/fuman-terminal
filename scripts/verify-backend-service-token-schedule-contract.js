@@ -168,7 +168,12 @@ function verifyAutonomousRootRunner(issues) {
     "policy:autonomous-ops",
     "rollforward:terminal:apply",
     "rollforward:terminal:apply-scanners",
-    "verify:terminal-unattended-root",
+    "verify:terminal-canary-publish:live",
+    "verify:terminal-control-plane:from-existing",
+    "verify:terminal-resource-chain:unattended",
+    "verify:terminal-runid-closure",
+    "verify:terminal-ops-production-live",
+    "ops:production-unattended-readiness-report:fresh",
     "send-workflow-alert.js",
     "IDLE_NO_RETRY_NEEDED",
   ];
@@ -232,7 +237,7 @@ async function main() {
       "scorecard publish is daily-manifest gated and can run without member live readback",
       "BLOCKED_AUTH jobs require service token repair and are never auto-executed as fake success",
       "schedule running result 0x41301 is classified separately from failed scanner output",
-      "autonomous root monitor runs the full root chain and job queue roll-forward after due windows",
+      "autonomous root monitor runs deterministic root steps once, then readback-only closure after due windows",
     ],
     issues,
   };

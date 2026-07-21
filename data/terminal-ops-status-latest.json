@@ -2,37 +2,37 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-21T00:24:25.364Z",
-  "checkedAt": "2026-07-21T00:24:12.176Z",
+  "generatedAt": "2026-07-21T04:30:15.176Z",
+  "checkedAt": "2026-07-21T04:30:01.660Z",
   "tradeDate": "20260721",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "NO",
   "action": "wait_until_next_strategy_due_time",
-  "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+  "reason": "pending_not_due:strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
   "gates": {
     "predictivePreflight": {
       "ok": true,
-      "status": "MARKET_CLOSED_SKIP_SCAN",
-      "reason": "trading_day_before_formal_source_window"
+      "status": "READY",
+      "reason": "date_preflight_ready"
     },
     "waterRoot": {
       "ok": true,
-      "status": "trading_day_wait_source_window_previous_good",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
+      "status": "ready",
+      "reason": "terminal_water_root_ready"
     },
     "stateMachine": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "dailyManifest": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "canaryPublish": {
       "ok": true,
-      "status": "CANARY_READY_MARKET_CLOSED_CLOSURE",
+      "status": "CANARY_WAITING_PENDING_NOT_DUE",
       "reason": ""
     },
     "notificationPolicy": {
@@ -53,7 +53,7 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     }
   },
   "modules": [
@@ -61,14 +61,14 @@
       "key": "strategy2",
       "label": "策略2 即時",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
-      "runId": "strategy2-20260720-120027",
-      "tradeDate": "20260720",
-      "sourceDate": "20260720",
+      "runId": "strategy2-20260721-120146",
+      "tradeDate": "20260721",
+      "sourceDate": "20260721",
       "resultCount": 0,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:09:00"
+      "issue": ""
     },
     {
       "key": "strategy3",
@@ -153,14 +153,14 @@
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
-    "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
-    "action": "skip_formal_scan",
-    "reason": "trading_day_before_formal_source_window",
+    "state": "READY_FOR_FORMAL_SCAN",
+    "action": "allow_formal_scan",
+    "reason": "date_preflight_ready",
     "scannerTargetDate": "20260721",
-    "displayTradeDate": "20260720",
-    "formalScanAllowed": false,
-    "preservePreviousGood": true,
-    "publishAllowed": false,
+    "displayTradeDate": "20260721",
+    "formalScanAllowed": true,
+    "preservePreviousGood": false,
+    "publishAllowed": true,
     "issues": []
   },
   "stateMachineContract": {
@@ -212,7 +212,7 @@
     "formalScan": {
       "allowed": false,
       "mode": "wait_until_due_time",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "publish": {
       "allowed": false,
@@ -252,10 +252,10 @@
   "canaryPublish": {
     "contract": "terminal-canary-publish-v1",
     "ok": true,
-    "status": "CANARY_READY_MARKET_CLOSED_CLOSURE",
+    "status": "CANARY_WAITING_PENDING_NOT_DUE",
     "scorecardPublishAllowed": false,
     "reason": "",
-    "tradeDate": "20260720"
+    "tradeDate": "20260721"
   },
   "notificationPlan": {
     "contract": "autonomous-ops-notification-plan-v1",

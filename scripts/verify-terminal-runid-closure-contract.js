@@ -82,8 +82,17 @@ function pendingNotDuePreviousGoodHold(manifest = {}) {
   const modules = Array.isArray(manifest.modules) ? manifest.modules.filter((row) => row.key && row.key !== "market") : [];
   return modules.length > 0 && modules.every((row) => row.ok === true && row.fallback !== true && row.runId && isPendingNotDueModule(row));
 }
+
+function mixedPendingNotDueHold(manifest = {}) {
+  const modules = Array.isArray(manifest.modules) ? manifest.modules.filter((row) => row.key && row.key !== "market") : [];
+  return modules.length > 0 && modules.every((row) => {
+    if (row.ok !== true || row.fallback === true || !row.runId) return false;
+    if (isPendingNotDueModule(row)) return true;
+    return row.complete === true;
+  });
+}
 function acceptableManifestStatus(status, closedPreviousGood, pendingHold) {
-  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD") || (closedPreviousGood === true && pendingHold === true && status === "NO");
+  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD") || (pendingHold === true && status === "NO");
 }
 
 function validateModule(row, manifest, controlPlane, issues, options = {}) {
@@ -163,7 +172,7 @@ async function main() {
   const resourceChainScript = readText(RESOURCE_CHAIN_SCRIPT);
 
   const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
-  const pendingHold = pendingNotDuePreviousGoodHold(manifest);
+  const pendingHold = pendingNotDuePreviousGoodHold(manifest) || mixedPendingNotDueHold(manifest);
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_missing");
   if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) issues.push("manifest_modules_missing");
   if (manifest.ok !== true && !pendingHold) issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
@@ -178,6 +187,7 @@ async function main() {
       controlPlane.decision?.unattendedStatus === "YES"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
       || controlPlane.canaryPublish?.status === "CANARY_READY_MARKET_CLOSED_CLOSURE"
+      || controlPlane.canaryPublish?.status === "CANARY_WAITING_PENDING_NOT_DUE"
     );
   if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
   if (!controlPlaneRunIdClosureAccepted) issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);

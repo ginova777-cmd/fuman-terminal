@@ -28,16 +28,29 @@ function Write-RunnerLog {
 function Invoke-NpmStep {
   param(
     [string]$Name,
-    [string]$Script
+    [string]$Script,
+    [int]$MaxAttempts = 1,
+    [int]$RetryDelaySeconds = 0
   )
-  Write-RunnerLog "START $Name :: npm run $Script"
+  $attempt = 1
   $stepStarted = Get-Date
-  & npm run $Script 2>&1 | Tee-Object -FilePath $LogFile -Append
-  $exitCode = $LASTEXITCODE
+  $exitCode = 0
+  do {
+    Write-RunnerLog "START $Name attempt=$attempt/$MaxAttempts :: npm run $Script"
+    & npm run $Script 2>&1 | Tee-Object -FilePath $LogFile -Append
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) { break }
+    if ($attempt -lt $MaxAttempts) {
+      Write-RunnerLog "RETRY $Name exit=$exitCode wait=${RetryDelaySeconds}s"
+      Start-Sleep -Seconds $RetryDelaySeconds
+    }
+    $attempt += 1
+  } while ($attempt -le $MaxAttempts)
   $stepFinished = Get-Date
   $row = [ordered]@{
     name = $Name
     script = $Script
+    attempts = $attempt
     exitCode = $exitCode
     startedAt = $stepStarted.ToString("o")
     finishedAt = $stepFinished.ToString("o")
@@ -129,7 +142,7 @@ $steps = New-Object System.Collections.Generic.List[object]
 try {
   Write-RunnerLog "Autonomous root started contract=$Contract applyScanners=$([bool]$ApplyScanners) requireProtectedReadback=$([bool]$RequireProtectedReadback)"
   $steps.Add((Invoke-NpmStep "predictive-preflight" "ops:predictive-preflight"))
-  $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root"))
+  $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20))
   $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run"))
   $steps.Add((Invoke-NpmStep "state-machine" "orchestrator:state:from-existing"))
   $steps.Add((Invoke-NpmStep "autonomous-policy" "policy:autonomous-ops"))
@@ -138,7 +151,15 @@ try {
   } else {
     $steps.Add((Invoke-NpmStep "job-queue-roll-forward" "rollforward:terminal:apply"))
   }
-  $steps.Add((Invoke-NpmStep "unattended-root-readback" "verify:terminal-unattended-root"))
+    $steps.Add((Invoke-NpmStep "canary-publish-readback" "verify:terminal-canary-publish:live"))
+  $steps.Add((Invoke-NpmStep "control-plane-readback" "verify:terminal-control-plane:from-existing"))
+  $steps.Add((Invoke-NpmStep "resource-chain-readback" "verify:terminal-resource-chain:unattended"))
+  $steps.Add((Invoke-NpmStep "runid-closure-readback" "verify:terminal-runid-closure"))
+  $steps.Add((Invoke-NpmStep "ops-status-export" "ops:status:export"))
+  $steps.Add((Invoke-NpmStep "ops-status-api-readback" "verify:terminal-ops-status-api"))
+  $steps.Add((Invoke-NpmStep "production-live-readback" "verify:terminal-ops-production-live"))
+  $steps.Add((Invoke-NpmStep "production-readiness-report" "ops:production-unattended-readiness-report:fresh"))
+  $steps.Add((Invoke-NpmStep "production-readiness-report-verify" "verify:production-unattended-readiness-report"))
   $receipt = Write-Receipt -Ok $true -Steps $steps.ToArray()
   Write-RunnerLog "Autonomous root complete receipt=$ReceiptFile"
   exit 0
@@ -150,6 +171,5 @@ try {
   Write-RunnerLog "Autonomous root failed failedStep=$failedStep error=$message receipt=$ReceiptFile"
   exit 1
 }
-
 
 

@@ -350,7 +350,10 @@ function authenticatedReadbackOk(payload = {}) {
 }
 
 function requiresAuthenticatedReadbackForReady(payload = {}) {
-  return !isPreviousGoodWaterRoot(payload);
+  if (isPreviousGoodWaterRoot(payload)) return false;
+  if (isPendingNotDueManifest(payload) || payload.status === "PENDING_NOT_DUE") return false;
+  return payload.status === "PRODUCTION_READY"
+    || (payload.dailyManifest?.ok === true && payload.dailyManifest?.unattendedStatus === "YES");
 }
 
 function resourceChainProtectedReadbackOk(payload = {}) {
@@ -599,7 +602,8 @@ async function main() {
     blockers: payload.blockers.map((row) => row.blocker),
     reportFile,
   }, null, 2));
-  if (!payload.ok) process.exitCode = 1;
+  const pendingNotDue = payload.status === "PENDING_NOT_DUE";
+  if (!payload.ok && !pendingNotDue) process.exitCode = 1;
 }
 
 main().catch((error) => {

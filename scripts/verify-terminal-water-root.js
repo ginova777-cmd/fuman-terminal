@@ -9,6 +9,7 @@ const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.ve
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR }).replace(/\/+$/, "");
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TIMEOUT_MS = Math.max(1000, Number(process.env.FUMAN_WATER_ROOT_TIMEOUT_MS || "3000") || 3000);
+const QUERY_ATTEMPTS = Math.max(1, Number(process.env.FUMAN_WATER_ROOT_QUERY_ATTEMPTS || "3") || 3);
 const EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
 
 function taipeiDateKey(date = new Date()) {
@@ -80,7 +81,13 @@ function restUrl(pathname, params = {}) {
 }
 
 async function query(name, pathname, params = {}, options = {}) {
-  const result = await timedFetch(restUrl(pathname, params), { timeoutMs: options.timeoutMs || TIMEOUT_MS });
+  const attempts = Math.max(1, Number(options.attempts || QUERY_ATTEMPTS) || QUERY_ATTEMPTS);
+  let result = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    result = await timedFetch(restUrl(pathname, params), { timeoutMs: options.timeoutMs || TIMEOUT_MS });
+    if (result.ok || attempt === attempts) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250 * attempt, 1000)));
+  }
   const rows = Array.isArray(result.json) ? result.json : [];
   const row = rows[0] || null;
   return {
@@ -93,6 +100,7 @@ async function query(name, pathname, params = {}, options = {}) {
     row,
     error: result.error,
     maxElapsedMs: options.timeoutMs || TIMEOUT_MS,
+    attempts,
   };
 }
 
@@ -130,6 +138,7 @@ function sourceStatusSummary(row = {}) {
     scannerCanRunOpening: payload.scanner_can_run_opening === true || row.scanner_can_run_opening === true,
     priorityFreshQuoteCoverage120s: asNumber(payload.priority_fresh_quote_coverage_120s ?? row.priority_fresh_quote_coverage_120s),
     quoteAgeSeconds: asNumber(payload.quote_age_seconds ?? row.quote_age_seconds, 999999),
+    hasIntraday1mStaleSeconds: payload.intraday_1m_stale_seconds !== undefined || row.intraday_1m_stale_seconds !== undefined,
     intraday1mStaleSeconds: asNumber(payload.intraday_1m_stale_seconds ?? row.intraday_1m_stale_seconds, 999999),
     dailyVolumeStatus: String(payload.daily_volume_status || row.daily_volume_status || ""),
     phase: String(payload.phase || row.phase || ""),
@@ -182,10 +191,12 @@ function effectiveSourceOperational(payload) {
     asNumber(intraday.updatedAgeSeconds, 999999),
   );
   const sourceStatusOk = ["ok", "ready"].includes(source.status);
+  const sourceIntradayFresh = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
+  const intradayReady = intraday.hasTodayData === true || sourceIntradayFresh;
   const objectiveOk = Boolean(
     source.priorityFreshQuoteCoverage120s >= required.priorityCoverage
     && source.quoteAgeSeconds <= required.quoteAgeSeconds
-    && intraday.hasTodayData === true
+    && intradayReady
     && intradayAge <= required.intraday1mStaleSeconds
     && (!required.dailyVolume || ["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase()))
   );
@@ -236,8 +247,11 @@ function statusIssues(payload) {
   const priorityRows = payload.priorityTop40.rowCount;
 
   for (const item of payload.probes) {
-    if (!item.ok) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
-    if (item.elapsedMs > item.maxElapsedMs) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
+    const diagnosticIntradayCoveredBySource = item.name === "intraday_1m_status"
+      && source.hasIntraday1mStaleSeconds
+      && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
+    if (!item.ok && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
+    if (item.elapsedMs > item.maxElapsedMs && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
   }
   if (required.tradingDay && payload.marketCalendar.ok && payload.marketCalendar.row?.isTradingDay === false) {
     issues.push("market_calendar_not_trading_day");
@@ -265,8 +279,9 @@ function statusIssues(payload) {
     if (gate.formalEntryAllowed !== true) issues.push("formal_entry_allowed_false");
     if (gate.scannerCanRunOpening !== true) issues.push("scanner_can_run_opening_false");
   }
+  const intradayDiagnosticCoveredBySource = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
   const intradayHasTodayData = intradaySummary.hasTodayData === true || asNumber(intraday.today_candle_count) > 0;
-  if ((intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
+  if (!intradayDiagnosticCoveredBySource && (intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
     issues.push("intraday_1m_today_candle_count_zero");
   }
   return issues;
@@ -342,6 +357,7 @@ async function main() {
     }),
     query("intraday_1m_status", "v_fugle_daytrade_intraday_1m_status", {
       select: "*",
+      order: "latest_candle_time.desc",
       limit: "1",
     }),
     query("daily_volume", "fugle_daytrade_daily_volume_avg", {

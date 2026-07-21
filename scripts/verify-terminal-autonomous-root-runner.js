@@ -47,7 +47,12 @@ async function main() {
     "policy:autonomous-ops",
     "rollforward:terminal:apply",
     "rollforward:terminal:apply-scanners",
-    "verify:terminal-unattended-root",
+    "verify:terminal-canary-publish:live",
+    "verify:terminal-control-plane:from-existing",
+    "verify:terminal-resource-chain:unattended",
+    "verify:terminal-runid-closure",
+    "verify:terminal-ops-production-live",
+    "ops:production-unattended-readiness-report:fresh",
     "send-workflow-alert.js",
     "terminal-autonomous-root-latest.json",
     "IDLE_NO_RETRY_NEEDED",
@@ -107,7 +112,7 @@ async function main() {
     guarantees: [
       "autonomous root is callable as a first-class npm script",
       "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, and unattended root readback",
+      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
       "failure writes a receipt and attempts workflow alert",
     ],
     issues,
@@ -121,5 +126,4 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-root-runner-contract] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
 

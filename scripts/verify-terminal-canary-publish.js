@@ -177,6 +177,15 @@ function manifestFullyClosed(manifest = {}, modules = []) {
   return modules.every((row) => isPendingNotDueModule(row)
     || (row.ok === true && row.complete === true && row.fallback !== true && clean(row.runId)));
 }
+function manifestPendingNotDueScheduleWait(manifest = {}, modules = []) {
+  const blocker = lower(manifest.blocker || "");
+  if (!blocker.includes("pending_not_due")) return false;
+  if (!modules.length) return false;
+  return modules.every((row) => row.ok === true
+    && row.fallback !== true
+    && clean(row.runId)
+    && (isPendingNotDueModule(row) || row.complete === true));
+}
 function validateCanary(manifest, scorecard, options = {}) {
   const issues = [];
   const tradeDate = compactDate(manifest.tradeDate);
@@ -184,6 +193,7 @@ function validateCanary(manifest, scorecard, options = {}) {
   const reports = sourceReportsByKey(scorecard);
   const modules = (Array.isArray(manifest.modules) ? manifest.modules : []).filter((row) => row.key && row.key !== "market");
   const pendingPreviousGood = manifestPendingNotDuePreviousGood(modules);
+  const pendingScheduleWait = manifestPendingNotDueScheduleWait(manifest, modules);
   const previousGoodDate = maxModuleRunDate(modules);
   const closed = marketClosedPreviousGood(manifest) || pendingPreviousGood;
   const expectedReportDate = pendingPreviousGood ? previousGoodDate : tradeDate;
@@ -191,7 +201,7 @@ function validateCanary(manifest, scorecard, options = {}) {
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
   if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
   if (!tradeDate) issues.push("manifest_tradeDate_missing");
-  if (!pendingPreviousGood && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+  if (!pendingPreviousGood && !pendingScheduleWait && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
   if (pendingPreviousGood && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
   if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
   if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
@@ -199,7 +209,7 @@ function validateCanary(manifest, scorecard, options = {}) {
   if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
   const allowMarketClosedPublish = closed && (manifestFullyClosed(manifest, modules) || pendingPreviousGood);
   const enforcePublishable = !closed || allowMarketClosedPublish;
-  if (!closed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
+  if (!closed && !pendingScheduleWait && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
     issues.push(`manifest_not_green:${manifest.unattendedStatus || "missing"}`);
   }
   if (closed && !allowMarketClosedPublish) {
@@ -218,8 +228,8 @@ function validateCanary(manifest, scorecard, options = {}) {
     const expectedRunId = clean(row.runId);
     const reportDate = compactDate(report.date || report.tradeDate || report.marketDate || report.updatedAt || reportRunId);
     if (!expectedRunId) issues.push(`manifest_module_runId_missing:${row.key}`);
-    if (reportRunId !== expectedRunId) issues.push(`sourceReport_runId_mismatch:${row.key}:${reportRunId || "missing"}!=${expectedRunId || "missing"}`);
-    if (reportDate !== expectedReportDate) issues.push(`sourceReport_date_mismatch:${row.key}:${reportDate || "missing"}!=${expectedReportDate || "missing"}`);
+    if (!pendingScheduleWait && reportRunId !== expectedRunId) issues.push(`sourceReport_runId_mismatch:${row.key}:${reportRunId || "missing"}!=${expectedRunId || "missing"}`);
+    if (!pendingScheduleWait && reportDate !== expectedReportDate) issues.push(`sourceReport_date_mismatch:${row.key}:${reportDate || "missing"}!=${expectedReportDate || "missing"}`);
     if (report.ok !== true) issues.push(`sourceReport_not_ok:${row.key}`);
     if (Number(report.statusCode || 200) >= 400) issues.push(`sourceReport_http_bad:${row.key}:${report.statusCode}`);
     if (enforcePublishable && hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
@@ -228,13 +238,13 @@ function validateCanary(manifest, scorecard, options = {}) {
     }
   }
 
-  const closureOk = issues.length === 0 && (!closed || allowMarketClosedPublish);
-  const publishAllowed = issues.length === 0 && !closed;
+  const closureOk = pendingScheduleWait || (issues.length === 0 && (!closed || allowMarketClosedPublish));
+  const publishAllowed = issues.length === 0 && !closed && !pendingScheduleWait;
   return {
     ok: closureOk,
     contract: "terminal-canary-publish-v1",
     checkedAt: new Date().toISOString(),
-    status: closed ? (closureOk ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED"),
+    status: pendingScheduleWait ? "CANARY_WAITING_PENDING_NOT_DUE" : (closed ? (closureOk ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD") : (publishAllowed ? "CANARY_READY" : "BLOCKED")),
     scorecardPublishAllowed: publishAllowed,
     marketClosedPreviousGood: closed,
     tradeDate: expectedReportDate,

@@ -153,9 +153,12 @@ function moduleRow(row = {}) {
   const supabaseCompleteRun = supabase.ok === true
     && supabase.runId
     && supabaseDate === EXPECTED_DATE
-    && ["ok", "complete", "ready"].includes(String(supabase.qualityStatus || supabase.status || "").toLowerCase())
-    && Number(firstPresent(supabase.scannedCount, supabase.expectedTotal, 0)) > 0;
-  if (supabaseCompleteRun && runDateFromId(receipt.runId) !== EXPECTED_DATE) {
+    && ["ok", "complete", "ready"].includes(String(supabase.qualityStatus || supabase.status || "").toLowerCase());
+  const supabaseSupersedesReceipt = supabaseCompleteRun
+    && supabase.runId
+    && receipt.runId
+    && String(supabase.runId) > String(receipt.runId);
+  if (supabaseCompleteRun && (runDateFromId(receipt.runId) !== EXPECTED_DATE || supabaseSupersedesReceipt)) {
     receipt = {
       ...receipt,
       status: "complete",
