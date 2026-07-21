@@ -3362,6 +3362,7 @@ if (fetchResult.status !== 0) {
       "api/strategy4-latest.js",
       "api/strategy5-latest.js",
       "data/scorecard-latest.json",
+      "data/terminal-ops-status-latest.json",
       "scripts/generate-slim-cache.js",
       "scripts/generate-health-summary.js",
       "scripts/verify-terminal-field-completeness.js",
@@ -3414,3 +3415,4 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
+
