@@ -11,6 +11,9 @@ const CHECK_LIVE = !process.argv.includes("--pre-deploy");
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const ALLOW_AHEAD = process.argv.includes("--allow-ahead");
 const RELEASE_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA);
+const GENERATED_DIRTY_ALLOWLIST = new Set([
+  "data/terminal-ops-status-latest.json",
+]);
 const EXPECTED_GIT_REMOTE_RE = /^(https:\/\/github\.com\/ginova777-cmd\/fuman-terminal\.git|git@github\.com:ginova777-cmd\/fuman-terminal\.git)$/i;
 const LEGACY_SYNC_TREE_RE = new RegExp("fuman-terminal" + "-sync", "i");
 const RESERVED_PRODUCTION_ROUTES = [
@@ -77,6 +80,14 @@ function git(args) {
   };
 }
 
+function parsePorcelain(stdout) {
+  return String(stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[ MADRCU?!]{1,2}\s+/, "").replace(/\\/g, "/"));
+}
+
 function detectVersion() {
   const match = read("terminal-core.js").match(/const\s+version\s*=\s*["']([^"']+)["']/);
   if (!match) throw new Error("Unable to detect local version");
@@ -118,7 +129,13 @@ function assertGitState() {
   if (!status.ok) {
     issues.push(`git status failed: ${status.stderr}`);
   } else if (status.stdout && !ALLOW_DIRTY) {
-    issues.push(`working tree is dirty; commit or stash before deploy:\n${status.stdout.split(/\r?\n/).slice(0, 20).join("\n")}`);
+    const dirtyEntries = parsePorcelain(status.stdout);
+    const disallowedDirty = dirtyEntries.filter((entry) => !GENERATED_DIRTY_ALLOWLIST.has(entry));
+    if (disallowedDirty.length) {
+      issues.push(`working tree is dirty; commit or stash before deploy:\n${status.stdout.split(/\r?\n/).slice(0, 20).join("\n")}`);
+    } else {
+      warnings.push(`generated ops artifact dirty but allowed: ${dirtyEntries.join(", ")}`);
+    }
   }
   const localHead = git(["rev-parse", "HEAD"]);
   let originHead = "";
@@ -316,5 +333,6 @@ main().catch((error) => {
   console.error(`[production-guard] failed: ${error.stack || error.message}`);
   process.exit(1);
 });
+
 
 
