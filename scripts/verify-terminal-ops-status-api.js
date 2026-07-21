@@ -30,7 +30,7 @@ function assert(condition, issue, details, issues) {
 }
 
 function isPendingNotDue(payload) {
-  return payload.unattendedStatus === "NO"
+  return (payload.unattendedStatus === "NO" || payload.unattendedStatus === "PREVIOUS_GOOD_HOLD")
     && payload.state === "PENDING_NOT_DUE"
     && payload.gates?.dailyManifest?.status === "PENDING_NOT_DUE"
     && payload.gates?.runIdClosure?.status === "PENDING_NOT_DUE"

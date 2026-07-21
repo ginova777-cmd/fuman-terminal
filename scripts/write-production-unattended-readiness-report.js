@@ -404,6 +404,7 @@ function severityRank(value = "") {
 
 function classifyRootCause(blocker = "") {
   const text = String(blocker || "").toLowerCase();
+  if (/pending_not_due|pending not due|PENDING_NOT_DUE/i.test(blocker)) return "schedule_pending";
   if (/protectedreadbackcredential|protected_readback|authenticated readback|authenticated_readback|\/88|membership|required \(token not armed\)|bearer/.test(text)) return "auth_readback";
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
@@ -421,6 +422,7 @@ function classifyRootCause(blocker = "") {
 function rootCauseAction(category) {
   return {
     auth_readback: "Install and verify protected readback runtime credential, then rerun protected readback / resource-chain / runId closure gates.",
+    schedule_pending: "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
     source_water_root: "Recheck or rewater source root; scanner reruns stay blocked until current Water Root PASS and formal entry is allowed.",
     release_deploy: "Align production release SHA with current audited HEAD before claiming production readiness.",
     production_live_readback: "Rerun production live readback after deploy and protected credential are ready.",
@@ -461,6 +463,7 @@ function buildRootCauseSummary(blockers = []) {
 
 const RECOVERY_ORDER = {
   auth_readback: 10,
+  schedule_pending: 15,
   source_water_root: 20,
   schedule_service_token: 25,
   release_deploy: 30,
@@ -500,6 +503,13 @@ function rootCauseRecoveryStep(row = {}) {
       ],
       reason: "Protected desktop/mobile/88 readback needs a runtime member credential; this can never be auto-created or stored in source.",
       stopMode: "manual_repair_required",
+    },
+    schedule_pending: {
+      automation: "wait_until_due_time",
+      requires: ["module_due_time_reached", "water_root_still_ok_or_previous_good_hold"],
+      commands: [command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run")],
+      reason: "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
+      stopMode: "pending_not_due",
     },
     source_water_root: {
       automation: "wait_or_rewater",
@@ -733,10 +743,12 @@ function collectBlockers(payload, issues) {
         blockers.push({ blocker: `manifest_module_issue:${row.key}:${moduleIssue}`, severity: "critical" });
       }
     }
-    if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
-    if (row.rawFallback === true) blockers.push({ blocker: `manifest_module_raw_fallback:${row.key}`, severity: "critical" });
-    if (row.evidenceStatus && row.evidenceStatus !== "complete") blockers.push({ blocker: `manifest_module_evidence:${row.key}:${row.evidenceStatus}`, severity: "critical" });
-    if (row.publishAllowed !== true && row.pendingNotDue !== true) blockers.push({ blocker: `manifest_module_publish_not_allowed:${row.key}`, severity: "critical" });
+    if (row.pendingNotDue !== true) {
+      if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
+      if (row.rawFallback === true) blockers.push({ blocker: `manifest_module_raw_fallback:${row.key}`, severity: "critical" });
+      if (row.evidenceStatus && row.evidenceStatus !== "complete") blockers.push({ blocker: `manifest_module_evidence:${row.key}:${row.evidenceStatus}`, severity: "critical" });
+      if (row.publishAllowed !== true) blockers.push({ blocker: `manifest_module_publish_not_allowed:${row.key}`, severity: "critical" });
+    }
   }
   for (const row of payload.productionLiveOpsReadback.issues || []) {
     blockers.push({ blocker: `production_live_issue:${formatIssue(row)}`, severity: "critical" });
