@@ -1367,7 +1367,7 @@ async function withFreshStrategySourceReports(payload) {
   return nextPayload;
 }
 
-async function withLiveSourceReports(payload) {
+async function withLiveSourceReports(payload, options = {}) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
@@ -1377,6 +1377,8 @@ async function withLiveSourceReports(payload) {
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
+  const refreshFreshStrategyReports = options.freshStrategySourceReports === true;
+  const maybeFreshStrategyReports = (nextPayload) => refreshFreshStrategyReports ? withFreshStrategySourceReports(nextPayload) : Promise.resolve(nextPayload);
   const releaseReports = releaseSourceReports();
   const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
   const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
@@ -1405,18 +1407,18 @@ async function withLiveSourceReports(payload) {
       selectedDate: runtimeDate || runtimePayload?.selectedDate || payload?.selectedDate,
       sourceReportsSource: "runtime-scorecard-terminal-current",
     };
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
+    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
   }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (existingComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
   if (releaseComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
   }
-  return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+  return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
@@ -1867,12 +1869,12 @@ async function buildPayload(requestedDate = "", options = {}) {
       },
     }, "complete");
     payload = liveSourceReports
-      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   } else {
     const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
     payload = liveSourceReports
-      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   }
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
@@ -1893,7 +1895,11 @@ async function handler(request, response) {
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
     const liveSourceReports = request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
     const noCache = request.query?.live === "1" || liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
-    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, noCache }), marketCalendar);
+    const payload = attachMarketCalendar(await buildPayload(requestedDate, {
+      liveSourceReports,
+      noCache,
+      freshStrategySourceReports: request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
+    }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {
@@ -1912,3 +1918,4 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
+
