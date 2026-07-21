@@ -1381,23 +1381,29 @@ async function withLiveSourceReports(payload, options = {}) {
   const maybeFreshStrategyReports = (nextPayload) => refreshFreshStrategyReports ? withFreshStrategySourceReports(nextPayload) : Promise.resolve(nextPayload);
   const releaseReports = releaseSourceReports();
   const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
-  const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
-  const mergedReleaseReports = releaseReports.map((report) => {
-    const live = lightweightReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
-    if (!isBlank(live?.runId) && sourceReportDateValue(live) >= sourceReportDateValue(report)) {
-      return { ...report, ...live, reason: cleanText(live.reason || "scorecard_live_latest_complete_run") };
+  const mergeLightweightReports = (reports) => {
+    const sourceReports = Array.isArray(reports) ? reports : [];
+    const byKey = new Map(sourceReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
+    const merged = sourceReports.map((report) => {
+      const live = lightweightReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
+      if (!isBlank(live?.runId) && sourceReportDateValue(live) >= sourceReportDateValue(report)) {
+        return { ...report, ...live, reason: cleanText(live.reason || "scorecard_live_latest_complete_run") };
+      }
+      return report;
+    });
+    for (const live of lightweightReports) {
+      const key = cleanText(live?.key).toLowerCase();
+      if (!isBlank(live?.runId) && key && !byKey.has(key)) merged.push(live);
     }
-    return report;
-  });
-  for (const live of lightweightReports) {
-    const key = cleanText(live?.key).toLowerCase();
-    if (!isBlank(live?.runId) && key && !releaseByKey.has(key)) mergedReleaseReports.push(live);
-  }
+    return merged;
+  };
+  const mergedRuntimeReports = mergeLightweightReports(runtimeReports);
+  const mergedReleaseReports = mergeLightweightReports(releaseReports);
   const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
   const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
-  const runtimeComplete = runtimeReports.length >= 7 && runtimeReports.every((report) => !isBlank(report?.runId));
+  const runtimeComplete = mergedRuntimeReports.length >= 7 && mergedRuntimeReports.every((report) => !isBlank(report?.runId));
   const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId));
-  if (runtimeComplete && maxSourceReportDate(runtimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
+  if (runtimeComplete && maxSourceReportDate(mergedRuntimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
     const runtimeDate = cleanText(runtimePayload?.latestDate || runtimePayload?.marketDate || runtimePayload?.selectedDate || payload?.latestDate);
     const runtimeBase = {
       ...payload,
@@ -1407,7 +1413,7 @@ async function withLiveSourceReports(payload, options = {}) {
       selectedDate: runtimeDate || runtimePayload?.selectedDate || payload?.selectedDate,
       sourceReportsSource: "runtime-scorecard-terminal-current",
     };
-    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
+    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedRuntimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
   }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
     return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
@@ -1918,4 +1924,5 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
+
 
