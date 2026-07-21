@@ -2,9 +2,9 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-21T21:09:47.934Z",
+  "generatedAt": "2026-07-21T21:21:19.516Z",
   "checkedAt": "2026-07-21T16:20:01.349Z",
-  "tradeDate": "20260722",
+  "tradeDate": "20260721",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
   "action": "continue_autonomous_monitoring",
@@ -459,62 +459,30 @@
   "rootCauseSummary": {
     "contract": "production-readiness-root-cause-summary-v1",
     "ok": true,
-    "totalBlockers": 1,
-    "rootCauseCount": 1,
+    "totalBlockers": 0,
+    "rootCauseCount": 0,
     "criticalRootCauseCount": 0,
     "unknownBlockers": 0,
-    "categories": [
-      {
-        "category": "resource_chain",
-        "severity": "info",
-        "count": 1,
-        "action": "Rerun terminal resource-chain unattended verifier and inspect per-module runId closure rows.",
-        "blockers": [
-          "terminal-resource-chain:unattended_exit_1"
-        ]
-      }
-    ]
+    "categories": []
   },
   "rootCauseRecoveryPlan": {
     "contract": "production-readiness-root-cause-recovery-plan-v1",
     "ok": true,
-    "stepCount": 1,
-    "autoExecutableSteps": 1,
-    "autoExecutableNow": 1,
+    "stepCount": 0,
+    "autoExecutableSteps": 0,
+    "autoExecutableNow": 0,
     "blockedAutoExecutableSteps": 0,
     "manualSteps": 0,
     "firstManualStep": "",
-    "firstExecutableStep": "resource_chain",
+    "firstExecutableStep": "",
     "firstBlockedStep": "",
-    "steps": [
-      {
-        "category": "resource_chain",
-        "order": 50,
-        "severity": "info",
-        "blockerCount": 1,
-        "canAutoExecute": true,
-        "canExecuteNow": true,
-        "blockedBy": [],
-        "automation": "rerun_verifier",
-        "requires": [
-          "protected_readback_credential_ok",
-          "water_root_ok_or_previous_good_hold"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:terminal-resource-chain:unattended"
-          }
-        ],
-        "reason": "Resource chain is evidence-only and may rerun after auth/water prerequisites are ready.",
-        "stopMode": "verification_required"
-      }
-    ]
+    "steps": []
   },
   "readinessReport": {
     "contract": "production-unattended-readiness-report-v1",
-    "status": "PENDING_NOT_DUE",
+    "status": "PREVIOUS_GOOD_HOLD_READY",
     "ok": true,
-    "checkedAt": "2026-07-21T20:59:58.714Z"
+    "checkedAt": "2026-07-21T21:09:47.982Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
