@@ -415,6 +415,21 @@ if ($scanExit -ne 0) {
 
 Write-Log "Strategy4 API-only: static JSON copy, slim generation, cache sync, postflight static checks, and JSON-based sheet upload are disabled."
 
+$dbVerify = $null
+try {
+  $dbVerifyOutput = (& $nodeExe "scripts\verify-strategy4-db-latest-run.js" 2>&1) -join "`n"
+  $dbVerifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+  Write-Log "Strategy4 DB latest-run verification before API readback exit=$dbVerifyExit $dbVerifyOutput"
+  if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
+  $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
+  if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+  if ([string]::IsNullOrWhiteSpace([string]$dbVerify.runId)) { throw "DB latest-run verifier missing runId" }
+} catch {
+  Write-Log "Strategy4 DB latest-run verification before API readback failed: $($_.Exception.Message)"
+  Write-Strategy4Receipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during DB latest-run verification"
+  exit 1
+}
+
 $apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 try {
   $apiResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 45
@@ -424,6 +439,9 @@ try {
   if ($strategy4Output.ok -ne $true) { throw "api ok=false error=$($strategy4Output.error)" }
   if ([string]::IsNullOrWhiteSpace([string]$strategy4Output.runId)) { throw "missing runId" }
   if (([int]$strategy4Output.count) -le 0) { throw "empty count=$($strategy4Output.count)" }
+  if ([string]$strategy4Output.runId -ne [string]$dbVerify.runId) {
+    throw "api runId did not match Supabase latest after scan: api=$($strategy4Output.runId) db=$($dbVerify.runId)"
+  }
   if ($cacheControl -notmatch "no-store") {
     Write-Log "Strategy4 API cache-control=$cacheControl; continuing after runId/count verification."
   }
@@ -440,12 +458,16 @@ try {
   Write-Log "Strategy4 API-only verification failed: $apiVerifyError"
   Write-Log "Strategy4 API endpoint may be membership-protected; falling back to Supabase complete-run readback."
   try {
-    $dbVerifyOutput = (& $nodeExe "scripts\verify-strategy4-db-latest-run.js" 2>&1) -join "`n"
-    $dbVerifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-    Write-Log "Strategy4 DB latest-run verification exit=$dbVerifyExit $dbVerifyOutput"
-    if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
-    $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
-    if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+    if ($null -eq $dbVerify) {
+      $dbVerifyOutput = (& $nodeExe "scripts\verify-strategy4-db-latest-run.js" 2>&1) -join "`n"
+      $dbVerifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+      Write-Log "Strategy4 DB latest-run verification exit=$dbVerifyExit $dbVerifyOutput"
+      if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
+      $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
+      if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+    } else {
+      Write-Log "Strategy4 DB latest-run verification reused after API mismatch: runId=$($dbVerify.runId)"
+    }
     $strategy4Output = [pscustomobject]@{
       runId = [string]$dbVerify.runId
       count = [int]$dbVerify.resultCount
