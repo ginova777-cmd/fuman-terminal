@@ -795,13 +795,6 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
-    const bypassHtmlSnapshot = url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1";
-    const htmlSnapshot = bypassHtmlSnapshot ? null : await readMobileFragmentHtmlSnapshot(tab);
-    if (htmlSnapshot?.html) {
-      response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
-      sendHtml(request, response, 200, htmlSnapshot.html, { tab, snapshotHit: true, runId: htmlSnapshot.runId });
-      return;
-    }
   }
   try {
     const endpoint = appendQuery(config.endpoint, {
@@ -840,6 +833,21 @@ module.exports = async function handler(request, response) {
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
+    if (tab !== "ai") {
+      const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab).catch(() => null);
+      if (htmlSnapshot?.html) {
+        response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "html-snapshot");
+        response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
+        sendHtml(request, response, 200, htmlSnapshot.html, {
+          tab,
+          snapshotHit: true,
+          fallback: true,
+          runId: htmlSnapshot.runId,
+          reason: error?.message || "mobile_fragment_live_fetch_failed",
+        });
+        return;
+      }
+    }
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
