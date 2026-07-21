@@ -2,13 +2,13 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-21T05:42:56.756Z",
-  "checkedAt": "2026-07-21T05:42:38.801Z",
+  "generatedAt": "2026-07-21T10:12:19.478Z",
+  "checkedAt": "2026-07-21T10:12:06.009Z",
   "tradeDate": "20260721",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "NO",
   "action": "wait_until_next_strategy_due_time",
-  "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+  "reason": "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
   "gates": {
     "predictivePreflight": {
       "ok": true,
@@ -23,12 +23,12 @@
     "stateMachine": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "dailyManifest": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "canaryPublish": {
       "ok": true,
@@ -53,7 +53,7 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     }
   },
   "modules": [
@@ -76,10 +76,10 @@
       "ok": true,
       "complete": true,
       "fallback": false,
-      "runId": "strategy3-20260721-20260721050837",
+      "runId": "strategy3-20260721-20260721070946",
       "tradeDate": "20260721",
       "sourceDate": "20260721",
-      "resultCount": 60,
+      "resultCount": 76,
       "runIdClosureOk": true,
       "issue": ""
     },
@@ -87,14 +87,14 @@
       "key": "strategy4",
       "label": "策略4",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
-      "runId": "strategy4-20260720-20260720090934",
-      "tradeDate": "20260720",
-      "sourceDate": "20260720",
-      "resultCount": 305,
+      "runId": "strategy4-20260721-20260721091043",
+      "tradeDate": "20260721",
+      "sourceDate": "20260721",
+      "resultCount": 278,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:16:00"
+      "issue": ""
     },
     {
       "key": "strategy5",
@@ -212,7 +212,7 @@
     "formalScan": {
       "allowed": false,
       "mode": "wait_until_due_time",
-      "reason": "pending_not_due:strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+      "reason": "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
     },
     "publish": {
       "allowed": false,
@@ -270,7 +270,7 @@
     "tradeDate": "20260721"
   },
   "rollForward": {
-    "mode": "apply",
+    "mode": "dry-run",
     "state": "IDLE_NO_RETRY_NEEDED",
     "jobs": 0,
     "executableJobs": 0,
