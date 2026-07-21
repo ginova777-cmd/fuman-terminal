@@ -228,6 +228,9 @@ function moduleRow(row = {}) {
     : scorecard.runId
       ? "readback"
       : "not-read";
+  const scannerResultCount = Number(firstPresent(receipt.matches, receipt.resultCount, receipt.count, 0)) || 0;
+  const liveResultCount = Number(firstPresent(api.count, api.resultCount, terminal.count, terminal.resultCount, desktop.count, desktop.resultCount, supabase.count, supabase.resultCount, 0)) || 0;
+  const liveReadbackCount = Number(firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0;
   return {
     key: row.key,
     label: row.label,
@@ -236,10 +239,10 @@ function moduleRow(row = {}) {
     sourceDate,
     complete,
     fallback,
-    evidenceStatus: firstPresent(api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, ""),
-    publishAllowed: api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true,
-    resultCount: Number(firstPresent(api.count, terminal.count, desktop.count, supabase.count, receipt.matches, 0)) || 0,
-    readbackCount: Number(firstPresent(api.readbackCount, terminal.readbackCount, desktop.readbackCount, 0)) || 0,
+    evidenceStatus: firstPresent(api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, receipt.evidenceStatus, ""),
+    publishAllowed: api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true || (complete && receipt.publishBlocked !== true),
+    resultCount: liveResultCount || scannerResultCount,
+    readbackCount: liveReadbackCount,
     runIds,
     scorecard88Protection,
     scheduleStatus,
