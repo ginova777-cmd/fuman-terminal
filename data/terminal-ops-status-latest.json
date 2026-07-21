@@ -2,7 +2,7 @@
   "ok": true,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-21T16:49:24.248Z",
+  "generatedAt": "2026-07-21T17:46:28.964Z",
   "checkedAt": "2026-07-21T16:20:01.349Z",
   "tradeDate": "20260721",
   "state": "UNATTENDED_YES",
@@ -12,11 +12,7 @@
   "blockers": [
     "all_layers_green"
   ],
-  "protectedReadbackDisplayBlockers": [
-    "terminal_ops_status:protected_readback_unauthorized",
-    "scorecard:protected_readback_unauthorized",
-    "source_reports:protected_readback_unauthorized"
-  ],
+  "protectedReadbackDisplayBlockers": [],
   "gates": {
     "predictivePreflight": {
       "ok": true,
@@ -130,23 +126,20 @@
       "reasonUnknown": false
     },
     "protectedReadbackCredential": {
-      "ok": false,
+      "ok": true,
       "status": "",
-      "reason": "terminal_ops_status:protected_readback_unauthorized",
+      "reason": "",
       "reasonCodes": [
-        "AUTH_PROTECTED_READBACK_NOT_OK",
-        "AUTH_BACKEND_SERVICE_TOKEN_INVALID"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "AUTH_PROTECTED_READBACK_NOT_OK",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "verify_protected_readback_credential",
-        "repair_backend_service_token"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "auth_readback",
-        "backend_auth"
+        "closure"
       ],
-      "reasonSeverity": "critical",
+      "reasonSeverity": "info",
       "reasonUnknown": false
     },
     "runIdClosure": {
@@ -429,20 +422,16 @@
     "ok": true,
     "entries": 19,
     "unknownEntries": 0,
-    "criticalEntries": 1,
+    "criticalEntries": 0,
     "codes": [
-      "AUTH_BACKEND_SERVICE_TOKEN_INVALID",
-      "AUTH_PROTECTED_READBACK_NOT_OK",
       "CLOSURE_GREEN",
       "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW",
       "PREVIOUS_GOOD_PRESERVED"
     ],
-    "primaryCode": "AUTH_PROTECTED_READBACK_NOT_OK",
+    "primaryCode": "CLOSURE_GREEN",
     "actions": [
       "continue_autonomous_monitoring",
       "preserve_previous_good_and_mark_degraded",
-      "repair_backend_service_token",
-      "verify_protected_readback_credential",
       "wait_or_recheck_source_window"
     ]
   },
@@ -498,7 +487,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "NOT_READY",
     "ok": false,
-    "checkedAt": "2026-07-21T16:22:03.365Z"
+    "checkedAt": "2026-07-21T16:51:11.155Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
@@ -641,33 +630,29 @@
   },
   "protectedReadbackCredential": {
     "contract": "protected-readback-credential-v1",
-    "ok": false,
+    "ok": true,
     "armed": true,
     "source": "runtime-file-email-password",
     "reason": "ok",
-    "failures": [
-      "terminal_ops_status:protected_readback_unauthorized",
-      "scorecard:protected_readback_unauthorized",
-      "source_reports:protected_readback_unauthorized"
-    ],
+    "failures": [],
     "endpoints": [
       {
         "name": "",
-        "ok": false,
-        "status": 401,
-        "reason": "protected_readback_unauthorized"
+        "ok": true,
+        "status": 200,
+        "reason": "ok"
       },
       {
         "name": "",
-        "ok": false,
-        "status": 401,
-        "reason": "protected_readback_unauthorized"
+        "ok": true,
+        "status": 200,
+        "reason": "ok"
       },
       {
         "name": "",
-        "ok": false,
-        "status": 401,
-        "reason": "protected_readback_unauthorized"
+        "ok": true,
+        "status": 200,
+        "reason": "ok"
       }
     ],
     "nextActions": [

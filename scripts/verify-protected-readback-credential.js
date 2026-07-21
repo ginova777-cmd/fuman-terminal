@@ -132,7 +132,9 @@ async function main() {
   const endpoints = [];
   if (credential.ok && credential.token) {
     for (const endpoint of DIRECT_ENDPOINTS) {
-      const response = await fetchText(`${BASE_URL}${endpoint.path}`, {
+      const separator = endpoint.path.includes("?") ? "&" : "?";
+      const probeUrl = `${BASE_URL}${endpoint.path}${separator}protected_readback_probe=${Date.now()}`;
+      const response = await fetchText(probeUrl, {
         headers: {
           ...protectedReadbackHeaders(credential),
           accept: "application/json,text/html;q=0.9,*/*;q=0.8",
@@ -200,4 +202,3 @@ main().catch(async (error) => {
   console.error(`[protected-readback-credential] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
