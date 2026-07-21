@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-03T18:20:00+08:00",
+  "updatedAt": "2026-07-20T23:22:29.061Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -54,7 +54,8 @@
       "Fuman Daytrade Source Final Verdict 0912",
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
-      "Fuman Market Calendar Auto Update 1900-0830"
+      "Fuman Market Calendar Auto Update 1900-0830",
+      "Fuman Terminal Autonomous Root Monitor"
     ],
     "expectedDisabledTasks": [],
     "retiredTasks": [
@@ -243,6 +244,11 @@
       "Fuman Market Calendar Auto Update 1900-0830": [
         0,
         267009
+      ],
+      "Fuman Terminal Autonomous Root Monitor": [
+        0,
+        267009,
+        267011
       ]
     },
     "coveredBy": {
@@ -872,6 +878,23 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "19:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Terminal Autonomous Root Monitor",
+      "displayName": "Fuman Terminal Autonomous Root Monitor",
+      "description": "Autonomous root monitor: predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback.",
+      "time": "08:55,09:10,09:40,13:35,14:10,16:10,21:35,22:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:55",
+        "09:10",
+        "09:40",
+        "13:35",
+        "14:10",
+        "16:10",
+        "21:35",
+        "22:00"
       ]
     }
   ]

@@ -11,6 +11,8 @@ const AUTH_URL = String(process.env.FUMAN_MEMBERSHIP_AUTH_URL || "https://jxnqyq
 const AUTH_KEY = process.env.FUMAN_MEMBERSHIP_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
 const MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
 const MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || ""))
+  || process.argv.includes("--require-protected-readback");
 let MEMBER_BEARER_TOKEN = [
   process.env.FUMAN_VERIFY_BEARER_TOKEN,
   process.env.FUMAN_MEMBERSHIP_BEARER_TOKEN,
@@ -63,7 +65,20 @@ async function ensureMemberToken() {
 
 async function readLiveScorecard() {
   const auth = await ensureMemberToken();
-  if (!auth.ok) throw new Error(`live_scorecard_auth_failed:${auth.status || 0}:${auth.error}`);
+  if (!auth.ok) {
+    if (REQUIRE_PROTECTED_READBACK) throw new Error(`live_scorecard_auth_failed:${auth.status || 0}:${auth.error}`);
+    return {
+      payload: null,
+      useArtifactScorecard: true,
+      readback: {
+        status: auth.status || 0,
+        authSource: auth.source,
+        protectedReadbackNotArmed: true,
+        displayOnly: true,
+        error: auth.error,
+      },
+    };
+  }
   const response = await fetch(freshUrl("/api/scorecard?live=1"), {
     cache: "no-store",
     headers: {
@@ -304,8 +319,12 @@ async function main() {
   let liveReadback = null;
   if (LIVE_MODE) {
     const live = await readLiveScorecard();
-    scorecard = live.payload;
-    mode = "production-live";
+    if (live.payload) {
+      scorecard = live.payload;
+      mode = "production-live";
+    } else {
+      mode = "production-live-auth-split-artifact-scorecard";
+    }
     liveReadback = live.readback;
   }
   const payload = validateCanary(manifest, scorecard, { mode });

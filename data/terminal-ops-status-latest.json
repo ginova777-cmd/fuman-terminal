@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-20T19:32:29.799Z",
-  "checkedAt": "2026-07-20T19:31:27.149Z",
+  "generatedAt": "2026-07-21T00:24:25.364Z",
+  "checkedAt": "2026-07-21T00:24:12.176Z",
   "tradeDate": "20260721",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "NO",
@@ -66,7 +66,7 @@
       "runId": "strategy2-20260720-120027",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 104,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:09:00"
     },
@@ -79,7 +79,7 @@
       "runId": "strategy3-20260720-20260720061726",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 39,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:13:05"
     },
@@ -92,7 +92,7 @@
       "runId": "strategy4-20260720-20260720090934",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 60,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:16:00"
     },
@@ -105,7 +105,7 @@
       "runId": "strategy5-20260720-20260720133227",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 35,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:21:00"
     },
@@ -118,7 +118,7 @@
       "runId": "institution-20260720-20260720131654",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 248,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:21:00"
     },
@@ -131,7 +131,7 @@
       "runId": "cb-detect-20260720-214518",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 3,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:21:25"
     },
@@ -144,7 +144,7 @@
       "runId": "warrant-flow-20260720-20260720125117",
       "tradeDate": "20260720",
       "sourceDate": "20260720",
-      "resultCount": 120,
+      "resultCount": 0,
       "runIdClosureOk": true,
       "issue": "pending_not_due:20:30"
     }

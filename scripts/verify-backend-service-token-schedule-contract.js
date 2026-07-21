@@ -13,6 +13,7 @@ const REQUIRED_ACTIVE_TASKS = [
   "Fuman Strategy5 Cache 2100",
   "Fuman API Unattended Scorecard",
   "Fuman Public Slot Shared Source Watchdog",
+  "Fuman Terminal Autonomous Root Monitor",
 ];
 
 const SERVICE_KEY_MARKERS = [
@@ -79,7 +80,7 @@ function verifyScheduleRegistry(issues) {
   for (const task of REQUIRED_ACTIVE_TASKS) {
     if (!activeTasks.includes(task)) addIssue(issues, `schedule_active_task_missing:${task}`, { task });
   }
-  for (const task of ["Fuman Scorecard Daily Automation 1400", "Fuman Public Slot Shared Source Watchdog"]) {
+  for (const task of ["Fuman Scorecard Daily Automation 1400", "Fuman Public Slot Shared Source Watchdog", "Fuman Terminal Autonomous Root Monitor"]) {
     const allowed = allowedResults[task] || [];
     if (!allowed.includes(0)) addIssue(issues, `schedule_allowed_result_missing_zero:${task}`, { task, allowed });
     if (!allowed.includes(267009)) addIssue(issues, `schedule_allowed_result_missing_running_267009:${task}`, { task, allowed });
@@ -155,6 +156,38 @@ function verifyMembershipLayering(issues) {
   };
 }
 
+function verifyAutonomousRootRunner(issues) {
+  const runner = readText("run-terminal-autonomous-root.ps1");
+  const installer = readText("scripts/install-terminal-autonomous-root-task.ps1");
+  const runnerMarkers = [
+    "terminal-autonomous-root-runner-v1",
+    "ops:predictive-preflight",
+    "verify:terminal-water-root",
+    "manifest:daily-terminal-run",
+    "orchestrator:state:from-existing",
+    "policy:autonomous-ops",
+    "rollforward:terminal:apply",
+    "rollforward:terminal:apply-scanners",
+    "verify:terminal-unattended-root",
+    "send-workflow-alert.js",
+    "IDLE_NO_RETRY_NEEDED",
+  ];
+  for (const marker of runnerMarkers) {
+    requireText(issues, "run-terminal-autonomous-root.ps1", runner, marker, `autonomous_root_runner_missing_marker:${marker}`);
+  }
+  const installerMarkers = ["Fuman Terminal Autonomous Root Monitor", "Register-ScheduledTask", "08:55", "22:00", "-ApplyScanners"];
+  for (const marker of installerMarkers) {
+    requireText(issues, "scripts/install-terminal-autonomous-root-task.ps1", installer, marker, `autonomous_root_installer_missing_marker:${marker}`);
+  }
+  return {
+    runnerExists: Boolean(runner),
+    installerExists: Boolean(installer),
+    hasApplyScanners: runner.includes("rollforward:terminal:apply-scanners"),
+    hasFailureAlert: runner.includes("send-workflow-alert.js"),
+    installerRegistersTask: installer.includes("Register-ScheduledTask"),
+  };
+}
+
 function verifyPackageWiring(issues) {
   const pkg = readJson(PACKAGE_FILE, { scripts: {} });
   const scripts = pkg.scripts || {};
@@ -165,6 +198,9 @@ function verifyPackageWiring(issues) {
     addIssue(issues, "package_missing_verify_backend_service_token_schedule");
   }
   const root = String(scripts["verify:terminal-unattended-root"] || "");
+  if (!String(scripts["ops:autonomous-root"] || "").includes("run-terminal-autonomous-root.ps1")) addIssue(issues, "package_missing_ops_autonomous_root");
+  if (!String(scripts["ops:autonomous-root:apply-scanners"] || "").includes("-ApplyScanners")) addIssue(issues, "package_missing_ops_autonomous_root_apply_scanners");
+  if (!String(scripts["install:terminal-autonomous-root-task"] || "").includes("install-terminal-autonomous-root-task.ps1")) addIssue(issues, "package_missing_install_terminal_autonomous_root_task");
   for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure"]) {
     if (!root.includes(required)) addIssue(issues, `terminal_unattended_root_missing:${required}`, { root });
   }
@@ -172,6 +208,7 @@ function verifyPackageWiring(issues) {
     hasBackendAuthIsolation: Boolean(scripts["verify:backend-auth-isolation"]),
     hasBackendServiceTokenSchedule: Boolean(scripts["verify:backend-service-token-schedule"]),
     rootIncludesBackendServiceTokenSchedule: root.includes("verify:backend-service-token-schedule"),
+    hasAutonomousRootRunner: Boolean(scripts["ops:autonomous-root"]),
   };
 }
 
@@ -187,6 +224,7 @@ async function main() {
     scorecardRunner: verifyScorecardRunner(issues),
     strategyWrappers: verifyStrategyWrappers(issues),
     membershipLayering: verifyMembershipLayering(issues),
+    autonomousRootRunner: verifyAutonomousRootRunner(issues),
     packageWiring: verifyPackageWiring(issues),
     guarantees: [
       "backend scanner/publisher uses service role or internal verified API, not member browser session",
@@ -194,6 +232,7 @@ async function main() {
       "scorecard publish is daily-manifest gated and can run without member live readback",
       "BLOCKED_AUTH jobs require service token repair and are never auto-executed as fake success",
       "schedule running result 0x41301 is classified separately from failed scanner output",
+      "autonomous root monitor runs the full root chain and job queue roll-forward after due windows",
     ],
     issues,
   };
