@@ -143,7 +143,7 @@ try {
     . "${PSScriptRoot}\schedule-guard.ps1"
     Invoke-FumanWeekdayGuard -Label "Strategy4 source prewarm" -LogPath $log
 
-    & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4-source-prewarm" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
+    & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4-source-prewarm" "--after-close-profile=1" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
     $dateExit = $LASTEXITCODE
     if ($dateExit -eq 10) {
       $reason = "market closed; source prewarm skipped and previous good preserved"

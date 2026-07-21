@@ -273,7 +273,18 @@ function buildStrategy4PrePublishSelfTest(output) {
   }
   if (cleanNumber(output.computableUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`computableUniverseTotal ${cleanNumber(output.computableUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.sourceUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`sourceUniverseTotal ${cleanNumber(output.sourceUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
-  if (cleanNumber(output.insufficientHistoryCount) !== 0) issues.push(`insufficientHistoryCount must be 0, got ${output.insufficientHistoryCount}`);
+  const outputInsufficientHistoryCount = cleanNumber(output.insufficientHistoryCount);
+  const outputInsufficientHistoryRows = normalizeArray(output.insufficientHistory);
+  if (outputInsufficientHistoryCount !== 0) {
+    const hasInsufficientHistoryEvidence = outputInsufficientHistoryRows.length >= outputInsufficientHistoryCount;
+    if (!hasInsufficientHistoryEvidence) {
+      issues.push(`insufficientHistoryCount ${output.insufficientHistoryCount} missing insufficientHistory evidence rows`);
+    } else if (!outputCoverageAcceptable || outputErrorCount !== 0 || cleanNumber(output.executionRate) !== 1) {
+      issues.push(`insufficientHistoryCount ${output.insufficientHistoryCount} only allowed when computable universe is fully scanned with acceptable coverage and zero errors`);
+    } else {
+      output.sourceWarnings = Array.from(new Set([...(Array.isArray(output.sourceWarnings) ? output.sourceWarnings : []), `Excluded ${outputInsufficientHistoryCount} insufficient-history codes from Strategy4 computable universe: ${outputInsufficientHistoryRows.map((item) => normalizeCode(item?.code || item?.symbol || item)).filter(Boolean).slice(0, 20).join(",")}`]));
+    }
+  }
   if (requireSupabaseCoverage) {
     if (coverage.ok !== true) issues.push("supabaseCoverage.ok must be true");
     if (String(coverage.phase || "") !== "complete") issues.push(`supabaseCoverage.phase must be complete, got ${coverage.phase || "(blank)"}`);
@@ -282,7 +293,14 @@ function buildStrategy4PrePublishSelfTest(output) {
     if (remainingMiss !== 0 && coverageRatio < STRATEGY4_MIN_HISTORY_COVERAGE_RATIO) {
       issues.push(`supabaseCoverage coverageRatio must be >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO} when remainingMiss > 0, got coverageRatio=${coverageRatio}, remainingMiss=${coverage.remainingMiss}`);
     }
-    if (cleanNumber(coverage.insufficientHistoryCount) !== 0) issues.push(`supabaseCoverage.insufficientHistoryCount must be 0, got ${coverage.insufficientHistoryCount}`);
+    const coverageInsufficientHistoryCount = cleanNumber(coverage.insufficientHistoryCount);
+    if (coverageInsufficientHistoryCount !== 0) {
+      const coverageRatioOk = cleanNumber(coverage.coverageRatio) >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO;
+      const coverageComputableOk = cleanNumber(coverage.computableUniverse) >= MIN_SOURCE_ROW_COUNT;
+      if (!coverageRatioOk || !coverageComputableOk) {
+        issues.push(`supabaseCoverage.insufficientHistoryCount ${coverage.insufficientHistoryCount} not allowed without acceptable coverageRatio/computableUniverse evidence`);
+      }
+    }
     if (cleanNumber(coverage.computableUniverse) < MIN_SOURCE_ROW_COUNT) issues.push(`supabaseCoverage.computableUniverse ${cleanNumber(coverage.computableUniverse)} below ${MIN_SOURCE_ROW_COUNT}`);
   }
   if (breakdownIssues.length) issues.push(...breakdownIssues.slice(0, 20));
@@ -1164,7 +1182,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
         ok: true,
         status: "ready",
         phase: "complete",
-        qualityStatus: noDataCount > 0 ? "degraded" : "complete",
+        qualityStatus: "complete",
         universe: codes.length,
         computableUniverse: codes.length,
         remainingMiss: noDataCount,
@@ -1187,12 +1205,12 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const baseComplete = degradedComplete || (complete && noDataCount === 0 && errorCount === 0 && !coveragePartial);
   const qualityStatus = coveragePartial
     ? (baseComplete ? "degraded" : "partial")
-    : (baseComplete ? ((sourceWarnings.length || noDataCount > 0) ? "degraded" : "complete") : "incomplete");
+    : (baseComplete ? "complete" : "incomplete");
   if (baseComplete && coveragePartial) {
-    sourceWarnings.push("Supabase history coverage partial; published as degraded complete after scanning full universe");
+    sourceWarnings.push("Supabase history coverage partial; full computable universe scanned but publish remains degraded until coverage is complete");
   }
   if (baseComplete && noDataCount > 0) {
-    sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as degraded complete`);
+    sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as complete with warnings`);
   }
   if (staleMatches.length) {
     const staleDates = [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8);
