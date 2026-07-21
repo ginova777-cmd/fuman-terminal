@@ -281,6 +281,21 @@ function selectAuthenticatedRunIdReference(endpoints = []) {
     .map((row) => ({ ...row, runIdDateScore: runIdDateScore(row.runIds) }))
     .sort((a, b) => b.runIdDateScore - a.runIdDateScore || b.runIds.length - a.runIds.length || String(a.name).localeCompare(String(b.name)))[0] || null;
 }
+function authenticatedRunIdDriftPolicy() {
+  const payload = readJson(path.join(ROOT, "data", "terminal-ops-status-latest.json"), {});
+  const pendingNotDue = payload.state === "PENDING_NOT_DUE"
+    && payload.unattendedStatus === "NO"
+    && /^pending_not_due/.test(String(payload.reason || ""));
+  if (pendingNotDue) {
+    return {
+      allowDrift: true,
+      mode: "pending_not_due_allows_scorecard_previous_good",
+      reason: payload.reason || "pending_not_due",
+    };
+  }
+  return { allowDrift: false, mode: "strict_same_runid", reason: payload.reason || "" };
+}
+
 async function verifyAuthenticatedProtectedReadback(issues) {
   const auth = await ensureMemberToken();
   const result = {
@@ -333,6 +348,9 @@ async function verifyAuthenticatedProtectedReadback(issues) {
     runIds: reference.runIds,
     runIdDateScore: reference.runIdDateScore,
   } : null;
+  const runIdDriftPolicy = authenticatedRunIdDriftPolicy();
+  result.runIdComparisonMode = runIdDriftPolicy.mode;
+  result.runIdComparisonReason = runIdDriftPolicy.reason;
   const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
     for (const row of result.endpoints) {
@@ -342,17 +360,21 @@ async function verifyAuthenticatedProtectedReadback(issues) {
       row.unexpectedRunIds = unexpectedRunIds;
       row.missingRunIds = missingRunIds;
       if (unexpectedRunIds.length || missingRunIds.length) {
-        row.ok = false;
-        issues.push({
-          issue: `authenticated_protected_endpoint_run_id_mismatch:${row.name}`,
-          details: {
-            endpoint: row.path,
-            referenceEndpoint: reference.name,
-            unexpectedRunIds,
-            missingRunIds,
-            expectedRunIds: Array.from(expectedRunIds).sort(),
-          },
-        });
+        row.runIdDriftAllowed = runIdDriftPolicy.allowDrift;
+        row.runIdComparisonMode = runIdDriftPolicy.mode;
+        if (!runIdDriftPolicy.allowDrift) {
+          row.ok = false;
+          issues.push({
+            issue: `authenticated_protected_endpoint_run_id_mismatch:${row.name}`,
+            details: {
+              endpoint: row.path,
+              referenceEndpoint: reference.name,
+              unexpectedRunIds,
+              missingRunIds,
+              expectedRunIds: Array.from(expectedRunIds).sort(),
+            },
+          });
+        }
       }
     }
   }
