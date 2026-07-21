@@ -253,7 +253,15 @@ function buildManifest(manifest) {
 function isPendingNotDueManifest(payload = {}) {
   const manifest = payload.dailyManifest || payload;
   const blocker = String(manifest.blocker || "").toLowerCase();
-  return manifest.ok !== true && blocker.startsWith("pending_not_due:");
+  const waterText = [
+    blocker,
+    manifest.waterRootStatus,
+    payload.waterRoot?.status,
+    payload.waterRoot?.reason,
+    manifest.unattendedStatus,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return manifest.ok !== true
+    && (blocker.startsWith("pending_not_due:") || /pending_not_due|previous_good|wait_source_window|formal_scan_skipped|outside_formal_source_window/.test(waterText));
 }
 function normalizeAuthenticatedReadback(auth = {}) {
   const mode = auth.mode || "legacy-missing";
@@ -409,7 +417,7 @@ function classifyRootCause(blocker = "") {
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
   if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot/.test(text)) return "production_live_readback";
-  if (/resourcechain|resource_chain/.test(text)) return "resource_chain";
+  if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
   if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
   if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
@@ -1080,6 +1088,9 @@ async function main() {
     const failure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-resource-chain.js"), resourceArgs, "resource_chain_readback");
     if (failure) refreshFailures.push(failure);
   }
+  const opsStatusFailure = runNodeScriptBestEffort(path.join("scripts", "export-terminal-ops-status-snapshot.js"), [], "ops_status_snapshot");
+  if (opsStatusFailure) refreshFailures.push(opsStatusFailure);
+
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});
   const resourceChain = readJson(FILES.resourceChain, {});

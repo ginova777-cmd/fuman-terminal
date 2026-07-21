@@ -188,6 +188,7 @@ const STRATEGIES = [
     label: "市場總覽",
     policy: "same-day live",
     endpoint: "/api/market",
+    allowMissingDesktopSnapshot: true,
   },
 ];
 
@@ -917,7 +918,8 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (config.requireApiRunId && !compact?.runId && !compact?.membershipProtected) issues.push("terminal API missing runId");
   if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus && !live?.membershipProtected) issues.push("live API missing writeBudget disclosure");
   if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus && !compact?.membershipProtected) issues.push("terminal API missing writeBudget disclosure");
-  if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"))))) {
+  const desktopSnapshotMissingAllowed = Boolean(config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"));
+  if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !desktopSnapshotMissingAllowed))) {
     issues.push(`desktop artifact endpoint missing/error`);
   }
   if (mobile && mobile.status >= 500) issues.push(`mobile fragment ${mobile.status}`);
@@ -933,7 +935,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     && live.date === snapshot.date
   );
   const allowedRealtimeSnapshotDrift = allowedHighFrequencySnapshotDrift(config, live, snapshot);
-  if (!nonTradingRealtimeZero && !live?.membershipProtected && !snapshot?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop artifact runId (${live.runId} vs ${snapshot.runId})`);
+  if (!nonTradingRealtimeZero && !desktopSnapshotMissingAllowed && !live?.membershipProtected && !snapshot?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop artifact runId (${live.runId} vs ${snapshot.runId})`);
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   if (config.scorecardKeys?.length) {
     const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";

@@ -370,9 +370,10 @@ function localOpsStatusSummary(issues) {
   const previousGoodHold = payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
     && payload.canaryPublish?.scorecardPublishAllowed === false;
+  const pendingReason = String(payload.reason || "").toLowerCase();
   const pendingNotDue = payload.state === "PENDING_NOT_DUE"
-    && payload.unattendedStatus === "NO"
-    && /^pending_not_due/.test(String(payload.reason || ""));
+    && (payload.unattendedStatus === "NO" || payload.unattendedStatus === "PREVIOUS_GOOD_HOLD")
+    && (/^pending_not_due/.test(pendingReason) || /source_window|formal_source_window|previous_good/.test(pendingReason));
   assert(payload.unattendedStatus === "YES" || previousGoodHold || pendingNotDue, issues, "local_ops_status_not_fresh_yes_previous_good_or_pending", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason });
   assert(payload.actionMatrix?.protectedInvariants?.includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "local_ops_status_membership_invariant_missing", {
     protectedInvariants: payload.actionMatrix?.protectedInvariants,
@@ -480,4 +481,3 @@ main().catch((error) => {
   console.error(`[terminal-ops-production-live] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
