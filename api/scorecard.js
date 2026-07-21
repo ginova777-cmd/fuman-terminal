@@ -1904,7 +1904,7 @@ async function handler(request, response) {
     const payload = attachMarketCalendar(await buildPayload(requestedDate, {
       liveSourceReports,
       noCache,
-      freshStrategySourceReports: request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
+      freshStrategySourceReports: request.query?.live === "1" || request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1",
     }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
@@ -1924,5 +1924,4 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
-
 
