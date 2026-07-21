@@ -15,6 +15,7 @@ const RELEASE_SHA = normalizeSha(
 );
 const ALLOW_DIRTY = process.argv.includes("--allow-dirty");
 const REQUIRE_MAIN = !process.argv.includes("--allow-non-main");
+const GENERATED_DIRTY_ALLOWLIST = new Set(["data/terminal-ops-status-latest.json"]);
 
 const issues = [];
 
@@ -52,6 +53,14 @@ function fail(message) {
   issues.push(message);
 }
 
+function parsePorcelain(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => ({ raw: line, file: line.slice(3).replace(/\\/g, "/") }));
+}
+
 if (!fs.existsSync(MIRROR_ROOT)) {
   fail(`production mirror missing: ${MIRROR_ROOT}`);
 } else if (!fs.existsSync(path.join(MIRROR_ROOT, ".git"))) {
@@ -67,7 +76,13 @@ if (!fs.existsSync(MIRROR_ROOT)) {
   if (!status.ok) {
     fail(`cannot read mirror worktree status: ${status.stderr}`);
   } else if (status.stdout && !ALLOW_DIRTY) {
-    fail(`production mirror is dirty and cannot be used for deploy:\n${status.stdout.split(/\r?\n/).slice(0, 40).join("\n")}`);
+    const dirtyEntries = parsePorcelain(status.stdout);
+    const blockingDirty = dirtyEntries.filter((entry) => !GENERATED_DIRTY_ALLOWLIST.has(entry.file));
+    if (blockingDirty.length) {
+      fail(`production mirror is dirty and cannot be used for deploy:\n${blockingDirty.map((entry) => entry.raw).slice(0, 40).join("\n")}`);
+    } else if (dirtyEntries.length) {
+      console.warn(`[production-mirror-guard] allowing generated ops artifact dirty: ${dirtyEntries.map((entry) => entry.file).join(", ")}`);
+    }
   }
 
   const head = gitText(["rev-parse", "HEAD"]);
@@ -86,3 +101,4 @@ if (issues.length) {
 
 const head = gitText(["rev-parse", "HEAD"]).stdout || "";
 console.log(`[production-mirror-guard] ok root=${MIRROR_ROOT} head=${head.slice(0, 8)} release=${RELEASE_SHA ? RELEASE_SHA.slice(0, 8) : "none"}`);
+

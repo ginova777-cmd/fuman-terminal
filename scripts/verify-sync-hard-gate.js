@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const PRODUCTION_MIRROR_ROOT = path.resolve("C:/fuman-terminal").toLowerCase();
 const REQUIRED_VERCEL_PROJECT = "fuman-terminal";
 const VERSION_FILES = new Set(["version.json", "index.html", "fuman-sw.js"]);
+const GENERATED_DIRTY_ALLOWLIST = new Set(["data/terminal-ops-status-latest.json"]);
 const DEFAULT_ALLOWED_BRANCHES = ["main"];
 
 function splitList(value) {
@@ -40,6 +41,14 @@ function fail(message) {
   issues.push(message);
 }
 
+function parsePorcelain(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => ({ raw: line, file: line.slice(3).replace(/\\/g, "/") }));
+}
+
 function assertCleanWorktree() {
   const status = git(["status", "--porcelain=v1", "--untracked-files=all"]);
   if (!status.ok) {
@@ -47,11 +56,16 @@ function assertCleanWorktree() {
     return;
   }
   if (!status.stdout) return;
-  fail(`working tree must be clean and have no untracked files:\n${status.stdout.split(/\r?\n/).slice(0, 40).join("\n")}`);
-  const versionDirty = status.stdout
-    .split(/\r?\n/)
-    .map((line) => line.slice(3).replace(/\\/g, "/"))
+  const dirtyEntries = parsePorcelain(status.stdout);
+  const blockingDirty = dirtyEntries.filter((entry) => !GENERATED_DIRTY_ALLOWLIST.has(entry.file));
+  const versionDirty = dirtyEntries
+    .map((entry) => entry.file)
     .filter((file) => VERSION_FILES.has(file));
+  if (blockingDirty.length) {
+    fail(`working tree must be clean and have no untracked files:\n${blockingDirty.map((entry) => entry.raw).slice(0, 40).join("\n")}`);
+  } else if (dirtyEntries.length) {
+    console.warn(`[sync-hard-gate] allowing generated ops artifact dirty: ${dirtyEntries.map((entry) => entry.file).join(", ")}`);
+  }
   if (versionDirty.length) {
     fail(`version-bearing files have uncommitted changes: ${versionDirty.join(", ")}`);
   }
@@ -143,3 +157,4 @@ if (issues.length) {
 }
 
 console.log(`[sync-hard-gate] ok root=${ROOT}`);
+
