@@ -46,7 +46,11 @@ function parsePorcelain(output) {
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter(Boolean)
-    .map((line) => ({ raw: line, file: line.slice(3).replace(/\\/g, "/") }));
+    .map((line) => {
+      const match = line.match(/^[ MARCUD?!]{1,2}\s+(.+)$/);
+      const file = (match ? match[1] : line.slice(3)).replace(/\\/g, "/");
+      return { raw: line, file };
+    });
 }
 
 function assertCleanWorktree() {
@@ -157,4 +161,6 @@ if (issues.length) {
 }
 
 console.log(`[sync-hard-gate] ok root=${ROOT}`);
+
+
 

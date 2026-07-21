@@ -58,7 +58,11 @@ function parsePorcelain(output) {
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter(Boolean)
-    .map((line) => ({ raw: line, file: line.slice(3).replace(/\\/g, "/") }));
+    .map((line) => {
+      const match = line.match(/^[ MARCUD?!]{1,2}\s+(.+)$/);
+      const file = (match ? match[1] : line.slice(3)).replace(/\\/g, "/");
+      return { raw: line, file };
+    });
 }
 
 if (!fs.existsSync(MIRROR_ROOT)) {
@@ -101,4 +105,6 @@ if (issues.length) {
 
 const head = gitText(["rev-parse", "HEAD"]).stdout || "";
 console.log(`[production-mirror-guard] ok root=${MIRROR_ROOT} head=${head.slice(0, 8)} release=${RELEASE_SHA ? RELEASE_SHA.slice(0, 8) : "none"}`);
+
+
 
