@@ -13,6 +13,7 @@ const FIX = process.argv.includes("--fix") || process.argv.includes("--cleanup")
 
 const DEFAULT_ALLOWLIST = [
   "data/scorecard-latest.json",
+  "data/terminal-ops-status-latest.json",
 ];
 
 function normalizeRel(file) {
