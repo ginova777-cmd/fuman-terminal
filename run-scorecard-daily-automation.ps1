@@ -299,11 +299,9 @@ Write-Step "refresh daily manifest before scorecard publish"
 $manifestArgs = @(
   "--use-system-ca",
   "scripts\write-daily-terminal-run-manifest.js",
-  "--expected-date=$ExpectedDate"
+  "--expected-date=$ExpectedDate",
+  "--scorecard-candidate-file=$snapshotFile"
 )
-if (-not $allowPreviousForRun) {
-  $manifestArgs += "--require-formal-now"
-}
 Invoke-Step "node" $manifestArgs
 
 Write-Step "verify scorecard canary against daily manifest"

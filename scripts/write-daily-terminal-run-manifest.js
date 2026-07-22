@@ -9,6 +9,8 @@ let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date=
 const REQUESTED_DATE = EXPECTED_DATE;
 const SKIP_RUN = process.argv.includes("--from-existing");
 const REQUIRE_FORMAL_NOW = process.argv.includes("--require-formal-now");
+const SCORECARD_CANDIDATE_FILE = process.argv.find((arg) => arg.startsWith("--scorecard-candidate-file="))?.slice("--scorecard-candidate-file=".length) || "";
+const SCORECARD_PUBLISH_MODE = Boolean(SCORECARD_CANDIDATE_FILE);
 const STRATEGY_DUE_TIMES = {
   strategy2: "09:00",
   strategy3: "13:05",
@@ -37,6 +39,38 @@ function readJson(file, fallback = null) {
 }
 
 
+
+let SCORECARD_CANDIDATE_CACHE = null;
+function scorecardCandidatePayload() {
+  if (!SCORECARD_CANDIDATE_FILE) return {};
+  if (SCORECARD_CANDIDATE_CACHE !== null) return SCORECARD_CANDIDATE_CACHE;
+  const candidatePath = path.isAbsolute(SCORECARD_CANDIDATE_FILE)
+    ? SCORECARD_CANDIDATE_FILE
+    : path.resolve(ROOT, SCORECARD_CANDIDATE_FILE);
+  SCORECARD_CANDIDATE_CACHE = readJson(candidatePath, {});
+  return SCORECARD_CANDIDATE_CACHE;
+}
+
+function scorecardCandidateForKey(key) {
+  const payload = scorecardCandidatePayload();
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const row = reports.find((item) => String(item?.key || "") === String(key || ""));
+  if (!row) return {};
+  const status = Number(row.statusCode || row.status || 200);
+  const count = numeric(row.emittedRows ?? row.count ?? row.resultCount ?? row.returnedCount);
+  return {
+    status,
+    ok: row.ok !== false && status < 400,
+    runId: String(row.runId || ""),
+    count,
+    returnedCount: count,
+    readbackCount: count,
+    date: String(row.date || row.tradeDate || row.sourceDate || ""),
+    reason: String(row.reason || ""),
+    cacheSource: "scorecard-candidate-source",
+    transportSource: "pre-publish-scorecard-candidate",
+  };
+}
 function taipeiMinuteOfDay(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Taipei",
@@ -230,6 +264,7 @@ function resolveExpectedDateFromWater(water = {}, fallbackDate = EXPECTED_DATE) 
     || water.marketCalendar?.tradingDayOpen === true;
   const waterReady = water.ok === true && /ready|ok/.test(String(water.status || "").toLowerCase());
   if ((marketOpen || waterReady || REQUIRE_FORMAL_NOW) && targetDate) return targetDate;
+  if (SCORECARD_PUBLISH_MODE && targetDate) return targetDate;
   if (displayTradeDate && !REQUIRE_FORMAL_NOW) return displayTradeDate;
   return compactDate(fallbackDate || taipeiDateKey());
 }
@@ -242,7 +277,7 @@ function moduleRow(row = {}) {
   const terminal = row.terminalApi || {};
   const desktop = row.desktopSnapshot || {};
   const mobile = row.mobileFragment || {};
-  const scorecard = row.scorecard || {};
+  let scorecard = row.scorecard || {};
   const runId = firstPresent(api.runId, terminal.runId, supabase.runId, receipt.runId, desktop.runId, mobile.runId, scorecard.runId);
   const tradeDate = firstPresent(
     runDateFromId(runId),
@@ -259,6 +294,24 @@ function moduleRow(row = {}) {
     tradeDate,
   );
   let issues = Array.isArray(row.issues) ? [...row.issues] : [];
+  const candidateScorecard = scorecardCandidateForKey(row.key);
+  const candidateRunId = candidateScorecard.runId || "";
+  const candidateDate = firstPresent(
+    runDateFromId(candidateRunId),
+    compactDate(candidateScorecard.date || candidateScorecard.tradeDate || candidateScorecard.updatedAt),
+  );
+  const latestSurfaceRunId = firstPresent(supabase.runId, api.runId, terminal.runId, desktop.runId, receipt.runId, mobile.runId, runId);
+  const scorecardCandidateCoversLatest = Boolean(
+    candidateRunId
+      && latestSurfaceRunId
+      && candidateRunId === latestSurfaceRunId
+      && candidateDate === EXPECTED_DATE
+      && candidateScorecard.ok !== false
+  );
+  if (scorecardCandidateCoversLatest) {
+    scorecard = { ...scorecard, ...candidateScorecard, prePublishCandidate: true };
+    issues = issues.filter((issue) => !/^scorecard \/88 row\/sourceReport (?:runId != latest pointer|missing runId|missing for)/.test(String(issue || "")));
+  }
   const protectedReadbackBlocked = isMembershipGateSurface(api)
     || isMembershipGateSurface(terminal)
     || isMembershipGateSurface(mobile)
@@ -316,7 +369,7 @@ function moduleRow(row = {}) {
     && effectivePublishAllowed === true
     && preservePreviousGood !== true
     && !fallback
-    && row.ok === true
+    && (row.ok === true || scorecardCandidateCoversLatest === true)
     && runId
     && tradeDate === EXPECTED_DATE
     && sourceDate === EXPECTED_DATE;

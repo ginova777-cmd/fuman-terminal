@@ -67,7 +67,8 @@ assertOrdered(dailyRunner, [
 ], "daily_scorecard_runner_publish_gate");
 
 assert(dailyRunner.includes("--scorecard=$snapshotFile"), "daily_runner_canary_not_using_candidate_snapshot");
-assert(dailyRunner.includes("--require-formal-now"), "daily_runner_manifest_missing_require_formal_now_on_trading_day");
+assert(dailyRunner.includes("--scorecard-candidate-file=$snapshotFile"), "daily_runner_manifest_missing_scorecard_candidate_file");
+assert(!dailyRunner.includes("$manifestArgs += \"--require-formal-now\""), "daily_runner_manifest_must_not_use_live_formal_gate_for_scorecard_publish");
 assert(dailyRunner.includes("--allow-degraded"), "daily_runner_guard_missing_closed_day_degraded_allowance");
 assert(rollForward.includes('npmRun("scorecard:publish")'), "roll_forward_publish_not_using_manifest_gated_script");
 assert(orchestrator.includes("npm run manifest:daily-terminal-run && npm run scorecard:publish"), "orchestrator_publish_repair_not_manifest_then_publish");
