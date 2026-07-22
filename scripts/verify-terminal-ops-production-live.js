@@ -307,7 +307,20 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
       for (const runId of row.runIds) endpointCounts.set(runId, Number(endpointCounts.get(runId) || 0) + 1);
     }
     for (const row of result.endpoints) {
-      if (!row.runIds.length) continue;
+      if (!row.runIds.length) {
+        if (row.name === "terminal_fast_bundle") {
+          row.ok = false;
+          issues.push({
+            issue: "authenticated_protected_endpoint_missing_run_ids:terminal_fast_bundle",
+            details: {
+              endpoint: row.path,
+              expectedRunIds: Array.from(expectedRunIds).sort(),
+              reason: row.reason || row.error || "desktop_bundle_missing_run_ids",
+            },
+          });
+        }
+        continue;
+      }
       if (isBatchSnapshotReadbackEndpoint(row.name)) {
         row.batchSnapshotReadback = true;
         row.unexpectedRunIds = [];

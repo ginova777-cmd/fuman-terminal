@@ -782,7 +782,8 @@ module.exports = async function handler(request, response) {
   }
   if (!wantsLive) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
-    const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || 1500) || 1500);
+    const defaultSnapshotTimeoutMs = entitlement?.ok ? 8000 : 1500;
+    const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || defaultSnapshotTimeoutMs) || defaultSnapshotTimeoutMs);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
       : await readDesktopRouteSnapshot({ timeoutMs: snapshotReadTimeoutMs }).catch(() => null);
@@ -835,8 +836,11 @@ module.exports = async function handler(request, response) {
         return;
       }
       const endpoints = {};
+      const authenticatedSnapshotMiss = entitlement?.ok === true;
       const missPayload = {
         ...snapshotMissPayload("desktop_route_snapshot_timeout_or_missing"),
+        ok: authenticatedSnapshotMiss ? false : true,
+        error: authenticatedSnapshotMiss ? "authenticated_desktop_route_snapshot_required" : undefined,
         endpoints,
         summary: {},
         misses: ["desktop_route_snapshot"],
