@@ -11,6 +11,8 @@ const SKIP_RUN = process.argv.includes("--from-existing");
 const REQUIRE_FORMAL_NOW = process.argv.includes("--require-formal-now");
 const SCORECARD_CANDIDATE_FILE = process.argv.find((arg) => arg.startsWith("--scorecard-candidate-file="))?.slice("--scorecard-candidate-file=".length) || "";
 const SCORECARD_PUBLISH_MODE = Boolean(SCORECARD_CANDIDATE_FILE);
+const SELF_TEST_SCHEDULE = process.argv.includes("--self-test-schedule");
+const MOCK_TAIPEI_MINUTE = process.env.FUMAN_MANIFEST_TAIPEI_MINUTE ? Number(process.env.FUMAN_MANIFEST_TAIPEI_MINUTE) : null;
 const STRATEGY_DUE_TIMES = {
   strategy2: "09:00",
   strategy3: "13:05",
@@ -72,6 +74,7 @@ function scorecardCandidateForKey(key) {
   };
 }
 function taipeiMinuteOfDay(date = new Date()) {
+  if (Number.isFinite(MOCK_TAIPEI_MINUTE)) return MOCK_TAIPEI_MINUTE;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Taipei",
     hour: "2-digit",
@@ -90,10 +93,9 @@ function minuteFromClock(value) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function scheduleStatusForKey(key) {
+function scheduleStatusForKey(key, currentMinute = taipeiMinuteOfDay()) {
   const dueTime = STRATEGY_DUE_TIMES[key] || "00:00";
   const dueMinute = minuteFromClock(dueTime);
-  const currentMinute = taipeiMinuteOfDay();
   const pendingNotDue = dueMinute !== null && currentMinute < dueMinute;
   return {
     dueTime,
@@ -101,6 +103,42 @@ function scheduleStatusForKey(key) {
     dueMinute,
     pendingNotDue,
     status: pendingNotDue ? "PENDING_NOT_DUE" : "DUE",
+  };
+}
+function selfTestScheduleTransitions() {
+  const cases = [
+    { key: "strategy2", before: "08:59", at: "09:00" },
+    { key: "strategy3", before: "13:04", at: "13:05" },
+    { key: "strategy4", before: "15:59", at: "16:00" },
+    { key: "warrant", before: "20:29", at: "20:30" },
+    { key: "strategy5", before: "20:59", at: "21:00" },
+    { key: "institution", before: "20:59", at: "21:00" },
+    { key: "cb", before: "21:24", at: "21:25" },
+  ];
+  const rows = cases.map((item) => {
+    const before = scheduleStatusForKey(item.key, minuteFromClock(item.before));
+    const at = scheduleStatusForKey(item.key, minuteFromClock(item.at));
+    return {
+      key: item.key,
+      dueTime: STRATEGY_DUE_TIMES[item.key],
+      beforeMinute: item.before,
+      atMinute: item.at,
+      beforeStatus: before.status,
+      atStatus: at.status,
+      beforePendingNotDue: before.pendingNotDue,
+      atPendingNotDue: at.pendingNotDue,
+      ok: before.pendingNotDue === true && at.pendingNotDue === false && at.status === "DUE",
+    };
+  });
+  const ok = rows.every((row) => row.ok === true);
+  return {
+    ok,
+    contract: "daily-terminal-run-schedule-transition-self-test-v1",
+    checkedAt: new Date().toISOString(),
+    rule: "pending_not_due_before_due_time_and_due_at_exact_due_minute",
+    activeDueTimes: STRATEGY_DUE_TIMES,
+    rows,
+    issues: rows.filter((row) => row.ok !== true).map((row) => `schedule_transition_failed:${row.key}:${row.beforeStatus}->${row.atStatus}`),
   };
 }
 function runDateFromId(value) {
@@ -456,6 +494,12 @@ function markdown(manifest) {
 }
 
 async function main() {
+  if (SELF_TEST_SCHEDULE) {
+    const payload = selfTestScheduleTransitions();
+    console.log(JSON.stringify(payload, null, 2));
+    if (!payload.ok) process.exitCode = 1;
+    return;
+  }
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
   const commands = [];
   if (!SKIP_RUN) {
