@@ -228,7 +228,7 @@ function createCaptureResponse(resolve) {
 
 function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
-  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  const query = Object.fromEntries(url.searchParams.entries());
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("strategy4_internal_timeout")), 12000);
     const finish = (result) => {
@@ -275,6 +275,13 @@ function fetchStrategy5Internal(request, endpoint) {
       reject(error);
     });
   });
+}
+
+function shouldUseLiveFragment(tab, request) {
+  return tab === "strategy2" && (
+    request.query?.live === "1"
+    || process.env.FUMAN_MOBILE_DAYTRADE_LIVE === "1"
+  );
 }
 
 function esc(value) {
@@ -803,7 +810,7 @@ module.exports = async function handler(request, response) {
       compact: 1,
       shell: 1,
       limit: 60,
-      ...(tab !== "ai" ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
+      ...(shouldUseLiveFragment(tab, request) ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({
@@ -812,7 +819,7 @@ module.exports = async function handler(request, response) {
       maxAgeMs: tab === "strategy2" ? 24 * 60 * 60 * 1000 : undefined,
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab !== "ai";
+    const forceLivePayload = shouldUseLiveFragment(tab, request);
     const payload = forceLivePayload
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 

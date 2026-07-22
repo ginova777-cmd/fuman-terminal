@@ -17,22 +17,22 @@ const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECAR
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
 const FORMAL_STRATEGY_ENDPOINTS = {
-  "策略2成績單": "/api/strategy2-latest?live=1",
-  "策略3隔日沖成績單": "/api/strategy3-latest?live=1",
-  "策略4成績單": "/api/strategy4-latest?live=1",
-  "策略5成績單": "/api/strategy5-latest?live=1",
-  "買賣超成績單": "/api/institution-latest?live=1",
-  "權證成績單": "/api/warrant-flow-latest?live=1",
-  "CB成績單": "/api/cb-detect-latest?live=1",
+  "策略2成績單": "/api/strategy2-latest",
+  "策略3隔日沖成績單": "/api/strategy3-latest",
+  "策略4成績單": "/api/strategy4-latest",
+  "策略5成績單": "/api/strategy5-latest",
+  "買賣超成績單": "/api/institution-latest",
+  "權證成績單": "/api/warrant-flow-latest",
+  "CB成績單": "/api/cb-detect-latest",
 };
 const AUDIT_SURFACES = [
-  ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest?live=1"],
-  ["strategy3", "Strategy3", "/api/strategy3-latest?live=1"],
-  ["strategy4", "Strategy4", "/api/strategy4-latest?live=1"],
-  ["strategy5", "Strategy5", "/api/strategy5-latest?live=1"],
-  ["institution", "Institution / 買賣超", "/api/institution-latest?live=1"],
-  ["cb", "CB", "/api/cb-detect-latest?live=1"],
-  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest?live=1"],
+  ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest"],
+  ["strategy3", "Strategy3", "/api/strategy3-latest"],
+  ["strategy4", "Strategy4", "/api/strategy4-latest"],
+  ["strategy5", "Strategy5", "/api/strategy5-latest"],
+  ["institution", "Institution / 買賣超", "/api/institution-latest"],
+  ["cb", "CB", "/api/cb-detect-latest"],
+  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest"],
   ["market-ai", "Market AI", "/api/market-ai-live"],
   ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
   ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
@@ -462,7 +462,6 @@ function callStrategy3Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "60",
       };
       timer = setTimeout(async () => resolve({
@@ -475,7 +474,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
+        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -504,7 +503,6 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         today: "1",
         verify: "1",
         top: "1",
@@ -519,7 +517,7 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&live=1&today=1&verify=1&top=1",
+        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&today=1&verify=1&top=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -548,7 +546,6 @@ function callStrategy4Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "70",
       };
       timer = setTimeout(async () => resolve({
@@ -561,7 +558,7 @@ function callStrategy4Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
+        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -590,7 +587,6 @@ function callCbDetectLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "60",
       };
       timer = setTimeout(() => resolve({
@@ -603,7 +599,7 @@ function callCbDetectLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
+        url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -632,7 +628,6 @@ function callWarrantLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "500",
       };
       timer = setTimeout(() => resolve({
@@ -645,7 +640,7 @@ function callWarrantLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&live=1&limit=500",
+        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=500",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -673,7 +668,6 @@ function callStrategy5Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "70",
       };
       timer = setTimeout(() => resolve({
@@ -686,7 +680,7 @@ function callStrategy5Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
+        url: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -826,7 +820,6 @@ function callInstitutionLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        live: "1",
         limit: "1200",
       };
       timer = setTimeout(() => resolve({
@@ -839,7 +832,7 @@ function callInstitutionLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/institution-latest?canvas=1&compact=1&shell=1&live=1&limit=1200",
+        url: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -1528,7 +1521,7 @@ function decorateRecords(payload, reason = "") {
     return {
       ...row,
       strategyName,
-      endpoint: FORMAL_STRATEGY_ENDPOINTS[strategyName] || "/api/scorecard?live=1",
+      endpoint: FORMAL_STRATEGY_ENDPOINTS[strategyName] || "/api/scorecard",
       runId: cleanText(payload.runId),
       tradeDate: cleanText(row.record_date || payload.marketDate || payload.latestDate),
       usedDate: cleanText(row.record_date || payload.latestDate),

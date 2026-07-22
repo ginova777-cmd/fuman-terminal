@@ -16,7 +16,6 @@ const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
-const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
@@ -432,7 +431,6 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
   const currentRunId = String(currentPayload.runId || currentPayload.transport?.runId || "").trim();
   const result = await callJson("/api/strategy5-latest", strategy5Latest, request, {
     ...compactQuery(140),
-    live: "1",
   }, 8000);
   const replacement = result?.payload;
   let finalReplacement = replacement;
@@ -445,7 +443,6 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
         canvas: true,
         compact: true,
         shell: true,
-        live: true,
         limit: 140,
         chipSourceHealth: null,
       });
@@ -462,7 +459,7 @@ async function repairStrategy5FullSnapshot(request, endpoints) {
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
   });
-  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1"] = {
+  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140"] = {
     ...finalReplacement,
     transport: {
       ...(finalReplacement.transport || {}),
@@ -517,9 +514,6 @@ async function repairStrategy3LatestSnapshot(request, endpoints) {
   const [currentEndpoint, currentPayload] = currentEntry || ["", null];
   const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
     ...compactQuery(60),
-    live: "1",
-    verify: "1",
-    noSnapshot: "1",
   }, 9000);
   const replacement = result?.payload;
   const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "");
@@ -530,7 +524,7 @@ async function repairStrategy3LatestSnapshot(request, endpoints) {
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
   });
-  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60"] = shapeTopPayload(request, {
     ...replacement,
     transport: {
       ...(replacement.transport || {}),
@@ -557,9 +551,6 @@ async function repairStrategy4LatestSnapshot(request, endpoints) {
   // Strategy4 must refresh from the latest complete run even when the desktop snapshot contains an older endpoint.
   const result = await callJson("/api/strategy4-latest", strategy4Latest, request, {
     ...compactQuery(70),
-    live: "1",
-    verify: "1",
-    noSnapshot: "1",
   }, 20000);
   const replacement = result?.payload;
   const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
@@ -569,7 +560,7 @@ async function repairStrategy4LatestSnapshot(request, endpoints) {
   Object.keys(endpoints || {}).forEach((endpoint) => {
     if (isStrategy4Endpoint(endpoint)) delete endpoints[endpoint];
   });
-  endpoints["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+  endpoints["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70"] = shapeTopPayload(request, {
     ...replacement,
     transport: {
       ...(replacement.transport || {}),
@@ -707,9 +698,9 @@ async function ensureDesktopRequiredEndpoint(request, endpoints, spec, options =
 async function ensureDesktopRequiredEndpoints(request, endpoints, options = {}) {
   const specs = [
     { endpoint: "/api/market", prefix: "/api/market", handler: market, query: compactQuery(24), timeoutMs: 4200, repair: "market-required-endpoint" },
-    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 6500, repair: "institution-required-endpoint" },
-    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 6500, repair: "cb-required-endpoint" },
-    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: { ...compactQuery(60), live: "1" }, timeoutMs: 9000, repair: "warrant-required-endpoint" },
+    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: compactQuery(60), timeoutMs: 6500, repair: "institution-required-endpoint" },
+    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: compactQuery(60), timeoutMs: 6500, repair: "cb-required-endpoint" },
+    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: compactQuery(60), timeoutMs: 9000, repair: "warrant-required-endpoint" },
   ];
   for (const spec of specs) {
     await ensureDesktopRequiredEndpoint(request, endpoints, spec, options);
@@ -719,6 +710,11 @@ function isMiss(item) {
   if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
   return Number(item.statusCode || 0) >= 500 || item.payload?.ok === false;
+}
+
+function terminalSnapshotRepairEnabled(request) {
+  return request.query?.repairSnapshot === "1"
+    || process.env.FUMAN_TERMINAL_SNAPSHOT_REPAIR === "1";
 }
 
 function liveFallbackEnabled(request) {
@@ -788,25 +784,22 @@ module.exports = async function handler(request, response) {
       response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
-      let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
-      if (!isReleaseReadbackSnapshot) {
+      const allowSnapshotRepair = terminalSnapshotRepairEnabled(request);
+      let realtimeRadarRepairs = isReleaseReadbackSnapshot
+        ? { skipped: "release-readback-snapshot" }
+        : { skipped: allowSnapshotRepair ? "retired-realtime-radar" : "snapshot-repair-disabled" };
+      if (allowSnapshotRepair && !isReleaseReadbackSnapshot) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
-        realtimeRadarRepairs = await repairRealtimeRadarSnapshotEndpoints(request, endpoints, {
-          timeoutMs: 5500,
-          via: "api/terminal-fast-bundle",
-          shapePayload: (payload) => shapeTopPayload(request, payload),
+        await repairStrategy4LatestSnapshot(request, endpoints);
+        await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
+          via: "api/terminal-fast-bundle:snapshot-repair",
+          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
         });
+        await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-repair" });
       }
-      await repairStrategy5FullSnapshot(request, endpoints);
-      await repairStrategy4LatestSnapshot(request, endpoints);
-      await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
-        cacheSource: "api/terminal-fast-bundle:snapshot-derived",
-        via: "api/terminal-fast-bundle:snapshot",
-        updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
-      });
-      await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot" });
       sanitizeStrategy2Endpoints(endpoints);
       const payload = {
         ...snapshot.payload,
