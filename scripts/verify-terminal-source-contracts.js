@@ -98,7 +98,7 @@ const CONTRACTS = [
         "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),
+      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 45, level: "warning" }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
     ],
   },

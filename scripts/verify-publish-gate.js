@@ -1610,12 +1610,14 @@ if (!/FAST_DEBOUNCE_SKIP/.test(cacheSync) || !/FUMAN_FAST_GATE_COMMIT_DEBOUNCE_M
   issues.push("run-cache-sync.ps1 missing fast gate commit debounce");
 }
 for (const marker of [
-  "realtimeRadarCache: \"/api/realtime-radar-latest\"",
+  "realtimeRadarLatestApi: \"\"",
+  "realtimeRadarCache: \"\"",
+  "realtimeRadarStaticCache: \"\"",
 ]) {
-  if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js missing live realtime radar endpoint marker ${marker}`);
+  if (!runtimeConfig.includes(marker)) issues.push(`terminal-runtime-config.js missing retired realtime radar endpoint marker ${marker}`);
 }
-if (/realtimeRadarStaticCache:\s*"\/data\/realtime-radar-latest\.json"/.test(runtimeConfig)) {
-  issues.push("terminal-runtime-config.js must not expose realtime radar static cache fallback");
+if (/realtimeRadar(Cache|LatestApi|StaticCache):\s*"\/api\/realtime-radar-latest|realtimeRadarStaticCache:\s*"\/data\/realtime-radar-latest\.json"/.test(runtimeConfig)) {
+  issues.push("terminal-runtime-config.js must not expose retired realtime radar endpoint or static cache fallback");
 }
 for (const marker of [
   "strategy4Cache: \"/api/strategy4-latest\"",
@@ -2654,24 +2656,14 @@ for (const marker of [
 ]) {
   if (!terminalSourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing source contract marker ${marker}`);
 }
-for (const marker of [
-  "realtimeRadarCache",
-  "realtime-radar-cache",
-  "fuman_realtime_radar_cache",
-  "fugle_realtime_quote_latest",
-  "formal quote-view fallback",
-  "staleQuoteCount",
-  "failedBatchCount",
-  "sourceExcludedCodes",
-]) {
-  if (!terminalSourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing realtime radar formal source-contract marker ${marker}`);
+if (terminalSourceContracts.includes('key: "realtime-radar"')) {
+  issues.push("verify-terminal-source-contracts.js must not include retired realtime-radar as a formal source contract");
 }
-const realtimeRadarSourceIndex = terminalSourceContracts.indexOf('key: "realtime-radar"');
-const realtimeRadarSourceBlock = realtimeRadarSourceIndex >= 0 ? terminalSourceContracts.slice(realtimeRadarSourceIndex, realtimeRadarSourceIndex + 1600) : "";
-if (!realtimeRadarSourceBlock) {
-  issues.push("verify-terminal-source-contracts.js missing realtime-radar contract block");
-} else if (/fugle_quotes_live/.test(realtimeRadarSourceBlock)) {
-  issues.push("verify-terminal-source-contracts.js realtime-radar contract must not read retired fugle_quotes_live; use fuman_realtime_radar_cache plus fugle_realtime_quote_latest fallback");
+for (const marker of [
+  "retiredSourceTable",
+  "retired source; not a formal gate",
+]) {
+  if (!terminalSourceContracts.includes(marker)) issues.push(`verify-terminal-source-contracts.js missing retired-source marker ${marker}`);
 }
 const fugleSourceContract = read("ops/public-slot/FugleSourceResourceContract.sql");
 for (const marker of [

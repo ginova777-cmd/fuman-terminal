@@ -4,7 +4,6 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 
 const requiredRuntimeApis = [
-  "/api/open-buy-latest",
   "/api/strategy2-latest",
   "/api/strategy3-latest",
   "/api/strategy4-latest",
@@ -34,7 +33,6 @@ const runtimeFiles = [
 ];
 
 const apiFiles = [
-  "api/open-buy-latest.js",
   "api/strategy2-latest.js",
   "api/strategy3-latest.js",
   "api/strategy4-latest.js",
@@ -45,7 +43,6 @@ const apiFiles = [
 ];
 
 const scannerMarkers = [
-  ["scripts/scan-open-buy-cache.js", "OPEN_BUY_API_ONLY = true"],
   ["scripts/scan-intraday-signals.js", "STRATEGY2_API_ONLY = true"],
   ["scripts/scan-strategy3-cache.js", "STRATEGY3_API_ONLY = true"],
   ["scripts/scan-strategy4-cache.js", "STRATEGY4_API_ONLY = true"],
@@ -88,6 +85,17 @@ for (const file of runtimeFiles) {
 const runtimeConfig = read("terminal-runtime-config.js");
 for (const endpoint of requiredRuntimeApis) {
   if (!runtimeConfig.includes(endpoint)) fail(`terminal-runtime-config.js missing ${endpoint}`);
+}
+
+const retiredRuntimeMarkers = [
+  'openBuyCache: ""',
+  'scanOpenBuy: ""',
+  'realtimeRadarLatestApi: ""',
+  'realtimeRadarCache: ""',
+  'realtimeRadarStaticCache: ""',
+];
+for (const marker of retiredRuntimeMarkers) {
+  if (!runtimeConfig.includes(marker)) fail(`terminal-runtime-config.js missing retired endpoint marker ${marker}`);
 }
 
 for (const file of apiFiles) {
