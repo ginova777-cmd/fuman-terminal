@@ -1161,23 +1161,10 @@ async function main() {
 
   await fs.promises.writeFile(reportFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await fs.promises.writeFile(path.join(OUT_DIR, "production-unattended-readiness-report.md"), markdown(payload), "utf8");
-  const opsStatusFile = path.join(ROOT, "data", "terminal-ops-status-latest.json");
-  const latestOpsStatus = readJson(opsStatusFile, {});
-  if (latestOpsStatus && typeof latestOpsStatus === "object" && !Array.isArray(latestOpsStatus)) {
-    latestOpsStatus.generatedAt = payload.checkedAt;
-    latestOpsStatus.releaseIdentity = payload.releaseIdentity;
-    latestOpsStatus.rootCauseSummary = payload.rootCauseSummary;
-    latestOpsStatus.rootCauseRecoveryPlan = payload.rootCauseRecoveryPlan;
-    latestOpsStatus.readinessReport = {
-      contract: payload.contract,
-      status: payload.status,
-      ok: payload.ok,
-      checkedAt: payload.checkedAt,
-      releaseSha: payload.releaseIdentity.releaseSha,
-      blockers: payload.blockers.map((row) => row.blocker),
-    };
-    await fs.promises.writeFile(opsStatusFile, `${JSON.stringify(latestOpsStatus, null, 2)}\n`, "utf8");
-  }
+  // Keep this report writer side-effect free for terminal ops snapshots.
+  // data/terminal-ops-status-latest.json is owned by ops:status:export;
+  // rewriting it here makes every production readback dirty because release SHA
+  // changes after each commit/deploy cycle.
   console.log(JSON.stringify({
     ok: payload.ok,
     contract: payload.contract,
