@@ -115,6 +115,13 @@ const websocketCollector = read("ops/public-slot/fugle-websocket-collector.js");
 if (/addMany\("strategy1"|addMany\("realtimeRadar"/.test(websocketCollector)) {
   issues.push({ file: "ops/public-slot/fugle-websocket-collector.js", code: "retired_priority_seed_in_websocket_collector", line: "WebSocket collector must not subscribe Strategy1/realtime radar priority seeds" });
 }
+const productionLiveVerifier = read("scripts/verify-terminal-ops-production-live.js");
+if (/\/api\/scorecard\?live=1/.test(productionLiveVerifier)) {
+  issues.push({ file: "scripts/verify-terminal-ops-production-live.js", code: "production_verifier_scorecard_live_query", line: "scorecard production readback must use snapshot endpoint, not ?live=1" });
+}
+if (/\/api\/source-reports\?live=1/.test(productionLiveVerifier)) {
+  issues.push({ file: "scripts/verify-terminal-ops-production-live.js", code: "production_verifier_source_reports_live_query", line: "sourceReports production readback must use snapshot endpoint, not ?live=1" });
+}
 const sourceReports = read("api/source-reports.js");
 if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
   issues.push({ file: "api/source-reports.js", code: "missing_source_reports_live_gate", line: "FUMAN_SCORECARD_LIVE_SOURCE_REPORTS" });

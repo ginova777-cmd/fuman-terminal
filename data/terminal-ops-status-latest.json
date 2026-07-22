@@ -2,7 +2,7 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T11:45:32.420Z",
+  "generatedAt": "2026-07-22T14:11:16.867Z",
   "checkedAt": "2026-07-22T08:11:20.271Z",
   "tradeDate": "20260722",
   "state": "PENDING_NOT_DUE",
@@ -319,30 +319,28 @@
       "key": "strategy5",
       "label": "策略5",
       "ok": true,
-      "complete": false,
-      "fallback": true,
-      "rawFallback": true,
-      "evidenceStatus": "insufficient",
-      "publishAllowed": false,
-      "runId": "strategy5-20260721-20260721130109",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
-      "resultCount": 58,
-      "pendingNotDue": true,
+      "complete": true,
+      "fallback": false,
+      "rawFallback": false,
+      "evidenceStatus": "complete",
+      "publishAllowed": true,
+      "runId": "strategy5-20260722-20260722133045",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
+      "resultCount": 48,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:21:00",
-      "issues": [
-        "pending_not_due:21:00"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -351,30 +349,28 @@
       "key": "institution",
       "label": "買賣超",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "institution-20260721-20260721131555",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
-      "resultCount": 204,
-      "pendingNotDue": true,
+      "runId": "institution-20260722-20260722131548",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
+      "resultCount": 221,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:21:00",
-      "issues": [
-        "pending_not_due:21:00"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -383,30 +379,28 @@
       "key": "cb",
       "label": "CB",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "cb-detect-20260721-214532",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
+      "runId": "cb-detect-20260722-214516",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
       "resultCount": 3,
-      "pendingNotDue": true,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:21:25",
-      "issues": [
-        "pending_not_due:21:25"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -415,54 +409,209 @@
       "key": "warrant",
       "label": "權證走向",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "warrant-flow-20260721-20260721125140",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
-      "resultCount": 43,
-      "pendingNotDue": true,
+      "runId": "warrant-flow-20260722-20260722125022",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
+      "resultCount": 120,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:20:30",
-      "issues": [
-        "pending_not_due:20:30"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
     }
   ],
-  "jobQueue": [],
+  "jobQueue": [
+    {
+      "key": "cb",
+      "label": "CB",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (cb-detect-20260721-214532 vs cb-detect-20260722-214516)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "institution",
+      "label": "買賣超",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (institution-20260721-20260721131555 vs institution-20260722-20260722131548)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "strategy2",
+      "label": "策略2 即時",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (strategy2-20260721-120146 vs strategy2-20260722-111122)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "strategy3",
+      "label": "策略3",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (strategy3-20260721-20260721070946 vs strategy3-20260722-20260722073639)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "strategy4",
+      "label": "策略4",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (strategy4-20260721-20260721091043 vs strategy4-20260722-20260722080805)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "strategy5",
+      "label": "策略5",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (strategy5-20260721-20260721130109 vs strategy5-20260722-20260722133045)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    },
+    {
+      "key": "warrant",
+      "label": "權證走向",
+      "state": "FAILED_PUBLISH",
+      "priority": 40,
+      "retryable": true,
+      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (warrant-flow-20260721-20260721125140 vs warrant-flow-20260722-20260722125022)",
+      "nextAction": "rerun_scorecard_source_sync_and_manifest_publish_gate",
+      "command": "npm run manifest:daily-terminal-run && npm run scorecard:publish",
+      "reasonCodes": [
+        "SCORECARD_DATE_MISMATCH"
+      ],
+      "primaryReasonCode": "SCORECARD_DATE_MISMATCH",
+      "reasonActions": [
+        "republish_scorecard_after_manifest_green"
+      ],
+      "reasonLayers": [
+        "scorecard"
+      ],
+      "reasonSeverity": "critical",
+      "reasonUnknown": false
+    }
+  ],
   "reasonCodeSummary": {
     "contract": "terminal-reason-code-summary-v1",
     "ok": true,
-    "entries": 18,
+    "entries": 25,
     "unknownEntries": 0,
-    "criticalEntries": 1,
+    "criticalEntries": 8,
     "codes": [
       "CLOSURE_GREEN",
       "DAILY_MANIFEST_NOT_OK",
       "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW",
       "PREVIOUS_GOOD_PRESERVED",
-      "SCHEDULE_PENDING_NOT_DUE"
+      "SCHEDULE_PENDING_NOT_DUE",
+      "SCORECARD_DATE_MISMATCH"
     ],
     "primaryCode": "DAILY_MANIFEST_NOT_OK",
     "actions": [
       "continue_autonomous_monitoring",
       "inspect_daily_manifest_modules",
       "preserve_previous_good_and_mark_degraded",
+      "republish_scorecard_after_manifest_green",
       "wait_or_recheck_source_window",
       "wait_until_due_time"
     ]
@@ -479,10 +628,10 @@
         "category": "schedule_pending",
         "severity": "info",
         "count": 1,
+        "action": "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
         "blockers": [
           "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
-        ],
-        "action": "Wait until each module due time, keep previous-good visible, and do not run formal publish early."
+        ]
       }
     ]
   },
@@ -504,6 +653,8 @@
         "severity": "info",
         "blockerCount": 1,
         "canAutoExecute": false,
+        "canExecuteNow": false,
+        "blockedBy": [],
         "automation": "wait_until_due_time",
         "requires": [
           "module_due_time_reached",
@@ -515,9 +666,7 @@
           }
         ],
         "reason": "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
-        "stopMode": "pending_not_due",
-        "canExecuteNow": false,
-        "blockedBy": []
+        "stopMode": "pending_not_due"
       }
     ]
   },
@@ -525,11 +674,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
     "ok": true,
-    "checkedAt": "2026-07-22T11:45:32.420Z",
-    "releaseSha": "edead3676e695d398691e80995496316e0a5f128",
-    "blockers": [
-      "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
-    ]
+    "checkedAt": "2026-07-22T11:53:41.884Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
@@ -714,16 +859,5 @@
     "marketClosedMode": false,
     "layers": 21,
     "issues": []
-  },
-  "releaseIdentity": {
-    "branch": "main",
-    "headSha": "edead3676e695d398691e80995496316e0a5f128",
-    "originMainSha": "edead3676e695d398691e80995496316e0a5f128",
-    "worktreeClean": false,
-    "deploymentUrl": "https://fuman-terminal.vercel.app",
-    "releaseSha": "edead3676e695d398691e80995496316e0a5f128",
-    "deployId": "dpl_Bbeh4RdSrhK1pFBHYp7MF4cQvUpA",
-    "deploymentPreviewUrl": "fuman-terminal-r3mtkrqt8-ginova777-9771s-projects.vercel.app",
-    "releaseBranch": "main"
   }
 }

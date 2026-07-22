@@ -19,8 +19,8 @@ const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUM
 
 const DIRECT_PROTECTED_ENDPOINTS = [
   { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
-  { name: "scorecard", path: "/api/scorecard?live=1" },
-  { name: "source_reports", path: "/api/source-reports?live=1" },
+  { name: "scorecard", path: "/api/scorecard" },
+  { name: "source_reports", path: "/api/source-reports" },
 ];
 
 const REDACTED_LOCKED_ENDPOINTS = [
@@ -253,8 +253,8 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   result.mode = "authenticated-readback";
   const targets = [
     { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
-    { name: "scorecard", path: "/api/scorecard?live=1" },
-    { name: "source_reports", path: "/api/source-reports?live=1" },
+    { name: "scorecard", path: "/api/scorecard" },
+    { name: "source_reports", path: "/api/source-reports" },
     { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70" },
     { name: "mobile_boot", path: "/api/mobile-boot" },
   ];
