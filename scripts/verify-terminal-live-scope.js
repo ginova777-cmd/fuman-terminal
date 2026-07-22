@@ -10,6 +10,7 @@ const files = [
   "api/terminal-ops-status.js",
   "api/desktop-route-snapshot.js",
   "api/warrant-flow-latest.js",
+  "terminal-runtime-config.js",
   "scripts/fugle-websocket-collector.js",
   "scripts/verify-terminal-resource-chain.js",
 ];
@@ -154,6 +155,13 @@ if (/live=1/.test(desktopRouteSnapshot)) {
 }
 if (!/function releaseReadbackSnapshot\(\) \{\s*return null;\s*\}/s.test(desktopRouteSnapshot)) {
   issues.push({ file: "api/desktop-route-snapshot.js", code: "desktop_release_readback_not_disabled", line: "releaseReadbackSnapshot must be disabled to avoid old first-paint data" });
+}
+const runtimeConfig = read("terminal-runtime-config.js");
+if (/\/api\/(?:heatmap|realtime-radar-latest|open-buy-latest|scan-open-buy)\b/.test(runtimeConfig) || /tab=strategy1/.test(runtimeConfig)) {
+  issues.push({ file: "terminal-runtime-config.js", code: "runtime_config_retired_endpoint", line: "runtime config must not expose retired heatmap/realtime/Strategy1/open-buy endpoints" });
+}
+if (!/mobileAiLatest:\s*"\/api\/mobile-fragment\?tab=ai"/.test(runtimeConfig)) {
+  issues.push({ file: "terminal-runtime-config.js", code: "runtime_config_mobile_ai_not_ai_tab", line: "mobile AI fragment must point to tab=ai, not retired strategy1" });
 }
 const sourceReports = read("api/source-reports.js");
 if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
