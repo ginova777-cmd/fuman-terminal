@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T19:02:20.134Z",
-  "checkedAt": "2026-07-22T18:37:27.343Z",
+  "generatedAt": "2026-07-22T23:27:16.063Z",
+  "checkedAt": "2026-07-22T23:26:18.449Z",
   "tradeDate": "20260723",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -526,7 +526,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
     "ok": true,
-    "checkedAt": "2026-07-22T18:51:16.086Z"
+    "checkedAt": "2026-07-22T23:18:35.011Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
@@ -571,6 +571,8 @@
       "DEGRADED_PREVIOUS_GOOD",
       "BLOCKED_SOURCE",
       "BLOCKED_AUTH",
+      "BLOCKED_RUNID_MISMATCH",
+      "BLOCKED_DATE_MISMATCH",
       "FAILED_SCAN",
       "FAILED_PUBLISH",
       "FAILED_DISPLAY"
