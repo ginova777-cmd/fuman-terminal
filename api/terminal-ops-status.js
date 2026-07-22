@@ -4,16 +4,24 @@ const { buildLatestOpsStatus, mergeLiveSourceReports } = require("../lib/termina
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 
+function terminalOpsLiveOverlayEnabled(request = {}) {
+  const query = request.query || {};
+  const envEnabled = process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "1";
+  const queryRequested = query.liveOverlay === "1" || query.strictLiveReports === "1";
+  return envEnabled && queryRequested;
+}
+
 async function buildLiveOverlayPayload(payload, request = {}) {
   const query = request.query || {};
-  const liveOverlayRequested = query.liveOverlay === "1" || query.strictLiveReports === "1" || process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "1";
+  const queryRequested = query.liveOverlay === "1" || query.strictLiveReports === "1";
+  const liveOverlayRequested = terminalOpsLiveOverlayEnabled(request);
   if (!liveOverlayRequested || process.env.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "0") {
     return {
       ...payload,
       liveOverlay: {
         ok: true,
         source: "daily-manifest-base",
-        reason: liveOverlayRequested ? "live_overlay_disabled" : "live_overlay_not_requested",
+        reason: queryRequested ? "live_overlay_env_disabled" : "live_overlay_not_requested",
         checkedAt: new Date().toISOString(),
       },
     };
@@ -69,4 +77,4 @@ async function handler(request, response) {
 }
 
 module.exports = withEntitlementRequired(handler, "terminal-ops-status");
-module.exports.__test = { handler, buildLatestOpsStatus, buildLiveOverlayPayload };
+module.exports.__test = { handler, buildLatestOpsStatus, buildLiveOverlayPayload, terminalOpsLiveOverlayEnabled };

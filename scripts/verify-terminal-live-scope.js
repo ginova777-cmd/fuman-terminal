@@ -7,6 +7,7 @@ const files = [
   "api/mobile-fragment.js",
   "api/scorecard.js",
   "api/source-reports.js",
+  "api/terminal-ops-status.js",
 ];
 
 const issues = [];
@@ -87,6 +88,16 @@ if (!scorecard.includes("const liveSnapshotReadback = scorecardLiveSnapshotReadb
   issues.push({ file: "api/scorecard.js", code: "scorecard_live_snapshot_not_env_gated", line: "live/snapshotLive must not directly force live readback" });
 }
 
+const terminalOpsStatus = read("api/terminal-ops-status.js");
+if (!terminalOpsStatus.includes("function terminalOpsLiveOverlayEnabled")) {
+  issues.push({ file: "api/terminal-ops-status.js", code: "missing_terminal_ops_live_overlay_gate", line: "FUMAN_TERMINAL_OPS_LIVE_OVERLAY" });
+}
+if (!terminalOpsStatus.includes("return envEnabled && queryRequested;")) {
+  issues.push({ file: "api/terminal-ops-status.js", code: "terminal_ops_live_overlay_not_env_gated", line: "liveOverlay/strictLiveReports must not directly enable scorecard live overlay" });
+}
+if (/query\.liveOverlay === "1" \|\| query\.strictLiveReports === "1" \|\| process\.env\.FUMAN_TERMINAL_OPS_LIVE_OVERLAY === "1"/.test(terminalOpsStatus)) {
+  issues.push({ file: "api/terminal-ops-status.js", code: "terminal_ops_query_direct_live_overlay", line: "query params cannot directly enable live overlay" });
+}
 const publicSlotSharedSource = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
 if (/strategy1_open_buy_results\?select/i.test(publicSlotSharedSource)) {
   issues.push({ file: "ops/public-slot/Run-PublicSlotSharedSource.ps1", code: "retired_strategy1_shared_source_read", line: "shared source warmup must not read strategy1_open_buy_results" });
