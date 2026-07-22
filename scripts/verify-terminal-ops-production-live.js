@@ -253,10 +253,17 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   result.mode = "authenticated-readback";
   const targets = [
     { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
-    { name: "scorecard", path: "/api/scorecard" },
-    { name: "source_reports", path: "/api/source-reports" },
-    { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70" },
+    { name: "scorecard", path: "/api/scorecard", requireAllRunIds: true },
+    { name: "source_reports", path: "/api/source-reports", requireAllRunIds: true },
+    { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", requireAllRunIds: true },
     { name: "mobile_boot", path: "/api/mobile-boot" },
+    { name: "mobile_strategy2", path: "/api/mobile-fragment?tab=strategy2", expectedKey: "strategy2" },
+    { name: "mobile_strategy3", path: "/api/mobile-fragment?tab=strategy3", expectedKey: "strategy3" },
+    { name: "mobile_strategy4", path: "/api/mobile-fragment?tab=strategy4", expectedKey: "strategy4" },
+    { name: "mobile_strategy5", path: "/api/mobile-fragment?tab=strategy5", expectedKey: "strategy5" },
+    { name: "mobile_institution", path: "/api/mobile-fragment?tab=chip", expectedKey: "institution" },
+    { name: "mobile_cb", path: "/api/mobile-fragment?tab=cb", expectedKey: "cb" },
+    { name: "mobile_warrant", path: "/api/mobile-fragment?tab=warrant", expectedKey: "warrant" },
   ];
   for (const target of targets) {
     let row;
@@ -297,6 +304,13 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
   const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
+    const targetByName = new Map(targets.map((target) => [target.name, target]));
+    const expectedRunIdsSorted = Array.from(expectedRunIds).sort();
+    const expectedByKey = new Map();
+    for (const runId of expectedRunIdsSorted) {
+      const key = strategyKeyFromRunId(runId);
+      if (key) expectedByKey.set(key, runId);
+    }
     const expectedStrategy2Dates = new Set(Array.from(expectedRunIds)
       .filter((runId) => strategyKeyFromRunId(runId) === "strategy2")
       .map(runDateFromId)
@@ -307,19 +321,54 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
       for (const runId of row.runIds) endpointCounts.set(runId, Number(endpointCounts.get(runId) || 0) + 1);
     }
     for (const row of result.endpoints) {
+      const target = targetByName.get(row.name) || {};
       if (!row.runIds.length) {
-        if (row.name === "terminal_fast_bundle") {
+        if (target.requireAllRunIds || target.expectedKey) {
           row.ok = false;
           issues.push({
-            issue: "authenticated_protected_endpoint_missing_run_ids:terminal_fast_bundle",
+            issue: "authenticated_protected_endpoint_missing_run_ids:" + row.name,
             details: {
               endpoint: row.path,
-              expectedRunIds: Array.from(expectedRunIds).sort(),
-              reason: row.reason || row.error || "desktop_bundle_missing_run_ids",
+              expectedRunIds: expectedRunIdsSorted,
+              expectedKey: target.expectedKey || "",
+              reason: row.reason || row.error || "protected_endpoint_missing_run_ids",
             },
           });
         }
         continue;
+      }
+      if (target.requireAllRunIds) {
+        const missingRunIds = expectedRunIdsSorted.filter((runId) => !row.runIds.includes(runId));
+        row.missingRunIds = missingRunIds;
+        if (missingRunIds.length) {
+          row.ok = false;
+          issues.push({
+            issue: "authenticated_protected_endpoint_missing_expected_run_ids:" + row.name,
+            details: {
+              endpoint: row.path,
+              missingRunIds,
+              actualRunIds: row.runIds,
+              expectedRunIds: expectedRunIdsSorted,
+            },
+          });
+        }
+      }
+      if (target.expectedKey) {
+        const expectedRunId = expectedByKey.get(target.expectedKey) || "";
+        row.expectedKey = target.expectedKey;
+        row.expectedRunId = expectedRunId;
+        if (expectedRunId && !row.runIds.includes(expectedRunId)) {
+          row.ok = false;
+          issues.push({
+            issue: "authenticated_mobile_fragment_run_id_mismatch:" + row.name,
+            details: {
+              endpoint: row.path,
+              expectedKey: target.expectedKey,
+              expectedRunId,
+              actualRunIds: row.runIds,
+            },
+          });
+        }
       }
       if (isBatchSnapshotReadbackEndpoint(row.name)) {
         row.batchSnapshotReadback = true;
