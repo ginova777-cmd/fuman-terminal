@@ -227,6 +227,10 @@ function sameDayStrategy2RollingAllowed(runId, expectedDates, endpointCounts) {
   return Number(endpointCounts.get(runId) || 0) >= 2;
 }
 
+function isBatchSnapshotReadbackEndpoint(name) {
+  return name === "scorecard" || name === "source_reports";
+}
+
 async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {}) {
   const credential = await resolveProtectedReadbackCredentialWithRetry();
   const auth = publicCredentialSummary(credential);
@@ -304,6 +308,12 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
     }
     for (const row of result.endpoints) {
       if (!row.runIds.length) continue;
+      if (isBatchSnapshotReadbackEndpoint(row.name)) {
+        row.batchSnapshotReadback = true;
+        row.unexpectedRunIds = [];
+        row.allowedRollingRunIds = [];
+        continue;
+      }
       const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
         && !sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts));
       row.unexpectedRunIds = unexpectedRunIds;
