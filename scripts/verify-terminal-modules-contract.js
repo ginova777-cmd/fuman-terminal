@@ -62,6 +62,51 @@ for (const marker of [
   if (!modules.includes(marker)) issues.push(`terminal-modules.js missing preload marker ${marker}`);
 }
 
+
+function extractBlock(text, startPattern, endPattern) {
+  const start = text.search(startPattern);
+  if (start < 0) return "";
+  const rest = text.slice(start);
+  const end = rest.search(endPattern);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+function sortedValues(values) {
+  return [...new Set(values)].sort();
+}
+
+function assertSameSet(label, actual, expected) {
+  const a = sortedValues(actual);
+  const e = sortedValues(expected);
+  if (a.join("|") !== e.join("|")) {
+    issues.push(`${label} mismatch actual=${a.join(",") || "none"} expected=${e.join(",")}`);
+  }
+}
+
+function assertNoRetiredOfficialKeys(label, text) {
+  for (const retired of ["strategy1", "open-buy", "open_buy", "realtime-radar", "realtimeRadar", "heatmap"]) {
+    if (text.includes(retired)) issues.push(`${label} contains retired official key ${retired}`);
+  }
+}
+
+const mobileFragment = read("api/mobile-fragment.js");
+const resourceChain = read("scripts/verify-terminal-resource-chain.js");
+const dailyManifest = read("scripts/write-daily-terminal-run-manifest.js");
+
+const mobileTabBlock = extractBlock(mobileFragment, /const\s+TAB_CONFIG\s*=\s*\{/, /\n\};/);
+const mobileTabs = [...mobileTabBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*\{/gm)].map((match) => match[1]);
+assertSameSet("mobile TAB_CONFIG official tabs", mobileTabs, ["ai", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]);
+assertNoRetiredOfficialKeys("mobile TAB_CONFIG", mobileTabBlock);
+
+const resourceStrategiesBlock = extractBlock(resourceChain, /const\s+STRATEGIES\s*=\s*\[/, /\n\];/);
+const resourceKeys = [...resourceStrategiesBlock.matchAll(/key:\s*"([^"]+)"/g)].map((match) => match[1]);
+assertSameSet("resource-chain STRATEGIES", resourceKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant", "market"]);
+assertNoRetiredOfficialKeys("resource-chain STRATEGIES", resourceStrategiesBlock);
+
+const manifestDueBlock = extractBlock(dailyManifest, /const\s+STRATEGY_DUE_TIMES\s*=\s*\{/, /\n\};/);
+const manifestDueKeys = [...manifestDueBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*"/gm)].map((match) => match[1]);
+assertSameSet("Daily Manifest STRATEGY_DUE_TIMES", manifestDueKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+assertNoRetiredOfficialKeys("Daily Manifest STRATEGY_DUE_TIMES", manifestDueBlock);
 if (issues.length) {
   console.error("[terminal-modules-contract] failed");
   for (const issue of issues) console.error("- " + issue);
