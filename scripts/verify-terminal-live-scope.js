@@ -9,6 +9,8 @@ const files = [
   "api/source-reports.js",
   "api/terminal-ops-status.js",
   "api/desktop-route-snapshot.js",
+  "api/warrant-flow-latest.js",
+  "scripts/fugle-websocket-collector.js",
   "scripts/verify-terminal-resource-chain.js",
 ];
 
@@ -113,6 +115,15 @@ if (/addMany\("strategy1"|addMany\("realtime_radar"/.test(daytradeWriter)) {
   issues.push({ file: "scripts/run-daytrade-source-writer.js", code: "retired_priority_seed_in_daytrade_writer", line: "daytrade writer must not seed Strategy1/realtime radar" });
 }
 
+const stockWebsocketCollector = read("scripts/fugle-websocket-collector.js");
+if (/addMany\("strategy1"|addMany\("realtimeRadar"/.test(stockWebsocketCollector)) {
+  issues.push({ file: "scripts/fugle-websocket-collector.js", code: "retired_priority_seed_in_formal_websocket_collector", line: "Formal WebSocket collector must not subscribe Strategy1/realtime radar priority seeds" });
+}
+
+const warrantFlowLatest = read("api/warrant-flow-latest.js");
+if (/RELEASE_WARRANT|release-latest-good|warrant-flow-20260713/.test(warrantFlowLatest)) {
+  issues.push({ file: "api/warrant-flow-latest.js", code: "warrant_stale_release_latest_good_fallback", line: "Warrant API must not contain stale release latest-good fallback data" });
+}
 const websocketCollector = read("ops/public-slot/fugle-websocket-collector.js");
 if (/addMany\("strategy1"|addMany\("realtimeRadar"/.test(websocketCollector)) {
   issues.push({ file: "ops/public-slot/fugle-websocket-collector.js", code: "retired_priority_seed_in_websocket_collector", line: "WebSocket collector must not subscribe Strategy1/realtime radar priority seeds" });
