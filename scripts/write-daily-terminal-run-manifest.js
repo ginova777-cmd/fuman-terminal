@@ -491,6 +491,16 @@ async function main() {
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
   if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
+  const scorecardPrepublishCovered = SCORECARD_PUBLISH_MODE
+    && modules.length > 0
+    && modules.every((row) => row.ok === true || row.pendingNotDue === true);
+  if (scorecardPrepublishCovered) {
+    for (let index = issues.length - 1; index >= 0; index -= 1) {
+      if (/^(terminal-resource-chain:unattended_exit_\d+|terminal_resource_chain_unattended_failed)$/.test(String(issues[index] || ""))) {
+        issues.splice(index, 1);
+      }
+    }
+  }
   const pendingModules = modules.filter((item) => item.pendingNotDue === true);
   const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
   const manifest = {

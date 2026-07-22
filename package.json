@@ -24,6 +24,9 @@
     "verify:scorecard-health": "node --use-system-ca scripts/verify-scorecard-health.js",
     "verify:scorecard-rules": "node --use-system-ca scripts/verify-scorecard-strategy-rules.js",
     "cleanup:api-only-retired": "node scripts/cleanup-api-only-retired-artifacts.js",
+    "cleanup:supabase-retired": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --json",
+    "cleanup:supabase-retired:apply": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --apply --json",
+    "cleanup:supabase-retired:purge-history": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --apply --purge-history --json",
     "cleanup:history": "node --use-system-ca scripts/cleanup-supabase-vercel-history.js --dry-run",
     "cleanup:history:apply": "node --use-system-ca scripts/cleanup-supabase-vercel-history.js --apply",
     "cleanup:history:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install-history-retention-cleanup-task.ps1",
@@ -350,7 +353,8 @@
     "verify:protected-readback-credential-contract": "node --check lib/protected-readback-credential.js && node --check scripts/verify-protected-readback-credential.js && node --check scripts/verify-protected-readback-credential-contract.js && node scripts/verify-protected-readback-credential-contract.js",
     "verify:terminal-reason-code-classifier": "node scripts/verify-terminal-reason-code-classifier.js",
     "setup:protected-readback-credential": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-protected-readback-credential.ps1",
-    "verify:terminal-canary-publish:live": "node scripts/verify-terminal-canary-publish.js --out=outputs/terminal-canary-publish-live"
+    "verify:terminal-canary-publish:live": "node scripts/verify-terminal-canary-publish.js --out=outputs/terminal-canary-publish-live",
+    "verify:supabase-retired-clean": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --json --expect-clean"
   },
   "engines": {
     "node": "24.x"

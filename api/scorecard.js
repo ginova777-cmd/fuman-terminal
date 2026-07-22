@@ -1900,12 +1900,13 @@ async function handler(request, response) {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
     const forceLiveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
-    const noCache = forceLiveSourceReports || request.query?.noCache === "1" || request.query?.refresh === "1";
+    const liveSnapshotReadback = request.query?.live === "1" || request.query?.snapshotLive === "1";
+    const noCache = forceLiveSourceReports || liveSnapshotReadback || request.query?.noCache === "1" || request.query?.refresh === "1";
     const payload = attachMarketCalendar(await buildPayload(requestedDate, {
       liveSourceReports: forceLiveSourceReports,
       noCache,
       freshStrategySourceReports: forceLiveSourceReports,
-      timeoutMs: forceLiveSourceReports ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS,
+      timeoutMs: (forceLiveSourceReports || liveSnapshotReadback) ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS,
     }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);

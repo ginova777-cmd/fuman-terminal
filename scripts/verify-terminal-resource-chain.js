@@ -776,6 +776,16 @@ function compatibleLiveSurfaceRun(config, left, right) {
     && left.date
     && left.date === right.date;
 }
+function desktopArtifactCoveredByTerminalApi(config, live, compact, snapshot) {
+  const missingDesktopArtifact = snapshot?.error === "endpoint_not_in_desktop_snapshot"
+    || snapshot?.error === "endpoint_not_in_desktop_artifact";
+  if (!missingDesktopArtifact) return false;
+  if (!compact || compact.membershipProtected || compact.status >= 500 || compact.ok === false) return false;
+  if (obviousFallback(compact) && !allowedFormalQuoteViewFallback(config, compact)) return false;
+  if (live && !live.membershipProtected && !compatibleLiveSurfaceRun(config, live, compact)) return false;
+  if (!compact.runId && !compact.date) return false;
+  return true;
+}
 function timestampMs(value) {
   const ms = Date.parse(String(value || ""));
   return Number.isFinite(ms) ? ms : 0;
@@ -940,7 +950,10 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (config.requireApiRunId && !compact?.runId && !compact?.membershipProtected) issues.push("terminal API missing runId");
   if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus && !live?.membershipProtected) issues.push("live API missing writeBudget disclosure");
   if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus && !compact?.membershipProtected) issues.push("terminal API missing writeBudget disclosure");
-  const desktopSnapshotMissingAllowed = Boolean(config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"));
+  const desktopSnapshotMissingAllowed = Boolean(
+    (config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"))
+    || desktopArtifactCoveredByTerminalApi(config, live, compact, snapshot)
+  );
   if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !desktopSnapshotMissingAllowed))) {
     issues.push(`desktop artifact endpoint missing/error`);
   }

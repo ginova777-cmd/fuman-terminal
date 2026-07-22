@@ -1083,7 +1083,7 @@ function sourceReportForStrategy(strategy) {
 function sourceReportsStatus(payload) {
   const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
   if (!reports.length) return { qualityStatus: "blocked", text: "sourceReports=missing｜策略來源回讀不可驗" };
-  const keyOrder = ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "seven_strategy_daily_history", "institution", "cb", "warrant", "realtime-radar"];
+  const keyOrder = ["strategy2", "strategy3", "strategy4", "strategy5", "seven_strategy_daily_history", "institution", "cb", "warrant"];
   const byKey = new Map(reports.map((report) => [String(report.key || report.strategy || report.label || "").toLowerCase(), report]));
   const ordered = [
     ...keyOrder.map((key) => reports.find((report) => String(report.key || report.strategy || "").toLowerCase() === key)).filter(Boolean),
@@ -1287,7 +1287,7 @@ async function load(date = "") {
   byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
-    const response = await fetch(`/api/scorecard?live=1&t=${Date.now()}${dateQuery}`, { cache: "no-store" });
+    const response = await fetch(`/api/scorecard?live=1&snapshotLive=1&noCache=1&t=${Date.now()}${dateQuery}`, { cache: "no-store" });
     payload = await response.json();
     if (isMembershipFailure(response, payload)) {
       renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);

@@ -169,17 +169,6 @@ const CONTRACTS = [
       resultTable("warrant_flow_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "result_type", "underlying_code", "underlying_name", "score", "data_contract_source"]),
     ],
   },
-  {
-    key: "realtime-radar",
-    label: "realtime radar",
-    checks: [
-      realtimeRadarCache(),
-      sourceTable("fugle_realtime_quote_latest", [
-        "symbol", "name", "market", "price", "open_price", "high_price", "low_price", "previous_close",
-        "change_percent", "volume_lots", "trade_value_twd", "last_trade_time", "quote_updated_at",
-      ], { order: "quote_updated_at.desc.nullslast", requireToday: true, minRows: 1, purpose: "formal quote-view fallback for stale/missing radar cache" }),
-    ],
-  },
 ];
 
 function readSecret(name) {

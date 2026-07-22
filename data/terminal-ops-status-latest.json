@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T02:45:36.976Z",
-  "checkedAt": "2026-07-22T01:41:46.888Z",
+  "generatedAt": "2026-07-22T08:12:25.811Z",
+  "checkedAt": "2026-07-22T08:11:20.271Z",
   "tradeDate": "20260722",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -14,34 +14,43 @@
   "gates": {
     "predictivePreflight": {
       "ok": true,
-      "status": "READY",
-      "reason": "date_preflight_ready",
+      "status": "TRADING_DAY_WAIT_SOURCE_WINDOW",
+      "reason": "trading_day_after_formal_source_window",
       "reasonCodes": [
-        "CLOSURE_GREEN"
+        "CLOSURE_GREEN",
+        "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW"
       ],
       "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "continue_autonomous_monitoring",
+        "wait_or_recheck_source_window"
       ],
       "reasonLayers": [
-        "closure"
+        "closure",
+        "predictive_preflight"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
     },
     "waterRoot": {
       "ok": true,
-      "status": "ready",
-      "reason": "terminal_water_root_ready",
+      "status": "trading_day_wait_source_window_previous_good",
+      "reason": "trading_day_outside_formal_source_window_preserve_previous_good",
       "reasonCodes": [
-        "CLOSURE_GREEN"
+        "CLOSURE_GREEN",
+        "PREVIOUS_GOOD_PRESERVED",
+        "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW"
       ],
       "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "continue_autonomous_monitoring",
+        "preserve_previous_good_and_mark_degraded",
+        "wait_or_recheck_source_window"
       ],
       "reasonLayers": [
-        "closure"
+        "closure",
+        "previous_good",
+        "predictive_preflight"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -84,20 +93,20 @@
       "reasonUnknown": false
     },
     "canaryPublish": {
-      "ok": true,
-      "status": "PENDING_NOT_DUE",
-      "reason": "",
+      "ok": false,
+      "status": "BLOCKED",
+      "reason": "manifest_not_green:NO",
       "reasonCodes": [
-        "CLOSURE_GREEN"
+        "DAILY_MANIFEST_NOT_OK"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "primaryReasonCode": "DAILY_MANIFEST_NOT_OK",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "inspect_daily_manifest_modules"
       ],
       "reasonLayers": [
-        "closure"
+        "daily_manifest"
       ],
-      "reasonSeverity": "info",
+      "reasonSeverity": "critical",
       "reasonUnknown": false
     },
     "notificationPolicy": {
@@ -213,33 +222,32 @@
     {
       "key": "strategy2",
       "label": "策略2 即時",
-      "ok": true,
-      "complete": true,
+      "ok": false,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy2-20260722-104250",
+      "runId": "strategy2-20260722-111122",
       "tradeDate": "20260722",
       "sourceDate": "20260722",
-      "resultCount": 110,
+      "resultCount": 121,
       "pendingNotDue": false,
       "runIdClosureOk": false,
-      "issue": "runId_mismatch:strategy2-20260722-094032,strategy2-20260722-093936",
+      "issue": "runId_mismatch:strategy2-20260722-111122,strategy2-20260721-120146",
       "issues": [
-        "runId_mismatch:strategy2-20260722-094032,strategy2-20260722-093936"
+        "runId_mismatch:strategy2-20260722-111122,strategy2-20260721-120146",
+        "scorecard /88 row/sourceReport runId != latest pointer (strategy2-20260721-120146 vs strategy2-20260722-111122)",
+        "manifest_runId_mismatch:strategy2-20260722-111122,strategy2-20260721-120146"
       ],
       "reasonCodes": [
-        "CLOSURE_GREEN",
         "RUNID_CLOSURE_NOT_OK"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
       "reasonActions": [
-        "continue_autonomous_monitoring",
         "verify_api_desktop_mobile_88_same_runid"
       ],
       "reasonLayers": [
-        "closure",
         "runid_closure"
       ],
       "reasonSeverity": "critical",
@@ -248,65 +256,70 @@
     {
       "key": "strategy3",
       "label": "策略3",
-      "ok": true,
+      "ok": false,
       "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy3-20260721-20260721070946",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
-      "resultCount": 76,
-      "pendingNotDue": true,
-      "runIdClosureOk": true,
-      "issue": "pending_not_due:13:05",
+      "runId": "strategy3-20260722-20260722073639",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
+      "resultCount": 85,
+      "pendingNotDue": false,
+      "runIdClosureOk": false,
+      "issue": "runId_mismatch:strategy3-20260722-20260722073639,strategy3-20260721-20260721070946",
       "issues": [
-        "pending_not_due:13:05"
+        "runId_mismatch:strategy3-20260722-20260722073639,strategy3-20260721-20260721070946",
+        "scorecard /88 row/sourceReport runId != latest pointer (strategy3-20260721-20260721070946 vs strategy3-20260722-20260722073639)",
+        "manifest_runId_mismatch:strategy3-20260722-20260722073639,strategy3-20260721-20260721070946"
       ],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "RUNID_CLOSURE_NOT_OK"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
       "reasonActions": [
-        "wait_until_due_time"
+        "verify_api_desktop_mobile_88_same_runid"
       ],
       "reasonLayers": [
-        "schedule"
+        "runid_closure"
       ],
-      "reasonSeverity": "info",
+      "reasonSeverity": "critical",
       "reasonUnknown": false
     },
     {
       "key": "strategy4",
       "label": "策略4",
-      "ok": true,
+      "ok": false,
       "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy4-20260721-20260721091043",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
+      "runId": "strategy4-20260722-20260722080805",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
       "resultCount": 60,
-      "pendingNotDue": true,
-      "runIdClosureOk": true,
-      "issue": "pending_not_due:16:00",
+      "pendingNotDue": false,
+      "runIdClosureOk": false,
+      "issue": "runId_mismatch:strategy4-20260722-20260722080805,strategy4-20260721-20260721091043",
       "issues": [
-        "pending_not_due:16:00"
+        "runId_mismatch:strategy4-20260722-20260722080805,strategy4-20260721-20260721091043",
+        "live API != desktop artifact runId (strategy4-20260722-20260722080805 vs strategy4-20260721-20260721091043)",
+        "scorecard /88 row/sourceReport runId != latest pointer (strategy4-20260721-20260721091043 vs strategy4-20260722-20260722080805)",
+        "manifest_runId_mismatch:strategy4-20260721-20260721091043,strategy4-20260722-20260722080805"
       ],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "RUNID_CLOSURE_NOT_OK"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
       "reasonActions": [
-        "wait_until_due_time"
+        "verify_api_desktop_mobile_88_same_runid"
       ],
       "reasonLayers": [
-        "schedule"
+        "runid_closure"
       ],
-      "reasonSeverity": "info",
+      "reasonSeverity": "critical",
       "reasonUnknown": false
     },
     {
@@ -444,16 +457,22 @@
     "ok": true,
     "entries": 18,
     "unknownEntries": 0,
-    "criticalEntries": 1,
+    "criticalEntries": 4,
     "codes": [
       "CLOSURE_GREEN",
+      "DAILY_MANIFEST_NOT_OK",
+      "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW",
+      "PREVIOUS_GOOD_PRESERVED",
       "RUNID_CLOSURE_NOT_OK",
       "SCHEDULE_PENDING_NOT_DUE"
     ],
-    "primaryCode": "CLOSURE_GREEN",
+    "primaryCode": "DAILY_MANIFEST_NOT_OK",
     "actions": [
       "continue_autonomous_monitoring",
+      "inspect_daily_manifest_modules",
+      "preserve_previous_good_and_mark_degraded",
       "verify_api_desktop_mobile_88_same_runid",
+      "wait_or_recheck_source_window",
       "wait_until_due_time"
     ]
   },
@@ -520,14 +539,14 @@
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
-    "state": "READY_FOR_FORMAL_SCAN",
-    "action": "allow_formal_scan",
-    "reason": "date_preflight_ready",
+    "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
+    "action": "skip_formal_scan",
+    "reason": "trading_day_after_formal_source_window",
     "scannerTargetDate": "20260722",
-    "displayTradeDate": "20260722",
-    "formalScanAllowed": true,
-    "preservePreviousGood": false,
-    "publishAllowed": true,
+    "displayTradeDate": "20260721",
+    "formalScanAllowed": false,
+    "preservePreviousGood": true,
+    "publishAllowed": false,
     "issues": []
   },
   "stateMachineContract": {
@@ -620,8 +639,8 @@
   },
   "canaryPublish": {
     "contract": "terminal-canary-publish-v1",
-    "ok": true,
-    "status": "PENDING_NOT_DUE",
+    "ok": false,
+    "status": "BLOCKED",
     "scorecardPublishAllowed": false,
     "reason": "",
     "tradeDate": "20260722"

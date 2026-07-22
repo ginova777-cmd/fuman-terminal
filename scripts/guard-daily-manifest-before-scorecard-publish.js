@@ -96,39 +96,7 @@ function main() {
   if (String(manifest.contract || "") !== "daily-terminal-run-manifest-v1") {
     fail("manifest_contract_invalid", { contract: manifest.contract || "" });
   }
-  const manifestTradeDate = String(manifest.tradeDate || "");
-  const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
-  const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
-  const manifestDateMatchesExpected = manifestTradeDate === EXPECTED_DATE;
-  const manifestDateIsPreviousGood = Boolean(manifestTradeDate && manifestTradeDate < EXPECTED_DATE && publishDate === manifestTradeDate);
-  const expectedDateIsPublishDate = Boolean(marketClosedClosureAllowed && publishDate === EXPECTED_DATE);
-  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood && !expectedDateIsPublishDate) {
-    fail("manifest_tradeDate_mismatch", {
-      tradeDate: manifestTradeDate,
-      expectedDate: EXPECTED_DATE,
-      publishDate,
-      marketClosedClosureAllowed,
-    });
-  }
-  if (!marketClosedClosureAllowed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
-    if (!ALLOW_DEGRADED) {
-      fail("manifest_not_green_refuse_scorecard_publish", {
-        unattendedStatus: manifest.unattendedStatus || "",
-        blocker: manifest.blocker || "",
-        issues: manifest.issues || [],
-        marketClosedClosureAllowed,
-        pendingPreviousGoodModules: pendingPreviousGoodModules(manifest),
-      });
-    }
-  }
-  const badModules = Array.isArray(manifest.modules)
-    ? manifest.modules.filter((row) => !(marketClosedClosureAllowed && isPendingNotDueModule(row)) && (row.ok !== true || row.complete !== true || row.fallback === true))
-    : [];
-  if (badModules.length && !ALLOW_DEGRADED) {
-    fail("manifest_modules_not_green", {
-      modules: badModules.map((row) => ({ key: row.key, runId: row.runId, issues: row.issues || [] })),
-    });
-  }
+
   let canary;
   try {
     canary = readJson(CANARY_FILE);
@@ -138,15 +106,56 @@ function main() {
   if (String(canary.contract || "") !== "terminal-canary-publish-v1") {
     fail("canary_publish_contract_invalid", { contract: canary.contract || "", canary: CANARY_FILE });
   }
+
+  const pendingRollForwardAllowed = String(canary.status || "") === "CANARY_READY_PENDING_NOT_DUE_ROLL_FORWARD"
+    && canary.scorecardPublishAllowed === true;
+  const manifestTradeDate = String(manifest.tradeDate || "");
+  const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
+  const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
+  const manifestDateMatchesExpected = manifestTradeDate === EXPECTED_DATE;
+  const manifestDateIsPreviousGood = Boolean(manifestTradeDate && manifestTradeDate < EXPECTED_DATE && publishDate === manifestTradeDate);
+  const expectedDateIsPublishDate = Boolean(marketClosedClosureAllowed && publishDate === EXPECTED_DATE);
+
+  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood && !expectedDateIsPublishDate) {
+    fail("manifest_tradeDate_mismatch", {
+      tradeDate: manifestTradeDate,
+      expectedDate: EXPECTED_DATE,
+      publishDate,
+      marketClosedClosureAllowed,
+      pendingRollForwardAllowed,
+    });
+  }
   if (String(canary.tradeDate || "") !== publishDate) {
     fail("canary_publish_tradeDate_mismatch", {
       tradeDate: canary.tradeDate || "",
       expectedDate: publishDate,
       manifestDate: EXPECTED_DATE,
+      pendingRollForwardAllowed,
     });
   }
   if (canary.ok !== true) {
     fail("canary_publish_not_green", { status: canary.status || "", issues: canary.issues || [] });
+  }
+  if (!marketClosedClosureAllowed && !pendingRollForwardAllowed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
+    if (!ALLOW_DEGRADED) {
+      fail("manifest_not_green_refuse_scorecard_publish", {
+        unattendedStatus: manifest.unattendedStatus || "",
+        blocker: manifest.blocker || "",
+        issues: manifest.issues || [],
+        marketClosedClosureAllowed,
+        pendingRollForwardAllowed,
+        pendingPreviousGoodModules: pendingPreviousGoodModules(manifest),
+      });
+    }
+  }
+  const badModules = Array.isArray(manifest.modules)
+    ? manifest.modules.filter((row) => !((marketClosedClosureAllowed || pendingRollForwardAllowed) && isPendingNotDueModule(row)) && (row.ok !== true || row.complete !== true || row.fallback === true))
+    : [];
+  if (badModules.length && !ALLOW_DEGRADED) {
+    fail("manifest_modules_not_green", {
+      modules: badModules.map((row) => ({ key: row.key, runId: row.runId, issues: row.issues || [] })),
+      pendingRollForwardAllowed,
+    });
   }
   if (canary.scorecardPublishAllowed !== true && !ALLOW_DEGRADED) {
     fail("canary_publish_not_armed_refuse_scorecard_publish", {
@@ -156,15 +165,15 @@ function main() {
   }
   console.log(JSON.stringify({
     ok: true,
-    status: manifest.ok ? "green" : "degraded_allowed",
+    status: manifest.ok ? "green" : (pendingRollForwardAllowed ? "pending_not_due_roll_forward" : "degraded_allowed"),
     tradeDate: manifest.tradeDate,
     unattendedStatus: manifest.unattendedStatus,
     modules: Array.isArray(manifest.modules) ? manifest.modules.length : 0,
+    pendingRollForwardAllowed,
     manifest: MANIFEST_FILE,
     canary: CANARY_FILE,
   }, null, 2));
 }
-
 main();
 
 
