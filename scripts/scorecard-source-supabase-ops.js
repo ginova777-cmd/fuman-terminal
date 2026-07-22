@@ -14,6 +14,8 @@ const TERMINAL_SCORECARD_SOURCE = "terminal-complete-run-scorecard";
 const SCORECARD_HISTORY_DAYS = Math.max(1, Number(process.env.FUMAN_SCORECARD_HISTORY_DAYS || "30"));
 const RETIRED_SCORECARD_STRATEGIES = [
   "即時雷達成績單",
+  "熱力圖成績單",
+  "市場熱力圖成績單",
   "策略1成績單",
   "策略1開盤入成績單",
   "策略2-A區進場",
@@ -279,7 +281,9 @@ async function chunkedUpsert(table, rows, conflict, size = 500) {
 
 async function probe() {
   const result = {};
-  for (const table of ["trade_records", "strategy_daily_summary", "v_scorecard_source_health"]) {
+  const tables = ["trade_records", "strategy_daily_summary"];
+  if (has("heavy-health")) tables.push("v_scorecard_source_health");
+  for (const table of tables) {
     const response = await restGet(table, "select=*&limit=1");
     result[table] = {
       ok: response.ok,
@@ -367,10 +371,53 @@ async function backfill() {
   };
 }
 
-async function health() {
+async function healthHeavy() {
   const response = await restGet("v_scorecard_source_health", "select=*&limit=1");
   if (!response.ok) throw new Error(`health view unavailable HTTP ${response.status}: ${(response.json?.message || response.text).slice(0, 300)}`);
   return Array.isArray(response.json) ? response.json[0] || null : response.json;
+}
+
+async function healthLight() {
+  const payload = readJson(arg("source-file", SOURCE_FILE));
+  const { records, daily } = scorecardRowsFromPayload(payload);
+  if (!records.length) throw new Error("light health source payload has no scorecard records");
+  if (!daily.length) throw new Error("light health source payload has no daily summaries");
+
+  const latestDate = records.map((row) => row.record_date).filter(Boolean).sort().at(-1) || "";
+  const latestSummaryDate = daily.map((row) => row.summary_date).filter(Boolean).sort().at(-1) || "";
+  const tradeQuery = `select=record_id,record_date,strategy,source&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&record_date=eq.${encodeURIComponent(latestDate)}&limit=1`;
+  const dailyQuery = `select=summary_date,strategy,source,status&source=eq.${encodeURIComponent(TERMINAL_SCORECARD_SOURCE)}&summary_date=eq.${encodeURIComponent(latestSummaryDate || latestDate)}&limit=1`;
+  const [tradeSample, dailySample] = await Promise.all([
+    restGet("trade_records", tradeQuery),
+    restGet("strategy_daily_summary", dailyQuery),
+  ]);
+  const tradeRow = Array.isArray(tradeSample.json) ? tradeSample.json[0] || null : null;
+  const dailyRow = Array.isArray(dailySample.json) ? dailySample.json[0] || null : null;
+  const issues = [];
+  if (!latestDate) issues.push("latest_record_date_missing");
+  if (!tradeSample.ok) issues.push(`trade_records_sample_http_${tradeSample.status}`);
+  if (!dailySample.ok) issues.push(`strategy_daily_summary_sample_http_${dailySample.status}`);
+  if (!tradeRow) issues.push("trade_records_latest_sample_missing");
+  if (!dailyRow) issues.push("strategy_daily_summary_latest_sample_missing");
+  return {
+    status: issues.length ? "not_ready" : "ready",
+    source_status: issues.length ? "not_ready" : "ready",
+    source: "scorecard-source-light-health",
+    heavyView: false,
+    latest_record_date: latestDate,
+    latest_summary_date: latestSummaryDate || latestDate,
+    local_record_rows: records.length,
+    local_daily_rows: daily.length,
+    trade_records_sample_present: Boolean(tradeRow),
+    strategy_daily_summary_sample_present: Boolean(dailyRow),
+    trade_records_sample_status: tradeSample.status,
+    strategy_daily_summary_sample_status: dailySample.status,
+    issues,
+  };
+}
+
+async function health() {
+  return has("heavy-health") ? healthHeavy() : healthLight();
 }
 
 async function main() {
@@ -380,6 +427,7 @@ async function main() {
   else if (selected === "apply") result.apply = await applyContract();
   else if (selected === "backfill") result.backfill = await backfill();
   else if (selected === "health") result.health = await health();
+  else if (selected === "health-heavy") result.health = await healthHeavy();
   else if (selected === "all") {
     result.apply = has("skip-apply") ? { skipped: true } : await applyContract();
     result.backfill = await backfill();

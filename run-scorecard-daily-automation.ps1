@@ -244,24 +244,12 @@ Invoke-Step -FilePath "node" -ArgumentList @(
   "--source-file=$sourceFile"
 ) -Attempts 3 -DelaySeconds 20
 
-Write-Step "read Supabase scorecard source health"
-$healthOk = $false
-for ($attempt = 1; $attempt -le 3; $attempt++) {
-  & node --use-system-ca "scripts\scorecard-source-supabase-ops.js" "health" | Out-File -LiteralPath $healthFile -Encoding utf8
-  $healthExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
-  if ($healthExitCode -eq 0) {
-    $healthOk = $true
-    break
-  }
-  if ($attempt -lt 3) {
-    Write-Step ("retry health {0}/3 after exit {1}" -f ($attempt + 1), $healthExitCode)
-    Start-Sleep -Seconds 20
-  }
+Write-Step "read Supabase scorecard source light health"
+& node --use-system-ca "scripts\scorecard-source-supabase-ops.js" "health" "--source-file=$sourceFile" | Out-File -LiteralPath $healthFile -Encoding utf8
+$healthExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+if ($healthExitCode -ne 0) {
+  throw "scorecard source light health failed with exit $healthExitCode"
 }
-if (-not $healthOk) {
-  throw "scorecard source health failed after retries"
-}
-
 $healthPayload = Read-JsonSummary $healthFile "health"
 $healthStatus = [string]$healthPayload.status
 $latestRecordDate = [string]$healthPayload.latestRecordDate
