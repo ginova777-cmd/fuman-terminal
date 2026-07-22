@@ -14,7 +14,7 @@ const STATE_MACHINE_CONTRACT = {
   contract: "terminal-state-machine-v1",
   lifecycle: LIFECYCLE_STATES,
   failureStates: FAILURE_STATES,
-  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
+  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
   invariants: [
     "water_root_must_pass_before_scanner_publish",
     "scanner_receipt_runid_must_equal_supabase_latest_pointer",
@@ -137,10 +137,15 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     state = "PUBLISH_DEFERRED_MANIFEST_PENDING";
     layer.push("publish", "scorecard88", "schedule");
     blocker = row.issues?.[0] || "scorecard_publish_deferred_until_manifest_full_green";
+  } else if (has(text, "manifest_runid_mismatch", "runid_mismatch", "runid mismatch", "row/sourcereport runid != latest pointer")) {
+    state = "BLOCKED_RUNID_MISMATCH";
+    layer.push("display", "runid_closure");
+    blocker = (row.issues || []).find((issue) => /manifest_runid_mismatch|runid_mismatch|runid mismatch|row\/sourceReport runId != latest pointer/i.test(String(issue))) || row.issues?.[0] || "runid_closure_mismatch";
   } else if (has(text, "scorecard", "publish")) {
     state = "FAILED_PUBLISH";
     layer.push("publish", "scorecard88");
-    blocker = row.issues?.[0] || "scorecard_publish_not_closed";  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage")) {
+    blocker = row.issues?.[0] || "scorecard_publish_not_closed";
+  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage")) {
     state = "BLOCKED_SOURCE";
     layer.push("source");
     blocker = manifest.waterRoot?.reason || row.issues?.[0] || "source_not_ready";
@@ -171,6 +176,8 @@ function priorityForState(state) {
     BLOCKED_AUTH: 10,
     BLOCKED_SOURCE: 20,
     FAILED_SCAN: 30,
+    BLOCKED_RUNID_MISMATCH: 35,
+    BLOCKED_DATE_MISMATCH: 36,
     FAILED_PUBLISH: 40,
     PUBLISH_DEFERRED_MANIFEST_PENDING: 84,
     DEGRADED_PREVIOUS_GOOD: 50,
@@ -186,6 +193,8 @@ function nextActionForState(state, row = {}) {
   if (state === "BLOCKED_SOURCE") return "wait_or_fix_water_root_then_rerun_only_affected_module";
   if (state === "FAILED_SCAN") return "rerun_strategy_scanner_after_water_ok";
   if (state === "FAILED_PUBLISH") return "rerun_scorecard_source_sync_and_manifest_publish_gate";
+  if (state === "BLOCKED_RUNID_MISMATCH") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
+  if (state === "BLOCKED_DATE_MISMATCH") return "rerun_strategy_scanner_after_date_gate_fix";
   if (state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return "wait_for_manifest_full_green_then_scorecard_publish";
   if (state === "DEGRADED_PREVIOUS_GOOD") return "rebuild_today_snapshot_and_verify_no_old_runid";
   if (state === "FAILED_DISPLAY") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
@@ -211,6 +220,8 @@ function retryPolicyForState(state) {
     BLOCKED_SOURCE: { maxAttempts: 12, backoffSeconds: 60, fuseAfterAttempts: 12, autoRetry: true, manualRepairRequired: false },
     FAILED_SCAN: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
     FAILED_PUBLISH: { maxAttempts: 2, backoffSeconds: 120, fuseAfterAttempts: 2, autoRetry: true, manualRepairRequired: false },
+    BLOCKED_RUNID_MISMATCH: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
+    BLOCKED_DATE_MISMATCH: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
     DEGRADED_PREVIOUS_GOOD: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
     FAILED_DISPLAY: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
   };
@@ -248,6 +259,7 @@ function commandFor(key, state) {
   if (state === "BLOCKED_AUTH") return "verify service token env, then rerun scanner/readback with machine token";
   if (state === "BLOCKED_SOURCE") return "npm run verify:terminal-water-root";
   if (state === "FAILED_PUBLISH") return "npm run manifest:daily-terminal-run && npm run scorecard:publish";
+  if (state === "BLOCKED_RUNID_MISMATCH") return "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended";
   if (state === "FAILED_DISPLAY") return "npm run verify:terminal-resource-chain:unattended";
   const map = {
     strategy2: `npm run verify:strategy2-e2e-closure -- --expected-date=${EXPECTED_DATE}`,
@@ -266,6 +278,8 @@ function overallState(manifest, moduleStates, marketCalendar = null) {
   const sourceFreshnessRequired = marketCalendar?.sourceFreshnessRequired !== false;
   if ((sourceFreshnessRequired && manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar)) || moduleStates.some((row) => row.state === "BLOCKED_SOURCE")) return "BLOCKED_SOURCE";
   if (moduleStates.some((row) => row.state === "BLOCKED_AUTH")) return "BLOCKED_AUTH";
+  if (moduleStates.some((row) => row.state === "BLOCKED_RUNID_MISMATCH")) return "BLOCKED_RUNID_MISMATCH";
+  if (moduleStates.some((row) => row.state === "BLOCKED_DATE_MISMATCH")) return "BLOCKED_DATE_MISMATCH";
   if (moduleStates.some((row) => row.state === "FAILED_SCAN")) return "FAILED_SCAN";
   if (moduleStates.some((row) => row.state === "FAILED_PUBLISH")) return "FAILED_PUBLISH";
   if (moduleStates.some((row) => row.state === "FAILED_DISPLAY")) return "FAILED_DISPLAY";
@@ -283,6 +297,13 @@ function selfTest() {
       row: { key: "strategy2", label: "Strategy2", ok: true, complete: true, fallback: false, runId: "strategy2-20260717-good", runIds: { scanner: "x", productionApi: "x", desktop: "x", mobile: "x", scorecard88: "x" }, issues: [] },
       manifest: { waterRoot: { ok: true } },
       expectedState: "CLOSED",
+      expectedJob: false,
+    },
+    {
+      name: "pending_not_due_has_no_job",
+      row: { key: "strategy5", label: "Strategy5", ok: false, complete: false, pendingNotDue: true, issues: ["pending_not_due:strategy5@21:00"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "PENDING_NOT_DUE",
       expectedJob: false,
     },
     {
@@ -310,6 +331,14 @@ function selfTest() {
       requiresWaterRootOk: true,
     },
     {
+      name: "due_stale_runid_creates_scanner_job",
+      row: { key: "strategy3", label: "Strategy3", ok: false, complete: false, runId: "strategy3-20260716-old", issues: ["manifest_tradeDate_mismatch:20260716!=20260723"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "FAILED_SCAN",
+      expectedJob: true,
+      requiresWaterRootOk: true,
+    },
+    {
       name: "scorecard_missing_becomes_publish_job",
       row: { key: "warrant", label: "Warrant", ok: false, complete: false, issues: ["scorecard sourceReport missing row"] },
       manifest: { waterRoot: { ok: true } },
@@ -323,6 +352,15 @@ function selfTest() {
       manifest: { waterRoot: { ok: true }, modules: [{ key: "strategy4", pendingNotDue: true }] },
       expectedState: "PUBLISH_DEFERRED_MANIFEST_PENDING",
       expectedJob: false,
+    },
+    {
+      name: "runid_mismatch_becomes_display_closure_job",
+      row: { key: "institution", label: "Institution", ok: false, complete: false, runId: "institution-20260721-old", issues: ["scorecard /88 row/sourceReport runId != latest pointer"] },
+      manifest: { waterRoot: { ok: true } },
+      expectedState: "BLOCKED_RUNID_MISMATCH",
+      expectedJob: true,
+      expectedCommand: "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended",
+      requiresWaterRootOk: false,
     },
     {
       name: "display_auth_readback_not_backend_auth",

@@ -275,7 +275,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
     return base;
   }
 
-  if (state.includes("DISPLAY") || state.includes("DEGRADED") || state.includes("PREVIOUS")) {
+  if (state.includes("DISPLAY") || state.includes("DEGRADED") || state.includes("PREVIOUS") || state.includes("RUNID")) {
     if (requiresProtectedReadbackCredential(base) && !protectedReadbackCredentialArmed()) {
       base.executable = false;
       base.executionGuard = "protected_readback_credential_not_armed";
@@ -487,6 +487,7 @@ function selfTest() {
     { name: "scan-formal-entry-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_entry_not_allowed_by_water_root" },
     { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
     { name: "display", job: { key: "strategy5", state: "FAILED_DISPLAY" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
+    { name: "runid-mismatch-display-repair", job: { key: "institution", state: "BLOCKED_RUNID_MISMATCH", blocker: "scorecard /88 row/sourceReport runId != latest pointer" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
     { name: "display-auth-unarmed", job: { key: "strategy2", state: "FAILED_DISPLAY", blocker: "protected_surface_needs_authenticated_readback_token", nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback" }, expectedExecutable: protectedReadbackCredentialArmed(), expectedGuard: protectedReadbackCredentialArmed() ? "display_snapshot" : "protected_readback_credential_not_armed" },
     { name: "publish-blocked", job: { key: "scorecard", state: "FAILED_PUBLISH" }, expectedExecutable: false, expectedGuard: "manifest_not_green" },
     { name: "publish-deferred", job: { key: "scorecard", state: "PUBLISH_DEFERRED_MANIFEST_PENDING" }, expectedExecutable: false, expectedGuard: "manifest_pending_publish_deferred" },
