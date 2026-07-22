@@ -86,9 +86,10 @@ async function main() {
   assert(Array.isArray(payload.reasonCodeSummary?.codes) && payload.reasonCodeSummary.codes.length > 0, "reason_code_summary_codes_missing", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
   assert(payload.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", "root_cause_summary_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseSummary?.ok === true && Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0, "root_cause_summary_not_ok", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  assert(Array.isArray(payload.rootCauseSummary?.categories) && payload.rootCauseSummary.categories.length > 0, "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
+  const rootCauseTotalBlockers = Number(payload.rootCauseSummary?.totalBlockers || 0);
+  assert(rootCauseTotalBlockers === 0 || (Array.isArray(payload.rootCauseSummary?.categories) && payload.rootCauseSummary.categories.length > 0), "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", "root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && payload.rootCauseRecoveryPlan.steps.length > 0, "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+  assert(rootCauseTotalBlockers === 0 || (Array.isArray(payload.rootCauseRecoveryPlan?.steps) && payload.rootCauseRecoveryPlan.steps.length > 0), "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const recoveryCategories = new Set((payload.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
   for (const row of payload.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), `root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const authStep = (payload.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");

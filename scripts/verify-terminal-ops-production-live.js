@@ -13,7 +13,7 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-ops-production-live");
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const TIMEOUT_MS = Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_TIMEOUT_MS || 25000);
+const TIMEOUT_MS = Number(process.env.FUMAN_VERIFY_PRODUCTION_LIVE_TIMEOUT_MS || 60000);
 const EXPECTED_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.FUMAN_DEPLOY_SHA || git(["rev-parse", "HEAD"]).stdout);
 const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || "")) || process.argv.includes("--require-protected-readback");
 

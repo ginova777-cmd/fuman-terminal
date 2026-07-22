@@ -45,6 +45,7 @@ const ACTION_MATRIX = {
   TASK_MISSED_0900: ["TASK_DIAGNOSTIC_ONLY"],
   MISSING_NATURAL_SCHEDULE_EVIDENCE: ["TASK_DIAGNOSTIC_ONLY"],
   MANUAL_VERIFICATION_ONLY: ["STOP_PROTECT_NATURAL_EVIDENCE_REQUIRED"],
+  TRADE_DATE_MISMATCH: ["STOP_PROTECT_NATURAL_EVIDENCE_REQUIRED"],
   PRIORITY_POOL_NOT_40: ["START_DAYTRADE_WRITER_TASK", "START_DAYTRADE_WATCHDOG_TASK", "RUN_DAYTRADE_SOURCE_WRITER_ONCE", "VERIFY_REWATER"],
   PRIORITY_COVERAGE_LT_095: ["START_DAYTRADE_WRITER_TASK", "START_DAYTRADE_WATCHDOG_TASK", "RUN_DAYTRADE_SOURCE_WRITER_ONCE", "VERIFY_REWATER"],
   QUOTE_STALE: ["START_DAYTRADE_WRITER_TASK", "START_DAYTRADE_WATCHDOG_TASK", "RUN_DAYTRADE_SOURCE_WRITER_ONCE", "VERIFY_REWATER"],
@@ -165,7 +166,7 @@ function normalizeFailureCodes(summary = {}) {
     if (text.includes("manual_verification_only")) codes.push("MANUAL_VERIFICATION_ONLY");
     if (text.includes("timeout")) codes.push("SUPABASE_TIMEOUT");
   }
-  return [...new Set(codes.map((code) => String(code || "").trim()).filter(Boolean))];
+  return [...new Set(codes.map((code) => String(code || "").trim()).filter(Boolean).map((code) => /^TRADE_DATE_\d{4}_\d{2}_\d{2}$/.test(code) ? "TRADE_DATE_MISMATCH" : code))];
 }
 
 function defaultSummaryFile(tradeDate) {
@@ -311,7 +312,7 @@ function selfTest() {
     unattended_yes: "NO",
     trade_date: "2026-07-21",
     run_id: "self-test-run",
-    failure_codes: ["PRIORITY_COVERAGE_LT_095", "INTRADAY_1M_NOT_FRESH", "TASK_MISSED_0845", "MANUAL_VERIFICATION_ONLY"],
+    failure_codes: ["PRIORITY_COVERAGE_LT_095", "INTRADAY_1M_NOT_FRESH", "TASK_MISSED_0845", "MANUAL_VERIFICATION_ONLY", "TRADE_DATE_2026_07_20"],
   };
   const plan = buildPlan(fake, "2026-07-21");
   const issues = [];
@@ -321,6 +322,7 @@ function selfTest() {
   if (!plan.jobs.find((job) => job.code === "PRIORITY_COVERAGE_LT_095" && job.actions.includes("RUN_DAYTRADE_SOURCE_WRITER_ONCE"))) issues.push("priority coverage does not map to rewater writer");
   if (!plan.jobs.find((job) => job.code === "TASK_MISSED_0845" && job.natural_evidence_backfill_allowed === false)) issues.push("task missed allows natural evidence backfill");
   if (!plan.jobs.find((job) => job.code === "MANUAL_VERIFICATION_ONLY" && job.state === "STOP_PROTECT")) issues.push("manual verification only is not stop-protect");
+  if (!plan.jobs.find((job) => job.code === "TRADE_DATE_MISMATCH" && job.state === "STOP_PROTECT" && job.natural_evidence_backfill_allowed === false)) issues.push("trade date mismatch is not stop-protect natural evidence wait");
   if (!plan.rewaterVerification.some((step) => step.label.includes("daytrade-source-contract-alignment"))) issues.push("missing source contract rewater verification");
   if (!plan.rewaterVerification.some((step) => step.label.includes("fugle-websocket-sources"))) issues.push("missing websocket rewater verification");
   return { ok: issues.length === 0, issues, samplePlan: plan };

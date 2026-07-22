@@ -506,12 +506,69 @@ function Invoke-FullScanDatePreflight {
 
   Write-ScanLog "END [critical] full scan date preflight targetDate=$($env:FUMAN_SCANNER_TARGET_DATE)"
 }
+
+function Invoke-FullScanFormalEntryGate {
+  Write-ScanLog "START [critical] full scan formal entry gate"
+  $gateFile = Join-Path $runtimeRoot "state\formal-entry-gate.json"
+  $warmupRootScript = Join-Path $syncRoot "scripts\verify-daytrade-warmup-root.js"
+  $warmupStrictScript = Join-Path $syncRoot "scripts\verify-daytrade-warmup-unattended.js"
+  $summaryPath = Join-Path $runtimeRoot ("state\daytrade-warmup-unattended-summary-{0}.json" -f $env:FUMAN_SCANNER_TARGET_DATE)
+  $outputLines = New-Object System.Collections.Generic.List[string]
+  $exitCode = 1
+
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe --use-system-ca $warmupRootScript "--apply" 2>&1 | ForEach-Object {
+        $line = [string]$_
+        $outputLines.Add($line) | Out-Null
+        Write-ScanLog "formal-entry-gate: $line"
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    $outputLines.Add([string]$_.Exception.Message) | Out-Null
+  }
+
+  $summary = Read-JsonFile $summaryPath
+  $formalAllowed = $false
+  if ($summary -and ([string]$summary.unattended_yes -eq "YES" -or [string]$summary.unattendedStatus -eq "YES")) {
+    $formalAllowed = $true
+  }
+
+  $payload = [ordered]@{
+    ok = ($exitCode -eq 0 -and $formalAllowed)
+    exitCode = $exitCode
+    checkedAt = (Get-Date).ToString("o")
+    gate = "full-scan-formal-entry-gate"
+    warmupRootScript = $warmupRootScript
+    warmupStrictScript = $warmupStrictScript
+    summaryPath = $summaryPath
+    unattended_yes = if ($summary) { [string]$summary.unattended_yes } else { "missing" }
+    formalEntryAllowed = $formalAllowed
+    action = if ($formalAllowed) { "ALLOW full scan strategy scans" } else { "STOP full scan before strategy scans" }
+    output = @($outputLines.ToArray())
+  }
+  Write-JsonFile $gateFile $payload
+
+  if (-not $payload.ok) {
+    Write-ScanLog "STOP full scan before strategy scans; formal-entry-gate.json=$gateFile"
+    throw "STOP full scan before strategy scans: formal entry gate failed exit=$exitCode unattended_yes=$($payload.unattended_yes)"
+  }
+
+  Write-ScanLog "END [critical] full scan formal entry gate ok formal-entry-gate.json=$gateFile"
+}
+
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
   Write-ScanLog "scan receipts mode=$(if ($syncReceiptDir) { 'runtime+code-repo' } else { 'runtime-only' })"
 
   Invoke-FullScanDatePreflight
+  Invoke-FullScanFormalEntryGate
   if (-not $SkipStrategy2) {
     Invoke-ScanTask "star-preopen" "STAR preopen raw refresh" "optional" "scripts\scan-star-preopen.js" (Join-Path $runtimeRoot "data\star-preopen-latest.json") @{}
     Invoke-ScanTask "strategy2" "strategy2 intraday raw refresh" "optional" "scripts\scan-intraday-signals.js" (Join-Path $runtimeRoot "data\strategy2-intraday-latest.json") @{

@@ -841,6 +841,15 @@
       ]
     },
     {
+      "taskName": "\\Fuman Daytrade Source Final Verdict 0912",
+      "displayName": "Fuman Daytrade Source Final Verdict 0912",
+      "description": "Read-only daytrade final verdict at 09:12. Runs warmup root apply after natural 0700/0845/0900 evidence and must not write strategy latest.",
+      "time": "09:12",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:12"
+      ]
+    },    {
       "taskName": "\\Fuman Fugle Daytrade Watchdog Every Minute",
       "displayName": "Fuman Fugle Daytrade Watchdog Every Minute",
       "description": "Daytrade source watchdog every minute during the opening window. Failure is critical.",

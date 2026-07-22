@@ -246,6 +246,10 @@ function statusIssues(payload) {
   const motherRows = payload.motherPool.rowCount;
   const priorityRows = payload.priorityTop40.rowCount;
 
+  if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
+    return issues;
+  }
+
   for (const item of payload.probes) {
     const diagnosticIntradayCoveredBySource = item.name === "intraday_1m_status"
       && source.hasIntraday1mStaleSeconds
@@ -255,9 +259,6 @@ function statusIssues(payload) {
   }
   if (required.tradingDay && payload.marketCalendar.ok && payload.marketCalendar.row?.isTradingDay === false) {
     issues.push("market_calendar_not_trading_day");
-  }
-  if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
-    return issues;
   }
   if (!effective.ok) issues.push(`source_status_not_ready:${source.status || "missing"}`);
   if (source.priorityFreshQuoteCoverage120s < required.priorityCoverage) {

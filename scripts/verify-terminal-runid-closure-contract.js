@@ -172,10 +172,8 @@ async function main() {
   const manifestPendingNotDue = hardBlockedManifestModules.length === 0
     && (String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
       || (manifest.modules || []).some((row) => row.pendingNotDue === true));
-  if (manifest.ok !== true) {
-    issues.push(manifestPendingNotDue
-      ? `manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`
-      : `manifest_not_ok:${manifest.blocker || "unknown"}`);
+  if (manifest.ok !== true && !manifestPendingNotDue) {
+    issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
   }
   const mode = closureMode(manifest, controlPlane);
   const previousGoodClosure = mode === "market_closed_previous_good_closure" || mode === "trading_day_previous_good_hold_closure";

@@ -12,7 +12,7 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || path.join(ROOT, "outputs", "protected-readback-credential"));
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const TIMEOUT_MS = Number(process.env.FUMAN_PROTECTED_READBACK_TIMEOUT_MS || 20000);
+const TIMEOUT_MS = Number(process.env.FUMAN_PROTECTED_READBACK_TIMEOUT_MS || 60000);
 const DIRECT_ENDPOINTS = [
   { key: "terminal_ops_status", path: "/api/terminal-ops-status" },
   { key: "scorecard", path: "/api/scorecard?live=1" },

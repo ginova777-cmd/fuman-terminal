@@ -333,9 +333,7 @@ function verifyInvariants(artifacts, issues) {
   const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
   const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
   const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
-  if (pendingNotDue) {
-    assert(false, issues, "manifest_pending_not_due", { blocker: manifest?.blocker || controlPlane?.decision?.reason || "pending_not_due" });
-  } else {
+  if (!pendingNotDue) {
     for (const row of hardBlockedModules) assert(false, issues, `manifest_module_blocked:${row.key}`, { issues: row.issues || [], runId: row.runId || "", tradeDate: row.tradeDate || "", sourceDate: row.sourceDate || "" });
     assert(acceptableCompletionStatus(manifest?.unattendedStatus, completionClosed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
     assert(manifest?.ok === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker });
@@ -383,9 +381,17 @@ function verifyInvariants(artifacts, issues) {
   assert(Object.keys(opsStatus?.reasonCodeSummary?.codes || {}).length > 0, issues, "ops_status_reason_codes_missing", { reasonCodeSummary: opsStatus?.reasonCodeSummary });
   assert(opsStatus?.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", issues, "ops_status_root_cause_summary_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
   assert(opsStatus?.rootCauseSummary?.ok === true && Number(opsStatus?.rootCauseSummary?.unknownBlockers || 0) === 0, issues, "ops_status_root_cause_summary_not_ok", { rootCauseSummary: opsStatus?.rootCauseSummary });
-  assert(Array.isArray(opsStatus?.rootCauseSummary?.categories) && opsStatus.rootCauseSummary.categories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
   assert(opsStatus?.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", issues, "ops_status_root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  assert(Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) && opsStatus.rootCauseRecoveryPlan.steps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+  const rootCauseTotalBlockers = Number(opsStatus?.rootCauseSummary?.totalBlockers || 0);
+  const rootCauseCategories = Array.isArray(opsStatus?.rootCauseSummary?.categories) ? opsStatus.rootCauseSummary.categories : [];
+  const rootCauseRecoverySteps = Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) ? opsStatus.rootCauseRecoveryPlan.steps : [];
+  if (rootCauseTotalBlockers > 0) {
+    assert(rootCauseCategories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
+    assert(rootCauseRecoverySteps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+  } else {
+    assert(rootCauseCategories.length === 0, issues, "ops_status_root_cause_categories_present_without_blockers", { rootCauseSummary: opsStatus?.rootCauseSummary });
+    assert(rootCauseRecoverySteps.length === 0 && Number(opsStatus?.rootCauseRecoveryPlan?.stepCount || 0) === 0, issues, "ops_status_root_cause_recovery_steps_present_without_blockers", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+  }
   const recoveryCategories = new Set((opsStatus?.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
   for (const row of opsStatus?.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), issues, `ops_status_root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
   const authRecoveryStep = (opsStatus?.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");

@@ -16,13 +16,24 @@ $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
-function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
+  $publishAllowed = $Complete -and -not $PreservePreviousGood -and [string]::IsNullOrWhiteSpace($BlockingReason)
+  $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
+  $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
+  $writeBudget = [ordered]@{
+    allowed = [bool]$publishAllowed
+    status = if ($publishAllowed) { "allow" } else { "blocked" }
+    finalStatus = if ($publishAllowed) { "allow" } else { "blocked" }
+    scope = "cb_detect_complete_run_publish"
+    reason = $BlockingReason
+  }
   $receipt = [ordered]@{
     strategy = "cb-detect"
     label = "CB detect full scan"
     tier = "critical"
     startedAt = $scanStartedAt
     finishedAt = (Get-Date).ToString("o")
+    source_snapshot_captured_at = $scanStartedAt
     status = $Status
     exitCode = $ExitCode
     scanned = 0
@@ -31,15 +42,55 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
+    fallbackUsed = $false
+    fallbackAllowed = $false
+    fallbackScope = @()
+    fallbackDetails = @()
+    fallbackContract = "cb-detect-fallback-disclosure-v1"
     runId = $RunId
     payloadPath = "supabase-snapshot:cb_detect_latest"
+    publishAllowed = $publishAllowed
+    latestOverwriteAllowed = $publishAllowed
+    latestWriteAttempted = [bool]$publishAllowed
+    latestPointerUpdated = [bool]$publishAllowed
+    overwrotePreviousGood = $false
+    blockedReceiptWritten = [bool]$PreservePreviousGood
+    degradedBlocksLatest = [bool]$PreservePreviousGood
+    preservePreviousGood = [bool]$PreservePreviousGood
+    writeBudget = $writeBudget
+    retentionOk = $true
+    evidenceStatus = $evidenceStatus
+    unattendedStatus = $unattendedStatus
+    run_quality_at_publish = [ordered]@{
+      publishAllowed = $publishAllowed
+      latestOverwriteAllowed = $publishAllowed
+      latestWriteAttempted = [bool]$publishAllowed
+      latestPointerUpdated = [bool]$publishAllowed
+      overwrotePreviousGood = $false
+      blockedReceiptWritten = [bool]$PreservePreviousGood
+      preservePreviousGood = [bool]$PreservePreviousGood
+      degradedBlocksLatest = [bool]$PreservePreviousGood
+      fallbackUsed = $false
+      fallbackAllowed = $false
+      fallbackScope = @()
+      fallbackDetails = @()
+      fallbackContract = "cb-detect-fallback-disclosure-v1"
+      writeBudget = $writeBudget
+      evidenceStatus = $evidenceStatus
+      unattendedStatus = $unattendedStatus
+      resultCount = [int]$Matches
+      readbackCount = [int]$Matches
+      blockedReason = $BlockingReason
+      scanner_block_reason = $BlockingReason
+    }
     warnings = @($Warnings)
     blockingReason = $BlockingReason
+    blockedReason = $BlockingReason
+    scanner_block_reason = $BlockingReason
     log = $log
   }
-  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8
+  $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8
 }
-
 function Get-CbDetectReadbackFromLog {
   $text = Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue
   if ([string]::IsNullOrWhiteSpace($text)) { return $null }
@@ -81,6 +132,20 @@ function Assert-CbDetectApi {
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "CB detect full scan" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "cb-detect" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  "CB detect source gate blocked new publish; preserving latest complete run. $reason" >> $log
+  try {
+    $verifiedPayload = Assert-CbDetectApi
+    Write-CbDetectReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
+    exit 0
+  } catch {
+    Write-CbDetectReceipt "blocked" 0 $false 0 "" @($reason, $_.Exception.Message) $reason $true
+    exit 0
+  }
+}
 $codeRepo = "${PSScriptRoot}"
 Push-Location $codeRepo
 try {

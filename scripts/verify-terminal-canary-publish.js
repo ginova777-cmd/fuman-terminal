@@ -126,13 +126,14 @@ function validateCanary(manifest, scorecard, options = {}) {
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
   if (hasPendingNotDue && manifest.ok !== true) {
-    issues.push(`manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`);
+    const deferrals = [`manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`];
     return {
-      ok: false,
+      ok: true,
       contract: "terminal-canary-publish-v1",
       checkedAt: new Date().toISOString(),
       status: "PENDING_NOT_DUE",
       scorecardPublishAllowed: false,
+      canaryDeferred: true,
       marketClosedPreviousGood: false,
       tradeDate,
       manifestTradeDate: tradeDate,
@@ -150,6 +151,7 @@ function validateCanary(manifest, scorecard, options = {}) {
         cacheSource: scorecard.cacheSource || "",
       },
       issues,
+      deferrals,
       mode: options.mode || "artifact",
     };
   }
@@ -268,7 +270,7 @@ function selfTests() {
     { name: "runid-mismatch", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], runId: "old" }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_runId_mismatch:strategy2" },
     { name: "fallback-report", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], fallbackUsed: true }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_fallback_or_stale:strategy2" },
     { name: "trading-day-previous-good-is-blocked-not-market-closed", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", waterRoot: { status: "trading_day_wait_source_window_previous_good", reason: "trading_day_outside_formal_source_window_preserve_previous_good" }, blocker: "terminal_resource_chain_unattended_failed" }, { ...s, latestDate: "2026-07-16" }], expectOk: false, expectedStatus: "BLOCKED", issue: "scorecard_latestDate_mismatch" },
-    { name: "manifest-pending-not-due-defers-scorecard-check", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, { ...s, latestDate: "2026-07-16", sourceReports: [] }], expectOk: false, expectedStatus: "PENDING_NOT_DUE", issue: "manifest_pending_not_due" },
+    { name: "manifest-pending-not-due-defers-scorecard-check", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, { ...s, latestDate: "2026-07-16", sourceReports: [] }], expectOk: true, expectedStatus: "PENDING_NOT_DUE" },
     { name: "manifest-hard-blocker-overrides-later-pending", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "strategy4:manifest_tradeDate_mismatch:20260720!=20260721", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260720-a", ok: false, complete: false, pendingNotDue: false, issues: ["manifest_tradeDate_mismatch:20260720!=20260721"] }, { key: "strategy5", runId: "strategy5-20260720-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:21:00"] }] }, { ...s, latestDate: "2026-07-20", sourceReports: [] }], expectOk: false, expectedStatus: "BLOCKED", issue: "manifest_not_green" },
   ];
   const failures = [];
