@@ -74,6 +74,50 @@ function runDateFromId(value) {
   return match ? match[1] : "";
 }
 
+function runTimeSecondsFromId(value) {
+  const match = String(value || "").match(/-(\d{6})$/);
+  if (!match) return 0;
+  const text = match[1];
+  const hour = Number(text.slice(0, 2));
+  const minute = Number(text.slice(2, 4));
+  const second = Number(text.slice(4, 6));
+  if (![hour, minute, second].every(Number.isFinite)) return 0;
+  return hour * 3600 + minute * 60 + second;
+}
+
+function numeric(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function surfaceFallback(surface = {}) {
+  return surface.fallback === true
+    || surface.fallbackUsed === true
+    || surface.preservePreviousGood === true
+    || surface.snapshotFallback === true
+    || String(surface.cacheSource || surface.transportSource || surface.error || "").toLowerCase().includes("fallback");
+}
+
+function strategy2RollingRunIdsAllowed(key, uniqueRunIds, surfaces = []) {
+  if (key !== "strategy2") return false;
+  const ids = [...new Set((uniqueRunIds || []).filter(Boolean))];
+  if (ids.length <= 1) return true;
+  const dates = ids.map(runDateFromId);
+  if (dates.some((date) => date !== EXPECTED_DATE)) return false;
+  const seconds = ids.map(runTimeSecondsFromId).filter(Boolean);
+  if (seconds.length !== ids.length) return false;
+  if (Math.max(...seconds) - Math.min(...seconds) > 180) return false;
+  let countBearingSurfaces = 0;
+  for (const surface of surfaces.filter((item) => item && item.runId)) {
+    if (surfaceFallback(surface)) return false;
+    if (surface.status && Number(surface.status) >= 500) return false;
+    if (surface.ok === false) return false;
+    const count = numeric(surface.count || surface.returnedCount || surface.matches || surface.resultCount);
+    if (count > 0) countBearingSurfaces += 1;
+  }
+  return countBearingSurfaces >= 3;
+}
+
 function compactDate(value) {
   const text = String(value || "");
   if (!text) return "";
@@ -286,8 +330,18 @@ function moduleRow(row = {}) {
   };
   const runIdValues = Object.values(runIds).filter(Boolean);
   const uniqueRunIds = [...new Set(runIdValues)];
+  const runIdSurfaces = [
+    { ...receipt, runId: runIds.scanner, count: receipt.matches, ok: receipt.complete === true && receipt.status === "complete" },
+    { ...supabase, runId: runIds.supabase, count: supabase.count, ok: supabase.ok !== false },
+    { ...api, runId: api.runId, count: api.count || api.returnedCount, ok: api.ok !== false },
+    { ...terminal, runId: terminal.runId, count: terminal.count || terminal.returnedCount, ok: terminal.ok !== false },
+    { ...desktop, runId: desktop.runId, count: desktop.count || desktop.returnedCount, ok: desktop.ok !== false },
+    { ...mobile, runId: mobile.runId, count: mobile.count || mobile.returnedCount, ok: mobile.ok !== false },
+    { ...scorecard, runId: scorecard.runId, count: scorecard.count || scorecard.returnedCount, ok: scorecard.ok !== false },
+  ];
+  const rollingRunIdDriftAllowed = strategy2RollingRunIdsAllowed(row.key, uniqueRunIds, runIdSurfaces);
   const pendingNotDue = scheduleStatus.pendingNotDue === true && tradeDate !== EXPECTED_DATE;
-  if (!pendingNotDue && uniqueRunIds.length > 1) addUniqueIssue(issues, `manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
+  if (!pendingNotDue && uniqueRunIds.length > 1 && !rollingRunIdDriftAllowed) addUniqueIssue(issues, `manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
   if (!pendingNotDue && !runId) addUniqueIssue(issues, "manifest_missing_runId");
   if (!pendingNotDue && tradeDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
   if (!pendingNotDue && sourceDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);

@@ -2,16 +2,14 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T00:37:22.443Z",
-  "checkedAt": "2026-07-22T00:36:15.552Z",
+  "generatedAt": "2026-07-22T02:45:36.976Z",
+  "checkedAt": "2026-07-22T01:41:46.888Z",
   "tradeDate": "20260722",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
   "action": "wait_until_next_strategy_due_time",
-  "reason": "trading_day_outside_formal_source_window_preserve_previous_good",
-  "blockers": [
-    "trading_day_outside_formal_source_window_preserve_previous_good"
-  ],
+  "reason": "terminal_water_root_ready",
+  "blockers": [],
   "protectedReadbackDisplayBlockers": [],
   "gates": {
     "predictivePreflight": {
@@ -51,7 +49,7 @@
     "stateMachine": {
       "ok": false,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+      "reason": "terminal-resource-chain:unattended_exit_1",
       "reasonCodes": [
         "SCHEDULE_PENDING_NOT_DUE"
       ],
@@ -68,21 +66,18 @@
     "dailyManifest": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good",
+      "reason": "terminal_water_root_ready",
       "reasonCodes": [
         "CLOSURE_GREEN",
-        "PREVIOUS_GOOD_PRESERVED",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
       "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
         "continue_autonomous_monitoring",
-        "preserve_previous_good_and_mark_degraded",
         "wait_until_due_time"
       ],
       "reasonLayers": [
         "closure",
-        "previous_good",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -142,21 +137,18 @@
     "runIdClosure": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good",
+      "reason": "terminal_water_root_ready",
       "reasonCodes": [
         "CLOSURE_GREEN",
-        "PREVIOUS_GOOD_PRESERVED",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
       "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
         "continue_autonomous_monitoring",
-        "preserve_previous_good_and_mark_degraded",
         "wait_until_due_time"
       ],
       "reasonLayers": [
         "closure",
-        "previous_good",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -182,15 +174,18 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+      "reason": "terminal-resource-chain:unattended_exit_1",
       "reasonCodes": [
+        "CLOSURE_GREEN",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
+        "continue_autonomous_monitoring",
         "wait_until_due_time"
       ],
       "reasonLayers": [
+        "closure",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -219,32 +214,35 @@
       "key": "strategy2",
       "label": "策略2 即時",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy2-20260721-120146",
-      "tradeDate": "20260721",
-      "sourceDate": "20260721",
-      "resultCount": 144,
-      "pendingNotDue": true,
-      "runIdClosureOk": true,
-      "issue": "pending_not_due:09:00",
+      "runId": "strategy2-20260722-104250",
+      "tradeDate": "20260722",
+      "sourceDate": "20260722",
+      "resultCount": 110,
+      "pendingNotDue": false,
+      "runIdClosureOk": false,
+      "issue": "runId_mismatch:strategy2-20260722-094032,strategy2-20260722-093936",
       "issues": [
-        "pending_not_due:09:00"
+        "runId_mismatch:strategy2-20260722-094032,strategy2-20260722-093936"
       ],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN",
+        "RUNID_CLOSURE_NOT_OK"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring",
+        "verify_api_desktop_mobile_88_same_runid"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure",
+        "runid_closure"
       ],
-      "reasonSeverity": "info",
+      "reasonSeverity": "critical",
       "reasonUnknown": false
     },
     {
@@ -444,18 +442,18 @@
   "reasonCodeSummary": {
     "contract": "terminal-reason-code-summary-v1",
     "ok": true,
-    "entries": 19,
+    "entries": 18,
     "unknownEntries": 0,
-    "criticalEntries": 0,
+    "criticalEntries": 1,
     "codes": [
       "CLOSURE_GREEN",
-      "PREVIOUS_GOOD_PRESERVED",
+      "RUNID_CLOSURE_NOT_OK",
       "SCHEDULE_PENDING_NOT_DUE"
     ],
-    "primaryCode": "PREVIOUS_GOOD_PRESERVED",
+    "primaryCode": "CLOSURE_GREEN",
     "actions": [
       "continue_autonomous_monitoring",
-      "preserve_previous_good_and_mark_degraded",
+      "verify_api_desktop_mobile_88_same_runid",
       "wait_until_due_time"
     ]
   },
@@ -517,7 +515,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
     "ok": true,
-    "checkedAt": "2026-07-22T00:10:36.877Z"
+    "checkedAt": "2026-07-22T00:42:17.518Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
@@ -583,18 +581,18 @@
     "formalScan": {
       "allowed": false,
       "mode": "wait_schedule",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
+      "reason": "terminal_water_root_ready"
     },
     "publish": {
       "allowed": false,
       "canaryRequired": true,
       "mode": "preserve_previous_good",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
+      "reason": "terminal_water_root_ready"
     },
     "terminalDisplay": {
       "allowed": true,
       "mode": "previous_good_hold",
-      "reason": "trading_day_outside_formal_source_window_preserve_previous_good"
+      "reason": "terminal_water_root_ready"
     },
     "rollForward": {
       "allowed": true,
@@ -641,7 +639,7 @@
     "tradeDate": "20260722"
   },
   "rollForward": {
-    "mode": "dry-run",
+    "mode": "apply",
     "state": "IDLE_NO_RETRY_NEEDED",
     "jobs": 0,
     "executableJobs": 0,

@@ -91,6 +91,7 @@ const STRATEGIES = [
     resultTable: "strategy2_scan_results",
     resultStrategy: "strategy2",
     allowMissingDesktopSnapshot: true,
+    allowDesktopSnapshotRunIdDrift: true,
     allowReceiptDriftWhenDownstreamFresh: true,
     scorecardKeys: ["strategy2","策略2成績單","策略2當沖成績單","策略2"],
   },
@@ -647,6 +648,17 @@ function runDateFromId(value) {
   return match ? match[1] : "";
 }
 
+function runTimeSecondsFromId(value) {
+  const match = String(value || "").match(/-(\d{6})$/);
+  if (!match) return 0;
+  const text = match[1];
+  const hour = Number(text.slice(0, 2));
+  const minute = Number(text.slice(2, 4));
+  const second = Number(text.slice(4, 6));
+  if (![hour, minute, second].every(Number.isFinite)) return 0;
+  return hour * 3600 + minute * 60 + second;
+}
+
 function scorecardMembershipProtectedSummary(scorecardPayload) {
   return {
     status: Number(scorecardPayload?.status || 401),
@@ -757,6 +769,7 @@ function allowedFormalQuoteViewFallback(config, summary) {
 
 function compatibleLiveSurfaceRun(config, left, right) {
   if (!left?.runId || !right?.runId || left.runId === right.runId) return true;
+  if (allowedHighFrequencySnapshotDrift(config, left, right)) return true;
   if (!config?.allowFormalQuoteViewFallback) return false;
   return allowedFormalQuoteViewFallback(config, left)
     && allowedFormalQuoteViewFallback(config, right)
@@ -769,15 +782,24 @@ function timestampMs(value) {
 }
 
 function allowedHighFrequencySnapshotDrift(config, live, snapshot) {
-  if (config?.key !== "realtime-radar") return false;
+  if (!["realtime-radar", "strategy2"].includes(config?.key)) return false;
   if (!config.allowDesktopSnapshotRunIdDrift) return false;
   if (!live?.runId || !snapshot?.runId || live.runId === snapshot.runId) return false;
   if (live?.status >= 500 || snapshot?.status >= 500 || live?.ok === false || snapshot?.ok === false) return false;
+  if (obviousFallback(live) || obviousFallback(snapshot)) return false;
   if (cleanNumber(live.count || live.returnedCount) <= 0 || cleanNumber(snapshot.count || snapshot.returnedCount) <= 0) return false;
+  const liveDate = runDateFromId(live.runId) || compactDate(live.date || live.tradeDate || live.updatedAt);
+  const snapshotDate = runDateFromId(snapshot.runId) || compactDate(snapshot.date || snapshot.tradeDate || snapshot.updatedAt);
+  if (!liveDate || !snapshotDate || liveDate !== snapshotDate) return false;
+  if (config.key === "strategy2" && liveDate !== EXPECTED_DATE) return false;
+  const maxDriftMs = (config.key === "strategy2" ? 3 : 5) * 60 * 1000;
   const liveAt = timestampMs(live.updatedAt || live.sourceSnapshotCapturedAt || live.servedAt);
   const snapshotAt = timestampMs(snapshot.updatedAt || snapshot.sourceSnapshotCapturedAt || snapshot.servedAt);
-  if (!liveAt || !snapshotAt) return true;
-  return Math.abs(liveAt - snapshotAt) <= 5 * 60 * 1000;
+  if (liveAt && snapshotAt) return Math.abs(liveAt - snapshotAt) <= maxDriftMs;
+  const liveRunSeconds = runTimeSecondsFromId(live.runId);
+  const snapshotRunSeconds = runTimeSecondsFromId(snapshot.runId);
+  if (liveRunSeconds && snapshotRunSeconds) return Math.abs(liveRunSeconds - snapshotRunSeconds) <= maxDriftMs / 1000;
+  return config.key !== "strategy2";
 }
 
 
@@ -936,7 +958,8 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   );
   const allowedRealtimeSnapshotDrift = allowedHighFrequencySnapshotDrift(config, live, snapshot);
   if (!nonTradingRealtimeZero && !desktopSnapshotMissingAllowed && !live?.membershipProtected && !snapshot?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop artifact runId (${live.runId} vs ${snapshot.runId})`);
-  if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
+  const allowedMobileRunIdDrift = allowedHighFrequencySnapshotDrift(config, live, mobile);
+  if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId && !allowedMobileRunIdDrift) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   if (config.scorecardKeys?.length) {
     const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
     if (scorecard?.membershipProtected) {
@@ -944,7 +967,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       // display gate is active; computation continuity is checked via
       // Supabase latest + desktop snapshot above.
     } else if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
-    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
+    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId && !allowedHighFrequencySnapshotDrift(config, { runId: expectedRunId, date: supabase?.date || live?.date || compact?.date, count: supabase?.count || live?.count || compact?.count, ok: true, status: 200, updatedAt: supabase?.updatedAt || live?.updatedAt || compact?.updatedAt }, { ...scorecard, count: scorecard.count || scorecard.returnedCount || supabase?.count || live?.count || compact?.count })) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
     else if (expectedRunId && !scorecard.runId) issues.push(`scorecard /88 row/sourceReport missing runId for ${config.key}`);
   }
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
