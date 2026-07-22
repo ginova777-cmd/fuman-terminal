@@ -2,7 +2,7 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T10:24:41.892Z",
+  "generatedAt": "2026-07-22T11:45:32.420Z",
   "checkedAt": "2026-07-22T08:11:20.271Z",
   "tradeDate": "20260722",
   "state": "PENDING_NOT_DUE",
@@ -479,10 +479,10 @@
         "category": "schedule_pending",
         "severity": "info",
         "count": 1,
-        "action": "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
         "blockers": [
           "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
-        ]
+        ],
+        "action": "Wait until each module due time, keep previous-good visible, and do not run formal publish early."
       }
     ]
   },
@@ -504,8 +504,6 @@
         "severity": "info",
         "blockerCount": 1,
         "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [],
         "automation": "wait_until_due_time",
         "requires": [
           "module_due_time_reached",
@@ -517,7 +515,9 @@
           }
         ],
         "reason": "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
-        "stopMode": "pending_not_due"
+        "stopMode": "pending_not_due",
+        "canExecuteNow": false,
+        "blockedBy": []
       }
     ]
   },
@@ -525,7 +525,11 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
     "ok": true,
-    "checkedAt": "2026-07-22T10:17:00.902Z"
+    "checkedAt": "2026-07-22T11:45:32.420Z",
+    "releaseSha": "edead3676e695d398691e80995496316e0a5f128",
+    "blockers": [
+      "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+    ]
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
@@ -710,5 +714,16 @@
     "marketClosedMode": false,
     "layers": 21,
     "issues": []
+  },
+  "releaseIdentity": {
+    "branch": "main",
+    "headSha": "edead3676e695d398691e80995496316e0a5f128",
+    "originMainSha": "edead3676e695d398691e80995496316e0a5f128",
+    "worktreeClean": false,
+    "deploymentUrl": "https://fuman-terminal.vercel.app",
+    "releaseSha": "edead3676e695d398691e80995496316e0a5f128",
+    "deployId": "dpl_Bbeh4RdSrhK1pFBHYp7MF4cQvUpA",
+    "deploymentPreviewUrl": "fuman-terminal-r3mtkrqt8-ginova777-9771s-projects.vercel.app",
+    "releaseBranch": "main"
   }
 }
