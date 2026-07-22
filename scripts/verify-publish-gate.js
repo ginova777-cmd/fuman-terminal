@@ -2701,12 +2701,16 @@ for (const marker of [
   "strategy4",
   "zoneLabel",
   "institutionTotalNet",
-  "realtime-radar",
-  "signalTags",
+  "underlyingClose",
+  "warrantPrice",
+  "market-ai",
   "/api/market",
   "terminal-field-completeness.md",
 ]) {
   if (!terminalFieldCompleteness.includes(marker)) issues.push(`verify-terminal-field-completeness.js missing terminal field contract marker ${marker}`);
+}
+if (/key:\s*["']realtime-radar["']|\/api\/realtime-radar-latest|key:\s*["']heatmap["']|\/api\/heatmap\?/i.test(terminalFieldCompleteness)) {
+  issues.push("verify-terminal-field-completeness.js must not fetch retired realtime radar or heatmap routes");
 }
 if (!strategy2SharedSource.includes("fetchStrategy3QuoteLatestReady") || !strategy2SharedSource.includes("order: \"updated_at.desc\"")) {
   issues.push("lib/supabase-public-slot.js must keep Strategy3 latest quote fallback ordered by updated_at.desc");
@@ -3407,4 +3411,3 @@ if (issues.length) {
 }
 
 console.log("[publish-gate] ok");
-

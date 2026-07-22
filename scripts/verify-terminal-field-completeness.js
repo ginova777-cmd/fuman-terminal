@@ -110,23 +110,6 @@ const ROUTES = [
     ],
   },
   {
-    key: "realtime-radar",
-    label: "即時雷達",
-    endpoint: "/api/realtime-radar-latest?compact=1&shell=1&limit=50&live=1",
-    groups: [
-      ["代號", ["code", "symbol", "stockId", "stock_id"]],
-      ["名稱", ["name", "stockName", "stock_name"]],
-      ["即時價", ["price", "close", "lastPrice", "latestClose"]],
-      ["量能", ["volume", "tradeVolume", "totalVolume", "trade_value"]],
-      ["時間", ["time", "quoteTime", "updatedAt", "latestSeenAt"]],
-      ["訊號", ["reason", "signal", "state", "tags", "signalTags"]],
-    ],
-    allowZeroWhen: (payload) => payload?.marketOpen === false
-      && payload?.marketStatus === "closed"
-      && payload?.publishAllowed === false
-      && payload?.preservePreviousGood === true,
-  },
-  {
     key: "market",
     label: "市場總覽",
     endpoint: "/api/market?canvas=1&compact=1&shell=1&limit=24&live=1",
@@ -138,20 +121,6 @@ const ROUTES = [
       ["名稱", ["name", "label", "title", "symbol"]],
       ["數值", ["value", "price", "close", "index"]],
       ["時間/更新", ["updatedAt", "time", "date"]],
-    ],
-  },
-  {
-    key: "heatmap",
-    label: "熱力圖",
-    endpoint: "/api/heatmap?limit=80&live=1",
-    metaGroups: [
-      ["日期/更新", ["updatedAt", "servedAt", "generatedAt", "date", "tradeDate", "resolvedTradeDate"]],
-      ["來源/freshness", ["source", "cacheSource", "freshness", "snapshotFresh"]],
-    ],
-    groups: [
-      ["分類名稱", ["name", "industry", "label", "title"]],
-      ["漲跌/分數", ["pct", "avgPct", "changePercent", "score"]],
-      ["樣本數", ["count", "stockCount", "sample", "up", "down"]],
     ],
   },
   {
@@ -168,10 +137,29 @@ const ROUTES = [
     groups: [
       ["代號", ["code", "Code", "symbol", "stockId", "stock_id"]],
       ["名稱", ["name", "Name", "stockName", "stock_name"]],
-      ["價格", ["price", "close", "ClosingPrice", "lastPrice", "latestClose"]],
+      ["價格/判讀", ["price", "close", "ClosingPrice", "lastPrice", "latestClose", "reason"]],
       ["漲跌/排序", ["change", "Change", "pct", "percent", "score", "rankScore", "finalScore", "rank"]],
-      ["量能/金額", ["value", "TradeValue", "volume", "TradeVolume", "tradeValue"]],
+      ["來源/更新", ["source", "industry", "updatedAt", "quoteDate"]],
     ],
+    rowGroups: (row) => {
+      const code = String(row?.code || row?.symbol || "").trim().toUpperCase();
+      const side = String(row?.side || "").trim().toLowerCase();
+      if (code === "REPORT" || code === "RISK" || side === "report" || side === "risk") {
+        return [
+          ["代號", ["code", "symbol"]],
+          ["名稱", ["name", "title"]],
+          ["AI文字", ["reason", "summary", "title"]],
+          ["來源/更新", ["source", "updatedAt", "quoteDate"]],
+        ];
+      }
+      return [
+        ["代號", ["code", "Code", "symbol", "stockId", "stock_id"]],
+        ["名稱", ["name", "Name", "stockName", "stock_name"]],
+        ["價格", ["price", "close", "ClosingPrice", "lastPrice", "latestClose"]],
+        ["漲跌/排序", ["change", "Change", "pct", "percent", "score", "rankScore", "finalScore", "rank"]],
+        ["來源/更新", ["source", "industry", "updatedAt", "quoteDate"]],
+      ];
+    },
   },
 ];
 
@@ -294,7 +282,8 @@ function checkRoute(route, payload) {
     return { rows, issues, zeroAllowed: false };
   }
   rows.forEach((row, index) => {
-    route.groups.forEach(([label, fields]) => {
+    const groups = typeof route.rowGroups === "function" ? route.rowGroups(row, payload) : route.groups;
+    groups.forEach(([label, fields]) => {
       const hit = fields.find((field) => !isBlank(getPath(row, field)));
       if (!hit) {
         issues.push({
