@@ -994,7 +994,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
 async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, scorecardPayload) {
   const receipt = receiptSummary(config.receiptKey);
   const endpoint = withQuery(config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
-  const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, live: 1, t: Date.now() });
+  const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
   const [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
     fetchLatestRun(config),
     fetchSnapshotKey(config.snapshotKey),
@@ -1082,7 +1082,7 @@ function markdown(results, desktopSnapshot, fastBundle) {
   lines.push(`- Desktop snapshot: status=${desktopSnapshot.status} fresh=${desktopSnapshot.summary?.snapshotFresh ?? ""} updatedAt=${desktopSnapshot.summary?.updatedAt || ""} endpointCount=${desktopSnapshot.summary?.endpointCount || 0}`);
   lines.push(`- Terminal fast bundle: status=${fastBundle.status} fresh=${fastBundle.summary?.snapshotFresh ?? ""} updatedAt=${fastBundle.summary?.updatedAt || ""} endpointCount=${fastBundle.summary?.endpointCount || 0}`);
   lines.push("");
-  lines.push("| 項目 | 排程狀態 | scanner receipt | source health | Supabase 最新 | live=1 API | 終端 compact API | desktop artifact | mobile fragment | /88 row/sourceReport | 判定 |");
+  lines.push("| 項目 | 排程狀態 | scanner receipt | source health | Supabase 最新 | production API | 終端 compact API | desktop artifact | mobile fragment | /88 row/sourceReport | 判定 |");
   lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|");
   for (const row of results) {
     const schedule = row.scheduleStatus ? `${row.scheduleStatus.state || "--"}<br>${row.scheduleStatus.dueTime || "--"}` : "n/a";
@@ -1138,7 +1138,7 @@ async function main() {
   const [desktopSnapshotResult, fastBundleResult, scorecardResult] = await Promise.all([
     fetchJson(publicUrl(withQuery("/api/desktop-route-snapshot", { t: Date.now() })), { timeoutMs: 35000 }),
     fetchJson(publicUrl(withQuery("/api/terminal-fast-bundle", { t: Date.now() })), { timeoutMs: 35000 }),
-    fetchJson(publicUrl(withQuery("/api/scorecard", { live: 1, t: Date.now() })), { timeoutMs: 35000 }),
+    fetchJson(publicUrl(withQuery("/api/scorecard", { t: Date.now() })), { timeoutMs: 35000 }),
   ]);
   const desktopSnapshotPayload = desktopSnapshotResult.json || {};
   const fastBundlePayload = fastBundleResult.json || {};

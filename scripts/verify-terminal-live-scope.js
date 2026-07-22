@@ -8,6 +8,7 @@ const files = [
   "api/scorecard.js",
   "api/source-reports.js",
   "api/terminal-ops-status.js",
+  "scripts/verify-terminal-resource-chain.js",
 ];
 
 const issues = [];
@@ -121,6 +122,16 @@ if (/\/api\/scorecard\?live=1/.test(productionLiveVerifier)) {
 }
 if (/\/api\/source-reports\?live=1/.test(productionLiveVerifier)) {
   issues.push({ file: "scripts/verify-terminal-ops-production-live.js", code: "production_verifier_source_reports_live_query", line: "sourceReports production readback must use snapshot endpoint, not ?live=1" });
+}
+const resourceChainVerifier = read("scripts/verify-terminal-resource-chain.js");
+if (/\/api\/scorecard\?live=1/.test(resourceChainVerifier) || /withQuery\("\/api\/scorecard",\s*\{[^}]*live:\s*1/s.test(resourceChainVerifier)) {
+  issues.push({ file: "scripts/verify-terminal-resource-chain.js", code: "resource_chain_scorecard_live_query", line: "resource-chain must read scorecard snapshot endpoint, not ?live=1" });
+}
+if (/withQuery\(config\.directEndpoint \|\| config\.endpoint,\s*\{[^}]*live:\s*1/s.test(resourceChainVerifier)) {
+  issues.push({ file: "scripts/verify-terminal-resource-chain.js", code: "resource_chain_strategy_live_query", line: "resource-chain display closure must not force strategy API live=1" });
+}
+if (/live=1 API/.test(resourceChainVerifier)) {
+  issues.push({ file: "scripts/verify-terminal-resource-chain.js", code: "resource_chain_live_label", line: "resource-chain report must not label production readback as live=1 API" });
 }
 const sourceReports = read("api/source-reports.js");
 if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
