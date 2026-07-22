@@ -68,6 +68,33 @@ for (const rel of files) {
   }
 }
 
+const terminalFastBundle = read("api/terminal-fast-bundle.js");
+if (!terminalFastBundle.includes("function liveFanoutEnabled")) {
+  issues.push({ file: "api/terminal-fast-bundle.js", code: "missing_live_fanout_kill_switch", line: "FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT" });
+}
+if (!terminalFastBundle.includes("const wantsLive = requestedLiveFanout && liveFanoutEnabled(request);")) {
+  issues.push({ file: "api/terminal-fast-bundle.js", code: "terminal_live_fanout_not_env_gated", line: "wantsLive must be gated by liveFanoutEnabled" });
+}
+
+const scorecard = read("api/scorecard.js");
+if (!scorecard.includes("function scorecardLiveSourceReportsEnabled")) {
+  issues.push({ file: "api/scorecard.js", code: "missing_scorecard_live_source_reports_gate", line: "FUMAN_SCORECARD_LIVE_SOURCE_REPORTS" });
+}
+if (!scorecard.includes("const forceLiveSourceReports = scorecardLiveSourceReportsEnabled(request);")) {
+  issues.push({ file: "api/scorecard.js", code: "scorecard_live_source_reports_not_env_gated", line: "strictLiveReports/refreshSourceReports must not directly enable live source reports" });
+}
+if (!scorecard.includes("const liveSnapshotReadback = scorecardLiveSnapshotReadbackEnabled(request);")) {
+  issues.push({ file: "api/scorecard.js", code: "scorecard_live_snapshot_not_env_gated", line: "live/snapshotLive must not directly force live readback" });
+}
+
+const sourceReports = read("api/source-reports.js");
+if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
+  issues.push({ file: "api/source-reports.js", code: "missing_source_reports_live_gate", line: "FUMAN_SCORECARD_LIVE_SOURCE_REPORTS" });
+}
+if (!sourceReports.includes("const forceLiveSourceReports = sourceReportsLiveSourceReportsEnabled(request);")) {
+  issues.push({ file: "api/source-reports.js", code: "source_reports_live_not_env_gated", line: "strictLiveReports/refreshSourceReports must not directly enable live source reports" });
+}
+
 if (issues.length) {
   console.error(JSON.stringify({ ok: false, issueCount: issues.length, issues }, null, 2));
   process.exit(1);

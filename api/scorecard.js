@@ -1842,6 +1842,16 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
   }, "degraded", reason);
 }
 
+function scorecardLiveSourceReportsEnabled(request) {
+  return process.env.FUMAN_SCORECARD_LIVE_SOURCE_REPORTS === "1"
+    && (request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1");
+}
+
+function scorecardLiveSnapshotReadbackEnabled(request) {
+  return process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_READBACK === "1"
+    && (request.query?.live === "1" || request.query?.snapshotLive === "1");
+}
+
 async function buildPayload(requestedDate = "", options = {}) {
   const liveSourceReports = options.liveSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
@@ -1892,8 +1902,8 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const forceLiveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
-    const liveSnapshotReadback = request.query?.live === "1" || request.query?.snapshotLive === "1";
+    const forceLiveSourceReports = scorecardLiveSourceReportsEnabled(request);
+    const liveSnapshotReadback = scorecardLiveSnapshotReadbackEnabled(request);
     const noCache = forceLiveSourceReports || liveSnapshotReadback || request.query?.noCache === "1" || request.query?.refresh === "1";
     const payload = attachMarketCalendar(await buildPayload(requestedDate, {
       liveSourceReports: forceLiveSourceReports,

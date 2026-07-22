@@ -2,11 +2,21 @@ const { buildMarketCalendarContract, installMarketCalendarResponse } = require("
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 "use strict";
 
+function sourceReportsLiveSourceReportsEnabled(request) {
+  return process.env.FUMAN_SCORECARD_LIVE_SOURCE_REPORTS === "1"
+    && (request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1");
+}
+
+function sourceReportsLiveSnapshotReadbackEnabled(request) {
+  return process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_READBACK === "1"
+    && (request.query?.live === "1" || request.query?.snapshotLive === "1");
+}
+
 async function readScorecardPayload(request) {
   const scorecard = require("./scorecard");
   if (scorecard.__test?.buildPayload) {
-    const forceLiveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
-    const liveSnapshotReadback = request.query?.live === "1" || request.query?.snapshotLive === "1";
+    const forceLiveSourceReports = sourceReportsLiveSourceReportsEnabled(request);
+    const liveSnapshotReadback = sourceReportsLiveSnapshotReadbackEnabled(request);
     return scorecard.__test.buildPayload(request.query?.date || request.query?.record_date || "", {
       liveSourceReports: forceLiveSourceReports,
       noCache: forceLiveSourceReports || liveSnapshotReadback || request.query?.noCache === "1" || request.query?.refresh === "1",

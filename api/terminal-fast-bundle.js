@@ -723,6 +723,13 @@ function liveFallbackEnabled(request) {
     || process.env.FUMAN_DESKTOP_FAST_BUNDLE_ALLOW_LIVE_FALLBACK === "1";
 }
 
+function liveFanoutEnabled(request) {
+  if (request.query?.internalLiveFanout === "1") {
+    return process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
+  }
+  return process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
+}
+
 function snapshotMissPayload(reason = "snapshot_missing_or_stale") {
   const updatedAt = new Date().toISOString();
   return {
@@ -760,9 +767,10 @@ module.exports = async function handler(request, response) {
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
 
-  const wantsLive = request.query?.live === "1"
+  const requestedLiveFanout = request.query?.live === "1"
     || request.query?.refresh === "1"
     || request.query?.force === "1";
+  const wantsLive = requestedLiveFanout && liveFanoutEnabled(request);
   if (!entitlement?.ok && !wantsLive) {
     if (request.method === 'HEAD') {
       response.status(200).end('');
