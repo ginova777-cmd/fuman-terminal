@@ -256,7 +256,7 @@ $latestRecordDate = [string]$healthPayload.latestRecordDate
 $latestSummaryDate = [string]$healthPayload.latestSummaryDate
 
 if ($healthStatus -ne "ready") {
-  throw "v_scorecard_source_health.status=$healthStatus; refusing to publish scorecard_latest"
+  throw "scorecard_source_light_health.status=$healthStatus; refusing to publish scorecard_latest"
 }
 if ($latestRecordDate -ne $sourceLatestDate) {
   throw "health latest_record_date=$latestRecordDate does not match generated latestDate=$sourceLatestDate; refusing to publish"
