@@ -1388,7 +1388,7 @@ function Get-TerminalPrioritySymbols {
   }
 
   $payload = [ordered]@{
-    strategy1 = @(Get-TerminalTableSymbols -PathAndQuery "strategy1_open_buy_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy1")
+    strategy1 = @() # retired: do not read strategy1_open_buy_results during shared-source warmup
     strategy2 = @(Get-TerminalTableSymbols -PathAndQuery "strategy2_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy2")
     strategy3 = @(Get-TerminalTableSymbols -PathAndQuery "strategy3_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy3")
     strategy4 = @(Get-TerminalTableSymbols -PathAndQuery "strategy4_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy4")
@@ -1396,7 +1396,7 @@ function Get-TerminalPrioritySymbols {
     institution = @(Get-TerminalTableSymbols -PathAndQuery "institution_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "institution")
     warrant = @(Get-TerminalTableSymbols -PathAndQuery "warrant_flow_scan_results?select=underlying_code,underlying_name,payload" -Fields @("underlying_code", "payload.underlyingCode", "payload.underlyingSymbol") -UniverseSet $universeSet -Label "warrant")
     cb = @(Get-TerminalTableSymbols -PathAndQuery "cb_detect_scan_results?select=symbol,payload" -Fields @("symbol", "payload.symbol", "payload.underlyingCode", "payload.underlyingSymbol") -UniverseSet $universeSet -Label "cb")
-    realtimeRadar = @(Get-TerminalTableSymbols -PathAndQuery "fuman_realtime_radar_cache?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "realtime-radar")
+    realtimeRadar = @() # retired: do not read fuman_realtime_radar_cache during shared-source warmup
   }
   $combined = @(Get-UniqueSymbols -Values (
     @($payload.strategy1) + @($payload.strategy2) + @($payload.strategy3) + @($payload.strategy4) +

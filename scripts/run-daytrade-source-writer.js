@@ -1337,7 +1337,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, 120);
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
-  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, 90);
+  counts.strategy1 = 0; // retired: do not seed daytrade priority from Strategy1
   addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, 90);
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, 90);
   addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, 80);
@@ -1345,7 +1345,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("institution", payload.institution || payload.institutionSymbols, 75);
   addMany("warrant", payload.warrant || payload.warrantSymbols, 70);
   addMany("cb", payload.cb || payload.cbSymbols, 60);
-  addMany("realtime_radar", payload.realtimeRadar || payload.realtimeRadarSymbols, 75);
+  counts.realtime_radar = 0; // retired: do not seed daytrade priority from realtime radar
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("symbols", payload.symbols, 10);
 
@@ -1607,7 +1607,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       payload: {
         score: numberValue(row.score),
         selected: true,
-        consumerScope: ["daytrade", "strategy1", "strategy3"],
+        consumerScope: ["daytrade", "strategy3"],
         motherPoolRuleVersion: "daytrade_mother_pool_rank_overlap_20260709",
         motherPoolMetrics: row.priorityMetrics || {},
         motherPoolRuleHits: row.priorityMetrics?.ruleHits || [],
@@ -1669,7 +1669,7 @@ function countPriorityValues(values, universe) {
 function readRuntimePrioritySummary(activeSymbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
   const universe = new Set(activeSymbols.map((row) => row.symbol));
-  const strategy1 = countPriorityValues(payload.strategy1 || payload.strategy1Symbols, universe);
+  const strategy1 = 0;
   const strategy2 = countPriorityValues(payload.strategy2 || payload.strategy2Symbols, universe);
   const strategy3 = countPriorityValues(payload.strategy3 || payload.strategy3Symbols, universe);
   const strategy4 = countPriorityValues(payload.strategy4 || payload.strategy4Symbols, universe);
@@ -1677,7 +1677,7 @@ function readRuntimePrioritySummary(activeSymbols) {
   const institution = countPriorityValues(payload.institution || payload.institutionSymbols, universe);
   const warrant = countPriorityValues(payload.warrant || payload.warrantSymbols, universe);
   const cb = countPriorityValues(payload.cb || payload.cbSymbols, universe);
-  const realtimeRadar = countPriorityValues(payload.realtimeRadar || payload.realtimeRadarSymbols, universe);
+  const realtimeRadar = 0;
   return {
     source: payload.source || "",
     updatedAt: payload.updatedAt || "",

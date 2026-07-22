@@ -87,6 +87,23 @@ if (!scorecard.includes("const liveSnapshotReadback = scorecardLiveSnapshotReadb
   issues.push({ file: "api/scorecard.js", code: "scorecard_live_snapshot_not_env_gated", line: "live/snapshotLive must not directly force live readback" });
 }
 
+const publicSlotSharedSource = read("ops/public-slot/Run-PublicSlotSharedSource.ps1");
+if (/strategy1_open_buy_results\?select/i.test(publicSlotSharedSource)) {
+  issues.push({ file: "ops/public-slot/Run-PublicSlotSharedSource.ps1", code: "retired_strategy1_shared_source_read", line: "shared source warmup must not read strategy1_open_buy_results" });
+}
+if (/fuman_realtime_radar_cache\?select/i.test(publicSlotSharedSource)) {
+  issues.push({ file: "ops/public-slot/Run-PublicSlotSharedSource.ps1", code: "retired_realtime_radar_shared_source_read", line: "shared source warmup must not read fuman_realtime_radar_cache" });
+}
+
+const daytradeWriter = read("scripts/run-daytrade-source-writer.js");
+if (/addMany\("strategy1"|addMany\("realtime_radar"/.test(daytradeWriter)) {
+  issues.push({ file: "scripts/run-daytrade-source-writer.js", code: "retired_priority_seed_in_daytrade_writer", line: "daytrade writer must not seed Strategy1/realtime radar" });
+}
+
+const websocketCollector = read("ops/public-slot/fugle-websocket-collector.js");
+if (/addMany\("strategy1"|addMany\("realtimeRadar"/.test(websocketCollector)) {
+  issues.push({ file: "ops/public-slot/fugle-websocket-collector.js", code: "retired_priority_seed_in_websocket_collector", line: "WebSocket collector must not subscribe Strategy1/realtime radar priority seeds" });
+}
 const sourceReports = read("api/source-reports.js");
 if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
   issues.push({ file: "api/source-reports.js", code: "missing_source_reports_live_gate", line: "FUMAN_SCORECARD_LIVE_SOURCE_REPORTS" });
