@@ -15,8 +15,8 @@ const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_P
 const TIMEOUT_MS = Number(process.env.FUMAN_PROTECTED_READBACK_TIMEOUT_MS || 60000);
 const DIRECT_ENDPOINTS = [
   { key: "terminal_ops_status", path: "/api/terminal-ops-status" },
-  { key: "scorecard", path: "/api/scorecard?live=1" },
-  { key: "source_reports", path: "/api/source-reports?live=1" },
+  { key: "scorecard", path: "/api/scorecard" },
+  { key: "source_reports", path: "/api/source-reports" },
 ];
 
 function safeJson(text, fallback) {

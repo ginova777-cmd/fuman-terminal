@@ -366,7 +366,8 @@ async function main() {
     || decision.state === "PENDING_NOT_DUE"
     || rollForward.ok === true;
   const evidenceFresh = payload.predictivePreflight.ok === true;
-  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || evidenceFresh);
+  const pendingNotDue = decision.state === "PENDING_NOT_DUE";
+  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || evidenceFresh || pendingNotDue);
   console.log(JSON.stringify({
     ok: operationallyValid,
     state: decision.state,

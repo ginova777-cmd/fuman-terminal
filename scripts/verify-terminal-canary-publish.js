@@ -166,15 +166,26 @@ function validateCanary(manifest, scorecard, options = {}) {
     }
   }
 
-  const publishAllowed = issues.length === 0 && (!closed || allowMarketClosedPublish || allowPreviousGoodHoldClosurePublish);
+  const scorecardPublishAllowed = issues.length === 0
+    && !closed
+    && !allowPendingRollForward
+    && !allowPreviousGoodHoldClosurePublish
+    && manifest.ok === true
+    && manifest.unattendedStatus === "YES";
+  const guardedPreviousGood = issues.length === 0 && (closed || allowPendingRollForward || allowPreviousGoodHoldClosurePublish);
+  const ok = issues.length === 0;
   return {
-    ok: issues.length === 0,
+    ok,
     contract: "terminal-canary-publish-v1",
     checkedAt: new Date().toISOString(),
-    status: closed
-      ? (publishAllowed ? "CANARY_READY_MARKET_CLOSED_CLOSURE" : "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD")
-      : (publishAllowed && allowPendingRollForward ? "CANARY_READY_PENDING_NOT_DUE_ROLL_FORWARD" : (publishAllowed && allowPreviousGoodHoldClosurePublish ? "CANARY_READY_PREVIOUS_GOOD_HOLD_CLOSURE" : (publishAllowed ? "CANARY_READY" : "BLOCKED"))),
-    scorecardPublishAllowed: publishAllowed,
+    status: allowPendingRollForward && guardedPreviousGood
+      ? "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD"
+      : (closed
+        ? "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+        : (allowPreviousGoodHoldClosurePublish && guardedPreviousGood
+          ? "NOT_ARMED_TRADING_DAY_PREVIOUS_GOOD"
+          : (scorecardPublishAllowed ? "CANARY_READY" : "BLOCKED"))),
+    scorecardPublishAllowed,
     marketClosedPreviousGood: closed,
     tradeDate: expectedReportDate,
     manifestTradeDate: tradeDate,
@@ -241,7 +252,7 @@ function selfTests() {
     { name: "runid-mismatch", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], runId: "old" }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_runId_mismatch:strategy2" },
     { name: "fallback-report", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], fallbackUsed: true }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_fallback_or_stale:strategy2" },
     { name: "trading-day-previous-good-is-blocked-not-market-closed", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", waterRoot: { status: "trading_day_wait_source_window_previous_good", reason: "trading_day_outside_formal_source_window_preserve_previous_good" }, blocker: "terminal_resource_chain_unattended_failed" }, { ...s, latestDate: "2026-07-16" }], expectOk: false, expectedStatus: "BLOCKED", issue: "scorecard_latestDate_mismatch" },
-    { name: "manifest-pending-not-due-allows-current-nonpending-roll-forward", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, s], expectOk: true, expectedStatus: "CANARY_READY_PENDING_NOT_DUE_ROLL_FORWARD" },
+    { name: "manifest-pending-not-due-allows-current-nonpending-roll-forward", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, s], expectOk: true, expectedStatus: "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD" },
     { name: "manifest-hard-blocker-overrides-later-pending", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "strategy4:manifest_tradeDate_mismatch:20260720!=20260721", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260720-a", ok: false, complete: false, pendingNotDue: false, issues: ["manifest_tradeDate_mismatch:20260720!=20260721"] }, { key: "strategy5", runId: "strategy5-20260720-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:21:00"] }] }, { ...s, latestDate: "2026-07-20", sourceReports: [] }], expectOk: false, expectedStatus: "BLOCKED", issue: "manifest_not_green" },
   ];
   const failures = [];

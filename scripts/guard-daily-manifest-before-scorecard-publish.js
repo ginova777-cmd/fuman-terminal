@@ -71,10 +71,9 @@ function modulesGreen(manifest = {}) {
 }
 
 function allowMarketClosedClosurePublish(manifest = {}) {
-  return (manifest.ok === true
-    && String(manifest.unattendedStatus || "") === "PREVIOUS_GOOD_HOLD"
-    && modulesGreen(manifest))
-    || pendingPreviousGoodModules(manifest);
+  // Previous-good / pending-not-due is display protection only.
+  // A fresh scorecard publish must wait for canary.scorecardPublishAllowed=true.
+  return false;
 }
 
 function readJson(file) {
@@ -107,8 +106,8 @@ function main() {
     fail("canary_publish_contract_invalid", { contract: canary.contract || "", canary: CANARY_FILE });
   }
 
-  const pendingRollForwardAllowed = String(canary.status || "") === "CANARY_READY_PENDING_NOT_DUE_ROLL_FORWARD"
-    && canary.scorecardPublishAllowed === true;
+  const pendingRollForwardAllowed = String(canary.status || "") === "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD"
+    && canary.scorecardPublishAllowed === false;
   const manifestTradeDate = String(manifest.tradeDate || "");
   const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
   const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
