@@ -8,6 +8,7 @@ const files = [
   "api/scorecard.js",
   "api/source-reports.js",
   "api/terminal-ops-status.js",
+  "api/desktop-route-snapshot.js",
   "scripts/verify-terminal-resource-chain.js",
 ];
 
@@ -132,6 +133,16 @@ if (/withQuery\(config\.directEndpoint \|\| config\.endpoint,\s*\{[^}]*live:\s*1
 }
 if (/live=1 API/.test(resourceChainVerifier)) {
   issues.push({ file: "scripts/verify-terminal-resource-chain.js", code: "resource_chain_live_label", line: "resource-chain report must not label production readback as live=1 API" });
+}
+const desktopRouteSnapshot = read("api/desktop-route-snapshot.js");
+if (/release-readback|RELEASE_DESKTOP|strategy[2345]-2026071[34]|institution-20260713|cb-detect-20260713|warrant-flow-20260714/.test(desktopRouteSnapshot)) {
+  issues.push({ file: "api/desktop-route-snapshot.js", code: "desktop_stale_release_readback_fallback", line: "desktop route snapshot must not contain hardcoded old release readback data" });
+}
+if (/live=1/.test(desktopRouteSnapshot)) {
+  issues.push({ file: "api/desktop-route-snapshot.js", code: "desktop_snapshot_must_not_force_live", line: "desktop route snapshot must not hardcode live=1 endpoint fallbacks" });
+}
+if (!/function releaseReadbackSnapshot\(\) \{\s*return null;\s*\}/s.test(desktopRouteSnapshot)) {
+  issues.push({ file: "api/desktop-route-snapshot.js", code: "desktop_release_readback_not_disabled", line: "releaseReadbackSnapshot must be disabled to avoid old first-paint data" });
 }
 const sourceReports = read("api/source-reports.js");
 if (!sourceReports.includes("function sourceReportsLiveSourceReportsEnabled")) {
