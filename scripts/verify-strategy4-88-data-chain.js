@@ -116,14 +116,14 @@ async function main() {
   ]);
   const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy4&live=1", { tab: "strategy4", live: "1" });
   const [scorecard, sourceReports] = await Promise.all([
-    callInternal(modules.scorecard, "/api/scorecard?live=1", { live: "1" }),
+    callInternal(modules.scorecard, "/api/scorecard?t=1", { t: "1" }),
     callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }),
   ]);
   const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
     fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1"),
     fetchText("/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70"),
     fetchText("/api/mobile-fragment?tab=strategy4&live=1"),
-    fetchText("/api/scorecard?live=1"),
+    fetchText("/api/scorecard?t=1"),
     fetchText("/api/source-reports?live=1"),
     fetchText("/88"),
   ]);
@@ -177,14 +177,14 @@ async function main() {
   addCheck(checks, summaries.mobileFragment.runId === runId, "mobile_fragment_internal_run_id", summaries.mobileFragment);
   addCheck(checks, summaries.scorecard.runId === runId, "scorecard_source_row_internal_run_id", summaries.scorecard);
   addCheck(checks, summaries.sourceReports.runId === runId, "source_reports_internal_run_id", summaries.sourceReports);
-  addCheck(checks, page88Local.includes("/api/scorecard?live=1") && page88Local.includes("scorecardStrategy4Live"), "page_88_scorecard_strategy4_data_chain_hook", {
+  addCheck(checks, page88Local.includes("/api/scorecard?t=") && page88Local.includes("scorecardStrategy4Live"), "page_88_scorecard_strategy4_data_chain_hook", {
     file: path.join(root, "88.html"),
-    callsScorecard: page88Local.includes("/api/scorecard?live=1"),
+    callsScorecard: page88Local.includes("/api/scorecard?t="),
     hasStrategy4LiveHook: page88Local.includes("scorecardStrategy4Live"),
   });
-  addCheck(checks, prod88.status === 200 && prod88.text.includes("/api/scorecard?live=1"), "production_88_shell_calls_scorecard", {
+  addCheck(checks, prod88.status === 200 && prod88.text.includes("/api/scorecard?t="), "production_88_shell_calls_scorecard", {
     status: prod88.status,
-    hasScorecardCall: prod88.text.includes("/api/scorecard?live=1"),
+    hasScorecardCall: prod88.text.includes("/api/scorecard?t="),
     hasRunIdInShell: /strategy4-\d{8}-\d{14}/.test(prod88.text || ""),
   });
   addCheck(checks, prodProtected.strategy4Latest && prodProtected.mobileFragment && (prodProtected.scorecard || prodProtected.scorecardPublicRunAligned) && (prodProtected.sourceReports || prodProtected.sourceReportsPublicRunAligned), "production_membership_or_public_scorecard_contract", { ...prodProtected, prodScorecardStrategy4RunId, prodSourceReportsStrategy4RunId });
@@ -216,7 +216,7 @@ async function main() {
       mobileFragment: { status: prodMobile.status, protected: prodProtected.mobileFragment },
       scorecard: { status: prodScorecard.status, protected: prodProtected.scorecard, publicRunAligned: prodProtected.scorecardPublicRunAligned, runId: prodScorecardStrategy4RunId },
       sourceReports: { status: prodSourceReports.status, protected: prodProtected.sourceReports, publicRunAligned: prodProtected.sourceReportsPublicRunAligned, runId: prodSourceReportsStrategy4RunId },
-      page88: { status: prod88.status, shellCallsScorecard: prod88.text.includes("/api/scorecard?live=1") },
+      page88: { status: prod88.status, shellCallsScorecard: prod88.text.includes("/api/scorecard?t=") },
     },
     checks,
     issues: checks.filter((check) => !check.ok),

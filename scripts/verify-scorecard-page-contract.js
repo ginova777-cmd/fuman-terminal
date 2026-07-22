@@ -23,7 +23,10 @@ const sourceReportsApi = read("api/source-reports.js");
 const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
-assertMarker(issues, page, "/api/scorecard?live=1", "/88 live scorecard API");
+assertMarker(issues, page, "/api/scorecard?t=", "/88 snapshot scorecard API");
+if (/\/api\/scorecard\?[^`"']*(live=1|snapshotLive=1|noCache=1)/.test(page)) {
+  issues.push("/88 must not force scorecard live/snapshotLive/noCache; scorecard reads published snapshot to protect Supabase");
+}
 assertMarker(issues, page, "membership-lock=20260713-11", "/88 must load current membership guard");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "renderMembershipLock", "/88 membership lock renderer");

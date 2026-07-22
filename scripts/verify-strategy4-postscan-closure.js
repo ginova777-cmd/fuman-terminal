@@ -258,16 +258,16 @@ async function main() {
 
   const localHtml88 = readText(path.join(process.cwd(), "88.html"));
   const productionHtml88 = page88.text || "";
-  issue(checks, localHtml88.includes("/api/scorecard?live=1") && localHtml88.includes("scorecardStrategy4Live"), "scorecard_88_local_strategy4_live_hook_present", {
+  issue(checks, localHtml88.includes("/api/scorecard?t=") && localHtml88.includes("scorecardStrategy4Live"), "scorecard_88_local_strategy4_live_hook_present", {
     file: path.join(process.cwd(), "88.html"),
     hook: "scorecardStrategy4Live",
-    endpoint: "/api/scorecard?live=1",
+    endpoint: "/api/scorecard?t=",
   });
-  issue(checks, page88.ok && productionHtml88.includes("/api/scorecard?live=1") && productionHtml88.includes("scorecardStrategy4Live"), "scorecard_88_production_strategy4_live_hook_present", {
+  issue(checks, page88.ok && productionHtml88.includes("/api/scorecard?t=") && productionHtml88.includes("scorecardStrategy4Live"), "scorecard_88_production_strategy4_live_hook_present", {
     status: page88.status,
     url: page88.url,
     hook: "scorecardStrategy4Live",
-    endpoint: "/api/scorecard?live=1",
+    endpoint: "/api/scorecard?t=",
   });
   const scorecardProtectedByMembership = scorecard.status === 401 && scorecard.payload?.protected === true && scorecard.payload?.error === "membership_required";
   issue(checks, (scorecard.ok && scorecard.payload?.ok !== false) || scorecardProtectedByMembership, "scorecard_api_http_ok", { status: scorecard.status, protectedByMembership: scorecardProtectedByMembership, url: scorecard.url, runId: scorecard.payload?.runId || "" });
