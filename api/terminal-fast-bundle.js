@@ -778,9 +778,10 @@ module.exports = async function handler(request, response) {
   }
   if (!wantsLive) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
+    const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || 1500) || 1500);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
-      : await readDesktopRouteSnapshot({ timeoutMs: 8000 });
+      : await readDesktopRouteSnapshot({ timeoutMs: snapshotReadTimeoutMs }).catch(() => null);
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
       response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
@@ -833,17 +834,15 @@ module.exports = async function handler(request, response) {
         return;
       }
       const endpoints = {};
-      await repairStrategy2LatestSnapshot(request, endpoints);
-      await repairStrategy3LatestSnapshot(request, endpoints);
-      await repairStrategy5FullSnapshot(request, endpoints);
-      await repairStrategy4LatestSnapshot(request, endpoints);
-      await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-miss" });
       const missPayload = {
-        ...snapshotMissPayload(),
+        ...snapshotMissPayload("desktop_route_snapshot_timeout_or_missing"),
         endpoints,
-        summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
-        misses: Object.keys(endpoints).length ? [] : ["desktop_route_snapshot"],
-        snapshotRepairs: Object.keys(endpoints).length ? { strategy3: "live-repair-on-snapshot-miss" } : {},
+        summary: {},
+        misses: ["desktop_route_snapshot"],
+        snapshotRepairs: { skipped: "snapshot-miss-fast-fail" },
+        preservePreviousGood: true,
+        latestPointerUpdated: false,
+        emptyResultWritten: false,
       };
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar), entitlement));
       return;

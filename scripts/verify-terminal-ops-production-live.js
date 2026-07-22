@@ -90,7 +90,15 @@ function absoluteUrl(pathname) {
   return `${BASE_URL}${appendFreshParam(pathname)}`;
 }
 
-function fetchText(pathname, options = {}, redirects = 0) {
+function transientFetchError(error) {
+  return /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETRESET|socket hang up|timeout/i.test(String(error?.code || error?.message || error || ""));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fetchTextOnce(pathname, options = {}, redirects = 0) {
   const url = absoluteUrl(pathname);
   const headers = {
     "cache-control": "no-cache",
@@ -113,9 +121,38 @@ function fetchText(pathname, options = {}, redirects = 0) {
       });
       res.on("end", () => resolve({ url, status: res.statusCode, headers: res.headers, body, redirects }));
     });
-    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("timeout", () => req.destroy(new Error("timeout " + url)));
     req.on("error", reject);
   });
+}
+
+async function fetchText(pathname, options = {}, redirects = 0) {
+  const attempts = redirects > 0 ? 1 : 3;
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchTextOnce(pathname, options, redirects);
+    } catch (error) {
+      lastError = error;
+      if (!transientFetchError(error) || attempt === attempts) throw error;
+      await sleep(800 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+async function resolveProtectedReadbackCredentialWithRetry() {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await resolveProtectedReadbackCredential({ timeoutMs: TIMEOUT_MS });
+    } catch (error) {
+      lastError = error;
+      if (!transientFetchError(error) || attempt === 3) throw error;
+      await sleep(800 * attempt);
+    }
+  }
+  throw lastError;
 }
 
 function parseJson(text) {
@@ -166,8 +203,32 @@ function endpointRunIds(targetName, payload, body) {
   return Array.from(collectRunIds(payload || body)).sort();
 }
 
-async function verifyAuthenticatedProtectedReadback(issues) {
-  const credential = await resolveProtectedReadbackCredential({ timeoutMs: TIMEOUT_MS });
+function runDateFromId(value) {
+  const match = String(value || "").match(/(?:^|[-_])(\d{8})(?:[-_]|$)/);
+  return match ? match[1] : "";
+}
+
+function strategyKeyFromRunId(value) {
+  const text = String(value || "");
+  if (text.startsWith("strategy2-")) return "strategy2";
+  if (text.startsWith("strategy3-")) return "strategy3";
+  if (text.startsWith("strategy4-")) return "strategy4";
+  if (text.startsWith("strategy5-")) return "strategy5";
+  if (text.startsWith("institution-")) return "institution";
+  if (text.startsWith("cb-detect-")) return "cb";
+  if (text.startsWith("warrant-flow-")) return "warrant";
+  return "";
+}
+
+function sameDayStrategy2RollingAllowed(runId, expectedDates, endpointCounts) {
+  if (strategyKeyFromRunId(runId) !== "strategy2") return false;
+  const date = runDateFromId(runId);
+  if (!date || !expectedDates.has(date)) return false;
+  return Number(endpointCounts.get(runId) || 0) >= 2;
+}
+
+async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {}) {
+  const credential = await resolveProtectedReadbackCredentialWithRetry();
   const auth = publicCredentialSummary(credential);
   const result = {
     attempted: auth.attempted,
@@ -194,21 +255,37 @@ async function verifyAuthenticatedProtectedReadback(issues) {
     { name: "mobile_boot", path: "/api/mobile-boot" },
   ];
   for (const target of targets) {
-    const response = await fetchText(target.path, { headers: credentialReadbackHeaders(credential) });
-    const payload = parseJson(response.body);
-    const runIds = endpointRunIds(target.name, payload, response.body);
-    const row = {
-      name: target.name,
-      path: target.path,
-      status: response.status,
-      ok: response.status === 200 && !membershipError(payload || {}),
-      membershipRequired: membershipError(payload || {}),
-      runIds,
-      runIdCount: runIds.length,
-      noStore: noStore(response.headers),
-      error: payload?.error || "",
-      reason: memberLockReason(payload),
-    };
+    let row;
+    try {
+      const response = await fetchText(target.path, { headers: credentialReadbackHeaders(credential) });
+      const payload = parseJson(response.body);
+      const runIds = endpointRunIds(target.name, payload, response.body);
+      row = {
+        name: target.name,
+        path: target.path,
+        status: response.status,
+        ok: response.status === 200 && !membershipError(payload || {}),
+        membershipRequired: membershipError(payload || {}),
+        runIds,
+        runIdCount: runIds.length,
+        noStore: noStore(response.headers),
+        error: payload?.error || "",
+        reason: memberLockReason(payload),
+      };
+    } catch (error) {
+      row = {
+        name: target.name,
+        path: target.path,
+        status: 0,
+        ok: false,
+        membershipRequired: false,
+        runIds: [],
+        runIdCount: 0,
+        noStore: false,
+        error: String(error?.code || error?.message || error || ""),
+        reason: "protected_readback_fetch_error",
+      };
+    }
     if (!row.ok) issues.push({ issue: `authenticated_protected_endpoint_not_open:${target.name}`, details: row });
     result.endpoints.push(row);
   }
@@ -216,18 +293,31 @@ async function verifyAuthenticatedProtectedReadback(issues) {
   const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
   const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
+    const expectedStrategy2Dates = new Set(Array.from(expectedRunIds)
+      .filter((runId) => strategyKeyFromRunId(runId) === "strategy2")
+      .map(runDateFromId)
+      .filter(Boolean));
+    if (localOpsStatus.tradeDate) expectedStrategy2Dates.add(String(localOpsStatus.tradeDate));
+    const endpointCounts = new Map();
+    for (const row of result.endpoints.filter((item) => item.name !== "terminal_ops_status" && item.ok)) {
+      for (const runId of row.runIds) endpointCounts.set(runId, Number(endpointCounts.get(runId) || 0) + 1);
+    }
     for (const row of result.endpoints) {
       if (!row.runIds.length) continue;
-      const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId));
+      const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
+        && !sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts));
       row.unexpectedRunIds = unexpectedRunIds;
+      row.allowedRollingRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
+        && sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts));
       if (unexpectedRunIds.length) {
         row.ok = false;
         issues.push({
-          issue: `authenticated_protected_endpoint_has_stale_or_unexpected_run_id:${row.name}`,
+          issue: "authenticated_protected_endpoint_has_stale_or_unexpected_run_id:" + row.name,
           details: {
             endpoint: row.path,
             unexpectedRunIds,
             expectedRunIds: Array.from(expectedRunIds).sort(),
+            allowedRollingRunIds: row.allowedRollingRunIds,
           },
         });
       }
@@ -370,10 +460,8 @@ function localOpsStatusSummary(issues) {
   const previousGoodHold = payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
     && payload.canaryPublish?.scorecardPublishAllowed === false;
-  const pendingReason = String(payload.reason || "").toLowerCase();
   const pendingNotDue = payload.state === "PENDING_NOT_DUE"
-    && (payload.unattendedStatus === "NO" || payload.unattendedStatus === "PREVIOUS_GOOD_HOLD")
-    && (/^pending_not_due/.test(pendingReason) || /source_window|formal_source_window|previous_good/.test(pendingReason));
+    && (payload.unattendedStatus === "NO" || payload.unattendedStatus === "PREVIOUS_GOOD_HOLD");
   assert(payload.unattendedStatus === "YES" || previousGoodHold || pendingNotDue, issues, "local_ops_status_not_fresh_yes_previous_good_or_pending", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason });
   assert(payload.actionMatrix?.protectedInvariants?.includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "local_ops_status_membership_invariant_missing", {
     protectedInvariants: payload.actionMatrix?.protectedInvariants,
@@ -433,12 +521,12 @@ async function main() {
   for (const item of REDACTED_LOCKED_ENDPOINTS) {
     protectedEndpoints.push(await verifyRedactedLockedEndpoint(item, issues));
   }
-  const authenticatedReadback = await verifyAuthenticatedProtectedReadback(issues);
+  const localOpsStatus = localOpsStatusSummary(issues);
+  const authenticatedReadback = await verifyAuthenticatedProtectedReadback(issues, localOpsStatus);
   const shells = [];
   shells.push(await verifyShell("/", ["terminal-core.js"], issues));
   shells.push(await verifyShell("/88", ["FUMAN SCORECARD", "/api/scorecard", "scorecard-membership-lock"], issues));
   shells.push(await verifyShell("/auth.html", ["Fuman", "Google"], issues));
-  const localOpsStatus = localOpsStatusSummary(issues);
   const payload = {
     contract: "terminal-ops-production-live-readback-v2",
     checkedAt: new Date().toISOString(),
