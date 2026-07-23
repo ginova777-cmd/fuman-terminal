@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const market = require("./market");
 const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const stocks = require("./stocks");
@@ -18,6 +20,117 @@ const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cach
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+
+const TERMINAL_ROOT = path.resolve(__dirname, "..");
+const TERMINAL_OPS_STATUS_FILE = path.join(TERMINAL_ROOT, "data", "terminal-ops-status-latest.json");
+const DAILY_MANIFEST_FILE = path.join(TERMINAL_ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
+const FORMAL_RUN_ID_PATTERN = /\b(?:strategy2|strategy3|strategy4|strategy5|institution|cb-detect|warrant-flow)-\d{8}[\w-]*/g;
+let canonicalRunIdsCache = { at: 0, byKey: new Map() };
+
+function readJsonFile(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
+function strategyKeyFromRunId(runId) {
+  const text = String(runId || "");
+  if (text.startsWith("strategy2-")) return "strategy2";
+  if (text.startsWith("strategy3-")) return "strategy3";
+  if (text.startsWith("strategy4-")) return "strategy4";
+  if (text.startsWith("strategy5-")) return "strategy5";
+  if (text.startsWith("institution-")) return "institution";
+  if (text.startsWith("cb-detect-")) return "cb";
+  if (text.startsWith("warrant-flow-")) return "warrant";
+  return "";
+}
+
+function canonicalRunIdsFromArtifacts() {
+  if (Date.now() - canonicalRunIdsCache.at < 30000) return canonicalRunIdsCache.byKey;
+  const byKey = new Map();
+  const candidates = [readJsonFile(TERMINAL_OPS_STATUS_FILE), readJsonFile(DAILY_MANIFEST_FILE)];
+  for (const payload of candidates) {
+    for (const row of Array.isArray(payload?.modules) ? payload.modules : []) {
+      const key = String(row?.key || "").trim();
+      const runId = String(row?.runId || "").trim();
+      if (key && runId && !byKey.has(key)) byKey.set(key, runId);
+    }
+  }
+  canonicalRunIdsCache = { at: Date.now(), byKey };
+  return byKey;
+}
+
+function collectFormalRunIds(value, out = new Set()) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(FORMAL_RUN_ID_PATTERN)) out.add(match[0]);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectFormalRunIds(item, out);
+    return out;
+  }
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectFormalRunIds(item, out);
+  }
+  return out;
+}
+
+function redactUnexpectedManifestRunIds(value, canonicalByKey) {
+  if (typeof value === "string") {
+    return value.replace(FORMAL_RUN_ID_PATTERN, (runId) => {
+      const key = strategyKeyFromRunId(runId);
+      const canonical = key ? canonicalByKey.get(key) : "";
+      if (canonical && canonical === runId) return runId;
+      return key ? `stale_${key}_runid_redacted` : "stale_runid_redacted";
+    });
+  }
+  if (Array.isArray(value)) return value.map((item) => redactUnexpectedManifestRunIds(item, canonicalByKey));
+  if (value && typeof value === "object") {
+    const next = {};
+    for (const [key, item] of Object.entries(value)) next[key] = redactUnexpectedManifestRunIds(item, canonicalByKey);
+    return next;
+  }
+  return value;
+}
+
+function isCanonicalStrategyEndpoint(endpoint, key) {
+  const pathName = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+  if (key === "strategy2") return pathName === "/api/strategy2-latest";
+  if (key === "strategy3") return pathName === "/api/strategy3-latest";
+  if (key === "strategy4") return pathName === "/api/strategy4-latest";
+  if (key === "strategy5") return pathName === "/api/strategy5-latest";
+  if (key === "institution") return pathName === "/api/institution-latest";
+  if (key === "cb") return pathName === "/api/cb-detect-latest";
+  if (key === "warrant") return pathName === "/api/warrant-flow-latest";
+  return false;
+}
+
+function removeStaleManifestRunIdEndpoints(endpoints = {}) {
+  const canonicalByKey = canonicalRunIdsFromArtifacts();
+  if (!canonicalByKey.size) return [];
+  const removals = [];
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    const runIds = [...collectFormalRunIds(payload)];
+    const staleRunIds = runIds.filter((runId) => {
+      const key = strategyKeyFromRunId(runId);
+      const canonical = key ? canonicalByKey.get(key) : "";
+      return Boolean(canonical && canonical !== runId);
+    });
+    if (!staleRunIds.length) continue;
+    const staleKeys = [...new Set(staleRunIds.map(strategyKeyFromRunId).filter(Boolean))];
+    const hasCanonicalRunId = runIds.some((runId) => {
+      const key = strategyKeyFromRunId(runId);
+      return Boolean(key && canonicalByKey.get(key) === runId);
+    });
+    const canonicalEndpoint = staleKeys.some((key) => isCanonicalStrategyEndpoint(endpoint, key));
+    if (canonicalEndpoint && hasCanonicalRunId) {
+      endpoints[endpoint] = redactUnexpectedManifestRunIds(payload, canonicalByKey);
+      removals.push({ endpoint, action: "redacted", staleRunIds });
+    } else {
+      delete endpoints[endpoint];
+      removals.push({ endpoint, action: "removed", staleRunIds });
+    }
+  }
+  return removals;
+}
 
 function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
@@ -810,6 +923,7 @@ module.exports = async function handler(request, response) {
         await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-repair" });
       }
       sanitizeStrategy2Endpoints(endpoints);
+      const staleManifestEndpointRemovals = removeStaleManifestRunIdEndpoints(endpoints);
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -820,7 +934,10 @@ module.exports = async function handler(request, response) {
         partial: Boolean(snapshot.payload.partial),
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
         snapshotHit: !isReleaseReadbackSnapshot,
-        snapshotRepairs: realtimeRadarRepairs,
+        snapshotRepairs: {
+          ...(realtimeRadarRepairs && typeof realtimeRadarRepairs === "object" ? realtimeRadarRepairs : { value: realtimeRadarRepairs }),
+          staleManifestEndpointRemovals,
+        },
       };
       if (request.method === "HEAD") {
         response.status(200).end("");
@@ -883,6 +1000,7 @@ module.exports = async function handler(request, response) {
     via: "api/terminal-fast-bundle",
   });
   sanitizeStrategy2Endpoints(endpoints);
+  const staleManifestEndpointRemovals = removeStaleManifestRunIdEndpoints(endpoints);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
   const misses = rows
@@ -899,6 +1017,7 @@ module.exports = async function handler(request, response) {
     summary,
     misses,
     timings: Object.fromEntries(rows.map((item) => [item.label, item.elapsedMs || 0])),
+    snapshotRepairs: { staleManifestEndpointRemovals },
   };
 
   if (request.method === "HEAD") {

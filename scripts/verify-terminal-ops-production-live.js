@@ -302,14 +302,14 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   }
 
   const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
-  const expectedRunIds = new Set(reference?.runIds || []);
+  const expectedRunIds = new Set((localOpsStatus.expectedRunIds && localOpsStatus.expectedRunIds.length) ? localOpsStatus.expectedRunIds : (reference?.runIds || []));
   if (expectedRunIds.size) {
     const targetByName = new Map(targets.map((target) => [target.name, target]));
     const expectedRunIdsSorted = Array.from(expectedRunIds).sort();
-    const expectedByKey = new Map();
+    const expectedByKey = new Map(Object.entries(localOpsStatus.expectedByKey || {}));
     for (const runId of expectedRunIdsSorted) {
       const key = strategyKeyFromRunId(runId);
-      if (key) expectedByKey.set(key, runId);
+      if (key && !expectedByKey.has(key)) expectedByKey.set(key, runId);
     }
     const expectedStrategy2Dates = new Set(Array.from(expectedRunIds)
       .filter((runId) => strategyKeyFromRunId(runId) === "strategy2")
@@ -538,12 +538,19 @@ function localOpsStatusSummary(issues) {
   assert(payload.actionMatrix?.protectedInvariants?.includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "local_ops_status_membership_invariant_missing", {
     protectedInvariants: payload.actionMatrix?.protectedInvariants,
   });
+  const modules = Array.isArray(payload.modules) ? payload.modules : [];
+  const expectedRunIds = modules.map((row) => String(row.runId || "").trim()).filter(Boolean);
+  const expectedByKey = Object.fromEntries(modules
+    .map((row) => [String(row.key || "").trim(), String(row.runId || "").trim()])
+    .filter(([key, runId]) => key && runId));
   return {
     contract: payload.contract || "",
     state: payload.state || "",
     unattendedStatus: payload.unattendedStatus || "",
     tradeDate: payload.tradeDate || "",
-    modules: Array.isArray(payload.modules) ? payload.modules.length : 0,
+    modules: modules.length,
+    expectedRunIds,
+    expectedByKey,
   };
 }
 

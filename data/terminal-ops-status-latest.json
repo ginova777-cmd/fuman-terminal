@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-23T10:34:17.002Z",
-  "checkedAt": "2026-07-23T10:33:16.973Z",
+  "generatedAt": "2026-07-23T12:26:32.041Z",
+  "checkedAt": "2026-07-23T11:08:40.448Z",
   "tradeDate": "20260723",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -474,36 +474,23 @@
   "rootCauseSummary": {
     "contract": "production-readiness-root-cause-summary-v1",
     "ok": true,
-    "totalBlockers": 16,
-    "rootCauseCount": 3,
-    "criticalRootCauseCount": 2,
+    "totalBlockers": 7,
+    "rootCauseCount": 2,
+    "criticalRootCauseCount": 1,
     "unknownBlockers": 0,
     "categories": [
       {
         "category": "production_live_readback",
         "severity": "critical",
-        "count": 12,
+        "count": 6,
         "action": "Rerun production live readback after deploy and protected credential are ready.",
         "blockers": [
           "productionLiveOpsReadback_not_ok",
-          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:scorecard:{\"endpoint\":\"/api/scorecard\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
-          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:source_reports:{\"endpoint\":\"/api/source-reports\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
-          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:terminal_fast_bundle:{\"endpoint\":\"/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260722-20260722080805\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
-          "production_live_issue:authenticated_protected_endpoint_has_stale_or_unexpected_run_id:terminal_fast_bundle:{\"endpoint\":\"/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70\",\"unexpectedRunIds\":[\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"allowedRollingRunIds\":[\"strategy2-20260723-115814\"]}",
-          "production_live_issue:authenticated_mobile_fragment_run_id_mismatch:mobile_strategy2:{\"endpoint\":\"/api/mobile-fragment?tab=strategy2\",\"expectedKey\":\"strategy2\",\"expectedRunId\":\"strategy2-20260722-111122\",\"actualRunIds\":[\"strategy2-20260723-115814\"]}",
-          "production_live_issue:authenticated_mobile_fragment_run_id_mismatch:mobile_strategy3:{\"endpoint\":\"/api/mobile-fragment?tab=strategy3\",\"expectedKey\":\"strategy3\",\"expectedRunId\":\"strategy3-20260722-20260722073639\",\"actualRunIds\":[\"strategy3-20260723-20260723064941\"]}",
-          "production_live_issue:authenticated_protected_endpoint_has_stale_or_unexpected_run_id:mobile_strategy3:{\"endpoint\":\"/api/mobile-fragment?tab=strategy3\",\"unexpectedRunIds\":[\"strategy3-20260723-20260723064941\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"allowedRollingRunIds\":[]}"
-        ]
-      },
-      {
-        "category": "release_deploy",
-        "severity": "critical",
-        "count": 3,
-        "action": "Align production release SHA with current audited HEAD before claiming production readiness.",
-        "blockers": [
-          "production_release_sha_mismatch",
-          "production_live_issue:release_manifest_sha_mismatch:{\"live\":\"ee18ae6780674e44f2272d61583c9ce3c725f19c\",\"expected\":\"5fe22b513f2e928684ffea1776f7720d88f96b37\"}",
-          "release_sha_not_current_head"
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:scorecard:{\"endpoint\":\"/api/scorecard\",\"missingRunIds\":[\"stale_strategy2_runid_redacted\",\"stale_strategy3_runid_redacted\",\"stale_strategy4_runid_redacted\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"stale_strategy2_runid_redacted\",\"strategy2-20260723-115814\",\"stale_strategy3_runid_redacted\",\"strategy3-20260723-20260723064941\",\"stale_strategy4_runid_redacted\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:source_reports:{\"endpoint\":\"/api/source-reports\",\"missingRunIds\":[\"stale_strategy2_runid_redacted\",\"stale_strategy3_runid_redacted\",\"stale_strategy4_runid_redacted\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"stale_strategy2_runid_redacted\",\"strategy2-20260723-115814\",\"stale_strategy3_runid_redacted\",\"strategy3-20260723-20260723064941\",\"stale_strategy4_runid_redacted\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:terminal_fast_bundle:{\"endpoint\":\"/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70\",\"missingRunIds\":[\"stale_strategy2_runid_redacted\",\"stale_strategy3_runid_redacted\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"stale_strategy4_runid_redacted\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"stale_strategy2_runid_redacted\",\"strategy2-20260723-115814\",\"stale_strategy3_runid_redacted\",\"strategy3-20260723-20260723064941\",\"stale_strategy4_runid_redacted\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "refresh_failed:production_live_readback",
+          "production_live_not_ok"
         ]
       },
       {
@@ -520,14 +507,14 @@
   "rootCauseRecoveryPlan": {
     "contract": "production-readiness-root-cause-recovery-plan-v1",
     "ok": true,
-    "stepCount": 3,
+    "stepCount": 2,
     "autoExecutableSteps": 0,
     "autoExecutableNow": 0,
     "blockedAutoExecutableSteps": 0,
-    "manualSteps": 3,
+    "manualSteps": 2,
     "firstManualStep": "schedule_pending",
     "firstExecutableStep": "",
-    "firstBlockedStep": "release_deploy",
+    "firstBlockedStep": "",
     "steps": [
       {
         "category": "schedule_pending",
@@ -551,41 +538,13 @@
         "stopMode": "pending_not_due"
       },
       {
-        "category": "release_deploy",
-        "order": 30,
-        "severity": "critical",
-        "blockerCount": 3,
-        "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [
-          "release_owner_approval_required",
-          "production_sha_not_aligned_to_head",
-          "release_dirty_state_requires_owner_review"
-        ],
-        "automation": "deploy_required",
-        "requires": [
-          "release_owner_approval",
-          "current_head_audited",
-          "no_unrelated_dirty_release"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live"
-          }
-        ],
-        "reason": "Production SHA must match the audited HEAD before production readiness can be claimed.",
-        "stopMode": "deploy_required"
-      },
-      {
         "category": "production_live_readback",
         "order": 40,
         "severity": "critical",
-        "blockerCount": 12,
+        "blockerCount": 6,
         "canAutoExecute": false,
         "canExecuteNow": false,
-        "blockedBy": [
-          "production_sha_not_aligned"
-        ],
+        "blockedBy": [],
         "automation": "readback_after_auth_deploy",
         "requires": [
           "protected_readback_credential_ok",
@@ -605,7 +564,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
     "ok": false,
-    "checkedAt": "2026-07-23T10:29:40.513Z"
+    "checkedAt": "2026-07-23T11:25:48.652Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
