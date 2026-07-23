@@ -263,12 +263,14 @@ function readRequestOptions(request) {
     const displayRead = url.searchParams.get("compact") === "1"
       || url.searchParams.get("top") === "1";
     const limit = Math.max(1, Math.min(canvas ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 80 : 3000)));
-    const snapshotFriendly = canvas
+    const forceLive = url.searchParams.get("live") === "1"
+      || url.searchParams.get("scorecardSource") === "1";
+    const snapshotFriendly = !forceLive && (canvas
       || displayRead
       || url.searchParams.get("snapshotBuild") === "1"
       || url.searchParams.get("fastBundle") === "1"
-      || url.searchParams.get("shell") === "1";
-    return { canvas, limit, snapshotFriendly };
+      || url.searchParams.get("shell") === "1");
+    return { canvas, limit, snapshotFriendly, forceLive };
   } catch {
     return { canvas: false, limit: 3000, snapshotFriendly: false };
   }
@@ -895,7 +897,7 @@ async function handler(request, response) {
 
   const options = readRequestOptions(request);
 
-  const cached = await readEndpointFromDesktopSnapshot(request, {
+  const cached = options.forceLive ? null : await readEndpointFromDesktopSnapshot(request, {
     timeoutMs: 700,
     via: "api/warrant-flow-latest",
   });
@@ -1008,3 +1010,4 @@ module.exports._prewater = {
   readRequestOptions,
   validateDataContract,
 };
+

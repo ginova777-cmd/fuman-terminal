@@ -91,23 +91,38 @@ function redactUnexpectedManifestRunIds(value, canonicalByKey) {
   return value;
 }
 
-function isCanonicalStrategyEndpoint(endpoint, key) {
+function canonicalStrategyEndpointKey(endpoint) {
   const pathName = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
-  if (key === "strategy2") return pathName === "/api/strategy2-latest";
-  if (key === "strategy3") return pathName === "/api/strategy3-latest";
-  if (key === "strategy4") return pathName === "/api/strategy4-latest";
-  if (key === "strategy5") return pathName === "/api/strategy5-latest";
-  if (key === "institution") return pathName === "/api/institution-latest";
-  if (key === "cb") return pathName === "/api/cb-detect-latest";
-  if (key === "warrant") return pathName === "/api/warrant-flow-latest";
-  return false;
+  if (pathName === "/api/strategy2-latest") return "strategy2";
+  if (pathName === "/api/strategy3-latest") return "strategy3";
+  if (pathName === "/api/strategy4-latest") return "strategy4";
+  if (pathName === "/api/strategy5-latest") return "strategy5";
+  if (pathName === "/api/institution-latest") return "institution";
+  if (pathName === "/api/cb-detect-latest") return "cb";
+  if (pathName === "/api/warrant-flow-latest") return "warrant";
+  return "";
+}
+
+function isCanonicalStrategyEndpoint(endpoint, key) {
+  return canonicalStrategyEndpointKey(endpoint) === key;
+}
+
+function canonicalRunIdsForEndpoint(endpoint, payload, baseCanonicalByKey) {
+  const canonicalByKey = new Map(baseCanonicalByKey);
+  const endpointKey = canonicalStrategyEndpointKey(endpoint);
+  const endpointRunId = String(payload?.runId || payload?.transport?.runId || "").trim();
+  if (endpointKey && endpointRunId && strategyKeyFromRunId(endpointRunId) === endpointKey) {
+    canonicalByKey.set(endpointKey, endpointRunId);
+  }
+  return canonicalByKey;
 }
 
 function removeStaleManifestRunIdEndpoints(endpoints = {}) {
-  const canonicalByKey = canonicalRunIdsFromArtifacts();
-  if (!canonicalByKey.size) return [];
+  const baseCanonicalByKey = canonicalRunIdsFromArtifacts();
+  if (!baseCanonicalByKey.size) return [];
   const removals = [];
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    const canonicalByKey = canonicalRunIdsForEndpoint(endpoint, payload, baseCanonicalByKey);
     const runIds = [...collectFormalRunIds(payload)];
     const staleRunIds = runIds.filter((runId) => {
       const key = strategyKeyFromRunId(runId);
@@ -1026,3 +1041,4 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
