@@ -11,6 +11,11 @@ const OUT_DIR = path.join(RUNTIME_DIR, "state");
 const PROD_OUT_DIR = process.env.DAYTRADE_UNATTENDED_OUTPUT_DIR || "C:/Users/ginov/Documents/Codex/buy-sell-autonomy-main/outputs";
 const SOURCE_NAME = "fugle_daytrade_source";
 const PHASES = ["0700", "0845", "0900"];
+const PHASE_DUE_MINUTES = {
+  "0700": 7 * 60,
+  "0845": 8 * 60 + 45,
+  "0900": 9 * 60,
+};
 const PRIORITY_LIMIT = 40;
 const MIN_PRIORITY_COVERAGE = 0.95;
 const WRITER_BUILD = "daytrade-warmup-unattended-hard-gate-20260720-03";
@@ -27,6 +32,24 @@ function taipeiDateParts(date = new Date()) {
 function taipeiTradeDate(date = new Date()) {
   const parts = taipeiDateParts(date);
   return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function taipeiClockMinutes(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  return num(parts.hour) * 60 + num(parts.minute);
+}
+
+function phaseDue(phase, tradeDate, now = new Date()) {
+  const today = taipeiTradeDate(now);
+  const normalizedTradeDate = String(tradeDate || "").replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+  if (normalizedTradeDate < today) return true;
+  if (normalizedTradeDate > today) return false;
+  return taipeiClockMinutes(now) >= (PHASE_DUE_MINUTES[phase] ?? 24 * 60);
 }
 
 function argValue(name, fallback = "") {
@@ -138,6 +161,7 @@ function nextTaipeiRunAt(hour, minute) {
 
 function buildOpsPolicy({ yes, failedPhase, failureCodes, previousUnattendedYes, selfHeal, selfHealRecovered }) {
   const uniqueCodes = [...new Set(failureCodes || [])];
+  const pendingNotDue = uniqueCodes.includes("PENDING_NOT_DUE");
   const firstCode = uniqueCodes[0] || null;
   const taskMissed = uniqueCodes.some((code) => String(code).startsWith("TASK_MISSED_"));
   const sourceNotReady = uniqueCodes.some((code) => [
@@ -149,32 +173,36 @@ function buildOpsPolicy({ yes, failedPhase, failureCodes, previousUnattendedYes,
     "SCANNER_OPENING_FALSE",
     "FORMAL_VERDICT_NO",
   ].includes(code));
-  const incidentStatus = yes ? "NONE" : "OPEN";
-  const policyDecision = yes ? "ALLOW_FORMAL_SCAN" : "FAIL_CLOSED_PRESERVE_PREVIOUS_GOOD";
+  const incidentStatus = yes || pendingNotDue ? "NONE" : "OPEN";
+  const policyDecision = yes ? "ALLOW_FORMAL_SCAN" : pendingNotDue ? "PENDING_NOT_DUE_PRESERVE_PREVIOUS_GOOD" : "FAIL_CLOSED_PRESERVE_PREVIOUS_GOOD";
   const selfHealAction = yes
     ? "NO_ACTION"
-    : (taskMissed ? "QUEUE_TASK_MISSED_DIAGNOSTIC_ONLY_DO_NOT_BACKFILL_NATURAL" : "QUEUE_SOURCE_RECHECK_DO_NOT_BACKFILL_NATURAL");
+    : pendingNotDue
+      ? "WAIT_FOR_NATURAL_SCHEDULED_PHASE"
+      : (taskMissed ? "QUEUE_TASK_MISSED_DIAGNOSTIC_ONLY_DO_NOT_BACKFILL_NATURAL" : "QUEUE_SOURCE_RECHECK_DO_NOT_BACKFILL_NATURAL");
   return {
     policy_decision: policyDecision,
-    scanner_action: yes ? "ALLOW_SCANNER_OPENING" : "BLOCK_SCANNER_OPENING",
+    scanner_action: yes ? "ALLOW_SCANNER_OPENING" : pendingNotDue ? "WAIT_FOR_NEXT_WARMUP_PHASE" : "BLOCK_SCANNER_OPENING",
     publish_action: yes ? "ALLOW_TODAY_FORMAL_PUBLISH" : "PREVIOUS_GOOD_ONLY",
     latest_action: yes ? "ALLOW_LATEST_UPDATE" : "BLOCK_LATEST_UPDATE",
     incident_status: incidentStatus,
-    incident_severity: yes ? "NONE" : (taskMissed ? "CRITICAL" : "HIGH"),
+    incident_severity: yes || pendingNotDue ? "NONE" : (taskMissed ? "CRITICAL" : "HIGH"),
     incident_reason_code: firstCode,
     incident_reason_codes: uniqueCodes,
     first_failed_phase: failedPhase[0] || null,
     self_heal_action: selfHealAction,
     self_heal_does_not_count_as_natural: true,
     self_heal_recovered: Boolean(selfHealRecovered),
-    next_retry_at: yes ? null : nextTaipeiRunAt(7, 0),
-    next_retry_policy: yes ? "NONE" : "next natural 0700/0845/0900 evidence required; manual retry cannot set unattended YES",
+    next_retry_at: yes ? null : pendingNotDue ? null : nextTaipeiRunAt(7, 0),
+    next_retry_policy: yes ? "NONE" : pendingNotDue ? "wait for next scheduled warmup phase; do not read yesterday artifacts as failure" : "next natural 0700/0845/0900 evidence required; manual retry cannot set unattended YES",
     owner_message: yes
       ? "當沖暖機三段自然 evidence 全綠，可宣告 unattended YES。"
-      : `當沖暖機 fail-closed：${failedPhase[0] || "unknown"} failed, code=${firstCode || "UNKNOWN"}; preserve previous good, do not enter formal scan.`,
+      : pendingNotDue
+        ? "當沖暖機等待下一段自然 evidence；未到 08:45/09:00 不讀昨天 artifact，preserve previous good。"
+        : `當沖暖機 fail-closed：${failedPhase[0] || "unknown"} failed, code=${firstCode || "UNKNOWN"}; preserve previous good, do not enter formal scan.`,
     previous_unattended_yes: previousUnattendedYes,
     auto_recovered: previousUnattendedYes === "NO" && yes,
-    regressed_today: previousUnattendedYes === "YES" && !yes,
+    regressed_today: previousUnattendedYes === "YES" && !yes && !pendingNotDue,
     source_not_ready: sourceNotReady,
     task_missed: taskMissed,
   };
@@ -276,9 +304,33 @@ function buildSummary(expectedTradeDate, runId) {
   }));
   const phaseReports = {};
   const failedPhase = [];
+  const pendingPhase = [];
   const failedChecks = [];
   const failureCodes = [];
   for (const phase of PHASES) {
+    const due = phaseDue(phase, expectedTradeDate);
+    if (!due) {
+      pendingPhase.push(phase);
+      phaseReports[phase] = {
+        pass: false,
+        pending: true,
+        due: false,
+        status: "PENDING_NOT_DUE",
+        failures: [],
+        failure_codes: [],
+        natural_schedule_evidence: false,
+        evidence: {
+          phase,
+          trade_date: expectedTradeDate,
+          pending: true,
+          due: false,
+          pendingReason: "phase_not_due_yet",
+          scheduledMinuteTaipei: PHASE_DUE_MINUTES[phase],
+        },
+        artifact: artifacts[phase].file,
+      };
+      continue;
+    }
     const report = phaseFailures(phase, artifacts[phase].row, expectedTradeDate);
     phaseReports[phase] = {
       pass: report.failures.length === 0,
@@ -294,9 +346,10 @@ function buildSummary(expectedTradeDate, runId) {
       failureCodes.push(...report.failure_codes);
     }
   }
-  const yes = failedChecks.length === 0;
+  const pendingNotDue = pendingPhase.length > 0 && failedChecks.length === 0;
+  const yes = failedChecks.length === 0 && pendingPhase.length === 0;
   const previous_unattended_yes = previousUnattendedYes(expectedTradeDate);
-  const uniqueFailureCodes = [...new Set(failureCodes)];
+  const uniqueFailureCodes = pendingNotDue ? ["PENDING_NOT_DUE"] : [...new Set(failureCodes)];
   const opsPolicy = buildOpsPolicy({
     yes,
     failedPhase,
@@ -308,6 +361,7 @@ function buildSummary(expectedTradeDate, runId) {
   const summary = {
     summary_type: "daytrade_warmup_unattended_summary_v1",
     ok: yes,
+    status: yes ? "UNATTENDED_YES" : pendingNotDue ? "PENDING_NOT_DUE" : "FAILED",
     unattended_yes: yes ? "YES" : "NO",
     manual_verification_pass_only: !yes && Object.values(phaseReports).some((report) => report.evidence.manualVerificationOnly),
     source_name: SOURCE_NAME,
@@ -317,11 +371,12 @@ function buildSummary(expectedTradeDate, runId) {
     phases_required: PHASES,
     phase_results: phaseReports,
     natural_schedule_evidence_by_phase: Object.fromEntries(Object.entries(phaseReports).map(([phase, report]) => [phase, report.natural_schedule_evidence === true])),
-    "0700": phaseReports["0700"].pass ? "PASS" : "FAIL",
-    "0845": phaseReports["0845"].pass ? "PASS" : "FAIL",
-    "0900": phaseReports["0900"].pass ? "PASS" : "FAIL",
+    "0700": phaseReports["0700"].pending ? "PENDING" : phaseReports["0700"].pass ? "PASS" : "FAIL",
+    "0845": phaseReports["0845"].pending ? "PENDING" : phaseReports["0845"].pass ? "PASS" : "FAIL",
+    "0900": phaseReports["0900"].pending ? "PENDING" : phaseReports["0900"].pass ? "PASS" : "FAIL",
     failed_phase: failedPhase,
     first_failed_phase: failedPhase[0] || null,
+    pending_phase: pendingPhase,
     failed_checks: failedChecks,
     failure_reasons: failedChecks,
     failure_codes: uniqueFailureCodes,
@@ -329,7 +384,7 @@ function buildSummary(expectedTradeDate, runId) {
     self_heal_recovered: Object.values(phaseReports).some((report) => report.evidence.selfHealRecovered),
     preserve_previous_good: !yes,
     previous_unattended_yes,
-    regressed_today: previous_unattended_yes === "YES" && !yes,
+    regressed_today: previous_unattended_yes === "YES" && !yes && !pendingNotDue,
     auto_recovered: previous_unattended_yes === "NO" && yes,
     ops_policy: opsPolicy,
     policy_decision: opsPolicy.policy_decision,

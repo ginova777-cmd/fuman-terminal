@@ -35,12 +35,17 @@ function main() {
   const warmup = run("verify:daytrade-warmup-unattended", "scripts/verify-daytrade-warmup-unattended.js", extra);
   const selfHealArgs = APPLY ? ["--apply", ...extra] : extra;
   const selfHeal = run(APPLY ? "daytrade-warmup:self-heal:apply" : "daytrade-warmup:self-heal", "scripts/run-daytrade-warmup-self-heal.js", selfHealArgs);
+  let selfHealPayload = {};
+  try { selfHealPayload = JSON.parse(selfHeal.stdout || "{}"); } catch {}
+  const waitingForNaturalPhase = selfHealPayload.state === "WAITING_FOR_NATURAL_PHASE";
   const ok = warmup.ok || selfHeal.ok;
   const state = warmup.ok
     ? "WARMUP_UNATTENDED_YES_NO_REWATER_NEEDED"
-    : selfHeal.ok
-      ? "WARMUP_NOT_READY_SELF_HEAL_PLANNED_OR_APPLIED"
-      : "WARMUP_NOT_READY_SELF_HEAL_FAILED";
+    : waitingForNaturalPhase
+      ? "WARMUP_WAITING_FOR_NATURAL_PHASE"
+      : selfHeal.ok
+        ? "WARMUP_NOT_READY_SELF_HEAL_PLANNED_OR_APPLIED"
+        : "WARMUP_NOT_READY_SELF_HEAL_FAILED";
   const result = {
     ok,
     contract: "daytrade-warmup-root-with-self-heal-v1",

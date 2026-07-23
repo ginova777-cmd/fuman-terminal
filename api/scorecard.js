@@ -8,10 +8,10 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
-const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1200) || 1200);
+const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 8000) || 8000);
 const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
   SCORECARD_SNAPSHOT_TIMEOUT_MS,
-  Number(process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 7000) || 7000
+  Number(process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 8000) || 8000
 );
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
@@ -1677,6 +1677,19 @@ function activeStrategyCount(rows) {
 function defaultScorecardDate(payload, allRecords, dates) {
   const sourceQuery = sanitizeScorecardSourceQuery(payload?.sourceQuery || {});
   const candidates = Array.isArray(sourceQuery.latestDateCandidates) ? sourceQuery.latestDateCandidates : [];
+  const payloadDate = isoDate(payload?.latestDate || payload?.marketDate || "");
+  if (payloadDate && dates.includes(payloadDate)) {
+    const rows = allRecords.filter((row) => cleanText(row.record_date) === payloadDate);
+    const payloadCandidate = candidates.find((candidate) => candidateIsoDate(candidate) === payloadDate) || {};
+    const candidateRows = Number(payloadCandidate.rows || 0);
+    const rowFloor = Number(sourceQuery.latestDateRowFloor || 0);
+    const selectedReason = cleanText(sourceQuery.selectedLatestDateReason).toLowerCase();
+    const allowPartialSelectedDate = rows.length > 0
+      && activeStrategyCount(rows) >= 1
+      && (candidateRows >= Math.max(1, rowFloor)
+        || /expected date has enough|partial|pending/.test(selectedReason));
+    if (allowPartialSelectedDate || activeStrategyCount(rows) >= 5) return payloadDate;
+  }
   for (const candidate of candidates) {
     const date = candidateIsoDate(candidate);
     if (!date || !dates.includes(date)) continue;
@@ -1688,16 +1701,10 @@ function defaultScorecardDate(payload, allRecords, dates) {
     const completeAfterRetired = missing.length === 0;
     if (completeAfterRetired && activeStrategyCount(rows) >= 5) return date;
   }
-  const payloadDate = isoDate(payload?.latestDate || payload?.marketDate || "");
-  if (payloadDate && dates.includes(payloadDate)) {
-    const rows = allRecords.filter((row) => cleanText(row.record_date) === payloadDate);
-    if (activeStrategyCount(rows) >= 5) return payloadDate;
-  }
   return dates
     .map((date) => ({ date, rows: allRecords.filter((row) => cleanText(row.record_date) === date) }))
     .sort((a, b) => activeStrategyCount(b.rows) - activeStrategyCount(a.rows) || b.rows.length - a.rows.length || b.date.localeCompare(a.date))[0]?.date || "";
 }
-
 function summarize(records, dailyRows, latestDate) {
   const rows = Array.isArray(records) ? records : [];
   const wins = rows.filter((row) => cleanNumber(row.pnl) > 0).length;

@@ -2389,14 +2389,19 @@ async function syncWebSocketIntraday1mCandles(priorityRows) {
 async function syncWebSocketFutoptQuotes() {
   const cache = readFugleFutoptWebSocketQuotes({ maxAgeMs: FUTOPT_WEBSOCKET_MAX_AGE_MS });
   const rows = [];
+  let stockRows = 0;
+  let txfRows = 0;
   for (const quote of cache.quotes.values()) {
     const futureSymbol = String(quote.future_symbol || "").trim().toUpperCase();
     if (!futureSymbol) continue;
     const price = numberValue(quote.last_price ?? quote.price);
     if (!price) continue;
+    const underlyingSymbol = normalizeCode(quote.underlying_symbol) || (futureSymbol.startsWith("TXF") ? "TXF" : null);
+    if (/^\d{4}$/.test(String(underlyingSymbol || ""))) stockRows += 1;
+    else if (underlyingSymbol === "TXF" || futureSymbol.startsWith("TXF")) txfRows += 1;
     rows.push({
       future_symbol: futureSymbol,
-      underlying_symbol: normalizeCode(quote.underlying_symbol) || (futureSymbol.startsWith("TXF") ? "TXF" : null),
+      underlying_symbol: underlyingSymbol,
       underlying_name: quote.underlying_name || null,
       updated_at: normalizeTimestamp(quote.quoteSeenAt || cache.payload?.updatedAt, nowIso()),
       last_price: price,
@@ -2420,9 +2425,9 @@ async function syncWebSocketFutoptQuotes() {
       },
     });
   }
-  if (!rows.length) return { written: 0, skipped: true, cacheCount: cache.quotes.size };
+  if (!rows.length) return { written: 0, skipped: true, cacheCount: cache.quotes.size, stockRows, txfRows };
   await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol");
-  return { written: rows.length, skipped: false, cacheCount: cache.quotes.size };
+  return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows };
 }
 
 async function tick() {
@@ -2540,6 +2545,14 @@ async function tick() {
   result.payload.futopt_websocket_synced_rows = websocketFutoptSync.written || 0;
   result.payload.futopt_websocket_cache_count = websocketFutoptSync.cacheCount || 0;
   result.payload.futopt_websocket_sync_skipped = Boolean(websocketFutoptSync.skipped);
+  result.payload.futopt_websocket_synced_stock_rows = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_websocket_synced_txf_rows = websocketFutoptSync.txfRows || 0;
+  result.payload.futopt_stock_quote_universe = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_stock_quote_attempted = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_stock_quote_fetched = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_stock_quotes_this_loop = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_stock_this_loop = websocketFutoptSync.stockRows || 0;
+  result.payload.txf_quotes_this_loop = websocketFutoptSync.txfRows || 0;
   await writeStatusAndScorecard(result);
   const offSession = Boolean(result.payload.off_session);
   return {
@@ -2640,9 +2653,4 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
-
-
-
-
-
 

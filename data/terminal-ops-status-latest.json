@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-22T23:27:16.063Z",
-  "checkedAt": "2026-07-22T23:26:18.449Z",
+  "generatedAt": "2026-07-23T10:34:17.002Z",
+  "checkedAt": "2026-07-23T10:33:16.973Z",
   "tradeDate": "20260723",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -15,7 +15,7 @@
     "predictivePreflight": {
       "ok": true,
       "status": "TRADING_DAY_WAIT_SOURCE_WINDOW",
-      "reason": "trading_day_before_formal_source_window",
+      "reason": "trading_day_after_formal_source_window",
       "reasonCodes": [
         "CLOSURE_GREEN",
         "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW"
@@ -56,17 +56,23 @@
       "reasonUnknown": false
     },
     "stateMachine": {
-      "ok": false,
+      "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+      "reason": "trading_day_outside_formal_source_window_preserve_previous_good",
       "reasonCodes": [
+        "CLOSURE_GREEN",
+        "PREVIOUS_GOOD_PRESERVED",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
+        "continue_autonomous_monitoring",
+        "preserve_previous_good_and_mark_degraded",
         "wait_until_due_time"
       ],
       "reasonLayers": [
+        "closure",
+        "previous_good",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -189,15 +195,18 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
+      "reason": "terminal-resource-chain:unattended_exit_1",
       "reasonCodes": [
+        "CLOSURE_GREEN",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
+        "continue_autonomous_monitoring",
         "wait_until_due_time"
       ],
       "reasonLayers": [
+        "closure",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -226,30 +235,28 @@
       "key": "strategy2",
       "label": "策略2 即時",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy2-20260722-111122",
-      "tradeDate": "20260722",
-      "sourceDate": "20260722",
-      "resultCount": 60,
-      "pendingNotDue": true,
+      "runId": "strategy2-20260723-115814",
+      "tradeDate": "20260723",
+      "sourceDate": "20260723",
+      "resultCount": 52,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:09:00",
-      "issues": [
-        "pending_not_due:09:00"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -258,30 +265,28 @@
       "key": "strategy3",
       "label": "策略3",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy3-20260722-20260722073639",
-      "tradeDate": "20260722",
-      "sourceDate": "20260722",
-      "resultCount": 85,
-      "pendingNotDue": true,
+      "runId": "strategy3-20260723-20260723064941",
+      "tradeDate": "20260723",
+      "sourceDate": "20260723",
+      "resultCount": 55,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:13:05",
-      "issues": [
-        "pending_not_due:13:05"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -290,30 +295,28 @@
       "key": "strategy4",
       "label": "策略4",
       "ok": true,
-      "complete": false,
+      "complete": true,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
       "publishAllowed": true,
-      "runId": "strategy4-20260722-20260722080805",
-      "tradeDate": "20260722",
-      "sourceDate": "20260722",
+      "runId": "strategy4-20260723-20260723083226",
+      "tradeDate": "20260723",
+      "sourceDate": "20260723",
       "resultCount": 60,
-      "pendingNotDue": true,
+      "pendingNotDue": false,
       "runIdClosureOk": true,
-      "issue": "pending_not_due:16:00",
-      "issues": [
-        "pending_not_due:16:00"
-      ],
+      "issue": "",
+      "issues": [],
       "reasonCodes": [
-        "SCHEDULE_PENDING_NOT_DUE"
+        "CLOSURE_GREEN"
       ],
-      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
+      "primaryReasonCode": "CLOSURE_GREEN",
       "reasonActions": [
-        "wait_until_due_time"
+        "continue_autonomous_monitoring"
       ],
       "reasonLayers": [
-        "schedule"
+        "closure"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -471,18 +474,45 @@
   "rootCauseSummary": {
     "contract": "production-readiness-root-cause-summary-v1",
     "ok": true,
-    "totalBlockers": 1,
-    "rootCauseCount": 1,
-    "criticalRootCauseCount": 0,
+    "totalBlockers": 16,
+    "rootCauseCount": 3,
+    "criticalRootCauseCount": 2,
     "unknownBlockers": 0,
     "categories": [
+      {
+        "category": "production_live_readback",
+        "severity": "critical",
+        "count": 12,
+        "action": "Rerun production live readback after deploy and protected credential are ready.",
+        "blockers": [
+          "productionLiveOpsReadback_not_ok",
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:scorecard:{\"endpoint\":\"/api/scorecard\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:source_reports:{\"endpoint\":\"/api/source-reports\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:terminal_fast_bundle:{\"endpoint\":\"/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70\",\"missingRunIds\":[\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\"],\"actualRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260722-20260722080805\",\"strategy4-20260723-20260723083226\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"]}",
+          "production_live_issue:authenticated_protected_endpoint_has_stale_or_unexpected_run_id:terminal_fast_bundle:{\"endpoint\":\"/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70\",\"unexpectedRunIds\":[\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"allowedRollingRunIds\":[\"strategy2-20260723-115814\"]}",
+          "production_live_issue:authenticated_mobile_fragment_run_id_mismatch:mobile_strategy2:{\"endpoint\":\"/api/mobile-fragment?tab=strategy2\",\"expectedKey\":\"strategy2\",\"expectedRunId\":\"strategy2-20260722-111122\",\"actualRunIds\":[\"strategy2-20260723-115814\"]}",
+          "production_live_issue:authenticated_mobile_fragment_run_id_mismatch:mobile_strategy3:{\"endpoint\":\"/api/mobile-fragment?tab=strategy3\",\"expectedKey\":\"strategy3\",\"expectedRunId\":\"strategy3-20260722-20260722073639\",\"actualRunIds\":[\"strategy3-20260723-20260723064941\"]}",
+          "production_live_issue:authenticated_protected_endpoint_has_stale_or_unexpected_run_id:mobile_strategy3:{\"endpoint\":\"/api/mobile-fragment?tab=strategy3\",\"unexpectedRunIds\":[\"strategy3-20260723-20260723064941\"],\"expectedRunIds\":[\"cb-detect-20260722-214516\",\"institution-20260722-20260722131548\",\"strategy2-20260722-111122\",\"strategy3-20260722-20260722073639\",\"strategy4-20260722-20260722080805\",\"strategy5-20260722-20260722133045\",\"warrant-flow-20260722-20260722125022\"],\"allowedRollingRunIds\":[]}"
+        ]
+      },
+      {
+        "category": "release_deploy",
+        "severity": "critical",
+        "count": 3,
+        "action": "Align production release SHA with current audited HEAD before claiming production readiness.",
+        "blockers": [
+          "production_release_sha_mismatch",
+          "production_live_issue:release_manifest_sha_mismatch:{\"live\":\"ee18ae6780674e44f2272d61583c9ce3c725f19c\",\"expected\":\"5fe22b513f2e928684ffea1776f7720d88f96b37\"}",
+          "release_sha_not_current_head"
+        ]
+      },
       {
         "category": "schedule_pending",
         "severity": "info",
         "count": 1,
         "action": "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
         "blockers": [
-          "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
+          "pending_not_due:strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30"
         ]
       }
     ]
@@ -490,14 +520,14 @@
   "rootCauseRecoveryPlan": {
     "contract": "production-readiness-root-cause-recovery-plan-v1",
     "ok": true,
-    "stepCount": 1,
+    "stepCount": 3,
     "autoExecutableSteps": 0,
     "autoExecutableNow": 0,
     "blockedAutoExecutableSteps": 0,
-    "manualSteps": 1,
+    "manualSteps": 3,
     "firstManualStep": "schedule_pending",
     "firstExecutableStep": "",
-    "firstBlockedStep": "",
+    "firstBlockedStep": "release_deploy",
     "steps": [
       {
         "category": "schedule_pending",
@@ -519,21 +549,70 @@
         ],
         "reason": "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
         "stopMode": "pending_not_due"
+      },
+      {
+        "category": "release_deploy",
+        "order": 30,
+        "severity": "critical",
+        "blockerCount": 3,
+        "canAutoExecute": false,
+        "canExecuteNow": false,
+        "blockedBy": [
+          "release_owner_approval_required",
+          "production_sha_not_aligned_to_head",
+          "release_dirty_state_requires_owner_review"
+        ],
+        "automation": "deploy_required",
+        "requires": [
+          "release_owner_approval",
+          "current_head_audited",
+          "no_unrelated_dirty_release"
+        ],
+        "commands": [
+          {
+            "command": "cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live"
+          }
+        ],
+        "reason": "Production SHA must match the audited HEAD before production readiness can be claimed.",
+        "stopMode": "deploy_required"
+      },
+      {
+        "category": "production_live_readback",
+        "order": 40,
+        "severity": "critical",
+        "blockerCount": 12,
+        "canAutoExecute": false,
+        "canExecuteNow": false,
+        "blockedBy": [
+          "production_sha_not_aligned"
+        ],
+        "automation": "readback_after_auth_deploy",
+        "requires": [
+          "protected_readback_credential_ok",
+          "production_sha_aligned"
+        ],
+        "commands": [
+          {
+            "command": "cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live -- --require-protected-readback"
+          }
+        ],
+        "reason": "Production protected surfaces can only be closed after credential and deployed release are aligned.",
+        "stopMode": "readback_required"
       }
     ]
   },
   "readinessReport": {
     "contract": "production-unattended-readiness-report-v1",
     "status": "PENDING_NOT_DUE",
-    "ok": true,
-    "checkedAt": "2026-07-22T23:18:35.011Z"
+    "ok": false,
+    "checkedAt": "2026-07-23T10:29:40.513Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
     "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
     "action": "skip_formal_scan",
-    "reason": "trading_day_before_formal_source_window",
+    "reason": "trading_day_after_formal_source_window",
     "scannerTargetDate": "20260723",
     "displayTradeDate": "20260722",
     "formalScanAllowed": false,
@@ -637,7 +716,7 @@
     "status": "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD",
     "scorecardPublishAllowed": false,
     "reason": "",
-    "tradeDate": "20260722"
+    "tradeDate": "20260723"
   },
   "notificationPlan": {
     "contract": "autonomous-ops-notification-plan-v1",
@@ -652,7 +731,7 @@
     "tradeDate": "20260723"
   },
   "rollForward": {
-    "mode": "dry-run",
+    "mode": "apply",
     "state": "IDLE_NO_RETRY_NEEDED",
     "jobs": 0,
     "executableJobs": 0,

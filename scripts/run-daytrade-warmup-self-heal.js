@@ -273,8 +273,12 @@ function rewaterVerificationCommands() {
 }
 
 function buildPlan(summary, tradeDate) {
-  const { failureCodes, jobs, unknownCodes } = planActions(summary, tradeDate);
-  const okBefore = summary.unattended_yes === "YES" || summary.ok === true;
+  const plannedActions = planActions(summary, tradeDate);
+  const pendingNotDue = summary.status === "PENDING_NOT_DUE" || normalizeFailureCodes(summary).includes("PENDING_NOT_DUE");
+  const failureCodes = pendingNotDue ? [] : plannedActions.failureCodes;
+  const jobs = pendingNotDue ? [] : plannedActions.jobs;
+  const unknownCodes = pendingNotDue ? [] : plannedActions.unknownCodes;
+  const okBefore = summary.unattended_yes === "YES" || summary.ok === true || pendingNotDue;
   const planned = {
     ...CONTRACT,
     checkedAt: new Date().toISOString(),
@@ -289,10 +293,10 @@ function buildPlan(summary, tradeDate) {
     jobs,
     rewaterVerification: rewaterVerificationCommands(),
     decision: {
-      ok: okBefore || (unknownCodes.length === 0 && jobs.length > 0),
-      state: okBefore ? "NO_REWATER_NEEDED" : unknownCodes.length ? "UNKNOWN_REASON_CODE_BLOCKED" : jobs.length ? "SELF_HEAL_PLANNED" : "NO_FAILURE_CODES_FOUND",
+      ok: pendingNotDue || okBefore || (unknownCodes.length === 0 && jobs.length > 0),
+      state: pendingNotDue ? "WAITING_FOR_NATURAL_PHASE" : okBefore ? "NO_REWATER_NEEDED" : unknownCodes.length ? "UNKNOWN_REASON_CODE_BLOCKED" : jobs.length ? "SELF_HEAL_PLANNED" : "NO_FAILURE_CODES_FOUND",
       applyAllowed: !okBefore && unknownCodes.length === 0 && jobs.some((job) => job.executable),
-      reason: okBefore ? "warmup already yes" : unknownCodes.length ? `unknown reason code: ${unknownCodes.join(",")}` : jobs.length ? "reason codes mapped to self-heal actions" : "warmup not ready but no failure code was emitted; reason classifier must be fixed",
+      reason: pendingNotDue ? "next warmup phase is not due yet" : okBefore ? "warmup already yes" : unknownCodes.length ? `unknown reason code: ${unknownCodes.join(",")}` : jobs.length ? "reason codes mapped to self-heal actions" : "warmup not ready but no failure code was emitted; reason classifier must be fixed",
     },
     exclusions: ["membership", "terminal_ui", "/88", "desktop", "mobile"],
   };
