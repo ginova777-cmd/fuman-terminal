@@ -16,12 +16,16 @@ async function readScorecardPayload(request) {
   const scorecard = require("./scorecard");
   if (scorecard.__test?.buildPayload) {
     const forceLiveSourceReports = sourceReportsLiveSourceReportsEnabled(request);
-    const liveSnapshotReadback = sourceReportsLiveSnapshotReadbackEnabled(request);
+    const liveSnapshotReadback = sourceReportsLiveSnapshotReadbackEnabled(request) || request.query?.live !== "0";
+    const timeoutMs = Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS
+      || (forceLiveSourceReports || liveSnapshotReadback ? process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS)
+      || process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS
+      || 8000);
     return scorecard.__test.buildPayload(request.query?.date || request.query?.record_date || "", {
       liveSourceReports: forceLiveSourceReports,
-      noCache: forceLiveSourceReports || liveSnapshotReadback || request.query?.noCache === "1" || request.query?.refresh === "1",
+      noCache: true,
       freshStrategySourceReports: forceLiveSourceReports,
-      timeoutMs: Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || ((forceLiveSourceReports || liveSnapshotReadback) ? process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS) || ((forceLiveSourceReports || liveSnapshotReadback) ? 7000 : 1200)),
+      timeoutMs,
     });
   }
   throw new Error("scorecard_build_payload_unavailable");

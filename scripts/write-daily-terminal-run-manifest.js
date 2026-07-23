@@ -400,7 +400,20 @@ function moduleRow(row = {}) {
     : rawFallback;
   const effectiveEvidenceStatus = firstPresent(receipt.evidenceStatus, api.evidenceStatus, terminal.evidenceStatus, desktop.evidenceStatus, "");
   const effectivePublishAllowed = receipt.publishAllowed === true || api.publishAllowed === true || terminal.publishAllowed === true || desktop.publishAllowed === true;
-  const preservePreviousGood = receipt.preservePreviousGood === true || api.preservePreviousGood === true || terminal.preservePreviousGood === true || desktop.preservePreviousGood === true;
+  const rawPreservePreviousGood = receipt.preservePreviousGood === true || api.preservePreviousGood === true || terminal.preservePreviousGood === true || desktop.preservePreviousGood === true;
+  const formalCompleteSurfaceAligned = Boolean(
+    effectivePublishAllowed === true
+    && effectiveEvidenceStatus === "complete"
+    && fallback !== true
+    && runId
+    && runDateFromId(runId) === EXPECTED_DATE
+    && tradeDate === EXPECTED_DATE
+    && sourceDate === EXPECTED_DATE
+    && [receipt.runId, supabase.runId, api.runId, terminal.runId, desktop.runId, mobile.runId, scorecard.runId]
+      .filter(Boolean)
+      .every((value) => value === runId)
+  );
+  const preservePreviousGood = rawPreservePreviousGood === true && formalCompleteSurfaceAligned !== true;
   const complete = receipt.complete === true
     && receipt.status === "complete"
     && receipt.evidenceStatus === "complete"

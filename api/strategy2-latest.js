@@ -2093,23 +2093,21 @@ async function handler(request, response) {
       fetchStrategy2SourceGate(),
     ]);
     if (completeRun) {
-      const payloadForPublishGate = sourceGate?.publishAllowed === true
-        ? {
-          ...completeRun,
-          tradeDate: compactDate(completeRun.tradeDate || completeRun.usedDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
-          usedDate: completeRun.usedDate || compactDate(completeRun.tradeDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
-          sourceDate: completeRun.sourceDate || compactDate(completeRun.tradeDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
-          resourceReadiness: readiness,
-          transport: {
-            ...(completeRun.transport || {}),
-            readinessStatusView: READINESS_STATUS_VIEW,
-            tradingDay,
-            readinessDiagnosticOnly: true,
-            publishBlocked: false,
-            publishBlockedReason: "",
-          },
-        }
-        : attachStrategy2Readiness(completeRun, readiness, tradingDay);
+      const payloadForPublishGate = {
+        ...completeRun,
+        tradeDate: compactDate(completeRun.tradeDate || completeRun.usedDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
+        usedDate: completeRun.usedDate || compactDate(completeRun.tradeDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
+        sourceDate: completeRun.sourceDate || compactDate(completeRun.tradeDate || completeRun.date || completeRun.marketSession?.marketDataDate || ""),
+        resourceReadiness: readiness,
+        transport: {
+          ...(completeRun.transport || {}),
+          readinessStatusView: READINESS_STATUS_VIEW,
+          tradingDay,
+          readinessDiagnosticOnly: true,
+          publishBlocked: false,
+          publishBlockedReason: "",
+        },
+      };
       setStrategy2LiveShellCache(response, options);
       const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
       const approvedSnapshotFields = gatedPayload?.sourceGate?.publishAllowed === true

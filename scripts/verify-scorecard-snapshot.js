@@ -3,6 +3,7 @@ const https = require("https");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders, publicCredentialSummary } = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
@@ -10,10 +11,10 @@ const BASE_URL = (process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PROD
 const CHECK_LIVE = !process.argv.includes("--no-live");
 const LOCAL_FILE = path.join(ROOT, "data", "scorecard-latest.json");
 
-function fetchJson(pathname, timeoutMs = 30000) {
+function fetchJson(pathname, timeoutMs = 30000, extraHeaders = {}) {
   const url = `${BASE_URL}${pathname}${pathname.includes("?") ? "&" : "?"}t=${Date.now()}`;
   return new Promise((resolve, reject) => {
-    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache" } }, (response) => {
+    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache", ...extraHeaders } }, (response) => {
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk) => { body += chunk; });
@@ -84,13 +85,20 @@ async function main() {
   if (!snapshotSummary.strategyRules.ok) issues.push(`scorecard snapshot strategy rule lock failed: ${snapshotSummary.strategyRules.issues.join(",")}`);
 
   let liveSummary = null;
+  let protectedReadback = null;
   if (CHECK_LIVE) {
-    const live = await fetchJson("/api/scorecard", 35000);
+    const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+    protectedReadback = publicCredentialSummary(credential);
+    const authHeaders = credential.token
+      ? { ...protectedReadbackHeaders(credential), "X-Fuman-Readback-Auth": "membership-bearer" }
+      : {};
+    const live = await fetchJson("/api/scorecard?live=1", 35000, authHeaders);
     liveSummary = {
       status: live.status,
       ...summarizePayload(live.json, live.json?.cacheSource || "live"),
     };
-    if (live.status < 200 || live.status >= 300) issues.push(`live /api/scorecard HTTP ${live.status}`);
+    if (live.status === 401 && !credential.token) issues.push(`live /api/scorecard HTTP 401 and protected readback credential not armed: ${protectedReadback.reason}`);
+    else if (live.status < 200 || live.status >= 300) issues.push(`live /api/scorecard HTTP ${live.status}`);
     if (!liveSummary.ok) issues.push("live /api/scorecard ok=false");
     if (liveSummary.rows <= 0) issues.push(`live /api/scorecard rows invalid: ${liveSummary.rows}`);
     if (liveSummary.missingRecordSources > 0) issues.push(`live /api/scorecard records missing source fields: ${liveSummary.missingRecordSources}`);
@@ -102,6 +110,7 @@ async function main() {
     ok: issues.length === 0,
     snapshot: snapshotSummary,
     live: liveSummary,
+    protectedReadback,
     issues,
   };
   console.log(JSON.stringify(report, null, 2));

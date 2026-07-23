@@ -5,6 +5,7 @@ const https = require("https");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders, publicCredentialSummary } = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -86,10 +87,10 @@ function readJsonFile(file) {
   return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
 }
 
-function fetchText(pathname, timeoutMs = 30000) {
+function fetchText(pathname, timeoutMs = 30000, extraHeaders = {}) {
   const url = `${BASE_URL}${pathname}${pathname.includes("?") ? "&" : "?"}rollback=${Date.now()}`;
   return new Promise((resolve, reject) => {
-    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache" } }, (response) => {
+    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache", ...extraHeaders } }, (response) => {
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk) => { body += chunk; });
@@ -100,8 +101,8 @@ function fetchText(pathname, timeoutMs = 30000) {
   });
 }
 
-async function fetchJson(pathname, timeoutMs = 30000) {
-  const response = await fetchText(pathname, timeoutMs);
+async function fetchJson(pathname, timeoutMs = 30000, extraHeaders = {}) {
+  const response = await fetchText(pathname, timeoutMs, extraHeaders);
   let json = null;
   try {
     json = JSON.parse(response.body || "null");
@@ -354,10 +355,15 @@ async function main() {
   }
 
   let livePayload = null;
+  let protectedReadback = null;
   if (CHECK_LIVE) {
-    const liveApi = await fetchJson("/api/scorecard", 35000);
+    const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+    protectedReadback = publicCredentialSummary(credential);
+    const authHeaders = credential.token ? { ...protectedReadbackHeaders(credential), "X-Fuman-Readback-Auth": "membership-bearer" } : {};
+    const liveApi = await fetchJson("/api/scorecard?live=1", 35000, authHeaders);
     livePayload = liveApi.json;
     details.live = verifyPayload(checks, livePayload, "live-api");
+    details.protectedReadback = protectedReadback;
     const liveHtml = await fetchText("/88", 30000);
     addCheck(checks, liveHtml.status >= 200 && liveHtml.status < 300, "live-88-http", "live /88 must return 2xx", { status: liveHtml.status });
     verifyHtml(checks, liveHtml.body, "live-88-html");

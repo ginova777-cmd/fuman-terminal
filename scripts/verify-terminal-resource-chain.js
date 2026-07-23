@@ -533,8 +533,31 @@ function membershipProtectedSummary(result) {
   };
 }
 
+function firstPresent(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+function payloadQuality(payload = {}) {
+  return payload?.run_quality_at_publish
+    || payload?.runQualityAtPublish
+    || payload?.payload?.run_quality_at_publish
+    || payload?.payload?.runQualityAtPublish
+    || payload?.transport?.payload?.run_quality_at_publish
+    || {};
+}
 function summarizePayload(payload, status = 200, elapsedMs = 0) {
   const rows = rowsOf(payload);
+  const quality = payloadQuality(payload);
+  const evidenceStatus = String(firstPresent(payload?.evidenceStatus, payload?.payload?.evidenceStatus, quality?.evidenceStatus) || "");
+  const unattendedStatus = String(firstPresent(payload?.unattendedStatus, payload?.payload?.unattendedStatus, quality?.unattendedStatus) || "");
+  const publishAllowed = firstPresent(payload?.publishAllowed, payload?.payload?.publishAllowed, quality?.publishAllowed);
+  const fallbackUsed = firstPresent(payload?.fallbackUsed, payload?.payload?.fallbackUsed, quality?.fallbackUsed);
+  const rawPreservePreviousGood = firstPresent(payload?.preservePreviousGood, payload?.payload?.preservePreviousGood, quality?.preservePreviousGood);
+  const preservePreviousGood = rawPreservePreviousGood === true
+    && !(publishAllowed === true && evidenceStatus === "complete" && fallbackUsed !== true);
   return {
     ok: payload?.ok !== false,
     status,
@@ -544,7 +567,16 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
     updatedAt: payload?.updatedAt || payload?.generatedAt || payload?.finishedAt || "",
     count: cleanNumber(payload?.count ?? payload?.matchCount ?? payload?.entryCount ?? rows.length),
     returnedCount: cleanNumber(payload?.returnedCount ?? rows.length),
+    resultCount: cleanNumber(firstPresent(payload?.resultCount, payload?.payload?.resultCount, quality?.resultCount)),
+    readbackCount: cleanNumber(firstPresent(payload?.readbackCount, payload?.payload?.readbackCount, quality?.readbackCount)),
+    expectedTotal: cleanNumber(firstPresent(payload?.expectedTotal, payload?.payload?.expectedTotal, quality?.expectedTotal)),
+    scannedCount: cleanNumber(firstPresent(payload?.scannedCount, payload?.payload?.scannedCount, quality?.scannedCount)),
     qualityStatus: payload?.qualityStatus || payload?.sourceHealth?.status || "",
+    evidenceStatus,
+    unattendedStatus,
+    publishAllowed,
+    fallbackUsed,
+    preservePreviousGood,
     source: payload?.source || "",
     cacheSource: payload?.cacheSource || "",
     transportSource: payload?.transport?.source || "",
