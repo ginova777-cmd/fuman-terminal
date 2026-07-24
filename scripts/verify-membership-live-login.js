@@ -118,8 +118,8 @@ async function main() {
 
   const apiRows = [];
   apiRows.push(await verifyJsonEndpoint(token, "/api/strategy2-latest?live=1"));
-  apiRows.push(await verifyJsonEndpoint(token, "/api/strategy4-latest?live=1"));
-  apiRows.push(await verifyJsonEndpoint(token, "/api/scorecard?live=1"));
+  apiRows.push(await verifyJsonEndpoint(token, "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70"));
+  apiRows.push(await verifyJsonEndpoint(token, "/api/scorecard?live=0"));
   apiRows.push(await verifyJsonEndpoint(token, "/api/source-reports"));
   apiRows.push(await verifyJsonEndpoint(token, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", {
     mustNotContain: ["membershipRequired\":true"],
