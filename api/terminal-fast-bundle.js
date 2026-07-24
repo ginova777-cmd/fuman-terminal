@@ -943,7 +943,7 @@ function sourceReportEndpointPayload(request, report = {}) {
 }
 
 async function buildSourceReportsDerivedBundle(request, reason = "desktop_route_snapshot_timeout_or_missing") {
-  const result = await callJson("/api/source-reports", sourceReportsApi, request, { compact: "1", shell: "1", live: "0" }, 6000);
+  const result = await callJson("/api/source-reports", sourceReportsApi, request, { compact: "1", shell: "1", live: "0", snapshotLive: "0" }, 12000);
   if (Number(result?.statusCode || 0) >= 400 || result?.payload?.ok === false) return null;
   const reports = Array.isArray(result.payload?.sourceReports) ? result.payload.sourceReports
     : Array.isArray(result.payload?.reports) ? result.payload.reports
