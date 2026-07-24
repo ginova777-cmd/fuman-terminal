@@ -460,6 +460,12 @@
     return !!active && active.key === key && active.seq === seq;
   }
 
+  function isActiveRenderRoute(key) {
+    const active = window.__fumanDesktopActiveRoute;
+    if (!key || !active?.key) return true;
+    return active.key === key;
+  }
+
   function startLatency(link, source) {
     const key = fixedRouteKey(link);
     if (!key || typeof performance === "undefined") return null;
@@ -4060,6 +4066,7 @@
   function applySnapshot(key, item, source) {
     const panel = document.querySelector("#strategy-view");
     if (!key || (!item?.html && !item?.rows?.length) || !panel) return false;
+    if (!isActiveRenderRoute(key)) return false;
     if (Date.now() - Number(item.at || 0) > SNAPSHOT_MAX_AGE_MS) return false;
     if (isStrategyRoute(key) && !isApiBackedSnapshotItem(item)) return false;
     if (Array.isArray(item.rows) && item.rows.length) {
@@ -7966,6 +7973,7 @@
     const panel = document.querySelector("#strategy-view");
     if (!panel) return false;
     const key = strategyRouteKey(link);
+    if (!isActiveRenderRoute(key)) return false;
     const previousRoute = canvasState.route;
     const incomingRows = rows.length ? rows : rowsForRoute(key);
     const stored = canvasStore.get(key);
@@ -8048,6 +8056,7 @@
 
   function renderFixedPageShell(link, source, rows = []) {
     const key = fixedRouteKey(link);
+    if (!isActiveRenderRoute(key)) return false;
     window.clearTimeout(window.__fumanMarketOverviewRefreshTimer || 0);
     marketApiOnlyLoading = false;
     const panel = panelForRoute(key);

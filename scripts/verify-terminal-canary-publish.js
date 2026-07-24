@@ -123,13 +123,13 @@ function validateCanary(manifest, scorecard, options = {}) {
   const previousGoodDate = maxModuleRunDate(modules);
   const closed = marketClosedPreviousGood(manifest) || pendingPreviousGood;
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
-  const expectedReportDate = pendingPreviousGood ? previousGoodDate : tradeDate;
+  const expectedReportDate = (pendingPreviousGood || allowPendingRollForward) ? previousGoodDate : tradeDate;
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
   if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
   if (!tradeDate) issues.push("manifest_tradeDate_missing");
-  if (!pendingPreviousGood && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
-  if (pendingPreviousGood && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
+  if (!(pendingPreviousGood || allowPendingRollForward) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+  if ((pendingPreviousGood || allowPendingRollForward) && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
   if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
   if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
   if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");

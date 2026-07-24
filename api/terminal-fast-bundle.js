@@ -910,7 +910,7 @@ module.exports = async function handler(request, response) {
   }
   if (!wantsLive) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
-    const defaultSnapshotTimeoutMs = entitlement?.ok ? 8000 : 1500;
+    const defaultSnapshotTimeoutMs = entitlement?.ok ? 1200 : 1500;
     const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || defaultSnapshotTimeoutMs) || defaultSnapshotTimeoutMs);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
@@ -961,7 +961,7 @@ module.exports = async function handler(request, response) {
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
       return;
     }
-    if (!liveFallbackEnabled(request)) {
+    if (!liveFallbackEnabled(request) && entitlement?.ok !== true) {
       response.setHeader("X-Fuman-Fast-Bundle-Mode", "snapshot-only");
       if (request.method === "HEAD") {
         response.status(204).end("");

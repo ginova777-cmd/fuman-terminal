@@ -2,8 +2,8 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-07-23T16:09:10.125Z",
-  "checkedAt": "2026-07-23T11:08:40.448Z",
+  "generatedAt": "2026-07-24T00:12:03.077Z",
+  "checkedAt": "2026-07-24T00:11:08.957Z",
   "tradeDate": "20260723",
   "state": "PENDING_NOT_DUE",
   "unattendedStatus": "PREVIOUS_GOOD_HOLD",
@@ -15,7 +15,7 @@
     "predictivePreflight": {
       "ok": true,
       "status": "TRADING_DAY_WAIT_SOURCE_WINDOW",
-      "reason": "trading_day_after_formal_source_window",
+      "reason": "trading_day_before_formal_source_window",
       "reasonCodes": [
         "CLOSURE_GREEN",
         "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW"
@@ -195,18 +195,15 @@
     "autonomousOpsPolicy": {
       "ok": true,
       "status": "PENDING_NOT_DUE",
-      "reason": "terminal-resource-chain:unattended_exit_1",
+      "reason": "pending_not_due:strategy2@09:00,strategy3@13:05,strategy4@16:00,strategy5@21:00,institution@21:00,cb@21:25,warrant@20:30",
       "reasonCodes": [
-        "CLOSURE_GREEN",
         "SCHEDULE_PENDING_NOT_DUE"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring",
         "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure",
         "schedule"
       ],
       "reasonSeverity": "info",
@@ -235,7 +232,7 @@
       "key": "strategy2",
       "label": "策略2 即時",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -244,19 +241,21 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 52,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:09:00",
+      "issues": [
+        "pending_not_due:09:00"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -265,7 +264,7 @@
       "key": "strategy3",
       "label": "策略3",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -274,19 +273,21 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 55,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:13:05",
+      "issues": [
+        "pending_not_due:13:05"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -295,7 +296,7 @@
       "key": "strategy4",
       "label": "策略4",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -304,19 +305,21 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 60,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:16:00",
+      "issues": [
+        "pending_not_due:16:00"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -325,28 +328,30 @@
       "key": "strategy5",
       "label": "策略5",
       "ok": true,
-      "complete": true,
-      "fallback": false,
-      "rawFallback": false,
-      "evidenceStatus": "complete",
+      "complete": false,
+      "fallback": true,
+      "rawFallback": true,
+      "evidenceStatus": "insufficient",
       "publishAllowed": true,
       "runId": "strategy5-20260723-20260723130127",
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 46,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:21:00",
+      "issues": [
+        "pending_not_due:21:00"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -355,7 +360,7 @@
       "key": "institution",
       "label": "買賣超",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -364,19 +369,21 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 204,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:21:00",
+      "issues": [
+        "pending_not_due:21:00"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -385,7 +392,7 @@
       "key": "cb",
       "label": "CB",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -394,19 +401,21 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 2,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:21:25",
+      "issues": [
+        "pending_not_due:21:25"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
@@ -415,7 +424,7 @@
       "key": "warrant",
       "label": "權證走向",
       "ok": true,
-      "complete": true,
+      "complete": false,
       "fallback": false,
       "rawFallback": false,
       "evidenceStatus": "complete",
@@ -424,134 +433,43 @@
       "tradeDate": "20260723",
       "sourceDate": "20260723",
       "resultCount": 120,
-      "pendingNotDue": false,
+      "pendingNotDue": true,
       "runIdClosureOk": true,
-      "issue": "",
-      "issues": [],
-      "reasonCodes": [
-        "CLOSURE_GREEN"
+      "issue": "pending_not_due:20:30",
+      "issues": [
+        "pending_not_due:20:30"
       ],
-      "primaryReasonCode": "CLOSURE_GREEN",
+      "reasonCodes": [
+        "SCHEDULE_PENDING_NOT_DUE"
+      ],
+      "primaryReasonCode": "SCHEDULE_PENDING_NOT_DUE",
       "reasonActions": [
-        "continue_autonomous_monitoring"
+        "wait_until_due_time"
       ],
       "reasonLayers": [
-        "closure"
+        "schedule"
       ],
       "reasonSeverity": "info",
       "reasonUnknown": false
     }
   ],
-  "jobQueue": [
-    {
-      "key": "strategy5",
-      "label": "策略5",
-      "state": "FAILED_SCAN",
-      "priority": 30,
-      "retryable": true,
-      "blocker": "manifest_scanner_not_complete:blocked",
-      "nextAction": "rerun_strategy_scanner_after_water_ok",
-      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy5.ps1",
-      "reasonCodes": [
-        "SCANNER_EVIDENCE_INSUFFICIENT"
-      ],
-      "primaryReasonCode": "SCANNER_EVIDENCE_INSUFFICIENT",
-      "reasonActions": [
-        "rerun_scanner_and_collect_evidence"
-      ],
-      "reasonLayers": [
-        "scanner_evidence"
-      ],
-      "reasonSeverity": "critical",
-      "reasonUnknown": false
-    },
-    {
-      "key": "cb",
-      "label": "CB",
-      "state": "BLOCKED_RUNID_MISMATCH",
-      "priority": 35,
-      "retryable": true,
-      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (stale_cb_runid_redacted vs cb-detect-20260723-214526)",
-      "nextAction": "refresh_terminal_snapshot_bundle_mobile_88_readback",
-      "command": "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended",
-      "reasonCodes": [
-        "RUNID_CLOSURE_NOT_OK"
-      ],
-      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
-      "reasonActions": [
-        "verify_api_desktop_mobile_88_same_runid"
-      ],
-      "reasonLayers": [
-        "runid_closure"
-      ],
-      "reasonSeverity": "critical",
-      "reasonUnknown": false
-    },
-    {
-      "key": "institution",
-      "label": "買賣超",
-      "state": "BLOCKED_RUNID_MISMATCH",
-      "priority": 35,
-      "retryable": true,
-      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (stale_institution_runid_redacted vs institution-20260723-20260723131631)",
-      "nextAction": "refresh_terminal_snapshot_bundle_mobile_88_readback",
-      "command": "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended",
-      "reasonCodes": [
-        "RUNID_CLOSURE_NOT_OK"
-      ],
-      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
-      "reasonActions": [
-        "verify_api_desktop_mobile_88_same_runid"
-      ],
-      "reasonLayers": [
-        "runid_closure"
-      ],
-      "reasonSeverity": "critical",
-      "reasonUnknown": false
-    },
-    {
-      "key": "warrant",
-      "label": "權證走向",
-      "state": "BLOCKED_RUNID_MISMATCH",
-      "priority": 35,
-      "retryable": true,
-      "blocker": "scorecard /88 row/sourceReport runId != latest pointer (stale_warrant_runid_redacted vs warrant-flow-20260723-20260723125027)",
-      "nextAction": "refresh_terminal_snapshot_bundle_mobile_88_readback",
-      "command": "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended",
-      "reasonCodes": [
-        "RUNID_CLOSURE_NOT_OK"
-      ],
-      "primaryReasonCode": "RUNID_CLOSURE_NOT_OK",
-      "reasonActions": [
-        "verify_api_desktop_mobile_88_same_runid"
-      ],
-      "reasonLayers": [
-        "runid_closure"
-      ],
-      "reasonSeverity": "critical",
-      "reasonUnknown": false
-    }
-  ],
+  "jobQueue": [],
   "reasonCodeSummary": {
     "contract": "terminal-reason-code-summary-v1",
     "ok": true,
-    "entries": 22,
+    "entries": 18,
     "unknownEntries": 0,
-    "criticalEntries": 4,
+    "criticalEntries": 0,
     "codes": [
       "CLOSURE_GREEN",
       "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW",
       "PREVIOUS_GOOD_PRESERVED",
-      "RUNID_CLOSURE_NOT_OK",
-      "SCANNER_EVIDENCE_INSUFFICIENT",
       "SCHEDULE_PENDING_NOT_DUE"
     ],
-    "primaryCode": "SCANNER_EVIDENCE_INSUFFICIENT",
+    "primaryCode": "CLOSURE_GREEN",
     "actions": [
       "continue_autonomous_monitoring",
       "preserve_previous_good_and_mark_degraded",
-      "rerun_scanner_and_collect_evidence",
-      "verify_api_desktop_mobile_88_same_runid",
       "wait_or_recheck_source_window",
       "wait_until_due_time"
     ]
@@ -559,227 +477,39 @@
   "rootCauseSummary": {
     "contract": "production-readiness-root-cause-summary-v1",
     "ok": true,
-    "totalBlockers": 27,
-    "rootCauseCount": 5,
-    "criticalRootCauseCount": 4,
+    "totalBlockers": 0,
+    "rootCauseCount": 0,
+    "criticalRootCauseCount": 0,
     "unknownBlockers": 0,
-    "categories": [
-      {
-        "category": "daily_manifest_publish",
-        "severity": "critical",
-        "count": 14,
-        "action": "Inspect Daily Manifest modules; only manifest-green modules may pass canary publish, otherwise preserve previous good/degraded.",
-        "blockers": [
-          "manifest_module_not_ok:strategy5",
-          "manifest_module_issue:strategy5:manifest_fallback_true",
-          "manifest_module_issue:strategy5:manifest_raw_fallback_true",
-          "manifest_module_issue:strategy5:manifest_scanner_not_complete:blocked",
-          "manifest_module_issue:strategy5:manifest_evidence_not_complete:insufficient",
-          "manifest_module_issue:strategy5:manifest_publish_not_allowed",
-          "manifest_module_issue:strategy5:manifest_preserve_previous_good_true",
-          "manifest_module_fallback:strategy5"
-        ]
-      },
-      {
-        "category": "auth_readback",
-        "severity": "critical",
-        "count": 4,
-        "action": "Install and verify protected readback runtime credential, then rerun protected readback / resource-chain / runId closure gates.",
-        "blockers": [
-          "manifest_module_issue:strategy5:scorecard /88 row/sourceReport runId != latest pointer (stale_strategy5_runid_redacted vs strategy5-20260723-20260723130127)",
-          "manifest_module_issue:institution:scorecard /88 row/sourceReport runId != latest pointer (stale_institution_runid_redacted vs institution-20260723-20260723131631)",
-          "manifest_module_issue:cb:scorecard /88 row/sourceReport runId != latest pointer (stale_cb_runid_redacted vs cb-detect-20260723-214526)",
-          "manifest_module_issue:warrant:scorecard /88 row/sourceReport runId != latest pointer (stale_warrant_runid_redacted vs warrant-flow-20260723-20260723125027)"
-        ]
-      },
-      {
-        "category": "production_live_readback",
-        "severity": "critical",
-        "count": 4,
-        "action": "Rerun production live readback after deploy and protected credential are ready.",
-        "blockers": [
-          "productionLiveOpsReadback_not_ok",
-          "production_live_issue:authenticated_protected_endpoint_has_stale_or_unexpected_run_id:terminal_ops_status:{\"endpoint\":\"/api/terminal-ops-status\",\"unexpectedRunIds\":[\"stale_cb_runid_redacted\",\"stale_institution_runid_redacted\",\"stale_strategy5_runid_redacted\",\"stale_warrant_runid_redacted\"],\"expectedRunIds\":[\"cb-detect-20260723-214526\",\"institution-20260723-20260723131631\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260723-20260723130127\",\"warrant-flow-20260723-20260723125027\"],\"allowedRollingRunIds\":[]}",
-          "production_live_issue:authenticated_protected_endpoint_missing_expected_run_ids:source_reports:{\"endpoint\":\"/api/source-reports\",\"missingRunIds\":[\"cb-detect-20260723-214526\",\"institution-20260723-20260723131631\",\"strategy5-20260723-20260723130127\",\"warrant-flow-20260723-20260723125027\"],\"actualRunIds\":[\"stale_cb_runid_redacted\",\"stale_institution_runid_redacted\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"stale_strategy5_runid_redacted\",\"stale_warrant_runid_redacted\"],\"expectedRunIds\":[\"cb-detect-20260723-214526\",\"institution-20260723-20260723131631\",\"strategy2-20260723-115814\",\"strategy3-20260723-20260723064941\",\"strategy4-20260723-20260723083226\",\"strategy5-20260723-20260723130127\",\"warrant-flow-20260723-20260723125027\"]}",
-          "production_live_not_ok"
-        ]
-      },
-      {
-        "category": "runid_closure",
-        "severity": "critical",
-        "count": 4,
-        "action": "Verify production API, desktop, mobile and /88 all expose the same module runId after authentication.",
-        "blockers": [
-          "manifest_module_issue:strategy5:manifest_runId_mismatch:strategy5-20260723-20260723130127,stale_strategy5_runid_redacted",
-          "manifest_module_issue:institution:manifest_runId_mismatch:institution-20260723-20260723131631,stale_institution_runid_redacted",
-          "manifest_module_issue:cb:manifest_runId_mismatch:cb-detect-20260723-214526,stale_cb_runid_redacted",
-          "manifest_module_issue:warrant:manifest_runId_mismatch:warrant-flow-20260723-20260723125027,stale_warrant_runid_redacted"
-        ]
-      },
-      {
-        "category": "resource_chain",
-        "severity": "info",
-        "count": 1,
-        "action": "Rerun terminal resource-chain unattended verifier and inspect per-module runId closure rows.",
-        "blockers": [
-          "terminal-resource-chain:unattended_exit_1"
-        ]
-      }
-    ]
+    "categories": []
   },
   "rootCauseRecoveryPlan": {
     "contract": "production-readiness-root-cause-recovery-plan-v1",
     "ok": true,
-    "stepCount": 5,
-    "autoExecutableSteps": 1,
-    "autoExecutableNow": 1,
+    "stepCount": 0,
+    "autoExecutableSteps": 0,
+    "autoExecutableNow": 0,
     "blockedAutoExecutableSteps": 0,
-    "manualSteps": 4,
-    "firstManualStep": "auth_readback",
-    "firstExecutableStep": "resource_chain",
-    "firstBlockedStep": "auth_readback",
-    "steps": [
-      {
-        "category": "auth_readback",
-        "order": 10,
-        "severity": "critical",
-        "blockerCount": 4,
-        "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [
-          "manual_secret_install_required",
-          "secret_must_remain_manual_runtime_only"
-        ],
-        "automation": "manual_secret",
-        "requires": [
-          "operator_installs_runtime_credential",
-          "no_secret_in_repo_or_chat"
-        ],
-        "commands": [
-          {
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\fuman-terminal\\scripts\\setup-protected-readback-credential.ps1 -Email \"<member-email>\" -Force"
-          },
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:protected-readback-credential"
-          }
-        ],
-        "reason": "Protected desktop/mobile/88 readback needs a runtime member credential; this can never be auto-created or stored in source.",
-        "stopMode": "manual_repair_required"
-      },
-      {
-        "category": "production_live_readback",
-        "order": 40,
-        "severity": "critical",
-        "blockerCount": 4,
-        "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [],
-        "automation": "readback_after_auth_deploy",
-        "requires": [
-          "protected_readback_credential_ok",
-          "production_sha_aligned"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live -- --require-protected-readback"
-          }
-        ],
-        "reason": "Production protected surfaces can only be closed after credential and deployed release are aligned.",
-        "stopMode": "readback_required"
-      },
-      {
-        "category": "resource_chain",
-        "order": 50,
-        "severity": "info",
-        "blockerCount": 1,
-        "canAutoExecute": true,
-        "canExecuteNow": true,
-        "blockedBy": [],
-        "automation": "rerun_verifier",
-        "requires": [
-          "protected_readback_credential_ok",
-          "water_root_ok_or_previous_good_hold"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:terminal-resource-chain:unattended"
-          }
-        ],
-        "reason": "Resource chain is evidence-only and may rerun after auth/water prerequisites are ready.",
-        "stopMode": "verification_required"
-      },
-      {
-        "category": "daily_manifest_publish",
-        "order": 60,
-        "severity": "critical",
-        "blockerCount": 14,
-        "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [
-          "module_evidence_not_complete",
-          "raw_fallback_present"
-        ],
-        "automation": "manifest_repair",
-        "requires": [
-          "water_root_ok",
-          "resource_chain_ok",
-          "module_evidence_complete",
-          "no_raw_fallback"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run manifest:daily-terminal-run"
-          },
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:daily-terminal-run-manifest"
-          }
-        ],
-        "reason": "Daily Manifest must be green before publish; previous-good/degraded must remain explicit.",
-        "stopMode": "preserve_previous_good"
-      },
-      {
-        "category": "runid_closure",
-        "order": 70,
-        "severity": "critical",
-        "blockerCount": 4,
-        "canAutoExecute": false,
-        "canExecuteNow": false,
-        "blockedBy": [
-          "production_live_readback_not_ok",
-          "runid_closure_not_verified"
-        ],
-        "automation": "runid_readback_after_publish",
-        "requires": [
-          "production_api_ready",
-          "desktop_ready",
-          "mobile_ready",
-          "scorecard88_ready",
-          "same_runid"
-        ],
-        "commands": [
-          {
-            "command": "cd C:\\fuman-terminal; npm run verify:terminal-resource-chain:unattended"
-          }
-        ],
-        "reason": "Production API, desktop, mobile and /88 must expose the same module runId.",
-        "stopMode": "runid_closure_required"
-      }
-    ]
+    "manualSteps": 0,
+    "firstManualStep": "",
+    "firstExecutableStep": "",
+    "firstBlockedStep": "",
+    "steps": []
   },
   "readinessReport": {
     "contract": "production-unattended-readiness-report-v1",
-    "status": "PENDING_NOT_DUE",
-    "ok": false,
-    "checkedAt": "2026-07-23T15:56:30.580Z"
+    "status": "PREVIOUS_GOOD_HOLD_READY",
+    "ok": true,
+    "checkedAt": "2026-07-23T16:30:26.323Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
     "ok": true,
     "state": "TRADING_DAY_WAIT_SOURCE_WINDOW",
     "action": "skip_formal_scan",
-    "reason": "trading_day_after_formal_source_window",
-    "scannerTargetDate": "20260723",
-    "displayTradeDate": "20260722",
+    "reason": "trading_day_before_formal_source_window",
+    "scannerTargetDate": "20260724",
+    "displayTradeDate": "20260723",
     "formalScanAllowed": false,
     "preservePreviousGood": true,
     "publishAllowed": false,
@@ -860,7 +590,7 @@
       "required": false,
       "channel": "ops_alert",
       "kind": "none",
-      "dedupeKey": "PENDING_NOT_DUE:20260723",
+      "dedupeKey": "PENDING_NOT_DUE:20260724",
       "reason": "expected_schedule_wait"
     },
     "operatorAction": "wait_until_due_time",
@@ -890,13 +620,13 @@
     "sendAllowed": false,
     "dryRun": true,
     "kind": "none",
-    "dedupeKey": "PENDING_NOT_DUE:20260723",
+    "dedupeKey": "PENDING_NOT_DUE:20260724",
     "reason": "expected_schedule_wait",
     "opsState": "PENDING_NOT_DUE",
-    "tradeDate": "20260723"
+    "tradeDate": "20260724"
   },
   "rollForward": {
-    "mode": "apply",
+    "mode": "dry-run",
     "state": "IDLE_NO_RETRY_NEEDED",
     "jobs": 0,
     "executableJobs": 0,
@@ -953,7 +683,7 @@
   "finalAudit": {
     "contract": "terminal-autonomous-completion-audit-v1",
     "ok": true,
-    "tradeDate": "20260723",
+    "tradeDate": "20260724",
     "marketClosedMode": false,
     "layers": 21,
     "issues": []
