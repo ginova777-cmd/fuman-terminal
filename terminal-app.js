@@ -1375,13 +1375,14 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
 ;(function installFumanDesktopRouteMarker20260724(){
   if(window.__fumanDesktopRouteMarker20260724)return;
   window.__fumanDesktopRouteMarker20260724=true;
-  function routeInfo(view,text=""){
+  function routeInfo(view,text="",route=""){
     const label=String(text||"").replace(/\s+/g," ").trim();
+    const strategyRoute=String(route||"");
     if(view==="strategy"){
-      if(label.includes("當沖")||label.includes("雷達"))return {key:"strategy|策略2",label:"策略2",view,route:"intraday_2m"};
-      if(label.includes("隔日"))return {key:"strategy|策略3",label:"策略3",view,route:"strategy3"};
-      if(label.includes("波段"))return {key:"strategy|策略4",label:"策略4",view,route:"swing_radar"};
-      if(label.includes("綜合"))return {key:"strategy|策略5",label:"策略5",view,route:"strategy5"};
+      if(strategyRoute==="intraday_2m"||label.includes("當沖")||label.includes("雷達"))return {key:"strategy|策略2",label:"策略2",view,route:"intraday_2m"};
+      if(strategyRoute==="strategy3"||label.includes("隔日"))return {key:"strategy|策略3",label:"策略3",view,route:"strategy3"};
+      if(strategyRoute==="swing_radar"||label.includes("波段"))return {key:"strategy|策略4",label:"策略4",view,route:"swing_radar"};
+      if(strategyRoute==="strategy5"||label.includes("綜合"))return {key:"strategy|策略5",label:"策略5",view,route:"strategy5"};
       return {key:"strategy|策略",label:"策略",view,route:""};
     }
     const labels={market:"市場總覽","chip-trade":"買賣超","cb-detect":"CB可轉債","warrant-flow":"權證走向",watchlist:"自選股",member:"會員"};
@@ -1399,12 +1400,24 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }
   function infoFromLink(link,viewName=""){
     if(link?.dataset?.memberTab)return null;
-    return routeInfo(link?.dataset?.view||viewName||"",link?.textContent||"");
+    return routeInfo(link?.dataset?.view||viewName||"",link?.textContent||"",link?.dataset?.strategyRoute||"");
   }
   function markFromLink(link,viewName=""){
     const info=infoFromLink(link,viewName);
     markInfo(info);
   }
+  function reconcileActiveRoute(){
+    const activePanel=[...document.querySelectorAll(".view-panel")].find(el=>el.classList.contains("active")&&!el.hidden);
+    const activeNav=document.querySelector('[data-view].active,[data-view][aria-current="page"]');
+    if(!activePanel||!activeNav||activeNav.dataset?.memberTab)return;
+    if(activeNav.dataset.view==="strategy"&&activePanel.id!=="strategy-view")return;
+    if(activeNav.dataset.view==="chip-trade"&&activePanel.id!=="chip-trade-view")return;
+    if(activeNav.dataset.view==="cb-detect"&&activePanel.id!=="cb-detect-view")return;
+    if(activeNav.dataset.view==="warrant-flow"&&activePanel.id!=="warrant-flow-view")return;
+    if(activeNav.dataset.view==="watchlist"&&activePanel.id!=="watchlist-view")return;
+    setRouteInfo(infoFromLink(activeNav,activeNav.dataset.view));
+  }
+  setInterval(reconcileActiveRoute,350);
   document.addEventListener("pointerdown",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
   document.addEventListener("click",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
   if(typeof showView==="function"&&!showView.__fumanDesktopRouteMarker20260724){
