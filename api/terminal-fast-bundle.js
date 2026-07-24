@@ -13,6 +13,7 @@ const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
+const sourceReportsApi = require("./source-reports");
 const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
@@ -885,6 +886,96 @@ function setAuthenticatedNoStore(response, entitlement) {
   response.setHeader("Expires", "0");
 }
 
+
+function sourceReportRunId(report = {}) {
+  return String(report.runId || report.run_id || report.latestRunId || report.latest_run_id || report.internalRunId || report.internal_run_id || report.sourceRunId || report.source_run_id || "").trim();
+}
+
+function sourceReportKeyFromReport(report = {}) {
+  const explicit = String(report.key || report.strategy || report.strategyKey || report.name || report.module || report.label || "").toLowerCase();
+  if (/strategy2/.test(explicit)) return "strategy2";
+  if (/strategy3/.test(explicit)) return "strategy3";
+  if (/strategy4/.test(explicit)) return "strategy4";
+  if (/strategy5/.test(explicit)) return "strategy5";
+  if (/institution|chip|買賣|法人/.test(explicit)) return "institution";
+  if (/cb|convertible|可轉債/.test(explicit)) return "cb";
+  if (/warrant|權證/.test(explicit)) return "warrant";
+  return strategyKeyFromRunId(sourceReportRunId(report));
+}
+
+function sourceReportEndpointSpecForKey(key) {
+  const specs = {
+    strategy2: { endpoint: "/api/strategy2-latest", query: { ...compactQuery(240), today: "1", live: "1" } },
+    strategy3: { endpoint: "/api/strategy3-latest", query: compactQuery(60) },
+    strategy4: { endpoint: "/api/strategy4-latest", query: compactQuery(70) },
+    strategy5: { endpoint: "/api/strategy5-latest", query: compactQuery(140) },
+    institution: { endpoint: "/api/institution-latest", query: compactQuery(60) },
+    cb: { endpoint: "/api/cb-detect-latest", query: compactQuery(60) },
+    warrant: { endpoint: "/api/warrant-flow-latest", query: compactQuery(60) },
+  };
+  return specs[key] || null;
+}
+
+function sourceReportEndpointPayload(request, report = {}) {
+  const key = sourceReportKeyFromReport(report);
+  const spec = sourceReportEndpointSpecForKey(key);
+  const runId = sourceReportRunId(report);
+  if (!key || !spec || !runId) return null;
+  const count = Number(report.count ?? report.resultCount ?? report.emittedRows ?? report.rows ?? report.readbackCount ?? 0) || 0;
+  return [buildEndpoint(spec.endpoint, spec.query || {}), shapeTopPayload(request, {
+    ok: true,
+    runId,
+    count,
+    resultCount: count,
+    readbackCount: Number(report.readbackCount ?? count) || count,
+    rows: [],
+    matches: [],
+    evidenceStatus: report.evidenceStatus || "complete",
+    unattendedStatus: report.unattendedStatus || "YES",
+    publishAllowed: report.publishAllowed !== false,
+    qualityStatus: report.qualityStatus || report.status || "source_report_display_fallback",
+    sourceReportDisplayFallback: true,
+    sourceReportKey: key,
+    sourceReportOriginal: report,
+    updatedAt: report.updatedAt || report.finishedAt || report.generatedAt || new Date().toISOString(),
+    transport: { source: "api/source-reports", via: "terminal-fast-bundle:source-reports-fallback", runId, fetchedAt: new Date().toISOString() },
+  })];
+}
+
+async function buildSourceReportsDerivedBundle(request, reason = "desktop_route_snapshot_timeout_or_missing") {
+  const result = await callJson("/api/source-reports", sourceReportsApi, request, { compact: "1", shell: "1", live: "0" }, 6000);
+  if (Number(result?.statusCode || 0) >= 400 || result?.payload?.ok === false) return null;
+  const reports = Array.isArray(result.payload?.sourceReports) ? result.payload.sourceReports
+    : Array.isArray(result.payload?.reports) ? result.payload.reports
+      : Array.isArray(result.payload?.rows) ? result.payload.rows : [];
+  const endpoints = {};
+  for (const report of reports) {
+    const entry = sourceReportEndpointPayload(request, report);
+    if (entry) endpoints[entry[0]] = entry[1];
+  }
+  if (!Object.keys(endpoints).length) return null;
+  return {
+    ok: true,
+    partial: true,
+    source: "terminal-fast-bundle",
+    cacheSource: "api/source-reports:desktop-fallback",
+    snapshotOnly: true,
+    snapshotHit: false,
+    snapshotFresh: false,
+    reason,
+    updatedAt: new Date().toISOString(),
+    elapsedMs: result.elapsedMs || 0,
+    endpoints,
+    summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
+    misses: ["desktop_route_snapshot"],
+    timings: { "/api/source-reports": result.elapsedMs || 0 },
+    preservePreviousGood: true,
+    latestPointerUpdated: false,
+    emptyResultWritten: false,
+    snapshotRepairs: { sourceReportsFallback: true },
+  };
+}
+
 function snapshotMissPayload(reason = "snapshot_missing_or_stale") {
   const updatedAt = new Date().toISOString();
   return {
@@ -1001,6 +1092,14 @@ module.exports = async function handler(request, response) {
       }
       const endpoints = {};
       const authenticatedSnapshotMiss = entitlement?.ok === true;
+      const sourceReportsBundle = authenticatedSnapshotMiss
+        ? await buildSourceReportsDerivedBundle(request, "desktop_route_snapshot_timeout_or_missing").catch(() => null)
+        : null;
+      if (sourceReportsBundle) {
+        response.setHeader("X-Fuman-Fast-Bundle-Mode", "source-reports-fallback");
+        response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(sourceReportsBundle, sourceReportsBundle.endpoints || {}), marketCalendar), entitlement));
+        return;
+      }
       const missPayload = {
         ...snapshotMissPayload("desktop_route_snapshot_timeout_or_missing"),
         ok: true,

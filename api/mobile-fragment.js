@@ -806,6 +806,34 @@ function sourceReportRunId(report = {}) {
   return String(report.runId || report.run_id || report.latestRunId || report.latest_run_id || report.internalRunId || report.internal_run_id || report.sourceRunId || report.source_run_id || "").trim();
 }
 
+
+function sourceReportAliasesForKey(key = "") {
+  return ({
+    institution: ["institution", "chip", "buy-sell", "買賣超", "法人"],
+    cb: ["cb", "cb-detect", "可轉債"],
+    warrant: ["warrant", "warrant-flow", "權證"],
+    strategy2: ["strategy2", "當沖"],
+    strategy3: ["strategy3", "隔日"],
+    strategy4: ["strategy4", "波段"],
+    strategy5: ["strategy5", "綜合"],
+  })[key] || [key];
+}
+
+function sourceReportMatchesKey(report = {}, key = "") {
+  const aliases = sourceReportAliasesForKey(key).map((item) => String(item || "").toLowerCase());
+  const raw = String(report?.key || report?.strategy || report?.strategyKey || report?.name || report?.module || report?.label || "").toLowerCase();
+  if (raw && aliases.some((alias) => raw === alias || raw.includes(alias))) return true;
+  const runId = sourceReportRunId(report).toLowerCase();
+  return aliases.some((alias) => runId.startsWith(alias + "-"));
+}
+
+function formalRunIdFromPayload(payload, tab = "") {
+  const key = sourceReportKeyForTab(tab);
+  const aliases = sourceReportAliasesForKey(key).map((item) => String(item || "").toLowerCase());
+  const direct = String(payload?.runId || payload?.run_id || payload?.latestRunId || payload?.latest_run_id || payload?.run?.runId || payload?.latest?.runId || payload?.transport?.runId || payload?.payload?.runId || payload?.payload?.transport?.runId || "").trim().toLowerCase();
+  return aliases.some((alias) => direct.startsWith(alias + "-")) ? direct : "";
+}
+
 async function sourceReportFallbackPayload(request, tab, endpoint, error) {
   const key = sourceReportKeyForTab(tab);
   if (!key || tab === "ai") return null;
@@ -815,7 +843,7 @@ async function sourceReportFallbackPayload(request, tab, endpoint, error) {
     : Array.isArray(payload?.reports) ? payload.reports
       : Array.isArray(payload?.rows) ? payload.rows
         : [];
-  const report = reports.find((item) => String(item?.key || item?.strategy || item?.strategyKey || item?.name || "").toLowerCase() === key);
+  const report = reports.find((item) => sourceReportMatchesKey(item, key));
   const runId = sourceReportRunId(report);
   if (!report || !runId) return null;
   const count = Number(report.count ?? report.resultCount ?? report.emittedRows ?? report.rows ?? 0) || 0;
@@ -899,8 +927,12 @@ module.exports = async function handler(request, response) {
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
-    const html = renderFragment(tab, config, payload);
-    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
+    let displayPayload = payload;
+    if (tab !== "ai" && !formalRunIdFromPayload(payload, tab)) {
+      displayPayload = await sourceReportFallbackPayload(request, tab, endpoint, new Error("mobile_fragment_payload_missing_formal_run_id")).catch(() => null) || payload;
+    }
+    const html = renderFragment(tab, config, displayPayload);
+    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, displayPayload);
     response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {

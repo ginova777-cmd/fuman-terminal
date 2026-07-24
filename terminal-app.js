@@ -1214,3 +1214,60 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }
   installStrategyNoOverviewFallback(STRATEGY5_ENTRY_ID);
 })();
+;(function installFumanStrategyRouteStaleRenderGuard20260724(){
+  if(window.__fumanStrategyRouteStaleRenderGuard20260724)return;
+  window.__fumanStrategyRouteStaleRenderGuard20260724=true;
+  let activeRoute="";
+  let routeSeq=0;
+  function routeFromLink(link){
+    const text=String(link?.textContent||"");
+    const route=String(link?.dataset?.strategyRoute||"");
+    if(route)return route;
+    if(text.includes("當沖")||text.includes("雷達"))return "intraday_2m";
+    if(text.includes("隔日"))return "strategy3";
+    if(text.includes("波段"))return "swing_radar";
+    if(text.includes("綜合"))return "strategy5";
+    return "";
+  }
+  function currentRoute(){
+    if(activeRoute)return activeRoute;
+    if(strategyPresetMode==="strategy3")return "strategy3";
+    if(strategyPresetMode==="strategy5")return "strategy5";
+    if(selectedStrategyIds?.has?.("swing_radar"))return "swing_radar";
+    if(selectedStrategyIds?.has?.("intraday_2m"))return "intraday_2m";
+    return "";
+  }
+  function forceRoute(route){
+    if(!route||!isViewActive?.("strategy"))return;
+    if(route==="strategy3"){
+      strategyPresetMode="strategy3";selectedStrategyIds=new Set(["overnight_chip"]);strategy3Page=1;setStrategyChrome?.("strategy3");
+    }else if(route==="swing_radar"){
+      strategyPresetMode="";selectedStrategyIds=new Set(["swing_radar"]);swingPage=1;setStrategyChrome?.("swing");
+    }else if(route==="strategy5"){
+      strategyPresetMode="strategy5";strategy5ActiveId=strategy5ActiveId||"multi_strategy_confluence";selectedStrategyIds=new Set([strategy5ActiveId]);strategy5Page=1;setStrategyChrome?.("strategy5");
+    }else if(route==="intraday_2m"){
+      strategyPresetMode="";selectedStrategyIds=new Set(["intraday_2m"]);setStrategyChrome?.("intraday");
+    }
+  }
+  function setRoute(route){
+    if(!route)return;
+    activeRoute=route;
+    routeSeq+=1;
+    document.body.dataset.strategyActiveRoute=route;
+    forceRoute(route);
+  }
+  document.addEventListener("pointerdown",event=>{const link=event.target?.closest?.('[data-view="strategy"]');setRoute(routeFromLink(link))},true);
+  document.addEventListener("click",event=>{const link=event.target?.closest?.('[data-view="strategy"]');setRoute(routeFromLink(link));setTimeout(()=>forceRoute(activeRoute),0);setTimeout(()=>forceRoute(activeRoute),120)},true);
+  if(typeof renderStrategyScanner==="function"){
+    const originalRenderStrategyScanner=renderStrategyScanner;
+    renderStrategyScanner=function(...args){
+      const expected=currentRoute();
+      const seq=routeSeq;
+      forceRoute(expected);
+      const result=originalRenderStrategyScanner.apply(this,args);
+      if(seq!==routeSeq||expected!==currentRoute())forceRoute(activeRoute||expected);
+      return result;
+    };
+  }
+  window.FUMAN_STRATEGY_STALE_RENDER_GUARD={setRoute,forceRoute,currentRoute};
+})();
