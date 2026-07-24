@@ -876,6 +876,15 @@ function liveFanoutEnabled(request) {
   return process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
 }
 
+function setAuthenticatedNoStore(response, entitlement) {
+  if (entitlement?.ok !== true) return;
+  response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+  response.setHeader("CDN-Cache-Control", "no-store");
+  response.setHeader("Vercel-CDN-Cache-Control", "no-store");
+  response.setHeader("Pragma", "no-cache");
+  response.setHeader("Expires", "0");
+}
+
 function snapshotMissPayload(reason = "snapshot_missing_or_stale") {
   const updatedAt = new Date().toISOString();
   return {
@@ -911,6 +920,7 @@ module.exports = async function handler(request, response) {
   if (!rate.ok) return sendRateLimited(response, "terminal-fast-bundle", rate);
 
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
+  setAuthenticatedNoStore(response, entitlement);
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
 
   const requestedLiveFanout = request.query?.live === "1"
@@ -935,9 +945,13 @@ module.exports = async function handler(request, response) {
       : await readDesktopRouteSnapshot({ timeoutMs: snapshotReadTimeoutMs }).catch(() => null);
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
-      response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
-      response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
-      response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+      if (entitlement?.ok === true) {
+        setAuthenticatedNoStore(response, entitlement);
+      } else {
+        response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
+        response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+        response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+      }
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       const allowSnapshotRepair = terminalSnapshotRepairEnabled(request);
       let realtimeRadarRepairs = isReleaseReadbackSnapshot
@@ -1060,4 +1074,3 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
-

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "membership-entitlement-guard-20260713-11";
+  const VERSION = "membership-entitlement-guard-20260724-01";
   const AUTH_CACHE_KEY = "fuman-terminal-auth-cache-v1";
   const LAST_ROUTE_KEY = "fuman-terminal-last-route-v1";
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);

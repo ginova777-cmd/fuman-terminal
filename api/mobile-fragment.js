@@ -766,9 +766,23 @@ function waitingRunId(payload, tab = "") {
 function extractRunId(payload, tab = "") {
   const runId = String(
     payload?.runId
+    || payload?.run_id
+    || payload?.latestRunId
+    || payload?.latest_run_id
+    || payload?.run?.runId
+    || payload?.run?.run_id
+    || payload?.latest?.runId
+    || payload?.latest?.run_id
+    || payload?.scanReceipt?.runId
+    || payload?.scanReceipt?.run_id
+    || payload?.receipt?.runId
+    || payload?.receipt?.run_id
     || payload?.transport?.runId
     || payload?.transport?.payloadRunId
     || payload?.payload?.runId
+    || payload?.payload?.run_id
+    || payload?.payload?.run?.runId
+    || payload?.payload?.run?.run_id
     || payload?.payload?.transport?.runId
     || payload?.meta?.runId
     || ""
@@ -858,9 +872,3 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
-
-
-
-
-
-

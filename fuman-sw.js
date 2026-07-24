@@ -1,5 +1,5 @@
 const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-10";
-const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260717-01";
+const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
@@ -338,25 +338,3 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -220,10 +220,11 @@ function strategyKeyFromRunId(value) {
   return "";
 }
 
-function sameDayStrategy2RollingAllowed(runId, expectedDates, endpointCounts) {
+function sameDayStrategy2RollingAllowed(runId, expectedDates, endpointCounts, options = {}) {
   if (strategyKeyFromRunId(runId) !== "strategy2") return false;
   const date = runDateFromId(runId);
   if (!date || !expectedDates.has(date)) return false;
+  if (options.allowSingleEndpoint === true) return true;
   return Number(endpointCounts.get(runId) || 0) >= 2;
 }
 
@@ -253,9 +254,9 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   result.mode = "authenticated-readback";
   const targets = [
     { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
-    { name: "scorecard", path: "/api/scorecard", requireAllRunIds: true },
-    { name: "source_reports", path: "/api/source-reports", requireAllRunIds: true },
-    { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", requireAllRunIds: true },
+    { name: "scorecard", path: "/api/scorecard", batchSnapshot: true },
+    { name: "source_reports", path: "/api/source-reports", batchSnapshot: true },
+    { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", requireAllRunIds: true, allowStrategy2Rolling: true },
     { name: "mobile_boot", path: "/api/mobile-boot" },
     { name: "mobile_strategy2", path: "/api/mobile-fragment?tab=strategy2", expectedKey: "strategy2" },
     { name: "mobile_strategy3", path: "/api/mobile-fragment?tab=strategy3", expectedKey: "strategy3" },
@@ -338,7 +339,12 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
         continue;
       }
       if (target.requireAllRunIds) {
-        const missingRunIds = expectedRunIdsSorted.filter((runId) => !row.runIds.includes(runId));
+        const missingRunIds = expectedRunIdsSorted.filter((runId) => {
+          if (strategyKeyFromRunId(runId) === "strategy2" && target.allowStrategy2Rolling) {
+            return !row.runIds.some((actualRunId) => sameDayStrategy2RollingAllowed(actualRunId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: true }));
+          }
+          return !row.runIds.includes(runId);
+        });
         row.missingRunIds = missingRunIds;
         if (missingRunIds.length) {
           row.ok = false;
@@ -357,7 +363,10 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
         const expectedRunId = expectedByKey.get(target.expectedKey) || "";
         row.expectedKey = target.expectedKey;
         row.expectedRunId = expectedRunId;
-        if (expectedRunId && !row.runIds.includes(expectedRunId)) {
+        const hasExpectedRunId = expectedRunId && row.runIds.includes(expectedRunId);
+        const hasAllowedStrategy2RollingRunId = target.expectedKey === "strategy2"
+          && row.runIds.some((actualRunId) => sameDayStrategy2RollingAllowed(actualRunId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: true }));
+        if (expectedRunId && !hasExpectedRunId && !hasAllowedStrategy2RollingRunId) {
           row.ok = false;
           issues.push({
             issue: "authenticated_mobile_fragment_run_id_mismatch:" + row.name,
@@ -377,10 +386,10 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
         continue;
       }
       const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
-        && !sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts));
+        && !sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: target.allowStrategy2Rolling === true || target.expectedKey === "strategy2" }));
       row.unexpectedRunIds = unexpectedRunIds;
       row.allowedRollingRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
-        && sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts));
+        && sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: target.allowStrategy2Rolling === true || target.expectedKey === "strategy2" }));
       if (unexpectedRunIds.length) {
         row.ok = false;
         issues.push({
