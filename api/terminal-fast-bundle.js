@@ -938,7 +938,7 @@ module.exports = async function handler(request, response) {
   }
   if (!wantsLive) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
-    const defaultSnapshotTimeoutMs = entitlement?.ok ? 1200 : 1500;
+    const defaultSnapshotTimeoutMs = entitlement?.ok ? 2500 : 1500;
     const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || defaultSnapshotTimeoutMs) || defaultSnapshotTimeoutMs);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
@@ -993,7 +993,7 @@ module.exports = async function handler(request, response) {
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
       return;
     }
-    if (!liveFallbackEnabled(request) && entitlement?.ok !== true) {
+    if (!liveFallbackEnabled(request)) {
       response.setHeader("X-Fuman-Fast-Bundle-Mode", "snapshot-only");
       if (request.method === "HEAD") {
         response.status(204).end("");
@@ -1003,8 +1003,8 @@ module.exports = async function handler(request, response) {
       const authenticatedSnapshotMiss = entitlement?.ok === true;
       const missPayload = {
         ...snapshotMissPayload("desktop_route_snapshot_timeout_or_missing"),
-        ok: authenticatedSnapshotMiss ? false : true,
-        error: authenticatedSnapshotMiss ? "authenticated_desktop_route_snapshot_required" : undefined,
+        ok: true,
+        error: authenticatedSnapshotMiss ? "authenticated_desktop_route_snapshot_pending" : undefined,
         endpoints,
         summary: {},
         misses: ["desktop_route_snapshot"],

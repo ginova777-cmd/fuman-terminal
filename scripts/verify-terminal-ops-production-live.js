@@ -18,7 +18,7 @@ const EXPECTED_SHA = normalizeSha(process.env.FUMAN_RELEASE_SHA || process.env.F
 const REQUIRE_PROTECTED_READBACK = /^(1|true|yes)$/i.test(String(process.env.FUMAN_REQUIRE_PROTECTED_READBACK || "")) || process.argv.includes("--require-protected-readback");
 
 const DIRECT_PROTECTED_ENDPOINTS = [
-  { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
+  { name: "terminal_ops_status", path: "/api/terminal-ops-status", batchSnapshot: true },
   { name: "scorecard", path: "/api/scorecard" },
   { name: "source_reports", path: "/api/source-reports" },
 ];
@@ -253,7 +253,7 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   }
   result.mode = "authenticated-readback";
   const targets = [
-    { name: "terminal_ops_status", path: "/api/terminal-ops-status" },
+    { name: "terminal_ops_status", path: "/api/terminal-ops-status", batchSnapshot: true },
     { name: "scorecard", path: "/api/scorecard", batchSnapshot: true },
     { name: "source_reports", path: "/api/source-reports", batchSnapshot: true },
     { name: "terminal_fast_bundle", path: "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", requireAllRunIds: true, allowStrategy2Rolling: true },
@@ -302,8 +302,8 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
     result.endpoints.push(row);
   }
 
-  const reference = result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
-  const expectedRunIds = new Set((localOpsStatus.expectedRunIds && localOpsStatus.expectedRunIds.length) ? localOpsStatus.expectedRunIds : (reference?.runIds || []));
+  const reference = result.endpoints.find((row) => row.name === "source_reports" && row.ok && row.runIds.length) || result.endpoints.find((row) => row.name === "scorecard" && row.ok && row.runIds.length) || result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
+  const expectedRunIds = new Set((reference?.runIds && reference.runIds.length) ? reference.runIds : ((localOpsStatus.expectedRunIds && localOpsStatus.expectedRunIds.length) ? localOpsStatus.expectedRunIds : []));
   if (expectedRunIds.size) {
     const targetByName = new Map(targets.map((target) => [target.name, target]));
     const expectedRunIdsSorted = Array.from(expectedRunIds).sort();

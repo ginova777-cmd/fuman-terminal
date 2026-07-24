@@ -790,6 +790,56 @@ function extractRunId(payload, tab = "") {
   return runId || waitingRunId(payload, tab);
 }
 
+function sourceReportKeyForTab(tab = "") {
+  return ({
+    chip: "institution",
+    cb: "cb",
+    warrant: "warrant",
+    strategy2: "strategy2",
+    strategy3: "strategy3",
+    strategy4: "strategy4",
+    strategy5: "strategy5",
+  })[tab] || tab;
+}
+
+function sourceReportRunId(report = {}) {
+  return String(report.runId || report.run_id || report.latestRunId || report.latest_run_id || report.internalRunId || report.internal_run_id || report.sourceRunId || report.source_run_id || "").trim();
+}
+
+async function sourceReportFallbackPayload(request, tab, endpoint, error) {
+  const key = sourceReportKeyForTab(tab);
+  if (!key || tab === "ai") return null;
+  const url = `${originFrom(request)}/api/source-reports?compact=1&shell=1&ts=${Date.now()}`;
+  const payload = await fetchJsonWithTimeout(url, 6000, authHeadersFrom(request)).catch(() => null);
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports
+    : Array.isArray(payload?.reports) ? payload.reports
+      : Array.isArray(payload?.rows) ? payload.rows
+        : [];
+  const report = reports.find((item) => String(item?.key || item?.strategy || item?.strategyKey || item?.name || "").toLowerCase() === key);
+  const runId = sourceReportRunId(report);
+  if (!report || !runId) return null;
+  const count = Number(report.count ?? report.resultCount ?? report.emittedRows ?? report.rows ?? 0) || 0;
+  return {
+    ok: true,
+    runId,
+    count,
+    resultCount: count,
+    readbackCount: Number(report.readbackCount ?? count) || count,
+    rows: [],
+    matches: [],
+    evidenceStatus: report.evidenceStatus || "complete",
+    unattendedStatus: report.unattendedStatus || "YES",
+    publishAllowed: report.publishAllowed !== false,
+    qualityStatus: report.qualityStatus || report.status || "source_report_display_fallback",
+    mobileDisplayFallback: true,
+    mobileDisplayFallbackSource: "source-reports",
+    sourceReportKey: key,
+    sourceReportEndpoint: "/api/source-reports",
+    sourceReportOriginalEndpoint: endpoint,
+    sourceReportFallbackReason: error?.message || String(error || "mobile_fragment_live_fetch_failed"),
+    updatedAt: report.updatedAt || report.finishedAt || report.generatedAt || new Date().toISOString(),
+  };
+}
 module.exports = async function handler(request, response) {
   setNoStore(response);
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -851,14 +901,14 @@ module.exports = async function handler(request, response) {
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
-    response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
+    response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
     if (tab !== "ai") {
       const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab).catch(() => null);
       if (htmlSnapshot?.html) {
         response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "html-snapshot");
-        response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
+        response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16) + "\"");
         sendHtml(request, response, 200, htmlSnapshot.html, {
           tab,
           snapshotHit: true,
@@ -868,6 +918,20 @@ module.exports = async function handler(request, response) {
         });
         return;
       }
+    }
+    const reportFallback = await sourceReportFallbackPayload(request, tab, TAB_CONFIG[tab]?.endpoint || "", error).catch(() => null);
+    if (reportFallback) {
+      const html = renderFragment(tab, config, reportFallback);
+      response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "source-reports");
+      response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
+      sendHtml(request, response, 200, html, {
+        tab,
+        fallback: true,
+        displayFallback: true,
+        runId: reportFallback.runId,
+        reason: error?.message || "mobile_fragment_live_fetch_failed",
+      });
+      return;
     }
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
