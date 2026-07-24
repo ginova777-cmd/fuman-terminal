@@ -1371,3 +1371,40 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }
 })();
 
+
+;(function installFumanDesktopRouteMarker20260724(){
+  if(window.__fumanDesktopRouteMarker20260724)return;
+  window.__fumanDesktopRouteMarker20260724=true;
+  function routeInfo(view,text=""){
+    const label=String(text||"").replace(/\s+/g," ").trim();
+    if(view==="strategy"){
+      if(label.includes("當沖")||label.includes("雷達"))return {key:"strategy|策略2",label:"策略2",view,route:"intraday_2m"};
+      if(label.includes("隔日"))return {key:"strategy|策略3",label:"策略3",view,route:"strategy3"};
+      if(label.includes("波段"))return {key:"strategy|策略4",label:"策略4",view,route:"swing_radar"};
+      if(label.includes("綜合"))return {key:"strategy|策略5",label:"策略5",view,route:"strategy5"};
+      return {key:"strategy|策略",label:"策略",view,route:""};
+    }
+    const labels={market:"市場總覽","chip-trade":"買賣超","cb-detect":"CB可轉債","warrant-flow":"權證走向",watchlist:"自選股",member:"會員"};
+    const routeLabel=labels[view]||label||view||"terminal";
+    return {key:String(view||"terminal")+"|"+routeLabel,label:routeLabel,view:String(view||""),route:String(view||"")};
+  }
+  function markFromLink(link){
+    if(!link||link.dataset?.memberTab)return;
+    const info=routeInfo(link.dataset?.view||"",link.textContent||"");
+    document.documentElement.dataset.fumanDesktopActiveRoute=info.key;
+    window.__fumanDesktopActiveRoute={...info,at:Date.now()};
+    if(window.FUMAN_DESKTOP_ROUTE_STATE&&typeof window.FUMAN_DESKTOP_ROUTE_STATE.set==="function"){
+      try{window.FUMAN_DESKTOP_ROUTE_STATE.set(info)}catch(error){}
+    }
+  }
+  document.addEventListener("pointerdown",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
+  document.addEventListener("click",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
+  if(typeof showView==="function"&&!showView.__fumanDesktopRouteMarker20260724){
+    const originalShowView=showView;
+    showView=function(viewName,activeLink,...args){
+      markFromLink(activeLink||document.querySelector(`[data-view="${CSS.escape(String(viewName||""))}"]`));
+      return originalShowView.call(this,viewName,activeLink,...args);
+    };
+    showView.__fumanDesktopRouteMarker20260724=originalShowView;
+  }
+})();
