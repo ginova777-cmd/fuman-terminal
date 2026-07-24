@@ -1388,22 +1388,32 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     const routeLabel=labels[view]||label||view||"terminal";
     return {key:String(view||"terminal")+"|"+routeLabel,label:routeLabel,view:String(view||""),route:String(view||"")};
   }
-  function markFromLink(link){
-    if(!link||link.dataset?.memberTab)return;
-    const info=routeInfo(link.dataset?.view||"",link.textContent||"");
+  function setRouteInfo(info){
+    if(!info||!info.key)return;
     document.documentElement.dataset.fumanDesktopActiveRoute=info.key;
     window.__fumanDesktopActiveRoute={...info,at:Date.now()};
-    if(window.FUMAN_DESKTOP_ROUTE_STATE&&typeof window.FUMAN_DESKTOP_ROUTE_STATE.set==="function"){
-      try{window.FUMAN_DESKTOP_ROUTE_STATE.set(info)}catch(error){}
-    }
+  }
+  function markInfo(info){
+    if(!info||!info.key)return;
+    [0,40,120,320,800,1400].forEach(delay=>setTimeout(()=>setRouteInfo(info),delay));
+  }
+  function infoFromLink(link,viewName=""){
+    if(link?.dataset?.memberTab)return null;
+    return routeInfo(link?.dataset?.view||viewName||"",link?.textContent||"");
+  }
+  function markFromLink(link,viewName=""){
+    const info=infoFromLink(link,viewName);
+    markInfo(info);
   }
   document.addEventListener("pointerdown",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
   document.addEventListener("click",event=>markFromLink(event.target?.closest?.("[data-view]:not([data-member-tab])")),true);
   if(typeof showView==="function"&&!showView.__fumanDesktopRouteMarker20260724){
     const originalShowView=showView;
     showView=function(viewName,activeLink,...args){
-      markFromLink(activeLink||document.querySelector(`[data-view="${CSS.escape(String(viewName||""))}"]`));
-      return originalShowView.call(this,viewName,activeLink,...args);
+      const link=activeLink||document.querySelector(`[data-view="${CSS.escape(String(viewName||""))}"]`);
+      const result=originalShowView.call(this,viewName,activeLink,...args);
+      markFromLink(link,viewName);
+      return result;
     };
     showView.__fumanDesktopRouteMarker20260724=originalShowView;
   }
