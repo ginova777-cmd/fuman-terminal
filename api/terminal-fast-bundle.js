@@ -1010,6 +1010,7 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
+  await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:live-fallback" });
   await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
     cacheSource: "api/terminal-fast-bundle",
     via: "api/terminal-fast-bundle",
