@@ -1237,8 +1237,16 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     if(selectedStrategyIds?.has?.("intraday_2m"))return "intraday_2m";
     return "";
   }
+  function markRoute(route){
+    const label={intraday_2m:"策略2",strategy3:"策略3",swing_radar:"策略4",strategy5:"策略5"}[route]||"策略";
+    const key="strategy|"+label;
+    document.documentElement.dataset.fumanDesktopActiveRoute=key;
+    window.__fumanDesktopActiveRoute={key:key,label:label,route:route,at:Date.now()};
+    document.body.dataset.strategyActiveRoute=route;
+  }
   function forceRoute(route){
     if(!route||!isViewActive?.("strategy"))return;
+    markRoute(route);
     if(route==="strategy3"){
       strategyPresetMode="strategy3";selectedStrategyIds=new Set(["overnight_chip"]);strategy3Page=1;setStrategyChrome?.("strategy3");
     }else if(route==="swing_radar"){
@@ -1253,7 +1261,7 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     if(!route)return;
     activeRoute=route;
     routeSeq+=1;
-    document.body.dataset.strategyActiveRoute=route;
+    markRoute(route);
     forceRoute(route);
   }
   document.addEventListener("pointerdown",event=>{const link=event.target?.closest?.('[data-view="strategy"]');setRoute(routeFromLink(link))},true);
@@ -1309,6 +1317,10 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
       if(route==="swing_radar")swingPage=1;
     }
     setStrategyChrome?.(m.chrome);
+    const label={intraday_2m:"策略2",strategy3:"策略3",swing_radar:"策略4",strategy5:"策略5"}[route]||m.title;
+    const key="strategy|"+label;
+    document.documentElement.dataset.fumanDesktopActiveRoute=key;
+    window.__fumanDesktopActiveRoute={key:key,label:label,route:route,at:Date.now()};
     document.body.dataset.strategyActiveRoute=route;
   }
   function paintPending(route){
@@ -1358,3 +1370,4 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     };
   }
 })();
+
