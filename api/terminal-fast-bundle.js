@@ -797,21 +797,35 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
   };
 }
 
-function hasEndpointPrefix(endpoints = {}, prefix) {
+function endpointRunId(payload) {
+  return String(payload?.runId || payload?.transport?.runId || payload?.payload?.runId || payload?.payload?.transport?.runId || "").trim();
+}
+
+function findEndpointPrefixEntry(endpoints = {}, prefix) {
   const expectedPath = new URL(String(prefix || "/"), "https://fuman.local").pathname;
-  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
+  return Object.entries(endpoints || {}).find(([endpoint]) => {
     const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
-    if (path !== expectedPath) return false;
-    return payload && typeof payload === "object" && payload.ok !== false;
-  });
+    return path === expectedPath;
+  }) || null;
+}
+
+function hasEndpointPrefix(endpoints = {}, prefix, spec = {}) {
+  const found = findEndpointPrefixEntry(endpoints, prefix);
+  const payload = found?.[1];
+  if (!payload || typeof payload !== "object" || payload.ok === false) return false;
+  if (!spec.runIdPrefix) return true;
+  return endpointRunId(payload).startsWith(spec.runIdPrefix);
 }
 
 async function ensureDesktopRequiredEndpoint(request, endpoints, spec, options = {}) {
-  if (hasEndpointPrefix(endpoints, spec.prefix || spec.endpoint)) return;
+  const existing = findEndpointPrefixEntry(endpoints, spec.prefix || spec.endpoint);
+  if (hasEndpointPrefix(endpoints, spec.prefix || spec.endpoint, spec)) return;
   const result = await callJson(spec.endpoint, spec.handler, request, spec.query || {}, spec.timeoutMs || 5000);
   if (Number(result?.statusCode || 0) >= 400) return;
   const payload = result?.payload;
   if (!payload || typeof payload !== "object" || payload.ok === false) return;
+  if (spec.runIdPrefix && !endpointRunId(payload).startsWith(spec.runIdPrefix)) return;
+  if (existing?.[0]) delete endpoints[existing[0]];
   endpoints[buildEndpoint(spec.endpoint, spec.query || {})] = shapeTopPayload(request, {
     ...payload,
     transport: {
@@ -826,9 +840,13 @@ async function ensureDesktopRequiredEndpoint(request, endpoints, spec, options =
 async function ensureDesktopRequiredEndpoints(request, endpoints, options = {}) {
   const specs = [
     { endpoint: "/api/market", prefix: "/api/market", handler: market, query: compactQuery(24), timeoutMs: 4200, repair: "market-required-endpoint" },
-    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: compactQuery(60), timeoutMs: 6500, repair: "institution-required-endpoint" },
-    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: compactQuery(60), timeoutMs: 6500, repair: "cb-required-endpoint" },
-    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: compactQuery(60), timeoutMs: 9000, repair: "warrant-required-endpoint" },
+    { endpoint: "/api/strategy2-latest", prefix: "/api/strategy2-latest", handler: strategy2Latest, query: { ...compactQuery(240), today: "1", live: "1" }, timeoutMs: 20000, repair: "strategy2-required-endpoint", runIdPrefix: "strategy2-" },
+    { endpoint: "/api/strategy3-latest", prefix: "/api/strategy3-latest", handler: strategy3Latest, query: compactQuery(60), timeoutMs: 10000, repair: "strategy3-required-endpoint", runIdPrefix: "strategy3-" },
+    { endpoint: "/api/strategy4-latest", prefix: "/api/strategy4-latest", handler: strategy4Latest, query: compactQuery(70), timeoutMs: 10000, repair: "strategy4-required-endpoint", runIdPrefix: "strategy4-" },
+    { endpoint: "/api/strategy5-latest", prefix: "/api/strategy5-latest", handler: strategy5Latest, query: compactQuery(140), timeoutMs: 10000, repair: "strategy5-required-endpoint", runIdPrefix: "strategy5-" },
+    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: compactQuery(60), timeoutMs: 6500, repair: "institution-required-endpoint", runIdPrefix: "institution-" },
+    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: compactQuery(60), timeoutMs: 6500, repair: "cb-required-endpoint", runIdPrefix: "cb-detect-" },
+    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: compactQuery(60), timeoutMs: 9000, repair: "warrant-required-endpoint", runIdPrefix: "warrant-flow-" },
   ];
   for (const spec of specs) {
     await ensureDesktopRequiredEndpoint(request, endpoints, spec, options);
