@@ -196,6 +196,7 @@ function collectRunIds(value, out = new Set()) {
 }
 
 function endpointRunIds(targetName, payload, body) {
+  if (targetName === "terminal_ops_status") return [];
   if ((targetName === "scorecard" || targetName === "source_reports") && payload && typeof payload === "object") {
     const reports = payload.sourceReports || payload.source_reports || payload.reports;
     return Array.from(collectRunIds(Array.isArray(reports) ? reports : [])).sort();

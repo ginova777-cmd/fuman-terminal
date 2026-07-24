@@ -837,8 +837,8 @@ function formalRunIdFromPayload(payload, tab = "") {
 async function sourceReportFallbackPayload(request, tab, endpoint, error) {
   const key = sourceReportKeyForTab(tab);
   if (!key || tab === "ai") return null;
-  const url = `${originFrom(request)}/api/source-reports?compact=1&shell=1&ts=${Date.now()}`;
-  const payload = await fetchJsonWithTimeout(url, 6000, authHeadersFrom(request)).catch(() => null);
+  const url = `${originFrom(request)}/api/source-reports?compact=1&shell=1&live=0&snapshotLive=0&ts=${Date.now()}`;
+  const payload = await fetchJsonWithTimeout(url, 12000, authHeadersFrom(request)).catch(() => null);
   const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports
     : Array.isArray(payload?.reports) ? payload.reports
       : Array.isArray(payload?.rows) ? payload.rows

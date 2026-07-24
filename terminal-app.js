@@ -1271,3 +1271,90 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }
   window.FUMAN_STRATEGY_STALE_RENDER_GUARD={setRoute,forceRoute,currentRoute};
 })();
+
+;(function installFumanStrategyRouteImmediateSwitchGuard20260724(){
+  if(window.__fumanStrategyRouteImmediateSwitchGuard20260724)return;
+  window.__fumanStrategyRouteImmediateSwitchGuard20260724=true;
+  const meta={
+    intraday_2m:{title:"策略2-當沖雷達",chrome:"intraday",ids:["intraday_2m"]},
+    strategy3:{title:"策略3-隔日沖",chrome:"strategy3",ids:["overnight_chip"],preset:"strategy3"},
+    swing_radar:{title:"策略4-波段",chrome:"swing",ids:["swing_radar"]},
+    strategy5:{title:"策略5-綜合策略",chrome:"strategy5",ids:["multi_strategy_confluence"],preset:"strategy5"}
+  };
+  let activeRoute="";
+  let seq=0;
+  function routeFromLink(link){
+    const text=String(link?.textContent||"");
+    if(text.includes("當沖")||text.includes("雷達"))return "intraday_2m";
+    if(text.includes("隔日"))return "strategy3";
+    if(text.includes("波段"))return "swing_radar";
+    if(text.includes("綜合"))return "strategy5";
+    return "";
+  }
+  function applyRoute(route){
+    const m=meta[route];
+    if(!m)return;
+    if(route==="strategy3"){
+      strategyPresetMode="strategy3";
+      selectedStrategyIds=new Set(m.ids);
+      strategy3Page=1;
+    }else if(route==="strategy5"){
+      strategyPresetMode="strategy5";
+      strategy5ActiveId=strategy5ActiveId||m.ids[0];
+      selectedStrategyIds=new Set([strategy5ActiveId]);
+      strategy5Page=1;
+    }else{
+      strategyPresetMode="";
+      selectedStrategyIds=new Set(m.ids);
+      if(route==="swing_radar")swingPage=1;
+    }
+    setStrategyChrome?.(m.chrome);
+    document.body.dataset.strategyActiveRoute=route;
+  }
+  function paintPending(route){
+    const m=meta[route];
+    if(!m||!isViewActive?.("strategy"))return;
+    if(strategyTitle)strategyTitle.textContent=m.title;
+    if(strategyHeaderTitle)strategyHeaderTitle.textContent=m.title;
+    if(strategySummary)strategySummary.textContent="正在載入 "+m.title+" 正式資料...";
+    if(strategyMatchCount)strategyMatchCount.textContent="--";
+    if(strategyAvgScore)strategyAvgScore.textContent="--";
+    if(strategyTopHit)strategyTopHit.textContent="--";
+    if(strategyTable)strategyTable.innerHTML='<tr><td colspan="4"><div class="empty-state">正在切換至 '+m.title+'...</div></td></tr>';
+  }
+  function switchRoute(route){
+    if(!meta[route])return;
+    activeRoute=route;
+    seq+=1;
+    applyRoute(route);
+    paintPending(route);
+    const currentSeq=seq;
+    [0,80,260].forEach(delay=>setTimeout(()=>{
+      if(currentSeq!==seq||activeRoute!==route)return;
+      applyRoute(route);
+      renderStrategyScanner?.();
+    },delay));
+  }
+  document.addEventListener("pointerdown",event=>{
+    const link=event.target?.closest?.('[data-view="strategy"]');
+    const route=routeFromLink(link);
+    if(route)switchRoute(route);
+  },true);
+  document.addEventListener("click",event=>{
+    const link=event.target?.closest?.('[data-view="strategy"]');
+    const route=routeFromLink(link);
+    if(route)switchRoute(route);
+  },true);
+  if(typeof renderStrategyScanner==="function"){
+    const original=renderStrategyScanner;
+    renderStrategyScanner=function(...args){
+      if(activeRoute)applyRoute(activeRoute);
+      const routeAtStart=activeRoute;
+      const result=original.apply(this,args);
+      requestAnimationFrame(()=>{
+        if(routeAtStart&&activeRoute===routeAtStart)applyRoute(routeAtStart);
+      });
+      return result;
+    };
+  }
+})();
