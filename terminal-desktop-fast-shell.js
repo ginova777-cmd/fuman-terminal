@@ -179,6 +179,7 @@
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
+  installStrategyRouteIdentityWatchdog20260725();
   disableRealtimeRadarSurface();
   window.setInterval(disableRealtimeRadarSurface, 1500);
 
@@ -8523,6 +8524,39 @@
     }, true);
   }
 
+  function installStrategyRouteIdentityWatchdog20260725() {
+    if (document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 === "1") return;
+    document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 = "1";
+    const activeStrategyLink = () => {
+      const active = document.querySelector('aside.sidebar a[data-view="strategy"].active,aside.sidebar a[data-view="strategy"][aria-current="page"]')
+        || document.querySelector('a[data-view="strategy"].active,a[data-view="strategy"][aria-current="page"]');
+      if (active) return active;
+      const routeName = String(document.body?.dataset?.strategyActiveRoute || "");
+      if (routeName) return document.querySelector(`a[data-view="strategy"][data-strategy-route="${CSS.escape(routeName)}"]`);
+      return null;
+    };
+    const reconcile = (source = "watchdog") => {
+      const panel = document.querySelector("#strategy-view");
+      if (!panel?.classList?.contains("active") || panel.hidden) return false;
+      const link = activeStrategyLink();
+      const key = strategyRouteKey(link);
+      if (!link || !key || key === "strategy|unknown") return false;
+      activeSnapshotRoute = key;
+      document.body.dataset.strategyActiveRoute = String(link.dataset.strategyRoute || savedStrategyRouteName(key) || "");
+      if (window.__fumanDesktopActiveRoute?.key !== key || document.documentElement.dataset.fumanDesktopActiveRoute !== key) {
+        publishActiveRoute(link, key, `strategy-route-${source}`);
+      }
+      return true;
+    };
+    window.FUMAN_DESKTOP_RECONCILE_STRATEGY_ROUTE = reconcile;
+    window.setInterval(() => reconcile("interval"), 200);
+    window.addEventListener("fuman:desktop-route", () => window.setTimeout(() => reconcile("event"), 20), { passive: true });
+    document.addEventListener("click", (event) => {
+      if (!event.target?.closest?.('a[data-view="strategy"]')) return;
+      window.setTimeout(() => reconcile("click"), 0);
+      window.setTimeout(() => reconcile("click-late"), 120);
+    }, true);
+  }
   function installCanvasThemeObserver() {
     if (document.documentElement.dataset.fumanDesktopCanvasThemeObserver === "1") return;
     document.documentElement.dataset.fumanDesktopCanvasThemeObserver = "1";
