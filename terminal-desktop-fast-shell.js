@@ -365,6 +365,12 @@
     window.__fumanDesktopActiveRoute = route;
     document.documentElement.dataset.fumanDesktopActiveRoute = key;
     document.documentElement.dataset.fumanDesktopActiveRouteSeq = String(seq);
+    if (view === "strategy") {
+      const strategyRouteName = savedStrategyRouteName(key);
+      if (strategyRouteName) document.body.dataset.strategyActiveRoute = strategyRouteName;
+    } else if (document.body?.dataset) {
+      delete document.body.dataset.strategyActiveRoute;
+    }
     if (key === REALTIME_RADAR_ROUTE) realtimeRadarDomSideUserSelected = false;
     try {
       window.dispatchEvent(new CustomEvent("fuman:desktop-route", { detail: route }));
@@ -2173,14 +2179,21 @@
     return true;
   }
 
+  function isTrustedProtectedMemory(route, memory) {
+    if (!memory?.rows?.length) return false;
+    const source = String(memory.source || "");
+    const age = Date.now() - Number(memory.at || 0);
+    const ttl = Number(canvasOptionsForRoute(route).ttl || CANVAS_REFRESH_TTL_MS);
+    if (age > ttl) return false;
+    if (!/^(api|api-only-poll|bundle)(?:-|$)/.test(source)) return false;
+    if (/snapshot|session|indexeddb|dom|html|member-preview/i.test(source)) return false;
+    return true;
+  }
+
   function rowsForRoute(route) {
     const memory = canvasStore.get(route);
     if (isProtectedDataRoute(route)) {
-      const source = String(memory?.source || "");
-      const age = Date.now() - Number(memory?.at || 0);
-      if (memory?.rows?.length && /^api(?:-|$)|^api-only-poll/.test(source) && age <= Number(canvasOptionsForRoute(route).ttl || CANVAS_REFRESH_TTL_MS)) {
-        return memory.rows;
-      }
+      if (isTrustedProtectedMemory(route, memory)) return memory.rows;
       return [];
     }
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;

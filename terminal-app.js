@@ -1393,6 +1393,7 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     if(!info||!info.key)return;
     document.documentElement.dataset.fumanDesktopActiveRoute=info.key;
     window.__fumanDesktopActiveRoute={...info,at:Date.now()};
+    if(info.view==="strategy"&&info.route)document.body.dataset.strategyActiveRoute=info.route;
   }
   function markInfo(info){
     if(!info||!info.key)return;
