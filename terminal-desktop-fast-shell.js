@@ -1260,39 +1260,27 @@
     const panel = panelForRoute("warrant-flow|權證走向");
     if (!panel) return false;
     cleanupFixedDomRouteShells();
-    const runId = pickFirstValue(payload.runId, payload.run_id, payload.latestRunId, "--");
-    const source = pickFirstValue(payload.cacheSource, payload.source, "api");
-    const evidence = pickFirstValue(payload.evidenceStatus, payload.unattended?.evidenceStatus, payload.selfCheck?.status, "");
-    const count = rows.length || cleanNumber(payload.count || payload.resultCount || payload.returnedCount || payload.total);
-    const updated = pickFirstValue(payload.updatedAt, payload.source_snapshot_captured_at, payload.sourceSnapshotCapturedAt, "");
-    const statusText = state.loading ? "載入中" : state.error ? "讀取失敗" : count ? `${count} 筆` : "暫無資料";
-    const body = rows.length
-      ? renderDesktopFastWarrantRows(rows)
-      : `<tr><td colspan="4"><strong>${escapeHtml(state.error ? "權證 API 暫時讀取失敗" : "權證資料暫無可顯示資料")}</strong><br><span>${escapeHtml(state.error || "目前沒有權證走向 rows；不以 placeholder 冒充正式資料。")}</span></td></tr>`;
-    panel.innerHTML = [
-      '<header class="page-header chip-page-header">',
-      '<div>',
-      '<h1>權證走向</h1>',
-      `<span class="refresh-line">API only ｜ run=${escapeHtml(runId)} ｜ source=${escapeHtml(source)}${evidence ? ` ｜ evidence=${escapeHtml(evidence)}` : ""}${updated ? ` ｜ updated=${escapeHtml(updated)}` : ""}</span>`,
-      '</div>',
-      '<button type="button" class="canvas-refresh-button" data-warrant-refresh>重新整理</button>',
-      '</header>',
-      '<section class="swing-dashboard warrant-flow-dashboard">',
-      '<div class="swing-topbar">',
-      '<div><h2>策略6：權證資金走向</h2><p>權證資金異動、標的強弱與爆量訊號。</p></div>',
-      `<span class="canvas-route-badge">${escapeHtml(statusText)}</span>`,
-      '</div>',
-      '<section class="swing-panel warrant-flow-panel">',
-      '<div class="table-wrap">',
-      '<table class="swing-table">',
-      '<thead><tr><th>Rank</th><th>標的 / 權證</th><th>方向</th><th>指標</th></tr></thead>',
-      `<tbody>${body}</tbody>`,
-      '</table>',
-      '</div>',
-      '</section>',
-      '</section>',
-    ].join("");
-    return true;
+    const route = "warrant-flow|權證走向";
+    const meta = strategyMeta(route);
+    const payloadMeta = routePayloadMeta(route, payload) || {
+      runId: pickFirstValue(payload.runId, payload.run_id, payload.latestRunId, payload.transport?.runId, ""),
+      updatedAt: pickFirstValue(payload.updatedAt, payload.source_snapshot_captured_at, payload.sourceSnapshotCapturedAt, ""),
+      resultCount: rows.length || cleanNumber(payload.count || payload.resultCount || payload.returnedCount || payload.total),
+      evidenceStatus: pickFirstValue(payload.evidenceStatus, payload.unattended?.evidenceStatus, payload.selfCheck?.status, ""),
+      cacheSource: pickFirstValue(payload.cacheSource, payload.source, "api"),
+    };
+    activeSnapshotRoute = route;
+    canvasState.route = route;
+    canvasState.source = state.loading ? "warrant-loading" : state.error ? "warrant-error" : "api";
+    canvasState.rows = rows;
+    canvasState.filtered = rows;
+    canvasState.signalFilter = "";
+    canvasState.meta = payloadMeta;
+    canvasStore.set(route, { rows, source: canvasState.source, at: Date.now(), meta: payloadMeta });
+    if (state.loading && !rows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
+    }
+    return renderUnifiedListShell(route, meta, panel);
   }
 
   async function fetchFixedDomRouteRows(route) {
