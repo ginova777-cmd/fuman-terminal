@@ -8592,8 +8592,12 @@
       const text = String(panel.textContent || "").replace(/\s+/g, " ").trim();
       const pending = panel.querySelector("[data-member-strategy-pending='1']")
         || /策略資料載入中|正式策略載入中|正在切換正式策略畫面|正在載入正式策略資料/.test(text);
+      const routeMismatch = (key === "strategy|策略2" && !/策略2|當沖/.test(text))
+        || (key === "strategy|策略3" && !/策略3|隔日沖/.test(text))
+        || (key === "strategy|策略4" && !/策略4|波段/.test(text))
+        || (key === "strategy|策略5" && !/策略5|綜合策略/.test(text));
       const resolved = payloadMetaHasResolvedResponse(canvasPayloadMeta(key));
-      if (pending && isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
+      if ((pending || routeMismatch) && isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
         const now = Date.now();
         const last = Number(reconcilePaintState.get(key) || 0);
         if (now - last > 1800) {
