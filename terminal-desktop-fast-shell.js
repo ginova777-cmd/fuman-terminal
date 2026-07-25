@@ -739,6 +739,10 @@
     if (!link) return;
     const key = fixedRouteKey(link);
     if (key) document.documentElement.dataset.fumanPointerRoute = key;
+    if (key && isStrategyLink(link)) {
+      activeSnapshotRoute = key;
+      publishActiveRoute(link, key, "instant-active");
+    }
     if (lastInstantLink && lastInstantLink !== link) lastInstantLink.classList.remove("fuman-instant-active");
     lastInstantLink = link;
     link.classList.add("fuman-instant-active");

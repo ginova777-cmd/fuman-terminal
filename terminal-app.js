@@ -1420,7 +1420,8 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     const activeNav=document.querySelector('[data-view].active,[data-view][aria-current="page"]');
     if(!activePanel)return;
     if(activePanel.id==="strategy-view"){
-      setRouteInfo(infoFromStrategyState()||infoFromLink(activeNav,"strategy"));
+      const activeStrategyNav=document.querySelector('[data-view="strategy"].active,[data-view="strategy"][aria-current="page"]');
+      setRouteInfo(infoFromStrategyState()||infoFromLink(activeStrategyNav||activeNav,"strategy"));
       return;
     }
     if(!activeNav||activeNav.dataset?.memberTab)return;
