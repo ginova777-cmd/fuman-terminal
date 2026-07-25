@@ -8054,7 +8054,7 @@
     }
     const meta = strategyMeta(link);
     const drawableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
-    if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken()) return renderMemberStrategyPendingShell(key, meta, panel);
+    if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken() && !payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) return renderMemberStrategyPendingShell(key, meta, panel);
     if (isStrategy3Route(key)) return renderUnifiedListShell(key, meta, panel);
     if (!isStrategy2Route(key)) return renderUnifiedListShell(key, meta, panel);
     panel.dataset.fumanRouteSnapshotRestoring = "1";
