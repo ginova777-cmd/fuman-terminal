@@ -1398,9 +1398,17 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
     if(!info||!info.key)return;
     [0,40,120,320,800,1400].forEach(delay=>setTimeout(()=>setRouteInfo(info),delay));
   }
+  function infoFromStrategyState(){
+    const route=String(document.body?.dataset?.strategyActiveRoute||window.FUMAN_STRATEGY_STALE_RENDER_GUARD?.currentRoute?.()||"");
+    return route?routeInfo("strategy","",route):null;
+  }
   function infoFromLink(link,viewName=""){
     if(link?.dataset?.memberTab)return null;
-    return routeInfo(link?.dataset?.view||viewName||"",link?.textContent||"",link?.dataset?.strategyRoute||"");
+    const view=link?.dataset?.view||viewName||"";
+    const route=String(link?.dataset?.strategyRoute||"");
+    if(view==="strategy"&&route)return routeInfo(view,link?.textContent||"",route);
+    if(view==="strategy")return infoFromStrategyState()||routeInfo(view,link?.textContent||"",route);
+    return routeInfo(view,link?.textContent||"",route);
   }
   function markFromLink(link,viewName=""){
     const info=infoFromLink(link,viewName);
@@ -1409,8 +1417,12 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   function reconcileActiveRoute(){
     const activePanel=[...document.querySelectorAll(".view-panel")].find(el=>el.classList.contains("active")&&!el.hidden);
     const activeNav=document.querySelector('[data-view].active,[data-view][aria-current="page"]');
-    if(!activePanel||!activeNav||activeNav.dataset?.memberTab)return;
-    if(activeNav.dataset.view==="strategy"&&activePanel.id!=="strategy-view")return;
+    if(!activePanel)return;
+    if(activePanel.id==="strategy-view"){
+      setRouteInfo(infoFromStrategyState()||infoFromLink(activeNav,"strategy"));
+      return;
+    }
+    if(!activeNav||activeNav.dataset?.memberTab)return;
     if(activeNav.dataset.view==="chip-trade"&&activePanel.id!=="chip-trade-view")return;
     if(activeNav.dataset.view==="cb-detect"&&activePanel.id!=="cb-detect-view")return;
     if(activeNav.dataset.view==="warrant-flow"&&activePanel.id!=="warrant-flow-view")return;

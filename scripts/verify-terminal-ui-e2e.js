@@ -10,6 +10,11 @@ const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
 const BLANK_PAGE_URL = "data:text/html,FUMAN_E2E";
 const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL || DEFAULT_BASE_URL;
 const BASE_ORIGIN = new URL(BASE_URL).origin;
+const FUMAN_AUTH_URL = process.env.FUMAN_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
+const FUMAN_AUTH_KEY = process.env.FUMAN_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
+const FUMAN_TEST_MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const FUMAN_TEST_MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let fumanUiE2eMemberSessionPromise = null;
 const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
 const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
 const KEEP_BROWSER = process.argv.includes("--keep-browser");
@@ -155,6 +160,43 @@ function freePort() {
   });
 }
 
+async function getFumanUiE2eMemberToken() {
+  if (!FUMAN_TEST_MEMBER_EMAIL || !FUMAN_TEST_MEMBER_PASSWORD) return "";
+  if (!fumanUiE2eMemberSessionPromise) {
+    fumanUiE2eMemberSessionPromise = fetch(`${FUMAN_AUTH_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: FUMAN_AUTH_KEY,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({ email: FUMAN_TEST_MEMBER_EMAIL, password: FUMAN_TEST_MEMBER_PASSWORD }),
+    }).then(async (response) => {
+      const text = await response.text();
+      let json = {};
+      try {
+        json = JSON.parse(text || "{}");
+      } catch (error) {
+        throw new Error(`member auth JSON parse failed: ${error?.message || error}`);
+      }
+      if (!response.ok || !json?.access_token) {
+        throw new Error(`member auth failed status=${response.status} body=${text.slice(0, 220)}`);
+      }
+      return json;
+    });
+  }
+  const session = await fumanUiE2eMemberSessionPromise;
+  return session?.access_token || "";
+}
+
+async function armFumanUiE2eMemberHeaders(cdp) {
+  const token = await getFumanUiE2eMemberToken();
+  if (!token) return { armed: false, reason: "missing_test_member_credentials" };
+  await cdp.send("Network.setExtraHTTPHeaders", {
+    headers: { Authorization: `Bearer ${token}` },
+  }, 10000);
+  return { armed: true };
+}
 async function fetchJson(url, options = {}) {
   const target = new URL(url);
   return new Promise((resolve, reject) => {
@@ -270,6 +312,7 @@ async function createTab(browser) {
         await cdp.send("Runtime.evaluate", { expression: "1", returnByValue: true }, 5000);
         await cdp.send("DOM.enable", {}, 10000).catch((error) => debug(`DOM.enable skipped: ${error.message}`));
         await cdp.send("Network.enable", {}, 10000).catch((error) => debug(`Network.enable skipped: ${error.message}`));
+        await armFumanUiE2eMemberHeaders(cdp).catch((error) => debug(`member auth headers skipped: ${error.message}`));
         await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
         await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
         await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
