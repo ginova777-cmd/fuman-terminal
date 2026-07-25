@@ -8569,6 +8569,7 @@
   function installStrategyRouteIdentityWatchdog20260725() {
     if (document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 === "1") return;
     document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 = "1";
+    const reconcilePaintState = new Map();
     const activeStrategyLink = () => {
       const active = document.querySelector('aside.sidebar a[data-view="strategy"].active,aside.sidebar a[data-view="strategy"][aria-current="page"]')
         || document.querySelector('a[data-view="strategy"].active,a[data-view="strategy"][aria-current="page"]');
@@ -8587,6 +8588,27 @@
       document.body.dataset.strategyActiveRoute = String(link.dataset.strategyRoute || savedStrategyRouteName(key) || "");
       if (window.__fumanDesktopActiveRoute?.key !== key || document.documentElement.dataset.fumanDesktopActiveRoute !== key) {
         publishActiveRoute(link, key, `strategy-route-${source}`);
+      }
+      const text = String(panel.textContent || "").replace(/\s+/g, " ").trim();
+      const pending = panel.querySelector("[data-member-strategy-pending='1']")
+        || /策略資料載入中|正式策略載入中|正在切換正式策略畫面|正在載入正式策略資料/.test(text);
+      const resolved = payloadMetaHasResolvedResponse(canvasPayloadMeta(key));
+      if (pending && isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
+        const now = Date.now();
+        const last = Number(reconcilePaintState.get(key) || 0);
+        if (now - last > 1800) {
+          reconcilePaintState.set(key, now);
+          fetchCanvasRows(key, true).then((rows) => {
+            const currentLink = activeStrategyLink();
+            if (!currentLink || strategyRouteKey(currentLink) !== key) return;
+            const nextRows = Array.isArray(rows) ? rows : [];
+            if (nextRows.length || payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) {
+              renderStrategyRouteShell(key, nextRows.length ? "watchdog-api" : "watchdog-empty", nextRows);
+            }
+          }).catch(() => {
+            if (resolved) renderStrategyRouteShell(key, "watchdog-meta", rowsForRoute(key));
+          });
+        }
       }
       return true;
     };
