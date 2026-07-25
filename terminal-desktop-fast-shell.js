@@ -2675,17 +2675,23 @@
           const source = payload?.snapshotFirst ? "snapshot-first-refreshing" : "api";
           rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, payload));
         } else {
-          rememberCanvasEmptyPayload(route, "api-empty", Date.now(), routePayloadMeta(route, payload));
+          const meta = routePayloadMeta(route, payload);
+          rememberCanvasEmptyPayload(route, "api-empty", Date.now(), meta);
           const emptyState = routeEmptyStateFromPayload(payload, route);
           if (emptyState) {
             canvasEmptyStates.set(route, emptyState);
             if (canvasState.route === route) {
               canvasState.source = emptyState.qualityStatus || emptyState.reason || "waiting";
               if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken()) {
-                const panel = document.querySelector("#strategy-view");
-                if (panel) renderMemberStrategyPendingShell(route, strategyMeta(route), panel);
+                if (payloadMetaHasResolvedResponse(meta)) renderStrategyRouteShell(route, "api-empty", []);
+                else {
+                  const panel = document.querySelector("#strategy-view");
+                  if (panel) renderMemberStrategyPendingShell(route, strategyMeta(route), panel);
+                }
               }
             }
+          } else if (canvasState.route === route && isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && payloadMetaHasResolvedResponse(meta)) {
+            renderStrategyRouteShell(route, "api-empty", []);
           }
         }
         return rows;
@@ -8233,6 +8239,7 @@
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         const bundleRows = rowsForRoute(key);
         if (bundleRows.length) renderStrategyRouteShell(key, "fast-bundle", bundleRows);
+        else if (payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) renderStrategyRouteShell(key, "bundle-empty", []);
       }).catch(() => undefined);
     } else {
       renderStrategyRouteShell(link, source, rows);
@@ -11911,6 +11918,3 @@
     }, true);
   })();
 })();
-
-
-
