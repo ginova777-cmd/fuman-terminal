@@ -7795,10 +7795,10 @@
     panel.classList.remove("strategy5-only", "swing-only", "open-buy-only");
     panel.classList.toggle("strategy3-only", isStrategy3Route(route));
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
-    const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
+    const headerText = panel.querySelector(".desktop-route-shell-head p, .strategy-header p, .chip-page-header p, .page-header p");
     const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
     const headerBadge = panel.querySelector(".strategy-header .console-badge");
-    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarTitle = panel.querySelector(".desktop-route-shell-head h2, .strategy-toolbar h2");
     const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
     const summary = panel.querySelector("#strategy-summary");
     const count = panel.querySelector("#strategy-match-count");
@@ -7865,10 +7865,10 @@
     const evidenceStatus = payloadMeta.evidenceStatus || "";
     const unattendedStatus = payloadMeta.unattendedStatus || "";
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
-    const headerText = panel.querySelector(".strategy-header p, .chip-page-header p, .page-header p");
+    const headerText = panel.querySelector(".desktop-route-shell-head p, .strategy-header p, .chip-page-header p, .page-header p");
     const headerLine = panel.querySelector(".strategy-header .refresh-line, .chip-page-header .refresh-line, .page-header .refresh-line");
     const headerBadge = panel.querySelector(".strategy-header .console-badge");
-    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarTitle = panel.querySelector(".desktop-route-shell-head h2, .strategy-toolbar h2");
     const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
     const summary = panel.querySelector("#strategy-summary");
     const count = panel.querySelector("#strategy-match-count");
@@ -7910,7 +7910,7 @@
         ${rows.map((row, index) => unifiedListCard(row, index, route)).join("")}
       </section>
     ` : `
-      <section class="fuman-zero-complete-state" aria-label="${escapeHtml(meta.title)} 0 檔正式結果" data-zero-result="1">
+      <section class="fuman-zero-complete-state" aria-label="${escapeHtml(meta.title)} 0 檔正式結果" data-zero-result="1" data-canvas-empty-note>
         <div class="empty-state">
           <strong>本次正式 API 已回讀，0 檔符合條件。</strong>
           <span>這是完整掃描後的合法空結果，不是載入失敗；不撐空白表格。</span>
@@ -7958,7 +7958,7 @@
     const headerTitle = panel.querySelector(".strategy-header h1");
     const headerText = panel.querySelector(".strategy-header p");
     const headerBadge = panel.querySelector(".strategy-header .console-badge");
-    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarTitle = panel.querySelector(".desktop-route-shell-head h2, .strategy-toolbar h2");
     const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
     const summary = panel.querySelector("#strategy-summary");
     const count = panel.querySelector("#strategy-match-count");
@@ -8070,7 +8070,7 @@
     const headerTitle = panel.querySelector(".strategy-header h1");
     const headerText = panel.querySelector(".strategy-header p");
     const headerBadge = panel.querySelector(".strategy-header .console-badge");
-    const toolbarTitle = panel.querySelector(".strategy-toolbar h2");
+    const toolbarTitle = panel.querySelector(".desktop-route-shell-head h2, .strategy-toolbar h2");
     const toolbarBadge = panel.querySelector(".strategy-toolbar .console-badge");
     const summary = panel.querySelector("#strategy-summary");
     const count = panel.querySelector("#strategy-match-count");

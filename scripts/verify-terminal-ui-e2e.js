@@ -1478,6 +1478,8 @@ function collectDesktopStats(route) {
     text(activePanel.querySelector(".desktop-canvas-status")),
   ].filter(Boolean).join(" | ");
   const emptyStateText = text(activePanel.querySelector("[data-canvas-empty-note]:not([hidden])"));
+  const zeroResultText = text(activePanel.querySelector("[data-zero-result='1']"));
+  const zeroResultOk = Boolean(zeroResultText && /正式 API 已回讀|0\s*檔符合|合法空結果|完整掃描/.test(zeroResultText));
   const waitingEmptyOk = Boolean(route.allowWaitingEmpty && emptyStateText && /等待|受控|decision|futopt|ready|snapshot/i.test(emptyStateText));
   const dateSignals = [...`${freshnessText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{1,2}[\/.]\d{1,2}\s+\d{2}:\d{2}|runId|run-|fresh|complete|更新|掃描|資料日期|今日)/gi)].slice(0, 12).map((match) => match[0]);
   const rowsVisible = Math.max(domRows.length, canvasRows);
@@ -1496,6 +1498,7 @@ function collectDesktopStats(route) {
     warnings.push(`route identity mismatch: panel=${activePanel.id || ""}/${route.expectedPanelId || ""}, route=${activeRouteKey}/${route.expectedRouteKey || ""}`);
   }
   if (waitingEmptyOk) warnings.push(`controlled waiting state: ${emptyStateText.slice(0, 90)}`);
+  if (zeroResultOk) warnings.push(`official zero-result state: ${zeroResultText.slice(0, 90)}`);
   if (!dateSignals.length) warnings.push("freshness/date/run signal not visible enough");
   if (missingRequiredText.length) warnings.push(`missing required visible text: ${missingRequiredText.join(", ")}`);
   if (!rowsVisible && filterCounts.length) warnings.push("route has populated subfilters but default view has no rows");
@@ -1648,7 +1651,7 @@ function collectDesktopStats(route) {
     missingRequiredText,
     blockerMatches: blockers,
     warnings,
-    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && blockers.length === 0 && missingRequiredText.length === 0,
+    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk || zeroResultOk) && blockers.length === 0 && missingRequiredText.length === 0,
   };
 }
 
