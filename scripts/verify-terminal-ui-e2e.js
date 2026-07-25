@@ -160,8 +160,8 @@ function freePort() {
   });
 }
 
-async function getFumanUiE2eMemberToken() {
-  if (!FUMAN_TEST_MEMBER_EMAIL || !FUMAN_TEST_MEMBER_PASSWORD) return "";
+async function getFumanUiE2eMemberSession() {
+  if (!FUMAN_TEST_MEMBER_EMAIL || !FUMAN_TEST_MEMBER_PASSWORD) return null;
   if (!fumanUiE2eMemberSessionPromise) {
     fumanUiE2eMemberSessionPromise = fetch(`${FUMAN_AUTH_URL}/auth/v1/token?grant_type=password`, {
       method: "POST",
@@ -185,7 +185,11 @@ async function getFumanUiE2eMemberToken() {
       return json;
     });
   }
-  const session = await fumanUiE2eMemberSessionPromise;
+  return fumanUiE2eMemberSessionPromise;
+}
+
+async function getFumanUiE2eMemberToken() {
+  const session = await getFumanUiE2eMemberSession();
   return session?.access_token || "";
 }
 
@@ -195,6 +199,40 @@ async function armFumanUiE2eMemberHeaders(cdp) {
   await cdp.send("Network.setExtraHTTPHeaders", {
     headers: { Authorization: `Bearer ${token}` },
   }, 10000);
+  return { armed: true };
+}
+
+async function armFumanUiE2eMemberStorage(cdp) {
+  const session = await getFumanUiE2eMemberSession();
+  if (!session?.access_token) return { armed: false, reason: "missing_test_member_credentials" };
+  const expiresAt = Number(session.expires_at || Math.floor(Date.now() / 1000) + 3600);
+  const email = String(session.user?.email || FUMAN_TEST_MEMBER_EMAIL || "").trim();
+  const authCache = {
+    accessToken: session.access_token,
+    expiresAt,
+    email,
+    session: { ...session, expires_at: expiresAt },
+    access: {
+      email,
+      status: "active",
+      memberStatus: "active",
+      plan: "premium",
+      permissions: { strategyTerminal: true, premiumTerminal: true, scorecard: true },
+      strategyTerminal: true,
+      premiumTerminal: true,
+      allowed: true,
+    },
+  };
+  const supabaseToken = { ...session, expires_at: expiresAt, currentSession: { ...session, expires_at: expiresAt } };
+  const source = `(() => {
+    try {
+      localStorage.setItem("fuman-terminal-auth-cache-v1", ${JSON.stringify(JSON.stringify(authCache))});
+      localStorage.setItem("sb-jxnqyqnigsppqsxinlrq-auth-token", ${JSON.stringify(JSON.stringify(supabaseToken))});
+    } catch (error) {
+      window.__FUMAN_UI_E2E_AUTH_STORAGE_ERROR = String(error && error.message || error || "storage_error");
+    }
+  })();`;
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source }, 10000);
   return { armed: true };
 }
 async function fetchJson(url, options = {}) {
@@ -316,6 +354,7 @@ async function createTab(browser) {
         await cdp.send("Network.setCacheDisabled", { cacheDisabled: true }, 10000).catch(() => null);
         await cdp.send("Network.setBypassServiceWorker", { bypass: true }, 10000).catch(() => null);
         await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
+          await armFumanUiE2eMemberStorage(cdp).catch((error) => debug(`member auth storage skipped: ${error.message}`));
         await cdp.send("Page.enable", {}, 5000).catch((error) => debug(`Page.enable skipped: ${error.message}`));
         await cdp.send("Log.enable", {}, 10000).catch(() => null);
         return cdp;
@@ -2102,6 +2141,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await verifyMobileConsecutiveManualAdds(cdp);
           await cdp.send("Page.navigate", { url: BLANK_PAGE_URL }, 10000).catch(() => null);
           await cdp.send("Storage.clearDataForOrigin", { origin: BASE_ORIGIN, storageTypes: "all" }, 10000).catch(() => null);
+          await armFumanUiE2eMemberStorage(cdp).catch((error) => debug(`member auth storage skipped: ${error.message}`));
           await reloadMobilePage(cdp, theme);
           await resetMobileWatchStorage(cdp, mobileWatchSeedRows());
           await reloadMobilePage(cdp, theme);

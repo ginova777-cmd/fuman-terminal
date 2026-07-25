@@ -2259,9 +2259,13 @@
       const route = routeForCompactEndpoint(endpoint);
       if (!route) return;
       const rows = normalizeCanvasRowsFromPayload(endpointPayload, route);
-      if (!rows.length) return;
-      rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, endpointPayload));
-      count += rows.length;
+      const meta = routePayloadMeta(route, endpointPayload);
+      if (rows.length) {
+        rememberCanvasRows(route, rows, source, Date.now(), meta);
+        count += rows.length;
+      } else if (payloadMetaHasResolvedResponse(meta)) {
+        rememberCanvasEmptyPayload(route, source === "fast-bundle" ? "bundle-empty" : `${source}-empty`, Date.now(), meta);
+      }
     });
     if (count && typeof window.FUMAN_HOTFIX_PRIME_API_CACHE === "function") {
       window.FUMAN_HOTFIX_PRIME_API_CACHE(endpoints, { source, reason: "desktop-shell" });
@@ -2346,6 +2350,25 @@
         cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
       };
     }
+    if (isStrategy4Route(route)) {
+      const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+        ? payload.run_quality_at_publish
+        : {};
+      const resultCount = cleanNumber(payload.resultCount || payload.count || payload.returnedCount || payload.matches?.length || payload.rows?.length);
+      return {
+        ok: payload.ok,
+        runId: payload.runId || payload.latestRunId || payload.run_id || payload.transport?.runId || payload.meta?.runId || "",
+        updatedAt: payload.updatedAt || payload.generatedAt || payload.source_snapshot_captured_at || "",
+        resultCount,
+        evidenceStatus: payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus || "",
+        unattendedStatus: payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "",
+        qualityStatus: payload.qualityStatus || payload.status || quality.status || "",
+        publishAllowed: payload.publishAllowed ?? quality.publishAllowed,
+        latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
+        sourceStatus: payload.source_status_at_run?.status || payload.sourceCoverage?.status || payload.sourceHealth?.status || "",
+        cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+      };
+    }
     if (isCbDetectRoute(route)) {
       const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
         ? payload.run_quality_at_publish
@@ -2421,6 +2444,16 @@
 
   function canvasPayloadMeta(route = canvasState.route) {
     return canvasState.meta || canvasStore.get(route)?.meta || null;
+  }
+
+  function payloadMetaHasResolvedResponse(meta) {
+    if (!meta || typeof meta !== "object") return false;
+    if (meta.runId || meta.updatedAt) return true;
+    if (meta.ok === true || meta.ok === false) return true;
+    if (meta.resultCount !== undefined && meta.resultCount !== null && meta.resultCount !== "") return true;
+    if (meta.evidenceStatus || meta.unattendedStatus || meta.qualityStatus || meta.sourceStatus || meta.cacheSource) return true;
+    if (meta.publishAllowed !== undefined || meta.latestOverwriteAllowed !== undefined) return true;
+    return false;
   }
 
   function strategy5MetaSummary(baseSummary, route = canvasState.route) {
@@ -7818,7 +7851,7 @@
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
     }
-    if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length) {
+    if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
       return renderMemberStrategyPendingShell(route, meta, panel);
     }
     const displayCount = unifiedDisplayCount(route, rows, allRows, payloadMeta);
@@ -8239,7 +8272,9 @@
           if (isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
             const fallbackRows = rowsForRoute(key);
             if (fallbackRows.length) scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "previous-good", fallbackRows), "previous-good");
-            else setCanvasStatus("已開通會員，保留目前畫面並等待 bundle / previous-good");
+            else if (payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) {
+              scheduleRoutePaint(key, seq, () => renderStrategyRouteShell(key, "api-empty", []), "api-empty");
+            } else setCanvasStatus("已開通會員，保留目前畫面並等待 bundle / previous-good");
           } else {
             scheduleCanvasDraw();
           }
