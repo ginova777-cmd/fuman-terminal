@@ -19,7 +19,7 @@ const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-build
 const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
-const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 1500) || 1500));
+const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
 
 function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
