@@ -119,6 +119,7 @@
     "rewater_actions_must_be_idempotent",
     "rewater_must_be_followed_by_verification",
     "self_heal_apply_failure_keeps_unattended_no",
-    "success_requires_rewater_verification_not_action_exit_only"
+    "success_requires_rewater_verification_not_action_exit_only",
+    "warmup_tasks_run_on_battery_power"
   ]
 }

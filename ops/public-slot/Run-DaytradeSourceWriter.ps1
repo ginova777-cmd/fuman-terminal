@@ -83,7 +83,7 @@ if ($LocalCheck) {
   if ($Once) {
     $args += "--once"
   } else {
-    $args += "--max-seconds=55"
+    $args += "--max-seconds=300"
   }
 } else {
   $args += "--dry-run"
