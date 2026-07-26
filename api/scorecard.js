@@ -8,7 +8,8 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
-const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1200) || 1200);
+const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1500) || 1500));
+const SCORECARD_SOURCE_REPORT_TIMEOUT_MS = Math.max(300, Math.min(2000, Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 1200) || 1200));
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
@@ -187,13 +188,13 @@ async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
   return text ? JSON.parse(text) : [];
 }
 
-async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", error = "source_report_timeout" } = {}) {
+async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", select = "*", timeoutMs = 5000, error = "source_report_timeout" } = {}) {
   if (!table) return { ok: false, error };
-  const params = ["select=*", "limit=1"];
+  const params = [`select=${encodeURIComponent(select || "*")}`, "limit=1"];
   if (strategy) params.push(`strategy=eq.${encodeURIComponent(strategy)}`);
   if (order) params.push(`order=${encodeURIComponent(order)}`);
   try {
-    const rows = await fetchSupabaseRows(table, params.join("&"), 5000);
+    const rows = await fetchSupabaseRows(table, params.join("&"), timeoutMs);
     const row = rows[0] || {};
     const quality = row.run_quality_at_publish && typeof row.run_quality_at_publish === "object" ? row.run_quality_at_publish : {};
     const runId = cleanText(row.run_id || row.runId || quality.runId);
@@ -201,6 +202,11 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
       ok: false,
       error,
       runId,
+      strategy: cleanText(row.strategy),
+      status: cleanText(row.status),
+      complete: row.complete === true || cleanText(row.status).toLowerCase() === "complete",
+      qualityStatus: cleanText(row.quality_status || row.qualityStatus),
+      source: cleanText(row.source),
       count: cleanNumber(row.result_count ?? row.matched_count ?? row.matches ?? row.total ?? quality.resultCount),
       resultCount: cleanNumber(row.result_count ?? quality.resultCount),
       readbackCount: cleanNumber(row.readback_count ?? quality.readbackCount),
@@ -208,7 +214,7 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
       scannedCount: cleanNumber(row.scanned_count ?? row.total ?? quality.scannedCount),
       usedDate: cleanText(row.used_date || row.scan_date || row.trade_date || row.date),
       tradeDate: cleanText(row.trade_date || row.scan_date || row.used_date || row.date),
-      source_snapshot_captured_at: cleanText(row.finished_at || row.updated_at || quality.sourceSnapshotCapturedAt),
+      source_snapshot_captured_at: cleanText(row.finished_at || row.updated_at || row.generated_at || quality.sourceSnapshotCapturedAt),
       evidenceStatus: "insufficient",
       unattendedStatus: "NO",
       publishAllowed: false,
@@ -279,13 +285,13 @@ function releaseSourceReports() {
   });
 }
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
-  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
-  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
-  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
-  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },
-  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc" },
-  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "" },
+  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "", select: "run_id,strategy,scan_date,finished_at,status,complete,result_count,quality_status,schema_version,data_contract_source,quote_age_seconds,latest_candle_time,today_candle_count,updated_at" },
+  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,error_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
 ];
 
 async function buildLightweightSourceReport(config) {
@@ -293,11 +299,17 @@ async function buildLightweightSourceReport(config) {
     table: config.table,
     strategy: config.strategyFilter,
     order: config.order,
+    select: config.select,
+    timeoutMs: SCORECARD_SOURCE_REPORT_TIMEOUT_MS,
     error: `${config.key}_latest_pointer_missing`,
   });
   const runId = cleanText(payload.runId);
-  const ok = !isBlank(runId);
-  const reason = ok ? "" : cleanText(payload.reason || payload.error || `${config.key}_latest_pointer_missing`);
+  const qualityStatus = cleanText(payload.qualityStatus).toLowerCase();
+  const qualityBlocked = ["failed", "blocked", "insufficient", "source_quality_fail", "degraded"].includes(qualityStatus);
+  const complete = payload.complete === true;
+  const ok = !isBlank(runId) && complete && !qualityBlocked;
+  const reason = ok ? "" : cleanText(payload.reason || payload.error || (qualityBlocked ? `quality_status_${qualityStatus}` : !complete ? `${config.key}_run_not_complete` : `${config.key}_latest_pointer_missing`));
+  const count = cleanNumber(payload.count ?? payload.resultCount);
   return {
     key: config.key,
     strategy: config.strategy,
@@ -305,12 +317,12 @@ async function buildLightweightSourceReport(config) {
     statusCode: ok ? 200 : 504,
     ok,
     runId,
-    count: cleanNumber(payload.count || payload.resultCount),
-    emittedRows: cleanNumber(payload.count || payload.resultCount),
+    count,
+    emittedRows: count,
     date: cleanText(payload.usedDate || payload.tradeDate),
     reason,
-    resultCount: cleanNumber(payload.resultCount || payload.count),
-    readbackCount: cleanNumber(payload.readbackCount || payload.count),
+    resultCount: cleanNumber(payload.resultCount ?? count),
+    readbackCount: cleanNumber(payload.readbackCount ?? count),
     expectedTotal: cleanNumber(payload.expectedTotal),
     scannedCount: cleanNumber(payload.scannedCount),
     sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
@@ -321,6 +333,8 @@ async function buildLightweightSourceReport(config) {
     preservePreviousGood: !ok,
     fallbackUsed: false,
     blockedReason: reason,
+    qualityStatus: cleanText(payload.qualityStatus || (ok ? "complete" : "insufficient")),
+    source: cleanText(payload.source),
   };
 }
 function isBlank(value) {
@@ -1327,43 +1341,30 @@ function alignPayloadDateWithSourceReports(payload) {
 
 
 async function withFreshStrategySourceReports(payload) {
-  let nextPayload = payload;
-  try {
-    const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
-    if (strategy2Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy2Report);
-  } catch {}
-  try {
-    const strategy3Report = buildStrategy3SourceReport(await callStrategy3Latest());
-    if (strategy3Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy3Report);
-  } catch {}
-  try {
-    const strategy4Report = buildStrategy4SourceReport(await callStrategy4Latest());
-    if (strategy4Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy4Report);
-  } catch {}
-  try {
-    const strategy5Report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
-    if (strategy5Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy5Report);
-  } catch {}
-  try {
-    const institutionReport = buildInstitutionSourceReport(await callInstitutionLatest());
-    if (institutionReport.runId) nextPayload = mergeSourceReport(nextPayload, institutionReport);
-  } catch {}
-  try {
-    const cbReport = buildCbSourceReport(await callCbDetectLatest());
-    if (cbReport.runId) nextPayload = mergeSourceReport(nextPayload, cbReport);
-  } catch {}
-  try {
-    const warrantReport = buildWarrantSourceReport(await callWarrantLatest());
-    if (warrantReport.runId) nextPayload = mergeSourceReport(nextPayload, warrantReport);
-  } catch {}
-  try {
-    const daytradeReport = await buildDaytradeSourceReport();
-    if (daytradeReport.runId) nextPayload = mergeSourceReport(nextPayload, daytradeReport);
-  } catch {}
-  return nextPayload;
+  const sourceReportTasks = [
+    async () => buildStrategy2SourceReport(await callStrategy2Latest()),
+    async () => buildStrategy3SourceReport(await callStrategy3Latest()),
+    async () => buildStrategy4SourceReport(await callStrategy4Latest()),
+    async () => buildStrategy5SourceReport(await callStrategy5SourceReportFast()),
+    async () => buildInstitutionSourceReport(await callInstitutionLatest()),
+    async () => buildCbSourceReport(await callCbDetectLatest()),
+    async () => buildWarrantSourceReport(await callWarrantLatest()),
+    async () => buildDaytradeSourceReport(),
+  ];
+  const reports = await Promise.all(sourceReportTasks.map(async (task) => {
+    try {
+      return await task();
+    } catch {
+      return null;
+    }
+  }));
+  return reports.reduce((nextPayload, report) => {
+    if (report?.runId) return mergeSourceReport(nextPayload, report);
+    return nextPayload;
+  }, payload);
 }
 
-async function withLiveSourceReports(payload) {
+async function withLiveSourceReports(payload, options = {}) {
   const existingReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
@@ -1375,6 +1376,10 @@ async function withLiveSourceReports(payload) {
       && !isRetiredScorecardSurfaceName(report?.endpoint));
   const releaseReports = releaseSourceReports();
   const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
+  const refreshFull = options.refreshFull === true;
+  const finalize = async (nextPayload) => alignPayloadDateWithSourceReports(refreshFull
+    ? await withFreshStrategySourceReports(nextPayload)
+    : nextPayload);
   const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
   const mergedReleaseReports = releaseReports.map((report) => {
     const live = lightweightReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
@@ -1401,18 +1406,18 @@ async function withLiveSourceReports(payload) {
       selectedDate: runtimeDate || runtimePayload?.selectedDate || payload?.selectedDate,
       sourceReportsSource: "runtime-scorecard-terminal-current",
     };
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
+    return finalize(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase));
   }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
   if (existingComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
   if (releaseComplete) {
-    return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
-  return alignPayloadDateWithSourceReports(await withFreshStrategySourceReports(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+  return finalize(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
@@ -1672,6 +1677,19 @@ function activeStrategyCount(rows) {
 function defaultScorecardDate(payload, allRecords, dates) {
   const sourceQuery = sanitizeScorecardSourceQuery(payload?.sourceQuery || {});
   const candidates = Array.isArray(sourceQuery.latestDateCandidates) ? sourceQuery.latestDateCandidates : [];
+  const payloadDate = isoDate(payload?.latestDate || payload?.marketDate || "");
+  if (payloadDate && dates.includes(payloadDate)) {
+    const rows = allRecords.filter((row) => cleanText(row.record_date) === payloadDate);
+    const payloadCandidate = candidates.find((candidate) => candidateIsoDate(candidate) === payloadDate) || {};
+    const candidateRows = Number(payloadCandidate.rows || 0);
+    const rowFloor = Number(sourceQuery.latestDateRowFloor || 0);
+    const selectedReason = cleanText(sourceQuery.selectedLatestDateReason).toLowerCase();
+    const allowPartialSelectedDate = rows.length > 0
+      && activeStrategyCount(rows) >= 1
+      && (candidateRows >= Math.max(1, rowFloor)
+        || /expected date has enough|partial|pending/.test(selectedReason));
+    if (allowPartialSelectedDate || activeStrategyCount(rows) >= 5) return payloadDate;
+  }
   for (const candidate of candidates) {
     const date = candidateIsoDate(candidate);
     if (!date || !dates.includes(date)) continue;
@@ -1683,16 +1701,10 @@ function defaultScorecardDate(payload, allRecords, dates) {
     const completeAfterRetired = missing.length === 0;
     if (completeAfterRetired && activeStrategyCount(rows) >= 5) return date;
   }
-  const payloadDate = isoDate(payload?.latestDate || payload?.marketDate || "");
-  if (payloadDate && dates.includes(payloadDate)) {
-    const rows = allRecords.filter((row) => cleanText(row.record_date) === payloadDate);
-    if (activeStrategyCount(rows) >= 5) return payloadDate;
-  }
   return dates
     .map((date) => ({ date, rows: allRecords.filter((row) => cleanText(row.record_date) === date) }))
     .sort((a, b) => activeStrategyCount(b.rows) - activeStrategyCount(a.rows) || b.rows.length - a.rows.length || b.date.localeCompare(a.date))[0]?.date || "";
 }
-
 function summarize(records, dailyRows, latestDate) {
   const rows = Array.isArray(records) ? records : [];
   const wins = rows.filter((row) => cleanNumber(row.pnl) > 0).length;
@@ -1820,6 +1832,23 @@ function buildPayloadFromSnapshotPayload(snapshotPayload, options = {}) {
 }
 
 function readStaticSnapshot(reason = "scorecard_static_snapshot") {
+  if (process.env.FUMAN_ALLOW_SCORECARD_JSON_FALLBACK !== "1") {
+    return withScorecardContract({
+      ok: false,
+      rows: [],
+      records: [],
+      sourceReports: [],
+      cacheSource: "json-snapshot-disabled",
+      fallbackReason: reason,
+      blockers: ["scorecard_static_json_fallback_disabled"],
+      warnings: ["formal_scorecard_requires_supabase_snapshot"],
+      qualityStatus: "blocked",
+      evidenceStatus: "insufficient",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      preservePreviousGood: true,
+    }, "blocked", reason);
+  }
   const stat = fs.statSync(SNAPSHOT_FILE);
   if (!staticSnapshotCache || staticSnapshotCache.mtimeMs !== stat.mtimeMs) {
     const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
@@ -1839,8 +1868,9 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
 
 async function buildPayload(requestedDate = "", options = {}) {
   const liveSourceReports = options.liveSourceReports === true;
+  const refreshSourceReports = options.refreshSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
-  const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
+  const cacheKey = JSON.stringify({ requestedDate, liveSourceReports, refreshSourceReports });
   const cached = payloadMemoryCache.get(cacheKey);
   if (!noCache && cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
 
@@ -1863,12 +1893,12 @@ async function buildPayload(requestedDate = "", options = {}) {
       },
     }, "complete");
     payload = liveSourceReports
-      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      ? await withLiveSourceReports(selectPayloadDate(basePayload, requestedDate), { refreshFull: refreshSourceReports })
       : selectPayloadDate(basePayload, requestedDate);
   } else {
     const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
     payload = liveSourceReports
-      ? await withLiveSourceReports(selectPayloadDate(await withLiveSourceReports(basePayload), requestedDate))
+      ? await withLiveSourceReports(selectPayloadDate(basePayload, requestedDate), { refreshFull: refreshSourceReports })
       : selectPayloadDate(basePayload, requestedDate);
   }
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
@@ -1887,9 +1917,11 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1" || request.query?.live === "1";
+    const refreshSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const snapshotTimeoutMs = liveSourceReports ? Math.min(SCORECARD_SNAPSHOT_TIMEOUT_MS, 1800) : SCORECARD_SNAPSHOT_TIMEOUT_MS;
     const noCache = request.query?.live === "1" || liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
-    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, noCache }), marketCalendar);
+    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, refreshSourceReports, noCache, timeoutMs: snapshotTimeoutMs }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {

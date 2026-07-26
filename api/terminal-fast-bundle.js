@@ -19,6 +19,7 @@ const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-build
 const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 1500) || 1500));
 
 function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
@@ -726,6 +727,11 @@ module.exports = async function handler(request, response) {
 
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  if (entitlement?.ok) {
+    response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.setHeader("CDN-Cache-Control", "no-store");
+    response.setHeader("Vercel-CDN-Cache-Control", "no-store");
+  }
 
   const wantsLive = request.query?.live === "1"
     || request.query?.refresh === "1"
@@ -743,15 +749,15 @@ module.exports = async function handler(request, response) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
-      : await readDesktopRouteSnapshot({ timeoutMs: 8000 });
+      : await readDesktopRouteSnapshot({
+        timeoutMs: FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS,
+        allowStale: marketCalendar?.marketOpen === false && (marketCalendar?.preservePreviousGood === true || marketCalendar?.formalScanSkipped === true),
+      });
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
-      response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
-      response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
-      response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
-      if (!isReleaseReadbackSnapshot) {
+      if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
@@ -761,13 +767,15 @@ module.exports = async function handler(request, response) {
           shapePayload: (payload) => shapeTopPayload(request, payload),
         });
       }
-      await repairStrategy5FullSnapshot(request, endpoints);
-      await repairStrategy4LatestSnapshot(request, endpoints);
-      await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
-        cacheSource: "api/terminal-fast-bundle:snapshot-derived",
-        via: "api/terminal-fast-bundle:snapshot",
-        updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
-      });
+      if (liveFallbackEnabled(request)) {
+        await repairStrategy5FullSnapshot(request, endpoints);
+        await repairStrategy4LatestSnapshot(request, endpoints);
+        await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
+          via: "api/terminal-fast-bundle:snapshot",
+          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+        });
+      }
       sanitizeStrategy2Endpoints(endpoints);
       const payload = {
         ...snapshot.payload,
@@ -795,16 +803,12 @@ module.exports = async function handler(request, response) {
         return;
       }
       const endpoints = {};
-      await repairStrategy2LatestSnapshot(request, endpoints);
-      await repairStrategy3LatestSnapshot(request, endpoints);
-      await repairStrategy5FullSnapshot(request, endpoints);
-      await repairStrategy4LatestSnapshot(request, endpoints);
       const missPayload = {
         ...snapshotMissPayload(),
         endpoints,
         summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
-        misses: Object.keys(endpoints).length ? [] : ["desktop_route_snapshot"],
-        snapshotRepairs: Object.keys(endpoints).length ? { strategy3: "live-repair-on-snapshot-miss" } : {},
+        misses: ["desktop_route_snapshot"],
+        snapshotRepairs: { skipped: "published_snapshot_required" },
       };
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar), entitlement));
       return;
