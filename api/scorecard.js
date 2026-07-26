@@ -2,7 +2,12 @@ const fs = require("fs");
 const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
-const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const {
+  serverSupabaseKey,
+  serverSupabaseUrl,
+  terminalSupabaseKey,
+  terminalSupabaseUrl,
+} = require("../lib/server-supabase-key");
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
@@ -193,8 +198,10 @@ async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
 async function readScorecardSnapshotProjection(timeoutMs = SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS) {
   const table = process.env.FUMAN_SNAPSHOT_TABLE || "market_snapshots";
   if (table !== "market_snapshots") return null;
-  const url = serverSupabaseUrl();
-  const key = serverSupabaseKey();
+  // Use the same terminal snapshot credentials as readSnapshot(). The generic
+  // server credentials can point at a different project or anon policy.
+  const url = terminalSupabaseUrl();
+  const key = terminalSupabaseKey();
   if (!url || !key) return null;
   const fields = [
     "payload->records",
