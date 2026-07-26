@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-20T23:22:29.061Z",
+  "updatedAt": "2026-07-26T12:41:40.9450879Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -17,9 +17,7 @@
       "Fuman Global Cost Janitor Scorecard 1555",
       "Fuman Institution Battle Verify 2110",
       "Fuman PC Wake 0430",
-      "Fuman Public Slot Anti Rollback Guard 1m",
       "Fuman Public Slot Shared Source 0800",
-      "Fuman Public Slot Quote Fast Flush 0845",
       "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
@@ -55,7 +53,7 @@
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
-      "Fuman Terminal Autonomous Root Monitor"
+      "Fuman Daytrade Warmup Nine-Day Audit 0915"
     ],
     "expectedDisabledTasks": [],
     "retiredTasks": [
@@ -90,7 +88,10 @@
       "Fuman Strategy3 Complete Scan 1318",
       "Fuman Strategy3 Refresh Snapshot 1308",
       "Fuman Strategy4 Postscan Closure 1605",
-      "Fuman Terminal API Health"
+      "Fuman Terminal API Health",
+      "Fuman Public Slot Anti Rollback Guard 1m",
+      "Fuman Public Slot Quote Fast Flush 0845",
+      "Fuman Terminal Autonomous Root Monitor"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"
@@ -249,6 +250,9 @@
         0,
         267009,
         267011
+      ],
+      "Fuman Daytrade Warmup Nine-Day Audit 0915": [
+        0
       ]
     },
     "coveredBy": {
@@ -849,7 +853,8 @@
       "expectedTriggers": [
         "09:12"
       ]
-    },    {
+    },
+    {
       "taskName": "\\Fuman Fugle Daytrade Watchdog Every Minute",
       "displayName": "Fuman Fugle Daytrade Watchdog Every Minute",
       "description": "Daytrade source watchdog every minute during the opening window. Failure is critical.",
@@ -904,6 +909,16 @@
         "16:10",
         "21:35",
         "22:00"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "displayName": "Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "description": "Read-only nine-day warmup evidence audit; does not publish or self-heal.",
+      "time": "09:15",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:15"
       ]
     }
   ]

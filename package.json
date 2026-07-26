@@ -336,6 +336,7 @@
     "ops:production-unattended-readiness-report:fresh": "node scripts/write-production-unattended-readiness-report.js --refresh-production-live",
     "verify:production-unattended-readiness-report": "node scripts/write-production-unattended-readiness-report.js --verify-only",
     "verify:daytrade-warmup-unattended": "node --use-system-ca scripts/verify-daytrade-warmup-unattended.js",
+    "verify:daytrade-warmup-nine-day": "node --use-system-ca scripts/verify-daytrade-warmup-nine-day-window.js",
     "daytrade-warmup:self-heal": "node --use-system-ca scripts/run-daytrade-warmup-self-heal.js",
     "daytrade-warmup:self-heal:apply": "node --use-system-ca scripts/run-daytrade-warmup-self-heal.js --apply",
     "verify:daytrade-warmup-self-heal": "node scripts/run-daytrade-warmup-self-heal.js --self-test",
