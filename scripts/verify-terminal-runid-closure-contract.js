@@ -186,8 +186,12 @@ async function main() {
       controlPlane.decision?.unattendedStatus === "YES"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_TRADING_DAY_PREVIOUS_GOOD"
+      || controlPlane.canaryPublish?.status === "CANARY_PREVIOUS_GOOD_HOLD"
     );
   if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
+  if (!controlPlaneAccepted) {
+    issues.push(`control_plane_not_accepted:${controlPlane.canaryPublish?.status || controlPlane.decision?.unattendedStatus || "missing"}`);
+  }
   if (controlPlane.runIdClosure?.ok !== true && controlPlane.runIdClosure?.status !== "PENDING_NOT_DUE") {
     issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
   }
