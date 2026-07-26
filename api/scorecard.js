@@ -10,6 +10,7 @@ const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1500) || 1500));
 const SCORECARD_SOURCE_REPORT_TIMEOUT_MS = Math.max(300, Math.min(2000, Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 1200) || 1200));
+const SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
@@ -1452,17 +1453,14 @@ async function withLiveSourceReports(payload, options = {}) {
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
   const releaseReports = releaseSourceReports();
-  const [desktopSnapshot, lightweightReports] = await Promise.all([
-    readSnapshot("desktop_route_snapshot", {
-      allowLatestFallback: true,
-      timeoutMs: SCORECARD_SOURCE_REPORT_TIMEOUT_MS,
-    }).catch(() => null),
-    Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport)),
-  ]);
+  const desktopSnapshot = await readSnapshot("desktop_route_snapshot", {
+    allowLatestFallback: true,
+    timeoutMs: SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS,
+  }).catch(() => null);
   const desktopSnapshotReports = buildDesktopSnapshotSourceReports(desktopSnapshot);
   const authoritativeLiveReports = desktopSnapshotReports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length
     ? desktopSnapshotReports
-    : lightweightReports;
+    : await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
   const refreshFull = options.refreshFull === true;
   const finalize = async (nextPayload) => alignPayloadDateWithSourceReports(refreshFull
     ? await withFreshStrategySourceReports(nextPayload)
