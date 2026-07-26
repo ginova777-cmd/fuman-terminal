@@ -293,6 +293,83 @@ const LIGHTWEIGHT_SOURCE_REPORTS = [
   { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
   { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
 ];
+const DESKTOP_SNAPSHOT_SOURCE_REPORTS = [
+  { key: "strategy2", strategy: "strategy2", endpointPrefix: "/api/strategy2-latest" },
+  { key: "strategy3", strategy: "strategy3", endpointPrefix: "/api/strategy3-latest" },
+  { key: "strategy4", strategy: "strategy4", endpointPrefix: "/api/strategy4-latest" },
+  { key: "strategy5", strategy: "strategy5", endpointPrefix: "/api/strategy5-latest" },
+  { key: "institution", strategy: "institution", endpointPrefix: "/api/institution-latest" },
+  { key: "cb", strategy: "cb", endpointPrefix: "/api/cb-detect-latest" },
+  { key: "warrant", strategy: "warrant", endpointPrefix: "/api/warrant-flow-latest" },
+];
+
+function desktopSnapshotSourceReport(config, snapshot, endpointPayload) {
+  const row = endpointPayload && typeof endpointPayload === "object" ? endpointPayload : {};
+  const runId = cleanText(row.runId || row.latestRunId);
+  const qualityStatus = cleanText(row.qualityStatus).toLowerCase();
+  const qualityBlocked = ["failed", "blocked", "insufficient", "source_quality_fail", "degraded"].includes(qualityStatus);
+  const complete = row.complete === true;
+  const snapshotComplete = snapshot?.payload?.partial !== true
+    && Array.isArray(snapshot?.payload?.misses)
+    && snapshot.payload.misses.length === 0;
+  const ok = snapshotComplete && !isBlank(runId) && complete && !qualityBlocked;
+  const date = cleanText(row.tradeDate || row.scanDate || row.usedDate || row.sourceDate || snapshot?.tradeDate);
+  const count = cleanNumber(row.resultCount ?? row.count ?? row.returnedCount);
+  const reason = ok
+    ? "desktop_route_snapshot_latest_complete_run"
+    : (!snapshotComplete
+      ? "desktop_route_snapshot_partial_or_missing"
+      : (qualityBlocked ? `quality_status_${qualityStatus}` : !complete ? `${config.key}_run_not_complete` : `${config.key}_run_id_missing`));
+  return {
+    key: config.key,
+    strategy: config.strategy,
+    endpoint: config.endpointPrefix,
+    statusCode: ok ? 200 : 504,
+    ok,
+    runId,
+    count,
+    emittedRows: cleanNumber(row.returnedCount ?? row.count ?? count),
+    date,
+    usedDate: date,
+    sourceDate: date,
+    source_date: date,
+    tradeDate: date,
+    reason,
+    resultCount: cleanNumber(row.resultCount ?? count),
+    readbackCount: cleanNumber(row.readbackCount ?? row.returnedCount ?? count),
+    expectedTotal: cleanNumber(row.expectedTotal),
+    scannedCount: cleanNumber(row.scannedCount),
+    sourceSnapshotCapturedAt: cleanText(snapshot?.updatedAt),
+    source_snapshot_captured_at: cleanText(snapshot?.updatedAt),
+    evidenceStatus: ok ? cleanText(row.evidenceStatus || "complete") : "insufficient",
+    unattendedStatus: ok ? cleanText(row.unattendedStatus || "YES") : "NO",
+    publishAllowed: ok && row.publishAllowed !== false,
+    latestOverwriteAllowed: false,
+    preservePreviousGood: !ok || row.preservePreviousGood === true,
+    fallbackUsed: row.fallbackUsed === true,
+    fallbackAllowed: false,
+    degradedBlocksLatest: !ok || row.degradedBlocksLatest === true,
+    blockedReason: ok ? "" : reason,
+    scanner_block_reason: ok ? "" : reason,
+    qualityStatus: cleanText(row.qualityStatus || (ok ? "complete" : "insufficient")),
+    source: "supabase:desktop_route_snapshot",
+    cacheSource: "desktop-route-snapshot",
+  };
+}
+
+function buildDesktopSnapshotSourceReports(snapshot) {
+  if (!snapshot?.payload || snapshot.payload.partial === true) return [];
+  const endpoints = snapshot.payload.endpoints && typeof snapshot.payload.endpoints === "object"
+    ? snapshot.payload.endpoints
+    : {};
+  const reports = DESKTOP_SNAPSHOT_SOURCE_REPORTS.map((config) => {
+    const entry = Object.entries(endpoints).find(([endpoint]) => String(endpoint).startsWith(config.endpointPrefix));
+    return desktopSnapshotSourceReport(config, snapshot, entry?.[1]);
+  });
+  return reports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length && reports.every((report) => report.ok && report.runId)
+    ? reports
+    : [];
+}
 
 async function buildLightweightSourceReport(config) {
   const payload = await latestRunFallbackPayload({
@@ -1375,20 +1452,30 @@ async function withLiveSourceReports(payload, options = {}) {
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
   const releaseReports = releaseSourceReports();
-  const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
+  const [desktopSnapshot, lightweightReports] = await Promise.all([
+    readSnapshot("desktop_route_snapshot", {
+      allowLatestFallback: true,
+      timeoutMs: SCORECARD_SOURCE_REPORT_TIMEOUT_MS,
+    }).catch(() => null),
+    Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport)),
+  ]);
+  const desktopSnapshotReports = buildDesktopSnapshotSourceReports(desktopSnapshot);
+  const authoritativeLiveReports = desktopSnapshotReports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length
+    ? desktopSnapshotReports
+    : lightweightReports;
   const refreshFull = options.refreshFull === true;
   const finalize = async (nextPayload) => alignPayloadDateWithSourceReports(refreshFull
     ? await withFreshStrategySourceReports(nextPayload)
     : nextPayload);
   const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
   const mergedReleaseReports = releaseReports.map((report) => {
-    const live = lightweightReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
+    const live = authoritativeLiveReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
     if (!isBlank(live?.runId) && sourceReportDateValue(live) >= sourceReportDateValue(report)) {
       return { ...report, ...live, reason: cleanText(live.reason || "scorecard_live_latest_complete_run") };
     }
     return report;
   });
-  for (const live of lightweightReports) {
+  for (const live of authoritativeLiveReports) {
     const key = cleanText(live?.key).toLowerCase();
     if (!isBlank(live?.runId) && key && !releaseByKey.has(key)) mergedReleaseReports.push(live);
   }
@@ -1417,7 +1504,7 @@ async function withLiveSourceReports(payload, options = {}) {
   if (releaseComplete) {
     return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
   }
-  return finalize(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+  return finalize(authoritativeLiveReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
