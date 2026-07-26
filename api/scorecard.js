@@ -11,6 +11,7 @@ const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1500) || 1500));
 const SCORECARD_SOURCE_REPORT_TIMEOUT_MS = Math.max(300, Math.min(2000, Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 1200) || 1200));
 const SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
+const SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS = Math.max(1000, Math.min(4000, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS || 2500) || 2500));
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
@@ -187,6 +188,63 @@ async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
   const text = await response.text();
   if (!response.ok) throw new Error(`${table}_read_failed:${response.status}:${text.slice(0, 180)}`);
   return text ? JSON.parse(text) : [];
+}
+
+async function readScorecardSnapshotProjection(timeoutMs = SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS) {
+  const table = process.env.FUMAN_SNAPSHOT_TABLE || "market_snapshots";
+  if (table !== "market_snapshots") return null;
+  const url = serverSupabaseUrl();
+  const key = serverSupabaseKey();
+  if (!url || !key) return null;
+  const fields = [
+    "payload->records",
+    "payload->summary",
+    "payload->latestDate",
+    "payload->marketDate",
+    "payload->runId",
+    "payload->ok",
+    "payload->qualityStatus",
+    "payload->evidenceStatus",
+    "payload->unattendedStatus",
+    "payload->publishAllowed",
+    "payload->updatedAt",
+    "payload->source",
+    "payload->contract",
+    "payload->sourceReports",
+    "payload->sourceQuery",
+    "payload->days",
+    "payload->cacheSource",
+  ].join(",");
+  const query = new URLSearchParams({
+    select: fields,
+    symbol: "eq.__fuman_" + SNAPSHOT_KEY,
+    limit: "1",
+  });
+  try {
+    const response = await fetch(url.replace(/\/+$/, "") + "/rest/v1/" + table + "?" + query.toString(), {
+      headers: {
+        apikey: key,
+        Authorization: "Bearer " + key,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+    if (!response.ok) return null;
+    const rows = await response.json();
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row || !Array.isArray(row.records)) return null;
+    const payload = { ...row, cacheSource: "supabase-snapshot" };
+    return {
+      key: SNAPSHOT_KEY,
+      tradeDate: cleanText(payload.tradeDate || payload.latestDate),
+      updatedAt: cleanText(payload.updatedAt),
+      source: cleanText(payload.source || "supabase:scorecard_snapshot"),
+      projection: true,
+      payload,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", select = "*", timeoutMs = 5000, error = "source_report_timeout" } = {}) {
@@ -1959,10 +2017,13 @@ async function buildPayload(requestedDate = "", options = {}) {
   const cached = payloadMemoryCache.get(cacheKey);
   if (!noCache && cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
 
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, {
+  let snapshot = await readSnapshot(SNAPSHOT_KEY, {
     allowLatestFallback: true,
     timeoutMs: Number(options.timeoutMs || SCORECARD_SNAPSHOT_TIMEOUT_MS) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
   }).catch(() => null);
+  if (!snapshot?.payload) {
+    snapshot = await readScorecardSnapshotProjection().catch(() => null);
+  }
   let payload;
   if (snapshot?.payload && typeof snapshot.payload === "object") {
     const basePayload = withScorecardContract({
