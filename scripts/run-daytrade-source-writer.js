@@ -1057,7 +1057,10 @@ function readFutoptWebSocketCacheRows() {
     source: "fugle-futopt-websocket-cache",
   })).filter((row) => row.future_symbol);
   rows.readinessSource = "fugle_futopt_websocket_cache";
-  rows.mappedCount = rows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
+  rows.stockUniverseCount = rows.filter((row) => /^\d{4}$/.test(normalizeCode(row.underlying_symbol))).length;
+  rows.stockMappedCount = rows.filter((row) => /^\d{4}$/.test(normalizeCode(row.underlying_symbol)) && ageSeconds(row.updated_at) <= 120).length;
+  rows.txfCount = rows.filter((row) => normalizeCode(row.underlying_symbol) === "TXF" || String(row.future_symbol || "").toUpperCase().startsWith("TXF")).length;
+  rows.mappedCount = rows.stockMappedCount;
   rows.cacheCount = cache.quotes.size;
   return rows;
 }
@@ -1184,7 +1187,10 @@ async function fetchFutoptRows() {
       { service: true },
     );
     rows.readinessSource = "dedicated_daytrade_futopt_quotes_live";
-    rows.mappedCount = rows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
+    rows.stockUniverseCount = rows.filter((row) => /^\d{4}$/.test(normalizeCode(row.underlying_symbol))).length;
+  rows.stockMappedCount = rows.filter((row) => /^\d{4}$/.test(normalizeCode(row.underlying_symbol)) && ageSeconds(row.updated_at) <= 120).length;
+  rows.txfCount = rows.filter((row) => normalizeCode(row.underlying_symbol) === "TXF" || String(row.future_symbol || "").toUpperCase().startsWith("TXF")).length;
+  rows.mappedCount = rows.stockMappedCount;
     rows.cacheCount = cacheRows.cacheCount || 0;
     if (rows.mappedCount >= MIN_FUTOPT_MAPPED) return rows;
     if (cacheRows.mappedCount >= MIN_FUTOPT_MAPPED) return cacheRows;
@@ -2040,9 +2046,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }
   const futoptMappedFromRows = Number.isFinite(Number(futoptRows.mappedCount))
     ? Number(futoptRows.mappedCount)
-    : futoptRows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
+    : futoptRows.filter((row) => /^\d{4}$/.test(normalizeCode(row.underlying_symbol)) && ageSeconds(row.updated_at) <= 120).length;
   const futoptMappedFromThisLoop = Number(websocketFutoptSync.stockRows || 0);
   const futoptMapped = Math.max(futoptMappedFromRows, futoptMappedFromThisLoop);
+  const futoptStockUniverse = Math.max(
+    Number(futoptRows.stockUniverseCount || 0),
+    Number(websocketFutoptSync.stockRows || 0),
+  );
   const cooldownRemaining = futureSeconds(state.cooldownUntil);
   const last429AgeSeconds = state.last429At ? ageSeconds(state.last429At) : 999999;
   const rateLimitStatus = cooldownRemaining > 0 ? "cooldown" : fetchResult.rateLimited ? "rate_limited" : "ok";
@@ -2297,6 +2307,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     today_1m_symbols: today1mSymbols,
     today_1m_rows: today1mRows,
     futopt_stock_mapped: futoptMapped,
+    futopt_stock_quote_universe: futoptStockUniverse,
     intraday_1m_readiness_source: intraday1mReadinessSource,
     natural_0900_warmup_evidence_source: intradayMap.warmupEvidenceSource || "",
     futopt_readiness_source: futoptRows.readinessSource || "unknown",
@@ -2657,7 +2668,10 @@ async function tick() {
   result.payload.futopt_websocket_sync_skipped = Boolean(websocketFutoptSync.skipped);
   result.payload.futopt_websocket_synced_stock_rows = websocketFutoptSync.stockRows || 0;
   result.payload.futopt_websocket_synced_txf_rows = websocketFutoptSync.txfRows || 0;
-  result.payload.futopt_stock_quote_universe = websocketFutoptSync.stockRows || 0;
+  result.payload.futopt_stock_quote_universe = Math.max(
+    Number(result.payload.futopt_stock_quote_universe || 0),
+    Number(websocketFutoptSync.stockRows || 0),
+  );
   result.payload.futopt_stock_quote_attempted = websocketFutoptSync.stockRows || 0;
   result.payload.futopt_stock_quote_fetched = websocketFutoptSync.stockRows || 0;
   result.payload.futopt_stock_quotes_this_loop = websocketFutoptSync.stockRows || 0;
