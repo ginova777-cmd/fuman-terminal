@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
@@ -197,7 +198,8 @@ function sourceWebsocketOk(source) {
     && source.websocketMode === "streaming"
     && source.quoteTransport.startsWith("websocket_")
     && source.websocketRestDisabled === true
-    && source.websocketRequiredChannelsReady === true;
+    && source.websocketRequiredChannelsReady === true
+    && source.websocketFormalReady === true;
 }
 
 function gateWebsocketOk(gate) {
@@ -291,6 +293,9 @@ function writerCodeRegressionChecks() {
     dailyVolumeSelectsStatus: source.includes("daily_volume_status"),
     dailyVolumeSourceEvidence: source.includes("daily_volume_source"),
     formalSourceAlignmentPayload: source.includes("formal_source_alignment_ok"),
+    websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
+    websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
+    formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
@@ -303,6 +308,23 @@ function writerCodeRegressionChecks() {
   }
   return { ok: issues.length === 0, path: writerPath, checks, issues };
 }
+function websocketCodeRegressionChecks() {
+  const files = {
+    stockCollector: path.join(__dirname, "fugle-websocket-collector.js"),
+    futoptCollector: path.join(__dirname, "fugle-futopt-websocket-collector.js"),
+    verifier: path.join(__dirname, "verify-fugle-websocket-sources.js"),
+  };
+  const source = Object.fromEntries(Object.entries(files).map(([name, file]) => {
+    try { return [name, fs.readFileSync(file, "utf8")]; } catch { return [name, ""]; }
+  }));
+  const checks = {
+    stockCollectorFormalReady: source.stockCollector.includes("formalReady") && source.stockCollector.includes("formalReadyReason"),
+    futoptCollectorFormalReady: source.futoptCollector.includes("formalReady") && source.futoptCollector.includes("formalReadyReason"),
+    verifierReadsFormalReady: source.verifier.includes("formalReady") && source.verifier.includes("websocket_formal_not_ready"),
+  };
+  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `websocket_regression_${name}_missing`);
+  return { ok: issues.length === 0, files, checks, issues };
+}
 async function optionalProbe(label, action) {
   try {
     return { label, ok: true, rows: await action() };
@@ -312,6 +334,8 @@ async function optionalProbe(label, action) {
 }
 
 async function main() {
+  const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
+  const marketClosed = marketDay.isTradingDay === false;
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
     path.join("C:", "fuman-runtime", "secrets", "supabase-anon-key.txt"),
     path.join(__dirname, "..", "secrets", "supabase-anon-key.txt"),
@@ -354,10 +378,14 @@ async function main() {
   const sourceStatus = normalizeSourceStatus(firstObject(sourceRows));
   const canonicalGate = normalizeGate(firstObject(canonicalRows));
   const unattendedGate = normalizeGate(firstObject(unattendedRows));
-  const alignment = gateVerdict(sourceStatus, canonicalGate, unattendedGate);
+  const alignment = marketClosed
+    ? { ok: true, verdict: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", mode: "market_closed_previous_good", issues: [] }
+    : gateVerdict(sourceStatus, canonicalGate, unattendedGate);
   const issues = [...alignment.issues];
   const writerCodeRegression = writerCodeRegressionChecks();
+  const websocketCodeRegression = websocketCodeRegressionChecks();
   issues.push(...writerCodeRegression.issues);
+  issues.push(...websocketCodeRegression.issues);
 
   for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
     if (item.hasPriorityPoolSymbols !== true) issues.push(`${label}_priority_pool_symbols_missing`);
@@ -366,8 +394,8 @@ async function main() {
     if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
     if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
     if (label !== "source" && item.hasCanonicalGateReason !== true) issues.push(`${label}_canonical_gate_reason_missing`);
-    if (item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
-    if ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A")) {
+    if (!marketClosed && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
+    if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
         if (item.formalGateScope !== "priority_top40") issues.push("source_formal_gate_scope_not_priority_top40");
@@ -403,11 +431,28 @@ async function main() {
       if (typeof row.txf_ok !== "boolean") issues.push(`${probe.label}_txf_ok_not_boolean`);
     }
   }
+  if (!marketClosed && canonicalGate.gateGrade === "A" && canonicalFutoptProbe.ok) {
+    const row = Array.isArray(canonicalFutoptProbe.rows) ? canonicalFutoptProbe.rows[0] : null;
+    if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("canonical_a_with_futopt_not_ready");
+    if (row && row.futopt_txf_ok !== true) issues.push("canonical_a_with_txf_not_ready");
+  }
+  if (!marketClosed && unattendedGate.gateGrade === "A" && unattendedFutoptProbe.ok) {
+    const row = Array.isArray(unattendedFutoptProbe.rows) ? unattendedFutoptProbe.rows[0] : null;
+    if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("unattended_a_with_futopt_not_ready");
+    if (row && row.futopt_txf_ok !== true) issues.push("unattended_a_with_txf_not_ready");
+  }
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
 
   const result = {
     ok: issues.length === 0 && alignment.ok === true,
+    marketContext: {
+      isTradingDay: marketDay.isTradingDay === true,
+      date: marketDay.date || "",
+      reason: marketDay.reason || "",
+      source: marketDay.source || "",
+      closedPolicy: marketClosed ? "preserve_previous_good_no_formal_entry" : "formal_alignment_required",
+    },
     checkedAt: new Date().toISOString(),
     sourceName: SOURCE_NAME,
     contract: "daytrade-source-contract-alignment-websocket-formal-v2",
@@ -416,6 +461,7 @@ async function main() {
     canonicalGate,
     unattendedGate,
     writerCodeRegression,
+    websocketCodeRegression,
     contractProbes: {
       dailyVolumeAlias: {
         ok: dailyAliasProbe.ok,
@@ -445,8 +491,8 @@ async function main() {
       },
     },
     issues,
-    mode: alignment.mode,
-    verdict: alignment.verdict,
+    mode: marketClosed ? "market_closed_previous_good" : alignment.mode,
+    verdict: marketClosed ? "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" : alignment.verdict,
   };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;
