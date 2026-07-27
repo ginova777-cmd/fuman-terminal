@@ -137,6 +137,9 @@ function normalizeSourceStatus(row) {
     message: stringValue(row?.message),
     updatedAt: stringValue(row?.updated_at),
     daytradeGateGrade: stringValue(payload.daytrade_gate_grade),
+    gateGrade: stringValue(payload.gate_grade),
+    gateStatus: stringValue(payload.gate_status),
+    formalEntrySpeedVerdict: stringValue(payload.formal_entry_speed_verdict),
     priorityGateGrade: stringValue(payload.priority_gate_grade),
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
@@ -146,6 +149,8 @@ function normalizeSourceStatus(row) {
     hasScannerCanRunOpening: hasValue(payload, "scanner_can_run_opening"),
     quoteAgeSeconds: numberValue(payload.quote_age_seconds, 999999),
     formalEntryAllowed: boolValue(payload.formal_entry_allowed),
+    dailyVolumeStatus: stringValue(payload.daily_volume_status),
+    intraday1mStaleSeconds: numberValue(payload.intraday_1m_stale_seconds, 999999),
     scannerCanRunQuoteOnly: boolValue(payload.scanner_can_run_quote_only),
     scannerCanRunOpening: boolValue(payload.scanner_can_run_opening),
     rateLimitStatus: stringValue(payload.rate_limit_status),
@@ -184,6 +189,10 @@ function normalizeGate(row) {
     freshQuotes120s: numberValue(row?.fresh_quotes_120s),
     scorecardRequiredOkCount: numberValue(row?.scorecard_required_ok_count),
     scorecardRequiredCount: numberValue(row?.scorecard_required_count),
+    formalEntryAllowed: boolValue(row?.formal_entry_allowed),
+    dailyVolumeStatus: stringValue(row?.daily_volume_status),
+    intraday1mStaleSeconds: numberValue(row?.intraday_1m_stale_seconds, 999999),
+    formalSourceAlignmentOk: boolValue(row?.formal_source_alignment_ok),
     formalEntrySpeedVerdict: stringValue(row?.formal_entry_speed_verdict),
     readyMa20Continuous: numberValue(row?.ready_ma20_continuous_symbols ?? row?.ready_ma20_continuous),
     readyMa35Continuous: numberValue(row?.ready_ma35_continuous_symbols ?? row?.ready_ma35_continuous),
@@ -347,6 +356,10 @@ async function main() {
     "canonical_gate_grade",
     "canonical_gate_status",
     "canonical_gate_reason",
+    "formal_entry_allowed",
+    "daily_volume_status",
+    "formal_source_alignment_ok",
+    "intraday_1m_stale_seconds",
     "priority_pool_symbols",
     "priority_fresh_quote_coverage_120s",
     "scanner_can_run_opening",
@@ -414,6 +427,24 @@ async function main() {
     }
   }
 
+  const layerAlignmentChecks = [
+    ["gate_grade", sourceStatus.gateGrade, canonicalGate.gateGrade, unattendedGate.gateGrade],
+    ["gate_status", sourceStatus.gateStatus, canonicalGate.gateStatus, unattendedGate.gateStatus],
+    ["formal_entry_speed_verdict", sourceStatus.formalEntrySpeedVerdict, canonicalGate.formalEntrySpeedVerdict, unattendedGate.formalEntrySpeedVerdict],
+    ["formal_entry_allowed", sourceStatus.formalEntryAllowed, canonicalGate.formalEntryAllowed, unattendedGate.formalEntryAllowed],
+    ["scanner_can_run_opening", sourceStatus.scannerCanRunOpening, canonicalGate.scannerCanRunOpening, unattendedGate.scannerCanRunOpening],
+    ["daily_volume_status", sourceStatus.dailyVolumeStatus, canonicalGate.dailyVolumeStatus, unattendedGate.dailyVolumeStatus],
+    ["websocket_formal_ready", sourceStatus.websocketFormalReady, canonicalGate.websocketFormalReady, unattendedGate.websocketFormalReady],
+    ["formal_source_alignment_ok", sourceStatus.formalSourceAlignmentOk, canonicalGate.formalSourceAlignmentOk, unattendedGate.formalSourceAlignmentOk],
+    ["intraday_1m_stale_seconds", sourceStatus.intraday1mStaleSeconds, canonicalGate.intraday1mStaleSeconds, unattendedGate.intraday1mStaleSeconds],
+  ];
+  for (const [name, ...values] of layerAlignmentChecks) {
+    if (values.some((value) => value === null || value === undefined || value === "" || Number.isNaN(value))) {
+      issues.push(`layer_contract_field_missing:${name}`);
+    } else if (values.some((value) => value !== values[0])) {
+      issues.push(`layer_contract_field_mismatch:${name}`);
+    }
+  }
   if (!dailyAliasProbe.ok) issues.push(`daily_volume_alias_probe_failed:${dailyAliasProbe.error}`);
   const dailyAliasRows = Array.isArray(dailyAliasProbe.rows) ? dailyAliasProbe.rows : [];
   if (dailyAliasProbe.ok && dailyAliasRows.some((row) => !Object.prototype.hasOwnProperty.call(row || {}, "daily_volume_status"))) issues.push("daily_volume_status_missing_from_daily_volume_avg");
@@ -503,5 +534,4 @@ main().catch((error) => {
   console.error(`[daytrade-source-contract-alignment] ${error.message}`);
   process.exitCode = 2;
 });
-
 

@@ -2253,6 +2253,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     source_name: SOURCE_NAME,
     writer_version: "daytrade-source-writer-20260702-03",
     daytrade_gate_grade: gateGrade,
+    gate_grade: gateGrade,
+    gate_status: gateGrade === "A" ? "ready" : "not_ready",
+    formal_entry_speed_verdict: gateGrade === "A" ? "YES" : "NO",
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
     formal_gate_scope: "priority_top40",
@@ -2874,11 +2877,4 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
-
-
-
-
-
-
-
 
