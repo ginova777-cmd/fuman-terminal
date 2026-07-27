@@ -394,6 +394,7 @@ async function main() {
     if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
     if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
     if (label !== "source" && item.hasCanonicalGateReason !== true) issues.push(`${label}_canonical_gate_reason_missing`);
+    if (Number.isFinite(item.scorecardRequiredOkCount) && Number.isFinite(item.scorecardRequiredCount) && item.scorecardRequiredOkCount !== item.scorecardRequiredCount) issues.push(`${label}_scorecard_required_count_mismatch`);
     if (!marketClosed && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
     if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
@@ -502,3 +503,5 @@ main().catch((error) => {
   console.error(`[daytrade-source-contract-alignment] ${error.message}`);
   process.exitCode = 2;
 });
+
+
