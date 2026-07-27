@@ -310,6 +310,26 @@ function writerCodeRegressionChecks() {
     slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 80 })'),
+    gracefulMaxRunStop: source.includes('maxRunReached = false')
+      && source.includes('max_run_seconds_reached_after_active_tick')
+      && !source.includes('process.exit(124)'),
+    motherPoolBaseEligibilityContract: source.includes('function evaluateMotherPoolBasePool')
+      && source.includes('avg5_volume_not_gt_3000')
+      && source.includes('market_not_twse_otc'),
+    runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost an already eligible candidate only')
+      && source.includes('if (!prev)'),
+    fullMarketMotherPoolRotation: source.includes('daytradeMotherPoolSymbols')
+      && source.includes('mother_pool_rotation_priority_top40'),
+    motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
+    stockTickerSchemaCompatible: source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
+      && !source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,is_trial'),
+    reasonCodePayload: source.includes('const failedChecks = []')
+      && source.includes('reason_code: reasonCode')
+      && source.includes('base_pool_shortfall'),
+    fullMarketVolumeMirror: source.includes('syncDailyVolumeMirror(dailyVolumeMap, activeSymbols)')
+      && source.includes('activeOrdinaryStockUniverse: true')
+      && source.includes('DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS')
+      && source.includes('{ batchSize: 250 }'),
   };
   const issues = [];
   for (const [key, ok] of Object.entries(checks)) {

@@ -83,7 +83,7 @@ if ($LocalCheck) {
   if ($Once) {
     $args += "--once"
   } else {
-    $args += "--max-seconds=55"
+    $args += "--max-seconds=300"
   }
 } else {
   $args += "--dry-run"
@@ -115,8 +115,16 @@ try {
     exit 0
   }
 
-  & $node @args > $StdoutLog 2> $StderrLog
-  $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+  $timeoutSeconds = if ($Apply) { 330 } elseif ($Fetch) { 120 } else { 120 }
+  $process = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru
+  if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
+    try { $process.Kill() } catch {}
+    try { $process.WaitForExit(5000) } catch {}
+    Write-FailureArtifact 9004 "writer_timeout_${timeoutSeconds}s"
+    Write-WrapperLog "FAIL writer_timeout_${timeoutSeconds}s stdout=$StdoutLog stderr=$StderrLog"
+    exit 1
+  }
+  $exitCode = [int]$process.ExitCode
   if ($exitCode -ne 0) {
     Write-FailureArtifact $exitCode "writer_exit_$exitCode"
     Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"

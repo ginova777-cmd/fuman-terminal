@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 const { spawnSync } = require("child_process");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -19,6 +20,7 @@ const DAYTRADE_WRITER_FILE = path.join(ROOT_DIR, "scripts", "run-daytrade-source
 const STOCK_MAX_SUBSCRIPTIONS = 2000;
 const FUTOPT_MAX_SUBSCRIPTIONS = 2000;
 const STATUS_MAX_AGE_MS = Number(process.env.FUGLE_WS_STATUS_MAX_AGE_MS || 3 * 60 * 1000);
+const FUTOPT_STATUS_MAX_AGE_MS = Number(process.env.FUGLE_FUTOPT_WS_STATUS_MAX_AGE_MS || 5 * 60 * 1000);
 const TASK_STILL_RUNNING = 267009; // 0x41301
 const TASK_SHARING_VIOLATION = 2147946720; // 0x80070020, usually overlapping scheduled launches.
 
@@ -102,6 +104,8 @@ function summarizeWebSocket(status, { maxSubscriptions, requiredChannels }) {
     connected: Boolean(status?.websocketConnected),
     authenticated: Boolean(status?.websocketAuthenticated),
     mode: status?.mode || "",
+    formalReady: status?.formalReady === true,
+    formalReadyReason: status?.formalReadyReason || "",
     streamingUrl: status?.streamingUrl || "",
     channels,
     requiredChannels,
@@ -117,6 +121,9 @@ function summarizeWebSocket(status, { maxSubscriptions, requiredChannels }) {
     messages: Number(status?.streamingMessages || 0),
     quotes: Number(status?.streamingQuotes || 0),
     candles: Number(status?.streamingCandles || 0),
+    selectedSymbols: Number(status?.selectedSymbols || status?.subscribedSymbols || 0),
+    requestedSymbols: Number(status?.requestedSymbols || 0),
+    tickerRows: Number(status?.tickerRows || 0),
   };
 }
 
@@ -148,7 +155,7 @@ function summarizeFinMindPolicy(stockStatus, sharedConfig) {
     }));
   return {
     contract: "finmind-diagnostic-only-v1",
-    formalDaytradeAllowedSources: ["fugle-websocket-trades", "fugle-websocket-aggregates", "fugle-websocket-candles", "fugle-rest-collector"],
+    formalDaytradeAllowedSources: ["fugle-websocket-trades", "fugle-websocket-aggregates", "fugle-websocket-candles"],
     finmindAllowedUses: ["low_frequency_diagnostic", "after_hours_backfill", "history_daily_fill"],
     finmindFormalPublishBlocked: stockStatus?.finmindFormalPublishAllowed === false,
     finmindFallbackBlocksLatest: stockStatus?.finmindFallbackBlocksLatest === true,
@@ -180,8 +187,10 @@ function auditFinMindPolicyCode() {
   };
 }
 
-function main() {
+async function main() {
   const issues = [];
+  const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
+  const marketClosed = marketDay.isTradingDay === false;
   const stockStatus = readJson(STOCK_STATUS_FILE, {});
   const futoptStatus = readJson(FUTOPT_STATUS_FILE, {});
   const daytrade = readJson(DAYTRADE_CONFIG_FILE, {});
@@ -200,13 +209,33 @@ function main() {
   const finmindPolicyCodeAudit = auditFinMindPolicyCode();
 
   for (const [name, ws] of [["stock", stock], ["futopt", futopt]]) {
+    const maxAgeMs = name === "futopt" ? FUTOPT_STATUS_MAX_AGE_MS : STATUS_MAX_AGE_MS;
+    const aliveByRecentMessage = ws.mode === "streaming"
+      && ws.authenticated
+      && ws.messages > 0
+      && ws.ageSeconds * 1000 <= maxAgeMs;
     addIssue(issues, ws.ok, `${name}_websocket_status_not_ok`, ws);
-    addIssue(issues, ws.connected, `${name}_websocket_not_connected`, ws);
+    addIssue(issues, ws.connected || aliveByRecentMessage, `${name}_websocket_not_connected`, {
+      ...ws,
+      aliveByRecentMessage,
+    });
     addIssue(issues, ws.authenticated, `${name}_websocket_not_authenticated`, ws);
     addIssue(issues, ws.mode === "streaming", `${name}_websocket_not_streaming`, ws);
-    addIssue(issues, ws.withinSubscriptionLimit, `${name}_websocket_subscription_limit_violation`, ws);
+    addIssue(issues, ws.formalReady || (name === "futopt" && marketClosed && ws.subscribedSymbols === 0 && ws.requestedSymbols === 0 && ws.tickerRows === 0), `${name}_websocket_formal_not_ready`, ws);
+    const emptyFutoptAllowedByMarketClosed = name === "futopt"
+      && marketClosed
+      && ws.subscribedSymbols === 0
+      && ws.requestedSymbols === 0
+      && ws.tickerRows === 0;
+    addIssue(issues, ws.withinSubscriptionLimit || emptyFutoptAllowedByMarketClosed, `${name}_websocket_subscription_limit_violation`, {
+      ...ws,
+      emptyFutoptAllowedByMarketClosed,
+    });
     addIssue(issues, ws.forbiddenChunks === 0, `${name}_websocket_forbidden_chunks`, ws);
-    addIssue(issues, ws.ageSeconds * 1000 <= STATUS_MAX_AGE_MS, `${name}_websocket_status_stale`, ws);
+    addIssue(issues, ws.ageSeconds * 1000 <= maxAgeMs, `${name}_websocket_status_stale`, {
+      ...ws,
+      maxAgeSeconds: Math.round(maxAgeMs / 1000),
+    });
     for (const channel of ws.requiredChannels) {
       addIssue(issues, ws.channels.includes(channel), `${name}_websocket_missing_channel_${channel}`, ws);
     }
@@ -267,7 +296,13 @@ function main() {
 
   const report = {
     ok: issues.length === 0,
-    status: issues.length === 0 ? "ready" : "not_ready",
+    marketContext: {
+      isTradingDay: marketDay.isTradingDay === true,
+      reason: marketDay.reason || "",
+      source: marketDay.source || "",
+      emptyFutoptSubscriptionAccepted: marketClosed,
+    },
+    status: issues.length === 0 ? (marketClosed ? "ready_off_session_previous_good" : "ready") : "not_ready",
     checkedAt: new Date().toISOString(),
     contract: "fugle-websocket-source-readiness-v1",
     scope: "local runtime source transport only; does not prove live market A during off-session and does not run strategy scanners",
@@ -314,13 +349,11 @@ function main() {
   if (!report.ok) process.exitCode = 1;
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(JSON.stringify({
     ok: false,
     status: "error",
     error: error?.stack || error?.message || String(error),
   }, null, 2));
   process.exitCode = 1;
-}
+});

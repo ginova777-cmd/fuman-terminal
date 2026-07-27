@@ -1043,6 +1043,8 @@ async function runStreamingCollector() {
       source: "fugle-websocket-streaming",
       error: "fugle api key missing",
       restDisabled: true,
+      formalReady: false,
+      formalReadyReason: "api_key_missing",
     });
     return;
   }
@@ -1072,12 +1074,21 @@ async function runStreamingCollector() {
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
       const freshCount = countFreshCachedQuotes(selection.selected);
+      const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
+      const formalReady = extra.ok !== false
+        && Boolean(ws && ws.readyState === WebSocket.OPEN)
+        && authenticated
+        && requiredChannelsReady
+        && selection.selected.length > 0
+        && forbiddenChunks === 0;
       writeStatus({
         mode: "streaming",
         channel: `websocket:${STREAMING_CHANNEL}`,
         primarySource: "fugle-websocket",
         fallbackSource: "none",
         restDisabled: true,
+        formalReady,
+        formalReadyReason: formalReady ? "streaming_authenticated_required_channels_and_subscription_ready" : "websocket_transport_not_formal_ready",
         streamingUrl: STREAMING_URL,
         streamingChannel: STREAMING_CHANNEL,
         streamingChannels: STREAMING_CHANNELS,

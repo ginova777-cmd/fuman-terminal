@@ -273,7 +273,7 @@ function writeStatus(extra = {}) {
 async function run() {
   const apiKey = readSecret(API_KEY_FILES);
   if (!apiKey) {
-    writeStatus({ ok: false, error: "fugle api key missing" });
+    writeStatus({ ok: false, formalReady: false, formalReadyReason: "api_key_missing", error: "fugle api key missing" });
     return;
   }
 
@@ -296,9 +296,19 @@ async function run() {
     let lastForbiddenMessage = "";
 
     const writeStreamingStatus = (extra = {}) => {
+      const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
+      const formalReady = extra.ok !== false
+        && Boolean(ws && ws.readyState === WebSocket.OPEN)
+        && authenticated
+        && requiredChannelsReady
+        && selection.selectedSymbols.length > 0
+        && selection.allRows.length > 0
+        && forbiddenChunks === 0;
       writeStatus({
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        formalReady,
+        formalReadyReason: formalReady ? "streaming_authenticated_required_channels_and_subscription_ready" : "websocket_transport_not_formal_ready",
         streamingOpenedAt: openedAt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
