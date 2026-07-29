@@ -5,10 +5,6 @@
 
 begin;
 
-drop view if exists public.v_fugle_daytrade_mother_pool_contract_health;
-drop view if exists public.v_fugle_daytrade_formal_priority_top40;
-drop view if exists public.v_fugle_daytrade_priority_top40;
-drop view if exists public.v_fugle_daytrade_mother_pool;
 
 create or replace view public.v_fugle_daytrade_mother_pool as
 select
@@ -51,7 +47,7 @@ select
   p.source as mother_source,
   p.updated_at as mother_updated_at,
   coalesce(nullif(p.payload ->> 'score', '')::numeric, 0) as mother_score,
-  coalesce(p.payload ->> 'motherPoolRuleVersion', 'daytrade_mother_pool_rank_overlap_20260709') as mother_pool_rule_version,
+  coalesce(p.payload ->> 'motherPoolRuleVersion', 'daytrade_mother_pool_base_filter_20260727') as mother_pool_rule_version,
   coalesce(p.payload -> 'motherPoolRuleHits', '[]'::jsonb) as mother_pool_rule_hits,
   coalesce(p.payload -> 'motherPoolMetrics', '{}'::jsonb) as mother_pool_metrics,
   coalesce(nullif(p.payload #>> '{motherPoolMetrics,tradeValue}', '')::numeric, 0) as mother_metric_trade_value,
@@ -271,8 +267,8 @@ select
   sr.updated_at as source_updated_at,
   sr.message as source_message,
   coalesce(sr.payload ->> 'mother_pool_source', 'dynamic_daytrade_mother_pool') as mother_pool_source,
-  coalesce(sr.payload ->> 'mother_pool_rule_version', 'daytrade_mother_pool_rank_overlap_20260709') as mother_pool_rule_version,
-  coalesce((sr.payload ->> 'formal_scope'), 'priority_top40') as formal_scope,
+  coalesce(sr.payload ->> 'mother_pool_rule_version', 'daytrade_mother_pool_base_filter_20260727') as mother_pool_rule_version,
+  coalesce((sr.payload ->> 'formal_scope'), 'mother_pool_300_rotating_deep_scan') as formal_scope,
   40::integer as formal_priority_limit,
   coalesce(m.mother_pool_symbols, 0) as mother_pool_symbols,
   coalesce(m.mother_ready_rows, 0) as mother_ready_rows,

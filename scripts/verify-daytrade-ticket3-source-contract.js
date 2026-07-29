@@ -34,6 +34,7 @@ async function main() {
   const collector = readText(path.join(root, "scripts", "fugle-websocket-collector.js"));
   const writer = readText(path.join(root, "scripts", "run-daytrade-source-writer.js"));
   const writerWrapper = readText(path.join(root, "ops", "public-slot", "Run-DaytradeSourceWriter.ps1"));
+  const motherPoolSql = readText(path.join(root, "ops", "public-slot", "DaytradeMotherPoolContractViews_20260709.sql"));
   const issues = [];
   const staticChecks = {
     fullMarketUniverse: writer.includes("full_market_active_common_stock"),
@@ -43,6 +44,10 @@ async function main() {
     dedicated0901Evidence: writer.includes("ensureOpening0901CandleEvidence") && writer.includes("opening_0901_candle_not_ready") && writer.includes("fugle_daytrade_intraday_1m"),
     writerEnsuresWebSocketCollector: writerWrapper.includes("Ensure-FugleWebSocketCollector") && writerWrapper.includes("Get-CimInstance Win32_Process") && writerWrapper.includes("FUGLE_STREAMING_CHANNELS") && writerWrapper.includes("FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"),
     noFormalSharedFallback: writer.includes("formal_source_alignment_ok") && writer.includes("opening0901Ready"),
+    motherPoolSqlSafeWarmingContract: motherPoolSql.includes("create or replace view public.v_fugle_daytrade_mother_pool")
+      && !/drop view if exists public\.v_fugle_daytrade_(mother_pool|priority_top40|formal_priority_top40)/i.test(motherPoolSql)
+      && !motherPoolSql.includes("where p.payload ->> 'basePoolEligible' = 'true'")
+      && motherPoolSql.includes("mother_pool_300_rotating_deep_scan"),
   };
   for (const [name, ok] of Object.entries(staticChecks)) if (!ok) issues.push("static_" + name + "_missing");
   let live = null;

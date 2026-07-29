@@ -122,6 +122,12 @@ async function main() {
   if (formalMaxMotherRank > 40) issues.push(`formal_max_mother_rank_${formalMaxMotherRank}_above_40`);
   if (priorityTop40MaxRank > 40) issues.push(`priority_top40_max_rank_${priorityTop40MaxRank}_above_40`);
   if (formalTop40MaxRank > 40) issues.push(`formal_priority_top40_max_rank_${formalTop40MaxRank}_above_40`);
+  const motherFreshQuoteCoverage120s = numberValue(health.mother_fresh_quote_coverage_120s);
+  const formalFreshQuoteCoverage120s = numberValue(health.formal_fresh_quote_coverage_120s);
+  const formalMaxQuoteAgeSeconds = numberValue(health.formal_max_quote_age_seconds, 999999);
+  if (motherFreshQuoteCoverage120s < 0.80) issues.push(`mother_fresh_quote_coverage_${motherFreshQuoteCoverage120s}_below_0.80`);
+  if (formalFreshQuoteCoverage120s < 0.95) issues.push(`formal_fresh_quote_coverage_${formalFreshQuoteCoverage120s}_below_0.95`);
+  if (formalMaxQuoteAgeSeconds > 120) issues.push(`formal_max_quote_age_${formalMaxQuoteAgeSeconds}_above_120`);
   for (const field of requiredContractFields) {
     if (!Object.prototype.hasOwnProperty.call(motherContractRow, field)) issues.push(`mother_pool_missing_field:${field}`);
     if (!Object.prototype.hasOwnProperty.call(priorityContractRow, field)) issues.push(`priority_top40_missing_field:${field}`);
@@ -129,13 +135,9 @@ async function main() {
   if (String(health.mother_pool_source || "") !== "dynamic_daytrade_mother_pool") {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
   }
-  const acceptedFormalScopes = new Set([
-    "priority_top40",
-    "mother_pool_300_rotating_deep_scan",
-    "mother_pool_rotation_priority_top40",
-  ]);
-  if (!acceptedFormalScopes.has(String(health.formal_scope || ""))) {
-    issues.push(`formal_scope_not_priority_top40:${health.formal_scope || "missing"}`);
+  const expectedFormalScope = "mother_pool_300_rotating_deep_scan";
+  if (String(health.formal_scope || "") !== expectedFormalScope) {
+    issues.push(`formal_scope_not_${expectedFormalScope}:${health.formal_scope || "missing"}`);
   }
 
   const result = {

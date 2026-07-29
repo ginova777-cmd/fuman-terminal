@@ -27,6 +27,9 @@
 - `npm run verify:daytrade-ticket3-source`：PASS。
 - writer、ticket verifier、WebSocket verifier：Node syntax PASS。
 - WebSocket transport regression：已修正並由 static verifier 證明。
+- Mother-pool SQL 已改為可重複 `CREATE OR REPLACE VIEW`，移除會破壞相依 view 的 `DROP VIEW`。
+- Mother-pool verifier 已將 `mother >= 0.80`、`formal >= 0.95`、`quote age <= 120s` 設為 hard gate；coverage=0 現在確實 FAIL。
+- Formal scope 已固定為 `mother_pool_300_rotating_deep_scan`，不再接受只掃 TOP40。
 
 ## Production 目前不得宣告完成的原因
 
