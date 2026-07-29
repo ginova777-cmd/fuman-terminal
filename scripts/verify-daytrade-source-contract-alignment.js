@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
@@ -136,6 +137,9 @@ function normalizeSourceStatus(row) {
     message: stringValue(row?.message),
     updatedAt: stringValue(row?.updated_at),
     daytradeGateGrade: stringValue(payload.daytrade_gate_grade),
+    gateGrade: stringValue(payload.gate_grade),
+    gateStatus: stringValue(payload.gate_status),
+    formalEntrySpeedVerdict: stringValue(payload.formal_entry_speed_verdict),
     priorityGateGrade: stringValue(payload.priority_gate_grade),
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
@@ -145,6 +149,8 @@ function normalizeSourceStatus(row) {
     hasScannerCanRunOpening: hasValue(payload, "scanner_can_run_opening"),
     quoteAgeSeconds: numberValue(payload.quote_age_seconds, 999999),
     formalEntryAllowed: boolValue(payload.formal_entry_allowed),
+    dailyVolumeStatus: stringValue(payload.daily_volume_status),
+    intraday1mStaleSeconds: numberValue(payload.intraday_1m_stale_seconds, 999999),
     scannerCanRunQuoteOnly: boolValue(payload.scanner_can_run_quote_only),
     scannerCanRunOpening: boolValue(payload.scanner_can_run_opening),
     rateLimitStatus: stringValue(payload.rate_limit_status),
@@ -183,6 +189,10 @@ function normalizeGate(row) {
     freshQuotes120s: numberValue(row?.fresh_quotes_120s),
     scorecardRequiredOkCount: numberValue(row?.scorecard_required_ok_count),
     scorecardRequiredCount: numberValue(row?.scorecard_required_count),
+    formalEntryAllowed: boolValue(row?.formal_entry_allowed),
+    dailyVolumeStatus: stringValue(row?.daily_volume_status),
+    intraday1mStaleSeconds: numberValue(row?.intraday_1m_stale_seconds, 999999),
+    formalSourceAlignmentOk: boolValue(row?.formal_source_alignment_ok),
     formalEntrySpeedVerdict: stringValue(row?.formal_entry_speed_verdict),
     readyMa20Continuous: numberValue(row?.ready_ma20_continuous_symbols ?? row?.ready_ma20_continuous),
     readyMa35Continuous: numberValue(row?.ready_ma35_continuous_symbols ?? row?.ready_ma35_continuous),
@@ -197,7 +207,8 @@ function sourceWebsocketOk(source) {
     && source.websocketMode === "streaming"
     && source.quoteTransport.startsWith("websocket_")
     && source.websocketRestDisabled === true
-    && source.websocketRequiredChannelsReady === true;
+    && source.websocketRequiredChannelsReady === true
+    && source.websocketFormalReady === true;
 }
 
 function gateWebsocketOk(gate) {
@@ -291,17 +302,67 @@ function writerCodeRegressionChecks() {
     dailyVolumeSelectsStatus: source.includes("daily_volume_status"),
     dailyVolumeSourceEvidence: source.includes("daily_volume_source"),
     formalSourceAlignmentPayload: source.includes("formal_source_alignment_ok"),
+    websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
+    websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
+    formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 80 })'),
+    websocketQuoteReadthrough: source.includes('supabaseUpsert(\'fugle_daytrade_quotes_live\', websocketQuoteRows, \'symbol\', { batchSize: 40 })')
+      && source.includes('websocket_cache_mother_pool_readthrough')
+      && source.includes('websocket_quote_readthrough_written'),
+    gracefulMaxRunStop: source.includes('maxRunReached = false')
+      && source.includes('max_run_seconds_reached_after_active_tick')
+      && !source.includes('process.exit(124)'),
+    motherPoolBaseEligibilityContract: source.includes('function evaluateMotherPoolBasePool')
+      && source.includes('Five-day average volume ranks liquidity')
+      && source.includes('avg5_volume_pending')
+      && !source.includes('avg5_volume_not_gt_3000')
+      && source.includes('market_not_twse_otc'),
+    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates]'),
+    runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
+      && source.includes('if (!prev)'),
+    fullMarketMotherPoolRotation: source.includes('daytradeMotherPoolSymbols')
+      && source.includes('mother_pool_rotation_priority_top40'),
+    motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
+    motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
+      && source.includes('mother_pool_fresh_coverage_120s'),    stockTickerSchemaCompatible: source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
+      && !source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,is_trial'),
+    reasonCodePayload: source.includes('const failedChecks = []')
+      && source.includes('reason_code: reasonCode')
+      && source.includes('base_pool_shortfall'),
+    fullMarketVolumeMirror: source.includes('syncDailyVolumeMirror(dailyVolumeMap, activeSymbols)')
+      && source.includes('activeOrdinaryStockUniverse: true')
+      && source.includes('DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS')
+      && source.includes('{ batchSize: 250 }'),
+    enrichmentPendingIsNonAuthoritative: source.includes('daytrade-source-writer-enrichment-pending.json')
+      && source.includes('authoritative_source_status_preserved: true')
+      && !source.includes('writeStatusAndScorecard(pendingResult)'),
   };
   const issues = [];
   for (const [key, ok] of Object.entries(checks)) {
     if (!ok) issues.push(`writer_regression_${key}_missing`);
   }
   return { ok: issues.length === 0, path: writerPath, checks, issues };
+}
+function websocketCodeRegressionChecks() {
+  const files = {
+    stockCollector: path.join(__dirname, "fugle-websocket-collector.js"),
+    futoptCollector: path.join(__dirname, "fugle-futopt-websocket-collector.js"),
+    verifier: path.join(__dirname, "verify-fugle-websocket-sources.js"),
+  };
+  const source = Object.fromEntries(Object.entries(files).map(([name, file]) => {
+    try { return [name, fs.readFileSync(file, "utf8")]; } catch { return [name, ""]; }
+  }));
+  const checks = {
+    stockCollectorFormalReady: source.stockCollector.includes("formalReady") && source.stockCollector.includes("formalReadyReason"),
+    futoptCollectorFormalReady: source.futoptCollector.includes("formalReady") && source.futoptCollector.includes("formalReadyReason"),
+    verifierReadsFormalReady: source.verifier.includes("formalReady") && source.verifier.includes("websocket_formal_not_ready"),
+  };
+  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `websocket_regression_${name}_missing`);
+  return { ok: issues.length === 0, files, checks, issues };
 }
 async function optionalProbe(label, action) {
   try {
@@ -312,6 +373,8 @@ async function optionalProbe(label, action) {
 }
 
 async function main() {
+  const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
+  const marketClosed = marketDay.isTradingDay === false;
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
     path.join("C:", "fuman-runtime", "secrets", "supabase-anon-key.txt"),
     path.join(__dirname, "..", "secrets", "supabase-anon-key.txt"),
@@ -323,6 +386,10 @@ async function main() {
     "canonical_gate_grade",
     "canonical_gate_status",
     "canonical_gate_reason",
+    "formal_entry_allowed",
+    "daily_volume_status",
+    "formal_source_alignment_ok",
+    "intraday_1m_stale_seconds",
     "priority_pool_symbols",
     "priority_fresh_quote_coverage_120s",
     "scanner_can_run_opening",
@@ -354,10 +421,14 @@ async function main() {
   const sourceStatus = normalizeSourceStatus(firstObject(sourceRows));
   const canonicalGate = normalizeGate(firstObject(canonicalRows));
   const unattendedGate = normalizeGate(firstObject(unattendedRows));
-  const alignment = gateVerdict(sourceStatus, canonicalGate, unattendedGate);
+  const alignment = marketClosed
+    ? { ok: true, verdict: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", mode: "market_closed_previous_good", issues: [] }
+    : gateVerdict(sourceStatus, canonicalGate, unattendedGate);
   const issues = [...alignment.issues];
   const writerCodeRegression = writerCodeRegressionChecks();
+  const websocketCodeRegression = websocketCodeRegressionChecks();
   issues.push(...writerCodeRegression.issues);
+  issues.push(...websocketCodeRegression.issues);
 
   for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
     if (item.hasPriorityPoolSymbols !== true) issues.push(`${label}_priority_pool_symbols_missing`);
@@ -366,8 +437,9 @@ async function main() {
     if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
     if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
     if (label !== "source" && item.hasCanonicalGateReason !== true) issues.push(`${label}_canonical_gate_reason_missing`);
-    if (item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
-    if ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A")) {
+    if (Number.isFinite(item.scorecardRequiredOkCount) && Number.isFinite(item.scorecardRequiredCount) && item.scorecardRequiredOkCount !== item.scorecardRequiredCount) issues.push(`${label}_scorecard_required_count_mismatch`);
+    if (!marketClosed && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
+    if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
         if (item.formalGateScope !== "priority_top40") issues.push("source_formal_gate_scope_not_priority_top40");
@@ -385,6 +457,24 @@ async function main() {
     }
   }
 
+  const layerAlignmentChecks = [
+    ["gate_grade", sourceStatus.gateGrade, canonicalGate.gateGrade, unattendedGate.gateGrade],
+    ["gate_status", sourceStatus.gateStatus, canonicalGate.gateStatus, unattendedGate.gateStatus],
+    ["formal_entry_speed_verdict", sourceStatus.formalEntrySpeedVerdict, canonicalGate.formalEntrySpeedVerdict, unattendedGate.formalEntrySpeedVerdict],
+    ["formal_entry_allowed", sourceStatus.formalEntryAllowed, canonicalGate.formalEntryAllowed, unattendedGate.formalEntryAllowed],
+    ["scanner_can_run_opening", sourceStatus.scannerCanRunOpening, canonicalGate.scannerCanRunOpening, unattendedGate.scannerCanRunOpening],
+    ["daily_volume_status", sourceStatus.dailyVolumeStatus, canonicalGate.dailyVolumeStatus, unattendedGate.dailyVolumeStatus],
+    ["websocket_formal_ready", sourceStatus.websocketFormalReady, canonicalGate.websocketFormalReady, unattendedGate.websocketFormalReady],
+    ["formal_source_alignment_ok", sourceStatus.formalSourceAlignmentOk, canonicalGate.formalSourceAlignmentOk, unattendedGate.formalSourceAlignmentOk],
+    ["intraday_1m_stale_seconds", sourceStatus.intraday1mStaleSeconds, canonicalGate.intraday1mStaleSeconds, unattendedGate.intraday1mStaleSeconds],
+  ];
+  for (const [name, ...values] of layerAlignmentChecks) {
+    if (values.some((value) => value === null || value === undefined || value === "" || Number.isNaN(value))) {
+      issues.push(`layer_contract_field_missing:${name}`);
+    } else if (values.some((value) => value !== values[0])) {
+      issues.push(`layer_contract_field_mismatch:${name}`);
+    }
+  }
   if (!dailyAliasProbe.ok) issues.push(`daily_volume_alias_probe_failed:${dailyAliasProbe.error}`);
   const dailyAliasRows = Array.isArray(dailyAliasProbe.rows) ? dailyAliasProbe.rows : [];
   if (dailyAliasProbe.ok && dailyAliasRows.some((row) => !Object.prototype.hasOwnProperty.call(row || {}, "daily_volume_status"))) issues.push("daily_volume_status_missing_from_daily_volume_avg");
@@ -403,11 +493,28 @@ async function main() {
       if (typeof row.txf_ok !== "boolean") issues.push(`${probe.label}_txf_ok_not_boolean`);
     }
   }
+  if (!marketClosed && canonicalGate.gateGrade === "A" && canonicalFutoptProbe.ok) {
+    const row = Array.isArray(canonicalFutoptProbe.rows) ? canonicalFutoptProbe.rows[0] : null;
+    if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("canonical_a_with_futopt_not_ready");
+    if (row && row.futopt_txf_ok !== true) issues.push("canonical_a_with_txf_not_ready");
+  }
+  if (!marketClosed && unattendedGate.gateGrade === "A" && unattendedFutoptProbe.ok) {
+    const row = Array.isArray(unattendedFutoptProbe.rows) ? unattendedFutoptProbe.rows[0] : null;
+    if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("unattended_a_with_futopt_not_ready");
+    if (row && row.futopt_txf_ok !== true) issues.push("unattended_a_with_txf_not_ready");
+  }
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
   if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
 
   const result = {
     ok: issues.length === 0 && alignment.ok === true,
+    marketContext: {
+      isTradingDay: marketDay.isTradingDay === true,
+      date: marketDay.date || "",
+      reason: marketDay.reason || "",
+      source: marketDay.source || "",
+      closedPolicy: marketClosed ? "preserve_previous_good_no_formal_entry" : "formal_alignment_required",
+    },
     checkedAt: new Date().toISOString(),
     sourceName: SOURCE_NAME,
     contract: "daytrade-source-contract-alignment-websocket-formal-v2",
@@ -416,6 +523,7 @@ async function main() {
     canonicalGate,
     unattendedGate,
     writerCodeRegression,
+    websocketCodeRegression,
     contractProbes: {
       dailyVolumeAlias: {
         ok: dailyAliasProbe.ok,
@@ -445,8 +553,8 @@ async function main() {
       },
     },
     issues,
-    mode: alignment.mode,
-    verdict: alignment.verdict,
+    mode: marketClosed ? "market_closed_previous_good" : alignment.mode,
+    verdict: marketClosed ? "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" : alignment.verdict,
   };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;
@@ -456,3 +564,4 @@ main().catch((error) => {
   console.error(`[daytrade-source-contract-alignment] ${error.message}`);
   process.exitCode = 2;
 });
+

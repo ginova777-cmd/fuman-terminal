@@ -399,7 +399,7 @@ function readPrioritySymbols(symbols) {
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
-  counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
+  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, { priority: true });
   addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, { priority: true });
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, { priority: true });
   addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, { priority: true });
@@ -407,7 +407,7 @@ function readPrioritySymbols(symbols) {
   addMany("institution", payload.institution || payload.institutionSymbols, { priority: true });
   addMany("warrant", payload.warrant || payload.warrantSymbols, { priority: true });
   addMany("cb", payload.cb || payload.cbSymbols, { priority: true });
-  counts.realtimeRadar = 0; // retired: do not subscribe realtime radar priority symbols
+  addMany("realtimeRadar", payload.realtimeRadar || payload.realtimeRadarSymbols, { priority: true });
   addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols, { priority: true });
   addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols, { priority: true });
   addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, { priority: true });
@@ -1043,6 +1043,8 @@ async function runStreamingCollector() {
       source: "fugle-websocket-streaming",
       error: "fugle api key missing",
       restDisabled: true,
+      formalReady: false,
+      formalReadyReason: "api_key_missing",
     });
     return;
   }
@@ -1072,12 +1074,21 @@ async function runStreamingCollector() {
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
       const freshCount = countFreshCachedQuotes(selection.selected);
+      const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
+      const formalReady = extra.ok !== false
+        && Boolean(ws && ws.readyState === WebSocket.OPEN)
+        && authenticated
+        && requiredChannelsReady
+        && selection.selected.length > 0
+        && forbiddenChunks === 0;
       writeStatus({
         mode: "streaming",
         channel: `websocket:${STREAMING_CHANNEL}`,
         primarySource: "fugle-websocket",
         fallbackSource: "none",
         restDisabled: true,
+        formalReady,
+        formalReadyReason: formalReady ? "streaming_authenticated_required_channels_and_subscription_ready" : "websocket_transport_not_formal_ready",
         streamingUrl: STREAMING_URL,
         streamingChannel: STREAMING_CHANNEL,
         streamingChannels: STREAMING_CHANNELS,

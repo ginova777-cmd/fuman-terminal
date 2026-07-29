@@ -20,9 +20,11 @@ const SELECT_FIELDS = [
   "strategy_label",
   "signal_type",
   "source",
+  "evidence",
   "updated_at",
 ];
 const LEGACY_SELECT_FIELDS = SELECT_FIELDS.filter((field) => field !== "entry_time" && field !== "strategy_label");
+const CORE_SELECT_FIELDS = LEGACY_SELECT_FIELDS.filter((field) => field !== "evidence");
 
 function text(value) {
   return String(value ?? "").trim();
@@ -102,6 +104,32 @@ function normalizeRow(row) {
   };
 }
 
+function parseEvidence(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function sourceRequiresFormalEvidence(source) {
+  const value = text(source).toLowerCase();
+  return value.includes("fugle") || value.includes("daytrade") || value.includes("live_detected");
+}
+
+function formalEvidenceReady(value) {
+  const evidence = parseEvidence(value);
+  const status = text(evidence.source_status ?? evidence.sourceStatus).toLowerCase();
+  const grade = text(evidence.gate_grade ?? evidence.gateGrade ?? evidence.canonical_gate_grade ?? evidence.canonicalGateGrade).toUpperCase();
+  const verdict = text(evidence.formal_entry_speed_verdict ?? evidence.formalEntrySpeedVerdict).toUpperCase();
+  const allowed = evidence.formal_entry_allowed ?? evidence.formalEntryAllowed;
+  const formalAllowed = allowed === true || ["true", "yes", "1"].includes(text(allowed).toLowerCase());
+  return ["ok", "ready"].includes(status) && grade === "A" && verdict === "YES" && formalAllowed;
+}
+
 function rowHasReplay(row) {
   return [row.source, row.strategy, row.signalType].some((value) => text(value).toLowerCase().includes("replay"));
 }
@@ -123,6 +151,7 @@ function normalizeRows(rows, today = todayTaipeiDate(), limit = 100) {
     replay: 0,
     blankRequired: 0,
     invalidSignalType: 0,
+    formalEvidenceNotReady: 0,
   };
   const kept = [];
   for (const raw of sourceRows) {
@@ -145,6 +174,10 @@ function normalizeRows(rows, today = todayTaipeiDate(), limit = 100) {
     }
     if (blankRequiredFields(row).length) {
       filtered.blankRequired += 1;
+      continue;
+    }
+    if ((row.signalType === "detected" || sourceRequiresFormalEvidence(row.source)) && !formalEvidenceReady(raw?.evidence)) {
+      filtered.formalEvidenceNotReady += 1;
       continue;
     }
     kept.push(row);
@@ -211,15 +244,15 @@ async function fetchSupabaseRows(tradeDate, limit) {
     data = null;
   }
   if (!response.ok) {
-    if (/entry_time|strategy_label/i.test(rawText)) {
-      response = await query(LEGACY_SELECT_FIELDS, true);
+    if (/entry_time|strategy_label|evidence/i.test(rawText)) {
+      response = await query(CORE_SELECT_FIELDS, true);
       const fallbackText = await response.text();
       try {
         data = fallbackText ? JSON.parse(fallbackText) : null;
       } catch {
         data = null;
       }
-      if (response.ok) return { ok: true, status: response.status, reason: "legacy_without_entry_time_strategy_label", rawRows: Array.isArray(data) ? data : [] };
+      if (response.ok) return { ok: true, status: response.status, reason: "legacy_without_optional_formal_evidence", rawRows: Array.isArray(data) ? data : [] };
       return {
         ok: false,
         status: response.status,
@@ -268,6 +301,7 @@ function noStore(response) {
 }
 
 async function buildPayload(options = {}) {
+  const explicitTradeDate = Boolean(normalizeTradeDate(options.tradeDate));
   const requestedDate = normalizeTradeDate(options.tradeDate) || todayTaipeiDate();
   let tradeDate = requestedDate;
   const limit = Math.min(Math.max(Number(options.limit) || 100, 1), 200);
@@ -276,7 +310,7 @@ async function buildPayload(options = {}) {
     ? { ok: true, status: 200, reason: "", rawRows: options.rawRows }
     : await fetchSupabaseRows(tradeDate, limit);
   let marketClosedPreviousGood = false;
-  if (!options.rawRows && marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
+  if (!options.rawRows && !explicitTradeDate && marketCalendar?.marketOpen === false && fetched.ok && !fetched.rawRows.length) {
     const latestTradeDate = await fetchLatestAvailableTradeDate(requestedDate);
     if (latestTradeDate && latestTradeDate !== requestedDate) {
       tradeDate = latestTradeDate;
@@ -339,7 +373,7 @@ async function handler(request, response) {
       timeWindow: { from: "09:00:00", to: "13:30:00", timezone: TAIPEI_TIME_ZONE },
       count: 0,
       rows: [],
-      filtered: { nonToday: 0, outsideWindow: 0, replay: 0, blankRequired: 0, invalidSignalType: 0 },
+      filtered: { nonToday: 0, outsideWindow: 0, replay: 0, blankRequired: 0, invalidSignalType: 0, formalEvidenceNotReady: 0 },
       reason: "seven_strategy_daily_history_unhandled_error",
       error: error?.message || String(error),
       updatedAt: new Date().toISOString(),
