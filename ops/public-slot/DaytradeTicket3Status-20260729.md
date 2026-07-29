@@ -108,3 +108,9 @@ checked_at：2026-07-29 16:16（Asia/Taipei；UTC 08:16）
 | Production canonical | 新增 mother contract 欄位仍未部署 | alignment 不能完成 |
 
 本次只讀驗證仍為：mother-pool contract `FAIL`、ticket3 live `FAIL`。因此狀態表維持「程式 contract PASS、production 水源未刷新、不可宣告 A」。
+
+## Readiness consistency hardening（2026-07-29 17:05 Asia/Taipei）
+
+- alignment verifier 現在要求非 `ok/ready` source 的 `websocket_formal_ready` 不得為 `true`。
+- ticket3 live verifier 會將 `source_status=stopped/degraded/not_ready` 搭配 `websocket_formal_ready=true` 回報為 `websocket_formal_ready_true_for_nonready_source`。
+- 靜態 verifier PASS；production readback 明確 FAIL-CLOSED，沒有把過期 readiness 當成可進場證據。

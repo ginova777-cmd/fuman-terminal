@@ -70,6 +70,8 @@ async function main() {
         ];
         const missingFields = requiredFields.filter((field) => !Object.prototype.hasOwnProperty.call(payload, field));
         if (REQUIRE_LIVE && missingFields.length) issues.push("live_missing_fields:" + missingFields.join(","));
+        const sourceStatus = String(row.status || "").toLowerCase();
+        if (REQUIRE_LIVE && !["ok", "ready"].includes(sourceStatus) && payload.websocket_formal_ready === true) issues.push("websocket_formal_ready_true_for_nonready_source");
         live = {
           sourceStatus: row.status || "",
           updatedAt: row.updated_at || "",

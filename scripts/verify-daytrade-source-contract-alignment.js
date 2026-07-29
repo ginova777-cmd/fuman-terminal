@@ -254,6 +254,7 @@ function isSourceFailClosed(source) {
   return ["ok", "degraded", "stopped", "not_ready"].includes(source.status)
     && source.daytradeGateGrade !== "A"
     && source.formalEntryAllowed === false
+    && source.websocketFormalReady !== true
     && (source.scannerCanRunOpening === true || message.includes("formal entry not allowed") || message.includes("off-session"))
     && source.rateLimitStatus !== "rate_limited";
 }
