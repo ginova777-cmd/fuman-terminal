@@ -10,14 +10,14 @@
 | --- | --- | --- | --- |
 | 07:00 暖機 1 分 K | REST seed 只做低頻補洞，WebSocket candles 持續增量；不以補跑冒充自然證據 | 程式 contract PASS；production 今日自然 evidence 尚未閉環 | 下一個交易日讀 07:00 natural evidence |
 | 全市場普通股母池 | active common stock 全量暖機，排除 ETF、權證、停牌、黑名單，再動態排序 | 程式 contract PASS；最後 live evidence active=1664，但 freshness 仍需自然 writer readback | 確認 full-market evidence 與 mother pool 同日 |
-| Mother pool 300 | full market → dynamic mother pool，固定 300 檔，freshness-first | 程式 contract PASS；最後 payload 有 300 檔，production view/eligibility 仍需核對 | REST 讀取 rows=300 且 coverage >=0.80 |
-| Priority TOP40 | 從 mother pool 排名取 40 檔，作為高頻優先，不是全市場唯一入口 | 最後 live 40/40、fresh coverage=1；formal gate 仍被 canonical contract 擋住 | canonical/unattended 同步回讀 40/40 |
+| Mother pool 300 | full market → dynamic mother pool，固定 300 檔，freshness-first | REST 實際 rows=300；mother freshness=0，hard gate FAIL | 下一次自然 writer 使 coverage >=0.80 |
+| Priority TOP40 | 從 mother pool 排名取 40 檔，作為高頻優先，不是全市場唯一入口 | REST 實際 rows=40；priority freshness=1，但不能單獨提升總 gate | canonical/unattended 同步回讀 40/40 與 formal freshness |
 | 盤中新股動態進池 | 漲幅、MA5/10/35、量能放大、量比 >=2、成交量 top100、價格 10~1000 等規則 | 程式與 static verifier PASS；不可由舊快照補成今日候選 | 交易時段確認候選與母池更新 evidence |
-| WebSocket source | 最多 2 條連線、trades/aggregates/candles、REST disabled、單例 collector、狀態年齡 <=300 秒 | 程式 contract PASS；source writer 已加 formal freshness hard gate | 水源主機自然執行並回讀 formal_ready=true |
-| 09:01 專用 1 分 K | dedicated daytrade intraday_1m；必要時 quote-derived 但必須標 source；缺證據即 fail-closed | contract PASS；尚無可宣告的本日自然 09:01 evidence | 讀到 trade_date、candle_time、high、low、source payload |
-| Formal gate | 只允許 fugle_daytrade_source；不得用 shared/fallback 提升 A | 最後 canonical/unattended 為 D/not_ready，formal_entry_allowed=false，屬正確 fail-closed | canonical、unattended、source_status 三層欄位一致 |
+| WebSocket source | 最多 2 條連線、trades/aggregates/candles、REST disabled、單例 collector、狀態年齡 <=300 秒 | local transport contract PASS；production source 最後為 stopped，不能代替自然 streaming evidence | 水源主機自然執行並回讀 formal_ready=true |
+| 09:01 專用 1 分 K | dedicated daytrade intraday_1m；必要時 quote-derived 但必須標 source；缺證據即 fail-closed | contract PASS；production 缺 `required/ready/trade_date/schema` 自然欄位 | 讀到 trade_date、candle_time、high、low、source payload |
+| Formal gate | 必須同時通過 mother=300、mother freshness>=0.80、formal=40、formal freshness>=0.95、quote age<=120；不得用 shared/fallback 提升 A | canonical/unattended 為 D/not_ready，formal_entry_allowed=false，正確 fail-closed | canonical、unattended、source_status 三層欄位一致 |
 | Futopt / TXF | dedicated daytrade futopt source；股票期貨與 TXF 分層，08:45 baseline 不可猜測 | runtime 有股票期貨 rows，但 production canonical 曾讀到 not_required/舊資料 | 下一次自然 08:45 驗證 ready 與 baseline |
-| 三個正式 view | mother_pool=300、priority_top40=40、formal_priority_top40=40；REST HTTP 200 且 rows>0 | 靜態 contract PASS；production freshness/readback 尚未完整閉環 | 三個 endpoint 逐一讀 rows 與 trade_date |
+| 三個正式 view | mother_pool=300、priority_top40=40、formal_priority_top40=40；REST HTTP 200 且 rows>0 | REST 實際 rows=`300 / 40 / 40`；freshness=`0 / 0`，formal max age=`192664s`，不可正式掃描 | 下一次自然 writer 回水後重讀 rows、trade_date、freshness |
 | Fail-closed / previous good | source 未 A 不更新 latest、不寫空結果、不讓 degraded/NO 進 detected history | 已有 writer 與 watchdog guard，最後 evidence preserve_previous_good=true | 驗證 blocked receipt 與 latest pointer 未更新 |
 
 ## 已驗證
