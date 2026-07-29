@@ -913,10 +913,11 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     const ma5 = firstNumber(intraday.ma5, intraday.sma5);
     const ma10 = firstNumber(intraday.ma10, intraday.sma10);
     const ma35 = firstNumber(intraday.ma35, intraday.sma35);
-    const maRising = boolValue(intraday.ma5_rising) && boolValue(intraday.ma10_rising) && boolValue(intraday.ma35_rising);
-    const bullish = boolValue(intraday.ma5_ma10_ma35_bullish)
-      || (ma5 > 0 && ma10 > 0 && ma35 > 0 && ma5 > ma10 && ma10 > ma35)
-      || maRising;
+    const maValuesReady = ma5 > 0 && ma10 > 0 && ma35 > 0;
+    const maAlignment = maValuesReady && ma5 > ma10 && ma10 > ma35;
+    const reportedBullish = boolValue(intraday.ma5_ma10_ma35_bullish);
+    // Rising averages alone do not prove bullish alignment. Require actual values.
+    const bullish = maValuesReady && (reportedBullish || maAlignment);
     const recent1mVolumeTrend = String(intraday.recent_1m_volume_trend || intraday.volume_trend || "").toLowerCase();
     const recent1mVolumeNotShrinking = ["expanding", "increasing", "up", "stable", "non_decreasing", "not_shrinking"].includes(recent1mVolumeTrend);
     const payload = quoteMap.get(symbol)?.payload || {};
@@ -951,6 +952,8 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
       ma5,
       ma10,
       ma35,
+      maValuesReady,
+      maAlignment,
       ma5Ma10Ma35Bullish: bullish,
       volumeExpanding,
       gainAbove2: metrics.changePercent > 2,
@@ -986,6 +989,11 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     universe: "full_market_active_common_stock",
     activeSymbols: activeSymbols.length,
     freshQuoteSymbols: fresh.length,
+    freshQuoteCoverage120s: activeSymbols.length ? Number((fresh.length / activeSymbols.length).toFixed(4)) : 0,
+    freshIntraday1mSymbols: fresh.filter((row) => row.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS).length,
+    freshIntraday1mCoverage: activeSymbols.length
+      ? Number((fresh.filter((row) => row.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS).length / activeSymbols.length).toFixed(4))
+      : 0,
     bullishGainVolumeCandidateCount: bullish.length,
     volumeSurgeTop100CandidateCount: volumeSurgeTop100.length,
     bullishGainVolumeCandidates: bullish.sort((a, b) => b.changePercent - a.changePercent || b.totalVolume - a.totalVolume).slice(0, 100).map(compact),
@@ -3373,7 +3381,7 @@ async function tick() {
   }
   const futoptRows = await fetchFutoptRows();
   const futoptPreopenBaseline = await captureFutoptPreopenBaseline(futoptRows);
-  const intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
+  let intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
     activeSymbols,
     dailyVolumeMap,
     quoteMap,
@@ -3423,6 +3431,13 @@ async function tick() {
   nextState = applyQuoteNotFoundState(nextState, fetchResult.errors);
   writeWriterState(nextState);
 
+  // Recompute after the current quote batch has been merged so evidence and persisted quotes share one loop.
+  intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
+    activeSymbols,
+    dailyVolumeMap,
+    quoteMap,
+    intradayMap,
+  });
   const result = computeStats({
     activeSymbols,
     priorityRows,
