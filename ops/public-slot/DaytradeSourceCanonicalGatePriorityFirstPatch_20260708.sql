@@ -212,6 +212,17 @@ futopt_snapshot as (
     end as raw_futopt_reason
   from public.fugle_daytrade_futopt_quotes_live
 ),
+mother_pool_health as (
+  select
+    coalesce(mother_pool_symbols, 0)::integer as mother_pool_symbols,
+    coalesce(mother_fresh_quote_coverage_120s, 0)::numeric as mother_fresh_quote_coverage_120s,
+    coalesce(formal_priority_symbols, 0)::integer as formal_priority_symbols,
+    coalesce(formal_fresh_quote_coverage_120s, 0)::numeric as formal_fresh_quote_coverage_120s,
+    coalesce(formal_max_quote_age_seconds, 999999)::integer as formal_max_quote_age_seconds,
+    coalesce(formal_scope, 'mother_pool_300_rotating_deep_scan')::text as formal_scope
+  from public.v_fugle_daytrade_mother_pool_contract_health
+  limit 1
+),
 normalized as (
   select
     coalesce(source_name, 'fugle_daytrade_source') as source_name,
@@ -229,6 +240,12 @@ normalized as (
     coalesce((payload->>'priority_fresh_quote_coverage_120s')::numeric, 0) as priority_fresh_quote_coverage_120s,
     coalesce((payload->>'priority_fresh_quotes_120s')::integer, 0) as priority_fresh_quotes_120s,
     coalesce((payload->>'priority_pool_symbols')::integer, 0) as priority_pool_symbols,
+    mother_pool_health.mother_pool_symbols,
+    mother_pool_health.mother_fresh_quote_coverage_120s,
+    mother_pool_health.formal_priority_symbols,
+    mother_pool_health.formal_fresh_quote_coverage_120s,
+    mother_pool_health.formal_max_quote_age_seconds,
+    mother_pool_health.formal_scope,
     coalesce((payload->>'fresh_quote_coverage_120s')::numeric, 0) as fresh_quote_coverage_120s,
     coalesce((payload->>'fresh_quotes_120s')::integer, 0) as fresh_quotes_120s,
     coalesce((payload->>'active_symbols')::integer, 0) as active_symbols,
@@ -267,6 +284,7 @@ normalized as (
     end as current_phase
   from status_row
   cross join current_clock
+  cross join mother_pool_health
 ),
 scored as (
   select
@@ -303,7 +321,13 @@ scored as (
       and writer_formal_entry_allowed is true
       and scanner_can_run_opening is true
       and priority_fresh_quote_coverage_120s >= 0.95
+      and mother_pool_symbols = 300
+      and mother_fresh_quote_coverage_120s >= 0.80
+      and formal_priority_symbols = 40
+      and formal_fresh_quote_coverage_120s >= 0.95
+      and formal_max_quote_age_seconds <= 120
       and quote_age_seconds <= 90
+      and formal_scope = 'mother_pool_300_rotating_deep_scan'
       and rate_limit_status not in ('rate_limited', 'cooldown')
     ) as canonical_ready,
     (
@@ -316,6 +340,12 @@ scored as (
       + (websocket_mode = 'streaming')::integer
       + (quote_transport like 'websocket_%')::integer
       + (websocket_rest_disabled is true)::integer
+      + (mother_pool_symbols = 300)::integer
+      + (mother_fresh_quote_coverage_120s >= 0.80)::integer
+      + (formal_priority_symbols = 40)::integer
+      + (formal_fresh_quote_coverage_120s >= 0.95)::integer
+      + (formal_max_quote_age_seconds <= 120)::integer
+      + (formal_scope = 'mother_pool_300_rotating_deep_scan')::integer
       + ((websocket_streaming_channels ? 'trades') and (websocket_streaming_channels ? 'aggregates') and (websocket_streaming_channels ? 'candles'))::integer
       + (coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300)::integer
       + (writer_formal_entry_allowed is true)::integer
@@ -344,6 +374,12 @@ projected as (
       when source_status <> 'ok' then 'source_status_not_ok'
       when daytrade_gate_grade <> 'A' then 'daytrade_gate_not_a'
       when daytrade_source_speed_ok is not true then 'daytrade_source_speed_not_ok'
+      when formal_scope <> 'mother_pool_300_rotating_deep_scan' then 'formal_scope_not_mother_pool_300_rotating_deep_scan'
+      when mother_pool_symbols < 300 then 'mother_pool_below_target_300'
+      when mother_fresh_quote_coverage_120s < 0.80 then 'mother_pool_quote_coverage_low'
+      when formal_priority_symbols <> 40 then 'formal_priority_top40_not_40'
+      when formal_fresh_quote_coverage_120s < 0.95 then 'formal_priority_quote_coverage_low'
+      when formal_max_quote_age_seconds > 120 then 'formal_priority_quote_age_too_old'
       when websocket_formal_ready is not true then 'websocket_not_formal_ready'
       when writer_formal_entry_allowed is not true then 'formal_entry_not_allowed'
       when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
@@ -389,7 +425,7 @@ select
   rate_limit_status,
   phase,
   scorecard_required_ok_count,
-  24 as scorecard_required_count,
+  29 as scorecard_required_count,
   case when canonical_ready then 'YES' else 'NO' end as formal_entry_speed_verdict,
   canonical_ready as formal_entry_allowed,
   daytrade_source_speed_ok,
@@ -407,7 +443,7 @@ select
     'source_family', 'daytrade_dedicated',
     'daytrade_source_name', 'fugle_daytrade_source',
     'shared_source_name', 'fuman_shared_source',
-    'formal_pool_scope', 'priority_top40',
+    'formal_pool_scope', 'mother_pool_300_rotating_deep_scan',
     'full_market_coverage_blocking', false
   ) as payload,
   formal_quote_source,
@@ -432,7 +468,7 @@ select
   'daytrade_dedicated'::text as source_family,
   'fugle_daytrade_source'::text as daytrade_source_name,
   'fuman_shared_source'::text as shared_source_name,
-  'priority_top40'::text as formal_pool_scope,
+  'mother_pool_300_rotating_deep_scan'::text as formal_pool_scope,
   false::boolean as full_market_coverage_blocking,
   case when futopt_contract_required then futopt_snapshot.raw_futopt_gate_status else 'not_required' end as futopt_gate_status,
   futopt_snapshot.futopt_txf_ok as futopt_txf_ok,
@@ -442,7 +478,13 @@ select
   futopt_snapshot.futopt_contract_rows,
   futopt_snapshot.latest_futopt_updated_at,
   futopt_snapshot.latest_txf_updated_at,
-  case when futopt_contract_required then futopt_snapshot.raw_futopt_reason else 'not_required' end as futopt_reason
+  case when futopt_contract_required then futopt_snapshot.raw_futopt_reason else 'not_required' end as futopt_reason,
+  mother_pool_symbols,
+  mother_fresh_quote_coverage_120s,
+  formal_priority_symbols,
+  formal_fresh_quote_coverage_120s,
+  formal_max_quote_age_seconds,
+  formal_scope
 from projected
 cross join futopt_snapshot;
 
@@ -521,7 +563,13 @@ select
   futopt_contract_rows,
   latest_futopt_updated_at,
   latest_txf_updated_at,
-  futopt_reason
+  futopt_reason,
+  mother_pool_symbols,
+  mother_fresh_quote_coverage_120s,
+  formal_priority_symbols,
+  formal_fresh_quote_coverage_120s,
+  formal_max_quote_age_seconds,
+  formal_scope
 from public.v_fugle_daytrade_canonical_gate;
 
 grant select on public.v_fugle_daytrade_canonical_gate to anon, authenticated, service_role;

@@ -33,6 +33,7 @@ async function main() {
   const root = path.join(__dirname, "..");
   const collector = readText(path.join(root, "scripts", "fugle-websocket-collector.js"));
   const writer = readText(path.join(root, "scripts", "run-daytrade-source-writer.js"));
+  const canonicalGateSql = readText(path.join(root, "ops", "public-slot", "DaytradeSourceCanonicalGatePriorityFirstPatch_20260708.sql"));
   const writerWrapper = readText(path.join(root, "ops", "public-slot", "Run-DaytradeSourceWriter.ps1"));
   const motherPoolSql = readText(path.join(root, "ops", "public-slot", "DaytradeMotherPoolContractViews_20260709.sql"));
   const issues = [];
@@ -42,6 +43,9 @@ async function main() {
     websocketRotation: collector.includes("STREAMING_ROTATION_INTERVAL_MS") && collector.includes("rotationCycle") && collector.includes("rotatingSelectedCount"),
     websocketFreshnessEvidence: collector.includes("websocketLastMessageAt") && collector.includes("freshSymbols120s") && collector.includes("messageAgeSeconds <= 300"),
     dedicated0901Evidence: writer.includes("ensureOpening0901CandleEvidence") && writer.includes("opening_0901_candle_not_ready") && writer.includes("fugle_daytrade_intraday_1m"),
+    formalScopeContract: writer.includes('formal_gate_scope: "mother_pool_300_rotating_deep_scan"')
+      && writer.includes('formal_scope: "mother_pool_300_rotating_deep_scan"')
+      && canonicalGateSql.includes("'formal_pool_scope', 'mother_pool_300_rotating_deep_scan'"),
     writerEnsuresWebSocketCollector: writerWrapper.includes("Ensure-FugleWebSocketCollector") && writerWrapper.includes("Get-CimInstance Win32_Process") && writerWrapper.includes("FUGLE_STREAMING_CHANNELS") && writerWrapper.includes("FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"),
     noFormalSharedFallback: writer.includes("formal_source_alignment_ok") && writer.includes("opening0901Ready"),
     motherPoolSqlSafeWarmingContract: motherPoolSql.includes("create or replace view public.v_fugle_daytrade_mother_pool")

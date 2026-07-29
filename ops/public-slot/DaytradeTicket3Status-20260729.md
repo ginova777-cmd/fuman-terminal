@@ -41,7 +41,7 @@
 
 ## Release Owner 下一步
 
-1. 將 `30888843` 同步到真正的 daytrade writer 主機；不要啟動第二個 writer。
+1. 將本輪 Release HEAD 同步到真正的 daytrade writer/Supabase SQL；不要啟動第二個 writer。
 2. 等下一次自然排程，不手動補造 07:00/08:45/09:01 evidence。
 3. 在正式 repo 執行：
    - `npm run verify:daytrade-source-contract-alignment`
@@ -72,3 +72,25 @@ checked_at：2026-07-29 16:16（Asia/Taipei；UTC 08:16）
 本輪 verifier 結果：`verify:daytrade-ticket3-source -- --live --require-live` FAIL（缺 WebSocket/09:01 live fields）；`verify:daytrade-source-contract-alignment` FAIL_CLOSED_ALIGNED；`verify:daytrade-mother-pool-contract` FAIL；`verify:fugle-websocket-sources` local transport PASS。
 
 因此目前仍是「程式 contract 完成、production natural evidence 未閉環」，不能宣告 A 或 unattended YES。
+
+## 工單 3 新要求 hardening（2026-07-29 16:50）
+
+本輪已補齊「全市場 → mother 300 → priority/formal TOP40」的正式 contract：
+
+| 項目 | 實作方式 | 目前狀態 | 下一個驗收 |
+| --- | --- | --- | --- |
+| Mother pool cardinality | verifier 直接讀母池最多 301 筆並要求實際 rows=300 | 程式 PASS；live rows=300 | 下一次自然 writer 仍須 freshness >=0.80 |
+| Mother pool hard gate | canonical A 要求 mother=300 且 freshness >=0.80 | SQL patch 已完成；production 尚未部署 | 先套 mother-pool views，再套 canonical gate SQL |
+| Formal pool hard gate | formal=40、freshness >=0.95、max quote age <=120s | SQL patch 已完成；production 尚未部署 | live canonical/unattended/source 三層一致 |
+| Formal scope | `mother_pool_300_rotating_deep_scan`；TOP40 只作速度優先 | writer、SQL、verifier 已一致 | 自然 writer 回寫同一 scope |
+| Fail-closed reason | mother/formal 不足各自回固定 reason code | verifier 已支援 | readback 不得只回泛用 `not_ready` |
+
+本輪實際驗證：
+
+- `verify:daytrade-ticket3-source`：PASS，static checks 全部通過。
+- `verify:daytrade-source-writer`：PASS，mother min/max=300、formal limit=40、batch=40、concurrency=1。
+- `verify:daytrade-mother-pool-contract`：FAIL-CLOSED（實際 mother rows=300、priority=40、formal=40；mother fresh=0、formal fresh=0、formal max age=192664s）。
+- `verify:daytrade-ticket3-source -- --live --require-live`：FAIL（source 最後更新 13:33:26，缺 WebSocket/09:01 live evidence 欄位）。
+- `verify:daytrade-source-contract-alignment`：目前 production canonical view 尚未包含新增欄位，REST 回 HTTP 400 `column v_fugle_daytrade_canonical_gate.mother_pool_symbols does not exist`；這是 SQL 尚未部署的明確 blocker。
+
+結論：本輪已完成程式與 SQL contract hardening；production 水源 freshness、canonical view SQL deploy、自然 09:01 evidence 尚未完成，因此仍不得宣告正式 A 或 unattended YES。

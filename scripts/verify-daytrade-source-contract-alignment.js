@@ -144,6 +144,12 @@ function normalizeSourceStatus(row) {
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(payload.priority_fresh_quote_coverage_120s),
+    motherPoolSymbols: numberValue(payload.mother_pool_symbols),
+    motherFreshQuoteCoverage120s: numberValue(payload.mother_pool_fresh_quote_coverage_120s ?? payload.mother_pool_fresh_coverage_120s),
+    formalPrioritySymbols: numberValue(payload.formal_priority_symbols ?? payload.formal_daytrade_priority_symbols ?? payload.priority_pool_symbols),
+    formalFreshQuoteCoverage120s: numberValue(payload.formal_fresh_quote_coverage_120s ?? payload.priority_top40_fresh_quote_coverage_120s ?? payload.priority_fresh_quote_coverage_120s),
+    formalMaxQuoteAgeSeconds: numberValue(payload.formal_max_quote_age_seconds ?? payload.priority_max_quote_age_seconds, 999999),
+    formalScope: stringValue(payload.formal_scope || payload.formal_gate_scope),
     hasPriorityPoolSymbols: hasValue(payload, "priority_pool_symbols"),
     hasPriorityFreshQuoteCoverage120s: hasValue(payload, "priority_fresh_quote_coverage_120s"),
     hasScannerCanRunOpening: hasValue(payload, "scanner_can_run_opening"),
@@ -175,6 +181,12 @@ function normalizeSourceStatus(row) {
 
 function normalizeGate(row) {
   return {
+    motherPoolSymbols: numberValue(row?.mother_pool_symbols),
+    motherFreshQuoteCoverage120s: numberValue(row?.mother_fresh_quote_coverage_120s),
+    formalPrioritySymbols: numberValue(row?.formal_priority_symbols),
+    formalFreshQuoteCoverage120s: numberValue(row?.formal_fresh_quote_coverage_120s),
+    formalMaxQuoteAgeSeconds: numberValue(row?.formal_max_quote_age_seconds, 999999),
+    formalScope: stringValue(row?.formal_scope),
     gateGrade: stringValue(row?.canonical_gate_grade || row?.daytrade_gate_grade || row?.gate_grade || row?.gate),
     gateStatus: stringValue(row?.canonical_gate_status || row?.gate_status || row?.status),
     reason: stringValue(row?.canonical_gate_reason || row?.reason || row?.canonical_reason || row?.scanner_block_reason),
@@ -221,6 +233,12 @@ function isSourceA(source) {
     && source.hasPriorityPoolSymbols === true
     && source.priorityPoolSymbols === 40
     && source.hasPriorityFreshQuoteCoverage120s === true
+    && source.motherPoolSymbols === 300
+    && source.motherFreshQuoteCoverage120s >= 0.80
+    && source.formalPrioritySymbols === 40
+    && source.formalFreshQuoteCoverage120s >= 0.95
+    && source.formalMaxQuoteAgeSeconds <= 120
+    && source.formalGateScope === "mother_pool_300_rotating_deep_scan"
     && source.priorityFreshQuoteCoverage120s >= 0.95
     && source.quoteAgeSeconds <= 90
     && source.formalEntryAllowed === true
@@ -246,6 +264,12 @@ function isGateA(gate) {
     && gate.hasCanonicalGateReason === true
     && gate.hasPriorityPoolSymbols === true
     && gate.priorityPoolSymbols === 40
+    && gate.motherPoolSymbols === 300
+    && gate.motherFreshQuoteCoverage120s >= 0.80
+    && gate.formalPrioritySymbols === 40
+    && gate.formalFreshQuoteCoverage120s >= 0.95
+    && gate.formalMaxQuoteAgeSeconds <= 120
+    && gate.formalScope === "mother_pool_300_rotating_deep_scan"
     && gate.hasPriorityFreshQuoteCoverage120s === true
     && gate.priorityFreshQuoteCoverage120s >= 0.95
     && gate.hasScannerCanRunOpening === true
@@ -259,7 +283,7 @@ function isGateFailClosed(gate) {
   return gate.gateGrade !== "A"
     && gate.hasCanonicalGateReason === true
     && gate.gateStatus === "not_ready"
-    && ["off_session_not_formal_entry", "formal_entry_not_allowed", "source_status_not_ok", "websocket_not_formal_ready"].includes(gate.reason)
+    && ["off_session_not_formal_entry", "formal_entry_not_allowed", "source_status_not_ok", "websocket_not_formal_ready", "mother_pool_below_target_300", "mother_pool_quote_coverage_low", "formal_priority_top40_not_40", "formal_priority_quote_coverage_low", "formal_priority_quote_age_too_old", "formal_scope_not_mother_pool_300_rotating_deep_scan"].includes(gate.reason)
     && gate.formalEntrySpeedVerdict === "NO";
 }
 
@@ -325,7 +349,8 @@ function writerCodeRegressionChecks() {
     runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
       && source.includes('if (!prev)'),
     fullMarketMotherPoolRotation: source.includes('daytradeMotherPoolSymbols')
-      && source.includes('mother_pool_rotation_priority_top40'),
+      && source.includes('mother_pool_300_rotating_deep_scan'),
+    formalGateScopeUsesMotherPool: source.includes('formal_gate_scope: "mother_pool_300_rotating_deep_scan"'),
     motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
       && source.includes('mother_pool_fresh_coverage_120s'),    stockTickerSchemaCompatible: source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
@@ -392,6 +417,12 @@ async function main() {
     "intraday_1m_stale_seconds",
     "priority_pool_symbols",
     "priority_fresh_quote_coverage_120s",
+    "mother_pool_symbols",
+    "mother_fresh_quote_coverage_120s",
+    "formal_priority_symbols",
+    "formal_fresh_quote_coverage_120s",
+    "formal_max_quote_age_seconds",
+    "formal_scope",
     "scanner_can_run_opening",
     "quote_age_seconds",
     "fresh_quotes_120s",
@@ -442,7 +473,7 @@ async function main() {
     if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
-        if (item.formalGateScope !== "priority_top40") issues.push("source_formal_gate_scope_not_priority_top40");
+        if (item.formalGateScope !== "mother_pool_300_rotating_deep_scan") issues.push("source_formal_gate_scope_not_mother_pool_300_rotating_deep_scan");
         if (item.formalSourceName !== SOURCE_NAME) issues.push("source_formal_source_name_mismatch");
         if (!item.formalGateSource.includes("v_fugle_daytrade_canonical_gate")) issues.push("source_formal_gate_source_missing_canonical_gate");
         if (item.formalQuoteSource !== "fugle_daytrade_quotes_live") issues.push("source_formal_quote_source_mismatch");
@@ -459,6 +490,12 @@ async function main() {
 
   const layerAlignmentChecks = [
     ["gate_grade", sourceStatus.gateGrade, canonicalGate.gateGrade, unattendedGate.gateGrade],
+    ["mother_pool_symbols", sourceStatus.motherPoolSymbols, canonicalGate.motherPoolSymbols, unattendedGate.motherPoolSymbols],
+    ["mother_fresh_quote_coverage_120s", sourceStatus.motherFreshQuoteCoverage120s, canonicalGate.motherFreshQuoteCoverage120s, unattendedGate.motherFreshQuoteCoverage120s],
+    ["formal_priority_symbols", sourceStatus.formalPrioritySymbols, canonicalGate.formalPrioritySymbols, unattendedGate.formalPrioritySymbols],
+    ["formal_fresh_quote_coverage_120s", sourceStatus.formalFreshQuoteCoverage120s, canonicalGate.formalFreshQuoteCoverage120s, unattendedGate.formalFreshQuoteCoverage120s],
+    ["formal_max_quote_age_seconds", sourceStatus.formalMaxQuoteAgeSeconds, canonicalGate.formalMaxQuoteAgeSeconds, unattendedGate.formalMaxQuoteAgeSeconds],
+    ["formal_scope", sourceStatus.formalScope, canonicalGate.formalScope, unattendedGate.formalScope],
     ["gate_status", sourceStatus.gateStatus, canonicalGate.gateStatus, unattendedGate.gateStatus],
     ["formal_entry_speed_verdict", sourceStatus.formalEntrySpeedVerdict, canonicalGate.formalEntrySpeedVerdict, unattendedGate.formalEntrySpeedVerdict],
     ["formal_entry_allowed", sourceStatus.formalEntryAllowed, canonicalGate.formalEntryAllowed, unattendedGate.formalEntryAllowed],

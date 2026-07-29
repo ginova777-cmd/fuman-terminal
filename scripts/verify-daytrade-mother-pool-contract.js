@@ -86,7 +86,9 @@ async function main() {
   ];
 
   const [motherRows, formalRows, priorityRows, motherStarRows, priorityStarRows, healthRows] = await Promise.all([
-    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,mother_rank,mother_source,mother_pool_rule_version,mother_readiness_status,quote_age_seconds,in_formal_priority_top40&order=mother_rank.asc&limit=5"),
+    // A five-row sample proves only that the view is non-empty. Read 301 rows
+    // so the contract can prove the actual 300-row mother-pool cardinality.
+    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,mother_rank,mother_source,mother_pool_rule_version,mother_readiness_status,quote_age_seconds,in_formal_priority_top40&order=mother_rank.asc&limit=301"),
     restGet(anonKey, "v_fugle_daytrade_formal_priority_top40?select=symbol,mother_rank,mother_readiness_status,quote_age_seconds&order=mother_rank.asc&limit=100"),
     restGet(anonKey, "v_fugle_daytrade_priority_top40?select=symbol,mother_pool_rank,mother_readiness_status,quote_age_seconds&order=mother_pool_rank.asc&limit=100"),
     restGet(anonKey, "v_fugle_daytrade_mother_pool?select=*&limit=1"),
@@ -99,6 +101,7 @@ async function main() {
   const priorityContractRow = Array.isArray(priorityStarRows) ? priorityStarRows[0] || {} : {};
   const motherPoolSymbols = numberValue(health.mother_pool_symbols);
   const formalPrioritySymbols = numberValue(health.formal_priority_symbols);
+  const motherViewRows = Array.isArray(motherRows) ? motherRows.length : 0;
   const formalPriorityLimit = numberValue(health.formal_priority_limit, 40);
   const formalMaxMotherRank = numberValue(health.formal_max_mother_rank);
   const priorityTop40Rows = Array.isArray(priorityRows) ? priorityRows.length : 0;
@@ -112,9 +115,8 @@ async function main() {
   if (!motherContractRow || Object.keys(motherContractRow).length === 0) issues.push("mother_pool_star_contract_empty_or_missing");
   if (!priorityContractRow || Object.keys(priorityContractRow).length === 0) issues.push("priority_top40_star_contract_empty_or_missing");
   if (!health || Object.keys(health).length === 0) issues.push("mother_pool_contract_health_empty_or_missing");
-  if (motherPoolSymbols < 300 || motherPoolSymbols > 600) {
-    issues.push(`mother_pool_symbols_${motherPoolSymbols}_outside_300_600`);
-  }
+  if (motherPoolSymbols !== 300) issues.push(`mother_pool_symbols_${motherPoolSymbols}_must_equal_300`);
+  if (motherViewRows !== 300) issues.push(`mother_pool_view_returned_${motherViewRows}_rows_must_equal_300`);
   if (formalPriorityLimit !== 40) issues.push(`formal_priority_limit_${formalPriorityLimit}_must_equal_40`);
   if (formalPrioritySymbols !== 40) issues.push(`formal_priority_symbols_${formalPrioritySymbols}_must_equal_40`);
   if (priorityTop40Rows !== 40) issues.push(`priority_top40_view_returned_${priorityTop40Rows}_rows_must_equal_40`);
@@ -150,7 +152,7 @@ async function main() {
       contractHealth: "v_fugle_daytrade_mother_pool_contract_health",
     },
     readback: {
-      motherRows: motherRows.length,
+      motherRows: motherViewRows,
       formalRows: formalRows.length,
       motherPoolSymbols,
       formalPrioritySymbols,
@@ -170,7 +172,7 @@ async function main() {
       formalScope: health.formal_scope || "",
     },
     samples: {
-      motherPool: motherRows,
+      motherPool: motherRows.slice(0, 5),
       priorityTop40: priorityRows,
       formalPriorityTop40: formalRows,
       motherPoolContractFields: Object.keys(motherContractRow),
