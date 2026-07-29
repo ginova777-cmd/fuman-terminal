@@ -64,6 +64,8 @@
     "apply:daytrade-source-contract-alignment": "node --use-system-ca scripts/apply-daytrade-source-contract-alignment.js",
     "apply:daytrade-mother-pool-contract": "node --use-system-ca scripts/apply-daytrade-mother-pool-contract.js",
     "verify:daytrade-mother-pool-contract": "node --use-system-ca scripts/verify-daytrade-mother-pool-contract.js",
+    "verify:daytrade-full-market-contract": "node --use-system-ca scripts/verify-daytrade-full-market-contract.js",
+    "verify:daytrade-ticket3-source": "node --use-system-ca scripts/verify-daytrade-ticket3-source-contract.js",
     "verify:daytrade-strategy3-closure-live": "node --use-system-ca scripts/verify-daytrade-strategy3-closure-live.js",
     "verify:daytrade-strategy3-closure:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daytrade-strategy3-closure-verify.ps1",
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",

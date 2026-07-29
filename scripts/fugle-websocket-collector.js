@@ -67,6 +67,8 @@ const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
 const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const PRIORITY_SYMBOLS_FILE = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-priority-symbols.json");
+const STREAMING_ROTATION_STATE_FILE = path.join(STATE_DIR, "fugle-ws-streaming-rotation.json");
+const STREAMING_ROTATION_INTERVAL_MS = Math.max(180000, Number(process.env.FUGLE_STREAMING_ROTATION_MS || 300000));
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -359,6 +361,7 @@ function readPrioritySymbols(symbols) {
   const ordered = [];
   const prioritySeen = new Set();
   const priorityOrdered = [];
+  const daytradeOrdered = [];
   const counts = {
     strategy1: 0,
     strategy2: 0,
@@ -397,6 +400,11 @@ function readPrioritySymbols(symbols) {
   };
 
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
+  const daytradePayloadSymbols = payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade || [];
+  for (const value of (Array.isArray(daytradePayloadSymbols) ? daytradePayloadSymbols : [])) {
+    const code = normalizeCode(value?.symbol || value?.code || value);
+    if (/^\d{4}$/.test(code) && universe.has(code) && !daytradeOrdered.includes(code)) daytradeOrdered.push(code);
+  }
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
   addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, { priority: true });
@@ -415,6 +423,7 @@ function readPrioritySymbols(symbols) {
 
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
+    daytradeSymbols: daytradeOrdered,
     allSymbols: ordered,
     counts,
     updatedAt: payload.updatedAt || "",
@@ -955,11 +964,35 @@ function chunkArray(values, size) {
   return out;
 }
 
-function selectStreamingSymbols() {
+function readStreamingRotationState() {
+  const payload = readJson(STREAMING_ROTATION_STATE_FILE, {});
+  return {
+    offset: Number.isFinite(Number(payload?.offset)) ? Math.max(0, Number(payload.offset)) : 0,
+    cycle: Number.isFinite(Number(payload?.cycle)) ? Math.max(0, Number(payload.cycle)) : 0,
+    updatedAt: payload?.updatedAt || "",
+  };
+}
+
+function writeStreamingRotationState(state) {
+  writeJson(STREAMING_ROTATION_STATE_FILE, {
+    offset: Math.max(0, Number(state?.offset) || 0),
+    cycle: Math.max(0, Number(state?.cycle) || 0),
+    updatedAt: nowIso(),
+    rotationIntervalMs: STREAMING_ROTATION_INTERVAL_MS,
+  });
+}
+
+function selectStreamingSymbols(options = {}) {
   const allSymbols = readSymbols();
   const priority = readPrioritySymbols(allSymbols);
   const maxSymbolsBySubscriptionBudget = Math.max(1, Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, STREAMING_CHANNELS.length)));
   const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, maxSymbolsBySubscriptionBudget);
+  const stablePriority = (priority.daytradeSymbols.length ? priority.daytradeSymbols : priority.symbols)
+    .slice(0, Math.min(300, symbolLimit));
+  const stableSet = new Set(stablePriority);
+  const rotatingSymbols = allSymbols.filter((code) => !stableSet.has(code));
+  const rotation = readStreamingRotationState();
+  const offset = rotatingSymbols.length ? rotation.offset % rotatingSymbols.length : 0;
   const seen = new Set();
   const ordered = [];
   const add = (code) => {
@@ -969,15 +1002,31 @@ function selectStreamingSymbols() {
       ordered.push(symbol);
     }
   };
-  for (const code of priority.symbols) add(code);
-  for (const code of allSymbols) add(code);
+  for (const code of stablePriority) add(code);
+  for (let index = 0; index < rotatingSymbols.length && ordered.length < symbolLimit; index += 1) {
+    add(rotatingSymbols[(offset + index) % rotatingSymbols.length]);
+  }
+  const selected = ordered.slice(0, symbolLimit);
+  const rotatingSelectedCount = Math.max(0, selected.length - stablePriority.length);
+  if (options.advance && rotatingSymbols.length && rotatingSelectedCount > 0) {
+    writeStreamingRotationState({
+      offset: (offset + rotatingSelectedCount) % rotatingSymbols.length,
+      cycle: rotation.cycle + 1,
+    });
+  }
   return {
     allSymbols,
     priority,
-    selected: ordered.slice(0, symbolLimit),
+    streamingPrioritySymbols: stablePriority,
+    rotatingSymbols,
+    selected,
     requested: ordered.length,
     symbolLimit,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+    rotationOffset: offset,
+    rotationCycle: rotation.cycle,
+    rotationIntervalMs: STREAMING_ROTATION_INTERVAL_MS,
+    rotatingSelectedCount,
   };
 }
 
@@ -1050,7 +1099,7 @@ async function runStreamingCollector() {
   }
 
   const runOnce = () => new Promise((resolve) => {
-    let selection = selectStreamingSymbols();
+    let selection = selectStreamingSymbols({ advance: true });
     let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     let ws;
     let openedAt = "";
@@ -1072,14 +1121,21 @@ async function runStreamingCollector() {
     let lastSubscribeCycleAt = "";
     let lastSubscribeSignature = "";
     let closed = false;
+    let rotationTimer;
     const writeStreamingStatus = (extra = {}) => {
-      const freshCount = countFreshCachedQuotes(selection.selected);
+      const freshSymbols120s = countFreshCachedQuotes(selection.selected);
+      const freshPrioritySymbols120s = countFreshCachedQuotes(selection.streamingPrioritySymbols);
+      const messageAgeSeconds = lastMessageAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastMessageAt)) / 1000)) : null;
       const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
       const formalReady = extra.ok !== false
         && Boolean(ws && ws.readyState === WebSocket.OPEN)
         && authenticated
         && requiredChannelsReady
         && selection.selected.length > 0
+        && messages > 0
+        && lastMessageAt
+        && Number.isFinite(messageAgeSeconds)
+        && messageAgeSeconds <= 300
         && forbiddenChunks === 0;
       writeStatus({
         mode: "streaming",
@@ -1108,8 +1164,19 @@ async function runStreamingCollector() {
         requestedSymbols: selection.requested,
         allSymbols: selection.allSymbols.length,
         prioritySymbols: selection.priority.symbols.length,
-        priorityFreshCount: freshCount,
+        priorityFreshCount: freshPrioritySymbols120s,
+        freshSymbols120s,
+        freshPrioritySymbols120s,
+        websocketLastMessageAt: lastMessageAt,
+        websocketLastMessageAgeSeconds: messageAgeSeconds,
+        websocketSymbolCount: selection.selected.length,
         prioritySource: selection.priority.source,
+        streamingPrioritySymbols: selection.streamingPrioritySymbols.length,
+        rotatingSymbols: selection.rotatingSymbols.length,
+        rotatingSelectedCount: selection.rotatingSelectedCount,
+        rotationOffset: selection.rotationOffset,
+        rotationCycle: selection.rotationCycle,
+        rotationIntervalMs: selection.rotationIntervalMs,
         priorityFileUpdatedAt: selection.priority.updatedAt,
         priorityDaytradeSymbols: selection.priority.counts.daytrade,
         priorityTerminalSymbols: selection.priority.counts.terminalPriority,
@@ -1148,7 +1215,7 @@ async function runStreamingCollector() {
     };
     const subscribe = () => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      selection = selectStreamingSymbols();
+      selection = selectStreamingSymbols({ advance: false });
       chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
       const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selected.join(",")}`;
       if (lastSubscribeSignature && signature === lastSubscribeSignature) {
@@ -1227,6 +1294,7 @@ async function runStreamingCollector() {
       });
       ws.addEventListener("close", () => {
         closed = true;
+        if (rotationTimer) clearInterval(rotationTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
@@ -1238,6 +1306,15 @@ async function runStreamingCollector() {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
+      rotationTimer = setInterval(() => {
+        if (closed) {
+          clearInterval(rotationTimer);
+          return;
+        }
+        if (openedAt && Date.now() - Date.parse(openedAt) >= STREAMING_ROTATION_INTERVAL_MS) {
+          ws.close(1000, "full-market rotation");
+        }
+      }, Math.min(30000, STREAMING_STATUS_MS));
     } catch (error) {
       writeStreamingStatus({ ok: false, websocketError: error?.message || String(error) });
       resolve();

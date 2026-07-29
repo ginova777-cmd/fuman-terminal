@@ -2275,7 +2275,12 @@ function readWebSocketStatusSummary() {
     && requiredChannels.every((channel) => streamingChannels.includes(channel))
     && numberValue(status.subscribedSymbols) > 0
     && numberValue(status.subscribeForbiddenChunks) === 0
-    && statusAgeSeconds <= 300;
+    && numberValue(status.streamingMessages) > 0
+    && Boolean(status.lastMessageAt || status.websocketLastMessageAt)
+    && ageSeconds(status.lastMessageAt || status.websocketLastMessageAt) <= 300;
+  const lastMessageAt = status.lastMessageAt || status.websocketLastMessageAt || "";
+  const lastMessageAgeSeconds = lastMessageAt ? ageSeconds(lastMessageAt) : 999999;
+  const freshSymbols120s = numberValue(status.freshSymbols120s ?? status.websocketFreshSymbols120s);
   return {
     ok: status.ok !== false,
     mode: status.mode || '',
@@ -2289,6 +2294,10 @@ function readWebSocketStatusSummary() {
     subscribedChannels: numberValue(status.subscribedChannels),
     streamingMessages: numberValue(status.streamingMessages),
     streamingQuotes: numberValue(status.streamingQuotes),
+    lastMessageAt,
+    lastMessageAgeSeconds,
+    symbolCount: numberValue(status.websocketSymbolCount ?? status.subscribedSymbols),
+    freshSymbols120s,
     priorityDaytradeSymbols: numberValue(status.priorityDaytradeSymbols),
     priorityFileUpdatedAt: status.priorityFileUpdatedAt || '',
     statusAgeSeconds,
@@ -2449,7 +2458,7 @@ async function fetchQuoteBatch(symbols) {
   };
 }
 
-function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, fetchResult, state, supplementalMaps = {} }) {
+function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, opening0901Evidence = {}, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
   const runtimePriority = readRuntimePrioritySummary(activeSymbols);
   const webSocketStatus = readWebSocketStatusSummary();
@@ -2461,6 +2470,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const after0830 = ["preopen_prepare_0830_0844", "opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0845 = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0900 = ["opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
+  const opening0901Required = after0900 && taipeiMinutes() >= (9 * 60 + 2);
+  const opening0901Ready = !opening0901Required || Boolean(opening0901Evidence.ready);
 
   for (const row of fetchedRows) quoteMap.set(row.symbol, row);
   const activeSet = new Set(activeSymbols.map((row) => row.symbol));
@@ -2591,7 +2602,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required)
     && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!after0845 || futoptGateReady)
-    && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
+    && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS)
+    && opening0901Ready;
   const scannerCanRunPreopen = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
@@ -2700,6 +2712,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   if (!offSession && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
   if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
   if (!offSession && after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) failedChecks.push('intraday_1m_not_ready');
+  if (!offSession && opening0901Required && !opening0901Ready) failedChecks.push('opening_0901_candle_not_ready');
   if (!offSession && after0845 && futoptMapped < MIN_FUTOPT_MAPPED) failedChecks.push('futopt_stock_mapping_not_ready');
   if (!offSession && after0845 && !futoptGateReady) failedChecks.push('futopt_gate_not_ready');
   if (!offSession && !webSocketStatus.formalReady) failedChecks.push('websocket_formal_not_ready');
@@ -2719,7 +2732,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const quoteSourceDaytradeOk = quoteStatus === "ready" && latestQuoteAge <= MAX_QUOTE_AGE_SECONDS;
   const intraday1mSourceDaytradeOk = !after0900
     || (today1mStatus === "ready" && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
-  const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk;
+  const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk && opening0901Ready;
   const formalPrioritySpeedOk = priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && priorityPoolSymbols >= minFormalPrioritySymbols;
   const payload = {
@@ -2779,6 +2792,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     websocket_subscribed_channels: webSocketStatus.subscribedChannels,
     websocket_streaming_messages: webSocketStatus.streamingMessages,
     websocket_streaming_quotes: webSocketStatus.streamingQuotes,
+    websocket_last_message_at: webSocketStatus.lastMessageAt,
+    websocket_last_message_age_seconds: webSocketStatus.lastMessageAgeSeconds,
+    websocket_symbol_count: webSocketStatus.symbolCount,
+    websocket_fresh_symbols_120s: webSocketStatus.freshSymbols120s,
     websocket_status_age_seconds: webSocketStatus.statusAgeSeconds,
     websocket_rest_disabled: webSocketStatus.restDisabled,
     websocket_formal_ready: webSocketStatus.formalReady,
@@ -2883,6 +2900,16 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     futopt_contract_rows: futoptContractRows,
     futopt_reason: futoptReason,
     intraday_1m_readiness_source: intraday1mReadinessSource,
+    opening_0901_candle_required: opening0901Required,
+    opening_0901_candle_ready: opening0901Ready,
+    opening_0901_candle_trade_date: opening0901Evidence.tradeDate || taipeiDate(),
+    opening_0901_candle_rows: numberValue(opening0901Evidence.rows),
+    opening_0901_candle_symbols: opening0901Evidence.symbols || [],
+    opening_0901_candle_required_symbols: opening0901Evidence.requiredSymbolCount || 0,
+    opening_0901_candle_missing_symbols: opening0901Evidence.missingSymbols || [],
+    opening_0901_candle_source: opening0901Evidence.source || "not_checked",
+    opening_0901_candle_rows_written: numberValue(opening0901Evidence.fallbackWritten),
+    opening_0901_candle_schema: opening0901Evidence.schema || [],
     natural_0900_warmup_evidence_source: intradayMap.warmupEvidenceSource || "",
     futopt_readiness_source: futoptRows.readinessSource || "unknown",
     rate_limit_status: rateLimitStatus,
@@ -3043,6 +3070,85 @@ async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, qu
   lastDailyVolumeMirrorSyncAt = now;
   return { written: result.written || 0, skipped: false, rows: rows.length, source: 'full_market_active_ordinary_stock' };
 }
+async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
+  const tradeDate = taipeiDate();
+  const requiredSymbols = [...new Set((formalPriorityRows || []).slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT)
+    .map((row) => normalizeCode(row.symbol)).filter(Boolean))];
+  const schema = ["symbol", "trade_date", "candle_time", "open", "high", "low", "close", "volume", "updated_at", "payload"];
+  const required = taipeiMinutes() >= (9 * 60 + 2);
+  const base = { required, tradeDate, requiredSymbols, requiredSymbolCount: requiredSymbols.length, schema };
+  if (!required) return { ...base, ready: true, source: "not_required_before_0902", rows: 0, symbols: [], missingSymbols: [] };
+  if (!requiredSymbols.length) return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_empty_formal_pool", rows: 0, symbols: [], missingSymbols: [] };
+  const start = `${tradeDate}T01:01:00.000Z`;
+  const end = `${tradeDate}T01:02:00.000Z`;
+  const bySymbol = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "fugle_daytrade_intraday_1m",
+      "select=symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,payload"
+        + "&trade_date=eq." + encodeURIComponent(tradeDate)
+        + "&candle_time=gte." + encodeURIComponent(start)
+        + "&candle_time=lt." + encodeURIComponent(end)
+        + "&symbol=in.(" + requiredSymbols.join(",") + ")",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      const symbol = normalizeCode(row.symbol);
+      if (!requiredSymbols.includes(symbol) || !numberValue(row.close)) continue;
+      bySymbol.set(symbol, { ...row, symbol, trade_date: tradeDate, payload: { ...(row.payload || {}), opening0901: true, source: row.source || "fugle_daytrade_intraday_1m" } });
+    }
+  } catch (error) {
+    return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_read_failed", rows: 0, symbols: [], missingSymbols: requiredSymbols, error: error?.message || String(error) };
+  }
+
+  let fallbackWritten = 0;
+  const fallbackRows = [];
+  const cache = readFugleWebSocketCandles({ maxAgeMs: 2 * 60 * 60 * 1000 });
+  for (const candle of cache.candles.values()) {
+    const symbol = normalizeCode(candle.symbol || candle.code);
+    const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
+    if (!requiredSymbols.includes(symbol) || !candleTime || taipeiDateFrom(candleTime) !== tradeDate) continue;
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(candleTime));
+    const hhmm = `${parts.find((part) => part.type === "hour")?.value || ""}:${parts.find((part) => part.type === "minute")?.value || ""}`;
+    if (hhmm !== "09:01" || bySymbol.has(symbol) || !numberValue(candle.close)) continue;
+    fallbackRows.push({
+      symbol,
+      market: candle.market || "",
+      trade_date: tradeDate,
+      candle_time: candleTime,
+      open: numberValue(candle.open),
+      high: numberValue(candle.high),
+      low: numberValue(candle.low),
+      close: numberValue(candle.close),
+      volume: numberValue(candle.volume),
+      updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
+      source: "fugle_daytrade_writer:websocket_candle_0901",
+      payload: { ...(candle.payload || {}), opening0901: true, fallback: true, source: "fugle-daytrade-writer:websocket-candle-0901" },
+    });
+    bySymbol.set(symbol, fallbackRows[fallbackRows.length - 1]);
+  }
+  if (fallbackRows.length) {
+    try {
+      const result = await supabaseUpsert("fugle_daytrade_intraday_1m", fallbackRows, "symbol,candle_time", { batchSize: 40 });
+      fallbackWritten = result.written || 0;
+    } catch (error) {
+      return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_fallback_write_failed", rows: bySymbol.size, symbols: [...bySymbol.keys()], missingSymbols: requiredSymbols.filter((symbol) => !bySymbol.has(symbol)), fallbackRows: fallbackRows.length, error: error?.message || String(error) };
+    }
+  }
+  const symbols = [...bySymbol.keys()];
+  const missingSymbols = requiredSymbols.filter((symbol) => !bySymbol.has(symbol));
+  return {
+    ...base,
+    ready: missingSymbols.length === 0,
+    source: fallbackRows.length ? "dedicated_daytrade_1m_0901+websocket_candle_fallback" : "dedicated_daytrade_1m_0901",
+    rows: bySymbol.size,
+    symbols,
+    missingSymbols,
+    fallbackRows: fallbackRows.length,
+    fallbackWritten,
+  };
+}
+
 async function syncWebSocketIntraday1mCandles(priorityRows) {
   const prioritySymbols = new Set(priorityRows.map((row) => normalizeCode(row.symbol)).filter(Boolean));
   const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_MAX_AGE_MS });
@@ -3330,6 +3436,7 @@ async function tick() {
     });
   }
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
+  let opening0901Evidence = { required: false, ready: true, source: "not_checked", rows: 0, symbols: [], missingSymbols: [], schema: [] };
   let websocketFutoptSync = { written: 0, skipped: true, cacheCount: 0 };
 
   if (priorityRows.length) {
@@ -3371,7 +3478,13 @@ async function tick() {
     });
   }
 
-  const intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(await fetchIntradayStatus(activeSymbols), priorityRows);
+  if (priorityRows.length && taipeiMinutes() >= (9 * 60 + 2)) {
+    try {
+      opening0901Evidence = await ensureOpening0901CandleEvidence(priorityRows);
+    } catch (error) {
+      opening0901Evidence = { required: true, ready: false, source: "dedicated_daytrade_1m_0901_unhandled_error", rows: 0, symbols: [], missingSymbols: priorityRows.slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT).map((row) => row.symbol), schema: [], error: error?.message || String(error) };
+    }
+  }
   const intradayStatusCacheSync = await syncIntradayStatusCache(intradayMap);
   if (intradayStatusCacheSync.error) {
     nonFatalWriteErrors.push({
@@ -3445,6 +3558,7 @@ async function tick() {
     fetchedRows: fetchResult.rows,
     dailyVolumeMap,
     intradayMap,
+    opening0901Evidence,
     futoptRows,
     websocketFutoptSync,
     fetchResult,
