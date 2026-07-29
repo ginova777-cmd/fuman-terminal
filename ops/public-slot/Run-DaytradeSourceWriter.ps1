@@ -73,6 +73,53 @@ $env:FUMAN_RUNTIME_DIR = $RuntimeDir
 . "$RepoRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 
+function Get-FugleWebSocketCollectorProcess {
+  $collectorMarker = "fugle-websocket-collector.js"
+  try {
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+      $_.Name -match '^(node|nodejs)(\.exe)?$' -and
+      [string]$_.CommandLine -match [regex]::Escape($collectorMarker)
+    })
+    if ($processes.Count -gt 0) { return $processes[0] }
+  } catch {
+    Write-WrapperLog "WARN unable to inspect websocket collector process: $($_.Exception.Message)"
+  }
+  return $null
+}
+
+function Ensure-FugleWebSocketCollector {
+  $collector = Join-Path $RepoRoot "scripts\fugle-websocket-collector.js"
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $collector)) {
+    Write-WrapperLog "WARN websocket collector missing: $collector"
+    return $false
+  }
+  if (-not (Test-Path -LiteralPath $nodeExe)) {
+    Write-WrapperLog "WARN node executable missing: $nodeExe"
+    return $false
+  }
+  $existing = Get-FugleWebSocketCollectorProcess
+  if ($null -ne $existing) {
+    Write-WrapperLog "websocket collector already running pid=$($existing.ProcessId)"
+    return $true
+  }
+
+  $env:FUGLE_STREAMING_CHANNELS = "trades,aggregates,candles"
+  $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
+  $process = Start-Process -FilePath $nodeExe `
+    -ArgumentList @("--use-system-ca", $collector) `
+    -WorkingDirectory (Split-Path -Parent $collector) `
+    -WindowStyle Hidden `
+    -PassThru
+  Start-Sleep -Milliseconds 500
+  Write-WrapperLog "websocket collector started pid=$($process.Id) channels=$($env:FUGLE_STREAMING_CHANNELS) subscriptions=$($env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS)"
+  return $true
+}
+
+if (-not (Ensure-FugleWebSocketCollector)) {
+  Write-WrapperLog "WARN websocket collector was not confirmed; writer remains fail-closed until formal WS status is ready"
+}
+
 $node = "node"
 $args = @("--use-system-ca", $WriterScript)
 

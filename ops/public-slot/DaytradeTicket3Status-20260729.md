@@ -1,0 +1,71 @@
+# 當沖 Daytrade Source 工單 3 驗收追蹤
+
+更新時間：2026-07-29（Asia/Taipei）
+範圍：只涵蓋 dedicated daytrade source、WebSocket、母池、1 分 K 與 formal gate。
+不涵蓋：會員、終端 UI、/88、desktop/mobile。
+
+## 狀態矩陣
+
+| 項目 | 實作方式 | 目前狀態 | 下一個驗收 |
+| --- | --- | --- | --- |
+| 07:00 暖機 1 分 K | REST seed 只做低頻補洞，WebSocket candles 持續增量；不以補跑冒充自然證據 | 程式 contract PASS；production 今日自然 evidence 尚未閉環 | 下一個交易日讀 07:00 natural evidence |
+| 全市場普通股母池 | active common stock 全量暖機，排除 ETF、權證、停牌、黑名單，再動態排序 | 程式 contract PASS；最後 live evidence active=1664，但 freshness 仍需自然 writer readback | 確認 full-market evidence 與 mother pool 同日 |
+| Mother pool 300 | full market → dynamic mother pool，固定 300 檔，freshness-first | 程式 contract PASS；最後 payload 有 300 檔，production view/eligibility 仍需核對 | REST 讀取 rows=300 且 coverage >=0.80 |
+| Priority TOP40 | 從 mother pool 排名取 40 檔，作為高頻優先，不是全市場唯一入口 | 最後 live 40/40、fresh coverage=1；formal gate 仍被 canonical contract 擋住 | canonical/unattended 同步回讀 40/40 |
+| 盤中新股動態進池 | 漲幅、MA5/10/35、量能放大、量比 >=2、成交量 top100、價格 10~1000 等規則 | 程式與 static verifier PASS；不可由舊快照補成今日候選 | 交易時段確認候選與母池更新 evidence |
+| WebSocket source | 最多 2 條連線、trades/aggregates/candles、REST disabled、單例 collector、狀態年齡 <=300 秒 | 程式 contract PASS；source writer 已加 formal freshness hard gate | 水源主機自然執行並回讀 formal_ready=true |
+| 09:01 專用 1 分 K | dedicated daytrade intraday_1m；必要時 quote-derived 但必須標 source；缺證據即 fail-closed | contract PASS；尚無可宣告的本日自然 09:01 evidence | 讀到 trade_date、candle_time、high、low、source payload |
+| Formal gate | 只允許 fugle_daytrade_source；不得用 shared/fallback 提升 A | 最後 canonical/unattended 為 D/not_ready，formal_entry_allowed=false，屬正確 fail-closed | canonical、unattended、source_status 三層欄位一致 |
+| Futopt / TXF | dedicated daytrade futopt source；股票期貨與 TXF 分層，08:45 baseline 不可猜測 | runtime 有股票期貨 rows，但 production canonical 曾讀到 not_required/舊資料 | 下一次自然 08:45 驗證 ready 與 baseline |
+| 三個正式 view | mother_pool=300、priority_top40=40、formal_priority_top40=40；REST HTTP 200 且 rows>0 | 靜態 contract PASS；production freshness/readback 尚未完整閉環 | 三個 endpoint 逐一讀 rows 與 trade_date |
+| Fail-closed / previous good | source 未 A 不更新 latest、不寫空結果、不讓 degraded/NO 進 detected history | 已有 writer 與 watchdog guard，最後 evidence preserve_previous_good=true | 驗證 blocked receipt 與 latest pointer 未更新 |
+
+## 已驗證
+
+- Release commit：`30888843`。
+- `npm run verify:daytrade-source-writer`：PASS。
+- `npm run verify:daytrade-ticket3-source`：PASS。
+- writer、ticket verifier、WebSocket verifier：Node syntax PASS。
+- WebSocket transport regression：已修正並由 static verifier 證明。
+
+## Production 目前不得宣告完成的原因
+
+- 最近 live source 為盤後 stopped/previous-good，不是新的自然暖機證據。
+- canonical/unattended 曾回 `25/28` required checks。
+- canonical/unattended 的 `websocket_formal_ready` 與 source payload 不一致。
+- futopt canonical 曾回 `not_required`，但 dedicated runtime 已有股票期貨/TXF rows，需完成 view/readthrough 對齊。
+- 尚未取得新的自然 07:00、08:45、09:01 evidence。
+
+## Release Owner 下一步
+
+1. 將 `30888843` 同步到真正的 daytrade writer 主機；不要啟動第二個 writer。
+2. 等下一次自然排程，不手動補造 07:00/08:45/09:01 evidence。
+3. 在正式 repo 執行：
+   - `npm run verify:daytrade-source-contract-alignment`
+   - `npm run verify:daytrade-mother-pool-contract`
+   - `npm run verify:daytrade-full-market-contract`
+   - `npm run verify:daytrade-ticket3-source -- --live --require-live`
+4. 只有三層 gate 欄位一致、三個 view rows 正確、09:01 evidence 存在且所有 freshness 達標，才可進下一層 formal scan。
+
+目前結論：程式 contract 已完成；production 自然水源與 formal gate 尚未閉環；維持 fail-closed，不宣告 A 或 unattended YES。
+## 最新只讀 readback
+
+checked_at：2026-07-29 16:16（Asia/Taipei；UTC 08:16）
+
+| 欄位 | 實際值 | 判定 |
+| --- | --- | --- |
+| source_status | `stopped`；最後更新 13:33:26 | fail-closed，盤後不可當自然暖機 PASS |
+| source gate | `B / not_ready`；formal entry `false` | 不允許正式進場 |
+| canonical / unattended gate | `D / not_ready`；`25/28` required checks | 欄位與 gate 尚未對齊 |
+| priority | 40/40；fresh coverage `1.0`；quote age `43s` | priority 數字達標，但不能單獨提升總 gate |
+| full market | active `1664`；fresh quote `317`；coverage 欄位缺失 | 全市場 evidence 不完整 |
+| mother pool | base rows `300`；base eligible `0`；fresh coverage `0` | production view freshness 不可用 |
+| formal priority | rows `40`；fresh coverage `0`；max quote age `190649s` | 不可正式掃描 |
+| WebSocket runtime | connected/authenticated/streaming；trades, aggregates, candles；age `2s` | transport local PASS |
+| 1 分 K | today symbols `881`；stale `0` | 數據有讀到，但 09:01 natural 欄位仍缺 |
+| 09:01 evidence | required/ready/trade_date/schema 欄位缺失 | 自然 evidence 未閉環 |
+| futopt/TXF | runtime 有股票期貨/TXF rows；canonical 仍為 `not_required` | source/view readthrough 未對齊 |
+
+本輪 verifier 結果：`verify:daytrade-ticket3-source -- --live --require-live` FAIL（缺 WebSocket/09:01 live fields）；`verify:daytrade-source-contract-alignment` FAIL_CLOSED_ALIGNED；`verify:daytrade-mother-pool-contract` FAIL；`verify:fugle-websocket-sources` local transport PASS。
+
+因此目前仍是「程式 contract 完成、production natural evidence 未閉環」，不能宣告 A 或 unattended YES。

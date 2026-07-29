@@ -2276,6 +2276,7 @@ function readWebSocketStatusSummary() {
     && numberValue(status.subscribedSymbols) > 0
     && numberValue(status.subscribeForbiddenChunks) === 0
     && numberValue(status.streamingMessages) > 0
+    && statusAgeSeconds <= 300
     && Boolean(status.lastMessageAt || status.websocketLastMessageAt)
     && ageSeconds(status.lastMessageAt || status.websocketLastMessageAt) <= 300;
   const lastMessageAt = status.lastMessageAt || status.websocketLastMessageAt || "";

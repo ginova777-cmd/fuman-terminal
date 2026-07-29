@@ -23,6 +23,7 @@ const STATUS_MAX_AGE_MS = Number(process.env.FUGLE_WS_STATUS_MAX_AGE_MS || 3 * 6
 const FUTOPT_STATUS_MAX_AGE_MS = Number(process.env.FUGLE_FUTOPT_WS_STATUS_MAX_AGE_MS || 5 * 60 * 1000);
 const TASK_STILL_RUNNING = 267009; // 0x41301
 const TASK_SHARING_VIOLATION = 2147946720; // 0x80070020, usually overlapping scheduled launches.
+const TASK_TERMINATED = 267014; // 0x41306, expected when the 06:00-13:30 writer window closes.
 
 function readJson(file, fallback = null) {
   try {
@@ -48,7 +49,35 @@ function taskLastResultOk(task) {
   if (lastResult === TASK_SHARING_VIOLATION && /^(ready|running)$/i.test(String(task?.state || ""))) {
     return true;
   }
+  if (lastResult === TASK_TERMINATED && isExpectedDaytradeWriterWindowClose(task)) return true;
   return false;
+}
+
+function taipeiHourMinute(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(parsed));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function isExpectedDaytradeWriterWindowClose(task) {
+  if (String(task?.taskName || "") !== "\\Fuman Daytrade Source Writer 0600-1330") return false;
+  if (!/^(ready|running)$/i.test(String(task?.state || ""))) return false;
+  const lastRunMinutes = taipeiHourMinute(task?.lastRunTime);
+  const nowMinutes = taipeiHourMinute(new Date().toISOString());
+  return lastRunMinutes !== null
+    && nowMinutes !== null
+    && lastRunMinutes >= 13 * 60 + 20
+    && lastRunMinutes <= 13 * 60 + 40
+    && nowMinutes >= 13 * 60 + 30;
 }
 
 function taskResultInterpretation(task) {
@@ -56,6 +85,7 @@ function taskResultInterpretation(task) {
   if (lastResult === 0) return "success";
   if (lastResult === TASK_STILL_RUNNING) return "still_running";
   if (lastResult === TASK_SHARING_VIOLATION) return "overlap_sharing_violation_treated_as_nonfatal_when_state_ready_or_running";
+  if (lastResult === TASK_TERMINATED && isExpectedDaytradeWriterWindowClose(task)) return "expected_daytrade_writer_window_close";
   return "unexpected";
 }
 
@@ -290,7 +320,7 @@ async function main() {
     addIssue(issues, taskLastResultOk(task), "required_task_last_result_nonzero", {
       ...task,
       interpretation: taskResultInterpretation(task),
-      allowedResults: [0, TASK_STILL_RUNNING, TASK_SHARING_VIOLATION],
+      allowedResults: [0, TASK_STILL_RUNNING, TASK_SHARING_VIOLATION, ...(isExpectedDaytradeWriterWindowClose(task) ? [TASK_TERMINATED] : [])],
     });
   }
 
@@ -338,6 +368,7 @@ async function main() {
         { code: 0, meaning: "success" },
         { code: TASK_STILL_RUNNING, meaning: "task still running / overlap-safe scheduled cadence" },
         { code: TASK_SHARING_VIOLATION, meaning: "overlapping scheduled launch/file lock; accepted only when task state is Ready or Running" },
+        { code: TASK_TERMINATED, meaning: "expected 13:30 daytrade writer window close; accepted only for the named task and time window" },
       ],
     },
     issues,
