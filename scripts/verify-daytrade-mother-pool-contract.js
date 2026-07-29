@@ -112,12 +112,14 @@ async function main() {
   if (!motherContractRow || Object.keys(motherContractRow).length === 0) issues.push("mother_pool_star_contract_empty_or_missing");
   if (!priorityContractRow || Object.keys(priorityContractRow).length === 0) issues.push("priority_top40_star_contract_empty_or_missing");
   if (!health || Object.keys(health).length === 0) issues.push("mother_pool_contract_health_empty_or_missing");
-  if (motherPoolSymbols < 180) issues.push(`mother_pool_symbols_${motherPoolSymbols}_below_min_180`);
+  if (motherPoolSymbols < 300 || motherPoolSymbols > 600) {
+    issues.push(`mother_pool_symbols_${motherPoolSymbols}_outside_300_600`);
+  }
   if (formalPriorityLimit !== 40) issues.push(`formal_priority_limit_${formalPriorityLimit}_must_equal_40`);
   if (formalPrioritySymbols !== 40) issues.push(`formal_priority_symbols_${formalPrioritySymbols}_must_equal_40`);
+  if (priorityTop40Rows !== 40) issues.push(`priority_top40_view_returned_${priorityTop40Rows}_rows_must_equal_40`);
+  if (formalTop40Rows !== 40) issues.push(`formal_priority_top40_view_returned_${formalTop40Rows}_rows_must_equal_40`);
   if (formalMaxMotherRank > 40) issues.push(`formal_max_mother_rank_${formalMaxMotherRank}_above_40`);
-  if (priorityTop40Rows > 40) issues.push(`priority_top40_view_returned_${priorityTop40Rows}_rows_above_40`);
-  if (formalTop40Rows > 40) issues.push(`formal_priority_top40_view_returned_${formalTop40Rows}_rows_above_40`);
   if (priorityTop40MaxRank > 40) issues.push(`priority_top40_max_rank_${priorityTop40MaxRank}_above_40`);
   if (formalTop40MaxRank > 40) issues.push(`formal_priority_top40_max_rank_${formalTop40MaxRank}_above_40`);
   for (const field of requiredContractFields) {
@@ -127,7 +129,12 @@ async function main() {
   if (String(health.mother_pool_source || "") !== "dynamic_daytrade_mother_pool") {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
   }
-  if (String(health.formal_scope || "") !== "priority_top40") {
+  const acceptedFormalScopes = new Set([
+    "priority_top40",
+    "mother_pool_300_rotating_deep_scan",
+    "mother_pool_rotation_priority_top40",
+  ]);
+  if (!acceptedFormalScopes.has(String(health.formal_scope || ""))) {
     issues.push(`formal_scope_not_priority_top40:${health.formal_scope || "missing"}`);
   }
 
