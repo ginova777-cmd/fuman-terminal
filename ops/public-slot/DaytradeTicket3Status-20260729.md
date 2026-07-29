@@ -17,7 +17,7 @@
 | 09:01 專用 1 分 K | dedicated daytrade intraday_1m；必要時 quote-derived 但必須標 source；缺證據即 fail-closed | contract PASS；production 缺 `required/ready/trade_date/schema` 自然欄位 | 讀到 trade_date、candle_time、high、low、source payload |
 | Formal gate | 必須同時通過 mother=300、mother freshness>=0.80、formal=40、formal freshness>=0.95、quote age<=120；不得用 shared/fallback 提升 A | canonical/unattended 為 D/not_ready，formal_entry_allowed=false，正確 fail-closed | canonical、unattended、source_status 三層欄位一致 |
 | Futopt / TXF | dedicated daytrade futopt source；股票期貨與 TXF 分層，08:45 baseline 不可猜測 | runtime 有股票期貨 rows，但 production canonical 曾讀到 not_required/舊資料 | 下一次自然 08:45 驗證 ready 與 baseline |
-| 三個正式 view | mother_pool=300、priority_top40=40、formal_priority_top40=40；REST HTTP 200 且 rows>0 | REST 實際 rows=`300 / 40 / 40`；freshness=`0 / 0`，formal max age=`192664s`，不可正式掃描 | 下一次自然 writer 回水後重讀 rows、trade_date、freshness |
+| 三個正式 view | mother_pool=300、priority_top40=40、formal_priority_top40=40；REST HTTP 200 且 rows>0 | REST 實際 rows=`300 / 40 / 40`；freshness=`0 / 0`，formal max age=`193045s`，不可正式掃描 | 下一次自然 writer 回水後重讀 rows、trade_date、freshness |
 | Fail-closed / previous good | source 未 A 不更新 latest、不寫空結果、不讓 degraded/NO 進 detected history | 已有 writer 與 watchdog guard，最後 evidence preserve_previous_good=true | 驗證 blocked receipt 與 latest pointer 未更新 |
 
 ## 已驗證
@@ -94,3 +94,17 @@ checked_at：2026-07-29 16:16（Asia/Taipei；UTC 08:16）
 - `verify:daytrade-source-contract-alignment`：目前 production canonical view 尚未包含新增欄位，REST 回 HTTP 400 `column v_fugle_daytrade_canonical_gate.mother_pool_symbols does not exist`；這是 SQL 尚未部署的明確 blocker。
 
 結論：本輪已完成程式與 SQL contract hardening；production 水源 freshness、canonical view SQL deploy、自然 09:01 evidence 尚未完成，因此仍不得宣告正式 A 或 unattended YES。
+
+## 最新只讀覆核（2026-07-29 16:56 Asia/Taipei）
+
+| 項目 | 實際結果 | 判定 |
+| --- | --- | --- |
+| 母池三層 rows | `300 / 40 / 40` | rows contract PASS |
+| Mother freshness | `0 / 300 = 0` | FAIL，要求 >=0.80 |
+| Formal freshness | `0 / 40 = 0` | FAIL，要求 >=0.95 |
+| Formal max quote age | `193045s` | FAIL，要求 <=120s |
+| Source live | `stopped`，最後更新 `13:33:26` | 無新的自然 writer evidence |
+| WebSocket / 09:01 | 缺 `websocket_last_message_at`、symbol/freshness 與 09:01 欄位 | natural evidence 未閉環 |
+| Production canonical | 新增 mother contract 欄位仍未部署 | alignment 不能完成 |
+
+本次只讀驗證仍為：mother-pool contract `FAIL`、ticket3 live `FAIL`。因此狀態表維持「程式 contract PASS、production 水源未刷新、不可宣告 A」。
