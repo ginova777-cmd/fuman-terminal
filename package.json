@@ -72,6 +72,7 @@
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",
     "daytrade-source:writer": "node --use-system-ca scripts/run-daytrade-source-writer.js --apply",
     "daytrade-near-one:source": "node --use-system-ca scripts/run-daytrade-near-one-source.js --apply",
+    "daytrade-near-one:task:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-daytrade-near-one-source-task.ps1",
     "daytrade-source:writer:dry-run": "node --use-system-ca scripts/run-daytrade-source-writer.js --dry-run --no-fetch --once",
     "futopt-websocket:collector": "node scripts/fugle-futopt-websocket-collector.js",
     "verify:futopt-websocket": "node --check lib/fugle-futopt-websocket.js && node --check scripts/fugle-futopt-websocket-collector.js",
