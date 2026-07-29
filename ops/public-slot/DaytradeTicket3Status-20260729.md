@@ -22,7 +22,7 @@
 
 ## 已驗證
 
-- Release commit：`30888843`。
+- Release commit：以 Release worktree 的 `HEAD` 為準，最終 SHA 以交接回報為準。
 - `npm run verify:daytrade-source-writer`：PASS。
 - `npm run verify:daytrade-ticket3-source`：PASS。
 - writer、ticket verifier、WebSocket verifier：Node syntax PASS。
