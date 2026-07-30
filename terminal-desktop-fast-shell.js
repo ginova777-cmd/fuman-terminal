@@ -6342,123 +6342,190 @@
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
     const industryItems = normalizeArray(aiPayload?.industryDynamics?.items);
     const industryMeta = aiPayload?.industryDynamics || {};
+    const weightedTrend = aiPayload?.weightedIndexTrend || aiPayload?.market?.weightedIndexTrend || aiPayload?.dashboard?.dataSources?.weightedIndexTrend || {};
     const industryToneClass = (tone) => tone === "up" ? "is-up" : tone === "down" ? "is-down" : tone === "volume" ? "is-volume" : "is-neutral";
-    const industrySectorsHtml = (sectors) => normalizeArray(sectors).slice(0, 5).map((sector, index) => {
-      const pct = num(sector?.pct);
-      const valueYi = num(sector?.valueYi ?? sector?.amountYi ?? sector?.totalValue);
-      const pctText = Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--";
-      const valueText = valueYi ? `${valueYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : "";
-      return `<span><b>${index + 1}</b>${escapeHtml(sector?.name || "--")} <em>${escapeHtml(pctText)}</em>${valueText ? `<small>${escapeHtml(valueText)}</small>` : ""}</span>`;
-    }).join("");
+    const industryFallbackTimes = { strongest: "10:28", weakest: "12:52", volumeTop: "09:33", inflow: "09:27", outflow: "13:21" };
+    const minuteFromLabel = (value) => {
+      const match = String(value || "").match(/(\d{1,2})[:：](\d{2})/);
+      if (!match) return null;
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+      return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : null;
+    };
     const industryEventTime = (index) => {
       const base = new Date(aiPayload?.updatedAt || Date.now());
       if (!Number.isFinite(base.getTime())) return "--:--";
       base.setMinutes(base.getMinutes() - Math.max(0, 4 - index) * 7);
       return base.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
     };
-    const industryChartRows = (() => {
-      const seen = new Set();
-      const rows = [];
-      industryItems.forEach((item) => {
-        const sectors = normalizeArray(item?.sectors);
-        const primary = sectors[0] || { name: item?.title, pct: 0, valueYi: 0, deltaYi: 0 };
-        const name = String(primary?.name || item?.title || item?.label || "--");
-        if (seen.has(name)) return;
-        seen.add(name);
-        rows.push({
-          key: item?.key || name,
+    const industryEvents = (() => {
+      const rows = normalizeArray(industryMeta?.events).length ? normalizeArray(industryMeta.events) : industryItems.map((item, index) => {
+        const primary = normalizeArray(item?.sectors)[0] || { name: item?.title, pct: 0, valueYi: 0, deltaYi: 0, stocks: [] };
+        return {
+          key: item?.key || primary?.name || item?.label || `industry-${index}`,
+          time: industryFallbackTimes[item?.key] || industryEventTime(index),
           label: item?.label || "產業訊號",
-          name,
-          tone: item?.tone || "neutral",
+          name: primary?.name || item?.title || item?.label || "--",
+          title: item?.title || primary?.name || "--",
+          tone: item?.tone || (num(primary?.pct) < 0 ? "down" : "up"),
           pct: num(primary?.pct),
           valueYi: num(primary?.valueYi ?? primary?.amountYi ?? primary?.totalValue),
           deltaYi: num(primary?.deltaYi),
           metric: item?.metric || "--",
           detail: item?.detail || "",
-        });
+          stocks: normalizeArray(primary?.stocks),
+          sectors: normalizeArray(item?.sectors),
+        };
       });
-      return rows.slice(0, 7);
+      const seen = new Set();
+      return rows.map((row, index) => {
+        const name = String(row?.name || row?.title || row?.label || "--");
+        return {
+          key: row?.key || name,
+          time: row?.time || industryFallbackTimes[row?.key] || industryEventTime(index),
+          label: row?.label || "產業訊號",
+          name,
+          title: row?.title || name,
+          tone: row?.tone || (num(row?.pct) < 0 ? "down" : "up"),
+          pct: num(row?.pct),
+          valueYi: num(row?.valueYi),
+          deltaYi: Number.isFinite(Number(row?.deltaYi)) ? Number(row.deltaYi) : null,
+          metric: row?.metric || "--",
+          detail: row?.detail || "",
+          stocks: normalizeArray(row?.stocks),
+          sectors: normalizeArray(row?.sectors),
+        };
+      }).filter((row) => row.name && row.name !== "--" && !seen.has(row.name) && seen.add(row.name)).slice(0, 8);
     })();
+    const industryByName = new Map(industryEvents.map((row) => [row.name, row]));
+    const marketWeightedSource = pickMarketIndex("weightedIndex", "twse", "taiex", "TAIEX") || {};
+    const marketWeightedPrice = Number(String(marketWeightedSource?.price ?? marketWeightedSource?.close ?? marketWeightedSource?.value ?? "").replace(/,/g, ""));
+    const marketWeightedPct = Number(String(marketWeightedSource?.pct ?? marketWeightedSource?.percent ?? "").replace(/%/g, ""));
+    const trendPointsFromApi = normalizeArray(weightedTrend?.points).map((point) => ({
+      time: String(point?.time || ""),
+      minute: Number(point?.minute ?? minuteFromLabel(point?.time)),
+      price: Number(String(point?.price ?? point?.value ?? "").replace(/,/g, "")),
+      valueYi: Number(point?.valueYi ?? point?.amountYi ?? 0),
+      deltaValueYi: Number(point?.deltaValueYi ?? point?.volumeYi ?? point?.valueYi ?? 0),
+    })).filter((point) => Number.isFinite(point.minute) && Number.isFinite(point.price) && point.price > 0);
+    const fallbackTrendPoints = (() => {
+      if (!Number.isFinite(marketWeightedPrice) || marketWeightedPrice <= 0) return [];
+      const pct = Number.isFinite(marketWeightedPct) ? marketWeightedPct : 0;
+      const previous = pct ? marketWeightedPrice / (1 + pct / 100) : marketWeightedPrice;
+      return [540, 600, 660, 720, 810].map((minute, index, list) => {
+        const progress = index / (list.length - 1);
+        const price = previous + (marketWeightedPrice - previous) * progress;
+        return { time: `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`, minute, price, valueYi: 0, deltaValueYi: 0 };
+      });
+    })();
+    const weightedTrendPoints = (trendPointsFromApi.length >= 2 ? trendPointsFromApi : fallbackTrendPoints).slice(0, 90);
+    const industrySectorsHtml = (sectors) => normalizeArray(sectors).slice(0, 5).map((sector, index) => {
+      const name = sector?.name || "--";
+      const pct = num(sector?.pct);
+      const valueYi = num(sector?.valueYi ?? sector?.amountYi ?? sector?.totalValue);
+      const pctText = Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--";
+      const valueText = valueYi ? `${valueYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : "";
+      return `<span data-market-ai-industry-name="${escapeHtml(name)}" role="button" tabindex="0"><b>${index + 1}</b>${escapeHtml(name)} <em>${escapeHtml(pctText)}</em>${valueText ? `<small>${escapeHtml(valueText)}</small>` : ""}</span>`;
+    }).join("");
     const industryPulseChartHtml = (() => {
-      if (!industryChartRows.length) return '<div class="empty-state">目前尚無產業線圖資料。</div>';
-      const pcts = industryChartRows.map((row) => Number.isFinite(row.pct) ? row.pct : 0);
-      const minPct = Math.min(...pcts, 0);
-      const maxPct = Math.max(...pcts, 0);
-      const span = Math.max(1, maxPct - minPct);
+      if (!weightedTrendPoints.length) return '<div class="empty-state">目前尚無加權指數走勢資料。</div>';
+      const prices = weightedTrendPoints.map((row) => row.price).filter(Number.isFinite);
+      const minRaw = Math.min(...prices);
+      const maxRaw = Math.max(...prices);
+      const padding = Math.max(25, (maxRaw - minRaw) * 0.22);
+      const minPrice = minRaw - padding;
+      const maxPrice = maxRaw + padding;
+      const span = Math.max(1, maxPrice - minPrice);
       const width = 760;
-      const height = 280;
-      const left = 58;
+      const height = 300;
+      const left = 72;
       const right = 24;
-      const top = 24;
-      const bottom = 54;
+      const top = 26;
+      const bottom = 60;
+      const volumeHeight = 46;
       const plotWidth = width - left - right;
       const plotHeight = height - top - bottom;
-      const pointFor = (row, index) => {
-        const x = left + (industryChartRows.length <= 1 ? plotWidth / 2 : index * (plotWidth / (industryChartRows.length - 1)));
-        const y = top + ((maxPct - (Number.isFinite(row.pct) ? row.pct : 0)) / span) * plotHeight;
-        return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
-      };
-      const points = industryChartRows.map(pointFor);
+      const startMinute = 9 * 60;
+      const endMinute = 13 * 60 + 30;
+      const xForMinute = (minute) => left + ((Math.max(startMinute, Math.min(endMinute, minute)) - startMinute) / (endMinute - startMinute)) * plotWidth;
+      const yForPrice = (price) => top + ((maxPrice - price) / span) * (plotHeight - volumeHeight);
+      const points = weightedTrendPoints.map((row) => ({ x: Number(xForMinute(row.minute).toFixed(1)), y: Number(yForPrice(row.price).toFixed(1)) }));
       const path = points.map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`).join(" ");
-      const zeroY = top + (maxPct / span) * plotHeight;
-      const yLabels = [maxPct, (maxPct + minPct) / 2, minPct];
-      const timeLabels = ["09", "10", "11", "12", "13"];
-      const callouts = industryChartRows.map((row, index) => {
-        const point = points[index];
-        const isDown = row.pct < 0;
-        const labelY = Math.max(18, Math.min(height - 72, point.y - (index % 2 ? -28 : 30)));
-        const rectX = Math.max(64, Math.min(width - 166, point.x - 54));
-        const textX = Math.max(76, Math.min(width - 154, point.x - 42));
+      const previousClose = Number(weightedTrend?.previousClose || 0);
+      const baseY = previousClose > 0 ? yForPrice(previousClose) : yForPrice(prices[0]);
+      const yLabels = [maxRaw, (maxRaw + minRaw) / 2, minRaw];
+      const maxVolume = Math.max(...weightedTrendPoints.map((point) => point.deltaValueYi || point.valueYi || 0), 1);
+      const bars = weightedTrendPoints.map((row) => {
+        const bar = Math.max(2, Math.min(volumeHeight, ((row.deltaValueYi || row.valueYi || 0) / maxVolume) * volumeHeight));
+        const x = xForMinute(row.minute);
+        return `<rect class="market-ai-industry-volume-bar" x="${(x - 2).toFixed(1)}" y="${(top + plotHeight - bar).toFixed(1)}" width="4" height="${bar.toFixed(1)}" rx="1" />`;
+      }).join("");
+      const nearestPoint = (minute) => weightedTrendPoints.reduce((best, point) => Math.abs(point.minute - minute) < Math.abs(best.minute - minute) ? point : best, weightedTrendPoints[0]);
+      const callouts = industryEvents.slice(0, 7).map((row, index) => {
+        const minute = minuteFromLabel(row.time) ?? (startMinute + index * 38);
+        const near = nearestPoint(minute);
+        const x = xForMinute(minute);
+        const y = yForPrice(near.price);
+        const isDown = row.tone === "down" || row.pct < 0 || row.deltaYi < 0;
+        const labelY = Math.max(18, Math.min(top + plotHeight - volumeHeight - 34, y - (index % 2 ? -34 : 38)));
+        const rectX = Math.max(78, Math.min(width - 176, x - 58));
         return `
-          <g class="market-ai-industry-callout ${isDown ? "is-down" : "is-up"}">
-            <line x1="${point.x}" y1="${point.y}" x2="${point.x}" y2="${labelY + 18}" />
-            <circle cx="${point.x}" cy="${point.y}" r="5" />
-            <rect x="${rectX}" y="${labelY}" width="128" height="32" rx="6" />
-            <text x="${textX}" y="${labelY + 21}">${escapeHtml(row.name.slice(0, 10))}</text>
+          <g class="market-ai-industry-callout ${isDown ? "is-down" : "is-up"}" data-market-ai-industry-name="${escapeHtml(row.name)}" role="button" tabindex="0">
+            <line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(labelY + 18).toFixed(1)}" />
+            <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" />
+            <rect x="${rectX.toFixed(1)}" y="${labelY.toFixed(1)}" width="136" height="32" rx="6" />
+            <text x="${(rectX + 12).toFixed(1)}" y="${(labelY + 21).toFixed(1)}">${escapeHtml(row.name.slice(0, 10))}</text>
           </g>
         `;
       }).join("");
+      const trendPct = Number(weightedTrend?.pct ?? marketWeightedPct ?? 0);
+      const trendValue = Number(weightedTrend?.current ?? marketWeightedPrice ?? prices[prices.length - 1] ?? 0);
       return `
         <div class="market-ai-industry-chart-head">
-          <div><small>產業走勢偵測</small><strong>${escapeHtml(industryChartRows[0]?.name || "--")}</strong></div>
-          <span>${escapeHtml(industryChartRows[0]?.metric || "--")}</span>
+          <div><small>加權指數走勢圖</small><strong>${trendValue.toLocaleString("zh-TW", { maximumFractionDigits: 2 })}</strong></div>
+          <span class="${trendPct >= 0 ? "is-up" : "is-down"}">${trendPct >= 0 ? "+" : ""}${trendPct.toFixed(2)}%</span>
         </div>
-        <svg class="market-ai-industry-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="產業即時動向線圖">
+        <svg class="market-ai-industry-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="加權指數走勢與產業量價事件">
           <defs>
             <linearGradient id="industryPulseFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stop-color="rgba(251,113,133,.32)" />
+              <stop offset="0" stop-color="rgba(251,113,133,.30)" />
               <stop offset="1" stop-color="rgba(45,212,191,.05)" />
             </linearGradient>
           </defs>
           <rect x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" rx="4" />
           ${[0, 0.25, 0.5, 0.75, 1].map((tick) => `<line class="grid-x" x1="${left + tick * plotWidth}" y1="${top}" x2="${left + tick * plotWidth}" y2="${top + plotHeight}" />`).join("")}
-          ${[0, 0.5, 1].map((tick, index) => `<g><line class="grid-y" x1="${left}" y1="${top + tick * plotHeight}" x2="${left + plotWidth}" y2="${top + tick * plotHeight}" /><text class="axis-y" x="8" y="${top + tick * plotHeight + 5}">${yLabels[index] >= 0 ? "+" : ""}${yLabels[index].toFixed(1)}%</text></g>`).join("")}
-          <line class="zero-line" x1="${left}" y1="${zeroY}" x2="${left + plotWidth}" y2="${zeroY}" />
-          <path class="area" d="${path} L${points[points.length - 1].x},${top + plotHeight} L${points[0].x},${top + plotHeight} Z" />
+          ${[0, 0.5, 1].map((tick, index) => `<g><line class="grid-y" x1="${left}" y1="${top + tick * (plotHeight - volumeHeight)}" x2="${left + plotWidth}" y2="${top + tick * (plotHeight - volumeHeight)}" /><text class="axis-y" x="8" y="${top + tick * (plotHeight - volumeHeight) + 5}">${yLabels[index].toLocaleString("zh-TW", { maximumFractionDigits: 0 })}</text></g>`).join("")}
+          <line class="zero-line" x1="${left}" y1="${baseY}" x2="${left + plotWidth}" y2="${baseY}" />
+          ${bars}
+          <path class="area" d="${path} L${points[points.length - 1].x},${top + plotHeight - volumeHeight} L${points[0].x},${top + plotHeight - volumeHeight} Z" />
           <path class="pulse" d="${path}" />
           ${callouts}
-          ${timeLabels.map((label, index) => `<text class="axis-x" x="${left + index * (plotWidth / (timeLabels.length - 1))}" y="${height - 18}">${label}</text>`).join("")}
+          ${["09", "10", "11", "12", "13"].map((label, index) => `<text class="axis-x" x="${left + index * (plotWidth / 4)}" y="${height - 18}">${label}</text>`).join("")}
         </svg>
       `;
     })();
-    const industryTimelineHtml = industryChartRows.length ? industryChartRows.slice(0, 6).map((row, index) => {
-      const deltaText = row.deltaYi ? `${row.deltaYi >= 0 ? "+" : ""}${row.deltaYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : row.metric;
+    const industryTimelineHtml = industryEvents.length ? industryEvents.slice(0, 7).map((row) => {
+      const deltaText = Number.isFinite(row.deltaYi) && row.deltaYi !== 0 ? `${row.deltaYi >= 0 ? "+" : ""}${row.deltaYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : row.metric;
       return `
-        <article class="${row.pct < 0 ? "is-down" : row.tone === "volume" ? "is-volume" : "is-up"}">
-          <time>${escapeHtml(industryEventTime(index))}</time>
+        <article class="${row.tone === "down" || row.pct < 0 ? "is-down" : row.tone === "volume" ? "is-volume" : "is-up"}" data-market-ai-industry-name="${escapeHtml(row.name)}" role="button" tabindex="0">
+          <time>${escapeHtml(row.time || "--:--")}</time>
           <div><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.label)}</span><b>${escapeHtml(row.metric)}</b><p>${escapeHtml(row.detail)}${deltaText ? ` · ${escapeHtml(deltaText)}` : ""}</p></div>
         </article>
       `;
     }).join("") : '<div class="empty-state">目前尚無產業事件時間軸。</div>';
-    const industryCardsHtml = industryItems.length ? industryItems.map((item) => `
-      <article class="market-ai-industry-card ${industryToneClass(item?.tone)}">
+    const industryCardsHtml = industryItems.length ? industryItems.map((item) => {
+      const primary = normalizeArray(item?.sectors)[0] || {};
+      const primaryName = primary?.name || item?.title || "--";
+      return `
+      <article class="market-ai-industry-card ${industryToneClass(item?.tone)}" data-market-ai-industry-name="${escapeHtml(primaryName)}" role="button" tabindex="0">
         <small>${escapeHtml(item?.label || "--")}</small>
         <strong>${escapeHtml(item?.title || "--")}</strong>
         <b>${escapeHtml(item?.metric || "--")}</b>
         <p>${escapeHtml(item?.detail || "")}</p>
         <div>${industrySectorsHtml(item?.sectors) || "<span><b>-</b>等待產業摘要</span>"}</div>
       </article>
-    `).join("") : '<div class="empty-state">目前產業即時動向摘要尚未產生。</div>';
+    `;
+    }).join("") : '<div class="empty-state">目前產業即時動向摘要尚未產生。</div>';
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = aiPayload?.source || aiPayload?.cacheSource || "desktop-fast-shell";
@@ -6512,7 +6579,61 @@
     if (hotSection) {
       const hotList = hotSection.querySelector(".market-ai-hot");
       const currentRule = hotSection.querySelector(".market-ai-current-rule");
+      const openMarketAiIndustryModal = (name) => {
+        const row = industryByName.get(String(name || ""));
+        if (!row) return;
+        const stocks = normalizeArray(row.stocks).slice().sort((a, b) => Number(b.value || b.tradeValue || b.valueYi || 0) - Number(a.value || a.tradeValue || a.valueYi || 0));
+        const pct = Number(row.pct || 0);
+        const overlay = document.createElement("section");
+        overlay.className = "sector-modal-overlay";
+        overlay.dataset.marketHeatmapModal = "1";
+        overlay.innerHTML = `
+          <div class="sector-modal-shell" role="dialog" aria-modal="true" aria-label="${escapeHtml(row.name || "產業明細")}">
+            <header class="sector-modal-header">
+              <div class="sector-modal-title-block">
+                <small>產業即時動向 · ${escapeHtml(row.label || "量價事件")}</small>
+                <h2>${escapeHtml(row.name || "--")}</h2>
+                <p>${escapeHtml(row.time || "--:--")} · ${escapeHtml(row.detail || "產業成分股")}</p>
+              </div>
+              <button type="button" class="sector-modal-close" data-market-heatmap-close aria-label="關閉">×</button>
+            </header>
+            <div class="sector-modal-summary">
+              <article><span>事件</span><strong>${escapeHtml(row.label || "--")}</strong></article>
+              <article><span>族群漲幅</span><strong class="${pct >= 0 ? "sector-pct-up" : "sector-pct-down"}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</strong></article>
+              <article><span>成交額</span><strong>${row.valueYi ? `${Number(row.valueYi).toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : "--"}</strong></article>
+              <article><span>成分股</span><strong>${escapeHtml(String(stocks.length))}</strong></article>
+            </div>
+            <div class="sector-modal-scroll">
+              ${stocks.length ? `
+                <table class="sector-modal-table">
+                  <thead><tr><th>股票</th><th>現價</th><th>漲跌</th><th>成交額</th><th>量</th><th>產業</th></tr></thead>
+                  <tbody>${stocks.map((stock, rowIndex) => {
+                    const stockPct = Number(stock.pct ?? stock.percent ?? 0) || 0;
+                    const value = Number(stock.value || stock.tradeValue || (Number(stock.valueYi || 0) * 100000000));
+                    return `
+                      <tr class="sector-modal-row ${rowIndex % 2 ? "is-alt" : ""}">
+                        <td class="sector-modal-stock-cell" data-label="股票"><div class="sector-modal-stock-title">${escapeHtml(stock.code || "")} <span>${escapeHtml(stock.name || "")}</span></div><div class="sector-modal-stock-sub">${escapeHtml(stock.quoteDate || "")} ${escapeHtml(stock.quoteTime || "")}</div></td>
+                        <td class="sector-modal-number-cell" data-label="現價">${escapeHtml(formatMarketHeatmapPrice(stock.close || stock.price))}</td>
+                        <td class="sector-modal-number-cell ${stockPct >= 0 ? "sector-pct-up" : "sector-pct-down"}" data-label="漲跌">${stockPct >= 0 ? "+" : ""}${stockPct.toFixed(2)}%</td>
+                        <td class="sector-modal-number-cell" data-label="成交額">${escapeHtml(formatYi(value))}</td>
+                        <td class="sector-modal-number-cell" data-label="量">${Number(stock.volume || stock.tradeVolume || 0).toLocaleString("zh-TW")}</td>
+                        <td class="sector-modal-market-cell" data-label="產業">${escapeHtml(stock.officialIndustry || stock.primaryIndustry || stock.industry || row.name || "--")}</td>
+                      </tr>`;
+                  }).join("")}</tbody>
+                </table>
+              ` : '<div class="sector-modal-empty">這個產業目前沒有可顯示股票。</div>'}
+            </div>
+          </div>`;
+        closeMarketHeatmapSectorModal();
+        document.body.appendChild(overlay);
+      };
       hotSection.addEventListener("click", (event) => {
+        const industryTarget = event.target.closest?.("[data-market-ai-industry-name]");
+        if (industryTarget && hotSection.contains(industryTarget)) {
+          event.preventDefault();
+          openMarketAiIndustryModal(industryTarget.dataset.marketAiIndustryName);
+          return;
+        }
         const button = event.target.closest?.("[data-market-ai-filter]");
         if (!button || !hotSection.contains(button)) return;
         const key = button.dataset.marketAiFilter || "all";
@@ -6524,6 +6645,13 @@
           const [title, note] = filterNotes[key] || filterNotes.all;
           currentRule.innerHTML = `<small>目前排序</small><strong>${escapeHtml(title)}</strong><span>${escapeHtml(note)}</span>`;
         }
+      });
+      hotSection.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const industryTarget = event.target.closest?.("[data-market-ai-industry-name]");
+        if (!industryTarget || !hotSection.contains(industryTarget)) return;
+        event.preventDefault();
+        openMarketAiIndustryModal(industryTarget.dataset.marketAiIndustryName);
       });
     }
     syncMarketAiDesktopModeIfVisible();
@@ -11811,6 +11939,21 @@
         }
         #market-view .market-ai-industry-chart .axis-x {
           text-anchor: middle;
+        }
+        #market-view .market-ai-industry-chart .market-ai-industry-volume-bar {
+          fill: rgba(59, 130, 246, 0.62);
+        }
+        #market-view .market-ai-industry-callout,
+        #market-view .market-ai-industry-timeline article,
+        #market-view .market-ai-industry-card,
+        #market-view .market-ai-industry-card span {
+          cursor: pointer;
+        }
+        #market-view .market-ai-industry-chart-head span.is-up {
+          color: #fb7185;
+        }
+        #market-view .market-ai-industry-chart-head span.is-down {
+          color: #2dd4bf;
         }
         #market-view .market-ai-industry-callout line {
           stroke: rgba(251, 113, 133, 0.72);

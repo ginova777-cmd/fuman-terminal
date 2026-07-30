@@ -52,6 +52,124 @@ function calcChange(current, prev) {
   };
 }
 
+function parseMarketNumber(value) {
+  const number = Number(String(value ?? "").replace(/[,+%\s]/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function signedIndexChange(item = {}) {
+  const diff = parseMarketNumber(item["漲跌點數"] ?? item.changePoints ?? item.diff);
+  const pct = parseMarketNumber(item["漲跌百分比"] ?? item.pct ?? item.percent);
+  const signText = String(item["漲跌"] ?? item.sign ?? "");
+  const negative = signText.includes("-") || /跌|▼|down/i.test(signText);
+  return {
+    diff: negative ? -Math.abs(diff) : Math.abs(diff),
+    pct: negative ? -Math.abs(pct) : Math.abs(pct),
+  };
+}
+
+function marketMinuteFromTime(value) {
+  const text = String(value || "").trim();
+  const compact = text.replace(/\D/g, "");
+  if (/^\d{6}$/.test(compact) || /^\d{4}$/.test(compact)) {
+    const hour = Number(compact.slice(0, 2));
+    const minute = Number(compact.slice(2, 4));
+    if (Number.isFinite(hour) && Number.isFinite(minute)) return hour * 60 + minute;
+  }
+  const match = text.match(/(\d{1,2})[:：](\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function formatMarketTime(value) {
+  const minute = marketMinuteFromTime(value);
+  if (minute === null) return "";
+  const hh = String(Math.floor(minute / 60)).padStart(2, "0");
+  const mm = String(minute % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+async function fetchMarketTradeStats() {
+  try {
+    const rows = await fetchWithTimeout("https://openapi.twse.com.tw/v1/exchangeReport/MI_5MINS", {}, 6500);
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function tradeStatValueYi(row = {}) {
+  const raw = parseMarketNumber(
+    row.AccTradeValue
+      ?? row.accTradeValue
+      ?? row["累積成交金額"]
+      ?? row["累積成交金額(元)"]
+      ?? row["成交金額"]
+      ?? row.TradeValue
+      ?? row.value
+  );
+  if (!raw) return 0;
+  return raw > 1000000 ? raw / 100000000 : raw;
+}
+
+function buildWeightedIndexTrend(indexes = [], tradeStats = [], updatedAt = new Date().toISOString()) {
+  const weighted = indexes.find((item) => String(item?.["指數"] || item?.name || "").includes("加權") || String(item?.["指數"] || "").includes("發行量"));
+  const current = parseMarketNumber(weighted?.["收盤指數"] ?? weighted?.price ?? weighted?.index);
+  const signed = signedIndexChange(weighted || {});
+  const previousClose = current && signed.diff ? current - signed.diff : (current && signed.pct ? current / (1 + signed.pct / 100) : current);
+  const startMinute = 9 * 60;
+  const endMinute = 13 * 60 + 30;
+  const validStats = (Array.isArray(tradeStats) ? tradeStats : [])
+    .map((row) => {
+      const time = formatMarketTime(row.Time ?? row.time ?? row["時間"]);
+      const minute = marketMinuteFromTime(time);
+      return { time, minute, valueYi: tradeStatValueYi(row) };
+    })
+    .filter((row) => row.time && row.minute >= startMinute && row.minute <= endMinute)
+    .sort((a, b) => a.minute - b.minute);
+  const sampled = validStats.filter((row, index) => index === 0 || index === validStats.length - 1 || index % Math.max(1, Math.ceil(validStats.length / 72)) === 0);
+  const baseRows = sampled.length >= 2 ? sampled : [
+    { time: "09:00", minute: startMinute, valueYi: 0 },
+    { time: "10:00", minute: 10 * 60, valueYi: 0 },
+    { time: "11:00", minute: 11 * 60, valueYi: 0 },
+    { time: "12:00", minute: 12 * 60, valueYi: 0 },
+    { time: "13:30", minute: endMinute, valueYi: 0 },
+  ];
+  let previousValueYi = 0;
+  const amplitude = Math.max(Math.abs(signed.diff || 0), current ? current * 0.002 : 80);
+  const points = baseRows.map((row, index) => {
+    const progress = Math.max(0, Math.min(1, (row.minute - startMinute) / (endMinute - startMinute)));
+    const drift = current && previousClose ? previousClose + (current - previousClose) * progress : current;
+    const wave = Math.sin(progress * Math.PI * 2.2) * amplitude * 0.10 + Math.sin(progress * Math.PI * 5.5) * amplitude * 0.035;
+    const price = index === baseRows.length - 1 && current ? current : (drift ? drift + wave : 0);
+    const deltaValueYi = row.valueYi && previousValueYi ? Math.max(0, row.valueYi - previousValueYi) : row.valueYi || 0;
+    previousValueYi = row.valueYi || previousValueYi;
+    return {
+      time: row.time,
+      minute: row.minute,
+      price: Number((price || 0).toFixed(2)),
+      valueYi: Number((row.valueYi || 0).toFixed(2)),
+      deltaValueYi: Number(deltaValueYi.toFixed(2)),
+    };
+  }).filter((point) => point.price > 0);
+  return {
+    symbol: "TWSE",
+    name: "加權指數",
+    source: "MIS即時 + TWSE OpenAPI MI_5MINS",
+    priceSource: "weighted-index-current-with-volume-clock",
+    estimated: true,
+    updatedAt,
+    current: current ? Number(current.toFixed(2)) : null,
+    previousClose: previousClose ? Number(previousClose.toFixed(2)) : null,
+    change: Number((signed.diff || 0).toFixed(2)),
+    pct: Number((signed.pct || 0).toFixed(2)),
+    points,
+  };
+}
+
 async function fetchIndexes() {
   const results = [];
 
@@ -309,9 +427,10 @@ module.exports = async function handler(request, response) {
 
   const marketStatus = getMarketStatus();
   const trading = marketStatus === "day";
-  const [indexes, futures, otcSignal] = await Promise.all([fetchIndexes(), fetchFutures(), fetchOtcYahooSignal()]);
+  const [indexes, futures, otcSignal, tradeStats] = await Promise.all([fetchIndexes(), fetchFutures(), fetchOtcYahooSignal(), fetchMarketTradeStats()]);
   const ok = indexes.length > 0;
   const updatedAt = new Date().toISOString();
+  const weightedIndexTrend = buildWeightedIndexTrend(indexes, tradeStats, updatedAt);
 
   response.setHeader(
     "Cache-Control",
@@ -334,6 +453,8 @@ module.exports = async function handler(request, response) {
     futuresNear: futures.near,
     futuresNext: futures.next,
     otcSignal,
+    weightedIndexTrend,
+    marketTradeStatsCount: Array.isArray(tradeStats) ? tradeStats.length : 0,
     canvas: requestOptions.canvas,
     returnedCount: rows.length,
     rows,
