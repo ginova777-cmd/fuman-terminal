@@ -6567,7 +6567,7 @@
           </article>
         </section>
         <section class="market-ai-block market-ai-hot-section market-ai-industry-section">
-          <header><div><h4>產業即時動向</h4><p>最強、最弱、量能、吸金、資金渙散</p></div><span>API · ${escapeHtml(dateLabel)} · ${escapeHtml(industryMeta.source || "industry-summary")}</span></header>
+          <header><div><h4>產業即時動向</h4><p>最強、最弱、量能、吸金、資金渙散</p></div></header>
           <div class="market-ai-industry-visual">
             <div class="market-ai-industry-pulse">${industryPulseChartHtml}</div>
             <div class="market-ai-industry-timeline"><h5>產業即時動向</h5>${industryTimelineHtml}</div>
