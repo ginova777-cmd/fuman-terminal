@@ -6350,6 +6350,106 @@
       const valueText = valueYi ? `${valueYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : "";
       return `<span><b>${index + 1}</b>${escapeHtml(sector?.name || "--")} <em>${escapeHtml(pctText)}</em>${valueText ? `<small>${escapeHtml(valueText)}</small>` : ""}</span>`;
     }).join("");
+    const industryEventTime = (index) => {
+      const base = new Date(aiPayload?.updatedAt || Date.now());
+      if (!Number.isFinite(base.getTime())) return "--:--";
+      base.setMinutes(base.getMinutes() - Math.max(0, 4 - index) * 7);
+      return base.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
+    };
+    const industryChartRows = (() => {
+      const seen = new Set();
+      const rows = [];
+      industryItems.forEach((item) => {
+        const sectors = normalizeArray(item?.sectors);
+        const primary = sectors[0] || { name: item?.title, pct: 0, valueYi: 0, deltaYi: 0 };
+        const name = String(primary?.name || item?.title || item?.label || "--");
+        if (seen.has(name)) return;
+        seen.add(name);
+        rows.push({
+          key: item?.key || name,
+          label: item?.label || "產業訊號",
+          name,
+          tone: item?.tone || "neutral",
+          pct: num(primary?.pct),
+          valueYi: num(primary?.valueYi ?? primary?.amountYi ?? primary?.totalValue),
+          deltaYi: num(primary?.deltaYi),
+          metric: item?.metric || "--",
+          detail: item?.detail || "",
+        });
+      });
+      return rows.slice(0, 7);
+    })();
+    const industryPulseChartHtml = (() => {
+      if (!industryChartRows.length) return '<div class="empty-state">目前尚無產業線圖資料。</div>';
+      const pcts = industryChartRows.map((row) => Number.isFinite(row.pct) ? row.pct : 0);
+      const minPct = Math.min(...pcts, 0);
+      const maxPct = Math.max(...pcts, 0);
+      const span = Math.max(1, maxPct - minPct);
+      const width = 760;
+      const height = 280;
+      const left = 58;
+      const right = 24;
+      const top = 24;
+      const bottom = 54;
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      const pointFor = (row, index) => {
+        const x = left + (industryChartRows.length <= 1 ? plotWidth / 2 : index * (plotWidth / (industryChartRows.length - 1)));
+        const y = top + ((maxPct - (Number.isFinite(row.pct) ? row.pct : 0)) / span) * plotHeight;
+        return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+      };
+      const points = industryChartRows.map(pointFor);
+      const path = points.map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`).join(" ");
+      const zeroY = top + (maxPct / span) * plotHeight;
+      const yLabels = [maxPct, (maxPct + minPct) / 2, minPct];
+      const timeLabels = ["09", "10", "11", "12", "13"];
+      const callouts = industryChartRows.map((row, index) => {
+        const point = points[index];
+        const isDown = row.pct < 0;
+        const labelY = Math.max(18, Math.min(height - 72, point.y - (index % 2 ? -28 : 30)));
+        const rectX = Math.max(64, Math.min(width - 166, point.x - 54));
+        const textX = Math.max(76, Math.min(width - 154, point.x - 42));
+        return `
+          <g class="market-ai-industry-callout ${isDown ? "is-down" : "is-up"}">
+            <line x1="${point.x}" y1="${point.y}" x2="${point.x}" y2="${labelY + 18}" />
+            <circle cx="${point.x}" cy="${point.y}" r="5" />
+            <rect x="${rectX}" y="${labelY}" width="128" height="32" rx="6" />
+            <text x="${textX}" y="${labelY + 21}">${escapeHtml(row.name.slice(0, 10))}</text>
+          </g>
+        `;
+      }).join("");
+      return `
+        <div class="market-ai-industry-chart-head">
+          <div><small>產業走勢偵測</small><strong>${escapeHtml(industryChartRows[0]?.name || "--")}</strong></div>
+          <span>${escapeHtml(industryChartRows[0]?.metric || "--")}</span>
+        </div>
+        <svg class="market-ai-industry-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="產業即時動向線圖">
+          <defs>
+            <linearGradient id="industryPulseFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stop-color="rgba(251,113,133,.32)" />
+              <stop offset="1" stop-color="rgba(45,212,191,.05)" />
+            </linearGradient>
+          </defs>
+          <rect x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" rx="4" />
+          ${[0, 0.25, 0.5, 0.75, 1].map((tick) => `<line class="grid-x" x1="${left + tick * plotWidth}" y1="${top}" x2="${left + tick * plotWidth}" y2="${top + plotHeight}" />`).join("")}
+          ${[0, 0.5, 1].map((tick, index) => `<g><line class="grid-y" x1="${left}" y1="${top + tick * plotHeight}" x2="${left + plotWidth}" y2="${top + tick * plotHeight}" /><text class="axis-y" x="8" y="${top + tick * plotHeight + 5}">${yLabels[index] >= 0 ? "+" : ""}${yLabels[index].toFixed(1)}%</text></g>`).join("")}
+          <line class="zero-line" x1="${left}" y1="${zeroY}" x2="${left + plotWidth}" y2="${zeroY}" />
+          <path class="area" d="${path} L${points[points.length - 1].x},${top + plotHeight} L${points[0].x},${top + plotHeight} Z" />
+          <path class="pulse" d="${path}" />
+          ${callouts}
+          ${timeLabels.map((label, index) => `<text class="axis-x" x="${left + index * (plotWidth / (timeLabels.length - 1))}" y="${height - 18}">${label}</text>`).join("")}
+        </svg>
+      `;
+    })();
+    const industryTimelineHtml = industryChartRows.length ? industryChartRows.slice(0, 6).map((row, index) => {
+      const deltaText = row.deltaYi ? `${row.deltaYi >= 0 ? "+" : ""}${row.deltaYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : row.metric;
+      return `
+        <article class="${row.pct < 0 ? "is-down" : row.tone === "volume" ? "is-volume" : "is-up"}">
+          <time>${escapeHtml(industryEventTime(index))}</time>
+          <div><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.label)}</span><b>${escapeHtml(row.metric)}</b><p>${escapeHtml(row.detail)}${deltaText ? ` · ${escapeHtml(deltaText)}` : ""}</p></div>
+        </article>
+      `;
+    }).join("") : '<div class="empty-state">目前尚無產業事件時間軸。</div>';
     const industryCardsHtml = industryItems.length ? industryItems.map((item) => `
       <article class="market-ai-industry-card ${industryToneClass(item?.tone)}">
         <small>${escapeHtml(item?.label || "--")}</small>
@@ -6401,6 +6501,10 @@
         </section>
         <section class="market-ai-block market-ai-hot-section market-ai-industry-section">
           <header><div><h4>產業即時動向</h4><p>最強、最弱、量能、吸金、資金渙散</p></div><span>API · ${escapeHtml(dateLabel)} · ${escapeHtml(industryMeta.source || "industry-summary")}</span></header>
+          <div class="market-ai-industry-visual">
+            <div class="market-ai-industry-pulse">${industryPulseChartHtml}</div>
+            <div class="market-ai-industry-timeline"><h5>產業即時動向</h5>${industryTimelineHtml}</div>
+          </div>
           <div class="market-ai-industry-grid">${industryCardsHtml}</div>
         </section>
     `;
@@ -11625,6 +11729,206 @@
           line-height: 1.55;
         }
 
+        #market-view .market-ai-industry-visual {
+          display: grid;
+          grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr);
+          gap: 14px;
+          padding: 12px;
+          border-bottom: 1px solid rgba(234, 179, 8, 0.16);
+        }
+        #market-view .market-ai-industry-pulse,
+        #market-view .market-ai-industry-timeline {
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 8px;
+          background: rgba(8, 15, 26, 0.66);
+          min-width: 0;
+        }
+        #market-view .market-ai-industry-pulse {
+          padding: 12px;
+        }
+        #market-view .market-ai-industry-chart-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: end;
+          margin-bottom: 8px;
+        }
+        #market-view .market-ai-industry-chart-head small {
+          display: block;
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 900;
+        }
+        #market-view .market-ai-industry-chart-head strong {
+          display: block;
+          margin-top: 3px;
+          color: #f8fafc;
+          font-size: 22px;
+          line-height: 1.1;
+        }
+        #market-view .market-ai-industry-chart-head span {
+          color: #fb7185;
+          font-size: 20px;
+          font-weight: 1000;
+          white-space: nowrap;
+        }
+        #market-view .market-ai-industry-chart {
+          display: block;
+          width: 100%;
+          min-height: 260px;
+          overflow: visible;
+        }
+        #market-view .market-ai-industry-chart rect:first-of-type {
+          fill: rgba(15, 23, 42, 0.74);
+          stroke: rgba(148, 163, 184, 0.28);
+        }
+        #market-view .market-ai-industry-chart .grid-x,
+        #market-view .market-ai-industry-chart .grid-y {
+          stroke: rgba(148, 163, 184, 0.18);
+          stroke-width: 1;
+        }
+        #market-view .market-ai-industry-chart .zero-line {
+          stroke: rgba(250, 204, 21, 0.34);
+          stroke-width: 1.5;
+          stroke-dasharray: 6 6;
+        }
+        #market-view .market-ai-industry-chart .area {
+          fill: url(#industryPulseFill);
+        }
+        #market-view .market-ai-industry-chart .pulse {
+          fill: none;
+          stroke: #fb7185;
+          stroke-width: 3.5;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          filter: drop-shadow(0 0 10px rgba(251, 113, 133, 0.28));
+        }
+        #market-view .market-ai-industry-chart .axis-x,
+        #market-view .market-ai-industry-chart .axis-y {
+          fill: #9fb0cd;
+          font-size: 16px;
+          font-weight: 900;
+        }
+        #market-view .market-ai-industry-chart .axis-x {
+          text-anchor: middle;
+        }
+        #market-view .market-ai-industry-callout line {
+          stroke: rgba(251, 113, 133, 0.72);
+          stroke-width: 2;
+        }
+        #market-view .market-ai-industry-callout.is-down line {
+          stroke: rgba(45, 212, 191, 0.72);
+        }
+        #market-view .market-ai-industry-callout circle {
+          fill: #fb7185;
+          stroke: rgba(248, 250, 252, 0.92);
+          stroke-width: 2;
+        }
+        #market-view .market-ai-industry-callout.is-down circle {
+          fill: #2dd4bf;
+        }
+        #market-view .market-ai-industry-callout rect {
+          fill: rgba(15, 23, 42, 0.92);
+          stroke: rgba(251, 113, 133, 0.75);
+        }
+        #market-view .market-ai-industry-callout.is-down rect {
+          stroke: rgba(45, 212, 191, 0.75);
+        }
+        #market-view .market-ai-industry-callout text {
+          fill: #f8fafc;
+          font-size: 14px;
+          font-weight: 1000;
+        }
+        #market-view .market-ai-industry-timeline {
+          position: relative;
+          padding: 14px 14px 14px 22px;
+        }
+        #market-view .market-ai-industry-timeline h5 {
+          margin: 0 0 12px;
+          color: #f8fafc;
+          font-size: 18px;
+          line-height: 1.2;
+        }
+        #market-view .market-ai-industry-timeline article {
+          position: relative;
+          display: grid;
+          grid-template-columns: 58px minmax(0, 1fr);
+          gap: 14px;
+          padding: 0 0 16px;
+        }
+        #market-view .market-ai-industry-timeline article::before {
+          content: "";
+          position: absolute;
+          left: 70px;
+          top: 8px;
+          bottom: -8px;
+          width: 2px;
+          background: rgba(250, 204, 21, 0.46);
+        }
+        #market-view .market-ai-industry-timeline article:last-child::before {
+          display: none;
+        }
+        #market-view .market-ai-industry-timeline time {
+          color: #facc15;
+          font-size: 17px;
+          font-weight: 1000;
+          text-align: right;
+          line-height: 1.2;
+        }
+        #market-view .market-ai-industry-timeline div {
+          position: relative;
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.72);
+          padding: 12px 12px 11px;
+          min-width: 0;
+        }
+        #market-view .market-ai-industry-timeline div::before {
+          content: "";
+          position: absolute;
+          left: -21px;
+          top: 10px;
+          width: 12px;
+          height: 12px;
+          border: 2px solid #facc15;
+          border-radius: 999px;
+          background: #111827;
+        }
+        #market-view .market-ai-industry-timeline strong {
+          color: #f8fafc;
+          font-size: 17px;
+          line-height: 1.25;
+        }
+        #market-view .market-ai-industry-timeline span,
+        #market-view .market-ai-industry-timeline b {
+          display: inline-flex;
+          margin-left: 8px;
+          border-radius: 7px;
+          padding: 2px 7px;
+          font-size: 12px;
+          font-weight: 1000;
+        }
+        #market-view .market-ai-industry-timeline span {
+          color: #fde68a;
+          background: rgba(234, 179, 8, 0.12);
+          border: 1px solid rgba(234, 179, 8, 0.35);
+        }
+        #market-view .market-ai-industry-timeline b {
+          color: #fb7185;
+          background: rgba(127, 29, 29, 0.25);
+          border: 1px solid rgba(251, 113, 133, 0.42);
+        }
+        #market-view .market-ai-industry-timeline article.is-down b {
+          color: #2dd4bf;
+          background: rgba(6, 78, 59, 0.24);
+          border-color: rgba(45, 212, 191, 0.42);
+        }
+        #market-view .market-ai-industry-timeline p {
+          margin: 8px 0 0;
+          color: #9fb0cd;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
         #market-view .market-ai-industry-grid {
           display: grid;
           grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -11875,6 +12179,15 @@
           #market-view .market-ai-current-rule {
             grid-template-columns: 1fr;
           }
+          #market-view .market-ai-industry-visual {
+            grid-template-columns: 1fr;
+          }
+          #market-view .market-ai-industry-chart {
+            min-height: 220px;
+          }
+          #market-view .market-ai-industry-timeline article {
+            grid-template-columns: 52px minmax(0, 1fr);
+          }
           #market-view .market-ai-industry-grid {
             grid-template-columns: 1fr;
           }
@@ -11941,6 +12254,9 @@
         body.fuman-light-theme #market-view .market-ai-hero-metrics .market-ai-index-chip,
         body.fuman-light-theme #market-view .market-ai-hot-section,
         body.fuman-light-theme #market-view .market-ai-stock-row,
+        body.fuman-light-theme #market-view .market-ai-industry-pulse,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline div,
         body.fuman-light-theme #market-view .market-ai-industry-card,
         body.fuman-light-theme #market-view .market-ai-industry-card span,
         body.fuman-light-theme #market-view .market-ai-current-rule {
