@@ -658,8 +658,8 @@ async function loadFastIndustrySectors(request, clock, deps = {}) {
   const snapshot = await withTimeout(readSnapshot("heatmap_latest", {
     tradeDate: clock.date,
     allowLatestFallback: true,
-    timeoutMs: 900,
-  }), 1000, null);
+    timeoutMs: 3000,
+  }), 3200, null);
   const snapshotDate = compactDate(snapshot?.tradeDate || snapshot?.payload?.resolvedTradeDate || snapshot?.payload?.today || "");
   const snapshotSectors = normalizeArray(snapshot?.payload?.sectors);
   if (snapshotSectors.length && (!snapshotDate || snapshotDate === clock.ymd)) return snapshotSectors;
@@ -1739,6 +1739,7 @@ module.exports.__test = {
   canServeCachedPayload,
   heatmapQueryForMarketAi,
 };
+
 
 
 
