@@ -3206,6 +3206,11 @@ function mergeQuote(stock, quote) {
     volume: quote.volume || stock.volume,
     value: quote.value || stock.value,
     amountYi: (quote.value || stock.value) / 100000000,
+    previousValue: stock.value || 0,
+    previousAmountYi: (stock.value || 0) / 100000000,
+    previousVolume: stock.volume || 0,
+    valueDelta: (quote.value || stock.value || 0) - (stock.value || 0),
+    valueDeltaYi: ((quote.value || stock.value || 0) - (stock.value || 0)) / 100000000,
     quoteDate: quote.quoteDate,
     quoteTime: quote.quoteTime,
     quoteUpdatedAt: quote.updatedAt,
@@ -3362,7 +3367,7 @@ module.exports = async function handler(request, response) {
     const uniqueStocks = [...byCode.values()];
     const { quoteMap, sourceInfo } = await fetchRealtimeQuotes(uniqueStocks, clock);
     const groups = Object.fromEntries(
-      BB_HEATMAP_GROUP_ORDER.map((name) => [name, { name, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 }])
+      BB_HEATMAP_GROUP_ORDER.map((name) => [name, { name, stocks: [], totalValue: 0, previousTotalValue: 0, up: 0, down: 0, flat: 0 }])
     );
 
     uniqueStocks.forEach((baseStock) => {
@@ -3382,11 +3387,12 @@ module.exports = async function handler(request, response) {
       };
 
       if (!groups[sector]) {
-        groups[sector] = { name: sector, stocks: [], totalValue: 0, up: 0, down: 0, flat: 0 };
+        groups[sector] = { name: sector, stocks: [], totalValue: 0, previousTotalValue: 0, up: 0, down: 0, flat: 0 };
       }
 
       groups[sector].stocks.push(profiledStock);
       groups[sector].totalValue += profiledStock.amountYi;
+      groups[sector].previousTotalValue += profiledStock.previousAmountYi || 0;
       if (profiledStock.change > 0) groups[sector].up++;
       else if (profiledStock.change < 0) groups[sector].down++;
       else groups[sector].flat++;
@@ -3405,6 +3411,8 @@ module.exports = async function handler(request, response) {
         const sortedStocks = [...group.stocks].sort((a, b) => b.amountYi - a.amountYi);
         const leader = sortedStocks[0];
         const totalValue = Number(group.totalValue.toFixed(1));
+        const previousTotalValue = Number((group.previousTotalValue || 0).toFixed(1));
+        const valueDeltaYi = Number((totalValue - previousTotalValue).toFixed(1));
         return {
           name: group.name,
           pct: Number(weightedPct.toFixed(2)),
@@ -3412,6 +3420,9 @@ module.exports = async function handler(request, response) {
           breadthPct: Number(breadthPct.toFixed(2)),
           totalValue,
           amountYi: totalValue,
+          previousTotalValue,
+          previousAmountYi: previousTotalValue,
+          valueDeltaYi,
           count: group.stocks.length,
           up: group.up,
           down: group.down,
@@ -3427,6 +3438,10 @@ module.exports = async function handler(request, response) {
             pct: Number(stock.pct.toFixed(2)),
             amountYi: Number(stock.amountYi.toFixed(2)),
             value: stock.value,
+            previousAmountYi: Number((stock.previousAmountYi || 0).toFixed(2)),
+            previousValue: stock.previousValue || 0,
+            valueDeltaYi: Number((stock.valueDeltaYi || 0).toFixed(2)),
+            valueDelta: stock.valueDelta || 0,
             volume: stock.volume,
             quoteDate: stock.quoteDate || "",
             quoteTime: stock.quoteTime || "",
@@ -3502,8 +3517,3 @@ module.exports = async function handler(request, response) {
     response.status(502).json({ ok: false, error: error.message });
   }
 };
-
-
-
-
-

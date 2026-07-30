@@ -37,6 +37,10 @@ function slimStock(row) {
     ClosingPrice: row.ClosingPrice ?? row.close ?? "",
     Change: row.Change ?? row.change ?? "",
     TradeValue: row.TradeValue ?? row.value ?? "",
+    previousValue: row.previousValue ?? row.PreviousValue ?? "",
+    previousAmountYi: row.previousAmountYi ?? row.PreviousAmountYi ?? "",
+    valueDelta: row.valueDelta ?? row.ValueDelta ?? "",
+    valueDeltaYi: row.valueDeltaYi ?? row.ValueDeltaYi ?? "",
     TradeVolume: row.TradeVolume ?? row.tradeVolume ?? "",
     percent: row.percent ?? row.Percent ?? "",
     quoteDate: row.quoteDate || row.tradeDate || "",
@@ -51,6 +55,9 @@ function slimSector(sector) {
     breadthPct: sector.breadthPct,
     totalValue: sector.totalValue,
     amountYi: sector.amountYi,
+    previousTotalValue: sector.previousTotalValue,
+    previousAmountYi: sector.previousAmountYi,
+    valueDeltaYi: sector.valueDeltaYi,
     count: sector.count ?? sector.total,
     up: sector.up,
     down: sector.down,
@@ -71,6 +78,10 @@ function compactHeatmapStock(stock) {
     pct: stock.pct,
     amountYi: stock.amountYi,
     value: stock.value,
+    previousAmountYi: stock.previousAmountYi,
+    previousValue: stock.previousValue,
+    valueDeltaYi: stock.valueDeltaYi,
+    valueDelta: stock.valueDelta,
     volume: stock.volume,
     quoteDate: stock.quoteDate || "",
     quoteTime: stock.quoteTime || "",
@@ -103,6 +114,9 @@ function compactHeatmapSnapshot(snapshot) {
       breadthPct: sector.breadthPct,
       totalValue: sector.totalValue,
       amountYi: sector.amountYi,
+      previousTotalValue: sector.previousTotalValue,
+      previousAmountYi: sector.previousAmountYi,
+      valueDeltaYi: sector.valueDeltaYi,
       count: sector.count,
       up: sector.up,
       down: sector.down,
@@ -151,7 +165,7 @@ function assertTodayMarketSummary(summary) {
 async function main() {
   const [market, heatmap, stocksResult] = await Promise.allSettled([
     callHandler(marketHandler),
-    callHandler(heatmapHandler),
+    callHandler(heatmapHandler, { source: "market-ai-live" }),
     callHandler(stocksHandler),
   ]);
   const marketPayload = market.status === "fulfilled" ? market.value : {};
@@ -247,4 +261,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
