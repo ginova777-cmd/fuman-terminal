@@ -6340,6 +6340,25 @@
         </div>
       </article>
     `).join("") : '<div class="empty-state">目前 AI 尚未篩出足夠觀察股。</div>';
+    const industryItems = normalizeArray(aiPayload?.industryDynamics?.items);
+    const industryMeta = aiPayload?.industryDynamics || {};
+    const industryToneClass = (tone) => tone === "up" ? "is-up" : tone === "down" ? "is-down" : tone === "volume" ? "is-volume" : "is-neutral";
+    const industrySectorsHtml = (sectors) => normalizeArray(sectors).slice(0, 5).map((sector, index) => {
+      const pct = num(sector?.pct);
+      const valueYi = num(sector?.valueYi ?? sector?.amountYi ?? sector?.totalValue);
+      const pctText = Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--";
+      const valueText = valueYi ? `${valueYi.toLocaleString("zh-TW", { maximumFractionDigits: 1 })} 億` : "";
+      return `<span><b>${index + 1}</b>${escapeHtml(sector?.name || "--")} <em>${escapeHtml(pctText)}</em>${valueText ? `<small>${escapeHtml(valueText)}</small>` : ""}</span>`;
+    }).join("");
+    const industryCardsHtml = industryItems.length ? industryItems.map((item) => `
+      <article class="market-ai-industry-card ${industryToneClass(item?.tone)}">
+        <small>${escapeHtml(item?.label || "--")}</small>
+        <strong>${escapeHtml(item?.title || "--")}</strong>
+        <b>${escapeHtml(item?.metric || "--")}</b>
+        <p>${escapeHtml(item?.detail || "")}</p>
+        <div>${industrySectorsHtml(item?.sectors) || "<span><b>-</b>等待產業摘要</span>"}</div>
+      </article>
+    `).join("") : '<div class="empty-state">目前產業即時動向摘要尚未產生。</div>';
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = aiPayload?.source || aiPayload?.cacheSource || "desktop-fast-shell";
@@ -6380,13 +6399,9 @@
             ]).map((item) => `<div><strong>${escapeHtml(item.title || "風險")}</strong><p>${escapeHtml(item.text || item.reason || "")}</p></div>`).join("")}
           </article>
         </section>
-        <section class="market-ai-block market-ai-hot-section">
-          <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API · ${escapeHtml(dateLabel)}</span></header>
-          <div class="market-ai-filter-row">
-            ${tabs.map(([key, label, klass, rows]) => `<button type="button" class="${key === activeFilter ? "active" : ""}" data-market-ai-filter="${escapeHtml(key)}">${escapeHtml(label)} <b>${rows.length}</b></button>`).join("")}
-          </div>
-          <div class="market-ai-current-rule"><small>目前排序</small><strong>${escapeHtml(activeFilterTitle)}</strong><span>${escapeHtml(activeFilterNote)}</span></div>
-          <div class="market-ai-hot">${rowHtml(activeTab[3] || [], activeFilter)}</div>
+        <section class="market-ai-block market-ai-hot-section market-ai-industry-section">
+          <header><div><h4>產業即時動向</h4><p>最強、最弱、量能、吸金、資金渙散</p></div><span>API · ${escapeHtml(dateLabel)} · ${escapeHtml(industryMeta.source || "industry-summary")}</span></header>
+          <div class="market-ai-industry-grid">${industryCardsHtml}</div>
         </section>
     `;
     const hotSection = panels.ai.querySelector(".market-ai-hot-section");
@@ -11609,6 +11624,101 @@
           color: #9fb0cd;
           line-height: 1.55;
         }
+
+        #market-view .market-ai-industry-grid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 10px;
+          min-height: 360px;
+          padding: 12px;
+        }
+        #market-view .market-ai-industry-card {
+          display: grid;
+          align-content: start;
+          gap: 9px;
+          min-height: 230px;
+          border: 1px solid rgba(234, 179, 8, 0.22);
+          border-radius: 8px;
+          background: rgba(15, 23, 42, 0.64);
+          padding: 14px;
+        }
+        #market-view .market-ai-industry-card.is-up {
+          border-color: rgba(251, 113, 133, 0.42);
+          background: linear-gradient(180deg, rgba(127, 29, 29, 0.34), rgba(15, 23, 42, 0.64));
+        }
+        #market-view .market-ai-industry-card.is-down {
+          border-color: rgba(45, 212, 191, 0.40);
+          background: linear-gradient(180deg, rgba(6, 78, 59, 0.34), rgba(15, 23, 42, 0.64));
+        }
+        #market-view .market-ai-industry-card.is-volume {
+          border-color: rgba(250, 204, 21, 0.44);
+        }
+        #market-view .market-ai-industry-card small {
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 900;
+        }
+        #market-view .market-ai-industry-card strong {
+          color: #f8fafc;
+          font-size: 22px;
+          line-height: 1.15;
+        }
+        #market-view .market-ai-industry-card > b {
+          color: #facc15;
+          font-size: 28px;
+          line-height: 1;
+        }
+        #market-view .market-ai-industry-card.is-up > b {
+          color: #fb7185;
+        }
+        #market-view .market-ai-industry-card.is-down > b {
+          color: #2dd4bf;
+        }
+        #market-view .market-ai-industry-card p {
+          margin: 0;
+          color: #b7c5df;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        #market-view .market-ai-industry-card div {
+          display: grid;
+          gap: 6px;
+          margin-top: 4px;
+        }
+        #market-view .market-ai-industry-card span {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          border: 1px solid rgba(148, 163, 184, 0.18);
+          border-radius: 8px;
+          background: rgba(8, 15, 26, 0.54);
+          color: #dbeafe;
+          padding: 7px 8px;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        #market-view .market-ai-industry-card span b {
+          display: grid;
+          place-items: center;
+          min-width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          background: rgba(234, 179, 8, 0.16);
+          color: #facc15;
+          font-size: 11px;
+        }
+        #market-view .market-ai-industry-card span em {
+          margin-left: auto;
+          color: #fb7185;
+          font-style: normal;
+          white-space: nowrap;
+        }
+        #market-view .market-ai-industry-card span small {
+          color: #9fb0cd;
+          font-size: 11px;
+          white-space: nowrap;
+        }
         #market-view .market-ai-filter-row {
           display: flex;
           flex-wrap: wrap;
@@ -11765,6 +11875,9 @@
           #market-view .market-ai-current-rule {
             grid-template-columns: 1fr;
           }
+          #market-view .market-ai-industry-grid {
+            grid-template-columns: 1fr;
+          }
         }
         body.fuman-light-theme #market-view .market-mode-tabs {
           border-color: rgba(249, 115, 22, 0.24) !important;
@@ -11828,6 +11941,8 @@
         body.fuman-light-theme #market-view .market-ai-hero-metrics .market-ai-index-chip,
         body.fuman-light-theme #market-view .market-ai-hot-section,
         body.fuman-light-theme #market-view .market-ai-stock-row,
+        body.fuman-light-theme #market-view .market-ai-industry-card,
+        body.fuman-light-theme #market-view .market-ai-industry-card span,
         body.fuman-light-theme #market-view .market-ai-current-rule {
           border-color: rgba(148, 163, 184, 0.34) !important;
           background: rgba(255, 255, 255, 0.92) !important;
@@ -11835,12 +11950,14 @@
         }
         body.fuman-light-theme #market-view .market-ai-index-chip small,
         body.fuman-light-theme #market-view .market-ai-stock-row p,
+        body.fuman-light-theme #market-view .market-ai-industry-card p,
         body.fuman-light-theme #market-view .market-ai-current-rule span,
         body.fuman-light-theme #market-view .market-ai-hot-section > header span {
           color: #475569 !important;
         }
         body.fuman-light-theme #market-view .market-ai-index-chip b,
         body.fuman-light-theme #market-view .market-ai-stock-row h4,
+        body.fuman-light-theme #market-view .market-ai-industry-card strong,
         body.fuman-light-theme #market-view .market-ai-hot-section h4,
         body.fuman-light-theme #market-view .market-ai-current-rule strong {
           color: #0f172a !important;

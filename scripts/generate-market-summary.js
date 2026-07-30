@@ -46,10 +46,17 @@ function slimStock(row) {
 function slimSector(sector) {
   return {
     name: sector.name || "",
-    avg: sector.avg,
+    pct: sector.pct,
+    avgPct: sector.avgPct ?? sector.avg,
+    breadthPct: sector.breadthPct,
+    totalValue: sector.totalValue,
+    amountYi: sector.amountYi,
+    count: sector.count ?? sector.total,
     up: sector.up,
     down: sector.down,
-    total: sector.total,
+    flat: sector.flat,
+    leader: sector.leader || "",
+    leaderCode: sector.leaderCode || "",
     stocks: Array.isArray(sector.stocks) ? sector.stocks.slice(0, 8).map(slimStock) : [],
   };
 }
