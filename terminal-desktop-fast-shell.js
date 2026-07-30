@@ -12448,6 +12448,167 @@
           color: #b45309 !important;
         }
 
+        /* market-ai-sunlight-palette-20260730 */
+        body.fuman-light-theme #market-view .market-ai-panel {
+          border-color: #c9d8e8 !important;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 249, 255, 0.98)) !important;
+          color: #0f172a !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-panel.market-ai-visual-dashboard {
+          background: transparent !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-hot-section,
+        body.fuman-light-theme #market-view .market-ai-industry-pulse,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline,
+        body.fuman-light-theme #market-view .market-ai-stock-row,
+        body.fuman-light-theme #market-view .market-ai-current-rule {
+          border-color: #cbd8e6 !important;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 247, 255, 0.96)) !important;
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08) !important;
+          color: #0f172a !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-visual {
+          border-bottom-color: #d7e2ee !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart rect:first-of-type {
+          fill: #ffffff !important;
+          stroke: #cbd8e6 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart .grid-x,
+        body.fuman-light-theme #market-view .market-ai-industry-chart .grid-y {
+          stroke: #dbe6f3 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart .zero-line {
+          stroke: rgba(217, 119, 6, 0.42) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart .pulse {
+          stroke: #e11d48 !important;
+          filter: drop-shadow(0 0 5px rgba(225, 29, 72, 0.18)) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart .axis-x,
+        body.fuman-light-theme #market-view .market-ai-industry-chart .axis-y {
+          fill: #42526b !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart .market-ai-industry-volume-bar {
+          fill: rgba(37, 99, 235, 0.42) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart-head small,
+        body.fuman-light-theme #market-view .market-ai-industry-card small {
+          color: #2563eb !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart-head strong,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline h5,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline strong,
+        body.fuman-light-theme #market-view .market-ai-industry-card strong {
+          color: #111827 !important;
+          text-shadow: none !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart-head span,
+        body.fuman-light-theme #market-view .market-ai-industry-chart-head span.is-up,
+        body.fuman-light-theme #market-view .market-ai-industry-card.is-up > b,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline b {
+          color: #dc2626 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-chart-head span.is-down,
+        body.fuman-light-theme #market-view .market-ai-industry-card.is-down > b,
+        body.fuman-light-theme #market-view .market-ai-industry-timeline article.is-down b {
+          color: #059669 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout line {
+          stroke: rgba(220, 38, 38, 0.68) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout.is-down line {
+          stroke: rgba(5, 150, 105, 0.68) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout circle {
+          fill: #dc2626 !important;
+          stroke: #ffffff !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout.is-down circle {
+          fill: #059669 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout rect {
+          fill: rgba(255, 255, 255, 0.96) !important;
+          stroke: rgba(220, 38, 38, 0.72) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout.is-down rect {
+          stroke: rgba(5, 150, 105, 0.72) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-callout text {
+          fill: #111827 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline time {
+          color: #b45309 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline article::before {
+          background: rgba(217, 119, 6, 0.46) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline div {
+          border: 1px solid #d7e2ee !important;
+          background: #ffffff !important;
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline div::before {
+          border-color: #d97706 !important;
+          background: #ffffff !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline span {
+          color: #92400e !important;
+          background: #fffbeb !important;
+          border-color: rgba(217, 119, 6, 0.34) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline b {
+          background: #fff1f2 !important;
+          border-color: rgba(220, 38, 38, 0.26) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline article.is-down b {
+          background: #ecfdf5 !important;
+          border-color: rgba(5, 150, 105, 0.28) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-timeline p,
+        body.fuman-light-theme #market-view .market-ai-industry-card p {
+          color: #475569 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card {
+          border-color: #cbd8e6 !important;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 255, 0.98)) !important;
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card.is-up {
+          border-color: rgba(220, 38, 38, 0.34) !important;
+          background: linear-gradient(180deg, #fff1f2 0%, #ffffff 56%, #f8fbff 100%) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card.is-down {
+          border-color: rgba(5, 150, 105, 0.32) !important;
+          background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 56%, #f8fbff 100%) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card.is-volume {
+          border-color: rgba(217, 119, 6, 0.34) !important;
+          background: linear-gradient(180deg, #fffbeb 0%, #ffffff 56%, #f8fbff 100%) !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card > b {
+          color: #b45309 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card span {
+          border-color: #dbe6f3 !important;
+          background: #f8fafc !important;
+          color: #1e293b !important;
+          box-shadow: none !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card span b {
+          background: #eaf2ff !important;
+          color: #2563eb !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card span em {
+          color: #dc2626 !important;
+        }
+        body.fuman-light-theme #market-view .market-ai-industry-card span small {
+          color: #64748b !important;
+        }
+
         body.fuman-light-theme #market-view .market-ai-sort-note {
           border-color: rgba(249, 115, 22, 0.28) !important;
           background: #fff7ed !important;

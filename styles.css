@@ -8818,3 +8818,45 @@ body.public-terminal #strategy-view[data-retired-strategy-shell="1"] #strategy-t
   color: #bfd7ff !important;
   min-height: 160px !important;
 }
+
+
+/* fuman-sunlight-palette-20260730 */
+body.fuman-light-theme.public-terminal {
+  background:
+    linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, #f7fbff 0%, #edf5ff 44%, #fffaf4 100%) !important;
+  color: #0f172a !important;
+}
+body.fuman-light-theme.public-terminal .app-shell,
+body.fuman-light-theme.public-terminal .dashboard {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(249, 115, 22, 0.08), transparent 30%),
+    radial-gradient(circle at 84% 0%, rgba(37, 99, 235, 0.08), transparent 32%),
+    transparent !important;
+}
+body.fuman-light-theme.public-terminal .terminal-sidebar {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: #d7e2ee !important;
+  box-shadow: 10px 0 30px rgba(15, 23, 42, 0.06) !important;
+}
+body.fuman-light-theme.public-terminal .nav-item,
+body.fuman-light-theme.public-terminal .strategy-link,
+body.fuman-light-theme.public-terminal .learn-link {
+  background: rgba(255, 255, 255, 0.84) !important;
+  border-color: #d8e3ef !important;
+  color: #1e293b !important;
+}
+body.fuman-light-theme.public-terminal .nav-item.active,
+body.fuman-light-theme.public-terminal .strategy-link.active,
+body.fuman-light-theme.public-terminal .learn-link.active {
+  background: linear-gradient(135deg, #fff7ed, #eff6ff) !important;
+  border-color: rgba(249, 115, 22, 0.62) !important;
+  color: #9a3412 !important;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.13) !important;
+}
+body.fuman-light-theme.public-terminal .theme-toggle,
+body.fuman-light-theme.public-terminal .logout-btn,
+body.fuman-light-theme.public-terminal .member-pill {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10) !important;
+}
