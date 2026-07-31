@@ -108,7 +108,7 @@
   const MARKET_JSON_CACHE_TTL_MS = 18000;
   const MARKET_HEATMAP_FETCH_TIMEOUT_MS = 12000;
   const MARKET_RADAR_FETCH_TIMEOUT_MS = 12000;
-  const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 5000;
+  const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 16000;
   let marketAiRenderSignature = "";
   let marketAiRenderTimer = 0;
   let marketAiRenderRequest = null;
@@ -5221,7 +5221,7 @@
     if (!force && cached?.payload && Date.now() - Number(cached.at || 0) < MARKET_JSON_CACHE_TTL_MS) {
       return Promise.resolve(cached.payload);
     }
-    if (!force && marketJsonInflight.has(key)) return marketJsonInflight.get(key);
+    if (marketJsonInflight.has(key)) return marketJsonInflight.get(key);
     const task = new Promise((resolve) => {
       try {
         const xhr = new XMLHttpRequest();
@@ -5249,9 +5249,9 @@
         resolve(null);
       }
     }).finally(() => {
-      if (!force) marketJsonInflight.delete(key);
+      marketJsonInflight.delete(key);
     });
-    if (!force) marketJsonInflight.set(key, task);
+    marketJsonInflight.set(key, task);
     return task;
   }
 
