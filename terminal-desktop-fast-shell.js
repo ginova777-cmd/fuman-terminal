@@ -6359,7 +6359,12 @@
       return base.toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
     };
     const industryEvents = (() => {
-      const rows = normalizeArray(industryMeta?.events).length ? normalizeArray(industryMeta.events) : industryItems.map((item, index) => {
+      const fakeIndustryEvent = (row) => {
+        const text = String([row?.name, row?.title, row?.label, row?.metric, row?.detail].filter(Boolean).join(" "));
+        return /昨成交額待補|尚未提供昨日成交金額|等待產業摘要/.test(text) && !normalizeArray(row?.sectors).length && !normalizeArray(row?.stocks).length;
+      };
+      const rawEvents = normalizeArray(industryMeta?.events).filter((row) => !fakeIndustryEvent(row));
+      const rows = rawEvents.length ? rawEvents : industryItems.filter((item) => !fakeIndustryEvent(item)).map((item, index) => {
         const primary = normalizeArray(item?.sectors)[0] || { name: item?.title, pct: 0, valueYi: 0, deltaYi: 0, stocks: [] };
         return {
           key: item?.key || primary?.name || item?.label || `industry-${index}`,
@@ -6512,12 +6517,12 @@
           <div><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.label)}</span><b>${escapeHtml(row.metric)}</b><p>${escapeHtml(row.detail)}${deltaText ? ` · ${escapeHtml(deltaText)}` : ""}</p></div>
         </article>
       `;
-    }).join("") : '<div class="empty-state">目前尚無產業事件時間軸。</div>';
+    }).join("") : `<div class="empty-state">${escapeHtml(industryMeta?.waitingTitle || "目前尚無產業事件時間軸。")}<br><small>${escapeHtml(industryMeta?.waitingDetail || "等待今日產業即時摘要。")}</small></div>`;
     const industryCardsHtml = industryItems.length ? industryItems.map((item) => {
       const primary = normalizeArray(item?.sectors)[0] || {};
       const primaryName = primary?.name || item?.title || "--";
       return `
-      <article class="market-ai-industry-card ${industryToneClass(item?.tone)}" data-market-ai-industry-name="${escapeHtml(primaryName)}" role="button" tabindex="0">
+      <article class="market-ai-industry-card ${primaryName === "--" || item?.key === "waiting" ? "is-waiting" : industryToneClass(item?.tone)}" ${primaryName === "--" || item?.key === "waiting" ? "" : `data-market-ai-industry-name="${escapeHtml(primaryName)}" role="button" tabindex="0"`}>
         <small>${escapeHtml(item?.label || "--")}</small>
         <strong>${escapeHtml(item?.title || "--")}</strong>
         <b>${escapeHtml(item?.metric || "--")}</b>
