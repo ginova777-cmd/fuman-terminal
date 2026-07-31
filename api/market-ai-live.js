@@ -684,12 +684,16 @@ async function loadFastIndustrySectors(request, clock, deps = {}) {
   const snapshotDate = compactDate(snapshot?.tradeDate || snapshot?.payload?.resolvedTradeDate || snapshot?.payload?.today || "");
   const snapshotSectors = normalizeArray(snapshot?.payload?.sectors);
   if (snapshotSectors.length && (!snapshotDate || snapshotDate === clock.ymd)) return snapshotSectors;
+  const liveIndustryRequired = isMarketAiDetectWindow(clock);
   const req = {
     ...request,
     method: "GET",
-    query: { ...(request.query || {}), snapshot: "1", fast: "1", compact: "1", source: "market-ai-industry-summary" },
+    query: liveIndustryRequired
+      ? { ...(request.query || {}), compact: "1", source: "market-ai-live", limit: "999", stocks: "999" }
+      : { ...(request.query || {}), snapshot: "1", fast: "1", compact: "1", source: "market-ai-industry-summary" },
   };
-  const result = await withTimeout(capture(heatmap, req), 1200, { statusCode: 504, payload: null });
+  const timeoutMs = liveIndustryRequired ? 16000 : 1400;
+  const result = await withTimeout(capture(heatmap, req), timeoutMs, { statusCode: 504, payload: null });
   return normalizeArray(result?.payload?.sectors);
 }
 
