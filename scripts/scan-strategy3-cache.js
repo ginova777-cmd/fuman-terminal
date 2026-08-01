@@ -79,6 +79,7 @@ const STRATEGY3_DRIFT_MIN_FUGLE_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_FU
 const STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_INTRADAY_STATUS_ROWS || 1000);
 const STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS = Number(process.env.STRATEGY3_DRIFT_MIN_DAILY_VOLUME_ROWS || 1000);
 const STRATEGY3_NOTIFICATION_DISABLED = process.env.STRATEGY3_NOTIFICATION_DISABLED === "1";
+const LEGACY_NOTIFICATIONS_DISABLED_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "config", "notifications-disabled.json");
 const STRATEGY3_NOTIFICATION_MAX_SYMBOLS = Number(process.env.STRATEGY3_NOTIFICATION_MAX_SYMBOLS || 20);
 const STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW = process.env.STRATEGY3_NOTIFICATION_REQUIRE_1300_WINDOW !== "0";
 const STRATEGY3_INTRADAY_STATUS_SOURCE = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
@@ -2457,6 +2458,14 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
 
 
 
+function legacyNotificationsDisabled() {
+  if (/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_ENABLE_LEGACY_EXTERNAL_NOTIFICATIONS || "").trim())) return false;
+  try {
+    return JSON.parse(fs.readFileSync(LEGACY_NOTIFICATIONS_DISABLED_FILE, "utf8")).disabled === true;
+  } catch {
+    return false;
+  }
+}
 function readNotificationSecret(envName, fileName) {
   const value = String(process.env[envName] || "").trim();
   if (value) return value;
@@ -2607,7 +2616,7 @@ async function sendLineStrategy3Notification(payload) {
 
 async function sendStrategy3CompleteNotifications(output, runId, snapshotResult) {
   if (notificationsDisabled()) return { ok: true, skipped: true, reason: "notifications_disabled" };
-  if (STRATEGY3_NOTIFICATION_DISABLED) return { ok: true, skipped: true, reason: "disabled" };
+  if (STRATEGY3_NOTIFICATION_DISABLED || legacyNotificationsDisabled()) return { ok: true, skipped: true, reason: "legacy notifications disabled" };
   if (!runId) return { ok: true, skipped: true, reason: "missing runId" };
   if (!output?.complete || !output?.count) return { ok: true, skipped: true, reason: "no complete strategy3 matches" };
   if (output?.selfTest && output.selfTest.ok !== true) return { ok: true, skipped: true, reason: "self-test not ok" };
