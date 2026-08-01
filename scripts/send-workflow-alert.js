@@ -18,6 +18,7 @@ function readSecretText(file) {
 }
 
 function notificationsDisabled() {
+  if (!/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_ENABLE_LEGACY_EXTERNAL_NOTIFICATIONS || "").trim())) return true;
   if (/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_NOTIFICATIONS_DISABLED || process.env.NOTIFICATIONS_DISABLED || "").trim())) return true;
   try {
     return JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "config", "notifications-disabled.json"), "utf8")).disabled === true;
