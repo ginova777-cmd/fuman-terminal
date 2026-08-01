@@ -4,6 +4,7 @@ const { execFileSync } = require("child_process");
 const { isTwseTradingDay } = require("./twse-trading-day");
 const { hasLineConfig, sendLineText } = require("./line-push");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
+const { notificationsDisabled } = require("./notification-guard");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = process.env.FUMAN_DATA_DIR || path.join(RUNTIME_DIR, "data");
@@ -205,6 +206,7 @@ async function readFrontendGuard() {
 }
 
 async function notify(report) {
+  if (notificationsDisabled()) return "";
   if (process.env.REALTIME_RADAR_HEALTH_NOTIFY === "0") return "";
   const status = readJson(STATUS_FILE, {});
   const signature = report.issues.map((item) => `${item.severity}:${item.code}:${item.message}`).join("|");
