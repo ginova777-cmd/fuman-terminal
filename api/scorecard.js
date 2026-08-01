@@ -2,37 +2,41 @@ const fs = require("fs");
 const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
-const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const {
+  serverSupabaseKey,
+  serverSupabaseUrl,
+  terminalSupabaseKey,
+  terminalSupabaseUrl,
+} = require("../lib/server-supabase-key");
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
-const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 8000) || 8000);
-const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
-  SCORECARD_SNAPSHOT_TIMEOUT_MS,
-  Number(process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS || 8000) || 8000
-);
+const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Math.min(2500, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 1500) || 1500));
+const SCORECARD_SOURCE_REPORT_TIMEOUT_MS = Math.max(300, Math.min(2000, Number(process.env.FUMAN_SOURCE_REPORTS_TIMEOUT_MS || 1200) || 1200));
+const SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
+const SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS = Math.max(1000, Math.min(4000, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS || 2500) || 2500));
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
 const payloadMemoryCache = new Map();
 const FORMAL_STRATEGY_ENDPOINTS = {
-  "策略2成績單": "/api/strategy2-latest",
-  "策略3隔日沖成績單": "/api/strategy3-latest",
-  "策略4成績單": "/api/strategy4-latest",
-  "策略5成績單": "/api/strategy5-latest",
-  "買賣超成績單": "/api/institution-latest",
-  "權證成績單": "/api/warrant-flow-latest",
-  "CB成績單": "/api/cb-detect-latest",
+  "策略2成績單": "/api/strategy2-latest?live=1",
+  "策略3隔日沖成績單": "/api/strategy3-latest?live=1",
+  "策略4成績單": "/api/strategy4-latest?live=1",
+  "策略5成績單": "/api/strategy5-latest?live=1",
+  "買賣超成績單": "/api/institution-latest?live=1",
+  "權證成績單": "/api/warrant-flow-latest?live=1",
+  "CB成績單": "/api/cb-detect-latest?live=1",
 };
 const AUDIT_SURFACES = [
-  ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest"],
-  ["strategy3", "Strategy3", "/api/strategy3-latest"],
-  ["strategy4", "Strategy4", "/api/strategy4-latest"],
-  ["strategy5", "Strategy5", "/api/strategy5-latest"],
-  ["institution", "Institution / 買賣超", "/api/institution-latest"],
-  ["cb", "CB", "/api/cb-detect-latest"],
-  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest"],
+  ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest?live=1"],
+  ["strategy3", "Strategy3", "/api/strategy3-latest?live=1"],
+  ["strategy4", "Strategy4", "/api/strategy4-latest?live=1"],
+  ["strategy5", "Strategy5", "/api/strategy5-latest?live=1"],
+  ["institution", "Institution / 買賣超", "/api/institution-latest?live=1"],
+  ["cb", "CB", "/api/cb-detect-latest?live=1"],
+  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest?live=1"],
   ["market-ai", "Market AI", "/api/market-ai-live"],
   ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
   ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
@@ -191,13 +195,72 @@ async function fetchSupabaseRows(table, query, timeoutMs = 8000) {
   return text ? JSON.parse(text) : [];
 }
 
-async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", error = "source_report_timeout" } = {}) {
+async function readScorecardSnapshotProjection(timeoutMs = SCORECARD_SNAPSHOT_PROJECTION_TIMEOUT_MS) {
+  const table = process.env.FUMAN_SNAPSHOT_TABLE || "market_snapshots";
+  if (table !== "market_snapshots") return null;
+  // Use the same terminal snapshot credentials as readSnapshot(). The generic
+  // server credentials can point at a different project or anon policy.
+  const url = terminalSupabaseUrl();
+  const key = terminalSupabaseKey();
+  if (!url || !key) return null;
+  const fields = [
+    "payload->records",
+    "payload->summary",
+    "payload->latestDate",
+    "payload->marketDate",
+    "payload->runId",
+    "payload->ok",
+    "payload->qualityStatus",
+    "payload->evidenceStatus",
+    "payload->unattendedStatus",
+    "payload->publishAllowed",
+    "payload->updatedAt",
+    "payload->source",
+    "payload->contract",
+    "payload->sourceReports",
+    "payload->sourceQuery",
+    "payload->days",
+    "payload->cacheSource",
+  ].join(",");
+  const query = new URLSearchParams({
+    select: fields,
+    symbol: "eq.__fuman_" + SNAPSHOT_KEY,
+    limit: "1",
+  });
+  try {
+    const response = await fetch(url.replace(/\/+$/, "") + "/rest/v1/" + table + "?" + query.toString(), {
+      headers: {
+        apikey: key,
+        Authorization: "Bearer " + key,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+    if (!response.ok) return null;
+    const rows = await response.json();
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row || !Array.isArray(row.records)) return null;
+    const payload = { ...row, cacheSource: "supabase-snapshot" };
+    return {
+      key: SNAPSHOT_KEY,
+      tradeDate: cleanText(payload.tradeDate || payload.latestDate),
+      updatedAt: cleanText(payload.updatedAt),
+      source: cleanText(payload.source || "supabase:scorecard_snapshot"),
+      projection: true,
+      payload,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function latestRunFallbackPayload({ table, strategy = "", order = "finished_at.desc", select = "*", timeoutMs = 5000, error = "source_report_timeout" } = {}) {
   if (!table) return { ok: false, error };
-  const params = ["select=*", "limit=1"];
+  const params = [`select=${encodeURIComponent(select || "*")}`, "limit=1"];
   if (strategy) params.push(`strategy=eq.${encodeURIComponent(strategy)}`);
   if (order) params.push(`order=${encodeURIComponent(order)}`);
   try {
-    const rows = await fetchSupabaseRows(table, params.join("&"), 5000);
+    const rows = await fetchSupabaseRows(table, params.join("&"), timeoutMs);
     const row = rows[0] || {};
     const quality = row.run_quality_at_publish && typeof row.run_quality_at_publish === "object" ? row.run_quality_at_publish : {};
     const runId = cleanText(row.run_id || row.runId || quality.runId);
@@ -205,6 +268,11 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
       ok: false,
       error,
       runId,
+      strategy: cleanText(row.strategy),
+      status: cleanText(row.status),
+      complete: row.complete === true || cleanText(row.status).toLowerCase() === "complete",
+      qualityStatus: cleanText(row.quality_status || row.qualityStatus),
+      source: cleanText(row.source),
       count: cleanNumber(row.result_count ?? row.matched_count ?? row.matches ?? row.total ?? quality.resultCount),
       resultCount: cleanNumber(row.result_count ?? quality.resultCount),
       readbackCount: cleanNumber(row.readback_count ?? quality.readbackCount),
@@ -212,7 +280,7 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
       scannedCount: cleanNumber(row.scanned_count ?? row.total ?? quality.scannedCount),
       usedDate: cleanText(row.used_date || row.scan_date || row.trade_date || row.date),
       tradeDate: cleanText(row.trade_date || row.scan_date || row.used_date || row.date),
-      source_snapshot_captured_at: cleanText(row.finished_at || row.updated_at || quality.sourceSnapshotCapturedAt),
+      source_snapshot_captured_at: cleanText(row.finished_at || row.updated_at || row.generated_at || quality.sourceSnapshotCapturedAt),
       evidenceStatus: "insufficient",
       unattendedStatus: "NO",
       publishAllowed: false,
@@ -283,25 +351,108 @@ function releaseSourceReports() {
   });
 }
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
-  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
-  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
-  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
-  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },
-  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc" },
-  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "" },
+  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "", select: "run_id,strategy,scan_date,finished_at,status,complete,result_count,quality_status,schema_version,data_contract_source,quote_age_seconds,latest_candle_time,today_candle_count,updated_at" },
+  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,error_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
+  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "", select: "run_id,strategy,scan_date,finished_at,status,expected_total,scanned_count,result_count,complete,quality_status,source,generated_at,updated_at" },
 ];
+const DESKTOP_SNAPSHOT_SOURCE_REPORTS = [
+  { key: "strategy2", strategy: "strategy2", endpointPrefix: "/api/strategy2-latest" },
+  { key: "strategy3", strategy: "strategy3", endpointPrefix: "/api/strategy3-latest" },
+  { key: "strategy4", strategy: "strategy4", endpointPrefix: "/api/strategy4-latest" },
+  { key: "strategy5", strategy: "strategy5", endpointPrefix: "/api/strategy5-latest" },
+  { key: "institution", strategy: "institution", endpointPrefix: "/api/institution-latest" },
+  { key: "cb", strategy: "cb", endpointPrefix: "/api/cb-detect-latest" },
+  { key: "warrant", strategy: "warrant", endpointPrefix: "/api/warrant-flow-latest" },
+];
+
+function desktopSnapshotSourceReport(config, snapshot, endpointPayload) {
+  const row = endpointPayload && typeof endpointPayload === "object" ? endpointPayload : {};
+  const runId = cleanText(row.runId || row.latestRunId);
+  const qualityStatus = cleanText(row.qualityStatus).toLowerCase();
+  const qualityBlocked = ["failed", "blocked", "insufficient", "source_quality_fail", "degraded"].includes(qualityStatus);
+  const complete = row.complete === true;
+  const snapshotComplete = snapshot?.payload?.partial !== true
+    && Array.isArray(snapshot?.payload?.misses)
+    && snapshot.payload.misses.length === 0;
+  const ok = snapshotComplete && !isBlank(runId) && complete && !qualityBlocked;
+  const date = cleanText(row.tradeDate || row.scanDate || row.usedDate || row.sourceDate || snapshot?.tradeDate);
+  const count = cleanNumber(row.resultCount ?? row.count ?? row.returnedCount);
+  const reason = ok
+    ? "desktop_route_snapshot_latest_complete_run"
+    : (!snapshotComplete
+      ? "desktop_route_snapshot_partial_or_missing"
+      : (qualityBlocked ? `quality_status_${qualityStatus}` : !complete ? `${config.key}_run_not_complete` : `${config.key}_run_id_missing`));
+  return {
+    key: config.key,
+    strategy: config.strategy,
+    endpoint: config.endpointPrefix,
+    statusCode: ok ? 200 : 504,
+    ok,
+    runId,
+    count,
+    emittedRows: cleanNumber(row.returnedCount ?? row.count ?? count),
+    date,
+    usedDate: date,
+    sourceDate: date,
+    source_date: date,
+    tradeDate: date,
+    reason,
+    resultCount: cleanNumber(row.resultCount ?? count),
+    readbackCount: cleanNumber(row.readbackCount ?? row.returnedCount ?? count),
+    expectedTotal: cleanNumber(row.expectedTotal),
+    scannedCount: cleanNumber(row.scannedCount),
+    sourceSnapshotCapturedAt: cleanText(snapshot?.updatedAt),
+    source_snapshot_captured_at: cleanText(snapshot?.updatedAt),
+    evidenceStatus: ok ? cleanText(row.evidenceStatus || "complete") : "insufficient",
+    unattendedStatus: ok ? cleanText(row.unattendedStatus || "YES") : "NO",
+    publishAllowed: ok && row.publishAllowed !== false,
+    latestOverwriteAllowed: false,
+    preservePreviousGood: !ok || row.preservePreviousGood === true,
+    fallbackUsed: row.fallbackUsed === true,
+    fallbackAllowed: false,
+    degradedBlocksLatest: !ok || row.degradedBlocksLatest === true,
+    blockedReason: ok ? "" : reason,
+    scanner_block_reason: ok ? "" : reason,
+    qualityStatus: cleanText(row.qualityStatus || (ok ? "complete" : "insufficient")),
+    source: "supabase:desktop_route_snapshot",
+    cacheSource: "desktop-route-snapshot",
+  };
+}
+
+function buildDesktopSnapshotSourceReports(snapshot) {
+  if (!snapshot?.payload || snapshot.payload.partial === true) return [];
+  const endpoints = snapshot.payload.endpoints && typeof snapshot.payload.endpoints === "object"
+    ? snapshot.payload.endpoints
+    : {};
+  const reports = DESKTOP_SNAPSHOT_SOURCE_REPORTS.map((config) => {
+    const entry = Object.entries(endpoints).find(([endpoint]) => String(endpoint).startsWith(config.endpointPrefix));
+    return desktopSnapshotSourceReport(config, snapshot, entry?.[1]);
+  });
+  return reports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length && reports.every((report) => report.ok && report.runId)
+    ? reports
+    : [];
+}
 
 async function buildLightweightSourceReport(config) {
   const payload = await latestRunFallbackPayload({
     table: config.table,
     strategy: config.strategyFilter,
     order: config.order,
+    select: config.select,
+    timeoutMs: SCORECARD_SOURCE_REPORT_TIMEOUT_MS,
     error: `${config.key}_latest_pointer_missing`,
   });
   const runId = cleanText(payload.runId);
-  const ok = !isBlank(runId);
-  const reason = ok ? "" : cleanText(payload.reason || payload.error || `${config.key}_latest_pointer_missing`);
+  const qualityStatus = cleanText(payload.qualityStatus).toLowerCase();
+  const qualityBlocked = ["failed", "blocked", "insufficient", "source_quality_fail", "degraded"].includes(qualityStatus);
+  const complete = payload.complete === true;
+  const ok = !isBlank(runId) && complete && !qualityBlocked;
+  const reason = ok ? "" : cleanText(payload.reason || payload.error || (qualityBlocked ? `quality_status_${qualityStatus}` : !complete ? `${config.key}_run_not_complete` : `${config.key}_latest_pointer_missing`));
+  const count = cleanNumber(payload.count ?? payload.resultCount);
   return {
     key: config.key,
     strategy: config.strategy,
@@ -309,12 +460,12 @@ async function buildLightweightSourceReport(config) {
     statusCode: ok ? 200 : 504,
     ok,
     runId,
-    count: cleanNumber(payload.count || payload.resultCount),
-    emittedRows: cleanNumber(payload.count || payload.resultCount),
+    count,
+    emittedRows: count,
     date: cleanText(payload.usedDate || payload.tradeDate),
     reason,
-    resultCount: cleanNumber(payload.resultCount || payload.count),
-    readbackCount: cleanNumber(payload.readbackCount || payload.count),
+    resultCount: cleanNumber(payload.resultCount ?? count),
+    readbackCount: cleanNumber(payload.readbackCount ?? count),
     expectedTotal: cleanNumber(payload.expectedTotal),
     scannedCount: cleanNumber(payload.scannedCount),
     sourceSnapshotCapturedAt: cleanText(payload.source_snapshot_captured_at),
@@ -325,6 +476,8 @@ async function buildLightweightSourceReport(config) {
     preservePreviousGood: !ok,
     fallbackUsed: false,
     blockedReason: reason,
+    qualityStatus: cleanText(payload.qualityStatus || (ok ? "complete" : "insufficient")),
+    source: cleanText(payload.source),
   };
 }
 function isBlank(value) {
@@ -462,6 +615,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "60",
       };
       timer = setTimeout(async () => resolve({
@@ -474,7 +628,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
+        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -503,6 +657,7 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         today: "1",
         verify: "1",
         top: "1",
@@ -517,7 +672,7 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&today=1&verify=1&top=1",
+        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&live=1&today=1&verify=1&top=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -546,6 +701,7 @@ function callStrategy4Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "70",
       };
       timer = setTimeout(async () => resolve({
@@ -558,7 +714,7 @@ function callStrategy4Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
+        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -587,6 +743,7 @@ function callCbDetectLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "60",
       };
       timer = setTimeout(() => resolve({
@@ -599,7 +756,7 @@ function callCbDetectLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
+        url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&live=1&limit=60",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -628,6 +785,7 @@ function callWarrantLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "500",
       };
       timer = setTimeout(() => resolve({
@@ -640,7 +798,7 @@ function callWarrantLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=500",
+        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&live=1&limit=500",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -668,6 +826,7 @@ function callStrategy5Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "70",
       };
       timer = setTimeout(() => resolve({
@@ -680,7 +839,7 @@ function callStrategy5Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70",
+        url: "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -820,6 +979,7 @@ function callInstitutionLatest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
+        live: "1",
         limit: "1200",
       };
       timer = setTimeout(() => resolve({
@@ -832,7 +992,7 @@ function callInstitutionLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200",
+        url: "/api/institution-latest?canvas=1&compact=1&shell=1&live=1&limit=1200",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -1287,6 +1447,63 @@ function maxSourceReportDate(reports) {
   return Math.max(0, ...(Array.isArray(reports) ? reports.map(sourceReportDateValue) : []));
 }
 
+function sourceReportsCoverDate(reports, selectedDateValue = 0) {
+  const selected = Number(selectedDateValue) || 0;
+  if (!selected) return true;
+  const formalReports = (Array.isArray(reports) ? reports : [])
+    .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
+      && !isRetiredScorecardSurfaceName(report?.strategy)
+      && !isRetiredScorecardSurfaceName(report?.endpoint));
+  if (!formalReports.length) return false;
+  return formalReports.every((report) => {
+    const reportDate = sourceReportDateValue(report);
+    return reportDate >= selected;
+  });
+}
+
+function normalizeSourceReportForSelectedDate(report, selectedDateValue = 0) {
+  const selected = Number(selectedDateValue) || 0;
+  if (!selected) return report;
+  const reportDate = sourceReportDateValue(report);
+  if (reportDate >= selected) return report;
+  const selectedDate = compactDateToIso(String(selected)) || String(selected);
+  const reportDateText = reportDate ? (compactDateToIso(String(reportDate)) || String(reportDate)) : "missing";
+  const reason = `source_report_date_mismatch:${reportDateText}<${selectedDate}`;
+  return {
+    ...report,
+    ok: false,
+    statusCode: Number(report?.statusCode || 0) >= 400 ? report.statusCode : 409,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    preservePreviousGood: true,
+    fallbackUsed: true,
+    fallbackAllowed: false,
+    degradedBlocksLatest: true,
+    blockedReason: cleanText(report?.blockedReason || reason),
+    scanner_block_reason: cleanText(report?.scanner_block_reason || reason),
+    reason,
+  };
+}
+
+
+function normalizePayloadSourceReportsForDate(payload, selectedDateValue = 0) {
+  if (!Array.isArray(payload?.sourceReports)) return payload;
+  const sourceReports = payload.sourceReports.map((report) => normalizeSourceReportForSelectedDate(report, selectedDateValue));
+  const blockedReports = blockedSourceReports(sourceReports);
+  return {
+    ...payload,
+    sourceReports,
+    blockedSourceReports: blockedReports.map((report) => ({
+      key: cleanText(report.key),
+      strategy: cleanText(report.strategy),
+      runId: cleanText(report.runId),
+      reason: cleanText(report.reason || report.blockedReason),
+    })),
+  };
+}
+
 function readRuntimeTerminalScorecardPayload() {
   const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
   const candidates = [
@@ -1324,40 +1541,27 @@ function alignPayloadDateWithSourceReports(payload) {
 
 
 async function withFreshStrategySourceReports(payload) {
-  let nextPayload = payload;
-  try {
-    const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
-    if (strategy2Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy2Report);
-  } catch {}
-  try {
-    const strategy3Report = buildStrategy3SourceReport(await callStrategy3Latest());
-    if (strategy3Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy3Report);
-  } catch {}
-  try {
-    const strategy4Report = buildStrategy4SourceReport(await callStrategy4Latest());
-    if (strategy4Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy4Report);
-  } catch {}
-  try {
-    const strategy5Report = buildStrategy5SourceReport(await callStrategy5SourceReportFast());
-    if (strategy5Report.runId) nextPayload = mergeSourceReport(nextPayload, strategy5Report);
-  } catch {}
-  try {
-    const institutionReport = buildInstitutionSourceReport(await callInstitutionLatest());
-    if (institutionReport.runId) nextPayload = mergeSourceReport(nextPayload, institutionReport);
-  } catch {}
-  try {
-    const cbReport = buildCbSourceReport(await callCbDetectLatest());
-    if (cbReport.runId) nextPayload = mergeSourceReport(nextPayload, cbReport);
-  } catch {}
-  try {
-    const warrantReport = buildWarrantSourceReport(await callWarrantLatest());
-    if (warrantReport.runId) nextPayload = mergeSourceReport(nextPayload, warrantReport);
-  } catch {}
-  try {
-    const daytradeReport = await buildDaytradeSourceReport();
-    if (daytradeReport.runId) nextPayload = mergeSourceReport(nextPayload, daytradeReport);
-  } catch {}
-  return nextPayload;
+  const sourceReportTasks = [
+    async () => buildStrategy2SourceReport(await callStrategy2Latest()),
+    async () => buildStrategy3SourceReport(await callStrategy3Latest()),
+    async () => buildStrategy4SourceReport(await callStrategy4Latest()),
+    async () => buildStrategy5SourceReport(await callStrategy5SourceReportFast()),
+    async () => buildInstitutionSourceReport(await callInstitutionLatest()),
+    async () => buildCbSourceReport(await callCbDetectLatest()),
+    async () => buildWarrantSourceReport(await callWarrantLatest()),
+    async () => buildDaytradeSourceReport(),
+  ];
+  const reports = await Promise.all(sourceReportTasks.map(async (task) => {
+    try {
+      return await task();
+    } catch {
+      return null;
+    }
+  }));
+  return reports.reduce((nextPayload, report) => {
+    if (report?.runId) return mergeSourceReport(nextPayload, report);
+    return nextPayload;
+  }, payload);
 }
 
 async function withLiveSourceReports(payload, options = {}) {
@@ -1370,33 +1574,58 @@ async function withLiveSourceReports(payload, options = {}) {
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
-  const refreshFreshStrategyReports = options.freshStrategySourceReports === true;
-  const maybeFreshStrategyReports = (nextPayload) => refreshFreshStrategyReports ? withFreshStrategySourceReports(nextPayload) : Promise.resolve(nextPayload);
   const releaseReports = releaseSourceReports();
-  const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
-  const mergeLightweightReports = (reports) => {
-    const sourceReports = Array.isArray(reports) ? reports : [];
-    const byKey = new Map(sourceReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
-    const merged = sourceReports.map((report) => {
-      const live = lightweightReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
-      if (!isBlank(live?.runId) && sourceReportDateValue(live) >= sourceReportDateValue(report)) {
-        return { ...report, ...live, reason: cleanText(live.reason || "scorecard_live_latest_complete_run") };
-      }
-      return report;
-    });
-    for (const live of lightweightReports) {
-      const key = cleanText(live?.key).toLowerCase();
-      if (!isBlank(live?.runId) && key && !byKey.has(key)) merged.push(live);
+  const desktopSnapshot = await readSnapshot("desktop_route_snapshot", {
+    allowLatestFallback: true,
+    timeoutMs: SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS,
+  }).catch(() => null);
+  const desktopSnapshotReports = buildDesktopSnapshotSourceReports(desktopSnapshot);
+  const selectedSourceReportDate = Number(compactDate(payload?.selectedDate || payload?.latestDate || payload?.marketDate)) || 0;
+  const desktopSnapshotReportsFresh = desktopSnapshotReports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length
+    && sourceReportsCoverDate(desktopSnapshotReports, selectedSourceReportDate);
+  const authoritativeLiveReports = desktopSnapshotReportsFresh
+    ? desktopSnapshotReports
+    : await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
+  const livePayload = desktopSnapshotReports.length && !desktopSnapshotReportsFresh
+    ? {
+      ...payload,
+      warnings: [
+        ...(Array.isArray(payload?.warnings) ? payload.warnings : []),
+        `desktop_route_snapshot_source_reports_stale_ignored:selected=${selectedSourceReportDate || "unknown"}`,
+      ],
     }
-    return merged;
+    : payload;
+  const refreshFull = options.refreshFull === true;
+  const finalize = async (nextPayload) => {
+    const refreshedPayload = refreshFull
+      ? await withFreshStrategySourceReports(nextPayload)
+      : nextPayload;
+    const normalizedSourceReportDate = Math.max(selectedSourceReportDate, maxSourceReportDate(refreshedPayload?.sourceReports));
+    return alignPayloadDateWithSourceReports(normalizePayloadSourceReportsForDate(refreshedPayload, normalizedSourceReportDate));
   };
-  const mergedRuntimeReports = mergeLightweightReports(runtimeReports);
-  const mergedReleaseReports = mergeLightweightReports(releaseReports);
-  const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
-  const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
-  const runtimeComplete = mergedRuntimeReports.length >= 7 && mergedRuntimeReports.every((report) => !isBlank(report?.runId));
-  const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId));
-  if (runtimeComplete && maxSourceReportDate(mergedRuntimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
+  const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
+  const mergedReleaseReports = releaseReports.map((report) => {
+    const live = authoritativeLiveReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
+    if (!isBlank(live?.runId) && sourceReportDateValue(live) >= sourceReportDateValue(report)) {
+      return { ...report, ...live, reason: cleanText(live.reason || "scorecard_live_latest_complete_run") };
+    }
+    return report;
+  });
+  for (const live of authoritativeLiveReports) {
+    const key = cleanText(live?.key).toLowerCase();
+    if (!isBlank(live?.runId) && key && !releaseByKey.has(key)) mergedReleaseReports.push(live);
+  }
+  const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(releaseReports, selectedSourceReportDate);
+  const existingComplete = existingReports.length >= 7
+    && existingReports.every((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(existingReports, selectedSourceReportDate);
+  const runtimeComplete = runtimeReports.length >= 7
+    && runtimeReports.every((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(runtimeReports, selectedSourceReportDate);
+  const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(mergedReleaseReports, selectedSourceReportDate);
+  if (runtimeComplete && maxSourceReportDate(runtimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
     const runtimeDate = cleanText(runtimePayload?.latestDate || runtimePayload?.marketDate || runtimePayload?.selectedDate || payload?.latestDate);
     const runtimeBase = {
       ...payload,
@@ -1406,18 +1635,18 @@ async function withLiveSourceReports(payload, options = {}) {
       selectedDate: runtimeDate || runtimePayload?.selectedDate || payload?.selectedDate,
       sourceReportsSource: "runtime-scorecard-terminal-current",
     };
-    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedRuntimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase)));
+    return finalize(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase));
   }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
-    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
   if (existingComplete) {
-    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
   if (releaseComplete) {
-    return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
-  return alignPayloadDateWithSourceReports(await maybeFreshStrategyReports(lightweightReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload)));
+  return finalize(authoritativeLiveReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
@@ -1521,7 +1750,7 @@ function decorateRecords(payload, reason = "") {
     return {
       ...row,
       strategyName,
-      endpoint: FORMAL_STRATEGY_ENDPOINTS[strategyName] || "/api/scorecard",
+      endpoint: FORMAL_STRATEGY_ENDPOINTS[strategyName] || "/api/scorecard?live=1",
       runId: cleanText(payload.runId),
       tradeDate: cleanText(row.record_date || payload.marketDate || payload.latestDate),
       usedDate: cleanText(row.record_date || payload.latestDate),
@@ -1761,11 +1990,13 @@ function selectPayloadDate(payload, requestedDate = "") {
   const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
     .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
+  const selectedSourceReportDate = Number(compactDate(selectedDate)) || 0;
   const sourceReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint)
-      && !isRetiredScorecardSurfaceName(report?.runId));
+      && !isRetiredScorecardSurfaceName(report?.runId))
+    .map((report) => normalizeSourceReportForSelectedDate(report, selectedSourceReportDate));
   const blockedReports = blockedSourceReports(sourceReports);
   const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
   const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));
@@ -1832,6 +2063,23 @@ function buildPayloadFromSnapshotPayload(snapshotPayload, options = {}) {
 }
 
 function readStaticSnapshot(reason = "scorecard_static_snapshot") {
+  if (process.env.FUMAN_ALLOW_SCORECARD_JSON_FALLBACK !== "1") {
+    return withScorecardContract({
+      ok: false,
+      rows: [],
+      records: [],
+      sourceReports: [],
+      cacheSource: "json-snapshot-disabled",
+      fallbackReason: reason,
+      blockers: ["scorecard_static_json_fallback_disabled"],
+      warnings: ["formal_scorecard_requires_supabase_snapshot"],
+      qualityStatus: "blocked",
+      evidenceStatus: "insufficient",
+      unattendedStatus: "NO",
+      publishAllowed: false,
+      preservePreviousGood: true,
+    }, "blocked", reason);
+  }
   const stat = fs.statSync(SNAPSHOT_FILE);
   if (!staticSnapshotCache || staticSnapshotCache.mtimeMs !== stat.mtimeMs) {
     const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
@@ -1849,27 +2097,21 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
   }, "degraded", reason);
 }
 
-function scorecardLiveSourceReportsEnabled(request) {
-  return process.env.FUMAN_SCORECARD_LIVE_SOURCE_REPORTS === "1"
-    && (request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1");
-}
-
-function scorecardLiveSnapshotReadbackEnabled(request) {
-  return process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_READBACK === "1"
-    && (request.query?.live === "1" || request.query?.snapshotLive === "1");
-}
-
 async function buildPayload(requestedDate = "", options = {}) {
   const liveSourceReports = options.liveSourceReports === true;
+  const refreshSourceReports = options.refreshSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
-  const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
+  const cacheKey = JSON.stringify({ requestedDate, liveSourceReports, refreshSourceReports });
   const cached = payloadMemoryCache.get(cacheKey);
   if (!noCache && cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
 
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, {
+  let snapshot = await readSnapshot(SNAPSHOT_KEY, {
     allowLatestFallback: true,
-    timeoutMs: Number(options.timeoutMs || (noCache ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS)) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
+    timeoutMs: Number(options.timeoutMs || SCORECARD_SNAPSHOT_TIMEOUT_MS) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
   }).catch(() => null);
+  if (!snapshot?.payload) {
+    snapshot = await readScorecardSnapshotProjection().catch(() => null);
+  }
   let payload;
   if (snapshot?.payload && typeof snapshot.payload === "object") {
     const basePayload = withScorecardContract({
@@ -1885,12 +2127,12 @@ async function buildPayload(requestedDate = "", options = {}) {
       },
     }, "complete");
     payload = liveSourceReports
-      ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
+      ? await withLiveSourceReports(selectPayloadDate(basePayload, requestedDate), { refreshFull: refreshSourceReports })
       : selectPayloadDate(basePayload, requestedDate);
   } else {
     const basePayload = readStaticSnapshot("supabase_scorecard_snapshot_timeout_previous_good");
     payload = liveSourceReports
-      ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
+      ? await withLiveSourceReports(selectPayloadDate(basePayload, requestedDate), { refreshFull: refreshSourceReports })
       : selectPayloadDate(basePayload, requestedDate);
   }
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
@@ -1909,15 +2151,11 @@ async function handler(request, response) {
   try {
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const forceLiveSourceReports = scorecardLiveSourceReportsEnabled(request);
-    const liveSnapshotReadback = scorecardLiveSnapshotReadbackEnabled(request);
-    const noCache = forceLiveSourceReports || liveSnapshotReadback || request.query?.noCache === "1" || request.query?.refresh === "1";
-    const payload = attachMarketCalendar(await buildPayload(requestedDate, {
-      liveSourceReports: forceLiveSourceReports,
-      noCache,
-      freshStrategySourceReports: forceLiveSourceReports,
-      timeoutMs: (forceLiveSourceReports || liveSnapshotReadback) ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS,
-    }), marketCalendar);
+    const liveSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1" || request.query?.live === "1";
+    const refreshSourceReports = request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1";
+    const snapshotTimeoutMs = liveSourceReports ? Math.min(SCORECARD_SNAPSHOT_TIMEOUT_MS, 1800) : SCORECARD_SNAPSHOT_TIMEOUT_MS;
+    const noCache = request.query?.live === "1" || liveSourceReports || request.query?.opsLive || request.query?.noCache === "1" || request.query?.refresh === "1";
+    const payload = attachMarketCalendar(await buildPayload(requestedDate, { liveSourceReports, refreshSourceReports, noCache, timeoutMs: snapshotTimeoutMs }), marketCalendar);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {
@@ -1936,4 +2174,3 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
-

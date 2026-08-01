@@ -1,12 +1,16 @@
 "use strict";
 
 const fs = require("fs");
+const { spawnSync } = require("child_process");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-autonomous-completion-audit");
-const REQUIRED_ACTIVE_MODULES = ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"];
+const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
+const ACTIVE_MODULE_REGISTRY = loadActiveModuleRegistry();
+const REQUIRED_ACTIVE_MODULES = ACTIVE_MODULE_REGISTRY.active.map((row) => row.key);
+const SCHEDULE_VERIFIER = path.join(ROOT, "scripts", "verify-terminal-autonomous-schedule-contract.js");
 
 const FILES = {
   predictivePreflight: path.join(ROOT, "outputs", "terminal-predictive-preflight", "terminal-predictive-preflight.json"),
@@ -34,6 +38,7 @@ const REQUIRED_SCRIPTS = [
   "verify:terminal-water-root-contract",
   "verify:daytrade-warmup-unattended",
   "verify:daytrade-warmup-root",
+  "verify:daytrade-warmup-nine-day",
   "daytrade-warmup:root",
   "daytrade-warmup:self-heal",
   "verify:daytrade-warmup-self-heal",
@@ -44,6 +49,9 @@ const REQUIRED_SCRIPTS = [
   "verify:terminal-state-machine-contract",
   "verify:terminal-reason-code-classifier",
   "verify:terminal-auto-roll-forward",
+  "verify:terminal-autonomous-schedule",
+  "verify:terminal-autonomous-schedule:live",
+  "verify:terminal-active-module-registry",
   "verify:terminal-idempotent-runner",
   "verify:strategy-scan-receipt-contract",
   "manifest:daily-terminal-run",
@@ -110,6 +118,23 @@ function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function taipeiDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${values.year || ""}${values.month || ""}${values.day || ""}`;
+}
+
+function marketCalendarRow(artifacts = {}) {
+  return artifacts?.waterRoot?.marketCalendar?.row
+    || artifacts?.predictivePreflight?.marketCalendar?.row
+    || null;
+}
+
 function lower(value) {
   return String(value || "").toLowerCase();
 }
@@ -135,6 +160,26 @@ function manifestPreviousGoodHoldClosure(manifest = {}, modules = []) {
     && row?.sourceDate === manifest.tradeDate);
 }
 
+function closedDaySafeHoldManifest(manifest = {}, closed = false) {
+  if (closed !== true) return false;
+  const safeBits = [
+    manifest?.phase,
+    manifest?.unattendedStatus,
+    manifest?.finalDecision,
+    manifest?.publishDecision,
+    manifest?.closureStatus,
+  ].map((value) => String(value || "").toLowerCase());
+  return safeBits.includes("market_closed")
+    && manifest?.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    && manifest?.finalDecision === "PRESERVE_PREVIOUS_GOOD"
+    && manifest?.publishDecision === "PRESERVE_PREVIOUS_GOOD"
+    && manifest?.closureStatus === "PREVIOUS_GOOD_HOLD"
+    && manifest?.preservePreviousGood === true
+    && manifest?.naturalSuccess === false
+    && manifest?.selfHealRecovered === false
+    && manifest?.sourceGrade !== "A"
+    && manifest?.gateGrade !== "A";
+}
 function protectedReadbackDisplayOnlyBlocker({ protectedReadbackCredential = {}, opsStatus = {} } = {}) {
   if (protectedReadbackCredential?.ok === true) return false;
   return opsStatus?.ok === true
@@ -186,7 +231,16 @@ function summarizeArtifact(name, payload = {}) {
   return `contract=${payload.contract || "--"}`;
 }
 
-function marketClosedMode({ predictivePreflight, policy, manifest, controlPlane, waterRoot }) {
+function marketClosedMode({ predictivePreflight, policy, manifest, controlPlane, waterRoot, expectedDate = "" } = {}) {
+  const calendar = marketCalendarRow({ predictivePreflight, waterRoot });
+  const calendarDate = compactDate(calendar?.marketDate || calendar?.requestedDate || calendar?.displayTradeDate);
+  const targetDate = compactDate(expectedDate || calendarDate || taipeiDateKey());
+  if (calendar) {
+    if (calendarDate && targetDate && calendarDate !== targetDate) return false;
+    if (calendar.finalMarketOpen === true || calendar.tradingDayOpen === true || calendar.marketOpen === true || lower(calendar.marketStatus) === "open") return false;
+    if (calendar.finalMarketOpen === false || calendar.tradingDayOpen === false || calendar.marketOpen === false || lower(calendar.marketStatus) === "closed") return true;
+    return false;
+  }
   const bits = [
     predictivePreflight?.state,
     predictivePreflight?.action,
@@ -207,7 +261,36 @@ function marketClosedMode({ predictivePreflight, policy, manifest, controlPlane,
   if (tradingDayWait) return false;
   return bits.includes("market_closed");
 }
-
+function verifyLiveSchedule(issues) {
+  const child = spawnSync(process.execPath, [SCHEDULE_VERIFIER, "--require-live"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 30000,
+    windowsHide: true,
+  });
+  let parsed = null;
+  try {
+    parsed = JSON.parse(String(child.stdout || "").trim());
+  } catch {
+    parsed = null;
+  }
+  const verifierIssues = Array.isArray(parsed?.issues) ? parsed.issues : [];
+  const ok = !child.error && child.status === 0 && parsed?.ok === true;
+  if (!ok) {
+    const reason = verifierIssues.join(",") || child.error?.message || `exit_${child.status ?? "unknown"}`;
+    issues.push({
+      issue: `live_schedule_gate_failed:${reason}`,
+      details: { exitCode: child.status, verifier: parsed, stderr: String(child.stderr || "").trim() },
+    });
+  }
+  return {
+    ok,
+    exitCode: child.status,
+    issues: verifierIssues,
+    verifier: parsed,
+    stderr: String(child.stderr || "").trim(),
+  };
+}
 function verifyPackageScripts(pkg, issues) {
   const scripts = pkg.scripts || {};
   const rows = [];
@@ -223,6 +306,7 @@ function verifyPackageScripts(pkg, issues) {
     "verify:terminal-water-root",
     "verify:terminal-water-root-contract",
     "verify:daytrade-warmup-root",
+    "verify:daytrade-warmup-nine-day",
     "daytrade-warmup:root",
     "verify:strategy-scan-formal-gate",
     "verify:strategy-scan-receipt-contract",
@@ -230,6 +314,9 @@ function verifyPackageScripts(pkg, issues) {
     "verify:terminal-state-machine-contract",
     "verify:terminal-reason-code-classifier",
     "verify:terminal-auto-roll-forward",
+  "verify:terminal-autonomous-schedule",
+  "verify:terminal-autonomous-schedule:live",
+  "verify:terminal-active-module-registry",
     "verify:terminal-idempotent-runner",
     "manifest:daily-terminal-run",
     "verify:terminal-canary-publish",
@@ -274,14 +361,54 @@ function verifyArtifacts(artifacts, issues) {
 
 function verifyInvariants(artifacts, issues) {
   const { predictivePreflight, fugleWebSocket, warmupFinal, warmupSelfHeal, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus, reasonCodeClassifier, protectedReadbackCredential } = artifacts;
-  const closed = marketClosedMode(artifacts);
+  const calendar = marketCalendarRow(artifacts);
+  const calendarDate = compactDate(calendar?.marketDate || calendar?.requestedDate || calendar?.displayTradeDate);
+  const expectedDate = compactDate(process.env.FUMAN_EXPECTED_DATE || taipeiDateKey());
+  const closed = marketClosedMode({ ...artifacts, expectedDate });
   const tradeDate = compactDate(controlPlane?.tradeDate || manifest?.tradeDate || policy?.tradeDate || opsStatus?.tradeDate);
   const displayTradeDate = compactDate(predictivePreflight?.displayTradeDate || waterRoot?.marketCalendar?.row?.displayTradeDate || manifest?.tradeDate);
-
+  const dateFields = {
+    market_calendar: calendarDate,
+    water_root: compactDate(waterRoot?.expectedDate),
+    warmup: compactDate(warmupFinal?.trade_date),
+    control_plane: tradeDate,
+    manifest: compactDate(manifest?.tradeDate),
+    display: displayTradeDate,
+  };
+  if (calendarDate && calendarDate !== expectedDate) {
+    assert(false, issues, "date_hard_gate_mismatch:market_calendar", { expectedDate, actual: calendarDate });
+  }
+  if (!closed) {
+    assert(calendar && (calendar.finalMarketOpen === true || calendar.tradingDayOpen === true || calendar.marketOpen === true || lower(calendar.marketStatus) === "open"), issues, "open_day_missing_explicit_market_calendar_open", { expectedDate, calendar });
+  }
+  for (const [name, value] of Object.entries(dateFields)) {
+    const previousGoodDateAllowed = closed && ["warmup", "display"].includes(name);
+    if (!previousGoodDateAllowed && value && value !== expectedDate) assert(false, issues, "date_hard_gate_mismatch:" + name, { expectedDate, actual: value });
+  }
   assert(DREAM_LAYERS.length === 21, issues, "dream_layers_incomplete", { layers: DREAM_LAYERS });
-  assert(fugleWebSocket?.ok === true, issues, "fugle_websocket_source_layer_not_ready", { fugleWebSocket });
-  assert(fugleWebSocket?.stock?.connected === true && fugleWebSocket?.stock?.authenticated === true, issues, "fugle_stock_websocket_not_connected_authenticated", { stock: fugleWebSocket?.stock });
-  assert(fugleWebSocket?.futopt?.connected === true && fugleWebSocket?.futopt?.authenticated === true, issues, "fugle_futopt_websocket_not_connected_authenticated", { futopt: fugleWebSocket?.futopt });
+  const waterPhaseText = [
+    waterRoot?.status,
+    waterRoot?.sourceStatus?.row?.payload?.phase,
+    waterRoot?.sourceStatus?.row?.message,
+    fugleWebSocket?.marketContext?.marketStatus,
+    predictivePreflight?.state,
+    predictivePreflight?.action,
+  ].map(lower).join(" ");
+  const afterFormalSourceWindow = !closed && (
+    waterPhaseText.includes("after_daytrade_window")
+    || waterPhaseText.includes("after_formal_source_window")
+    || waterPhaseText.includes("trading_day_after_formal_source_window")
+    || waterPhaseText.includes("off_session")
+  );
+  if (closed || afterFormalSourceWindow) {
+    assert(waterRoot?.ok === true, issues, "off_session_water_root_not_ready", { waterRoot });
+    assert(waterRoot?.sourceStatus?.row?.payload?.latest_update_allowed !== true, issues, "off_session_latest_update_allowed", { sourceStatus: waterRoot?.sourceStatus });
+    assert(waterRoot?.sourceStatus?.row?.payload?.formal_entry_allowed !== true, issues, "off_session_formal_entry_allowed", { sourceStatus: waterRoot?.sourceStatus });
+  } else {
+    assert(fugleWebSocket?.ok === true, issues, "fugle_websocket_source_layer_not_ready", { fugleWebSocket });
+    assert(fugleWebSocket?.stock?.connected === true && fugleWebSocket?.stock?.authenticated === true, issues, "fugle_stock_websocket_not_connected_authenticated", { stock: fugleWebSocket?.stock });
+    assert(fugleWebSocket?.futopt?.connected === true && fugleWebSocket?.futopt?.authenticated === true, issues, "fugle_futopt_websocket_not_connected_authenticated", { futopt: fugleWebSocket?.futopt });
+  }
   assert(warmupFinal?.summary_type === "daytrade_warmup_unattended_summary_v1", issues, "warmup_final_summary_type_mismatch", { summaryType: warmupFinal?.summary_type });
   assert(warmupFinal?.ops_policy?.self_heal_does_not_count_as_natural === true, issues, "warmup_self_heal_fakes_natural_evidence", { warmupFinal });
   const warmupInvariants = Array.isArray(warmupSelfHeal?.invariants) ? warmupSelfHeal.invariants : [];
@@ -296,8 +423,12 @@ function verifyInvariants(artifacts, issues) {
   }
   const rewaterVerification = Array.isArray(warmupSelfHeal?.rewaterVerification) ? warmupSelfHeal.rewaterVerification : [];
   const rewaterVerificationText = JSON.stringify(rewaterVerification);
-  assert(rewaterVerificationText.includes("verify:daytrade-source-contract-alignment"), issues, "warmup_rewater_source_contract_verification_missing", { rewaterVerification });
-  assert(rewaterVerificationText.includes("verify:fugle-websocket-sources"), issues, "warmup_rewater_websocket_verification_missing", { rewaterVerification });
+  const rewaterJobs = Array.isArray(warmupSelfHeal?.jobs) ? warmupSelfHeal.jobs : [];
+  const rewaterVerificationRequired = !closed && (rewaterJobs.length > 0 || warmupSelfHeal?.self_heal_recovered === true || warmupSelfHeal?.natural_success === true);
+  if (rewaterVerificationRequired) {
+    assert(rewaterVerificationText.includes("verify:daytrade-source-contract-alignment"), issues, "warmup_rewater_source_contract_verification_missing", { rewaterVerification });
+    assert(rewaterVerificationText.includes("verify:fugle-websocket-sources"), issues, "warmup_rewater_websocket_verification_missing", { rewaterVerification });
+  }
   assert((predictivePreflight?.issues || []).length === 0, issues, "predictive_preflight_has_issues", { issues: predictivePreflight?.issues });
   assert(predictivePreflight?.preservePreviousGood === true || predictivePreflight?.formalScanAllowed === true, issues, "predictive_preflight_no_preserve_or_scan", { predictivePreflight });
   if (closed) {
@@ -324,19 +455,49 @@ function verifyInvariants(artifacts, issues) {
 
   const modules = Array.isArray(manifest?.modules) ? manifest.modules : [];
   const moduleKeys = modules.map((row) => row.key).filter(Boolean);
+  const manifestActiveModules = Array.isArray(manifest?.activeModules) ? manifest.activeModules : [];
+  const registryActiveModules = ACTIVE_MODULE_REGISTRY.active.map((row) => row.key);
+  assert(manifest?.moduleRegistryContract === ACTIVE_MODULE_REGISTRY.contract, issues, "manifest_module_registry_contract_mismatch", {
+    manifest: manifest?.moduleRegistryContract,
+    expected: ACTIVE_MODULE_REGISTRY.contract,
+  });
+  assert(JSON.stringify([...manifestActiveModules].sort()) === JSON.stringify([...registryActiveModules].sort()), issues, "manifest_active_module_registry_mismatch", {
+    manifest: manifestActiveModules,
+    expected: registryActiveModules,
+  });
+  assert(Array.isArray(manifest?.retiredModules), issues, "manifest_retired_modules_missing", {});
+  assert(Boolean(manifest?.dailyRunId), issues, "manifest_dailyRunId_missing", {});
+  assert(Boolean(manifest?.sourceGrade), issues, "manifest_sourceGrade_missing", {});
+  assert(manifest?.moduleStatuses && typeof manifest.moduleStatuses === "object", issues, "manifest_moduleStatuses_missing", {});
+  for (const field of ["natural0700", "natural0845", "natural0900", "finalDecision"]) {
+    assert(field in (manifest || {}), issues, `manifest_${field}_missing`, {});
+  }
+  const allowedModuleStatuses = new Set(["complete", "empty", "blocked", "degraded", "0-result", "pending"]);
+  for (const row of modules) {
+    assert(allowedModuleStatuses.has(String(row.moduleStatus || "")), issues, `manifest_module_status_invalid:${row.key || "unknown"}`, { moduleStatus: row.moduleStatus });
+    assert(manifest.moduleStatuses?.[row.key] === row.moduleStatus, issues, `manifest_module_status_mismatch:${row.key || "unknown"}`, { manifest: manifest.moduleStatuses?.[row.key], row: row.moduleStatus });
+  }
+  assert(manifest?.warmupEvidence && typeof manifest.warmupEvidence === "object", issues, "manifest_warmup_evidence_missing", {});
+  assert(manifest?.warmupEvidence?.dateAligned === true || closed, issues, "manifest_warmup_date_not_aligned", { warmupEvidence: manifest?.warmupEvidence });
+  for (const phase of ["0700", "0845", "0900"]) {
+    assert(manifest?.naturalScheduleEvidenceByPhase?.[phase] === true || closed, issues, `manifest_natural_evidence_missing:${phase}`, { naturalScheduleEvidenceByPhase: manifest?.naturalScheduleEvidenceByPhase });
+  }
   for (const key of REQUIRED_ACTIVE_MODULES) {
     assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
   }
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
-  const completionClosed = closed || previousGoodHoldClosure;
+  const closedDaySafeHold = closedDaySafeHoldManifest(manifest, closed);
+  const completionClosed = closed || previousGoodHoldClosure || closedDaySafeHold;
   const protectedReadbackDisplayOnly = protectedReadbackDisplayOnlyBlocker({ protectedReadbackCredential, opsStatus });
   const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
   const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
   const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
-  if (!pendingNotDue) {
+  if (pendingNotDue) {
+    assert(false, issues, "manifest_pending_not_due", { blocker: manifest?.blocker || controlPlane?.decision?.reason || "pending_not_due" });
+  } else {
     for (const row of hardBlockedModules) assert(false, issues, `manifest_module_blocked:${row.key}`, { issues: row.issues || [], runId: row.runId || "", tradeDate: row.tradeDate || "", sourceDate: row.sourceDate || "" });
     assert(acceptableCompletionStatus(manifest?.unattendedStatus, completionClosed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
-    assert(manifest?.ok === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker });
+    assert(manifest?.ok === true || closedDaySafeHold, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker, closedDaySafeHold });
   }
   const jobQueue = Array.isArray(orchestrator?.jobQueue) ? orchestrator.jobQueue : [];
   for (const job of jobQueue) {
@@ -351,7 +512,7 @@ function verifyInvariants(artifacts, issues) {
   assert((rollForward?.idempotencyContract?.invariants || []).includes("scanner_jobs_require_current_water_root_ok"), issues, "idempotency_scanner_current_water_root_gate_missing", { idempotencyContract: rollForward?.idempotencyContract });
   assert((rollForward?.idempotencyContract?.invariants || []).includes("publish_jobs_require_manifest_canary_gate"), issues, "idempotency_publish_canary_gate_missing", { idempotencyContract: rollForward?.idempotencyContract });
 
-  if (!pendingNotDue) {
+  if (!pendingNotDue && !closed) {
     assert(controlPlane?.runIdClosure?.ok === true, issues, "control_plane_runid_closure_not_ok", { runIdClosure: controlPlane?.runIdClosure });
     assert(acceptableCompletionStatus(controlPlane?.decision?.unattendedStatus, completionClosed), issues, "control_plane_not_fresh_yes_or_previous_good_hold", { decision: controlPlane?.decision, closed });
   }
@@ -381,17 +542,9 @@ function verifyInvariants(artifacts, issues) {
   assert(Object.keys(opsStatus?.reasonCodeSummary?.codes || {}).length > 0, issues, "ops_status_reason_codes_missing", { reasonCodeSummary: opsStatus?.reasonCodeSummary });
   assert(opsStatus?.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", issues, "ops_status_root_cause_summary_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
   assert(opsStatus?.rootCauseSummary?.ok === true && Number(opsStatus?.rootCauseSummary?.unknownBlockers || 0) === 0, issues, "ops_status_root_cause_summary_not_ok", { rootCauseSummary: opsStatus?.rootCauseSummary });
+  assert(Array.isArray(opsStatus?.rootCauseSummary?.categories) && opsStatus.rootCauseSummary.categories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
   assert(opsStatus?.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", issues, "ops_status_root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  const rootCauseTotalBlockers = Number(opsStatus?.rootCauseSummary?.totalBlockers || 0);
-  const rootCauseCategories = Array.isArray(opsStatus?.rootCauseSummary?.categories) ? opsStatus.rootCauseSummary.categories : [];
-  const rootCauseRecoverySteps = Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) ? opsStatus.rootCauseRecoveryPlan.steps : [];
-  if (rootCauseTotalBlockers > 0) {
-    assert(rootCauseCategories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
-    assert(rootCauseRecoverySteps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  } else {
-    assert(rootCauseCategories.length === 0, issues, "ops_status_root_cause_categories_present_without_blockers", { rootCauseSummary: opsStatus?.rootCauseSummary });
-    assert(rootCauseRecoverySteps.length === 0 && Number(opsStatus?.rootCauseRecoveryPlan?.stepCount || 0) === 0, issues, "ops_status_root_cause_recovery_steps_present_without_blockers", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  }
+  assert(Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) && opsStatus.rootCauseRecoveryPlan.steps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
   const recoveryCategories = new Set((opsStatus?.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
   for (const row of opsStatus?.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), issues, `ops_status_root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
   const authRecoveryStep = (opsStatus?.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
@@ -432,7 +585,11 @@ function markdown(payload) {
   lines.push("|---|---:|---|---|---|");
   for (const row of payload.artifacts) lines.push(`| ${row.name} | ${row.ok} | ${row.contract || "--"} | ${row.summary.replace(/\|/g, "/")} | ${row.file} |`);
   lines.push("");
-  lines.push("## Package Wiring");
+  lines.push("## Live Schedule Readback");
+  lines.push(`- ok: ${payload.liveSchedule?.ok}`);
+  lines.push(`- exitCode: ${payload.liveSchedule?.exitCode ?? "--"}`);
+  lines.push(`- issues: ${(payload.liveSchedule?.issues || []).join(",") || "none"}`);
+  lines.push("");  lines.push("## Package Wiring");
   lines.push("| script | wired | command |");
   lines.push("|---|---:|---|");
   for (const row of payload.packageScripts) lines.push(`| ${row.name} | ${row.ok} | ${(row.command || "--").replace(/\|/g, "/")} |`);
@@ -444,10 +601,13 @@ async function main() {
   const pkg = readPackage();
   const artifacts = Object.fromEntries(Object.entries(FILES).map(([key, file]) => [key, readJson(file, null)]));
   const packageScripts = verifyPackageScripts(pkg, issues);
+  const liveSchedule = verifyLiveSchedule(issues);
   const artifactRows = verifyArtifacts(artifacts, issues);
   const summary = verifyInvariants(artifacts, issues);
   const layers = [
     { layer: "Market Calendar", evidence: "terminal-predictive-preflight + terminal-water-root marketCalendar rows decide trading day/source window" },
+    { layer: "Active Module Registry", evidence: "terminal-active-module-registry-v1 defines active modules and retired modules before scan/publish" },
+    { layer: "Single Daily Orchestrator Lock", evidence: "terminal-orchestrator-lock-v1 prevents overlapping autonomous controller runs" },
     { layer: "Predictive Preflight", evidence: "terminal-predictive-preflight artifact + package root gate + fail-closed date/market-calendar invariants" },
     { layer: "Fugle WebSocket Source Layer", evidence: "fugle-websocket-source-readiness-v1 stock/futopt connected/authenticated/streaming with conservative speed policy" },
     { layer: "Water Root", evidence: "terminal-water-root artifact + market calendar + Fugle/Supabase/source status probes" },
@@ -474,6 +634,13 @@ async function main() {
     contract: "terminal-autonomous-completion-audit-v1",
     checkedAt: new Date().toISOString(),
     ok: issues.length === 0,
+    operationalOk: issues.length === 0,
+    businessUnattendedYes: summary.closed !== true
+      && issues.length === 0
+      && artifacts.controlPlane?.decision?.unattendedStatus === "YES",
+    finalDecision: summary.closed === true
+      ? "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
+      : (issues.length === 0 && artifacts.controlPlane?.decision?.unattendedStatus === "YES" ? "UNATTENDED_YES" : "FAIL_CLOSED"),
     summary,
     layers,
     artifacts: artifactRows,
@@ -491,6 +658,9 @@ async function main() {
     tradeDate: summary.tradeDate,
     displayTradeDate: summary.displayTradeDate,
     marketClosedMode: summary.closed,
+    operationalOk: payload.operationalOk,
+    businessUnattendedYes: payload.businessUnattendedYes,
+    finalDecision: payload.finalDecision,
     issues: issues.map((row) => row.issue),
     output: jsonFile,
   }, null, 2));
@@ -501,3 +671,4 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-completion-audit] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

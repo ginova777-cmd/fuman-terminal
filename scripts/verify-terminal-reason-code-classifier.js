@@ -66,9 +66,12 @@ function selfTest(issues) {
     ["manifest_publish_not_allowed", "PUBLISH_NOT_ALLOWED"],
     ["manifest_preserve_previous_good_true", "PREVIOUS_GOOD_PRESERVED"],
     ["pending_not_due:21:00", "SCHEDULE_PENDING_NOT_DUE"],
+    ["protected_readback_timeout", "PROTECTED_READBACK_TIMEOUT"],
     ["production_release_sha_mismatch", "PRODUCTION_RELEASE_SHA_MISMATCH"],
     ["ROLL_FORWARD_QUEUE_ARMED", "AUTO_ROLL_FORWARD_QUEUE_ARMED"],
     ["scorecard_latestDate_mismatch:20260717!=20260721", "TRADE_DATE_MISMATCH"],
+    ["Supabase latest date 20260724 != expected 20260726", "TRADE_DATE_MISMATCH"],
+    ["refresh_failed:resource_chain_readback", "RESOURCE_CHAIN_NOT_OK"],
   ];
   for (const [text, expected] of cases) {
     const classification = classifyReason(text);
@@ -85,7 +88,10 @@ function collectEntries(opsStatus, manifest, readiness) {
     if (gate?.ok === false || gate?.reason) add(entries, "opsStatus", `gate:${gateKey}`, gate);
   }
   addIssueRows(entries, "opsStatus", "module", opsStatus?.modules || []);
-  add(entries, "opsStatus", "protectedReadbackCredential", opsStatus?.protectedReadbackCredential || opsStatus?.gates?.protectedReadbackCredential);
+  const opsProtectedReadback = opsStatus?.protectedReadbackCredential || opsStatus?.gates?.protectedReadbackCredential;
+  if (opsProtectedReadback && (opsProtectedReadback.ok !== true || opsProtectedReadback.armed === false || (Array.isArray(opsProtectedReadback.failures) && opsProtectedReadback.failures.length))) {
+    add(entries, "opsStatus", "protectedReadbackCredential", opsProtectedReadback);
+  }
 
   if (manifest?.waterRoot?.ok === false) add(entries, "manifest", "waterRoot", manifest.waterRoot);
   if (manifest?.ok === false || manifest?.unattendedStatus === "NO") add(entries, "manifest", "root", manifest);
@@ -99,7 +105,10 @@ function collectEntries(opsStatus, manifest, readiness) {
   if (membershipSummary && (membershipSummary.ok === false || membershipSummary.error || (membershipSummary.reason && String(membershipSummary.reason).toLowerCase() !== "ok") || membershipSummary.enabled === false)) {
     add(entries, "readiness", "membershipProtectedSummary", membershipSummary);
   }
-  add(entries, "readiness", "protectedReadbackCredential", readiness?.protectedReadbackCredential);
+  const readinessProtectedReadback = readiness?.protectedReadbackCredential;
+  if (readinessProtectedReadback && (readinessProtectedReadback.ok !== true || readinessProtectedReadback.armed === false || (Array.isArray(readinessProtectedReadback.failures) && readinessProtectedReadback.failures.length))) {
+    add(entries, "readiness", "protectedReadbackCredential", readinessProtectedReadback);
+  }
   if (readiness?.releaseIdentity?.releaseSha && readiness.releaseIdentity.headSha && readiness.releaseIdentity.releaseSha !== readiness.releaseIdentity.headSha) {
     add(entries, "readiness", "releaseIdentity", "production_release_sha_mismatch");
   }

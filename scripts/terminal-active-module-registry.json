@@ -1,0 +1,19 @@
+{
+  "contract": "terminal-active-module-registry-v1",
+  "version": 1,
+  "policy": "only-active-modules-may-scan-publish-or-close; retired-modules-must-not-reappear",
+  "active": [
+    { "key": "strategy2", "dueTime": "09:00", "requiredForUnattended": true, "class": "strategy" },
+    { "key": "strategy3", "dueTime": "13:05", "requiredForUnattended": true, "class": "strategy" },
+    { "key": "strategy4", "dueTime": "16:00", "requiredForUnattended": true, "class": "strategy" },
+    { "key": "strategy5", "dueTime": "21:00", "requiredForUnattended": true, "class": "strategy" },
+    { "key": "institution", "dueTime": "21:00", "requiredForUnattended": true, "class": "chip" },
+    { "key": "cb", "dueTime": "21:25", "requiredForUnattended": true, "class": "chip" },
+    { "key": "warrant", "dueTime": "20:30", "requiredForUnattended": true, "class": "chip" }
+  ],
+  "retired": [
+    { "key": "strategy1", "retired": true, "reason": "product_retired" },
+    { "key": "realtime-radar", "retired": true, "reason": "product_retired" },
+    { "key": "heatmap", "retired": true, "reason": "product_retired" }
+  ]
+}
