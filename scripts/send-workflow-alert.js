@@ -17,6 +17,14 @@ function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
+function notificationsDisabled() {
+  if (/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_NOTIFICATIONS_DISABLED || process.env.NOTIFICATIONS_DISABLED || "").trim())) return true;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "config", "notifications-disabled.json"), "utf8")).disabled === true;
+  } catch {}
+  return false;
+}
+
 function secretValue(envName, fileNames = [], options = {}) {
   const preferFiles = options.preferFiles === true;
   if (preferFiles) {
@@ -171,7 +179,26 @@ async function main() {
   const source = process.env.FUMAN_ALERT_SOURCE || alertDefaults.source;
   const subject = readArg("--subject") || process.env.FUMAN_ALERT_SUBJECT || alertDefaults.subject;
   const text = process.env.FUMAN_ALERT_TEXT || alertDefaults.text;
-
+  if (notificationsDisabled()) {
+    const finishedAt = new Date().toISOString();
+    writeReceipt(receiptFile, {
+      ok: true,
+      disabled: true,
+      kind,
+      source,
+      subject,
+      startedAt,
+      finishedAt,
+      deliveredAt: "",
+      channel: "disabled",
+      receiptFile,
+      dryRun,
+      error: "notifications_disabled",
+      delivery_error: "notifications_disabled",
+    });
+    console.log("failure alert skipped: notifications disabled");
+    return;
+  }
   const to = secretValue("REPORT_EMAIL_TO", ["report-email-to.txt", "smtp-to.txt", "gmail-to.txt"]);
   const user = secretValue("SMTP_USER", ["smtp-user.txt", "gmail-user.txt"]);
   const pass = secretValue("SMTP_PASS", ["smtp-pass.txt", "gmail-app-password.txt"], { preferFiles: true });
