@@ -1,4 +1,5 @@
 "use strict";
+const { notificationsDisabled } = require("./notification-guard");
 
 const fs = require("fs");
 const path = require("path");
@@ -86,6 +87,7 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendEmailText(subject, text, config = emailConfigFromEnv()) {
+  if (notificationsDisabled()) return { ok: true, disabled: true, reason: "notifications_disabled" };
   if (!hasEmailConfig(config)) throw new Error("Missing REPORT_EMAIL_TO/ALERT_EMAIL_TO, SMTP_USER, or SMTP_PASS");
 
   const socket = tls.connect({ host: config.host, port: config.port, servername: config.host });
