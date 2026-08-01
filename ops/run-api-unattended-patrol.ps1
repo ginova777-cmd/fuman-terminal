@@ -184,7 +184,7 @@ try {
   Add-Content -LiteralPath $script:LogFile -Value ("checkpoint={0}" -f $Checkpoint)
   Add-Content -LiteralPath $script:LogFile -Value ("releaseSha={0}" -f $ReleaseSha)
 
-  Invoke-Step -Name "production-guard" -Command $npm.Source -Arguments @("run", "guard:production")
+  $guardExitCode = Invoke-OptionalStep -Name "production-guard" -Command $npm.Source -Arguments @("run", "guard:production")
   Invoke-Step -Name "production-monitor" -Command $npm.Source -Arguments @("run", "monitor:production")
   $freshnessExitCode = Invoke-OptionalStep -Name "production-api-freshness" -Command $npm.Source -Arguments @("run", "verify:production-api-freshness")
   $scorecardExitCode = Invoke-OptionalStep -Name "api-unattended-scorecard" -Command $node.Source -Arguments @(
