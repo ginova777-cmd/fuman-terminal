@@ -503,6 +503,7 @@ function moduleRow(row = {}) {
     : scorecard.runId
       ? "readback"
       : "not-read";
+  const manifestPublishAllowed = Boolean(complete && effectivePublishAllowed === true && fallback !== true && rawFallback !== true && preservePreviousGood !== true);
   return {
     key: row.key,
     label: row.label,
@@ -513,7 +514,7 @@ function moduleRow(row = {}) {
     fallback,
     rawFallback,
     evidenceStatus: effectiveEvidenceStatus,
-    publishAllowed: effectivePublishAllowed,
+    publishAllowed: manifestPublishAllowed,
     resultCount: Number(protectedReadbackBlocked
       ? firstPresent(desktop.count, desktop.returnedCount, supabase.count, receipt.matches, api.count, terminal.count, 0)
       : firstPresent(api.count, terminal.count, desktop.count, supabase.count, receipt.matches, 0)) || 0,
