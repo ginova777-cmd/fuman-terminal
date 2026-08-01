@@ -307,12 +307,24 @@ function pruneModulePayloadToAuthority(value, prefix, expectedRunId, root = fals
   return next;
 }
 
+function latestModuleRunId(runIds = []) {
+  return [...new Set(runIds.filter(Boolean))].sort((a, b) => {
+    const parse = (runId) => {
+      const match = String(runId).match(/-(\d{8})(?:-(\d+))?/);
+      return match ? `${match[1]}-${String(match[2] || "").padStart(16, "0")}` : String(runId);
+    };
+    return parse(a).localeCompare(parse(b));
+  }).pop() || "";
+}
 function pruneEndpointRunIdsToAuthority(endpoints = {}, authority = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     const key = opsModuleKeyForEndpoint(endpoint);
-    const expectedRunId = String(authority.byKey?.[key]?.runId || "").trim();
+    const prefix = moduleRunIdPrefix(key);
+    const observedRunIds = Array.from(collectModuleRunIds(payload, prefix));
+    const authorityRunId = String(authority.byKey?.[key]?.runId || "").trim();
+    const expectedRunId = latestModuleRunId([...observedRunIds, authorityRunId]);
     if (!key || !expectedRunId) continue;
-    endpoints[endpoint] = pruneModulePayloadToAuthority(payload, moduleRunIdPrefix(key), expectedRunId, true);
+    endpoints[endpoint] = pruneModulePayloadToAuthority(payload, prefix, expectedRunId, true);
   }
   return endpoints;
 }
