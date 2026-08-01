@@ -15,6 +15,7 @@ const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { repairRealtimeRadarSnapshotEndpoints } = require("../lib/realtime-radar-snapshot-repair");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
@@ -222,6 +223,69 @@ function callJson(label, handler, request, query = {}, timeoutMs = 5500) {
   });
 }
 
+function opsModuleKeyForEndpoint(endpoint) {
+  const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname.toLowerCase();
+  if (path.includes("strategy2-latest")) return "strategy2";
+  if (path.includes("strategy3-latest")) return "strategy3";
+  if (path.includes("strategy4-latest") || path.includes("latest-signals")) return "strategy4";
+  if (path.includes("strategy5-latest")) return "strategy5";
+  if (path.includes("institution-latest")) return "institution";
+  if (path.includes("cb-detect-latest")) return "cb";
+  if (path.includes("warrant-flow-latest")) return "warrant";
+  return "";
+}
+
+function compactOpsAuthority(row = {}) {
+  return {
+    key: row.key || "",
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || "",
+    sourceDate: row.sourceDate || "",
+    moduleStatus: row.moduleStatus || "",
+    todayAuthoritative: row.todayAuthoritative === true,
+    formalDisplayAllowed: row.formalDisplayAllowed === true,
+    displayMode: row.displayMode || "",
+    displayBlockReason: row.displayBlockReason || row.issue || "",
+    pendingNotDue: row.pendingNotDue === true,
+    evidenceStatus: row.evidenceStatus || "",
+    publishAllowed: row.publishAllowed === true,
+    fallback: row.fallback === true,
+    resultCount: Number(row.resultCount || 0),
+    readbackCount: Number(row.readbackCount || 0),
+  };
+}
+
+function buildOpsAuthorityIndex() {
+  const status = buildLatestOpsStatus();
+  const modules = Array.isArray(status.modules) ? status.modules : [];
+  const byKey = Object.fromEntries(modules.filter((row) => row?.key).map((row) => [row.key, compactOpsAuthority(row)]));
+  return {
+    contract: "terminal-display-authority-v1",
+    source: status.source || "",
+    tradeDate: status.tradeDate || "",
+    state: status.state || "",
+    unattendedStatus: status.unattendedStatus || "NO",
+    generatedAt: status.generatedAt || new Date().toISOString(),
+    byKey,
+  };
+}
+
+function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!payload || typeof payload !== "object") continue;
+    const key = opsModuleKeyForEndpoint(endpoint);
+    const row = key ? authority.byKey?.[key] : null;
+    if (!row) continue;
+    payload.terminalAuthority = row;
+    payload.todayAuthoritative = row.todayAuthoritative;
+    payload.formalDisplayAllowed = row.formalDisplayAllowed;
+    payload.displayMode = row.displayMode;
+    payload.displayBlockReason = row.displayBlockReason;
+    payload.moduleStatus = row.moduleStatus;
+  }
+  return endpoints;
+}
+
 function summarize(payload) {
   if (!payload || typeof payload !== "object") return { ok: false, count: 0 };
   const rows = Array.isArray(payload.matches) ? payload.matches
@@ -241,6 +305,11 @@ function summarize(payload) {
     latestOverwriteAllowed: payload.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed ?? null,
     preservePreviousGood: payload.preservePreviousGood ?? payload.run_quality_at_publish?.preservePreviousGood ?? null,
     blockedReason: payload.blockedReason || payload.scanner_block_reason || payload.run_quality_at_publish?.blockedReason || "",
+    terminalAuthority: payload.terminalAuthority || null,
+    todayAuthoritative: payload.todayAuthoritative === true || payload.terminalAuthority?.todayAuthoritative === true,
+    formalDisplayAllowed: payload.formalDisplayAllowed === true || payload.terminalAuthority?.formalDisplayAllowed === true,
+    displayMode: payload.displayMode || payload.terminalAuthority?.displayMode || "",
+    displayBlockReason: payload.displayBlockReason || payload.terminalAuthority?.displayBlockReason || "",
   };
 }
 
@@ -727,6 +796,7 @@ module.exports = async function handler(request, response) {
 
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  const opsAuthority = buildOpsAuthorityIndex();
   if (entitlement?.ok) {
     response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
     response.setHeader("CDN-Cache-Control", "no-store");
@@ -777,6 +847,7 @@ module.exports = async function handler(request, response) {
         });
       }
       sanitizeStrategy2Endpoints(endpoints);
+      attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -788,6 +859,7 @@ module.exports = async function handler(request, response) {
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
         snapshotHit: !isReleaseReadbackSnapshot,
         snapshotRepairs: realtimeRadarRepairs,
+        terminalAuthority: opsAuthority,
       };
       if (request.method === "HEAD") {
         response.status(200).end("");
@@ -805,6 +877,7 @@ module.exports = async function handler(request, response) {
       const endpoints = {};
       const missPayload = {
         ...snapshotMissPayload(),
+        terminalAuthority: opsAuthority,
         endpoints,
         summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
         misses: ["desktop_route_snapshot"],
@@ -844,6 +917,7 @@ module.exports = async function handler(request, response) {
     via: "api/terminal-fast-bundle",
   });
   sanitizeStrategy2Endpoints(endpoints);
+  attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
   const misses = rows
@@ -860,6 +934,7 @@ module.exports = async function handler(request, response) {
     summary,
     misses,
     timings: Object.fromEntries(rows.map((item) => [item.label, item.elapsedMs || 0])),
+    terminalAuthority: opsAuthority,
   };
 
   if (request.method === "HEAD") {
