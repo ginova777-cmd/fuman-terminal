@@ -4,6 +4,7 @@ const path = require("path");
 const { hasLineConfig, sendLineText } = require("./line-push");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
 const { hasEmailConfig, sendEmailText } = require("./ops-email");
+const { notificationsDisabled } = require("./notification-guard");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (
@@ -487,6 +488,7 @@ function buildAlert(status) {
 }
 
 async function notifyIfNeeded(status, options = {}) {
+  if (notificationsDisabled()) return { sent: false, reason: "notifications-disabled" };
   const critical = status.issues.filter((item) => item.severity === "critical");
   if (!critical.length) return { sent: false, reason: "no critical issues" };
 

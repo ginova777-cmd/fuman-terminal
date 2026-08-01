@@ -1,12 +1,13 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { statePath, repoPath } = require("./runtime-paths");
+const { statePath, repoPath, runtimePath } = require("./runtime-paths");
 
 const CLAIM_DIR = statePath("notification-guard", "claims");
 const LOG_FILE = statePath("notification-guard", "sent-notifications.jsonl");
 const DEFAULT_MAX_EVENT_AGE_SEC = 6 * 60 * 60;
 let cachedRuntimeVersion = null;
+const NOTIFICATION_DISABLE_FILE = process.env.FUMAN_NOTIFICATION_DISABLE_FILE || runtimePath("config", "notifications-disabled.json");
 
 function envFlag(name, fallback = false) {
   const value = String(process.env[name] ?? "").trim();
@@ -16,6 +17,14 @@ function envFlag(name, fallback = false) {
 
 function disabledFlag(name) {
   return /^(0|false|no|off)$/i.test(String(process.env[name] ?? "").trim());
+}
+
+function notificationsDisabled() {
+  if (envFlag("FUMAN_NOTIFICATIONS_DISABLED") || envFlag("NOTIFICATIONS_DISABLED")) return true;
+  try {
+    return JSON.parse(fs.readFileSync(NOTIFICATION_DISABLE_FILE, "utf8")).disabled === true;
+  } catch {}
+  return false;
 }
 
 function fastMode() {
@@ -111,6 +120,7 @@ function eventTimeMs(options = {}) {
 }
 
 function localGate(channel, options = {}) {
+  if (notificationsDisabled()) return { ok: false, reason: "notifications-disabled" };
   if (envFlag("NOTIFICATION_GUARD_DISABLED") || envFlag("NOTIFY_GUARD_DISABLED")) {
     return { ok: true, reason: "guard-disabled" };
   }
@@ -233,6 +243,7 @@ module.exports = {
   guardedSend,
   guardSummary,
   localGate,
+  notificationsDisabled,
   notificationKey,
   recordNotification,
   stableJson,

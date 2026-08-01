@@ -4,6 +4,7 @@ const path = require("path");
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "fuman-notify-guard-"));
 process.env.FUMAN_STATE_DIR = stateDir;
+process.env.FUMAN_RUNTIME_DIR = stateDir;
 process.env.NOTIFY_RUNTIME_VERSION = "notify-20260628-02";
 process.env.NOTIFY_MIN_RUNTIME_VERSION = "notify-20260628-01";
 

@@ -2467,6 +2467,14 @@ function readNotificationSecret(envName, fileName) {
   }
 }
 
+function notificationsDisabled() {
+  if (/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_NOTIFICATIONS_DISABLED || process.env.NOTIFICATIONS_DISABLED || "").trim())) return true;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "config", "notifications-disabled.json"), "utf8")).disabled === true;
+  } catch {}
+  return false;
+}
+
 function notificationHash(payload) {
   return crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -2557,6 +2565,7 @@ function strategy3NotificationText(payload, channel) {
 }
 
 async function sendTelegramStrategy3Notification(payload) {
+  if (notificationsDisabled()) return { status: "disabled", reason: "notifications_disabled" };
   const token = readNotificationSecret("TELEGRAM_BOT_TOKEN", "telegram-bot-token.txt");
   const chatId = readNotificationSecret("TELEGRAM_CHAT_ID", "telegram-chat-id.txt");
   if (!token || !chatId) return { status: "disabled", reason: "missing telegram token/chat id" };
@@ -2575,6 +2584,7 @@ async function sendTelegramStrategy3Notification(payload) {
 }
 
 async function sendLineStrategy3Notification(payload) {
+  if (notificationsDisabled()) return { status: "disabled", reason: "notifications_disabled" };
   const token = readNotificationSecret("LINE_CHANNEL_ACCESS_TOKEN", "line-channel-access-token.txt");
   const targetId = readNotificationSecret("LINE_TARGET_ID", "line-target-id.txt");
   if (!token || !targetId) return { status: "disabled", reason: "missing line token/target id" };
@@ -2595,6 +2605,7 @@ async function sendLineStrategy3Notification(payload) {
 }
 
 async function sendStrategy3CompleteNotifications(output, runId, snapshotResult) {
+  if (notificationsDisabled()) return { ok: true, skipped: true, reason: "notifications_disabled" };
   if (STRATEGY3_NOTIFICATION_DISABLED) return { ok: true, skipped: true, reason: "disabled" };
   if (!runId) return { ok: true, skipped: true, reason: "missing runId" };
   if (!output?.complete || !output?.count) return { ok: true, skipped: true, reason: "no complete strategy3 matches" };
