@@ -97,6 +97,14 @@ function minuteFromClock(value) {
 function scheduleStatusForKey(key, currentMinute = taipeiMinuteOfDay()) {
   const dueTime = STRATEGY_DUE_TIMES[key] || "00:00";
   const dueMinute = minuteFromClock(dueTime);
+  const today = taipeiDateKey();
+  const expected = compactDate(EXPECTED_DATE);
+  if (expected && expected < today) {
+    return { dueTime, currentMinute, dueMinute, pendingNotDue: false, status: "DUE_PAST_DATE", today, expected };
+  }
+  if (expected && expected > today) {
+    return { dueTime, currentMinute, dueMinute, pendingNotDue: true, status: "PENDING_FUTURE_DATE", today, expected };
+  }
   const pendingNotDue = dueMinute !== null && currentMinute < dueMinute;
   return {
     dueTime,
@@ -104,6 +112,8 @@ function scheduleStatusForKey(key, currentMinute = taipeiMinuteOfDay()) {
     dueMinute,
     pendingNotDue,
     status: pendingNotDue ? "PENDING_NOT_DUE" : "DUE",
+    today,
+    expected,
   };
 }
 function selfTestScheduleTransitions() {
