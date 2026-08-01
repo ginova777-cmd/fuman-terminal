@@ -1092,11 +1092,11 @@ async function main() {
     const preWaterRoot = readJson(FILES.waterRoot, {});
     const preManifest = readJson(FILES.manifest, {});
     const refreshExpectedDate = compactDate(
-      preWaterRoot?.expectedDate
-      || preWaterRoot?.marketCalendar?.row?.displayTradeDate
+      preWaterRoot?.marketCalendar?.row?.displayTradeDate
       || preWaterRoot?.marketCalendar?.displayTradeDate
       || preWaterRoot?.displayTradeDate
       || preManifest?.tradeDate
+      || preWaterRoot?.expectedDate
     );
     const resourceArgs = ["--require-unattended"];
     if (refreshExpectedDate) resourceArgs.push(`--expected-date=${refreshExpectedDate}`);
