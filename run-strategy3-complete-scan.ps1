@@ -311,8 +311,8 @@ if ($resourceGate.PreserveLatest) {
     }
   }
   $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-resource-gate"
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
-  Write-Strategy3CompleteLog "Strategy3 resource-gated scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+  Write-Strategy3Receipt "blocked_preserved" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
+  Write-Strategy3CompleteLog "Strategy3 resource-gated scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
 $scannerError = ""
@@ -338,8 +338,8 @@ try {
   }
   $reason = "source not ready; preserved latest complete run: $scannerError"
   $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-scanner-controlled-failure"
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
-  Write-Strategy3CompleteLog "Strategy3 deferred complete scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+  Write-Strategy3Receipt "blocked_preserved" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
+  Write-Strategy3CompleteLog "Strategy3 deferred complete scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
 
