@@ -86,7 +86,19 @@ function isMarketClosedPreviousGood(manifest = {}, marketCalendar = null) {
   return Boolean(calendarClosed && (previousGoodText || offSessionStopped));
 }
 
-function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
+function classifyModule(row = {}, manifest = {}, marketCalendar = null) {  const marketClosedPreviousGood = isMarketClosedPreviousGood(manifest, marketCalendar);
+  if (marketClosedPreviousGood) {
+    return {
+      state: "CLOSED",
+      layer: ["market_closed", "previous_good"],
+      blocker: "market_closed_previous_good",
+      nextAction: "none",
+      retryable: false,
+      priority: 90,
+      contractNote: "market_closed_previous_good_module_is_not_a_recovery_job",
+    };
+  }
+
   const text = issueText(row);
   const sourceFreshnessRequired = marketCalendar?.sourceFreshnessRequired !== false;
   const waterBlocked = sourceFreshnessRequired && manifest.waterRoot?.ok === false && !isMarketClosedPreviousGood(manifest, marketCalendar);

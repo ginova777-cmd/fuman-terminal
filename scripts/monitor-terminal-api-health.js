@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const { hasLineConfig, sendLineText } = require("./line-push");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
@@ -556,6 +557,31 @@ async function main() {
   ensureStateDir();
   const expectedVersion = readLocalVersion();
   const clock = taipeiClock();
+  let marketCalendar = null;
+  try {
+    marketCalendar = await buildMarketCalendarContract({ now: new Date() });
+  } catch (_) {
+    // Calendar failure must remain observable; do not suppress live-day checks.
+  }
+  if (marketCalendar?.marketOpen === false) {
+    const status = {
+      ok: true,
+      source: "terminal-api-health",
+      baseUrl: BASE_URL,
+      updatedAt: new Date().toISOString(),
+      marketCalendar,
+      displayMode: "market_closed_previous_good",
+      preservePreviousGood: true,
+      criticalCount: 0,
+      warningCount: 0,
+      checks: [],
+      issues: [],
+      notification: { sent: false, reason: "market_closed_no_live_freshness_alert" },
+    };
+    fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
+    console.log(JSON.stringify(status, null, 2));
+    return;
+  }
   const checks = [];
   checks.push(await checkVersion(expectedVersion));
   checks.push(await checkHeatmapLiveApi(clock));
