@@ -215,6 +215,7 @@ function nextActionForState(state, row = {}) {
 
 function lifecycleStageForRow(row = {}, classification = {}, manifest = {}, marketCalendar = null) {
   if (classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return classification.state;
+  if (classification.state === "CLOSED") return "CLOSED";
   if (classification.state && classification.state !== "CLOSED") return classification.state;
   const runIds = row.runIds || {};
   const waterClosed = isMarketClosedPreviousGood(manifest, marketCalendar);
