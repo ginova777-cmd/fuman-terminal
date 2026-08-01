@@ -270,6 +270,52 @@ function buildOpsAuthorityIndex() {
   };
 }
 
+function moduleRunIdPrefix(key) {
+  return key === "cb" ? "cb-detect-" : `${key}-`;
+}
+
+function collectModuleRunIds(value, prefix, output = new Set()) {
+  if (typeof value === "string") {
+    const matches = value.match(new RegExp(`${prefix}\\d{8}(?:-\\d+)+`, "g")) || [];
+    matches.forEach((runId) => output.add(runId));
+  } else if (Array.isArray(value)) {
+    value.forEach((item) => collectModuleRunIds(item, prefix, output));
+  } else if (value && typeof value === "object") {
+    Object.values(value).forEach((item) => collectModuleRunIds(item, prefix, output));
+  }
+  return output;
+}
+
+function pruneModulePayloadToAuthority(value, prefix, expectedRunId, root = false) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => {
+      const ids = collectModuleRunIds(item, prefix);
+      return !Array.from(ids).some((runId) => runId !== expectedRunId);
+    }).map((item) => pruneModulePayloadToAuthority(item, prefix, expectedRunId, false));
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string" && value.startsWith(prefix) && value !== expectedRunId) return "";
+    return value;
+  }
+  const ownRunId = String(value.runId || value.transport?.runId || value.payload?.runId || "").trim();
+  if (!root && ownRunId.startsWith(prefix) && ownRunId !== expectedRunId) return null;
+  const next = {};
+  for (const [key, item] of Object.entries(value)) {
+    const cleaned = pruneModulePayloadToAuthority(item, prefix, expectedRunId, false);
+    if (cleaned !== null) next[key] = cleaned;
+  }
+  return next;
+}
+
+function pruneEndpointRunIdsToAuthority(endpoints = {}, authority = {}) {
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    const key = opsModuleKeyForEndpoint(endpoint);
+    const expectedRunId = String(authority.byKey?.[key]?.runId || "").trim();
+    if (!key || !expectedRunId) continue;
+    endpoints[endpoint] = pruneModulePayloadToAuthority(payload, moduleRunIdPrefix(key), expectedRunId, true);
+  }
+  return endpoints;
+}
 function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!payload || typeof payload !== "object") continue;
@@ -847,6 +893,7 @@ module.exports = async function handler(request, response) {
         });
       }
       sanitizeStrategy2Endpoints(endpoints);
+      pruneEndpointRunIdsToAuthority(endpoints, opsAuthority);
       attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
       const payload = {
         ...snapshot.payload,
@@ -917,6 +964,7 @@ module.exports = async function handler(request, response) {
     via: "api/terminal-fast-bundle",
   });
   sanitizeStrategy2Endpoints(endpoints);
+  pruneEndpointRunIdsToAuthority(endpoints, opsAuthority);
   attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;

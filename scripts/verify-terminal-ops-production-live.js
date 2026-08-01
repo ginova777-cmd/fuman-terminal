@@ -308,10 +308,14 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
   if (expectedRunIds.size) {
     const targetByName = new Map(targets.map((target) => [target.name, target]));
     const expectedRunIdsSorted = Array.from(expectedRunIds).sort();
-    const expectedByKey = new Map(Object.entries(localOpsStatus.expectedByKey || {}));
+    // Production scorecard/sourceReports are authoritative; local control-plane snapshots may be older on closed days.
+    const expectedByKey = new Map();
     for (const runId of expectedRunIdsSorted) {
       const key = strategyKeyFromRunId(runId);
       if (key && !expectedByKey.has(key)) expectedByKey.set(key, runId);
+    }
+    for (const [key, runId] of Object.entries(localOpsStatus.expectedByKey || {})) {
+      if (key && runId && !expectedByKey.has(key)) expectedByKey.set(key, runId);
     }
     const expectedStrategy2Dates = new Set(Array.from(expectedRunIds)
       .filter((runId) => strategyKeyFromRunId(runId) === "strategy2")
