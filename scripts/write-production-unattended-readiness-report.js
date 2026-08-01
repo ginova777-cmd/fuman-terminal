@@ -419,8 +419,9 @@ function classifyRootCause(blocker = "") {
   if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot/.test(text)) return "production_live_readback";
   if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
-  if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
-  if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
+  if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback|supabase latest date|latest date .* expected|expected .* latest date|tradedate_mismatch|sourcedate_mismatch/.test(text)) return "daily_manifest_publish";
+  if (/service_token|windows task|windowstask|backend-service-token|schedule/.test(text)) return "schedule_service_token";
+  if (/ops_status_snapshot|refresh_failed:ops_status|terminal-ops-status/.test(text)) return "control_plane";
   if (/auto_roll_forward|autorollforward|roll_forward/.test(text)) return "auto_roll_forward";
   if (/final_audit|finalaudit/.test(text)) return "final_audit";
   if (/root_cause_summary|reason_code|classifier/.test(text)) return "reason_code_classifier";
@@ -434,6 +435,7 @@ function rootCauseAction(category) {
     source_water_root: "Recheck or rewater source root; scanner reruns stay blocked until current Water Root PASS and formal entry is allowed.",
     release_deploy: "Align production release SHA with current audited HEAD before claiming production readiness.",
     production_live_readback: "Rerun production live readback after deploy and protected credential are ready.",
+    control_plane: "Refresh terminal control-plane and ops-status artifacts after upstream manifest/resource-chain changes, then rerun ops status readback.",
     resource_chain: "Rerun terminal resource-chain unattended verifier and inspect per-module runId closure rows.",
     runid_closure: "Verify production API, desktop, mobile and /88 all expose the same module runId after authentication.",
     daily_manifest_publish: "Inspect Daily Manifest modules; only manifest-green modules may pass canary publish, otherwise preserve previous good/degraded.",
@@ -477,6 +479,7 @@ const RECOVERY_ORDER = {
   release_deploy: 30,
   production_live_readback: 40,
   resource_chain: 50,
+  control_plane: 55,
   daily_manifest_publish: 60,
   runid_closure: 70,
   auto_roll_forward: 80,
@@ -557,6 +560,18 @@ function rootCauseRecoveryStep(row = {}) {
       commands: [command("cd C:\\fuman-terminal; npm run verify:terminal-resource-chain:unattended")],
       reason: "Resource chain is evidence-only and may rerun after auth/water prerequisites are ready.",
       stopMode: "verification_required",
+    },
+    control_plane: {
+      automation: "refresh_control_plane_snapshot",
+      canAutoExecute: true,
+      requires: ["protected_readback_credential_ok", "water_root_ok_or_previous_good_hold"],
+      commands: [
+        command("cd C:\\fuman-terminal; npm run verify:terminal-control-plane:from-existing"),
+        command("cd C:\\fuman-terminal; npm run ops:status:export"),
+        command("cd C:\\fuman-terminal; npm run verify:terminal-ops-status-api"),
+      ],
+      reason: "Control-plane and terminal ops-status snapshots must refresh after manifest/resource-chain changes; stale ops snapshots cannot be used for unattended YES.",
+      stopMode: "control_plane_refresh_required",
     },
     daily_manifest_publish: {
       automation: "manifest_repair",
