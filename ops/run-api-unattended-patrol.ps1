@@ -171,7 +171,7 @@ try {
   $calendarExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
   $calendarText = ($calendarOutput | Out-String)
   Add-Content -LiteralPath $script:LogFile -Value $calendarText.TrimEnd()
-  if ($calendarExitCode -eq 0 -and $calendarText -match '"marketOpen"\s*:\s*false') {
+  if (($calendarExitCode -eq 0 -or $calendarExitCode -eq 10) -and $calendarText -match 'marketOpen.*false') {
     Write-PatrolState -Status "market_closed_previous_good" -Message "market closed; preserve previous good; no API failure alert"
     Add-Content -LiteralPath $script:LogFile -Value ("[{0}] market closed; patrol skipped; previous good preserved" -f (Get-Date -Format o))
     exit 0
