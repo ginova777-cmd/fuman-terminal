@@ -271,7 +271,9 @@ function buildOpsAuthorityIndex() {
 }
 
 function moduleRunIdPrefix(key) {
-  return key === "cb" ? "cb-detect-" : `${key}-`;
+  if (key === "cb") return "cb-detect-";
+  if (key === "warrant") return "warrant-flow-";
+  return `${key}-`;
 }
 
 function collectModuleRunIds(value, prefix, output = new Set()) {
@@ -327,6 +329,7 @@ function pruneEndpointRunIdsToAuthority(endpoints = {}, authority = {}) {
     }
     const authorityRunId = String(authority.byKey?.[key]?.runId || "").trim();
     expectedByKey[key] = latestModuleRunId([...observedRunIds, authorityRunId]);
+    if (expectedByKey[key] && authority.byKey?.[key]) authority.byKey[key].runId = expectedByKey[key];
   }
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     let cleaned = payload;
