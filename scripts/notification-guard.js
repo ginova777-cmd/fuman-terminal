@@ -20,6 +20,7 @@ function disabledFlag(name) {
 }
 
 function notificationsDisabled() {
+  if (!/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_ENABLE_LEGACY_EXTERNAL_NOTIFICATIONS || "").trim())) return true;
   if (envFlag("FUMAN_NOTIFICATIONS_DISABLED") || envFlag("NOTIFICATIONS_DISABLED")) return true;
   try {
     return JSON.parse(fs.readFileSync(NOTIFICATION_DISABLE_FILE, "utf8")).disabled === true;
