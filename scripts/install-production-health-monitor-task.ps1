@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "FumanTerminalProductionHealthMonitor",
-  [string]$ProjectRoot = "C:\fuman-terminal",
+  [string]$ProjectRoot = "C:\fuman-terminal-publish-sync",
   [int]$IntervalMinutes = 5,
   [switch]$Uninstall
 )
