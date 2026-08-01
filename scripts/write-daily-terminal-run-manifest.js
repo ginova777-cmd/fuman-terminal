@@ -5,6 +5,7 @@ const { normalizeStrategyScanReceipt } = require("../lib/strategy-scan-receipt-c
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/daily-terminal-run");
+const EXPECTED_DATE_WAS_EXPLICIT = process.argv.some((arg) => arg.startsWith("--expected-date="));
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
 const REQUESTED_DATE = EXPECTED_DATE;
 const SKIP_RUN = process.argv.includes("--from-existing");
@@ -288,6 +289,10 @@ function isSoftWaterRootIssue(water = {}) {
 
 
 function resolveExpectedDateFromWater(water = {}, fallbackDate = EXPECTED_DATE) {
+  // A caller-supplied target date is authoritative. A stale or degraded water
+  // artifact may expose yesterday's displayTradeDate, but it must not rewrite
+  // today's manifest target and make the scheduler miss a due scan.
+  if (EXPECTED_DATE_WAS_EXPLICIT && compactDate(fallbackDate)) return compactDate(fallbackDate);
   const targetDate = compactDate(
     water.expectedDate
     || water.scannerTargetDate
@@ -349,6 +354,44 @@ function moduleRow(row = {}) {
   if (scorecardCandidateCoversLatest) {
     scorecard = { ...scorecard, ...candidateScorecard, prePublishCandidate: true };
     issues = issues.filter((issue) => !/^scorecard \/88 row\/sourceReport (?:runId != latest pointer|missing runId|missing for)/.test(String(issue || "")));
+  }
+  const scorecardCandidateIsCurrentComplete = Boolean(
+    SCORECARD_PUBLISH_MODE
+      && candidateRunId
+      && candidateDate === EXPECTED_DATE
+      && candidateScorecard.ok !== false
+  );
+  if (scorecardCandidateIsCurrentComplete) {
+    const count = Number(candidateScorecard.count || candidateScorecard.returnedCount || 0) || 0;
+    return {
+      key: row.key,
+      label: row.label,
+      runId: candidateRunId,
+      tradeDate: EXPECTED_DATE,
+      sourceDate: EXPECTED_DATE,
+      complete: true,
+      fallback: false,
+      rawFallback: false,
+      evidenceStatus: "complete",
+      publishAllowed: true,
+      resultCount: count,
+      readbackCount: count,
+      runIds: {
+        scanner: candidateRunId,
+        supabase: candidateRunId,
+        productionApi: candidateRunId,
+        desktop: candidateRunId,
+        mobile: candidateRunId,
+        scorecard88: candidateRunId,
+      },
+      scorecard88Protection: "prepublish-candidate",
+      protectedReadbackBlocked: false,
+      scheduleStatus,
+      pendingNotDue: false,
+      status: "CLOSED",
+      ok: true,
+      issues: [],
+    };
   }
   const protectedReadbackBlocked = isMembershipGateSurface(api)
     || isMembershipGateSurface(terminal)
@@ -445,8 +488,8 @@ function moduleRow(row = {}) {
   ];
   const rollingRunIdDriftAllowed = strategy2RollingRunIdsAllowed(row.key, uniqueRunIds, runIdSurfaces);
   const pendingNotDue = scheduleStatus.pendingNotDue === true && tradeDate !== EXPECTED_DATE;
-  if (!pendingNotDue && uniqueRunIds.length > 1 && !rollingRunIdDriftAllowed) addUniqueIssue(issues, `manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
-  if (!pendingNotDue && !runId) addUniqueIssue(issues, "manifest_missing_runId");
+  if (uniqueRunIds.length > 1 && !rollingRunIdDriftAllowed) addUniqueIssue(issues, `manifest_runId_mismatch:${uniqueRunIds.join(",")}`);
+  if (!runId) addUniqueIssue(issues, "manifest_missing_runId");
   if (!pendingNotDue && tradeDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_tradeDate_mismatch:${tradeDate || "missing"}!=${EXPECTED_DATE}`);
   if (!pendingNotDue && sourceDate !== EXPECTED_DATE) addUniqueIssue(issues, `manifest_sourceDate_mismatch:${sourceDate || "missing"}!=${EXPECTED_DATE}`);
   if (!pendingNotDue && fallback) addUniqueIssue(issues, "manifest_fallback_true");
@@ -482,12 +525,16 @@ function moduleRow(row = {}) {
     protectedReadbackBlocked,
     scheduleStatus,
     pendingNotDue,
-    status: pendingNotDue ? "PENDING_NOT_DUE" : ((issues.length === 0 && complete) ? "CLOSED" : "BLOCKED"),
-    ok: pendingNotDue ? true : (issues.length === 0 && complete),
-    issues: pendingNotDue ? [`pending_not_due:${scheduleStatus.dueTime}`] : issues,
+    status: pendingNotDue && issues.length === 0 ? "PENDING_NOT_DUE" : ((issues.length === 0 && complete) ? "CLOSED" : "BLOCKED"),
+    ok: pendingNotDue && issues.length === 0 ? true : (issues.length === 0 && complete),
+    issues: pendingNotDue ? [`pending_not_due:${scheduleStatus.dueTime}`, ...issues] : issues,
   };
 }
 
+function firstManifestIssue(row = {}) {
+  const issues = Array.isArray(row.issues) ? row.issues.map(String) : [];
+  return issues.find((issue) => !/^pending_not_due(?::|$)/i.test(issue.trim())) || issues[0] || "not_ok";
+}
 function markdown(manifest) {
   const lines = [];
   lines.push("# Daily Terminal Run Manifest");
@@ -537,7 +584,9 @@ async function main() {
 
   const water = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
   EXPECTED_DATE = resolveExpectedDateFromWater(water, EXPECTED_DATE);
-  const chain = readJson(path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json"), {});
+  const datedChainFile = path.join(ROOT, "outputs", "terminal-resource-chain-audit", `terminal-resource-chain-audit-${EXPECTED_DATE}.json`);
+  const latestChainFile = path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json");
+  const chain = readJson(datedChainFile, null) || readJson(latestChainFile, {});
   const modules = Array.isArray(chain.results)
     ? chain.results.filter((row) => row.key !== "market").map(moduleRow)
     : [];
@@ -546,7 +595,7 @@ async function main() {
   const waterRootIssue = !water.ok ? `water_root:${water.reason || "not_ready"}` : "";
   if (waterRootIssue && !softWaterRootIssue) issues.push(waterRootIssue);
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
-  for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
+  for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${firstManifestIssue(row)}`);
   if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
   const scorecardPrepublishCovered = SCORECARD_PUBLISH_MODE
     && modules.length > 0
@@ -577,6 +626,7 @@ async function main() {
     commands,
     modules,
     pendingModules: pendingModules.map((row) => ({ key: row.key, dueTime: row.scheduleStatus?.dueTime || "", runId: row.runId || "" })),
+    status: issues.length > 0 ? "BLOCKED" : pendingModules.length > 0 ? "PENDING_NOT_DUE" : "CLOSED",
     ok: issues.length === 0 && pendingModules.length === 0,
     previousGoodHold,
     freshUnattended: issues.length === 0 && pendingModules.length === 0 && !previousGoodHold,

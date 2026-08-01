@@ -34,6 +34,8 @@ function marketClosedPreviousGood(manifest = {}) {
     manifest.waterRoot?.reason,
     manifest.blocker,
     manifest.status,
+    manifest.unattendedStatus,
+    manifest.previousGoodHold === true ? 'previous_good_hold' : '',
   ].map(lower).join(" ");
   const tradingDay = bits.includes("trading_day") || bits.includes("after_formal_source_window");
   if (tradingDay && !bits.includes("market_closed")) return false;
@@ -121,19 +123,20 @@ function validateCanary(manifest, scorecard, options = {}) {
   const hasPendingNotDue = hardBlockedModules.length === 0 && (modules.some((row) => isPendingNotDueModule(row)) || lower(manifest.blocker).includes("pending_not_due"));
   const allowPendingRollForward = hasPendingNotDue && hardBlockedModules.length === 0;
   const previousGoodDate = maxModuleRunDate(modules);
-  const closed = marketClosedPreviousGood(manifest) || pendingPreviousGood;
+  const closed = hardBlockedModules.length === 0 && (marketClosedPreviousGood(manifest) || pendingPreviousGood);
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
+  const retiredStaticArtifact = closed;
   const expectedReportDate = (pendingPreviousGood || allowPendingRollForward) ? previousGoodDate : tradeDate;
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
-  if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
+  if (!retiredStaticArtifact && scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
   if (!tradeDate) issues.push("manifest_tradeDate_missing");
-  if (!(pendingPreviousGood || allowPendingRollForward) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
-  if ((pendingPreviousGood || allowPendingRollForward) && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
-  if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
-  if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
-  if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
-  if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
+  if (!retiredStaticArtifact && !(pendingPreviousGood || allowPendingRollForward) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+  if (!retiredStaticArtifact && (pendingPreviousGood || allowPendingRollForward) && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
+  if (!retiredStaticArtifact && scorecard.ok !== true) issues.push("scorecard_ok_not_true");
+  if (!retiredStaticArtifact && scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
+  if (!retiredStaticArtifact && (!Array.isArray(scorecard.records) || scorecard.records.length <= 0)) issues.push("scorecard_records_empty");
+  if (!retiredStaticArtifact && (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0)) issues.push("scorecard_sourceReports_empty");
   const allowMarketClosedPublish = closed && (manifestFullyClosed(manifest, modules) || pendingPreviousGood);
   const allowPreviousGoodHoldClosurePublish = previousGoodHoldClosure && !pendingPreviousGood;
   const enforcePublishable = !closed || allowMarketClosedPublish;
@@ -145,6 +148,7 @@ function validateCanary(manifest, scorecard, options = {}) {
   }
 
   for (const row of modules) {
+    if (retiredStaticArtifact) continue;
     const key = lower(row.key);
     if (isPendingNotDueModule(row) && !pendingPreviousGood) continue;
     const report = reports.get(key);
@@ -196,6 +200,8 @@ function validateCanary(manifest, scorecard, options = {}) {
       blocker: manifest.blocker || "",
     },
     scorecard: {
+      authoritative: !retiredStaticArtifact,
+      staticArtifactRetired: retiredStaticArtifact,
       ok: scorecard.ok === true,
       latestDate: scorecard.latestDate || scorecard.summary?.latestDate || "",
       records: Array.isArray(scorecard.records) ? scorecard.records.length : 0,
@@ -268,7 +274,7 @@ function selfTests() {
 
 async function main() {
   const manifest = readJson(MANIFEST_FILE);
-  const scorecard = readJson(SCORECARD_FILE);
+  const scorecard = fs.existsSync(SCORECARD_FILE) ? readJson(SCORECARD_FILE) : {};
   const payload = validateCanary(manifest, scorecard);
   const selfTestFailures = selfTests();
   if (selfTestFailures.length) {

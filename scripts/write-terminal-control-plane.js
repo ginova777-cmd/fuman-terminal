@@ -74,6 +74,8 @@ function preflightIsTradingDayWait(preflight = {}) {
 }
 
 function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
+  // The manifest owns the calendar decision. A ready root must not override a previous-good hold.
+  if (manifest.previousGoodHold === true || manifest.waterRoot?.previousGoodHold === true) return true
   const manifestWaterReady = manifest.waterRoot?.ok === true && /ready|ok/.test(String(manifest.waterRoot?.status || "").toLowerCase());
   const preflightReady = preflight.ok === true && preflight.action !== "skip_formal_scan" && preflight.status !== "market_closed";
   const tradingDayWait = preflightIsTradingDayWait(preflight);
@@ -91,14 +93,17 @@ function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
 }
 
 function resolveExpectedDateFromPreflight(preflight = {}) {
+  const today = taipeiDateKey();
   const tradingDayWait = preflightIsTradingDayWait(preflight);
   const marketClosed = !tradingDayWait && (String(preflight.action || "") === "skip_formal_scan" || String(preflight.status || "") === "market_closed");
   const scannerTargetDate = compactDate(preflight.scannerTargetDate || preflight.scannerTargetTradeDate || preflight.marketCalendar?.scannerTargetDate || preflight.marketCalendar?.row?.scannerTargetDate);
   const displayTradeDate = compactDate(preflight.displayTradeDate || preflight.marketCalendar?.displayTradeDate || preflight.marketCalendar?.row?.displayTradeDate);
-  if (tradingDayWait && scannerTargetDate) return scannerTargetDate;
-  if (!marketClosed && scannerTargetDate) return scannerTargetDate;
+  // A cached preflight is evidence, not a clock. On an open/trading-day wait,
+  // never let yesterday's scannerTargetDate pull the control plane backward.
+  // Closed-day display may intentionally point to the last trading date.
+  if (tradingDayWait || !marketClosed) return today;
   if (marketClosed && displayTradeDate) return displayTradeDate;
-  return scannerTargetDate || displayTradeDate || taipeiDateKey();
+  return today;
 }
 
 function preflightGate(preflight = {}, expectedDate = "") {
@@ -138,7 +143,16 @@ function canaryPublishGate(manifest = {}, policy = {}) {
       reason: "market_closed_preserve_previous_good_do_not_publish_new_scorecard",
     };
   }
-  const ok = manifest.ok === true
+  const pendingNotDue = String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
+    || (Array.isArray(manifest.modules) && manifest.modules.some((row) => row.pendingNotDue === true || String(row.status || "").toLowerCase() === "pending_not_due"));
+  if (pendingNotDue) {
+    return {
+      ok: true,
+      status: "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD",
+      scorecardPublishAllowed: false,
+      reason: manifest.blocker || "pending_not_due_wait_until_next_strategy_due_time",
+    };
+  }  const ok = manifest.ok === true
     && manifest.unattendedStatus === "YES"
     && decision.scorecardPublishAllowed === true
     && Array.isArray(manifest.modules)
@@ -316,8 +330,12 @@ async function main() {
     if (manifestDate) EXPECTED_DATE = manifestDate;
   }
   const canaryArtifact = readJson(CANARY_FILE, null);
-  const canary = canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy);
-  const closure = runIdClosureGate(manifest, EXPECTED_DATE);
+  const manifestClosedHold = manifest.previousGoodHold === true || manifest.waterRoot?.previousGoodHold === true;
+  const manifestPendingNotDue = String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
+    || (Array.isArray(manifest.modules) && manifest.modules.some((row) => row.pendingNotDue === true || String(row.status || "").toLowerCase() === "pending_not_due"));
+  const canary = manifestClosedHold || manifestPendingNotDue
+    ? canaryPublishGate(manifest, policy)
+    : (canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy));  const closure = runIdClosureGate(manifest, EXPECTED_DATE);
   const rollForward = autoRollForwardGate(orchestrator, policy);
   const decision = decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward });
   const payload = {

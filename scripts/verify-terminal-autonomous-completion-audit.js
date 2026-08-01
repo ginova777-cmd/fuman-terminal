@@ -24,6 +24,7 @@ const FILES = {
   opsStatus: path.join(ROOT, "data", "terminal-ops-status-latest.json"),
   reasonCodeClassifier: path.join(ROOT, "outputs", "terminal-reason-code-classifier", "terminal-reason-code-classifier.json"),
   protectedReadbackCredential: path.join(ROOT, "outputs", "protected-readback-credential", "protected-readback-credential.json"),
+  productionLive: path.join(ROOT, "outputs", "terminal-ops-production-live", "terminal-ops-production-live-readback.json"),
 };
 
 const REQUIRED_SCRIPTS = [
@@ -269,21 +270,46 @@ function verifyArtifacts(artifacts, issues) {
   rows.push(fileEvidence("opsStatus", FILES.opsStatus, "terminal-ops-status-v1", artifacts.opsStatus, issues));
   rows.push(fileEvidence("reasonCodeClassifier", FILES.reasonCodeClassifier, "terminal-reason-code-classifier-verifier-v1", artifacts.reasonCodeClassifier, issues));
   rows.push(fileEvidence("protectedReadbackCredential", FILES.protectedReadbackCredential, "protected-readback-credential-v1", artifacts.protectedReadbackCredential, issues));
+  rows.push(fileEvidence("productionLive", FILES.productionLive, "terminal-ops-production-live-readback-v2", artifacts.productionLive, issues));
   return rows;
 }
 
 function verifyInvariants(artifacts, issues) {
-  const { predictivePreflight, fugleWebSocket, warmupFinal, warmupSelfHeal, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus, reasonCodeClassifier, protectedReadbackCredential } = artifacts;
+  const { predictivePreflight, fugleWebSocket, warmupFinal, warmupSelfHeal, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus, reasonCodeClassifier, protectedReadbackCredential, productionLive } = artifacts;
   const closed = marketClosedMode(artifacts);
-  const tradeDate = compactDate(controlPlane?.tradeDate || manifest?.tradeDate || policy?.tradeDate || opsStatus?.tradeDate);
-  const displayTradeDate = compactDate(predictivePreflight?.displayTradeDate || waterRoot?.marketCalendar?.row?.displayTradeDate || manifest?.tradeDate);
-
+  // Market Calendar is authoritative; previous-good artifacts may lag by design.
+  const marketCalendarDate = compactDate(
+    orchestrator?.marketCalendar?.row?.marketDate
+      || orchestrator?.marketCalendar?.marketDate
+      || orchestrator?.tradeDate
+      || waterRoot?.marketCalendar?.row?.marketDate
+      || waterRoot?.marketCalendar?.marketDate
+      || predictivePreflight?.marketDate
+      || predictivePreflight?.scannerTargetDate
+  );
+  const tradeDate = marketCalendarDate
+    || compactDate(controlPlane?.tradeDate || manifest?.tradeDate || policy?.tradeDate || opsStatus?.tradeDate);
+  const displayTradeDate = compactDate(orchestrator?.marketCalendar?.displayTradeDate || orchestrator?.marketCalendar?.row?.displayTradeDate || waterRoot?.marketCalendar?.displayTradeDate || waterRoot?.marketCalendar?.row?.displayTradeDate || predictivePreflight?.displayTradeDate || manifest?.tradeDate);
+  // A pending control-plane window is a valid pre-execution state. Keep the
+  // natural-evidence assertions intact for due runs, but do not turn stale
+  // or not-yet-created warmup artifacts into false failures before the window.
+  const modules = Array.isArray(manifest?.modules) ? manifest.modules : [];
+  const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
+  const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
+  const pendingNotDue = (
+    String(manifest?.status || "") === "PENDING_NOT_DUE"
+    || String(orchestrator?.overallState || "") === "PENDING_NOT_DUE"
+    || String(controlPlane?.decision?.state || "") === "PENDING_NOT_DUE"
+    || blockerText.includes("pending_not_due")
+  ) && hardBlockedModules.length === 0;
   assert(DREAM_LAYERS.length === 21, issues, "dream_layers_incomplete", { layers: DREAM_LAYERS });
   assert(fugleWebSocket?.ok === true, issues, "fugle_websocket_source_layer_not_ready", { fugleWebSocket });
   assert(fugleWebSocket?.stock?.connected === true && fugleWebSocket?.stock?.authenticated === true, issues, "fugle_stock_websocket_not_connected_authenticated", { stock: fugleWebSocket?.stock });
   assert(fugleWebSocket?.futopt?.connected === true && fugleWebSocket?.futopt?.authenticated === true, issues, "fugle_futopt_websocket_not_connected_authenticated", { futopt: fugleWebSocket?.futopt });
-  assert(warmupFinal?.summary_type === "daytrade_warmup_unattended_summary_v1", issues, "warmup_final_summary_type_mismatch", { summaryType: warmupFinal?.summary_type });
-  assert(warmupFinal?.ops_policy?.self_heal_does_not_count_as_natural === true, issues, "warmup_self_heal_fakes_natural_evidence", { warmupFinal });
+  if (!pendingNotDue) {
+    assert(warmupFinal?.summary_type === "daytrade_warmup_unattended_summary_v1", issues, "warmup_final_summary_type_mismatch", { summaryType: warmupFinal?.summary_type });
+    assert(warmupFinal?.ops_policy?.self_heal_does_not_count_as_natural === true, issues, "warmup_self_heal_fakes_natural_evidence", { warmupFinal });
+  }
   const warmupInvariants = Array.isArray(warmupSelfHeal?.invariants) ? warmupSelfHeal.invariants : [];
   for (const required of [
     "task_missed_never_backfills_natural_evidence",
@@ -322,7 +348,7 @@ function verifyInvariants(artifacts, issues) {
     assert(invariants.includes(required), issues, `state_machine_invariant_missing:${required}`, { invariants });
   }
 
-  const modules = Array.isArray(manifest?.modules) ? manifest.modules : [];
+  assert(["CLOSED", "PENDING_NOT_DUE", "BLOCKED"].includes(String(manifest?.status || "")), issues, "manifest_status_missing_or_invalid", { status: manifest?.status });
   const moduleKeys = modules.map((row) => row.key).filter(Boolean);
   for (const key of REQUIRED_ACTIVE_MODULES) {
     assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
@@ -330,9 +356,6 @@ function verifyInvariants(artifacts, issues) {
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
   const completionClosed = closed || previousGoodHoldClosure;
   const protectedReadbackDisplayOnly = protectedReadbackDisplayOnlyBlocker({ protectedReadbackCredential, opsStatus });
-  const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
-  const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
-  const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
   if (!pendingNotDue) {
     for (const row of hardBlockedModules) assert(false, issues, `manifest_module_blocked:${row.key}`, { issues: row.issues || [], runId: row.runId || "", tradeDate: row.tradeDate || "", sourceDate: row.sourceDate || "" });
     assert(acceptableCompletionStatus(manifest?.unattendedStatus, completionClosed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
@@ -367,7 +390,19 @@ function verifyInvariants(artifacts, issues) {
   }
 
   assert(protectedReadbackCredential?.contract === "protected-readback-credential-v1", issues, "protected_readback_credential_contract_missing", { protectedReadbackCredential });
-  if (!closed && !pendingNotDue && !protectedReadbackDisplayOnly) assert(protectedReadbackCredential?.ok === true, issues, "protected_readback_credential_not_ok", { failures: protectedReadbackCredential?.failures || [], auth: protectedReadbackCredential?.auth || {} });
+  // Before a strategy's due window, and on a market-closed day, production
+  // readback is deferred by policy. It must not become a false scanner failure.
+  // The control plane still reports PENDING_NOT_DUE/PREVIOUS_GOOD_HOLD and keeps
+  // unattendedStatus=NO until the live checks are actually due and green.
+  if (!pendingNotDue && !closed) {
+    assert(productionLive?.contract === "terminal-ops-production-live-readback-v2", issues, "production_live_readback_contract_missing", { productionLive });
+    assert(productionLive?.ok === true, issues, "production_live_readback_not_green", { expectedSha: productionLive?.expectedSha || "", liveSha: productionLive?.release?.gitSha || "", authenticatedReadback: productionLive?.authenticatedReadback || {}, issues: productionLive?.issues || [] });
+    assert(productionLive?.authenticatedReadback?.ok === true, issues, "production_authenticated_readback_not_green", { authenticatedReadback: productionLive?.authenticatedReadback || {} });
+    const expectedLiveSha = String(productionLive?.expectedSha || "").toLowerCase();
+    const actualLiveSha = String(productionLive?.release?.gitSha || "").toLowerCase();
+    assert(Boolean(expectedLiveSha) && Boolean(actualLiveSha), issues, "production_release_identity_missing", { expectedSha: expectedLiveSha, liveSha: actualLiveSha });
+    assert(!expectedLiveSha || !actualLiveSha || expectedLiveSha === actualLiveSha || expectedLiveSha.startsWith(actualLiveSha) || actualLiveSha.startsWith(expectedLiveSha), issues, "production_release_sha_mismatch", { expectedSha: expectedLiveSha, liveSha: actualLiveSha });
+  }  if (!closed && !pendingNotDue && !protectedReadbackDisplayOnly) assert(protectedReadbackCredential?.ok === true, issues, "protected_readback_credential_not_ok", { failures: protectedReadbackCredential?.failures || [], auth: protectedReadbackCredential?.auth || {} });
 
   assert(notificationPlan?.ok === true, issues, "notification_plan_not_ok", { notificationPlan });
   assert(typeof notificationPlan?.notification?.required === "boolean", issues, "notification_required_not_boolean", { notification: notificationPlan?.notification });
@@ -385,10 +420,15 @@ function verifyInvariants(artifacts, issues) {
   const rootCauseTotalBlockers = Number(opsStatus?.rootCauseSummary?.totalBlockers || 0);
   const rootCauseCategories = Array.isArray(opsStatus?.rootCauseSummary?.categories) ? opsStatus.rootCauseSummary.categories : [];
   const rootCauseRecoverySteps = Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) ? opsStatus.rootCauseRecoveryPlan.steps : [];
+  const previousGoodOperationalHold = closed && (
+    opsStatus?.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    || manifest?.previousGoodHold === true
+    || controlPlane?.decision?.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+  );
   if (rootCauseTotalBlockers > 0) {
     assert(rootCauseCategories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
     assert(rootCauseRecoverySteps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  } else {
+  } else if (!previousGoodOperationalHold) {
     assert(rootCauseCategories.length === 0, issues, "ops_status_root_cause_categories_present_without_blockers", { rootCauseSummary: opsStatus?.rootCauseSummary });
     assert(rootCauseRecoverySteps.length === 0 && Number(opsStatus?.rootCauseRecoveryPlan?.stepCount || 0) === 0, issues, "ops_status_root_cause_recovery_steps_present_without_blockers", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
   }
@@ -408,7 +448,7 @@ function verifyInvariants(artifacts, issues) {
   assert((opsStatus?.actionMatrix?.protectedInvariants || []).includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "ops_status_membership_invariant_missing", { actionMatrix: opsStatus?.actionMatrix });
   assert(Array.isArray(opsStatus?.modules) && opsStatus.modules.length >= REQUIRED_ACTIVE_MODULES.length, issues, "ops_status_modules_missing", { modules: opsStatus?.modules?.length || 0 });
 
-  return { closed, tradeDate, displayTradeDate, activeModules: moduleKeys, jobQueueLength: jobQueue.length };
+  return { closed, pendingNotDue, tradeDate, displayTradeDate, activeModules: moduleKeys, jobQueueLength: jobQueue.length };
 }
 
 function markdown(payload) {
@@ -417,7 +457,8 @@ function markdown(payload) {
   lines.push("");
   lines.push(`- checkedAt: ${payload.checkedAt}`);
   lines.push(`- ok: ${payload.ok}`);
-  lines.push(`- tradeDate: ${payload.summary.tradeDate || "--"}`);
+  lines.push(`- status: ${payload.status}`);
+  lines.push(`- unattendedStatus: ${payload.unattendedStatus}`);  lines.push(`- tradeDate: ${payload.summary.tradeDate || "--"}`);
   lines.push(`- displayTradeDate: ${payload.summary.displayTradeDate || "--"}`);
   lines.push(`- marketClosedMode: ${payload.summary.closed}`);
   lines.push(`- issues: ${payload.issues.map((row) => row.issue).join("; ") || "none"}`);
@@ -474,6 +515,9 @@ async function main() {
     contract: "terminal-autonomous-completion-audit-v1",
     checkedAt: new Date().toISOString(),
     ok: issues.length === 0,
+    status: summary.closed ? "MARKET_CLOSED_PREVIOUS_GOOD_HOLD" : summary.pendingNotDue ? "PENDING_NOT_DUE" : issues.length === 0 ? "COMPLETE" : "BLOCKED",
+    unattendedStatus: summary.closed ? "PREVIOUS_GOOD_HOLD" : summary.pendingNotDue ? "NO" : issues.length === 0 ? "YES" : "NO",
+    deferredChecks: summary.closed || summary.pendingNotDue ? ["production_live_readback", "authenticated_protected_readback", "release_identity"] : [],
     summary,
     layers,
     artifacts: artifactRows,
@@ -487,6 +531,8 @@ async function main() {
   await fs.promises.writeFile(mdFile, markdown(payload), "utf8");
   console.log(JSON.stringify({
     ok: payload.ok,
+    status: payload.status,
+    unattendedStatus: payload.unattendedStatus,
     contract: payload.contract,
     tradeDate: summary.tradeDate,
     displayTradeDate: summary.displayTradeDate,

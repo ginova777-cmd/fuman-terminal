@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
+const EXPECTED_DATE_WAS_EXPLICIT = process.argv.some((arg) => arg.startsWith("--expected-date="));
+let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
 const MANIFEST_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--manifest="))?.slice("--manifest=".length)
   || path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"));
 const CANARY_FILE = path.resolve(process.argv.find((arg) => arg.startsWith("--canary="))?.slice("--canary=".length)
@@ -80,6 +81,10 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+function readJsonOrNull(file) {
+  try { return readJson(file); } catch { return null; }
+}
+
 function fail(reason, detail = {}) {
   console.error(JSON.stringify({ ok: false, reason, manifest: MANIFEST_FILE, ...detail }, null, 2));
   process.exit(1);
@@ -106,7 +111,13 @@ function main() {
     fail("canary_publish_contract_invalid", { contract: canary.contract || "", canary: CANARY_FILE });
   }
 
-  const pendingRollForwardAllowed = String(canary.status || "") === "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD"
+  const waterRoot = readJsonOrNull(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"));
+  const waterRequestedDate = compactDate(waterRoot?.expectedDate || waterRoot?.requestedDate || waterRoot?.marketCalendar?.requestedDate || waterRoot?.marketCalendar?.marketDate);
+  const waterDisplayTradeDate = compactDate(waterRoot?.marketCalendar?.row?.displayTradeDate || waterRoot?.marketCalendar?.displayTradeDate || waterRoot?.displayTradeDate);
+  if (!EXPECTED_DATE_WAS_EXPLICIT && waterDisplayTradeDate) {
+    EXPECTED_DATE = waterDisplayTradeDate;
+  }
+const pendingRollForwardAllowed = String(canary.status || "") === "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD"
     && canary.scorecardPublishAllowed === false;
   const manifestTradeDate = String(manifest.tradeDate || "");
   const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
@@ -174,13 +185,3 @@ function main() {
   }, null, 2));
 }
 main();
-
-
-
-
-
-
-
-
-
-

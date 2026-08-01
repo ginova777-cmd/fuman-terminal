@@ -66,14 +66,17 @@ function runCommand(step) {
   const result = spawnSync(command, step.args || [], {
     cwd: ROOT,
     encoding: "utf8",
-    env: { ...process.env },
+    env: { ...process.env, ...(step.env || {}) },
     shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(command),
   });
+  const exitCode = result.status ?? 1;
+  const allowedNonZero = exitCode !== 0 && Array.isArray(step.allowExitCodes) && step.allowExitCodes.includes(Number(exitCode));
   return {
     label: step.label,
     command: printable(step),
-    exitCode: result.status ?? 1,
-    ok: result.status === 0,
+    exitCode,
+    ok: exitCode === 0 || allowedNonZero,
+    allowedNonZero,
     stdout: String(result.stdout || "").slice(-3000),
     stderr: String(result.stderr || "").slice(-3000),
   };
@@ -91,6 +94,28 @@ function npmRun(script, extraArgs = []) {
   };
 }
 
+function allowBlockedVerifier(step) {
+  step.allowExitCodes = [1];
+  step.blockerEvidenceAllowed = true;
+  return step;
+}
+function scorecardCandidateFile() {
+  return process.env.FUMAN_SCORECARD_SOURCE_FILE || "C:\\fuman-runtime\\data\\scorecard-terminal-current.json";
+}
+
+function manifestFromExistingStep(tradeDate = currentTradeDate()) {
+  const step = npmRun("manifest:daily-terminal-run", ["--", "--from-existing", "--expected-date=" + tradeDate, "--scorecard-candidate-file=" + scorecardCandidateFile()]);
+  step.allowExitCodes = [1];
+  return step;
+}
+
+function manifestFromExistingStrictStep(tradeDate = currentTradeDate()) {
+  return npmRun("manifest:daily-terminal-run", ["--", "--from-existing", "--expected-date=" + tradeDate, "--scorecard-candidate-file=" + scorecardCandidateFile()]);
+}
+
+function manifestGatedScorecardPublishStep(tradeDate = currentTradeDate()) {
+  return npmRun("scorecard:publish:manifest-gated", ["--", "--expected-date=" + tradeDate]);
+}
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
@@ -118,7 +143,66 @@ function waterRootFormalEntryAllowed(waterRoot = {}) {
     || sourceRow.formal_entry_allowed === true;
 }
 
-function scannerWaterRootGate(waterRoot = null) {
+function sourceMetric(artifact = {}, camelName, snakeName = camelName) {
+  const sourceStatus = artifact.sourceStatus || {};
+  const row = sourceStatus.row || sourceStatus;
+  const payload = row.payload || sourceStatus.payload || {};
+  return payload[camelName]
+    ?? payload[snakeName]
+    ?? row[camelName]
+    ?? row[snakeName]
+    ?? sourceStatus[camelName]
+    ?? sourceStatus[snakeName];
+}
+
+function sourceMetricNumber(artifact = {}, camelName, snakeName = camelName) {
+  const value = Number(sourceMetric(artifact, camelName, snakeName));
+  return Number.isFinite(value) ? value : null;
+}
+
+function scannerProfileForKey(key) {
+  const profiles = {
+    strategy2: {
+      formalEntryRequired: true,
+      sourceWindow: "intraday_formal_entry",
+      minToday1mSymbols: 1,
+      maxIntraday1mStaleSeconds: 120,
+    },
+    strategy3: {
+      formalEntryRequired: false,
+      sourceWindow: "post_intraday_1m_complete_scan",
+      minToday1mSymbols: 1000,
+      maxIntraday1mStaleSeconds: 120,
+      dailyVolumeRequired: true,
+    },
+  };
+  return profiles[key] || { formalEntryRequired: true, sourceWindow: "formal_entry" };
+}
+
+function strategySourceReadinessGate(key, artifact = {}) {
+  const profile = scannerProfileForKey(key);
+  if (profile.formalEntryRequired && !waterRootFormalEntryAllowed(artifact)) {
+    return { ok: false, guard: "formal_entry_not_allowed_by_water_root", reason: artifact.reason || artifact.status || "formal_entry_not_allowed" };
+  }
+  if (!profile.formalEntryRequired) {
+    const today1mSymbols = sourceMetricNumber(artifact, "today_1m_symbols", "today1mSymbols");
+    const staleSeconds = sourceMetricNumber(artifact, "intraday_1m_stale_seconds", "intraday1mStaleSeconds");
+    const dailyVolumeStatus = String(sourceMetric(artifact, "daily_volume_status", "dailyVolumeStatus") || "").toLowerCase();
+    if (profile.minToday1mSymbols && (today1mSymbols === null || today1mSymbols < profile.minToday1mSymbols)) {
+      return { ok: false, guard: "strategy_source_1m_symbols_not_ready", reason: `${key}:today_1m_symbols ${today1mSymbols ?? "missing"} < ${profile.minToday1mSymbols}` };
+    }
+    if (profile.maxIntraday1mStaleSeconds !== undefined && (staleSeconds === null || staleSeconds > profile.maxIntraday1mStaleSeconds)) {
+      return { ok: false, guard: "strategy_source_1m_stale", reason: `${key}:intraday_1m_stale_seconds ${staleSeconds ?? "missing"} > ${profile.maxIntraday1mStaleSeconds}` };
+    }
+    if (profile.dailyVolumeRequired && dailyVolumeStatus !== "ready") {
+      return { ok: false, guard: "strategy_source_daily_volume_not_ready", reason: `${key}:daily_volume_status ${dailyVolumeStatus || "missing"} != ready` };
+    }
+    return { ok: true, guard: "strategy_source_profile_ready", reason: `${key}:${profile.sourceWindow}_ready` };
+  }
+  return { ok: true, guard: "water_root_ok_formal_entry_allowed", reason: "ok" };
+}
+
+function scannerWaterRootGate(key, waterRoot = null) {
   const artifact = waterRoot || readJson(WATER_ROOT_FILE, null);
   if (!artifact) {
     return { ok: false, guard: "water_root_artifact_missing_scanner_blocked", reason: "water_root_artifact_missing" };
@@ -126,10 +210,21 @@ function scannerWaterRootGate(waterRoot = null) {
   if (artifact.ok !== true) {
     return { ok: false, guard: "water_root_not_ok_scanner_blocked", reason: artifact.reason || artifact.status || "water_root_not_ok" };
   }
-  if (!waterRootFormalEntryAllowed(artifact)) {
-    return { ok: false, guard: "formal_entry_not_allowed_by_water_root", reason: artifact.reason || artifact.status || "formal_entry_not_allowed" };
+  return strategySourceReadinessGate(key, artifact);
+}
+function policyAllowsScannerRetryForStrategy(key, policy = {}) {
+  const profile = scannerProfileForKey(key);
+  const decision = policy.decision || {};
+  if (decision.formalScanAllowed === true || policy.actionMatrix?.formalScan?.allowed === true) {
+    return { ok: true, guard: "formal_scan_allowed_by_policy", reason: "policy_formal_scan_allowed" };
   }
-  return { ok: true, guard: "water_root_ok_formal_entry_allowed", reason: "ok" };
+  if (profile.formalEntryRequired === true) {
+    return { ok: false, guard: "formal_scan_not_allowed_by_policy", reason: "formal_entry_strategy_requires_policy_formal_scan_allowed" };
+  }
+  if (decision.autoRecoveryAllowed === true && policy.actionMatrix?.rollForward?.allowed !== false) {
+    return { ok: true, guard: "strategy_source_profile_retry_allowed", reason: `non_intraday_formal_strategy_retry_allowed:${profile.sourceWindow || "strategy_source_profile"}` };
+  }
+  return { ok: false, guard: "strategy_scan_not_allowed_by_policy", reason: decision.reason || "policy_disallows_strategy_retry" };
 }
 function requiresProtectedReadbackCredential(action = {}) {
   const codes = Array.isArray(action.reasonCodes) ? action.reasonCodes : [];
@@ -144,8 +239,8 @@ function safeId(value) {
   return String(value || "unknown").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 180);
 }
 
-function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING") {
-  return safeId(job.idempotencyKey || [currentTradeDate(), key, state, job.blocker || "none"].join(":"));
+function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING", tradeDate = currentTradeDate()) {
+  return safeId(job.idempotencyKey || [tradeDate, key, state, job.blocker || "none"].join(":"));
 }
 
 function receiptFileFor(action = {}) {
@@ -162,7 +257,9 @@ function readActionReceipt(action = {}) {
 
 function completedReceipt(action = {}) {
   const receipt = readActionReceipt(action);
-  return receipt?.ok === true && receipt?.status === "complete" ? receipt : null;
+  const results = Array.isArray(receipt?.results) ? receipt.results : [];
+  const hasSyntheticSuccess = results.some((row) => row?.skipped === true || row?.allowedNonZero === true);
+  return receipt?.ok === true && receipt?.status === "complete" && !hasSyntheticSuccess ? receipt : null;
 }
 
 async function writeActionReceipt(action = {}, status = "complete", results = [], extra = {}) {
@@ -188,12 +285,112 @@ async function writeActionReceipt(action = {}, status = "complete", results = []
   return payload;
 }
 
-function normalizeJobs(orchestrator = {}, queue = []) {
-  if (Array.isArray(queue) && queue.length) return queue;
-  if (Array.isArray(orchestrator.jobQueue)) return orchestrator.jobQueue;
-  return [];
+function isDisplayClosureState(state = "") {
+  const value = String(state || "");
+  return value.includes("DISPLAY") || value.includes("DEGRADED") || value.includes("PREVIOUS") || value.includes("RUNID");
+}function displayRepairTradeDateForJobs(jobs = [], fallback = currentTradeDate()) {
+  const dates = unique((Array.isArray(jobs) ? jobs : [])
+    .map((job) => normalizeTradeDate(job.repairTradeDate))
+    .filter(Boolean));
+  if (dates.length === 1) return dates[0];
+  return normalizeTradeDate(fallback) || currentTradeDate();
 }
 
+function coalesceDisplayClosureJobs(jobs = [], displayTradeDate = currentTradeDate()) {
+  const list = Array.isArray(jobs) ? jobs : [];
+  const displayJobs = list.filter((job) => isDisplayClosureState(job.state));
+  if (displayJobs.length <= 1) return list;
+  const others = list.filter((job) => !isDisplayClosureState(job.state));
+  const priority = Math.min(...displayJobs.map((job) => Number(job.priority ?? 80)));
+  const affectedKeys = displayJobs.map((job) => job.key).filter(Boolean);
+  const blockers = unique(displayJobs.map((job) => job.blocker || "").filter(Boolean));
+  const issues = unique(displayJobs.flatMap((job) => Array.isArray(job.issues) ? job.issues : []));
+  const repairTradeDate = displayRepairTradeDateForJobs(displayJobs, displayTradeDate);
+  const coalesced = {
+    key: "terminal-display-closure",
+    label: "Terminal Display Closure",
+    state: displayJobs.some((job) => String(job.state || "").includes("RUNID")) ? "BLOCKED_RUNID_MISMATCH" : "FAILED_DISPLAY",
+    priority,
+    retryable: true,
+    repairTradeDate,
+    blocker: blockers[0] || "terminal_display_closure_required",
+    nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback",
+    idempotencyKey: safeId([repairTradeDate, "terminal-display-closure", affectedKeys.join("+"), blockers[0] || "closure"].join(":")),
+    receiptRequired: true,
+    affectedKeys,
+    coalescedJobCount: displayJobs.length,
+    issues,
+    executionGuard: "coalesced_display_snapshot_readback_only",
+  };
+  return [coalesced, ...others];
+}
+
+function manifestDerivedJobs(displayTradeDate = currentTradeDate()) {
+  const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
+  const tradeDate = normalizeTradeDate(manifest.tradeDate || manifest.requestedDate || displayTradeDate);
+  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
+  const jobs = [];
+  for (const row of rows) {
+    const key = String(row.key || "").trim();
+    if (!key || key === "market") continue;
+    const issues = Array.isArray(row.issues) ? row.issues.map((issue) => String(issue || "")) : [];
+    const pending = row.pendingNotDue === true || issues.some((issue) => /^pending_not_due(?::|$)/.test(issue));
+    const staleDate = normalizeTradeDate(row.tradeDate) && tradeDate && normalizeTradeDate(row.tradeDate) !== tradeDate;
+    const staleSource = normalizeTradeDate(row.sourceDate) && tradeDate && normalizeTradeDate(row.sourceDate) !== tradeDate;
+    const fallback = row.fallback === true || row.rawFallback === true || issues.some((issue) => /fallback|previous_good|evidence_not_complete|sourceDate_mismatch|tradeDate_mismatch/i.test(issue));
+    if (pending) continue;
+    if (row.ok === true && row.complete === true && !staleDate && !staleSource && !fallback) continue;
+    const state = staleDate || staleSource || fallback || row.complete !== true ? "FAILED_SCAN" : "FAILED_DISPLAY";
+    const blocker = issues[0] || (staleDate ? `manifest_tradeDate_mismatch:${row.tradeDate}!=${tradeDate}` : "manifest_module_not_green");
+    jobs.push({
+      key,
+      label: row.label || key,
+      state,
+      layer: state === "FAILED_SCAN" ? ["scanner", "manifest"] : ["display", "manifest"],
+      priority: state === "FAILED_SCAN" ? 35 : 55,
+      retryable: true,
+      repairTradeDate: tradeDate || displayTradeDate,
+      blocker,
+      nextAction: state === "FAILED_SCAN" ? "rerun_idempotent_scanner_then_reverify_manifest_closure" : "refresh_terminal_snapshot_bundle_mobile_88_readback",
+      idempotencyKey: safeId([tradeDate || displayTradeDate, key, state, blocker].join(":")),
+      receiptRequired: true,
+      issues,
+      runId: row.runId || "",
+      runIds: row.runIds || {},
+      generatedFrom: "daily-terminal-run-manifest",
+    });
+  }
+  if (manifest.ok !== true && rows.length) {
+    jobs.push({
+      key: "scorecard",
+      label: "Scorecard Manifest Gate",
+      state: "PUBLISH_DEFERRED_MANIFEST_PENDING",
+      layer: ["scorecard", "manifest"],
+      priority: 90,
+      retryable: true,
+      repairTradeDate: tradeDate || displayTradeDate,
+      blocker: manifest.blocker || "manifest_not_green",
+      nextAction: "wait_for_manifest_green_before_scorecard_publish",
+      idempotencyKey: safeId([tradeDate || displayTradeDate, "scorecard", "PUBLISH_DEFERRED_MANIFEST_PENDING", manifest.blocker || "manifest"].join(":")),
+      receiptRequired: true,
+      issues: [manifest.blocker || "manifest_not_green"].filter(Boolean),
+      generatedFrom: "daily-terminal-run-manifest",
+    });
+  }
+  return jobs;
+}
+
+function normalizeJobs(orchestrator = {}, queue = [], displayTradeDate = currentTradeDate()) {
+  const jobs = Array.isArray(queue) && queue.length ? queue : Array.isArray(orchestrator.jobQueue) ? orchestrator.jobQueue : [];
+  const seen = new Set();
+  const merged = [...manifestDerivedJobs(displayTradeDate), ...jobs].filter((job) => {
+    const id = safeId([job.repairTradeDate || displayTradeDate, job.key, job.state].join(":"));
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return coalesceDisplayClosureJobs(merged, displayTradeDate);
+}
 function planForJob(job = {}, policy = {}, options = {}) {
   const state = String(job.state || "PENDING");
   const key = String(job.key || "unknown");
@@ -209,11 +406,14 @@ function planForJob(job = {}, policy = {}, options = {}) {
     executionGuard: "not_classified",
     commands: [],
     notes: [],
-    idempotencyKey: actionIdempotencyKey(job, key, state),
+    idempotencyKey: actionIdempotencyKey(job, key, state, job.repairTradeDate || options.displayTradeDate || options.tradeDate || currentTradeDate()),
     receiptFile: "",
     receiptRequired: true,
     ...compactReasonClassification({ key, label: job.label || key, state, blocker: job.blocker || "", nextAction: job.nextAction || "" }),
   };
+  if (isDisplayClosureState(state)) {
+    base.idempotencyKey = safeId([normalizeTradeDate(job.repairTradeDate) || options.displayTradeDate || options.tradeDate || currentTradeDate(), key, state, job.blocker || "none"].join(":"));
+  }
   base.receiptFile = receiptFileFor(base);
 
   if (state.includes("AUTH")) {
@@ -221,40 +421,60 @@ function planForJob(job = {}, policy = {}, options = {}) {
     base.notes.push("Auth failures are never auto-executed; membership display auth must not be confused with backend service token auth.");
     return base;
   }
+  const issueList = Array.isArray(job.issues) ? job.issues.map((issue) => String(issue || "")) : [];
+  const pendingNotDueIssue = issueList.find((issue) => /^pending_not_due(?::|$)/.test(issue));
+  if ((state.includes("PENDING_NOT_DUE") || pendingNotDueIssue) && state.includes("SCAN")) {
+    base.executable = false;
+    base.executionGuard = "schedule_not_due_no_auto_repair";
+    base.commands.push(manifestFromExistingStep(options.tradeDate || currentTradeDate()));
+    base.notes.push(`Module is not due yet (${pendingNotDueIssue || state}); do not scan, publish, or rebuild snapshots until its schedule window arrives.`);
+    return base;
+  }
+
 
   if (state.includes("SOURCE")) {
     base.executable = true;
-    base.executionGuard = "source_check_only_no_scanner_publish";
+    base.executionGuard = "source_rewater_then_verify_no_scanner_publish";
+    base.commands.push(npmRun(APPLY ? "daytrade-warmup:self-heal:apply" : "daytrade-warmup:self-heal"));
     base.commands.push(npmRun("verify:terminal-water-root"));
-    base.notes.push("Source recovery only rechecks root water; scanner/publish waits for water root PASS.");
+    base.notes.push("Source recovery runs idempotent daytrade rewater/self-heal, then rechecks root water; scanner/publish waits for Water Root PASS.");
     return base;
   }
 
   if (state.includes("SCAN")) {
-    const formalScanAllowed = policyDecision.formalScanAllowed === true || policy.actionMatrix?.formalScan?.allowed === true;
+    const policyGate = policyAllowsScannerRetryForStrategy(key, policy);
     const scannerApply = options.applyScanners === true || APPLY_SCANNERS;
-    const waterGate = scannerWaterRootGate(options.waterRoot || null);
+    const waterGate = scannerWaterRootGate(key, options.waterRoot || null);
+    const repairTradeDate = normalizeTradeDate(job.repairTradeDate) || options.tradeDate || currentTradeDate();
+    base.repairTradeDate = repairTradeDate;
+    const scannerCommand = scannerStepForKey(key, job.command, repairTradeDate);
+    const recoveryCommands = [];
+    if (scannerCommand) recoveryCommands.push(scannerCommand);
+    recoveryCommands.push(...scannerPostRunSteps(key, repairTradeDate));
+
     base.commands.push(npmRun("verify:terminal-water-root"));
+    base.commands.push(...recoveryCommands);
+
     if (!waterGate.ok) {
       base.executionGuard = waterGate.guard;
       base.executable = false;
-      base.notes.push(`Scanner reruns are blocked until current Water Root PASS and formal entry is allowed: ${waterGate.reason}`);
+      base.notes.push(`Scanner reruns are blocked until current Water Root PASS and the strategy source profile is ready: ${waterGate.reason}`);
+      base.notes.push("Recovery chain is listed for transparency but will not execute until the gate passes; this prevents silent stale latest and makes the next roll-forward deterministic.");
       return base;
     }
-    if (!formalScanAllowed) {
-      base.executionGuard = "formal_scan_not_allowed_by_policy";
+    if (!policyGate.ok) {
+      base.executionGuard = policyGate.guard;
       base.executable = false;
-      base.notes.push("Scanner reruns are blocked unless Autonomous Ops Policy explicitly allows formalScan.");
+      base.notes.push(`Scanner reruns are blocked by Autonomous Ops Policy: ${policyGate.reason}`);
+      base.notes.push("Recovery chain is listed for transparency but will not execute until policy allows the scanner retry.");
       return base;
     }
     base.executionGuard = scannerApply ? "scanner_apply_enabled" : "scanner_requires_apply_scanners";
     base.executable = scannerApply;
-    const scannerCommand = scannerStepForKey(key, job.command);
-    if (scannerCommand) base.commands.push(scannerCommand);
-    base.notes.push("Scanner reruns are idempotent-only, require current Water Root PASS, formal entry allowed, --apply --apply-scanners, and policy formalScanAllowed=true.");
+    base.notes.push(`Scanner reruns are idempotent-only, require current Water Root PASS, strategy-specific source readiness, --apply --apply-scanners, and policy gate: ${policyGate.reason}.`);
+    base.notes.push("After the real scanner, strategy closure, manifest refresh, desktop snapshot, and runId closure are verified in the same idempotent action.");
     return base;
   }
-
   if (state === "PUBLISH_DEFERRED_MANIFEST_PENDING") {
     base.executionGuard = "manifest_pending_publish_deferred";
     base.executable = false;
@@ -283,11 +503,18 @@ function planForJob(job = {}, policy = {}, options = {}) {
       base.notes.push("Protected display readback cannot auto-execute until the member readback credential is armed; this is a manual secret repair, not a scanner retry.");
       return base;
     }
+    const tradeDate = normalizeTradeDate(job.repairTradeDate) || options.displayTradeDate || options.tradeDate || currentTradeDate();
+    base.repairTradeDate = tradeDate;
     base.executable = true;
     base.executionGuard = "display_snapshot_readback_only";
+    base.commands.push(npmRun("scorecard:terminal-source"));
+    base.commands.push(manifestFromExistingStrictStep(tradeDate));
+    base.commands.push(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]));
+    base.commands.push(manifestGatedScorecardPublishStep(tradeDate));
     base.commands.push(npmRun("snapshot:desktop"));
-    base.commands.push(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${currentTradeDate()}`]));
-    base.notes.push("Display repair rebuilds terminal snapshots and verifies desktop/mobile/88 runId closure.");
+    base.commands.push(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${tradeDate}`])));
+    base.commands.push(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", `--expected-date=${tradeDate}`])));
+    base.notes.push("Display repair rebuilds the same-day scorecard candidate, refreshes Manifest with that candidate, publishes scorecard_latest only through the Manifest gate, rebuilds terminal snapshots, and verifies desktop/mobile/88 runId closure.");
     return base;
   }
 
@@ -296,37 +523,100 @@ function planForJob(job = {}, policy = {}, options = {}) {
   return base;
 }
 
-function scannerStepForKey(key, fallbackCommand = "") {
+function powershellScannerStep(key, scriptName) {
+  return {
+    command: process.platform === "win32" ? "pwsh.exe" : "pwsh",
+    args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(".", scriptName)],
+    label: "scanner:" + key,
+  };
+}
+
+function scannerStepForKey(key, fallbackCommand = "", tradeDate = "") {
+  // Scanner recovery must invoke the idempotent scan runner. Readback verifiers
+  // are executed only after the runner publishes and must never replace it.
   const map = {
-    strategy2: npmRun("verify:strategy2-e2e-closure"),
-    strategy3: npmRun("verify:daytrade-strategy3-closure-live"),
-    strategy5: npmRun("verify:strategy5-e2e-closure"),
-    institution: npmRun("verify:institution-e2e-closure"),
-    cb: npmRun("verify:cb-live-readback"),
-    warrant: npmRun("verify:warrant-live-closure"),
+    strategy2: powershellScannerStep("strategy2", "run-strategy2-intraday.ps1", tradeDate),
+    strategy3: powershellScannerStep("strategy3", "run-strategy3-complete-scan.ps1", tradeDate),
+    strategy4: powershellScannerStep("strategy4", "run-strategy4.ps1", tradeDate),
+    strategy5: powershellScannerStep("strategy5", "run-strategy5.ps1", tradeDate),
+    institution: powershellScannerStep("institution", "run-institution.ps1", tradeDate),
+    cb: powershellScannerStep("cb", "run-cb-detect.ps1", tradeDate),
+    warrant: powershellScannerStep("warrant", "run-warrant-flow.ps1", tradeDate),
   };
   if (map[key]) return map[key];
-  if (key === "strategy4") {
-    return {
-      command: process.platform === "win32" ? "pwsh.exe" : "pwsh",
-      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\run-strategy4.ps1"],
-      label: "scanner:strategy4",
-    };
-  }
-  if (String(fallbackCommand).startsWith("npm run verify:")) {
-    const parts = fallbackCommand.split(/\s+/).filter(Boolean);
-    return { command: npmBin, args: parts.slice(1), label: `scanner:${key}:fallback` };
+  if (String(fallbackCommand) && !/\bnpm run verify:/.test(String(fallbackCommand))) {
+    const parts = String(fallbackCommand).split(/\s+/).filter(Boolean);
+    return { command: parts.shift(), args: parts, label: "scanner:" + key + ":fallback" };
   }
   return null;
 }
+function scannerClosureStepsForKey(key) {
+  const map = {
+    strategy2: "verify:strategy2-e2e-closure",
+    strategy3: "verify:daytrade-strategy3-closure-live",
+    strategy4: "verify:strategy4-postscan-closure",
+    strategy5: "verify:strategy5-e2e-closure",
+    institution: "verify:institution-e2e-closure",
+    cb: "verify:cb-e2e-closure",
+    warrant: "verify:warrant-e2e-closure",
+  };
+  const script = map[key];
+  return script ? [npmRun(script)] : [];
+}
 
+function scannerPostRunSteps(key, tradeDate = currentTradeDate()) {
+  return [
+    ...scannerClosureStepsForKey(key),
+    npmRun("scorecard:terminal-source"),
+    manifestFromExistingStrictStep(tradeDate),
+    npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]),
+    manifestGatedScorecardPublishStep(tradeDate),
+    npmRun("snapshot:desktop"),
+    allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", "--expected-date=" + tradeDate])),
+    allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", "--expected-date=" + tradeDate])),
+  ];
+}
 function currentTradeDate() {
   const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
   return String(manifest.tradeDate || "").replace(/\D/g, "").slice(0, 8) || "latest";
 }
 
-function buildSafeRecoveryPreview(jobs = [], policy = {}) {
-  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true }));
+function normalizeTradeDate(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function displayClosureTargetTradeDate(orchestrator = {}) {
+  const calendar = orchestrator.marketCalendar || orchestrator.market || {};
+  const displayDate = normalizeTradeDate(
+    calendar.displayTradeDate
+    || calendar.lastCompleteTradeDate
+    || calendar.lastTradingDate
+    || calendar.lastOpenTradeDate
+    || orchestrator.displayTradeDate
+  );
+  const current = normalizeTradeDate(orchestrator.tradeDate || currentTradeDate()) || currentTradeDate();
+  const modeText = [
+    calendar.displayMode,
+    calendar.marketStatus,
+    calendar.skipReason,
+    calendar.reason,
+    orchestrator.state,
+    orchestrator.overallState,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  const formalSkipped = calendar.formalScanSkipped === true
+    || calendar.formalSourceWindowOpen === false
+    || calendar.marketOpen === false
+    || calendar.isTradingDay === false
+    || modeText.includes("previous_good")
+    || modeText.includes("wait_source_window")
+    || modeText.includes("before_formal_source_window")
+    || modeText.includes("market_closed")
+    || modeText.includes("holiday");
+  return formalSkipped && displayDate ? displayDate : current;
+}
+
+function buildSafeRecoveryPreview(jobs = [], policy = {}, tradeDate = currentTradeDate(), displayTradeDate = tradeDate) {
+  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true, tradeDate, displayTradeDate }));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   const decision = decide(actions, policy);
@@ -344,8 +634,10 @@ function buildSafeRecoveryPreview(jobs = [], policy = {}) {
   };
 }
 function buildPlan({ orchestrator, policy, queue }) {
-  const jobs = normalizeJobs(orchestrator, queue).sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
-  const actions = jobs.map((job) => planForJob(job, policy));
+  const tradeDate = String(orchestrator.tradeDate || currentTradeDate());
+  const displayTradeDate = displayClosureTargetTradeDate(orchestrator);
+  const jobs = normalizeJobs(orchestrator, queue, displayTradeDate).sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
+  const actions = jobs.map((job) => planForJob(job, policy, { tradeDate, displayTradeDate }));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   return {
@@ -353,7 +645,8 @@ function buildPlan({ orchestrator, policy, queue }) {
     checkedAt: new Date().toISOString(),
     mode: APPLY ? "apply" : "dry-run",
     applyScanners: APPLY_SCANNERS,
-    tradeDate: currentTradeDate(),
+    tradeDate,
+    displayTradeDate,
     policyState: policy.decision?.opsState || "",
     autoRecoveryAllowed: policy.decision?.autoRecoveryAllowed === true,
     jobs: jobs.length,
@@ -362,7 +655,7 @@ function buildPlan({ orchestrator, policy, queue }) {
     actions,
     idempotencyContract: IDEMPOTENCY_CONTRACT,
     reasonCodeSummary: buildReasonCodeSummary(actions),
-    safeRecoveryPreview: buildSafeRecoveryPreview(jobs, policy),
+    safeRecoveryPreview: buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate),
     decision: decide(actions, policy),
   };
 }
@@ -454,6 +747,7 @@ function markdown(plan) {
   lines.push("");
   lines.push(`- checkedAt: ${plan.checkedAt}`);
   lines.push(`- tradeDate: ${plan.tradeDate}`);
+  lines.push(`- displayTradeDate: ${plan.displayTradeDate || plan.tradeDate}`);
   lines.push(`- mode: ${plan.mode}`);
   lines.push(`- decision: ${plan.decision.state}`);
   lines.push(`- reason: ${plan.decision.reason}`);
@@ -476,17 +770,20 @@ function markdown(plan) {
 
 function selfTest() {
   const policy = { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: true } };
-  const waterOkFixture = { ok: true, canonicalGate: { formalEntryAllowed: true } };
+  const waterOkFixture = { ok: true, canonicalGate: { formalEntryAllowed: true }, sourceStatus: { payload: { today_1m_symbols: 1200, intraday_1m_stale_seconds: 0, daily_volume_status: "ready" } } };
   const waterBlockedFixture = { ok: false, status: "blocked", reason: "canonical_gate_not_A:D" };
-  const waterFormalEntryBlockedFixture = { ok: true, canonicalGate: { formalEntryAllowed: false }, reason: "formal_entry_allowed_false" };
+  const waterFormalEntryBlockedFixture = { ok: true, canonicalGate: { formalEntryAllowed: false }, reason: "formal_entry_allowed_false", sourceStatus: { payload: { today_1m_symbols: 1200, intraday_1m_stale_seconds: 0, daily_volume_status: "ready" } } };
   const cases = [
     { name: "auth-block", job: { key: "strategy4", state: "BLOCKED_AUTH", blocker: "401" }, expectedExecutable: false, expectedGuard: "blocked_auth" },
-    { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_check" },
+    { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_rewater" },
     { name: "scan-dry", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture }, expectedExecutable: APPLY_SCANNERS, expectedGuard: APPLY_SCANNERS ? "scanner_apply" : "scanner_requires" },
     { name: "scan-water-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "water_root_not_ok_scanner_blocked" },
-    { name: "scan-formal-entry-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_entry_not_allowed_by_water_root" },
-    { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
+    { name: "strategy2-formal-entry-block", job: { key: "strategy2", state: "FAILED_SCAN" }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_entry_not_allowed_by_water_root" },
+    { name: "scan-policy-block", policy: { decision: { autoRecoveryAllowed: true, scorecardPublishAllowed: false, formalScanAllowed: false } }, job: { key: "strategy2", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_scan_not_allowed" },
+    { name: "strategy3-post-intraday-source-ready", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: true, expectedGuard: "scanner_apply" },
     { name: "display", job: { key: "strategy5", state: "FAILED_DISPLAY" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
+    { name: "display-date-from-market-calendar", job: { key: "terminal-display-closure", state: "BLOCKED_RUNID_MISMATCH" }, options: { displayTradeDate: "20260730", tradeDate: "20260731" }, expectedExecutable: true, expectedGuard: "display_snapshot", expectedCommandDate: "20260730" },
+    { name: "display-date-from-job-repair", job: { key: "terminal-display-closure", state: "BLOCKED_RUNID_MISMATCH", repairTradeDate: "20260730" }, options: { displayTradeDate: "20260731", tradeDate: "20260731" }, expectedExecutable: true, expectedGuard: "display_snapshot", expectedCommandDate: "20260730" },
     { name: "runid-mismatch-display-repair", job: { key: "institution", state: "BLOCKED_RUNID_MISMATCH", blocker: "scorecard /88 row/sourceReport runId != latest pointer" }, expectedExecutable: true, expectedGuard: "display_snapshot" },
     { name: "display-auth-unarmed", job: { key: "strategy2", state: "FAILED_DISPLAY", blocker: "protected_surface_needs_authenticated_readback_token", nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback" }, expectedExecutable: protectedReadbackCredentialArmed(), expectedGuard: protectedReadbackCredentialArmed() ? "display_snapshot" : "protected_readback_credential_not_armed" },
     { name: "publish-blocked", job: { key: "scorecard", state: "FAILED_PUBLISH" }, expectedExecutable: false, expectedGuard: "manifest_not_green" },
@@ -497,6 +794,7 @@ function selfTest() {
     const action = planForJob(item.job, item.policy || policy, item.options || {});
     if (action.executable !== item.expectedExecutable) failures.push(`${item.name}: executable ${action.executable} != ${item.expectedExecutable}`);
     if (!action.executionGuard.includes(item.expectedGuard)) failures.push(`${item.name}: guard ${action.executionGuard} missing ${item.expectedGuard}`);
+    if (item.expectedCommandDate && !action.commands.some((command) => printable(command).includes(`--expected-date=${item.expectedCommandDate}`))) failures.push(`${item.name}: commands missing expected display date ${item.expectedCommandDate}`);
     if (!Array.isArray(action.reasonCodes) || action.reasonCodes.length === 0 || action.reasonUnknown === true) failures.push(`${item.name}: reason codes missing or unknown`);
   }
   const partialDecision = decide([
@@ -558,8 +856,9 @@ async function main() {
       process.exit(1);
     }
     for (const action of plan.actions.filter((item) => item.executable)) {
-      const previousReceipt = completedReceipt(action);
-      if (previousReceipt) {
+      const previousReceipt = readActionReceipt(action);
+      const doneReceipt = completedReceipt(action);
+      if (doneReceipt) {
         executed.push({
           label: `idempotent-skip:${action.key}`,
           command: "receipt-skip",
@@ -569,12 +868,31 @@ async function main() {
           key: action.key,
           idempotencyKey: action.idempotencyKey,
           receiptFile: action.receiptFile,
-          previousCheckedAt: previousReceipt.checkedAt || "",
+          previousCheckedAt: doneReceipt.checkedAt || "",
         });
         continue;
       }
       const actionResults = [];
       for (const command of action.commands) {
+        const previousResult = previousReceipt?.status === "failed"
+          ? (previousReceipt.results || []).find((row) => row.command === printable(command) && row.ok === true)
+          : null;
+        if (previousResult) {
+          const skipped = {
+            label: "idempotent-skip-after-partial:" + action.key,
+            command: "receipt-skip:" + printable(command),
+            exitCode: 0,
+            ok: true,
+            skipped: true,
+            key: action.key,
+            idempotencyKey: action.idempotencyKey,
+            receiptFile: action.receiptFile,
+            previousCheckedAt: previousReceipt.checkedAt || "",
+          };
+          actionResults.push(skipped);
+          executed.push(skipped);
+          continue;
+        }
         const result = { ...runCommand(command), key: action.key, idempotencyKey: action.idempotencyKey, receiptFile: action.receiptFile };
         actionResults.push(result);
         executed.push(result);
@@ -585,7 +903,14 @@ async function main() {
           process.exit(1);
         }
       }
-      await writeActionReceipt(action, "complete", actionResults);
+      const actionFailed = actionResults.some((result) => result.ok === false);
+      const actionPartial = !actionFailed && actionResults.some((result) => result.allowedNonZero === true || result.skipped === true);
+      const receiptStatus = actionFailed ? "failed" : actionPartial ? "partial_with_blockers" : "complete";
+      await writeActionReceipt(action, receiptStatus, actionResults, actionFailed ? { failedCommand: actionResults.find((result) => result.ok === false)?.command || "unknown" } : actionPartial ? { partialReason: "blocker evidence or synthetic skip was recorded; do not use as completed idempotency receipt" } : {});
+      if (actionFailed) {
+        await writeOutputs(plan, executed);
+        process.exit(1);
+      }
     }
   }
 
