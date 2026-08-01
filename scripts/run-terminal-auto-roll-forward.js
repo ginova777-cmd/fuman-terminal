@@ -550,7 +550,7 @@ function scannerStepForKey(key, fallbackCommand = "", tradeDate = "") {
   }
   return null;
 }
-function scannerClosureStepsForKey(key) {
+function scannerClosureStepsForKey(key, tradeDate = "") {
   const map = {
     strategy2: "verify:strategy2-e2e-closure",
     strategy3: "verify:daytrade-strategy3-closure-live",
@@ -561,12 +561,14 @@ function scannerClosureStepsForKey(key) {
     warrant: "verify:warrant-e2e-closure",
   };
   const script = map[key];
-  return script ? [npmRun(script)] : [];
+  const expected = normalizeTradeDate(tradeDate);
+  const args = expected ? ["--", "--expected-date=" + expected] : [];
+  return script ? [npmRun(script, args)] : [];
 }
 
 function scannerPostRunSteps(key, tradeDate = currentTradeDate()) {
   return [
-    ...scannerClosureStepsForKey(key),
+    ...scannerClosureStepsForKey(key, tradeDate),
     npmRun("scorecard:terminal-source"),
     manifestFromExistingStrictStep(tradeDate),
     npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]),

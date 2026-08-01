@@ -7,6 +7,28 @@ const RETRIES = Number(process.env.FUMAN_LIVE_CLOSURE_RETRIES || 2);
 const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1200);
 const ROOT = require("path").resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const EXPECTED_DATE = normalizeDate(
+  process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || ""
+);
+
+function normalizeDate(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function dateFromRunId(runId = "") {
+  const match = String(runId || "").match(/-(\d{8})(?:-|$)/);
+  return match ? match[1] : "";
+}
+
+function dateMatchesExpected(summary = {}) {
+  if (!EXPECTED_DATE) return true;
+  const actual = normalizeDate(summary.scanDate || summary.tradeDate || summary.sourceDate || summary.latestDate) || dateFromRunId(summary.runId);
+  return actual === EXPECTED_DATE;
+}
+
+function summaryDate(summary = {}) {
+  return normalizeDate(summary.scanDate || summary.tradeDate || summary.sourceDate || summary.latestDate) || dateFromRunId(summary.runId);
+}
 
 function numberValue(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -75,6 +97,9 @@ function apiSummary(response, fallbackCountKeys = ["count", "resultCount"]) {
     status: response.status,
     ok: response.ok && !response.parseError,
     runId: json.runId || json.run_id || "",
+    tradeDate: json.tradeDate || json.trade_date || json.date || "",
+    sourceDate: json.sourceDate || json.source_date || json.usedDate || json.used_date || "",
+    sourceSnapshotCapturedAt: json.source_snapshot_captured_at || json.sourceSnapshotCapturedAt || "",
     count: numberValue(count),
     resultCount: numberValue(json.resultCount ?? json.result_count ?? count),
     readbackCount: numberValue(json.readbackCount ?? json.readback_count ?? json.resultCount ?? count),
@@ -170,13 +195,21 @@ function verify(summary) {
   const daytrade = summary.daytradeSource;
   const strategy3Report = summary.strategy3SourceReport;
   const strategy3Api = summary.strategy3Api;
+  const strategy3ReportDate = summaryDate(strategy3Report);
+  const strategy3ApiDate = summaryDate(strategy3Api);
+  const strategy3ReportDateOk = dateMatchesExpected(strategy3Report);
+  const strategy3ApiDateOk = dateMatchesExpected(strategy3Api);
   const strategy3RunComplete =
     strategy3Report.ok &&
     strategy3Report.runId &&
     strategy3Report.resultCount === strategy3Report.readbackCount &&
-    strategy3Report.resultCount > 0;
+    strategy3Report.resultCount > 0 &&
+    strategy3ReportDateOk;
   const protectedStrategy3Api = strategy3Api.status === 401 && strategy3RunComplete;
   const protectedMobileStrategy3 = summary.mobileStrategy3.status === 401 && strategy3RunComplete;
+
+  if (EXPECTED_DATE && !strategy3ReportDateOk) issues.push(`strategy3_source_date_${strategy3ReportDate || "missing"}_not_expected_${EXPECTED_DATE}`);
+  if (EXPECTED_DATE && strategy3Api.runId && !strategy3ApiDateOk) issues.push(`strategy3_api_date_${strategy3ApiDate || "missing"}_not_expected_${EXPECTED_DATE}`);
 
   if (!source.ok) issues.push(`source_reports_http_${source.status}`);
   if (!daytrade.ok && !strategy3RunComplete) issues.push("daytrade_source_report_not_ok");

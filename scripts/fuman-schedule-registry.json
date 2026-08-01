@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-07-26T12:41:40.9450879Z",
-  "policyVersion": 3,
+  "updatedAt": "2026-08-01T09:46:10.075Z",
+  "policyVersion": 4,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [
@@ -53,7 +53,8 @@
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
-      "Fuman Daytrade Warmup Nine-Day Audit 0915"
+      "Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "Fuman Terminal Autonomous Root Monitor"
     ],
     "expectedDisabledTasks": [],
     "retiredTasks": [
@@ -90,8 +91,7 @@
       "Fuman Strategy4 Postscan Closure 1605",
       "Fuman Terminal API Health",
       "Fuman Public Slot Anti Rollback Guard 1m",
-      "Fuman Public Slot Quote Fast Flush 0845",
-      "Fuman Terminal Autonomous Root Monitor"
+      "Fuman Public Slot Quote Fast Flush 0845"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"

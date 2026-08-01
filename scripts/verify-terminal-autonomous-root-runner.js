@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-autonomous-root-runner-contract");
@@ -28,6 +29,40 @@ function addIssue(issues, issue, details = {}) {
 
 function requireMarker(issues, file, text, marker) {
   if (!text.includes(marker)) addIssue(issues, `missing_marker:${file}:${marker}`, { file, marker });
+}
+function queryWindowsTask(taskName) {
+  if (process.platform !== "win32") {
+    return {
+      checked: false,
+      reason: "non_windows_platform",
+      installed: null,
+      raw: "",
+    };
+  }
+  const result = spawnSync("schtasks.exe", ["/Query", "/TN", `\\${taskName}`, "/V", "/FO", "LIST"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const xmlResult = spawnSync("schtasks.exe", ["/Query", "/TN", `\\${taskName}`, "/XML"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const raw = `${result.stdout || ""}${result.stderr || ""}`;
+  const xmlRaw = `${xmlResult.stdout || ""}${xmlResult.stderr || ""}`;
+  const actionText = `${raw}\n${xmlRaw}`;
+  return {
+    checked: true,
+    installed: result.status === 0,
+    exitCode: result.status,
+    raw,
+    xmlRaw,
+    disabled: /Status:\s*Disabled/i.test(raw),
+    hasApplyScanners: actionText.includes("-ApplyScanners"),
+    hasRequireProtectedReadback: actionText.includes("-RequireProtectedReadback"),
+    hasRunner: actionText.includes("run-terminal-autonomous-root.ps1"),
+  };
 }
 
 async function main() {
@@ -86,12 +121,20 @@ async function main() {
   const activeTasks = registry.policy?.activeTasks || [];
   const allowed = registry.policy?.allowedResults?.["Fuman Terminal Autonomous Root Monitor"] || [];
   const taskRows = registry.tasks || [];
+  const windowsTask = queryWindowsTask("Fuman Terminal Autonomous Root Monitor");
   if (!activeTasks.includes("Fuman Terminal Autonomous Root Monitor")) addIssue(issues, "schedule_registry_missing_autonomous_root_active_task");
   for (const code of [0, 267009, 267011]) {
     if (!allowed.includes(code)) addIssue(issues, `schedule_registry_autonomous_root_allowed_result_missing:${code}`, { allowed });
   }
   if (!taskRows.some((row) => String(row.taskName || row.displayName || "").includes("Fuman Terminal Autonomous Root Monitor"))) {
     addIssue(issues, "schedule_registry_missing_autonomous_root_task_row");
+  }
+  if (windowsTask.checked) {
+    if (!windowsTask.installed) addIssue(issues, "windows_task_missing_autonomous_root_monitor", { exitCode: windowsTask.exitCode, raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && windowsTask.disabled) addIssue(issues, "windows_task_disabled_autonomous_root_monitor", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasRunner) addIssue(issues, "windows_task_missing_autonomous_root_runner", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasApplyScanners) addIssue(issues, "windows_task_missing_apply_scanners_flag", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasRequireProtectedReadback) addIssue(issues, "windows_task_missing_protected_readback_flag", { raw: windowsTask.raw.slice(0, 1200) });
   }
 
   const payload = {
@@ -108,6 +151,15 @@ async function main() {
     scheduleRegistry: {
       activeTask: activeTasks.includes("Fuman Terminal Autonomous Root Monitor"),
       allowedResults: allowed,
+    },
+    windowsTask: {
+      checked: windowsTask.checked,
+      installed: windowsTask.installed,
+      disabled: windowsTask.disabled,
+      exitCode: windowsTask.exitCode,
+      hasRunner: windowsTask.hasRunner,
+      hasApplyScanners: windowsTask.hasApplyScanners,
+      hasRequireProtectedReadback: windowsTask.hasRequireProtectedReadback,
     },
     guarantees: [
       "autonomous root is callable as a first-class npm script",
@@ -126,4 +178,3 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-root-runner-contract] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
