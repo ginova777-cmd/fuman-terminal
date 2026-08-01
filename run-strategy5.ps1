@@ -147,7 +147,19 @@ try {
   $verifiedPayload = Invoke-Strategy5InlineTerminalVerify
 } catch {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 terminal/sourceReports verification failed after scanner success: $($_.Exception.Message)"
-  Write-Strategy5Receipt "failed" 1 $false 0 "" @($_.Exception.Message) "scanner finished but terminal/sourceReports readback failed"
+  # Keep the scanner's verified run identity on a failed closure receipt. This
+  # records what actually ran while preserving the publish/fail-closed decision.
+  $failedRunId = ""
+  $failedCount = 0
+  $failedReportPath = Join-Path $env:FUMAN_DATA_DIR "strategy5-88-data-chain\strategy5-88-data-chain.json"
+  try {
+    $failedReport = Get-Content -LiteralPath $failedReportPath -Raw -ErrorAction Stop | ConvertFrom-Json
+    $failedRunId = [string]$failedReport.runId
+    $failedCount = [int]($failedReport.resultCount ?? $failedReport.readbackCount ?? 0)
+  } catch {
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 failed closure evidence read failed: $($_.Exception.Message)"
+  }
+  Write-Strategy5Receipt "failed" 1 $false $failedCount $failedRunId @($_.Exception.Message) "scanner finished but terminal/sourceReports readback failed"
   exit 1
 }
 
