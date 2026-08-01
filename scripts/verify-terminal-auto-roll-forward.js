@@ -8,6 +8,7 @@ const ROOT = path.resolve(__dirname, "..");
 const PACKAGE_FILE = path.join(ROOT, "package.json");
 const RUNNER_FILE = path.join(ROOT, "scripts", "run-terminal-auto-roll-forward.js");
 const OUTPUT_FILE = path.join(ROOT, "outputs", "terminal-roll-forward", "terminal-auto-roll-forward.json");
+const MANIFEST_FILE = path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
 
 function readJson(file, fallback = null) {
   try {
@@ -26,16 +27,48 @@ function verifyCurrentPlan(issues) {
     return { exists: false, contract: "", mode: "", decision: "", actionCount: 0 };
   }
   const plan = readJson(OUTPUT_FILE, {});
+  const manifest = readJson(MANIFEST_FILE, {});
   const actions = Array.isArray(plan.actions) ? plan.actions : [];
+  const actionKeys = new Set(actions.map((action) => String(action.key || "")));
+  const blockedManifestModules = Array.isArray(manifest.modules)
+    ? manifest.modules.filter((row) => row && row.ok !== true && row.pendingNotDue !== true).map((row) => String(row.key || "")).filter(Boolean)
+    : [];
   assert(plan.contract === "terminal-auto-roll-forward-v1", issues, "roll_forward_plan_contract_missing", {
     contract: plan.contract || "",
   });
+  for (const key of blockedManifestModules) {
+    assert(actionKeys.has(key), issues, "current_plan_missing_blocked_manifest_module_action", {
+      key,
+      manifestIssue: (manifest.modules || []).find((row) => String(row?.key || "") === key)?.issues || [],
+    });
+  }
+  if (blockedManifestModules.length > 0 || manifest.ok === false) {
+    assert(actionKeys.has("scorecard"), issues, "current_plan_missing_scorecard_deferred_action", {
+      blockedManifestModules,
+      manifestOk: manifest.ok,
+    });
+  }
   for (const action of actions) {
     assert(Boolean(action.idempotencyKey), issues, "roll_forward_action_idempotency_key_missing", {
       key: action.key || "",
     });
     assert(Boolean(action.receiptFile), issues, "roll_forward_action_receipt_missing", {
       key: action.key || "",
+    });
+    if (action.executable === false && action.state !== "PUBLISH_DEFERRED_MANIFEST_PENDING") {
+      assert(Boolean(action.executionGuard), issues, "blocked_action_execution_guard_missing", {
+        key: action.key || "",
+        state: action.state || "",
+      });
+    }
+    assert(Array.isArray(action.reasonCodes) && action.reasonCodes.length > 0, issues, "roll_forward_action_reason_codes_missing", {
+      key: action.key || "",
+      state: action.state || "",
+    });
+    assert(action.reasonUnknown !== true, issues, "roll_forward_action_reason_unknown", {
+      key: action.key || "",
+      state: action.state || "",
+      blocker: action.blocker || "",
     });
   }
   const scannerScripts = [
@@ -66,6 +99,7 @@ function verifyCurrentPlan(issues) {
     mode: plan.mode || "",
     decision: plan.decision?.state || "",
     actionCount: actions.length,
+    blockedManifestModules,
   };
 }
 
