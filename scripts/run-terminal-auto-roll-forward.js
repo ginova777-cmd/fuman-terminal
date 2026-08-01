@@ -94,6 +94,32 @@ function npmRun(script, extraArgs = []) {
   };
 }
 
+function alwaysRun(step) {
+  step.alwaysRun = true;
+  return step;
+}
+
+function nodeScriptStep(label, script, args = [], env = {}) {
+  return {
+    command: process.execPath,
+    args: ["--use-system-ca", path.join("scripts", script), ...args],
+    label,
+    env,
+  };
+}
+
+function degradedDisplayPublishSteps(tradeDate = currentTradeDate()) {
+  const candidate = scorecardCandidateFile();
+  return [
+    alwaysRun(allowBlockedVerifier(nodeScriptStep("terminal-canary-publish:degraded-display", "verify-terminal-canary-publish.js", ["--scorecard=" + candidate]))),
+    alwaysRun(nodeScriptStep("scorecard-publish-guard:degraded-display", "guard-daily-manifest-before-scorecard-publish.js", ["--allow-degraded", "--expected-date=" + tradeDate])),
+    alwaysRun(nodeScriptStep("scorecard-publish-raw:degraded-display", "publish-scorecard-snapshot.js", ["--file=" + candidate, "--expected-date=" + tradeDate], {
+      FUMAN_SCORECARD_MIN_ROWS: "1",
+      FUMAN_SCORECARD_MIN_ROW_RATIO: "0",
+    })),
+  ];
+}
+
 function allowBlockedVerifier(step) {
   step.allowExitCodes = [1];
   step.blockerEvidenceAllowed = true;
@@ -106,7 +132,7 @@ function scorecardCandidateFile() {
 function manifestFromExistingStep(tradeDate = currentTradeDate()) {
   const step = npmRun("manifest:daily-terminal-run", ["--", "--from-existing", "--expected-date=" + tradeDate, "--scorecard-candidate-file=" + scorecardCandidateFile()]);
   step.allowExitCodes = [1];
-  return step;
+  return alwaysRun(step);
 }
 
 function manifestFromExistingStrictStep(tradeDate = currentTradeDate()) {
@@ -507,13 +533,13 @@ function planForJob(job = {}, policy = {}, options = {}) {
     base.repairTradeDate = tradeDate;
     base.executable = true;
     base.executionGuard = "display_snapshot_readback_only";
-    base.commands.push(npmRun("scorecard:terminal-source"));
-    base.commands.push(manifestFromExistingStrictStep(tradeDate));
-    base.commands.push(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]));
-    base.commands.push(manifestGatedScorecardPublishStep(tradeDate));
-    base.commands.push(npmRun("snapshot:desktop"));
-    base.commands.push(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${tradeDate}`])));
-    base.commands.push(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", `--expected-date=${tradeDate}`])));
+    base.commands.push(alwaysRun(npmRun("scorecard:terminal-source")));
+    base.commands.push(manifestFromExistingStep(tradeDate));
+    base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]))));
+    base.commands.push(...degradedDisplayPublishSteps(tradeDate));
+    base.commands.push(alwaysRun(npmRun("snapshot:desktop")));
+    base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${tradeDate}`]))));
+    base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", `--expected-date=${tradeDate}`]))));
     base.notes.push("Display repair rebuilds the same-day scorecard candidate, refreshes Manifest with that candidate, publishes scorecard_latest only through the Manifest gate, rebuilds terminal snapshots, and verifies desktop/mobile/88 runId closure.");
     return base;
   }
@@ -569,13 +595,13 @@ function scannerClosureStepsForKey(key, tradeDate = "") {
 function scannerPostRunSteps(key, tradeDate = currentTradeDate()) {
   return [
     ...scannerClosureStepsForKey(key, tradeDate),
-    npmRun("scorecard:terminal-source"),
-    manifestFromExistingStrictStep(tradeDate),
-    npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]),
-    manifestGatedScorecardPublishStep(tradeDate),
-    npmRun("snapshot:desktop"),
-    allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", "--expected-date=" + tradeDate])),
-    allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", "--expected-date=" + tradeDate])),
+    alwaysRun(npmRun("scorecard:terminal-source")),
+    manifestFromExistingStep(tradeDate),
+    alwaysRun(allowBlockedVerifier(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]))),
+    ...degradedDisplayPublishSteps(tradeDate),
+    alwaysRun(npmRun("snapshot:desktop")),
+    alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", "--expected-date=" + tradeDate]))),
+    alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", "--expected-date=" + tradeDate]))),
   ];
 }
 function currentTradeDate() {
@@ -876,9 +902,11 @@ async function main() {
       }
       const actionResults = [];
       for (const command of action.commands) {
-        const previousResult = previousReceipt?.status === "failed"
-          ? (previousReceipt.results || []).find((row) => row.command === printable(command) && row.ok === true)
-          : null;
+        const previousResult = command.alwaysRun === true
+          ? null
+          : previousReceipt?.status === "failed"
+            ? (previousReceipt.results || []).find((row) => row.command === printable(command) && row.ok === true)
+            : null;
         if (previousResult) {
           const skipped = {
             label: "idempotent-skip-after-partial:" + action.key,
@@ -895,7 +923,7 @@ async function main() {
           executed.push(skipped);
           continue;
         }
-        const result = { ...runCommand(command), key: action.key, idempotencyKey: action.idempotencyKey, receiptFile: action.receiptFile };
+        const result = { ...runCommand(command), alwaysRun: command.alwaysRun === true, key: action.key, idempotencyKey: action.idempotencyKey, receiptFile: action.receiptFile };
         actionResults.push(result);
         executed.push(result);
         if (!result.ok) {

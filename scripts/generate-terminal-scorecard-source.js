@@ -277,6 +277,64 @@ function arraysFromTaskPayload(task, payload) {
   });
 }
 
+function lowerText(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function boolFalse(value) {
+  return value === false || lowerText(value) === "false" || lowerText(value) === "no";
+}
+
+function boolTrue(value) {
+  return value === true || lowerText(value) === "true" || lowerText(value) === "yes";
+}
+
+function payloadDecisionDate(payload = {}) {
+  return normalizeDate(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date || payload.scanDate || payload.marketDate || latestRunIdDate(payload.runId || payload.transport?.runId));
+}
+
+function rowPublishDecision(task, payload = {}, result = {}, context = {}) {
+  const quality = payload.run_quality_at_publish || payload.runQualityAtPublish || {};
+  const sourceCoverage = payload.sourceCoverage || payload.source_coverage || {};
+  const evidence = lowerText(payload.evidenceStatus || payload.sourceEvidenceStatus || quality.evidenceStatus || payload.qualityStatus);
+  const reasonText = lowerText([
+    payload.reason,
+    payload.error,
+    payload.detail,
+    payload.status,
+    payload.qualityStatus,
+    payload.cacheSource,
+    payload.source,
+    payload.fallbackReason,
+  ].join(" "));
+  const payloadDate = payloadDecisionDate(payload);
+  const expectedDisplayDate = normalizeDate(context.expectedDisplayDate || "");
+  const marketClosedLastGood = context.marketClosed === true
+    && expectedDisplayDate
+    && payloadDate === expectedDisplayDate
+    && !boolTrue(payload.fallbackUsed)
+    && !boolTrue(payload.fallback)
+    && !boolTrue(payload.rawFallback)
+    && !/source_quality_fail|insufficient|stale|degraded|not_ready|blocked/.test([reasonText, evidence].join(" "));
+  const blockers = [];
+  if (Number(result.statusCode || 0) >= 400) blockers.push(`http_${result.statusCode}`);
+  if (payload.ok === false) blockers.push("payload_ok_false");
+  if (boolFalse(payload.publishAllowed) || boolFalse(quality.publishAllowed)) blockers.push("publish_not_allowed");
+  if ((boolTrue(payload.fallbackUsed) || boolTrue(payload.fallback) || boolTrue(payload.rawFallback)) && !marketClosedLastGood) blockers.push("fallback_used");
+  if ((payload.preservePreviousGood === true || quality.preservePreviousGood === true) && !marketClosedLastGood) blockers.push("preserve_previous_good");
+  if (sourceCoverage.ok === false) blockers.push("source_coverage_not_ok");
+  if (/insufficient|source_quality_fail|degraded|blocked|not_ready|fallback|previous_good|stale/.test(evidence)) blockers.push(`evidence_${evidence || "not_complete"}`);
+  if (/source_quality_fail|fallback|previous_good|stale|degraded|not_ready|blocked/.test(reasonText) && !marketClosedLastGood) blockers.push("reason_blocked_or_stale");
+  return {
+    allow: blockers.length === 0,
+    reason: blockers[0] || (marketClosedLastGood ? "market_closed_last_good" : "publishable"),
+    blockers,
+    marketClosedLastGood,
+    payloadDate,
+    expectedDisplayDate,
+  };
+}
+
 function codeOf(row, fallback) {
   return cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || fallback);
 }
@@ -968,25 +1026,39 @@ function alignRecordDate(row, recordDate) {
 async function main() {
   const reports = [];
   const records = [];
+  const tradingDay = await isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
+  const expectedDisplayDate = tradingDay.isTradingDay ? tradingDay.date : (await previousTwseTradingDate(tradingDay.date) || tradingDay.date);
   for (const task of TASKS) {
     const result = await callApi(task);
     const payload = result.payload || {};
     const rows = arraysFromTaskPayload(task, payload);
-    rows.forEach((row, index) => records.push(normalizeRecord(task, payload, row, index)));
+    const publishDecision = rowPublishDecision(task, payload, result, {
+      marketClosed: tradingDay.isTradingDay === false,
+      expectedDisplayDate,
+    });
+    const emittedRows = publishDecision.allow ? rows : [];
+    emittedRows.forEach((row, index) => records.push(normalizeRecord(task, payload, row, index)));
     reports.push({
       key: task.key,
       strategy: task.strategy,
       statusCode: result.statusCode,
-      ok: payload.ok !== false && Number(result.statusCode || 0) < 400,
+      ok: payload.ok !== false && Number(result.statusCode || 0) < 400 && publishDecision.allow,
       runId: cleanText(payload.runId || payload.transport?.runId),
       count: cleanNumber(payload.count ?? payload.total ?? rows.length),
-      emittedRows: rows.length,
+      emittedRows: emittedRows.length,
+      suppressedRows: rows.length - emittedRows.length,
+      rowSuppressionReason: publishDecision.allow ? "" : publishDecision.reason,
+      rowSuppressionBlockers: publishDecision.blockers,
+      publishAllowed: payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed,
+      evidenceStatus: cleanText(payload.evidenceStatus || payload.sourceEvidenceStatus || payload.run_quality_at_publish?.evidenceStatus || payload.qualityStatus),
+      fallbackUsed: payload.fallbackUsed === true || payload.fallback === true || payload.rawFallback === true,
+      marketClosedLastGood: publishDecision.marketClosedLastGood === true,
+      expectedDisplayDate: publishDecision.expectedDisplayDate || "",
       date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-      reason: cleanText(payload.reason || payload.detail || payload.error),
+      reason: cleanText(payload.reason || payload.detail || payload.error || publishDecision.reason),
     });
   }
   let rawRecords = records.filter((row) => row.record_date && row.ticker);
-  const tradingDay = await isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
   const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
   let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
@@ -1054,12 +1126,18 @@ async function main() {
   const filtered = await enrichWithQuoteHighs(scorecardRecords.map((row) => alignRecordDate(row, latestDate)));
   const activeFiltered = filtered.filter((row) => !isRetiredScorecardStrategy(`${row.strategy || ""} ${row.source || ""} ${row.endpoint || ""}`));
   const activeReports = reports.filter((report) => !isRetiredScorecardStrategy(`${report.key || ""} ${report.strategy || ""} ${report.endpoint || ""}`));
+  const blockedReports = activeReports.filter((report) => report.ok !== true || Number(report.statusCode || 0) >= 400 || Number(report.suppressedRows || 0) > 0);
   const daily = summarize(activeFiltered);
   const payload = {
     ok: true,
+    contract: "scorecard-resource-chain-v1",
     source: "terminal-complete-run-scorecard",
     cacheSource: "json-snapshot",
     exportSource: "terminal-complete-run-scorecard",
+    qualityStatus: blockedReports.length ? "degraded" : "complete",
+    unattendedStatus: blockedReports.length ? "NO" : "YES",
+    displayMode: blockedReports.length ? "same-day-degraded-source-report" : "same-day-complete",
+    issues: blockedReports.map((report) => String(report.key || report.strategy || "unknown") + ":rows_suppressed_or_source_blocked:" + String(report.rowSuppressionReason || report.reason || report.statusCode || "unknown")),
     updatedAt: new Date().toISOString(),
     latestDate,
     marketStatus: {

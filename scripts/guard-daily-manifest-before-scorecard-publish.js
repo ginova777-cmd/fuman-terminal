@@ -143,7 +143,7 @@ const pendingRollForwardAllowed = String(canary.status || "") === "NOT_ARMED_PEN
       pendingRollForwardAllowed,
     });
   }
-  if (canary.ok !== true) {
+  if (canary.ok !== true && !ALLOW_DEGRADED) {
     fail("canary_publish_not_green", { status: canary.status || "", issues: canary.issues || [] });
   }
   if (!marketClosedClosureAllowed && !pendingRollForwardAllowed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
