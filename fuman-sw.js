@@ -1,6 +1,5 @@
 const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-22";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
-const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
@@ -29,7 +28,6 @@ const STATIC_ASSETS = [
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-22",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260714-22",
   `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
-  "/terminal-realtime-radar.css?v=radar-ledger-20260630-02",
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-22",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260714-22",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260714-22",
@@ -71,7 +69,6 @@ const LIVE_PATTERNS = [
   /\/api\/source-reports/i,
   /\/api\/realtime/i,
   /\/api\/scan-/i,
-  /\/api\/open-buy-latest/i,
   /\/api\/strategy2-latest/i,
   /\/api\/strategy3-latest/i,
   /\/api\/strategy4-latest/i,
@@ -131,10 +128,6 @@ function isStrategy4StaticDataRequest(url) {
   return /^\/data\/strategy4(?:-|$).*\.json$/i.test(url.pathname);
 }
 
-function isOpenBuyStaticDataRequest(url) {
-  return /^\/data\/open-buy(?:-|$).*\.json$/i.test(url.pathname);
-}
-
 function isDesktopApiOnlyStaticDataRequest(url) {
   return /^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(?:-|$).*\.json$/i.test(url.pathname);
 }
@@ -144,20 +137,6 @@ function strategy4StaticDisabledResponse() {
     ok: false,
     error: "strategy4_static_disabled",
     message: "Strategy4 desktop is API-only. Use /api/strategy4-latest.",
-  }), {
-    status: 410,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store, must-revalidate, max-age=0",
-    },
-  });
-}
-
-function openBuyStaticDisabledResponse() {
-  return new Response(JSON.stringify({
-    ok: false,
-    error: "open_buy_static_disabled",
-    message: "Strategy1 desktop is API-only. Use /api/open-buy-latest.",
   }), {
     status: 410,
     headers: {
@@ -300,12 +279,7 @@ self.addEventListener("fetch", (event) => {
   if (isStrategy4StaticDataRequest(url)) {
     event.respondWith(strategy4StaticDisabledResponse());
     return;
-  }
-  if (isOpenBuyStaticDataRequest(url)) {
-    event.respondWith(openBuyStaticDisabledResponse());
-    return;
-  }
-  if (isDesktopApiOnlyStaticDataRequest(url)) {
+  }  if (isDesktopApiOnlyStaticDataRequest(url)) {
     event.respondWith(desktopApiOnlyStaticDisabledResponse(url.pathname));
     return;
   }

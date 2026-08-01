@@ -64,7 +64,6 @@ const FILES = [
   "api/scorecard-health.js",
   "api/source-reports.js",
   "api/mobile-boot.js",
-  "api/open-buy-latest.js",
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
   "api/strategy2-latest.js",
@@ -114,7 +113,6 @@ const FILES = [
   "scripts/monitor-vercel-cost-health.js",
   "scripts/install-vercel-cost-health-monitor-task.ps1",
   "scripts/guard-source-tree.js",
-  "scripts/scan-open-buy-cache.js",
   "scripts/scan-star-preopen.js",
   "scripts/scan-warrant-flow-cache.js",
   "scripts/cleanup-supabase-vercel-history.js",
@@ -251,7 +249,6 @@ const FILES = [
   "ops/install-api-unattended-patrol-task.ps1",
   "VERCEL-COST-UPLOAD-GUARD.md",
   "install-api-only-cleanup-task.ps1",
-  "run-open-buy.ps1",
   "run-strategy2-intraday.ps1",
   "run-strategy3.ps1",
   "run-strategy3-complete-scan.ps1",
@@ -269,7 +266,6 @@ const FILES = [
   "run-flow.ps1",
   "flow-health.ps1",
   "data/chip-trade-exclusions.json",
-  "data/scorecard-latest.json",
 ];
 
 const DIRECTORIES = [];
@@ -301,9 +297,11 @@ const RETIRED_ARTIFACTS = [
   "scan-warrant-flow.js",
   LEGACY_FRESHNESS_OK_FILE,
   path.join("data", "chip-trade-health-latest.json"),
+  path.join("data", "institution-mobile-top.json"),
+  path.join("data", "strategy5-page-1.json"),
+  path.join("data", "warrant-flow-mobile-top.json"),
 
   path.join("data", "fugle-open-rebound-latest.json"),
-  path.join("data", "institution-mobile-top.json"),
   path.join("data", `${STRATEGY4_KEY}-latest.json`),
   path.join("data", `${STRATEGY4_KEY}-backup.json`),
   path.join("data", `${STRATEGY4_KEY}-summary.json`),
