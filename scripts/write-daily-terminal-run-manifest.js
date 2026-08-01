@@ -327,7 +327,7 @@ function marketClosedForManifest() {
   return row.marketOpen === false
     || row.finalMarketOpen === false
     || row.tradingDayOpen === false
-    || row.formalScanSkipped === true
+
     || marketStatus === "closed";
 }
 
@@ -675,7 +675,7 @@ async function main() {
     || water.marketCalendar?.row?.formalScanSkipped === true
     || marketClosedForManifest();
   const chain = readJson(path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json"), {});
-  if (SKIP_RUN) {
+  if (SKIP_RUN && !marketClosed) {
     const chainAuth = chain.protectedReadbackAuth || {};
     const chainReadbackOk = chain.ok === true
       && compactDate(chain.expectedDate) === EXPECTED_DATE
@@ -718,14 +718,14 @@ async function main() {
     for (const check of warmupEvidence.failedChecks) addUniqueIssue(issues, `warmup:${check}`);
   }
   for (const key of activeModuleKeys) {
-    if (!modules.some((row) => row.key === key)) issues.push(`active_module_missing_from_resource_chain:${key}`);
+    if (!marketClosed && !modules.some((row) => row.key === key)) issues.push(`active_module_missing_from_resource_chain:${key}`);
   }
   const softWaterRootIssue = isSoftWaterRootIssue(water);
   const waterRootIssue = !water.ok ? `water_root:${water.reason || "not_ready"}` : "";
   if (waterRootIssue && !softWaterRootIssue) issues.push(waterRootIssue);
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${row.issues[0] || "not_ok"}`);
-  if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
+  if (!marketClosed && !chain.ok) issues.push("terminal_resource_chain_unattended_failed");
   const scorecardPrepublishCovered = SCORECARD_PUBLISH_MODE
     && modules.length > 0
     && modules.every((row) => row.ok === true || row.pendingNotDue === true);
@@ -737,7 +737,7 @@ async function main() {
     }
   }
   const pendingModules = modules.filter((item) => item.pendingNotDue === true);
-  const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
+  const previousGoodHold = marketClosed || (issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water));
   const manifestCheckedAt = new Date().toISOString();
   const manifestRunId = `daily-terminal-manifest-${EXPECTED_DATE}-${manifestCheckedAt.replace(/\D/g, '').slice(0, 14)}`;
 
