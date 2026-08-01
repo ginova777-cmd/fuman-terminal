@@ -104,9 +104,13 @@ assertSameSet("resource-chain STRATEGIES", resourceKeys, ["strategy2", "strategy
 assertNoRetiredOfficialKeys("resource-chain STRATEGIES", resourceStrategiesBlock);
 
 const manifestDueBlock = extractBlock(dailyManifest, /const\s+STRATEGY_DUE_TIMES\s*=\s*\{/, /\n\};/);
-const manifestDueKeys = [...manifestDueBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*"/gm)].map((match) => match[1]);
-assertSameSet("Daily Manifest STRATEGY_DUE_TIMES", manifestDueKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
-assertNoRetiredOfficialKeys("Daily Manifest STRATEGY_DUE_TIMES", manifestDueBlock);
+if (manifestDueBlock) {
+  const manifestDueKeys = [...manifestDueBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*"/gm)].map((match) => match[1]);
+  assertSameSet("Daily Manifest STRATEGY_DUE_TIMES", manifestDueKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+  assertNoRetiredOfficialKeys("Daily Manifest STRATEGY_DUE_TIMES", manifestDueBlock);
+} else if (!/const\s+STRATEGY_DUE_TIMES\s*=\s*Object\.fromEntries\([\s\S]*ACTIVE_MODULE_REGISTRY\.active/.test(dailyManifest)) {
+  issues.push("Daily Manifest STRATEGY_DUE_TIMES must derive from the active module registry");
+}
 if (issues.length) {
   console.error("[terminal-modules-contract] failed");
   for (const issue of issues) console.error("- " + issue);

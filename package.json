@@ -50,6 +50,7 @@
     "verify:vercel-projects": "node scripts/verify-vercel-project-inventory.js",
     "verify:final-readonly": "node --use-system-ca scripts/verify-final-readonly.js",
     "verify:retired-artifacts": "node scripts/verify-retired-artifacts-clean.js",
+    "verify:realtime-radar-frontend-contract": "node scripts/verify-realtime-radar-frontend-contract.js",
     "schedule:check": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File check-fuman-schedules.ps1",
     "schedule:retire": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/remove-fuman-retired-schedule-tasks.ps1",
     "schedule:migrate:freshness2010": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/migrate-fuman-freshness-gate-2010-task.ps1",

@@ -854,8 +854,8 @@ function snapshotMissPayload(reason = "snapshot_missing_or_stale") {
 
 module.exports = async function handler(request, response) {
   response.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
-  response.setHeader("CDN-Cache-Control", "public, max-age=3, stale-while-revalidate=12");
-  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=3, stale-while-revalidate=12");
+  response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
+  response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
   response.setHeader("X-Content-Type-Options", "nosniff");
 
   if (request.method !== "GET" && request.method !== "HEAD") {

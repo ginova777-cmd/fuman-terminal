@@ -138,6 +138,7 @@ const FILES = [
   "scripts/verify-strategy-runtime-chain.js",
   "scripts/prewarm-strategy4-history-cache.js",
   "scripts/generate-slim-cache.js",
+  "data/scorecard-latest.json",
   "scripts/fuman-schedule-registry.json",
   "scripts/migrate-fuman-freshness-gate-2010-task.ps1",
   "scripts/remove-fuman-retired-schedule-tasks.ps1",
