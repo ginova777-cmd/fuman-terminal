@@ -255,24 +255,43 @@ function jobForRow(row, classification) {
   };
 }
 
+function expectedDateSuffix() {
+  return EXPECTED_DATE ? ` -- --expected-date=${EXPECTED_DATE}` : "";
+}
+
+function closureCommand(script) {
+  return `npm run ${script}${expectedDateSuffix()}`;
+}
+
+function manifestCommand(extraArgs = "") {
+  const expected = EXPECTED_DATE ? ` --expected-date=${EXPECTED_DATE}` : "";
+  return `npm run manifest:daily-terminal-run -- ${extraArgs}${expected}`.trim();
+}
+
+function scorecardTerminalRefreshCommand() {
+  const scorecardCandidate = "C:\\fuman-runtime\\data\\scorecard-terminal-current.json";
+  return `npm run scorecard:terminal-source && ${manifestCommand(`--from-existing --scorecard-candidate-file=${scorecardCandidate}`)} && npm run snapshot:desktop && ${closureCommand("verify:terminal-resource-chain:unattended")}`;
+}
+
 function commandFor(key, state) {
   if (state === "BLOCKED_AUTH") return "verify service token env, then rerun scanner/readback with machine token";
-  if (state === "BLOCKED_SOURCE") return "npm run verify:terminal-water-root";
-  if (state === "FAILED_PUBLISH") return "npm run manifest:daily-terminal-run && npm run scorecard:publish";
-  if (state === "BLOCKED_RUNID_MISMATCH") return "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended";
-  if (state === "FAILED_DISPLAY") return "npm run verify:terminal-resource-chain:unattended";
+  if (state === "BLOCKED_SOURCE") return "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root";
+  if (state === "FAILED_PUBLISH") return EXPECTED_DATE
+    ? `npm run manifest:daily-terminal-run -- --expected-date=${EXPECTED_DATE} && npm run scorecard:publish:manifest-gated -- --expected-date=${EXPECTED_DATE}`
+    : "npm run manifest:daily-terminal-run && npm run scorecard:publish:manifest-gated";
+  if (state === "BLOCKED_RUNID_MISMATCH") return scorecardTerminalRefreshCommand();
+  if (state === "FAILED_DISPLAY") return closureCommand("verify:terminal-resource-chain:unattended");
   const map = {
-    strategy2: `npm run verify:strategy2-e2e-closure -- --expected-date=${EXPECTED_DATE}`,
-    strategy3: "npm run verify:daytrade-strategy3-closure-live",
-    strategy4: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy4.ps1",
-    strategy5: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy5.ps1",
-    institution: "npm run verify:institution-live-closure",
-    cb: "npm run verify:cb-live-readback",
-    warrant: "npm run verify:warrant-live-closure",
+    strategy2: closureCommand("verify:strategy2-e2e-closure"),
+    strategy3: closureCommand("verify:daytrade-strategy3-closure-live"),
+    strategy4: closureCommand("verify:strategy4-postscan-closure"),
+    strategy5: closureCommand("verify:strategy5-e2e-closure"),
+    institution: closureCommand("verify:institution-e2e-closure"),
+    cb: closureCommand("verify:cb-e2e-closure"),
+    warrant: closureCommand("verify:warrant-e2e-closure"),
   };
   return map[key] || "rerun module scanner and terminal readback";
 }
-
 function overallState(manifest, moduleStates, marketCalendar = null) {
   if (manifest.ok === true && moduleStates.every((row) => row.state === "CLOSED")) return "CLOSED";
   const sourceFreshnessRequired = marketCalendar?.sourceFreshnessRequired !== false;
@@ -291,10 +310,11 @@ function overallState(manifest, moduleStates, marketCalendar = null) {
 function selfTest() {
   const closedMarket = { marketOpen: false };
   const waterBlockedManifest = { waterRoot: { ok: false, reason: "source_root_not_ready" } };
+  const closedTradeDate = EXPECTED_DATE || "20260730";
   const cases = [
     {
       name: "closed_module_has_no_job",
-      row: { key: "strategy2", label: "Strategy2", ok: true, complete: true, fallback: false, runId: "strategy2-20260717-good", runIds: { scanner: "x", productionApi: "x", desktop: "x", mobile: "x", scorecard88: "x" }, issues: [] },
+      row: { key: "strategy2", label: "Strategy2", ok: true, complete: true, fallback: false, tradeDate: closedTradeDate, sourceDate: closedTradeDate, runId: `strategy2-${closedTradeDate}-good`, runIds: { scanner: "x", productionApi: "x", desktop: "x", mobile: "x", scorecard88: "x" }, issues: [] },
       manifest: { waterRoot: { ok: true } },
       expectedState: "CLOSED",
       expectedJob: false,
@@ -320,7 +340,7 @@ function selfTest() {
       manifest: waterBlockedManifest,
       expectedState: "BLOCKED_SOURCE",
       expectedJob: true,
-      expectedCommand: "npm run verify:terminal-water-root",
+      expectedCommand: "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root",
     },
     {
       name: "scanner_failure_requires_water_root",
@@ -359,7 +379,7 @@ function selfTest() {
       manifest: { waterRoot: { ok: true } },
       expectedState: "BLOCKED_RUNID_MISMATCH",
       expectedJob: true,
-      expectedCommand: "npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended",
+      expectedCommand: scorecardTerminalRefreshCommand(),
       requiresWaterRootOk: false,
     },
     {
@@ -518,3 +538,4 @@ main().catch((error) => {
   console.error(`[terminal-orchestrator-state] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
