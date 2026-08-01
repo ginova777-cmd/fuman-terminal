@@ -317,14 +317,25 @@ function latestModuleRunId(runIds = []) {
   }).pop() || "";
 }
 function pruneEndpointRunIdsToAuthority(endpoints = {}, authority = {}) {
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    const key = opsModuleKeyForEndpoint(endpoint);
+  const moduleKeys = new Set(["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant", ...Object.keys(authority.byKey || {})]);
+  const expectedByKey = {};
+  for (const key of moduleKeys) {
     const prefix = moduleRunIdPrefix(key);
-    const observedRunIds = Array.from(collectModuleRunIds(payload, prefix));
+    const observedRunIds = [];
+    for (const payload of Object.values(endpoints || {})) {
+      observedRunIds.push(...collectModuleRunIds(payload, prefix));
+    }
     const authorityRunId = String(authority.byKey?.[key]?.runId || "").trim();
-    const expectedRunId = latestModuleRunId([...observedRunIds, authorityRunId]);
-    if (!key || !expectedRunId) continue;
-    endpoints[endpoint] = pruneModulePayloadToAuthority(payload, prefix, expectedRunId, true);
+    expectedByKey[key] = latestModuleRunId([...observedRunIds, authorityRunId]);
+  }
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    let cleaned = payload;
+    for (const key of moduleKeys) {
+      const expectedRunId = expectedByKey[key];
+      if (!expectedRunId) continue;
+      cleaned = pruneModulePayloadToAuthority(cleaned, moduleRunIdPrefix(key), expectedRunId, true);
+    }
+    endpoints[endpoint] = cleaned;
   }
   return endpoints;
 }
