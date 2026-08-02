@@ -325,138 +325,15 @@ function publicEndpointMap(results) {
   return map;
 }
 
-function sanitizeStrategy2RunIds(value, canonicalRunId) {
-  if (!canonicalRunId || !String(canonicalRunId).startsWith("strategy2-")) return value;
-  const pattern = /strategy2-\d{8}-\d+/g;
-  if (typeof value === "string") {
-    return value.replace(pattern, (match) => (match === canonicalRunId ? match : canonicalRunId));
-  }
-  if (Array.isArray(value)) return value.map((item) => sanitizeStrategy2RunIds(item, canonicalRunId));
-  if (value && typeof value === "object") {
-    const next = {};
-    for (const [key, item] of Object.entries(value)) next[key] = sanitizeStrategy2RunIds(item, canonicalRunId);
-    return next;
-  }
-  return value;
-}
-
-function strategy2RunIdSortKey(runId) {
-  const match = String(runId || "").trim().match(/^strategy2-(\d{8})-(\d+)/);
-  if (!match) return "";
-  return `${match[1]}-${String(match[2]).padStart(14, "0")}`;
-}
-
-function latestStrategy2Candidate(candidates = []) {
-  return candidates
-    .filter((candidate) => String(candidate?.runId || "").startsWith("strategy2-"))
-    .sort((a, b) => strategy2RunIdSortKey(b.runId).localeCompare(strategy2RunIdSortKey(a.runId)))[0] || null;
-}
-
-function findStrategy2CanonicalRunId(endpoints = {}) {
-  const candidates = [];
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (!runId.startsWith("strategy2-")) continue;
-    candidates.push({ runId, payload, endpoint, approved: payload?.publishAllowed === true && payload?.evidenceStatus === "complete" });
-  }
-  return (latestStrategy2Candidate(candidates.filter((candidate) => candidate.approved)) || latestStrategy2Candidate(candidates))?.runId || "";
-}
-
-function findApprovedStrategy2CanonicalPayload(endpoints = {}) {
-  const candidates = [];
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (!runId.startsWith("strategy2-")) continue;
-    if (payload?.publishAllowed === true && payload?.evidenceStatus === "complete") candidates.push({ runId, payload, endpoint });
-  }
-  return latestStrategy2Candidate(candidates)?.payload || null;
-}
-function normalizeApprovedStrategy2Evidence(value, canonicalPayload) {
-  const canonicalRunId = String(canonicalPayload?.runId || canonicalPayload?.transport?.runId || "").trim();
-  if (!canonicalRunId.startsWith("strategy2-")) return value;
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map((item) => normalizeApprovedStrategy2Evidence(item, canonicalPayload));
-  if (!value || typeof value !== "object") return value;
-
-  const next = {};
-  for (const [key, item] of Object.entries(value)) {
-    next[key] = normalizeApprovedStrategy2Evidence(item, canonicalPayload);
-  }
-
-  const ownRunId = String(next.runId || next.transport?.runId || next.payload?.runId || "").trim();
-  const looksStrategy2 = ownRunId === canonicalRunId
-    || String(next.strategyKey || next.key || "").toLowerCase() === "strategy2"
-    || (next.payload && String(next.payload.runId || next.payload?.transport?.runId || "").trim() === canonicalRunId);
-  if (!looksStrategy2) return next;
-
-  const runQuality = next.run_quality_at_publish && typeof next.run_quality_at_publish === "object"
-    ? next.run_quality_at_publish
-    : {};
-  const unattended = next.unattended && typeof next.unattended === "object" ? next.unattended : {};
-  return {
-    ...next,
-    ok: next.ok !== false,
-    status: next.status === "degraded" ? "ready" : next.status,
-    qualityStatus: next.qualityStatus === "degraded" ? "complete" : next.qualityStatus,
-    evidenceStatus: "complete",
-    sourceEvidenceStatus: "complete",
-    sourceEvidenceIssues: [],
-    unattendedStatus: "YES",
-    unattended: {
-      ...unattended,
-      status: "YES",
-      evidenceStatus: "complete",
-      canRunUnattended: true,
-      reason: "",
-    },
-    publishAllowed: true,
-    publishBlocked: false,
-    publishBlockedReason: "",
-    degradedBlocksLatest: false,
-    preservePreviousGood: false,
-    mustPreserveLatest: false,
-    blockedReason: "",
-    scanner_block_reason: "",
-    issues: Array.isArray(next.issues)
-      ? next.issues.filter((issue) => !String(issue || "").includes("source_quality_fail"))
-      : next.issues,
-    run_quality_at_publish: {
-      ...runQuality,
-      publishAllowed: true,
-      degradedBlocksLatest: false,
-      preservePreviousGood: false,
-      blockedReason: "",
-      scanner_block_reason: "",
-      reason: runQuality.reason === "source_quality_fail" ? "" : runQuality.reason,
-    },
-  };
-}
-
 function sanitizeStrategy2Endpoints(endpoints = {}) {
+  // Preserve source evidence and runIds exactly; only remove retired endpoints.
   stripRetiredTerminalEndpoints(endpoints);
-  const canonicalRunId = findStrategy2CanonicalRunId(endpoints);
-  if (!canonicalRunId) return endpoints;
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    endpoints[endpoint] = sanitizeStrategy2RunIds(payload, canonicalRunId);
-  }
-  const approvedPayload = findApprovedStrategy2CanonicalPayload(endpoints);
-  if (approvedPayload) {
-    for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-      endpoints[endpoint] = normalizeApprovedStrategy2Evidence(payload, approvedPayload);
-    }
-  }
   return endpoints;
 }
 
-function sanitizeStrategy2BundlePayload(payload, endpoints = {}) {
-  const canonicalRunId = findStrategy2CanonicalRunId(endpoints || payload?.endpoints || {});
-  if (!canonicalRunId) return payload;
-  const runIdSanitized = sanitizeStrategy2RunIds(payload, canonicalRunId);
-  const approvedPayload = findApprovedStrategy2CanonicalPayload(endpoints || payload?.endpoints || {});
-  return approvedPayload ? normalizeApprovedStrategy2Evidence(runIdSanitized, approvedPayload) : runIdSanitized;
+function sanitizeStrategy2BundlePayload(payload) {
+  // A fast bundle must never promote stale/degraded evidence to unattended YES.
+  return payload;
 }
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};

@@ -84,7 +84,7 @@ function fastMarketCalendarFallback(reason = "calendar_timeout") {
     displayMode: "mobile_fast_boot",
     displayTradeDate: today,
     evidenceStatus: "pending",
-    unattendedStatus: "YES",
+    unattendedStatus: "NO",
     reason,
   };
 }
