@@ -326,10 +326,17 @@ function requiresNextNaturalEvidence(summary = {}) {
   const text = [
     summary.ops_policy?.next_retry_policy,
     summary.next_retry_policy,
+    summary.ops_policy?.policy_decision,
+    summary.policy_decision,
     summary.owner_message,
     summary.status,
   ].map((value) => String(value || "").toLowerCase()).join(" ");
-  return text.includes("next natural") || text.includes("0700/0845/0900") || text.includes("manual retry cannot set unattended yes") || text.includes("pending_not_due");
+  return text.includes("next natural")
+    || text.includes("next scheduled natural")
+    || text.includes("0700/0845/0900")
+    || text.includes("manual retry cannot set unattended yes")
+    || text.includes("pending_not_due")
+    || text.includes("wait_for_natural_evidence");
 }
 function buildPlan(summary, tradeDate) {
   if (summary.market_closed === true) {
