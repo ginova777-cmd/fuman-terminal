@@ -20,6 +20,7 @@ requireText(installer, "-StartWhenAvailable", "start_when_available_missing");
 requireText(installer, "-AllowStartIfOnBatteries", "battery_start_missing");
 requireText(installer, "-DontStopIfGoingOnBatteries", "battery_stop_protection_missing");
 requireText(installer, "-MultipleInstances IgnoreNew", "duplicate_run_guard_missing");
+for (const checkpoint of ["07:00", "08:45", "09:00"]) requireText(installer, `"${checkpoint}"`, `natural_evidence_checkpoint_missing:${checkpoint}`);
 requireText(installer, 'New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount', "noninteractive_service_principal_missing");
 requireText(pkg.scripts?.["install:terminal-autonomous-root-task"] || "", "-RunAsSystem", "production_install_not_noninteractive");
 requireText(runner, "power-recovery-contract", "root_power_recovery_contract_step_missing");
