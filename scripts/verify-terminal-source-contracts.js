@@ -618,6 +618,7 @@ async function checkOne(strategy, check) {
   if (result.ok && check.kind.startsWith("latest-run") && Number(result.rows[0]?.result_count || 0) <= 0 && strategy.key !== "strategy2") {
     issues.push(`${check.table} latest complete run result_count<=0`);
   }
+  const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
   if (result.ok && check.requireToday && !liveSourceSkipped) {
     const expected = await expectedQuoteDateKey();
     const today = taipeiDateKey();
@@ -627,9 +628,7 @@ async function checkOne(strategy, check) {
   }
   // Historical source freshness is not a live requirement on market-closed days.
   // Closed days preserve previous-good; trading days remain strict.
-    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
   if (result.ok && check.maxAgeDays && tradingDay?.isTradingDay !== false) {
-    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const ageDays = dateAgeDays(newest);
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
     if (ageDays != null && ageDays > check.maxAgeDays) issues.push(`${check.table} newest date ${newest} age ${ageDays}d > ${check.maxAgeDays}d`);
