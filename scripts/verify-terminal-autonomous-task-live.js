@@ -56,8 +56,8 @@ function main() {
     issues,
   };
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(OUT_FILE, JSON.stringify(report, null, 2));
   report.output = OUT_FILE;
+  fs.writeFileSync(OUT_FILE, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   if (!report.ok) process.exitCode = 1;
 }
