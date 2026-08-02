@@ -138,6 +138,14 @@ if (fastShellSelfContainedGuard.status !== 0) {
   issues.push(`verify-fast-shell-self-contained failed: ${(fastShellSelfContainedGuard.stderr || fastShellSelfContainedGuard.stdout || "").trim()}`);
 }
 
+const terminalNoFakeUnattendedGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-terminal-no-fake-unattended.js")], {
+  cwd: ROOT,
+  encoding: "utf8",
+});
+if (terminalNoFakeUnattendedGuard.status !== 0) {
+  issues.push(`verify-terminal-no-fake-unattended failed: ${(terminalNoFakeUnattendedGuard.stderr || terminalNoFakeUnattendedGuard.stdout || "").trim()}`);
+}
+
 const deployWorktreeCleanGuard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "verify-deploy-worktree-clean.js")], {
   cwd: ROOT,
   encoding: "utf8",
@@ -3235,8 +3243,7 @@ if (fetchResult.status !== 0) {
     const [, behindText] = compare.stdout.trim().split(/\s+/);
     const behind = Number(behindText || 0);
     if (behind > 0) {
-      issues.push(`repo sync check failed: local repo is behind origin/main by ${behind} commit(s); run git pull --ff-only origin main`);
-    }
+      issues.push(`repo sync check failed: local repo is behind origin/main by ${behind} commit(s); run git pull --ff-only origin main`);    }
   }
 
   const status = runGit(["status", "--porcelain=v1"]);
