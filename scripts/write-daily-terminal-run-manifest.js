@@ -321,7 +321,53 @@ function resolveExpectedDateFromWater(water = {}, fallbackDate = EXPECTED_DATE) 
   if (displayTradeDate && !REQUIRE_FORMAL_NOW) return displayTradeDate;
   return compactDate(fallbackDate || taipeiDateKey());
 }
-function moduleRow(row = {}) {
+function isMarketClosedWater(water = {}) {
+  const bits = [water.status, water.reason, water.marketStatus, water.marketCalendar?.status, water.marketCalendar?.row?.status]
+    .map((value) => String(value || '').toLowerCase()).join(' ');
+  return water.marketClosed === true
+    || water.marketCalendar?.marketOpen === false
+    || water.marketCalendar?.tradingDayOpen === false
+    || water.marketCalendar?.row?.marketOpen === false
+    || water.marketCalendar?.row?.tradingDayOpen === false
+    || bits.includes('market_closed') || bits.includes('holiday') || bits.includes('typhoon') || bits.includes('closed_previous_good');
+}
+
+function moduleRow(row = {}, options = {}) {
+  const marketClosed = options.marketClosed === true;
+  const displayTradeDate = compactDate(options.displayTradeDate || '');
+  if (marketClosed) {
+    const closedRunId = firstPresent(row.live?.runId, row.terminalApi?.runId, row.supabase?.runId, row.receipt?.runId, row.desktopSnapshot?.runId, row.mobileFragment?.runId, row.scorecard?.runId);
+    return {
+      key: row.key,
+      label: row.label,
+      runId: closedRunId,
+      tradeDate: firstPresent(runDateFromId(closedRunId), displayTradeDate),
+      sourceDate: displayTradeDate,
+      complete: false,
+      fallback: true,
+      rawFallback: true,
+      evidenceStatus: 'previous_good',
+      publishAllowed: false,
+      resultCount: Number(row.desktopSnapshot?.count || row.supabase?.count || row.receipt?.matches || 0) || 0,
+      readbackCount: Number(row.desktopSnapshot?.readbackCount || row.desktopSnapshot?.count || 0) || 0,
+      runIds: {
+        scanner: row.receipt?.runId || '',
+        supabase: row.supabase?.runId || '',
+        productionApi: row.live?.runId || row.terminalApi?.runId || '',
+        desktop: row.desktopSnapshot?.runId || row.terminalApi?.runId || '',
+        mobile: row.mobileFragment?.runId || '',
+        scorecard88: row.scorecard?.runId || '',
+      },
+      scorecard88Protection: 'market-closed-previous-good',
+      protectedReadbackBlocked: false,
+      scheduleStatus: scheduleStatusForKey(row.key),
+      pendingNotDue: true,
+      status: 'SKIPPED_MARKET_CLOSED_PREVIOUS_GOOD',
+      ok: true,
+      issues: ['market_closed_formal_scan_skipped', 'preserve_previous_good'],
+    }
+  }
+
   const scheduleStatus = scheduleStatusForKey(row.key);
   let receipt = normalizeStrategyScanReceipt(row.receipt || {}, { key: row.key, strategy: row.key }) || {};
   const supabase = row.supabase || {};
@@ -598,8 +644,10 @@ async function main() {
   const datedChainFile = path.join(ROOT, "outputs", "terminal-resource-chain-audit", `terminal-resource-chain-audit-${EXPECTED_DATE}.json`);
   const latestChainFile = path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json");
   const chain = readJson(datedChainFile, null) || readJson(latestChainFile, {});
+  const marketClosed = isMarketClosedWater(water);
+  const displayTradeDate = compactDate(water.marketCalendar?.row?.displayTradeDate || water.displayTradeDate || "");
   const modules = Array.isArray(chain.results)
-    ? chain.results.filter((row) => row.key !== "market").map(moduleRow)
+    ? chain.results.filter((row) => row.key !== "market").map((row) => moduleRow(row, { marketClosed, displayTradeDate }))
     : [];
   const issues = [];
   const softWaterRootIssue = isSoftWaterRootIssue(water);
@@ -607,7 +655,7 @@ async function main() {
   if (waterRootIssue && !softWaterRootIssue) issues.push(waterRootIssue);
   for (const command of commands.filter((item) => !item.ok)) issues.push(`${command.label}_exit_${command.exitCode}`);
   for (const row of modules.filter((item) => !item.ok)) issues.push(`${row.key}:${firstManifestIssue(row)}`);
-  if (!chain.ok) issues.push("terminal_resource_chain_unattended_failed");
+  if (!chain.ok && !marketClosed) issues.push("terminal_resource_chain_unattended_failed");
   const scorecardPrepublishCovered = SCORECARD_PUBLISH_MODE
     && modules.length > 0
     && modules.every((row) => row.ok === true || row.pendingNotDue === true);
@@ -619,7 +667,8 @@ async function main() {
     }
   }
   const pendingModules = modules.filter((item) => item.pendingNotDue === true);
-  const previousGoodHold = isPreviousGoodHoldWaterRoot(water);
+  const previousGoodHold = isPreviousGoodHoldWaterRoot(water) || marketClosed;
+  const manifestIssues = marketClosed ? ["market_closed_formal_scan_skipped", "preserve_previous_good"] : issues;
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
     checkedAt: new Date().toISOString(),
@@ -637,13 +686,13 @@ async function main() {
     commands,
     modules,
     pendingModules: pendingModules.map((row) => ({ key: row.key, dueTime: row.scheduleStatus?.dueTime || "", runId: row.runId || "" })),
-    status: issues.length > 0 ? "BLOCKED" : pendingModules.length > 0 ? "PENDING_NOT_DUE" : "CLOSED",
-    ok: issues.length === 0 && pendingModules.length === 0,
+    status: marketClosed ? "MARKET_CLOSED_PREVIOUS_GOOD" : (issues.length > 0 ? "BLOCKED" : pendingModules.length > 0 ? "PENDING_NOT_DUE" : "CLOSED"),
+    ok: marketClosed ? true : (issues.length === 0 && pendingModules.length === 0),
     previousGoodHold,
-    freshUnattended: issues.length === 0 && pendingModules.length === 0 && !previousGoodHold,
-    unattendedStatus: issues.length === 0 && pendingModules.length === 0 ? (previousGoodHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
-    blocker: issues[0] || (pendingModules.length ? `pending_not_due:${pendingModules.map((row) => `${row.key}@${row.scheduleStatus?.dueTime || ""}`).join(",")}` : ""),
-    issues,
+    freshUnattended: false,
+    unattendedStatus: marketClosed ? "PREVIOUS_GOOD_HOLD" : (issues.length === 0 && pendingModules.length === 0 ? "YES" : "NO"),
+    blocker: marketClosed ? "market_closed_formal_scan_skipped_preserve_previous_good" : (issues[0] || ""),
+    issues: manifestIssues,
   };
   const dateFile = path.join(OUT_DIR, `daily-terminal-run-${EXPECTED_DATE}.json`);
   const latestFile = path.join(OUT_DIR, "daily-terminal-run-latest.json");
@@ -659,7 +708,7 @@ async function main() {
     modules: manifest.modules.map((row) => ({ key: row.key, ok: row.ok, runId: row.runId, issue: row.issues[0] || "" })),
     output: latestFile,
   }, null, 2));
-  if (issues.length > 0) process.exitCode = 1;
+  if (issues.length > 0 && !marketClosed) process.exitCode = 1;
 }
 
 main().catch((error) => {

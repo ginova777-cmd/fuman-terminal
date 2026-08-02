@@ -46,7 +46,7 @@ function localCheck() {
   const display = artifact("displayCorrectness", "outputs/terminal-display-correctness/terminal-display-correctness.json");
   const resource = artifact("resourceChain", "outputs/terminal-resource-chain-audit/terminal-resource-chain-audit.json");
   const canary = artifact("canary", "outputs/terminal-canary-publish/terminal-canary-publish.json");
-  const closure = artifact("runIdClosure", "outputs/terminal-runid-closure/terminal-runid-closure.json");
+  const closure = artifact("runIdClosure", "outputs/terminal-runid-closure-contract/terminal-runid-closure-contract.json");
   const ops = artifact("opsStatus", "data/terminal-ops-status-latest.json");
   const rows = Array.isArray(manifest.payload.modules) ? manifest.payload.modules : [];
   const closed = marketClosed(manifest.payload, canary.payload);
@@ -57,12 +57,13 @@ function localCheck() {
     : expectedDate;
   const modules = ACTIVE.map((key) => moduleState(rows.find((row) => text(row.key) === key) || { key, issues: ["MODULE_ROW_MISSING"] }, displayExpectedDate));
   const issues = [];
-  [manifest, display, resource, canary, closure].forEach((a) => { if (!a.exists) issues.push({ code: "SURFACE_ARTIFACT_MISSING", target: a.name, file: a.file }); });
+  const closedPreviousGood = closed && (yes(manifest.payload.previousGoodHold) || lower(manifest.payload.status || "").includes("previous_good") || lower(closure.payload.status || closure.payload.mode || "").includes("previous_good") || lower(canary.payload.status || canary.payload.reason || "").includes("previous_good"));
+  [manifest, display, resource, canary, closure].forEach((a) => { if (!a.exists && !(closedPreviousGood && a.name === "runIdClosure")) issues.push({ code: "SURFACE_ARTIFACT_MISSING", target: a.name, file: a.file }); });
   const manifestDate = dateOnly(manifest.payload.tradeDate || manifest.payload.requestedDate);
   if (manifest.exists && ((!closed && manifestDate !== expectedDate) || (closed && !displayExpectedDate))) issues.push({ code: "MANIFEST_DATE_MISMATCH", expectedDate: closed ? displayExpectedDate : expectedDate, actualDate: manifest.payload.tradeDate || manifest.payload.requestedDate || "" });
-  if (display.exists && display.payload.ok !== true) issues.push({ code: "DISPLAY_CORRECTNESS_GATE_BLOCKED", issueCount: display.payload.issueCount == null ? null : display.payload.issueCount });
-  if (resource.exists && resource.payload.ok !== true) issues.push({ code: "RESOURCE_CHAIN_BLOCKED" });
-  if (closure.exists && closure.payload.ok !== true) issues.push({ code: "RUNID_CLOSURE_BLOCKED" });
+  if (display.exists && display.payload.ok !== true && !closedPreviousGood) issues.push({ code: "DISPLAY_CORRECTNESS_GATE_BLOCKED", issueCount: display.payload.issueCount == null ? null : display.payload.issueCount });
+  if (resource.exists && resource.payload.ok !== true && !closedPreviousGood) issues.push({ code: "RESOURCE_CHAIN_BLOCKED" });
+  if (closure.exists && closure.payload.ok !== true && !closedPreviousGood) issues.push({ code: "RUNID_CLOSURE_BLOCKED" });
   modules.forEach((row) => { if (row.state === "blocked" || (row.state === "previous-good-degraded" && !closed)) issues.push({ code: row.state === "blocked" ? "MODULE_NOT_CURRENT_COMPLETE" : "MODULE_PREVIOUS_GOOD_ON_TRADING_DAY", key: row.key, state: row.state, issueCodes: row.issueCodes }); });
   return { expectedDate, displayExpectedDate, marketClosed: closed, status: issues.length ? (closed ? "MARKET_CLOSED_PREVIOUS_GOOD" : "BLOCKED") : "PASS", artifactChecks: [manifest, display, resource, canary, closure, ops].map(({ payload, ...a }) => Object.assign({}, a, { contract: payload && payload.contract || "" })), modules, issues };
 }

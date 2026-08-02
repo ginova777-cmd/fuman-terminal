@@ -357,7 +357,7 @@ function verifyInvariants(artifacts, issues) {
     assert(invariants.includes(required), issues, `state_machine_invariant_missing:${required}`, { invariants });
   }
 
-  assert(["CLOSED", "PENDING_NOT_DUE", "BLOCKED"].includes(String(manifest?.status || "")), issues, "manifest_status_missing_or_invalid", { status: manifest?.status });
+  assert(["CLOSED", "PENDING_NOT_DUE", "BLOCKED", "MARKET_CLOSED_PREVIOUS_GOOD"].includes(String(manifest?.status || "")), issues, "manifest_status_missing_or_invalid", { status: manifest?.status });
   const moduleKeys = modules.map((row) => row.key).filter(Boolean);
   for (const key of REQUIRED_ACTIVE_MODULES) {
     assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });

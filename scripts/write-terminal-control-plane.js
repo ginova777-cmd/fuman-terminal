@@ -177,6 +177,27 @@ function compactCanaryArtifact(canary = {}) {
 }
 function runIdClosureGate(manifest = {}, expectedDate = "") {
   const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
+  const marketClosed = manifest.status === "MARKET_CLOSED_PREVIOUS_GOOD"
+    || manifest.previousGoodHold === true
+    || manifest.waterRoot?.status === "market_closed_previous_good";
+  if (marketClosed) {
+    return {
+      ok: modules.length > 0,
+      status: "MARKET_CLOSED_PREVIOUS_GOOD",
+      modules: modules.map((row) => ({
+        key: row.key,
+        label: row.label || row.key,
+        ok: row.ok === true,
+        pendingNotDue: true,
+        runId: row.runId || "",
+        runDate: runIdDate(row.runId || ""),
+        uniqueRunIds: [],
+        expectedDate,
+        issue: "market_closed_formal_scan_skipped",
+      })),
+      blockers: [],
+    };
+  }
   const rows = modules.map((row) => {
     if (row.pendingNotDue === true) {
       return {
