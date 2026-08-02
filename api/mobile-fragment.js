@@ -8,6 +8,7 @@ const {
 const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
 const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 7000);
@@ -896,6 +897,7 @@ module.exports = async function handler(request, response) {
     }
   }
   try {
+    const marketCalendar = await buildMarketCalendarContract().catch(() => null);
     const endpoint = appendQuery(config.endpoint, {
       mobile: 1,
       canvas: 1,
@@ -931,14 +933,19 @@ module.exports = async function handler(request, response) {
     if (tab !== "ai" && !formalRunIdFromPayload(payload, tab)) {
       displayPayload = await sourceReportFallbackPayload(request, tab, endpoint, new Error("mobile_fragment_payload_missing_formal_run_id")).catch(() => null) || payload;
     }
+    displayPayload = attachMarketCalendar(displayPayload, marketCalendar);
     const html = renderFragment(tab, config, displayPayload);
     if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, displayPayload);
     response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
+    const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+    const displayDate = String(marketCalendar?.displayTradeDate || "").replace(/\\D/g, "").slice(0, 8);
     if (tab !== "ai") {
       const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab).catch(() => null);
-      if (htmlSnapshot?.html) {
+      const snapshotDate = String(htmlSnapshot?.runId || "").match(/20\\d{6}/)?.[0] || "";
+      const snapshotDateAllowed = !displayDate || !snapshotDate || snapshotDate === displayDate;
+      if (htmlSnapshot?.html && snapshotDateAllowed) {
         response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "html-snapshot");
         response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16) + "\"");
         sendHtml(request, response, 200, htmlSnapshot.html, {
@@ -953,7 +960,7 @@ module.exports = async function handler(request, response) {
     }
     const reportFallback = await sourceReportFallbackPayload(request, tab, TAB_CONFIG[tab]?.endpoint || "", error).catch(() => null);
     if (reportFallback) {
-      const html = renderFragment(tab, config, reportFallback);
+      const html = renderFragment(tab, config, attachMarketCalendar(reportFallback, marketCalendar));
       response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "source-reports");
       response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
       sendHtml(request, response, 200, html, {

@@ -6,7 +6,7 @@ const {
   buildDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
-const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
+const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 
 const ADMIN_EMAILS = new Set(
   String(process.env.FUMAN_ADMIN_EMAILS || "ginova777@gmail.com")
@@ -130,6 +130,8 @@ module.exports = async function handler(request, response) {
     return;
   }
 
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+
   const wantsRefresh = request.method === "POST"
     || request.query?.refresh === "1"
     || request.query?.force === "1";
@@ -141,7 +143,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(releaseSnapshot);
+      response.status(200).json(attachMarketCalendar(releaseSnapshot, marketCalendar));
       return;
     }
 
@@ -151,9 +153,9 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(snapshotResponsePayload(snapshot, {
+      response.status(200).json(attachMarketCalendar(snapshotResponsePayload(snapshot, {
         cacheSource: "supabase:desktop_route_snapshot",
-      }));
+      }), marketCalendar));
       return;
     }
 
@@ -163,11 +165,11 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(snapshotResponsePayload(staleSnapshot, {
+      response.status(200).json(attachMarketCalendar(snapshotResponsePayload(staleSnapshot, {
         cacheSource: "supabase:desktop_route_snapshot:market_closed_previous_good",
         marketClosedPreviousGood: true,
         reason: "market_closed_previous_good_stale_snapshot_allowed",
-      }));
+      }), marketCalendar));
       return;
     }
 
@@ -195,13 +197,13 @@ module.exports = async function handler(request, response) {
       response.status(200).end("");
       return;
     }
-    response.status(200).json({
+    response.status(200).json(attachMarketCalendar({
       ok: true,
       ...result.payload,
       write: result.write,
       snapshotHit: false,
       snapshotReadFallback: !wantsRefresh,
-    });
+    }, marketCalendar));
   } catch (error) {
     response.status(503).json({
       ok: false,
