@@ -1,9 +1,13 @@
 "use strict";
 
 const { execFileSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 const TASK_NAME = process.env.FUMAN_AUTONOMOUS_TASK_NAME || "\\Fuman Terminal Autonomous Root Monitor";
 const EXPECTED_ROOT = String(process.env.FUMAN_AUTONOMOUS_PROJECT_ROOT || "").trim().toLowerCase();
+const OUT_DIR = path.resolve(__dirname, "..", "outputs", "terminal-autonomous-task-live");
+const OUT_FILE = path.join(OUT_DIR, "terminal-autonomous-task-live.json");
 
 function query(args) {
   try {
@@ -51,6 +55,9 @@ function main() {
     ok: issues.length === 0,
     issues,
   };
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(OUT_FILE, JSON.stringify(report, null, 2));
+  report.output = OUT_FILE;
   console.log(JSON.stringify(report, null, 2));
   if (!report.ok) process.exitCode = 1;
 }

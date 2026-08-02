@@ -4,7 +4,8 @@ param(
   [string]$TaskName = "Fuman Terminal Autonomous Root Monitor",
   [string[]]$At = @("08:55", "09:10", "09:40", "13:35", "14:10", "16:10", "21:35", "22:00"),
   [switch]$ApplyScanners,
-  [switch]$RequireProtectedReadback
+  [switch]$RequireProtectedReadback,
+  [switch]$RunAsSystem
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,5 +41,16 @@ foreach ($time in $At) {
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
 $description = "Autonomous root monitor: startup recovery, predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback. Membership gates display only."
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Description $description -Force | Out-Null
-Write-Host ("[terminal-autonomous-root-task] installed task={0} root={1} triggers={2} applyScanners={3} requireProtectedReadback={4}" -f $TaskName, $ProjectRoot, ($At -join ","), [bool]$ApplyScanners, [bool]$RequireProtectedReadback)
+$registerArgs = @{
+  TaskName = $TaskName
+  Action = $action
+  Trigger = $triggers
+  Settings = $settings
+  Description = $description
+  Force = $true
+}
+if ($RunAsSystem) {
+  $registerArgs.Principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+}
+Register-ScheduledTask @registerArgs | Out-Null
+Write-Host ("[terminal-autonomous-root-task] installed task={0} root={1} triggers={2} applyScanners={3} requireProtectedReadback={4} runAsSystem={5}" -f $TaskName, $ProjectRoot, ($At -join ","), [bool]$ApplyScanners, [bool]$RequireProtectedReadback, [bool]$RunAsSystem)
