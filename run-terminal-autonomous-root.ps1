@@ -195,8 +195,14 @@ try {
   Write-RunnerLog "Autonomous root started contract=$Contract recovery=$RecoveryMode reasons=$($RecoveryReasons -join ",") applyScanners=$([bool]$ApplyScanners) requireProtectedReadback=$([bool]$RequireProtectedReadback)"
   $steps.Add((Invoke-NpmStep "power-recovery-contract" "verify:terminal-power-recovery-contract"))
   $steps.Add((Invoke-NpmStep "predictive-preflight" "ops:predictive-preflight"))
+  $steps.Add((Invoke-NpmStep "websocket-source-layer" "verify:fugle-websocket-sources" -ToleratedExitCodes @(1)))
     # Water Root is an observation gate; failure must reach self-heal.
   $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)))
+  $steps.Add((Invoke-NpmStep "warmup-phase-state-machine" "verify:daytrade-warmup-root" -ToleratedExitCodes @(1)))
+  $steps.Add((Invoke-NpmStep "reason-code-classifier" "verify:terminal-reason-code-classifier"))
+  $steps.Add((Invoke-NpmStep "formal-entry-gate" "verify:strategy-scan-formal-gate"))
+  $steps.Add((Invoke-NpmStep "job-queue-contract" "verify:terminal-job-queue-contract"))
+  $steps.Add((Invoke-NpmStep "idempotent-scanner-contract" "verify:terminal-idempotent-runner"))
   $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "state-machine" "orchestrator:state:from-existing"))
   $steps.Add((Invoke-NpmStep "autonomous-policy" "policy:autonomous-ops"))

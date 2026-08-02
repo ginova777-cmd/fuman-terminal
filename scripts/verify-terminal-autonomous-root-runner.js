@@ -77,7 +77,13 @@ async function main() {
   const runnerMarkers = [
     "terminal-autonomous-root-runner-v1",
     "ops:predictive-preflight",
+    "verify:fugle-websocket-sources",
     "verify:terminal-water-root",
+    "verify:daytrade-warmup-root",
+    "verify:terminal-reason-code-classifier",
+    "verify:strategy-scan-formal-gate",
+    "verify:terminal-job-queue-contract",
+    "verify:terminal-idempotent-runner",
     "CONTINUE_TO_STATE_MACHINE",
     "manifest:daily-terminal-run",
     "orchestrator:state:from-existing",
@@ -175,7 +181,7 @@ async function main() {
     guarantees: [
       "autonomous root is callable as a first-class npm script",
       "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, surface monitor, and readback-only closure",
+      "runner executes preflight, WebSocket source, water root, warmup, reason classification, formal entry gate, job queue and idempotent scanner contracts before manifest/publish",
       "failure writes a receipt and attempts workflow alert",
       "water root failure is recorded and handed to the self-heal queue instead of aborting before repair",
       "every child verifier has a hard timeout and process-tree termination receipt",
