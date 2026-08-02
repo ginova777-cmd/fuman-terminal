@@ -940,15 +940,19 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-    const displayDate = String(marketCalendar?.displayTradeDate || "").replace(/\\D/g, "").slice(0, 8);
+    const displayDate = String(marketCalendar?.displayTradeDate || "").replace(/\D/g, "").slice(0, 8);
     if (tab !== "ai") {
       const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab).catch(() => null);
-      const snapshotDate = String(htmlSnapshot?.runId || "").match(/20\\d{6}/)?.[0] || "";
+      const snapshotDate = String(htmlSnapshot?.runId || "").match(/20\d{6}/)?.[0] || "";
       const snapshotDateAllowed = !displayDate || !snapshotDate || snapshotDate === displayDate;
       if (htmlSnapshot?.html && snapshotDateAllowed) {
+        const closedBanner = marketCalendar?.marketOpen === false
+          ? `<div class="fuman-market-closed-banner" role="status">${esc(marketCalendar.closedReasonText || "市場休市")}：顯示最後交易日 ${esc(marketCalendar.displayTradeDate || displayDate)}；不重新掃描、不覆蓋 previous good。</div>`
+          : "";
+        const fallbackHtml = closedBanner + htmlSnapshot.html;
         response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "html-snapshot");
-        response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16) + "\"");
-        sendHtml(request, response, 200, htmlSnapshot.html, {
+        response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(fallbackHtml).digest("hex").slice(0, 16) + "\"");
+        sendHtml(request, response, 200, fallbackHtml, {
           tab,
           snapshotHit: true,
           fallback: true,

@@ -50,8 +50,10 @@ function localCheck() {
   const ops = artifact("opsStatus", "data/terminal-ops-status-latest.json");
   const rows = Array.isArray(manifest.payload.modules) ? manifest.payload.modules : [];
   const closed = marketClosed(manifest.payload, canary.payload);
+  const knownTradeDates = rows.map((row) => dateOnly(row.tradeDate || row.trade_date || row.sourceDate || row.source_date)).filter(Boolean).sort();
+  const latestKnownTradeDate = knownTradeDates[knownTradeDates.length - 1] || "";
   const displayExpectedDate = closed
-    ? dateOnly(manifest.payload.displayTradeDate || manifest.payload.display_trade_date || canary.payload.displayTradeDate || canary.payload.latestDate || manifest.payload.tradeDate || expectedDate)
+    ? dateOnly(manifest.payload.displayTradeDate || manifest.payload.display_trade_date || latestKnownTradeDate || canary.payload.displayTradeDate || canary.payload.latestDate || expectedDate)
     : expectedDate;
   const modules = ACTIVE.map((key) => moduleState(rows.find((row) => text(row.key) === key) || { key, issues: ["MODULE_ROW_MISSING"] }, displayExpectedDate));
   const issues = [];
