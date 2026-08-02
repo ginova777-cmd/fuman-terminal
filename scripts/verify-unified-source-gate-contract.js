@@ -4,6 +4,8 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
+const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
+const ACTIVE_MODULES = new Set(loadActiveModuleRegistry().active.map((row) => row.key));
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -189,17 +191,17 @@ requireMarkers("lib/run-time-source-snapshot-contract.js", [
   "preservePreviousGood",
 ]);
 
-const apiFiles = [
-  "api/open-buy-latest.js",
-  "api/strategy2-latest.js",
-  "api/strategy3-latest.js",
-  "api/strategy4-latest.js",
-  "api/strategy5-latest.js",
-  "api/institution-latest.js",
-  "api/warrant-flow-latest.js",
-  "api/cb-detect-latest.js",
-  "api/realtime-radar-latest.js",
-];
+const API_BY_MODULE = {
+  strategy1: "api/open-buy-latest.js",
+  strategy2: "api/strategy2-latest.js",
+  strategy3: "api/strategy3-latest.js",
+  strategy4: "api/strategy4-latest.js",
+  strategy5: "api/strategy5-latest.js",
+  institution: "api/institution-latest.js",
+  warrant: "api/warrant-flow-latest.js",
+  cb: "api/cb-detect-latest.js",
+};
+const apiFiles = Object.entries(API_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key)).map(([, file]) => file);
 for (const file of apiFiles) {
   requireMarkers(file, [
     "run-time-source-snapshot-contract",
@@ -215,18 +217,17 @@ for (const file of ["api/heatmap.js", "api/market-ai-live.js", "api/latest-strat
   requireMarkers(file, ["run-time-source-snapshot-contract"]);
 }
 
-const writerFiles = [
-  "scripts/scan-open-buy-cache.js",
-  "scripts/publish-strategy2-complete-run.js",
-  "scripts/scan-strategy3-cache.js",
-  "scripts/scan-strategy4-cache.js",
-  "scripts/scan-strategy5-cache.js",
-  "scripts/scan-institution-cache.js",
-  "scripts/scan-warrant-flow-cache.js",
-  "scripts/generate-cb-detect.js",
-  "scripts/scan-realtime-radar-cache.js",
-  "lib/watchlist-match-index-builder.js",
-];
+const WRITER_BY_MODULE = {
+  strategy1: "scripts/scan-open-buy-cache.js",
+  strategy2: "scripts/scan-intraday-signals.js",
+  strategy3: "scripts/scan-strategy3-cache.js",
+  strategy4: "scripts/scan-strategy4-cache.js",
+  strategy5: "scripts/scan-strategy5-cache.js",
+  institution: "scripts/scan-institution-cache.js",
+  warrant: "scripts/scan-warrant-flow-cache.js",
+  cb: "scripts/generate-cb-detect.js",
+};
+const writerFiles = Object.entries(WRITER_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key)).map(([, file]) => file).concat(["lib/watchlist-match-index-builder.js"]);
 for (const file of writerFiles) {
   if (!exists(file)) continue;
   if (file === "lib/watchlist-match-index-builder.js") {
