@@ -135,6 +135,8 @@ function verifyMembershipLayering(issues) {
   const helper = readText("scripts/e2e-membership-closure-utils.js");
   const resourceChain = readText("scripts/verify-terminal-resource-chain.js");
   const opsLive = readText("scripts/verify-terminal-ops-production-live.js");
+  const protectedCredential = readText("lib/protected-readback-credential.js");
+  const protectedCredentialVerifier = readText("scripts/verify-protected-readback-credential.js");
   const rollForward = readText("scripts/run-terminal-auto-roll-forward.js");
   const orchestrator = readText("scripts/write-terminal-orchestrator-state.js");
 
@@ -144,6 +146,9 @@ function verifyMembershipLayering(issues) {
   requireText(issues, "scripts/verify-terminal-resource-chain.js", resourceChain, "protectedReadbackAuth", "resource_chain_missing_protected_readback_split");
   requireText(issues, "scripts/verify-terminal-resource-chain.js", resourceChain, "membershipProtectedSummary", "resource_chain_missing_membership_protected_summary");
   requireText(issues, "scripts/verify-terminal-ops-production-live.js", opsLive, "direct_protected_endpoint_not_membership_required", "ops_live_missing_membership_required_assertion");
+  requireText(issues, "lib/protected-readback-credential.js", protectedCredential, "resolveProtectedReadbackCredential", "protected_credential_lib_missing_resolver");
+  requireText(issues, "lib/protected-readback-credential.js", protectedCredential, "FUMAN_PROTECTED_READBACK_CREDENTIAL_FILE", "protected_credential_lib_missing_runtime_file_env");
+  requireText(issues, "scripts/verify-protected-readback-credential.js", protectedCredentialVerifier, "protected-readback-credential-v1", "protected_credential_verifier_missing_contract");
   requireText(issues, "scripts/run-terminal-auto-roll-forward.js", rollForward, "Auth failures are never auto-executed", "rollforward_missing_auth_manual_repair_rule");
   requireText(issues, "scripts/write-terminal-orchestrator-state.js", orchestrator, "BLOCKED_AUTH", "orchestrator_missing_blocked_auth_state");
   requireText(issues, "scripts/write-terminal-orchestrator-state.js", orchestrator, "verify service token env", "orchestrator_missing_service_token_repair_action");
@@ -152,6 +157,8 @@ function verifyMembershipLayering(issues) {
     internalVerifyBypass: entitlement.includes("fumanInternalVerify === true"),
     resourceChainMemberReadbackSplit: resourceChain.includes("protectedReadbackAuth"),
     blockedAuthManualRepair: rollForward.includes("Auth failures are never auto-executed"),
+    protectedCredentialRuntimeFile: protectedCredential.includes("FUMAN_PROTECTED_READBACK_CREDENTIAL_FILE"),
+    protectedCredentialVerifier: protectedCredentialVerifier.includes("protected-readback-credential-v1"),
   };
 }
 
@@ -164,14 +171,22 @@ function verifyPackageWiring(issues) {
   if (!String(scripts["verify:backend-service-token-schedule"] || "").includes("verify-backend-service-token-schedule-contract.js")) {
     addIssue(issues, "package_missing_verify_backend_service_token_schedule");
   }
+  if (!String(scripts["verify:protected-readback-credential"] || "").includes("verify-protected-readback-credential.js")) {
+    addIssue(issues, "package_missing_verify_protected_readback_credential");
+  }
+  if (!String(scripts["verify:protected-readback-credential-contract"] || "").includes("verify-protected-readback-credential-contract.js")) {
+    addIssue(issues, "package_missing_verify_protected_readback_credential_contract");
+  }
   const root = String(scripts["verify:terminal-unattended-root"] || "");
-  for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure"]) {
+  for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure", "verify:protected-readback-credential-contract", "verify:protected-readback-credential"]) {
     if (!root.includes(required)) addIssue(issues, `terminal_unattended_root_missing:${required}`, { root });
   }
   return {
     hasBackendAuthIsolation: Boolean(scripts["verify:backend-auth-isolation"]),
     hasBackendServiceTokenSchedule: Boolean(scripts["verify:backend-service-token-schedule"]),
     rootIncludesBackendServiceTokenSchedule: root.includes("verify:backend-service-token-schedule"),
+    rootIncludesProtectedReadbackCredential: root.includes("verify:protected-readback-credential"),
+    rootIncludesProtectedReadbackCredentialContract: root.includes("verify:protected-readback-credential-contract"),
   };
 }
 
@@ -193,6 +208,7 @@ async function main() {
       "membership_required 401 protects display only and is not scanner compute failure",
       "scorecard publish is daily-manifest gated and can run without member live readback",
       "BLOCKED_AUTH jobs require service token repair and are never auto-executed as fake success",
+      "protected readback credential has a shared env/runtime-file/login resolver and a live hard gate",
       "schedule running result 0x41301 is classified separately from failed scanner output",
     ],
     issues,
@@ -207,3 +223,5 @@ main().catch((error) => {
   console.error(`[backend-service-token-schedule-contract] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+

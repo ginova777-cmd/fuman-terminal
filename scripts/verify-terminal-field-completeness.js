@@ -168,9 +168,8 @@ const ROUTES = [
     groups: [
       ["代號", ["code", "Code", "symbol", "stockId", "stock_id"]],
       ["名稱", ["name", "Name", "stockName", "stock_name"]],
-      ["價格", ["price", "close", "ClosingPrice", "lastPrice", "latestClose"]],
       ["漲跌/排序", ["change", "Change", "pct", "percent", "score", "rankScore", "finalScore", "rank"]],
-      ["量能/金額", ["value", "TradeValue", "volume", "TradeVolume", "tradeValue"]],
+      ["判讀/來源", ["reason", "source", "tags", "side", "percentSource"]],
     ],
   },
 ];

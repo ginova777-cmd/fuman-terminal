@@ -4,6 +4,27 @@ const BASE_URL = String(process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMA
 const REQUIRE_ROWS = process.argv.includes("--require-rows") || process.env.FUMAN_SEVEN_STRATEGY_DAILY_HISTORY_REQUIRE_ROWS === "1";
 const ENDPOINT = "/api/seven-strategy-daily-history";
 
+function argValue(name) {
+  const prefix = `${name}=`;
+  const inline = process.argv.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : "";
+}
+
+function normalizeDate(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return "";
+}
+
+function expectedTradeDate() {
+  return normalizeDate(argValue("--date") || argValue("--trade-date") || process.env.FUMAN_SCORECARD_EXPECTED_DATE || "") || todayTaipeiDate();
+}
+
 function todayTaipeiDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -52,14 +73,15 @@ function blank(value) {
 }
 
 async function main() {
-  const expectedDate = todayTaipeiDate();
+  const expectedDate = expectedTradeDate();
   const [historyResponse, reportsResponse] = await Promise.all([
-    fetchJson(`${ENDPOINT}?limit=100`, 60000),
+    fetchJson(`${ENDPOINT}?limit=100&date=${encodeURIComponent(expectedDate)}`, 60000),
     fetchJson("/api/source-reports", 60000).catch((error) => ({ status: 0, json: { ok: false, error: error.message } })),
   ]);
   const payload = historyResponse.json || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const reports = Array.isArray(reportsResponse.json?.sourceReports) ? reportsResponse.json.sourceReports : [];
+  const sourceReportsProtected = reportsResponse.status === 401 && String(reportsResponse.json?.error || reportsResponse.json?.reason || "").includes("membership_required");
   const sourceReport = reports.find((report) => String(report.key || report.sourceName || "").toLowerCase() === "seven_strategy_daily_history");
   const issues = [];
   if (historyResponse.status < 200 || historyResponse.status >= 300) issues.push(`http_status_${historyResponse.status}`);
@@ -69,7 +91,7 @@ async function main() {
   if (payload.tradeDate !== expectedDate) issues.push(`trade_date_${payload.tradeDate || "missing"}_expected_${expectedDate}`);
   if (!payload.source || !String(payload.source).includes("supabase:public.seven_strategy_daily_history")) issues.push("source_not_supabase_seven_strategy_daily_history");
   if (REQUIRE_ROWS && rows.length < 1) issues.push("empty_rows");
-  if (!sourceReport) issues.push("source_reports_missing_seven_strategy_daily_history");
+  if (!sourceReport && !sourceReportsProtected) issues.push("source_reports_missing_seven_strategy_daily_history");
   for (const [index, row] of rows.entries()) {
     if (row.tradeDate !== expectedDate) issues.push(`row_${index}_old_trade_date_${row.tradeDate || "missing"}`);
     const key = secondsFromTime(row.detectTime);
@@ -87,7 +109,7 @@ async function main() {
     }
   }
   if (issues.length) {
-    console.error(`[scorecard-seven-strategy-daily-history-live] rawOk=false base=${BASE_URL} endpoint=${ENDPOINT} issues=${issues.join(",")} rows=${rows.length} sourceReports=${Boolean(sourceReport)}`);
+    console.error(`[scorecard-seven-strategy-daily-history-live] rawOk=false base=${BASE_URL} endpoint=${ENDPOINT} issues=${issues.join(",")} rows=${rows.length} sourceReports=${Boolean(sourceReport)} sourceReportsProtected=${sourceReportsProtected}`);
     process.exit(1);
   }
   console.log(`[scorecard-seven-strategy-daily-history-live] rawOk=true base=${BASE_URL} endpoint=${ENDPOINT} sourceName=${payload.sourceName} table=${payload.table} tradeDate=${payload.tradeDate} rows=${rows.length} formal=${payload.formalCount} detected=${payload.detectedCount} requireRows=${REQUIRE_ROWS} sourceReports=${Boolean(sourceReport)} filteredOld=${payload.filtered?.nonToday ?? "missing"} filteredWindow=${payload.filtered?.outsideWindow ?? "missing"} filteredReplay=${payload.filtered?.replay ?? "missing"} filteredBlankRequired=${payload.filtered?.blankRequired ?? "missing"} source=${payload.source}`);

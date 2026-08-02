@@ -1,3 +1,4 @@
+process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
 const { runtimePath, cachePath, statePath, repoPath } = require("./runtime-paths");
@@ -13,11 +14,88 @@ const {
 const { readSnapshot } = require("../lib/supabase-snapshots");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
+const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
+const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || (process.env.FUMAN_DAYTRADE_WRITER_APPLY ? "" : "reader")).trim().toLowerCase();
+const WRITER_INSTANCE_ID = String(process.env.FUMAN_DAYTRADE_WRITER_INSTANCE_ID || (SOURCE_HOST_ID && SOURCE_HOST_ID !== "unknown" ? SOURCE_HOST_ID + ":daytrade-writer" : "")).trim();
+const WRITER_LEASE_SECONDS = Math.max(60, Math.min(600, Number(process.env.FUMAN_DAYTRADE_WRITER_LEASE_SECONDS || 240)));
+const WRITER_LEASE_REQUIRED = process.env.FUMAN_DAYTRADE_WRITER_LEASE_REQUIRED !== "0";
+const SOURCE_HOST_APPROVAL_FILE = runtimePath("config", "daytrade-source-host-approval.json");
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const STATE_FILE = statePath("daytrade-source-writer-state.json");
+const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
-const PRIORITY_SYMBOLS_FILE = cachePath("intraday", "fugle-ws-priority-symbols.json");
+const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE || cachePath("intraday", "fugle-daytrade-ws-priority-symbols.json");
+const STRATEGY_PRIORITY_BRIDGE_CACHE_FILE = cachePath("intraday", "fugle-strategy-chip-priority-bridge.json");
+const STRATEGY_PRIORITY_BRIDGE_REFRESH_MS = Math.max(
+  60000,
+  Number(process.env.DAYTRADE_STRATEGY_PRIORITY_BRIDGE_REFRESH_MS || 300000),
+);
+const STRATEGY_PRIORITY_BRIDGE_MAX_ROWS = Math.max(
+  40,
+  Math.min(300, Number(process.env.DAYTRADE_STRATEGY_PRIORITY_BRIDGE_MAX_ROWS || 160)),
+);
+let lastStrategyPriorityBridgeRefreshAt = 0;
+let strategyPriorityBridgeRefreshPromise = null;
+
+const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
+  {
+    key: "strategy2",
+    latestResource: "v_strategy2_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "strategy2_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+  },
+  {
+    key: "strategy3",
+    latestResource: "v_strategy3_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "strategy3_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+  },
+  {
+    key: "strategy4",
+    latestResource: "strategy4_scan_runs",
+    latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
+    resultsResource: "strategy4_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+  },
+  {
+    key: "strategy5",
+    latestResource: "v_strategy5_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "strategy5_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+  },
+  {
+    key: "institution",
+    latestResource: "v_institution_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "institution_scan_results",
+    resultSelect: "code,rank,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+  },
+  {
+    key: "warrant",
+    latestResource: "v_warrant_flow_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "warrant_flow_scan_results",
+    resultSelect: "code,underlying_code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "underlying",
+  },
+  {
+    key: "cb",
+    latestResource: "cb_detect_scan_runs",
+    latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
+    resultsResource: "cb_detect_scan_results",
+    resultSelect: "symbol,payload,run_id,scan_date,updated_at",
+    codeMode: "underlying",
+  },
+];
 const WARMUP_EVIDENCE_DIR = process.env.DAYTRADE_UNATTENDED_OUTPUT_DIR || "C:/Users/ginov/Documents/Codex/buy-sell-autonomy-main/outputs";
 const HEATMAP_LATEST_FILES = [
   runtimePath("data", "heatmap-latest.json"),
@@ -87,13 +165,14 @@ const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFre
 const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT, 40));
 const MOTHER_POOL_MIN_SYMBOLS = Math.max(
   FORMAL_DAYTRADE_PRIORITY_LIMIT,
-  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 180),
+  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300),
 );
+// The mother pool is dynamic: it can expand from 300 to 600 when
+// the full-market ranking has enough eligible candidates.
 const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
-  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 300),
-);
-const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 40));
+  Math.min(600, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 600)),
+);const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 40));
 const BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT, REST_PRIORITY_BATCH_LIMIT, positiveNumber(CONFIG.collector?.quoteBatchSize, 40)));
 const CONCURRENCY = 1;
 const TARGET_BATCH_INTERVAL_SECONDS = Math.max(5, positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 5));
@@ -110,7 +189,18 @@ const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_W
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
 const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
 const REQUIRE_MA35_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_MA35_FOR_FORMAL_ENTRY");
+const REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_FUTOPT_FOR_FORMAL_ENTRY");
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
+const FUTOPT_PREOPEN_BASELINE_START_MINUTES = 8 * 60 + 45;
+const FUTOPT_PREOPEN_BASELINE_END_MINUTES = 9 * 60;
+const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
+  15000,
+  Number(process.env.DAYTRADE_INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS || 30000),
+);
+let lastIntradayStatusCacheSyncAt = 0;
+const DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS = Math.max(60000, Number(process.env.DAYTRADE_DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS || 300000));
+let lastDailyVolumeMirrorSyncAt = 0;
+let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
@@ -362,6 +452,67 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
   return rows;
 }
 
+async function supabaseRpc(resource, body, options = {}) {
+  const key = requireSupabaseKey(Boolean(options.service));
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
+    method: 'POST',
+    headers: headers(key),
+    body: JSON.stringify(body || {}),
+    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${resource} RPC HTTP ${response.status}: ${text.slice(0, 240)}`);
+  return text ? JSON.parse(text) : [];
+}
+
+function ensureApprovedSourceHost() {
+  if (!APPLY) return { ok: true, status: "dry_run" };
+  let approval = null;
+  try { approval = JSON.parse(fs.readFileSync(SOURCE_HOST_APPROVAL_FILE, "utf8")); } catch {
+    throw new Error("daytrade_source_host_approval_missing");
+  }
+  if (approval?.approved !== true || String(approval.sourceRole || "") !== "writer" || String(approval.hostId || "") !== SOURCE_HOST_ID) {
+    throw new Error("daytrade_source_host_not_approved");
+  }
+  return { ok: true, status: "approved", file: SOURCE_HOST_APPROVAL_FILE };
+}
+
+async function ensureWriterLease() {
+  if (!APPLY) {
+    writerLease = { ok: true, status: "dry_run", leaseExpiresAt: "" };
+    return writerLease;
+  }
+  ensureApprovedSourceHost();
+  if (SOURCE_HOST_ROLE !== "writer") throw new Error("daytrade_writer_host_role_required");
+  if (!SOURCE_HOST_ID || SOURCE_HOST_ID === "unknown") throw new Error("daytrade_writer_host_id_required");
+  if (!WRITER_INSTANCE_ID) throw new Error("daytrade_writer_instance_id_required");
+  if (!WRITER_LEASE_REQUIRED) {
+    writerLease = { ok: true, status: "lease_optional", leaseExpiresAt: "" };
+    return writerLease;
+  }
+  const rows = await supabaseRpc("claim_fugle_daytrade_source_writer_lease", {
+    p_source_name: SOURCE_NAME,
+    p_writer_host_id: SOURCE_HOST_ID,
+    p_writer_instance_id: WRITER_INSTANCE_ID,
+    p_lease_seconds: WRITER_LEASE_SECONDS,
+  }, { service: true });
+  const lease = Array.isArray(rows) ? rows[0] || {} : rows || {};
+  if (lease.ok !== true && lease.claimed !== true) {
+    throw new Error("daytrade_writer_lease_not_acquired:" + (lease.current_writer_host_id || "unknown") + ":" + (lease.lease_expires_at || "unknown"));
+  }
+  writerLease = {
+    ok: true,
+    status: "claimed",
+    sourceName: SOURCE_NAME,
+    hostId: SOURCE_HOST_ID,
+    instanceId: WRITER_INSTANCE_ID,
+    heartbeatAt: lease.heartbeat_at || nowIso(),
+    leaseExpiresAt: lease.lease_expires_at || "",
+    leaseSeconds: WRITER_LEASE_SECONDS,
+  };
+  return writerLease;
+}
+
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
   if (!rows.length) return { written: 0, skipped: true };
   if (DRY_RUN) return { written: 0, skipped: true, dryRun: true };
@@ -481,6 +632,31 @@ function apply429State(state) {
   };
 }
 
+function evaluateMotherPoolBasePool(row, metrics) {
+  const market = String(row.market || "").toLowerCase();
+  const type = String(row.stockType || row.type || row.payload?.stockType || row.payload?.type || "").toLowerCase();
+  const failedChecks = [];
+  const pendingChecks = [];
+  if (!market || !/(twse|tse|tpex|otc|上市|上櫃)/i.test(market)) failedChecks.push("market_not_twse_otc");
+  if (row.isTrial === true || row.payload?.isTrial === true || /(etf|warrant|preferred|test|trial|權證|特別股|優先股|測試)/i.test(type)) failedChecks.push("not_common_stock");
+  if (metrics.price > 0 && (metrics.price < 10 || metrics.price > 1000)) failedChecks.push("price_out_of_range_10_1000");
+  else pendingChecks.push("price_pending");
+  // Five-day average volume ranks liquidity; it is not a hard membership gate.
+  // The full-market ordinary-stock pool must be able to rotate to 300-600 symbols.
+  // Missing history remains pending and cannot be promoted without evidence.
+  if (!(metrics.avgVolume5 > 0)) pendingChecks.push("avg5_volume_pending");
+  if (metrics.totalVolume > 0) {
+    if (metrics.changePercent < -5) failedChecks.push("change_percent_below_minus5");
+  } else {
+    pendingChecks.push("today_volume_pending");
+  }
+  return {
+    eligible: failedChecks.length === 0 && pendingChecks.length === 0,
+    pending: failedChecks.length === 0 && pendingChecks.length > 0,
+    failedChecks,
+    pendingChecks,
+  };
+}
 async function fetchActiveSymbols() {
   const rows = await supabaseGetPaged(
     "stock_tickers",
@@ -499,6 +675,7 @@ async function fetchActiveSymbols() {
       market: row.market || "",
       stockType: row.stock_type || row.type || "",
       industry: row.industry || row.payload?.industry || row.payload?.category || "",
+      isTrial: row.is_trial === true || row.payload?.isTrial === true || row.payload?.is_trial === true,
       payload: row.payload || {},
     });
   }
@@ -525,18 +702,35 @@ async function fetchDailyVolumeAvg() {
   const sources = [
     {
       resource: "fugle_daytrade_daily_volume_avg",
-      query: "select=symbol,market,trade_date,volume,avg_volume5,avg5_volume,daily_volume_status,updated_at,payload&order=symbol.asc",
+      query: "select=symbol,market,trade_date,volume,avg_volume5,avg5_volume,updated_at&order=symbol.asc",
       source: "fugle_daytrade_daily_volume_avg_fast_mirror",
-      earlyReturnRows: FORMAL_DAYTRADE_PRIORITY_LIMIT,
+      earlyReturnRows: 0,
     },
     {
       resource: "fugle_daily_volume_avg",
-      query: "select=symbol,market,trade_date,volume,avg_volume5,avg5_volume,updated_at,payload&order=symbol.asc",
+      query: "select=symbol,market,trade_date,volume,avg_volume5,avg5_volume,updated_at&order=symbol.asc",
       source: "fugle_daily_volume_avg",
       earlyReturnRows: 0,
     },
   ];
   const combined = new Map();
+  const currentTradeDate = taipeiDate();
+  const sourceRank = (source) => String(source || '').includes('fast_mirror') ? 2 : 1;
+  const rowRank = (row) => {
+    const tradeDate = String(row?.trade_date || '').slice(0, 10);
+    const isCurrent = tradeDate === currentTradeDate ? 1 : 0;
+    const tradeDateMs = Date.parse(tradeDate) || 0;
+    const updatedAtMs = Date.parse(row?.updated_at || '') || 0;
+    return [isCurrent, tradeDateMs, updatedAtMs, sourceRank(row?.source)];
+  };
+  const shouldReplace = (previous, next) => {
+    const previousRank = rowRank(previous);
+    const nextRank = rowRank(next);
+    for (let i = 0; i < nextRank.length; i += 1) {
+      if (nextRank[i] !== previousRank[i]) return nextRank[i] > previousRank[i];
+    }
+    return false;
+  };
   const readErrors = [];
   for (const spec of sources) {
     let loaded = false;
@@ -545,7 +739,7 @@ async function fetchDailyVolumeAvg() {
         const rows = await supabaseGetPaged(spec.resource, spec.query, { service, pageSize: 1000 });
         const map = dailyVolumeRowsToMap(rows, `${spec.source}${service ? "" : "_anon_retry"}`);
         for (const [symbol, row] of map.entries()) {
-          if (!combined.has(symbol)) combined.set(symbol, row);
+          if (!combined.has(symbol) || shouldReplace(combined.get(symbol), row)) combined.set(symbol, row);
         }
         if (map.size > 0) {
           combined.source = combined.source ? `${combined.source}+${map.source}` : map.source;
@@ -568,7 +762,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price,payload&order=symbol.asc",
+      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price&order=symbol.asc",
       { service: true },
     );
     for (const row of rows) {
@@ -691,37 +885,59 @@ async function fetchMarginChangeMap() {
 
 function mergeWebSocketQuoteCache(quoteMap) {
   const cache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
+  const numeric = (value, fallback, positiveOnly = false) => {
+    const parsed = numberValue(value, NaN);
+    if (Number.isFinite(parsed) && (!positiveOnly || parsed > 0)) return parsed;
+    const previous = numberValue(fallback, NaN);
+    return Number.isFinite(previous) ? previous : 0;
+  };
+  const currentValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
   for (const [code, row] of cache.quotes.entries()) {
     const symbol = normalizeCode(code || row.code || row.symbol);
     if (!symbol) continue;
     if (isFinMindDiagnosticQuote(row)) continue;
-    const seenAt = row.quoteSeenAt || row.updatedAt || cache.payload?.updatedAt || nowIso();
-    quoteMap.set(symbol, {
+    const previous = quoteMap.get(symbol) || {};
+    const seenAt = normalizeTimestamp(
+      row.quoteSeenAt || row.updatedAt || cache.payload?.updatedAt || previous.quote_seen_at,
+      nowIso(),
+    );
+    const changePercentValue = currentValue(row.changePercent, row.change_percent, row.percent);
+    const merged = {
+      ...previous,
       symbol,
-      market: row.market || "",
+      market: row.market || previous.market || "",
       quote_seen_at: seenAt,
-      updated_at: seenAt,
-      last_trade_time: row.lastTradeTime || row.quoteTime || row.time || seenAt,
-      price: numberValue(row.close ?? row.price),
-      open_price: numberValue(row.open ?? row.openPrice),
-      high_price: numberValue(row.high ?? row.highPrice),
-      low_price: numberValue(row.low ?? row.lowPrice),
-      previous_close: numberValue(row.previousClose ?? row.previous_close ?? row.referencePrice),
-      change_percent: numberValue(row.changePercent ?? row.change_percent ?? row.percent),
-      total_volume: numberValue(row.tradeVolume ?? row.total_volume),
-      trade_value: numberValue(row.tradeValue ?? row.trade_value),
-      bid_volume: numberValue(row.bidVolume ?? row.bid_volume),
-      ask_volume: numberValue(row.askVolume ?? row.ask_volume),
-      cumulative_bid_volume: numberValue(row.cumulativeBidVolume ?? row.cumulative_bid_volume),
-      cumulative_ask_volume: numberValue(row.cumulativeAskVolume ?? row.cumulative_ask_volume),
-      cumulative_bid_ask_volume: numberValue(row.cumulativeBidAskVolume ?? row.cumulative_bid_ask_volume),
+      updated_at: seenAt || previous.updated_at || "",
+      last_trade_time: normalizeTimestamp(
+        row.lastTradeTime || row.quoteTime || row.time || previous.last_trade_time,
+        seenAt,
+      ),
+      price: numeric(row.close ?? row.price, previous.price, true),
+      open_price: numeric(row.open ?? row.openPrice, previous.open_price, true),
+      high_price: numeric(row.high ?? row.highPrice, previous.high_price, true),
+      low_price: numeric(row.low ?? row.lowPrice, previous.low_price, true),
+      previous_close: numeric(row.previousClose ?? row.previous_close ?? row.referencePrice, previous.previous_close, true),
+      change_percent: numeric(changePercentValue, previous.change_percent),
+      total_volume: numeric(row.tradeVolume ?? row.total_volume, previous.total_volume, true),
+      trade_value: numeric(row.tradeValue ?? row.trade_value, previous.trade_value, true),
+      bid_price: numeric(row.bidPrice ?? row.bid_price, previous.bid_price, true),
+      ask_price: numeric(row.askPrice ?? row.ask_price, previous.ask_price, true),
+      bid_volume: numeric(row.bidVolume ?? row.bid_volume, previous.bid_volume),
+      ask_volume: numeric(row.askVolume ?? row.ask_volume, previous.ask_volume),
+      cumulative_bid_volume: numeric(row.cumulativeBidVolume ?? row.cumulative_bid_volume, previous.cumulative_bid_volume),
+      cumulative_ask_volume: numeric(row.cumulativeAskVolume ?? row.cumulative_ask_volume, previous.cumulative_ask_volume),
+      cumulative_bid_ask_volume: numeric(row.cumulativeBidAskVolume ?? row.cumulative_bid_ask_volume, previous.cumulative_bid_ask_volume),
+      limit_up_price: numeric(row.limitUpPrice ?? row.limit_up_price, previous.limit_up_price, true),
+      limit_down_price: numeric(row.limitDownPrice ?? row.limit_down_price, previous.limit_down_price, true),
       payload: {
+        ...(previous.payload || {}),
         ...(row.payload || {}),
         source: "fugle-websocket-cache",
         quoteSource: row.quoteSource || row.closeSource || "fugle-ws",
         cacheUpdatedAt: cache.payload?.updatedAt || "",
       },
-    });
+    };
+    quoteMap.set(symbol, merged);
   }
 }
 
@@ -818,6 +1034,111 @@ function topRankScore(rank, top, maxScore) {
   return Math.max(0, maxScore * (top - rank + 1) / top);
 }
 
+function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, quoteMap, intradayMap }) {
+  const rows = activeSymbols.map((row) => {
+    const symbol = row.symbol;
+    const metrics = quoteMetrics(symbol, dailyVolumeMap, quoteMap, { activeBySymbol: new Map([[symbol, row]]) });
+    const intraday = intradayMap?.get(symbol) || {};
+    const openPrice = firstNumber(intraday.open_price, metrics.openPrice);
+    const aboveOpenPrice = openPrice > 0 && metrics.price >= openPrice;
+    const ma5 = firstNumber(intraday.ma5, intraday.sma5);
+    const ma10 = firstNumber(intraday.ma10, intraday.sma10);
+    const ma35 = firstNumber(intraday.ma35, intraday.sma35);
+    const maValuesReady = ma5 > 0 && ma10 > 0 && ma35 > 0;
+    const maAlignment = maValuesReady && ma5 > ma10 && ma10 > ma35;
+    const reportedBullish = boolValue(intraday.ma5_ma10_ma35_bullish);
+    // Rising averages alone do not prove bullish alignment. Require actual values.
+    const bullish = maValuesReady && (reportedBullish || maAlignment);
+    const recent1mVolumeTrend = String(intraday.recent_1m_volume_trend || intraday.volume_trend || "").toLowerCase();
+    const recent1mVolumeNotShrinking = ["expanding", "increasing", "up", "stable", "non_decreasing", "not_shrinking"].includes(recent1mVolumeTrend);
+    const payload = quoteMap.get(symbol)?.payload || {};
+    const previousVolume = firstNumber(
+      payload.previousTotalVolume,
+      payload.previous_total_volume,
+      payload.previousTradeVolume,
+      payload.previous_trade_volume,
+    );
+    const volumeExpanding = boolValue(
+      payload.volumeIncreasing
+        || payload.volume_increasing
+        || payload.volumeExpanding
+        || payload.volume_expanding
+        || payload.volumeTrendUp
+        || payload.volume_trend_up,
+    ) || (previousVolume > 0 && metrics.totalVolume > previousVolume);
+    return {
+      symbol,
+      name: row.name || symbol,
+      changePercent: Number(metrics.changePercent.toFixed(4)),
+      totalVolume: Math.round(metrics.totalVolume),
+      avgVolume5: Math.round(metrics.avgVolume5),
+      volumeRatio5: Number(metrics.volumeRatio5.toFixed(4)),
+      aboveOpenPrice,
+      amplitudeFromOpen: Number(metrics.amplitudeFromOpen.toFixed(4)),
+      recent1mVolumeTrend,
+      recent1mVolumeNotShrinking,
+      quoteAgeSeconds: ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))),
+      latestCandleTime: intraday.latest_candle_time || "",
+      intraday1mStaleSeconds: numberValue(intraday.latest_candle_age_seconds, 999999),
+      ma5,
+      ma10,
+      ma35,
+      maValuesReady,
+      maAlignment,
+      ma5Ma10Ma35Bullish: bullish,
+      volumeExpanding,
+      gainAbove2: metrics.changePercent > 2,
+    };
+  });
+  const volumeRanks = rankMap(rows, (row) => row.totalVolume, { minValue: 0 });
+  for (const row of rows) row.volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
+  const fresh = rows.filter((row) => row.quoteAgeSeconds <= WINDOW_SECONDS);
+  const bullish = fresh.filter((row) => row.gainAbove2 && row.ma5Ma10Ma35Bullish && row.volumeExpanding && row.totalVolume > 0);
+  const volumeSurgeTop100 = fresh.filter((row) => row.totalVolume > 10000 && row.volumeRatio5 >= 2 && row.volumeExpanding && row.recent1mVolumeNotShrinking && row.volumeRank > 0 && row.volumeRank <= 100);
+  const compact = (row) => ({
+    symbol: row.symbol,
+    name: row.name,
+    changePercent: row.changePercent,
+    totalVolume: row.totalVolume,
+    avgVolume5: row.avgVolume5,
+    volumeRatio5: row.volumeRatio5,
+    volumeRank: row.volumeRank,
+    quoteAgeSeconds: row.quoteAgeSeconds,
+    latestCandleTime: row.latestCandleTime,
+    intraday1mStaleSeconds: row.intraday1mStaleSeconds,
+    ma5: row.ma5,
+    ma10: row.ma10,
+    ma35: row.ma35,
+    ma5Ma10Ma35Bullish: row.ma5Ma10Ma35Bullish,
+    aboveOpenPrice: row.aboveOpenPrice,
+    recent1mVolumeTrend: row.recent1mVolumeTrend,
+    recent1mVolumeNotShrinking: row.recent1mVolumeNotShrinking,
+    volumeExpanding: row.volumeExpanding,
+  });
+  return {
+    source: "fugle_daytrade_quotes_live+v_fugle_daytrade_intraday_1m_status",
+    universe: "full_market_active_common_stock",
+    activeSymbols: activeSymbols.length,
+    freshQuoteSymbols: fresh.length,
+    freshQuoteCoverage120s: activeSymbols.length ? Number((fresh.length / activeSymbols.length).toFixed(4)) : 0,
+    freshIntraday1mSymbols: fresh.filter((row) => row.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS).length,
+    freshIntraday1mCoverage: activeSymbols.length
+      ? Number((fresh.filter((row) => row.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS).length / activeSymbols.length).toFixed(4))
+      : 0,
+    bullishGainVolumeCandidateCount: bullish.length,
+    volumeSurgeTop100CandidateCount: volumeSurgeTop100.length,
+    bullishGainVolumeCandidates: bullish.sort((a, b) => b.changePercent - a.changePercent || b.totalVolume - a.totalVolume).slice(0, 100).map(compact),
+    evidenceCandidatesCap: 100,
+    volumeSurgeTop100Candidates: volumeSurgeTop100.sort((a, b) => b.volumeRatio5 - a.volumeRatio5 || a.volumeRank - b.volumeRank).slice(0, 100).map(compact),
+    rules: {
+      bullishGainVolume: "change_percent>2 AND ma5>ma10>ma35 AND volume_expanding",
+      volumeSurgeTop100: "total_volume>10000 AND total_volume/avg_volume5>=2 AND volume_expanding AND recent_2_3_1m_volume_not_shrinking AND volume_rank<=100",
+      formalEntryScope: "priority_top40",
+      rotationScope: "mother_pool_300_600",
+    },
+  };
+}
+
 function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const quote = quoteMap?.get(symbol) || {};
   const payload = quote.payload || {};
@@ -830,6 +1151,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
   const groupContract = supplementalMaps.stockGroupContractMap?.get(symbol) || {};
   const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
+  const openPrice = firstNumber(quote.open_price, payload.openPrice, payload.open_price);
   const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
   const changePercent = firstNumber(
     quote.change_percent,
@@ -846,6 +1168,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
   const highPrice = firstNumber(quote.high_price, payload.highPrice, payload.high_price, price);
   const lowPrice = firstNumber(quote.low_price, payload.lowPrice, payload.low_price, price);
+  const amplitudeFromOpen = openPrice > 0 && price > 0 ? ((price - openPrice) / openPrice) * 100 : 0;
   const limitUpPrice = firstNumber(quote.limit_up_price, payload.limitUpPrice, payload.limit_up_price, payload.limitUp, payload.limit_up, previousClose > 0 ? previousClose * 1.1 : 0);
   const insideVolume = firstNumber(quote.cumulative_bid_volume, payload.cumulativeBidVolume, payload.cumulative_bid_volume);
   const outsideVolume = firstNumber(quote.cumulative_ask_volume, payload.cumulativeAskVolume, payload.cumulative_ask_volume);
@@ -970,6 +1293,9 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const daytradeCrowded = boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer || dailyPayload.daytradeCrowded || dailyPayload.daytrade_crowded || dailyPayload.daytradeBigPlayer) || daytradeCrowded3To5d;
   return {
     price,
+    openPrice,
+    previousClose,
+    amplitudeFromOpen,
     changePercent,
     totalVolume,
     tradeValue,
@@ -1061,7 +1387,7 @@ function readFutoptWebSocketCacheRows() {
   rows.cacheCount = cache.quotes.size;
   return rows;
 }
-async function fetchIntradayStatus() {
+async function fetchIntradayStatus(activeSymbols = []) {
   const toMap = (rows, readinessSource) => {
     const map = new Map(rows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
     map.readinessSource = readinessSource;
@@ -1079,28 +1405,147 @@ async function fetchIntradayStatus() {
         today_candle_count: 0,
         warmup_candle_count: 0,
         continuous_candle_count: 0,
+        ready_ma5: false,
+        ready_ma10: false,
         ready_ma20_continuous: false,
+        ready_ma30: false,
         ready_ma35_continuous: false,
         latest_candle_age_seconds: 999999,
+        _closes: [],
+        _volumes: [],
+        _highs: [],
+        _lows: [],
       };
       const candleTime = normalizeTimestamp(row.candle_time || row.updated_at);
       if (String(row.trade_date || "") === tradeDate || taipeiDateFrom(candleTime) === tradeDate) current.today_candle_count += 1;
       current.warmup_candle_count += 1;
       current.continuous_candle_count += 1;
+      const close = numberValue(row.close);
+      if (close > 0) current._closes.push(close);
+      current._volumes.push(Math.max(0, numberValue(row.volume)));
+      current._highs.push(Math.max(0, numberValue(row.high, close)));
+      current._lows.push(Math.max(0, numberValue(row.low, close)));
       if (candleTime && (!current.latest_candle_time || Date.parse(candleTime) > Date.parse(current.latest_candle_time))) {
         current.latest_candle_time = candleTime;
         current.latest_candle_age_seconds = ageSeconds(candleTime);
       }
+      current.ready_ma5 = current.continuous_candle_count >= 5;
+      current.ready_ma10 = current.continuous_candle_count >= 10;
       current.ready_ma20_continuous = current.continuous_candle_count >= 20;
+      current.ready_ma30 = current.continuous_candle_count >= 30;
       current.ready_ma35_continuous = current.continuous_candle_count >= 35;
       grouped.set(symbol, current);
+    }
+    for (const current of grouped.values()) {
+      const closes = current._closes || [];
+      const volumes = current._volumes || [];
+      const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+      const movingAverage = (count, offset = 0) => average(closes.slice(offset, offset + count));
+      const volumeSum = (count, offset = 0) => volumes.slice(offset, offset + count).reduce((sum, value) => sum + value, 0);
+      current.ma5 = movingAverage(5);
+      current.ma10 = movingAverage(10);
+      current.ma30 = movingAverage(30);
+      current.ma35 = movingAverage(35);
+      current.ma5_ma10_ma35_bullish = Number.isFinite(current.ma5)
+        && Number.isFinite(current.ma10)
+        && Number.isFinite(current.ma35)
+        && current.ma5 > current.ma10
+        && current.ma10 > current.ma35
+        && current.ma35 > 0;
+      current.ma_bullish_alignment = current.ma5_ma10_ma35_bullish;
+      current.ma5_rising = closes.length >= 10 && movingAverage(5, 0) > movingAverage(5, 5);
+      current.ma10_rising = closes.length >= 20 && movingAverage(10, 0) > movingAverage(10, 10);
+      current.ma30_rising = closes.length >= 60 && movingAverage(30, 0) > movingAverage(30, 30);
+      current.ma35_rising = closes.length >= 70 && movingAverage(35, 0) > movingAverage(35, 35);
+      const latestVolume = volumeSum(3, 0);
+      const previousVolume = volumeSum(3, 3);
+      current.recent_1m_volume_trend = previousVolume <= 0
+        ? 'unknown'
+        : latestVolume > previousVolume * 1.05
+          ? 'expanding'
+          : latestVolume < previousVolume * 0.85
+            ? 'shrinking'
+            : 'stable';
+      const recentFive = average(volumes.slice(0, 5));
+      const priorTwenty = average(volumes.slice(5, 25));
+      current.relative_volume_5m = recentFive !== null && priorTwenty > 0 ? recentFive / priorTwenty : 0;
+
+      // Indicators use the chronological candle order. Insufficient history stays null.
+      const chronologicalCloses = closes.slice().reverse();
+      const emaSeries = (values, period) => {
+        if (values.length < period) return [];
+        const multiplier = 2 / (period + 1);
+        let ema = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+        const series = [ema];
+        for (const value of values.slice(period)) {
+          ema = ((value - ema) * multiplier) + ema;
+          series.push(ema);
+        }
+        return series;
+      };
+      if (chronologicalCloses.length >= 35) {
+        const fast = emaSeries(chronologicalCloses, 12);
+        const slow = emaSeries(chronologicalCloses, 26);
+        const macdSeries = [];
+        for (let i = 0; i < slow.length; i += 1) {
+          const fastIndex = i + (26 - 12);
+          if (fast[fastIndex] !== undefined) macdSeries.push(fast[fastIndex] - slow[i]);
+        }
+        const signal = emaSeries(macdSeries, 9);
+        current.macd_line = macdSeries.length ? macdSeries[macdSeries.length - 1] : null;
+        current.macd_signal = signal.length ? signal[signal.length - 1] : null;
+        current.macd_histogram = Number.isFinite(current.macd_line) && Number.isFinite(current.macd_signal)
+          ? current.macd_line - current.macd_signal
+          : null;
+      } else {
+        current.macd_line = null;
+        current.macd_signal = null;
+        current.macd_histogram = null;
+      }
+      const chronologicalHighs = (current._highs || []).slice().reverse();
+      const chronologicalLows = (current._lows || []).slice().reverse();
+      if (chronologicalCloses.length >= 9 && chronologicalHighs.length >= 9 && chronologicalLows.length >= 9) {
+        let k = 50;
+        let d = 50;
+        for (let i = 8; i < chronologicalCloses.length; i += 1) {
+          const high = Math.max(...chronologicalHighs.slice(i - 8, i + 1));
+          const low = Math.min(...chronologicalLows.slice(i - 8, i + 1));
+          const rsv = high > low ? ((chronologicalCloses[i] - low) / (high - low)) * 100 : 50;
+          k = ((2 * k) + rsv) / 3;
+          d = ((2 * d) + k) / 3;
+        }
+        current.kd_k = k;
+        current.kd_d = d;
+      } else {
+        current.kd_k = null;
+        current.kd_d = null;
+      }
+      if (chronologicalCloses.length >= 15) {
+        const recent = chronologicalCloses.slice(-15);
+        let gains = 0;
+        let losses = 0;
+        for (let i = 1; i < recent.length; i += 1) {
+          const delta = recent[i] - recent[i - 1];
+          if (delta > 0) gains += delta;
+          else losses -= delta;
+        }
+        const averageGain = gains / 14;
+        const averageLoss = losses / 14;
+        current.rsi14 = averageLoss === 0 ? 100 : 100 - (100 / (1 + (averageGain / averageLoss)));
+      } else {
+        current.rsi14 = null;
+      }
+      delete current._closes;
+      delete current._volumes;
+      delete current._highs;
+      delete current._lows;
     }
     return grouped;
   };
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
-      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous,latest_candle_age_seconds",
+      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma35_continuous,latest_candle_age_seconds,ma5,ma10,ma35,ma5_ma10_ma35_bullish,ma_bullish_alignment,ma30",
       { service: true, pageSize: 1000 },
     );
     if (rows.length) {
@@ -1116,6 +1561,23 @@ async function fetchIntradayStatus() {
   }
 
   const tradeDate = taipeiDateFrom(nowIso());
+  try {
+    const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
+    const rpcRows = [];
+    for (let i = 0; i < symbols.length; i += 200) {
+      const batch = symbols.slice(i, i + 200);
+      const rows = await supabaseRpc(
+        'get_fugle_daytrade_intraday_1m_latest_n',
+        { symbols: batch, bars_per_symbol: 200 },
+        { service: true },
+      );
+      if (Array.isArray(rows)) rpcRows.push(...rows);
+    }
+    const grouped = buildGrouped(rpcRows, tradeDate);
+    if (grouped.size) return toMap([...grouped.values()], 'dedicated_daytrade_intraday_1m_latest_n_rpc');
+  } catch {
+    // Fall through to direct reads; a missing/slow RPC must not weaken the gate.
+  }
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_intraday_1m",
@@ -1145,7 +1607,80 @@ async function fetchIntradayStatus() {
   const empty = toMap([], "dedicated_daytrade_intraday_1m_empty");
   empty.readError = false;
   return empty;
-}function readWarmupNaturalEvidenceCounts() {
+}
+
+function intradayStatusCacheRows(intradayMap) {
+  return [...(intradayMap || new Map()).entries()]
+    .map(([symbol, row]) => {
+      const latestCandleTime = normalizeTimestamp(row.latest_candle_time || row.updated_at, '');
+      const tradeDate = String(row.trade_date || '').slice(0, 10) || (latestCandleTime ? taipeiDateFrom(latestCandleTime) : '');
+      return {
+        symbol: normalizeCode(symbol),
+        market: row.market || null,
+        latest_candle_time: latestCandleTime || null,
+        today_candle_count: Math.max(0, Math.floor(numberValue(row.today_candle_count))),
+        warmup_candle_count: Math.max(0, Math.floor(numberValue(row.warmup_candle_count))),
+        continuous_candle_count: Math.max(0, Math.floor(numberValue(row.continuous_candle_count))),
+        ready_ma20_continuous: boolValue(row.ready_ma20_continuous),
+        ready_ma35_continuous: boolValue(row.ready_ma35_continuous),
+        latest_candle_age_seconds: Math.max(0, Math.floor(numberValue(row.latest_candle_age_seconds, 999999))),
+        ready_ma5: boolValue(row.ready_ma5),
+        ready_ma10: boolValue(row.ready_ma10),
+        ready_ma30: boolValue(row.ready_ma30),
+        ma5: Number.isFinite(Number(row.ma5)) ? Number(row.ma5) : null,
+        ma10: Number.isFinite(Number(row.ma10)) ? Number(row.ma10) : null,
+        ma35: Number.isFinite(Number(row.ma35)) ? Number(row.ma35) : null,
+        ma5_ma10_ma35_bullish: boolValue(row.ma5_ma10_ma35_bullish),
+        ma_bullish_alignment: boolValue(row.ma_bullish_alignment),
+        ma30: Number.isFinite(Number(row.ma30)) ? Number(row.ma30) : null,
+        ma5_rising: boolValue(row.ma5_rising),
+        ma10_rising: boolValue(row.ma10_rising),
+        ma30_rising: boolValue(row.ma30_rising),
+        ma35_rising: boolValue(row.ma35_rising),
+        relative_volume_5m: Number.isFinite(Number(row.relative_volume_5m)) ? Number(row.relative_volume_5m) : 0,
+        recent_1m_volume_trend: String(row.recent_1m_volume_trend || 'unknown'),
+        macd_line: Number.isFinite(Number(row.macd_line)) ? Number(row.macd_line) : null,
+        macd_signal: Number.isFinite(Number(row.macd_signal)) ? Number(row.macd_signal) : null,
+        macd_histogram: Number.isFinite(Number(row.macd_histogram)) ? Number(row.macd_histogram) : null,
+        kd_k: Number.isFinite(Number(row.kd_k)) ? Number(row.kd_k) : null,
+        kd_d: Number.isFinite(Number(row.kd_d)) ? Number(row.kd_d) : null,
+        rsi14: Number.isFinite(Number(row.rsi14)) ? Number(row.rsi14) : null,
+        trade_date: tradeDate || null,
+        source: row.source || 'fugle_daytrade_source_writer',
+        updated_at: nowIso(),
+      };
+    })
+    .filter((row) => /^\d{4}$/.test(row.symbol));
+}
+
+async function syncIntradayStatusCache(intradayMap) {
+  if (DRY_RUN || !intradayMap?.size) return { written: 0, skipped: true, reason: 'dry_run_or_empty' };
+  const now = Date.now();
+  if (now - lastIntradayStatusCacheSyncAt < INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS) {
+    return { written: 0, skipped: true, reason: 'interval_cooldown' };
+  }
+  const rows = intradayStatusCacheRows(intradayMap);
+  if (!rows.length) return { written: 0, skipped: true, reason: 'no_valid_rows' };
+  try {
+    const result = await supabaseUpsert(
+      'fugle_daytrade_intraday_1m_status_cache',
+      rows,
+      'symbol',
+      { batchSize: 250 },
+    );
+    lastIntradayStatusCacheSyncAt = now;
+    return { written: result.written || 0, skipped: false, rows: rows.length };
+  } catch (error) {
+    return {
+      written: 0,
+      skipped: false,
+      rows: rows.length,
+      error: error?.message || String(error),
+    };
+  }
+}
+
+function readWarmupNaturalEvidenceCounts() {
   const tradeDate = taipeiDateFrom(nowIso());
   const candidates = [
     path.join(WARMUP_EVIDENCE_DIR, "daytrade-unattended-gate-0900.json"),
@@ -1181,7 +1716,10 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
     const previous = intradayMap.get(symbol) || { symbol };
     const previousContinuous = numberValue(previous.continuous_candle_count ?? previous.candle_count);
     const previousToday = numberValue(previous.today_candle_count);
+    const readyMa5 = boolValue(previous.ready_ma5) || previousContinuous >= 5;
+    const readyMa10 = boolValue(previous.ready_ma10) || previousContinuous >= 10;
     const readyMa20 = boolValue(previous.ready_ma20_continuous) || previousContinuous >= 20;
+    const readyMa30 = boolValue(previous.ready_ma30) || previousContinuous >= 30;
     const readyMa35 = boolValue(previous.ready_ma35_continuous) || boolValue(previous.ready_ge_35) || previousContinuous >= 35;
     intradayMap.set(symbol, {
       ...previous,
@@ -1190,7 +1728,10 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
       today_candle_count: Math.max(previousToday, 1),
       warmup_candle_count: Math.max(numberValue(previous.warmup_candle_count), previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
       continuous_candle_count: Math.max(previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
+      ready_ma5: readyMa5,
+      ready_ma10: readyMa10,
       ready_ma20_continuous: readyMa20,
+      ready_ma30: readyMa30,
       ready_ma35_continuous: readyMa35,
       latest_candle_age_seconds: ageSeconds(seenAt),
       source: previous.source || "fugle_daytrade_writer:websocket_quote_derived_status",
@@ -1206,7 +1747,7 @@ async function fetchFutoptRows() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_futopt_quotes_live",
-      "select=future_symbol,underlying_symbol,updated_at,total_volume&order=future_symbol.asc",
+      "select=future_symbol,underlying_symbol,product,last_price,change_percent,total_volume,updated_at&order=updated_at.desc",
       { service: true },
     );
     rows.readinessSource = "dedicated_daytrade_futopt_quotes_live";
@@ -1424,8 +1965,294 @@ async function fetchStockGroupContractMap() {
   return map;
 }
 
+function objectPayload(value) {
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+  return value;
+}
+
+function compactDateKey(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function strategyPriorityRunValidation(run) {
+  const payload = objectPayload(run?.payload);
+  const status = String(run?.status || payload.status || "").trim().toLowerCase();
+  const qualityStatus = String(run?.quality_status || run?.qualityStatus || payload.quality_status || payload.qualityStatus || "").trim().toLowerCase();
+  const complete = run?.complete === true || payload.complete === true || status === "complete";
+  const publishAllowed = run?.publish_allowed ?? run?.publishAllowed ?? payload.publish_allowed ?? payload.publishAllowed;
+  const blocked = run?.publish_blocked === true
+    || run?.publishBlocked === true
+    || payload.publish_blocked === true
+    || payload.publishBlocked === true
+    || payload.fallbackUsed === true
+    || payload.fallback_used === true
+    || payload.preservePreviousGood === true
+    || payload.preserve_previous_good === true;
+  const allowedStatus = new Set(["complete", "ok", "ready", "pass", "a"]);
+  const allowedQuality = new Set(["complete", "ok", "ready", "pass", "a"]);
+  let reason = "";
+  if (!complete) reason = "run_incomplete";
+  else if (!allowedStatus.has(status)) reason = "run_status_not_complete";
+  else if (!allowedQuality.has(qualityStatus)) reason = "run_quality_not_publishable";
+  else if (publishAllowed === false) reason = "run_publish_not_allowed";
+  else if (blocked) reason = "run_fallback_or_previous_good";
+  return {
+    ok: !reason,
+    reason,
+    runId: String(run?.run_id || run?.runId || payload.run_id || payload.runId || ""),
+    scanDate: compactDateKey(run?.scan_date || run?.scanDate || payload.scan_date || payload.scanDate),
+    finishedAt: run?.finished_at || run?.finishedAt || payload.finished_at || payload.finishedAt || "",
+    status,
+    qualityStatus,
+    publishAllowed: publishAllowed === undefined ? null : Boolean(publishAllowed),
+    payload,
+  };
+}
+
+function strategyPriorityStockCode(row, codeMode) {
+  const payload = objectPayload(row?.payload);
+  const values = codeMode === "underlying"
+    ? [
+      row?.underlying_code,
+      row?.underlyingCode,
+      payload.underlying_code,
+      payload.underlyingCode,
+      payload.underlying_stock_code,
+      payload.underlyingStockCode,
+      payload.stock_code,
+      payload.stockCode,
+      row?.symbol,
+    ]
+    : [
+      row?.code,
+      row?.symbol,
+      payload.code,
+      payload.symbol,
+      payload.stock_code,
+      payload.stockCode,
+    ];
+  for (const value of values) {
+    const raw = String(value || "").trim();
+    if (/^\d{4}$/.test(raw)) return raw;
+  }
+  return "";
+}
+
+async function readStrategyPriorityBridgeSource(source) {
+  const latestRows = await supabaseGet(source.latestResource, source.latestQuery);
+  const run = Array.isArray(latestRows) ? latestRows[0] : null;
+  if (!run) {
+    return {
+      key: source.key,
+      status: "empty",
+      symbols: [],
+      reason: "latest_complete_run_missing",
+      runId: "",
+      scanDate: "",
+      qualityStatus: "",
+      resultRows: 0,
+    };
+  }
+  const validation = strategyPriorityRunValidation(run);
+  const base = {
+    key: source.key,
+    status: validation.ok ? "ready" : "blocked",
+    symbols: [],
+    reason: validation.ok ? "" : validation.reason,
+    runId: validation.runId,
+    scanDate: validation.scanDate,
+    finishedAt: validation.finishedAt,
+    qualityStatus: validation.qualityStatus,
+    publishAllowed: validation.publishAllowed,
+    resultRows: 0,
+  };
+  if (!validation.ok || !validation.runId) return base;
+  const query = [
+    "select=" + source.resultSelect,
+    "run_id=eq." + encodeURIComponent(validation.runId),
+    "limit=" + STRATEGY_PRIORITY_BRIDGE_MAX_ROWS,
+    source.key === "cb" ? "order=updated_at.desc" : "order=rank.asc",
+  ].join("&");
+  const rows = await supabaseGet(source.resultsResource, query);
+  const symbols = [];
+  const seen = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const code = strategyPriorityStockCode(row, source.codeMode);
+    if (!code || seen.has(code)) continue;
+    const rowQuality = String(row?.quality_status || "").trim().toLowerCase();
+    if (row?.complete === false || (rowQuality && !new Set(["complete", "ok", "ready", "pass", "a"]).has(rowQuality))) continue;
+    seen.add(code);
+    symbols.push(code);
+  }
+  return {
+    ...base,
+    status: symbols.length ? "ready" : "empty",
+    symbols,
+    resultRows: Array.isArray(rows) ? rows.length : 0,
+    symbolCount: symbols.length,
+  };
+}
+
+
+function buildFormalStrategyChipArtifact(bridge, formalPrioritySymbols = [], fallbackTradeDate = taipeiDate()) {
+  const groups = {};
+  const formalSet = new Set((Array.isArray(formalPrioritySymbols) ? formalPrioritySymbols : [])
+    .map((value) => normalizeCode(value))
+    .filter((value) => /^\d{4}$/.test(value)));
+  const bridgeGroups = objectPayload(bridge?.groups);
+  for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
+    const group = objectPayload(bridgeGroups[source.key]);
+    const sourceSymbols = (Array.isArray(group.symbols) ? group.symbols : [])
+      .map((value) => normalizeCode(value))
+      .filter((value) => /^\d{4}$/.test(value));
+    const top40Symbols = sourceSymbols.filter((symbol) => formalSet.has(symbol));
+    const status = String(group.status || "missing").trim().toLowerCase();
+    const qualityStatus = String(group.qualityStatus || "").trim().toLowerCase();
+    const readyEvidence = status === "ready"
+      && Boolean(group.runId)
+      && Boolean(group.scanDate)
+      && Boolean(group.finishedAt)
+      && new Set(["complete", "ok", "ready", "pass", "a"]).has(qualityStatus);
+    groups[source.key] = {
+      key: source.key,
+      status: ["ready", "blocked", "empty", "error"].includes(status) ? status : "missing",
+      reason: String(group.reason || ""),
+      runId: String(group.runId || ""),
+      scanDate: String(group.scanDate || ""),
+      finishedAt: String(group.finishedAt || ""),
+      qualityStatus: String(group.qualityStatus || ""),
+      publishAllowed: group.publishAllowed === undefined ? null : group.publishAllowed,
+      resultRows: numberValue(group.resultRows),
+      sourceSymbolCount: sourceSymbols.length,
+      top40SymbolCount: top40Symbols.length,
+      top40Symbols,
+      latestCompleteRunEvidence: readyEvidence,
+    };
+  }
+  const groupValues = Object.values(groups);
+  const completeLatestRunEvidence = groupValues.length === STRATEGY_PRIORITY_BRIDGE_SOURCES.length
+    && groupValues.every((group) => group.latestCompleteRunEvidence === true);
+  return {
+    schemaVersion: "daytrade-formal-priority-strategy-chip-v1",
+    source: String(bridge?.source || "supabase:complete-run-priority-bridge"),
+    status: String(bridge?.status || "missing"),
+    updatedAt: String(bridge?.updatedAt || ""),
+    tradeDate: String(bridge?.tradeDate || fallbackTradeDate),
+    formalPriorityLimit: FORMAL_DAYTRADE_PRIORITY_LIMIT,
+    formalPriorityCount: Array.isArray(formalPrioritySymbols) ? formalPrioritySymbols.length : 0,
+    formalPrioritySymbols: Array.isArray(formalPrioritySymbols) ? formalPrioritySymbols : [],
+    groups,
+    counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, group.top40SymbolCount])),
+    completeLatestRunEvidence,
+    completeLatestRunReason: completeLatestRunEvidence ? "" : "one_or_more_strategy_chip_groups_not_latest_complete",
+  };
+}
+
+function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
+  const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const next = {
+    ...existing,
+    priorityBridge: {
+      schemaVersion: bridge.schemaVersion,
+      source: bridge.source,
+      status: bridge.status,
+      updatedAt: bridge.updatedAt,
+      tradeDate: bridge.tradeDate,
+      groups: bridge.groups,
+      counts: bridge.counts,
+    },
+    formalPriorityStrategyChip: buildFormalStrategyChipArtifact(
+      bridge,
+      existing.daytradeFormalPrioritySymbols || existing.priorityTop40Symbols || [],
+      bridge.tradeDate || taipeiDate(),
+    ),
+  };
+  for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
+    const group = bridge.groups[source.key];
+    if (!group || group.status === "error") continue;
+    next[source.key] = Array.isArray(group.symbols) ? group.symbols : [];
+  }
+  const changed = JSON.stringify(existing) !== JSON.stringify(next);
+  if (!changed) return false;
+  writeJson(PRIORITY_SYMBOLS_FILE, next);
+  try {
+    writeFugleWebSocketSymbols(next.symbols || [], {
+      source: "daytrade-strategy-chip-priority-bridge",
+      prioritySource: "daytrade-strategy-chip-priority-bridge",
+      strategyPriorityBridgeStatus: bridge.status,
+    });
+  } catch {}
+  return true;
+}
+
+async function refreshStrategyChipPriorityBridge() {
+  if (!APPLY) return { status: "skipped", reason: "writer_not_apply" };
+  if (strategyPriorityBridgeRefreshPromise) return strategyPriorityBridgeRefreshPromise;
+  const now = Date.now();
+  const existing = readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {});
+  if (now - lastStrategyPriorityBridgeRefreshAt < STRATEGY_PRIORITY_BRIDGE_REFRESH_MS) {
+    return existing;
+  }
+  lastStrategyPriorityBridgeRefreshAt = now;
+  strategyPriorityBridgeRefreshPromise = (async () => {
+    const groups = {};
+    for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
+      try {
+        groups[source.key] = await readStrategyPriorityBridgeSource(source);
+      } catch (error) {
+        groups[source.key] = {
+          key: source.key,
+          status: "error",
+          symbols: [],
+          reason: "bridge_read_failed",
+          error: error?.message || String(error),
+          runId: "",
+          scanDate: "",
+          qualityStatus: "",
+          resultRows: 0,
+        };
+      }
+    }
+    const statuses = Object.values(groups).map((group) => group.status);
+    const readyCount = statuses.filter((status) => status === "ready").length;
+    const errorCount = statuses.filter((status) => status === "error").length;
+    const bridge = {
+      schemaVersion: "daytrade-strategy-chip-priority-bridge-v1",
+      source: "supabase:complete-run-priority-bridge",
+      status: readyCount === STRATEGY_PRIORITY_BRIDGE_SOURCES.length ? "ready" : readyCount ? "partial" : errorCount === statuses.length ? "error" : "blocked",
+      updatedAt: nowIso(),
+      tradeDate: taipeiDate(),
+      groups,
+      counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, Array.isArray(group.symbols) ? group.symbols.length : 0])),
+      readyGroups: readyCount,
+      errorGroups: errorCount,
+    };
+    writeJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, bridge);
+    mergeStrategyPriorityBridgeIntoRuntimeFile(bridge);
+    return bridge;
+  })().finally(() => {
+    strategyPriorityBridgeRefreshPromise = null;
+  });
+  return strategyPriorityBridgeRefreshPromise;
+}
 function readRuntimePrioritySeeds(activeSymbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const bridge = objectPayload(payload.priorityBridge) || readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {});
+  const bridgeGroups = objectPayload(bridge.groups);
+  const bridgeValues = (key) => {
+    const group = objectPayload(bridgeGroups[key]);
+    return group.status === "ready" && Array.isArray(group.symbols) ? group.symbols : [];
+  };
   const universe = new Set(activeSymbols.map((row) => row.symbol));
   const bySymbol = new Map();
   const counts = {};
@@ -1447,14 +2274,13 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, 120);
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
-  addMany("strategy1", payload.strategy1 || payload.strategy1Symbols, 90);
-  addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, 90);
-  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, 90);
-  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, 80);
-  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols, 80);
-  addMany("institution", payload.institution || payload.institutionSymbols, 75);
-  addMany("warrant", payload.warrant || payload.warrantSymbols, 70);
-  addMany("cb", payload.cb || payload.cbSymbols, 60);
+  addMany("strategy2", payload.strategy2 || payload.strategy2Symbols || bridgeValues("strategy2"), 90);
+  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols || bridgeValues("strategy3"), 90);
+  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols || bridgeValues("strategy4"), 80);
+  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols || bridgeValues("strategy5"), 80);
+  addMany("institution", payload.institution || payload.institutionSymbols || bridgeValues("institution"), 75);
+  addMany("warrant", payload.warrant || payload.warrantSymbols || bridgeValues("warrant"), 70);
+  addMany("cb", payload.cb || payload.cbSymbols || bridgeValues("cb"), 60);
   addMany("realtime_radar", payload.realtimeRadar || payload.realtimeRadarSymbols, 75);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("symbols", payload.symbols, 10);
@@ -1462,8 +2288,12 @@ function readRuntimePrioritySeeds(activeSymbols) {
   return {
     symbols: [...bySymbol.values()],
     counts,
-    updatedAt: payload.updatedAt || "",
-    source: payload.source || "runtime_priority_file",
+    updatedAt: payload.updatedAt || bridge.updatedAt || "",
+    source: payload.source || bridge.source || "runtime_priority_file",
+    strategyPriorityBridgeStatus: bridge.status || "missing",
+    strategyPriorityBridgeUpdatedAt: bridge.updatedAt || "",
+    strategyPriorityBridgeCounts: bridge.counts || {},
+    strategyPriorityBridgeGroups: bridgeGroups,
   };
 }
 
@@ -1475,12 +2305,27 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const candidates = activeSymbols.map((row) => ({
     ...row,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
+  })).map((row) => ({
+    ...row,
+    basePool: evaluateMotherPoolBasePool(row, row.metrics),
   }));
-  const changeRanks = rankMap(candidates, (row) => row.metrics.changePercent, { minValue: 0 });
-  const volumeSurgeRanks = rankMap(candidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
-  const volumeRanks = rankMap(candidates, (row) => row.metrics.totalVolume, { minValue: 0 });
-  const valueRanks = rankMap(candidates, (row) => row.metrics.tradeValue, { minValue: 0 });
-  const turnoverRanks = rankMap(candidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
+  const qualifiedCandidates = candidates.filter((row) => row.basePool.eligible);
+  const pendingCandidates = candidates.filter((row) => !row.basePool.eligible && row.basePool.pending);
+  const basePoolFailureCounts = {};
+  const basePoolPendingCounts = {};
+  for (const candidate of candidates) {
+    for (const check of candidate.basePool.failedChecks || []) basePoolFailureCounts[check] = (basePoolFailureCounts[check] || 0) + 1;
+    for (const check of candidate.basePool.pendingChecks || []) basePoolPendingCounts[check] = (basePoolPendingCounts[check] || 0) + 1;
+  }
+  // The ordinary-stock mother pool warms from the full active universe.
+  // Pending quote/volume fields may enter the warming pool, but formal entry
+  // still requires fresh quotes and every canonical gate condition below.
+  const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates];
+  const changeRanks = rankMap(rankingCandidates, (row) => row.metrics.changePercent, { minValue: 0 });
+  const volumeSurgeRanks = rankMap(rankingCandidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
+  const volumeRanks = rankMap(rankingCandidates, (row) => row.metrics.totalVolume, { minValue: 0 });
+  const valueRanks = rankMap(rankingCandidates, (row) => row.metrics.tradeValue, { minValue: 0 });
+  const turnoverRanks = rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
   const groupLimitUpLeaders = new Map();
   for (const row of candidates) {
     const metrics = row.metrics;
@@ -1504,7 +2349,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       }
     }
   }
-  const rankedCandidates = candidates.map((row) => {
+  const rankedCandidates = rankingCandidates.map((row) => {
     const metrics = row.metrics;
     const changeRank = changeRanks.get(row.symbol)?.rank || 0;
     const volumeSurgeRank = volumeSurgeRanks.get(row.symbol)?.rank || 0;
@@ -1631,6 +2476,11 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       prioritySource: "dynamic_daytrade_mother_pool",
       priorityReason: reasons.length ? reasons.join("+") : "dynamic_liquidity_fill",
       priorityMetrics: {
+        openPrice: Number(metrics.openPrice.toFixed(4)),
+        previousClose: Number(metrics.previousClose.toFixed(4)),
+        amplitudeFromOpen: Number(metrics.amplitudeFromOpen.toFixed(4)),
+        highPrice: Number(metrics.highPrice.toFixed(4)),
+        lowPrice: Number(metrics.lowPrice.toFixed(4)),
         changePercent: Number(metrics.changePercent.toFixed(4)),
         totalVolume: Math.round(metrics.totalVolume),
         tradeValue: Math.round(metrics.tradeValue),
@@ -1670,9 +2520,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         quoteFresh: metrics.quoteFresh,
         fieldCoverage: metrics.fieldCoverage,
         ruleHits: reasons,
+        basePoolEligible: row.basePool.eligible,
+        basePoolPending: row.basePool.pending,
+        basePoolFailedChecks: row.basePool.failedChecks,
+        basePoolPendingChecks: row.basePool.pendingChecks,
       },
     };
-  }).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol));
+  }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.score - a.score || a.symbol.localeCompare(b.symbol));
 
   for (const row of rankedCandidates) {
     if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) break;
@@ -1687,26 +2541,21 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const row = activeBySymbol.get(seed.symbol);
     if (!row) continue;
     const prev = bySymbol.get(seed.symbol);
-    if (prev) {
-      prev.score += seed.score;
-      prev.prioritySource = `${prev.prioritySource},${seed.sources.join(",")}`;
-      prev.priorityReason = `${prev.priorityReason}+runtime_priority`;
+    if (!prev) {
+      // Runtime seeds may boost a candidate already selected in the warming
+      // pool. They cannot bypass the ordinary-stock filter or fill excluded rows.
       continue;
     }
-    if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) continue;
-    bySymbol.set(seed.symbol, {
-      ...row,
-      score: seed.score,
-      prioritySource: seed.sources.join(","),
-      priorityReason: "runtime_priority",
-    });
+    prev.score += seed.score;
+    prev.prioritySource = `${prev.prioritySource},${seed.sources.join(",")}`;
+    prev.priorityReason = `${prev.priorityReason}+runtime_priority`;
   }
 
   const rows = [...bySymbol.values()]
-    .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
-    .slice(0, MOTHER_POOL_MAX_SYMBOLS)
+    .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.score - a.score || a.symbol.localeCompare(b.symbol))
+    .slice(0, MOTHER_POOL_MAX_SYMBOLS);
   const priorityUpdatedAt = nowIso();
-  return rows.map((row, index) => ({
+  const output = rows.map((row, index) => ({
       symbol: row.symbol,
       name: row.name || row.symbol,
       market: row.market || "",
@@ -1717,23 +2566,59 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       payload: {
         score: numberValue(row.score),
         selected: true,
-        consumerScope: ["daytrade", "strategy1", "strategy3"],
-        motherPoolRuleVersion: "daytrade_mother_pool_rank_overlap_20260709",
+        consumerScope: ["daytrade", "strategy3"],
+        motherPoolRuleVersion: "daytrade_mother_pool_base_filter_20260731_max600",
         motherPoolMetrics: row.priorityMetrics || {},
         motherPoolRuleHits: row.priorityMetrics?.ruleHits || [],
+        basePoolEligible: row.priorityMetrics?.basePoolEligible === true,
+        basePoolPending: row.priorityMetrics?.basePoolPending === true,
         runtimePrioritySource: seeds.source,
         runtimePriorityUpdatedAt: seeds.updatedAt,
         runtimePriorityCounts: seeds.counts,
       },
     }));
+  output.basePoolMeta = {
+    activeSymbols: candidates.length,
+    basePoolEligibleSymbols: qualifiedCandidates.length,
+    basePoolPendingSymbols: pendingCandidates.length,
+    basePoolExcludedSymbols: Math.max(0, candidates.length - qualifiedCandidates.length - pendingCandidates.length),
+    minimumSymbols: MOTHER_POOL_MIN_SYMBOLS,
+    maximumSymbols: MOTHER_POOL_MAX_SYMBOLS,
+    ruleVersion: "daytrade_mother_pool_base_filter_20260731_max600",
+    failureCounts: basePoolFailureCounts,
+    pendingCounts: basePoolPendingCounts,
+  };
+  return output;
 }
 
 function publishDaytradePrioritySymbols(priorityRows) {
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
-  const daytradePrioritySymbols = priorityRows
+  // This function runs after the strategy/chip bridge refresh. Keep the bridge
+  // from the current artifact, or recover it from its cache when another
+  // source writer has just replaced the priority shell.
+  const bridgePayload = objectPayload(existing.priorityBridge)
+    || objectPayload(readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {}));
+  const bridgeGroups = objectPayload(bridgePayload?.groups);
+  const bridgeFields = {};
+  if (Object.keys(bridgeGroups).length > 0) {
+    bridgeFields.priorityBridge = bridgePayload;
+    for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
+      const group = objectPayload(bridgeGroups[source.key]);
+      if (["ready", "blocked", "empty"].includes(String(group.status || "").toLowerCase())) {
+        bridgeFields[source.key] = Array.isArray(group.symbols) ? group.symbols : [];
+      }
+    }
+  }
+  const daytradeMotherPoolSymbols = priorityRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code))
-    .slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT);
+    .slice(0, MOTHER_POOL_MAX_SYMBOLS);
+  const daytradePrioritySymbols = daytradeMotherPoolSymbols.slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT);
+  const formalPriorityStrategyChip = buildFormalStrategyChipArtifact(
+    bridgePayload,
+    daytradePrioritySymbols,
+    bridgePayload.tradeDate || taipeiDate(),
+  );
   const prependUnique = (preferred, values) => {
     const seen = new Set();
     const out = [];
@@ -1748,22 +2633,39 @@ function publishDaytradePrioritySymbols(priorityRows) {
   };
   const nextPriorityPayload = {
     ...existing,
+    ...bridgeFields,
     updatedAt: nowIso(),
     source: "daytrade-dedicated-priority-bridge",
-    daytradePrioritySymbols,
-    daytradePriorityCount: daytradePrioritySymbols.length,
-    terminalPrioritySymbols: prependUnique(daytradePrioritySymbols, existing.terminalPrioritySymbols || existing.terminalSymbols || existing.terminalPriority),
-    openingPrioritySymbols: prependUnique(daytradePrioritySymbols, existing.openingPrioritySymbols || existing.primaryPrioritySymbols),
-    symbols: prependUnique(daytradePrioritySymbols, existing.symbols),
+    // Keep the complete mother pool on the WebSocket/data-rotation path.
+    // Formal entry remains explicitly limited to the first top40 rows below.
+    daytradeMotherPoolSymbols,
+    daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
+    daytradePrioritySymbols: daytradeMotherPoolSymbols,
+    daytradePriorityCount: daytradeMotherPoolSymbols.length,
+    daytradeFormalPrioritySymbols: daytradePrioritySymbols,
+    daytradeFormalPriorityCount: daytradePrioritySymbols.length,
+    formalPriorityStrategyChip,
+    terminalPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.terminalPrioritySymbols || existing.terminalSymbols || existing.terminalPriority),
+    openingPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.openingPrioritySymbols || existing.primaryPrioritySymbols),
+    symbols: prependUnique(daytradeMotherPoolSymbols, existing.symbols),
   };
-  writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
-  writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
-    source: "daytrade-dedicated-priority-bridge",
-    prioritySource: "daytrade-dedicated-priority-bridge",
-    daytradePriorityCount: daytradePrioritySymbols.length,
-    terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
-    openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
-  });
+  const sameSymbols = JSON.stringify(existing.symbols || []) === JSON.stringify(nextPriorityPayload.symbols || []);
+  const samePriorityCounts = Number(existing.daytradeMotherPoolCount || 0) === nextPriorityPayload.daytradeMotherPoolCount
+    && Number(existing.daytradeFormalPriorityCount || 0) === nextPriorityPayload.daytradeFormalPriorityCount;
+  const bridgeChanged = Object.keys(bridgeFields).some((key) => JSON.stringify(existing[key]) !== JSON.stringify(bridgeFields[key]));
+  const formalPriorityArtifactChanged = JSON.stringify(existing.formalPriorityStrategyChip || {}) !== JSON.stringify(formalPriorityStrategyChip);
+  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged) {
+    writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
+    writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
+      source: "daytrade-dedicated-priority-bridge",
+      prioritySource: "daytrade-dedicated-priority-bridge",
+      daytradePriorityCount: daytradeMotherPoolSymbols.length,
+      daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
+      daytradeFormalPriorityCount: daytradePrioritySymbols.length,
+      terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
+      openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
+    });
+  }
 }
 
 function countPriorityValues(values, universe) {
@@ -1779,7 +2681,6 @@ function countPriorityValues(values, universe) {
 function readRuntimePrioritySummary(activeSymbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
   const universe = new Set(activeSymbols.map((row) => row.symbol));
-  const strategy1 = countPriorityValues(payload.strategy1 || payload.strategy1Symbols, universe);
   const strategy2 = countPriorityValues(payload.strategy2 || payload.strategy2Symbols, universe);
   const strategy3 = countPriorityValues(payload.strategy3 || payload.strategy3Symbols, universe);
   const strategy4 = countPriorityValues(payload.strategy4 || payload.strategy4Symbols, universe);
@@ -1788,13 +2689,18 @@ function readRuntimePrioritySummary(activeSymbols) {
   const warrant = countPriorityValues(payload.warrant || payload.warrantSymbols, universe);
   const cb = countPriorityValues(payload.cb || payload.cbSymbols, universe);
   const realtimeRadar = countPriorityValues(payload.realtimeRadar || payload.realtimeRadarSymbols, universe);
+  const formalPriorityStrategyChip = objectPayload(payload.formalPriorityStrategyChip);
+  const strategyChipCompleteLatestRun = formalPriorityStrategyChip.schemaVersion === 'daytrade-formal-priority-strategy-chip-v1'
+    && formalPriorityStrategyChip.status === 'ready'
+    && numberValue(formalPriorityStrategyChip.formalPriorityLimit) === FORMAL_DAYTRADE_PRIORITY_LIMIT
+    && numberValue(formalPriorityStrategyChip.formalPriorityCount) === FORMAL_DAYTRADE_PRIORITY_LIMIT
+    && formalPriorityStrategyChip.completeLatestRunEvidence === true;
   return {
     source: payload.source || "",
     updatedAt: payload.updatedAt || "",
     daytrade: countPriorityValues(payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, universe),
     terminal: countPriorityValues(payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, universe),
     opening: countPriorityValues(payload.openingPrioritySymbols || payload.primaryPrioritySymbols, universe),
-    strategy1,
     strategy2,
     strategy3,
     strategy4,
@@ -1803,7 +2709,10 @@ function readRuntimePrioritySummary(activeSymbols) {
     warrant,
     cb,
     realtimeRadar,
-    strategyPriority: strategy1 + strategy2 + strategy3 + strategy4 + strategy5 + institution + warrant + cb + realtimeRadar,
+    formalPriorityStrategyChip,
+    strategyChipCompleteLatestRun,
+    strategyChipCompleteLatestRunReason: strategyChipCompleteLatestRun ? '' : String(formalPriorityStrategyChip.completeLatestRunReason || 'formal_priority_strategy_chip_missing_or_incomplete'),
+    strategyPriority: strategy2 + strategy3 + strategy4 + strategy5 + institution + warrant + cb + realtimeRadar,
     total: countPriorityValues(payload.symbols, universe),
   };
 }
@@ -1821,7 +2730,13 @@ function readWebSocketStatusSummary() {
     && requiredChannels.every((channel) => streamingChannels.includes(channel))
     && numberValue(status.subscribedSymbols) > 0
     && numberValue(status.subscribeForbiddenChunks) === 0
-    && statusAgeSeconds <= 300;
+    && numberValue(status.streamingMessages) > 0
+    && statusAgeSeconds <= 300
+    && Boolean(status.lastMessageAt || status.websocketLastMessageAt)
+    && ageSeconds(status.lastMessageAt || status.websocketLastMessageAt) <= 300;
+  const lastMessageAt = status.lastMessageAt || status.websocketLastMessageAt || "";
+  const lastMessageAgeSeconds = lastMessageAt ? ageSeconds(lastMessageAt) : 999999;
+  const freshSymbols120s = numberValue(status.freshSymbols120s ?? status.websocketFreshSymbols120s);
   return {
     ok: status.ok !== false,
     mode: status.mode || '',
@@ -1835,6 +2750,10 @@ function readWebSocketStatusSummary() {
     subscribedChannels: numberValue(status.subscribedChannels),
     streamingMessages: numberValue(status.streamingMessages),
     streamingQuotes: numberValue(status.streamingQuotes),
+    lastMessageAt,
+    lastMessageAgeSeconds,
+    symbolCount: numberValue(status.websocketSymbolCount ?? status.subscribedSymbols),
+    freshSymbols120s,
     priorityDaytradeSymbols: numberValue(status.priorityDaytradeSymbols),
     priorityFileUpdatedAt: status.priorityFileUpdatedAt || '',
     statusAgeSeconds,
@@ -1842,7 +2761,7 @@ function readWebSocketStatusSummary() {
     formalReady: transportReady,
     formalReadyReason: transportReady
       ? 'streaming_authenticated_required_channels_and_subscription_ready'
-      : 'websocket_transport_not_formal_ready',
+      : (status.formalReadyReason || 'websocket_transport_not_formal_ready'),
     updatedAt: status.updatedAt || '',
   };
 }
@@ -1995,9 +2914,11 @@ async function fetchQuoteBatch(symbols) {
   };
 }
 
-function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, fetchResult, state, supplementalMaps = {} }) {
+function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, opening0901Evidence = {}, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
   const runtimePriority = readRuntimePrioritySummary(activeSymbols);
+  const strategyChipCompleteLatestRun = runtimePriority.strategyChipCompleteLatestRun === true;
+  const strategyChipReason = runtimePriority.strategyChipCompleteLatestRunReason || 'formal_priority_strategy_chip_missing_or_incomplete';
   const webSocketStatus = readWebSocketStatusSummary();
   const formalPriorityRows = priorityRows.slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT);
   const minFormalPrioritySymbols = Math.min(MIN_PRIORITY_POOL_SYMBOLS, FORMAL_DAYTRADE_PRIORITY_LIMIT);
@@ -2007,6 +2928,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const after0830 = ["preopen_prepare_0830_0844", "opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0845 = ["opening_boost_0845_0859", "opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
   const after0900 = ["opening_detection_0900_0934", "regular_daytrade_0935_1330"].includes(phase);
+  const opening0901Required = after0900 && taipeiMinutes() >= (9 * 60 + 2);
 
   for (const row of fetchedRows) quoteMap.set(row.symbol, row);
   const activeSet = new Set(activeSymbols.map((row) => row.symbol));
@@ -2038,9 +2960,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }
 
   const priorityPoolSymbols = prioritySet.size;
+  const motherPoolSet = new Set(priorityRows.map((row) => normalizeCode(row.symbol)).filter((symbol) => activeSet.has(symbol)));
+  const freshMother = freshFull.filter((symbol) => motherPoolSet.has(symbol));
+  const motherPoolSymbols = motherPoolSet.size;
   const activeCount = activeSet.size;
   const freshQuoteCoverage = activeCount ? freshFull.length / activeCount : 0;
   const priorityFreshCoverage = priorityPoolSymbols ? freshPriority.length / priorityPoolSymbols : 0;
+  const motherFreshCoverage = motherPoolSymbols ? freshMother.length / motherPoolSymbols : 0;
   const priorityMaxAge = priorityAges.length ? Math.max(...priorityAges) : 999999;
   const priorityFreshMaxAge = freshPriorityAges.length ? Math.max(...freshPriorityAges) : 999999;
   const priorityCoverageAge = percentile(priorityAges, MIN_PRIORITY_FRESH_COVERAGE);
@@ -2090,6 +3016,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     readyMa35 = Math.max(readyMa35, warmupEvidence.readyMa35);
     intradayMap.warmupEvidenceSource = warmupEvidence.source;
   }
+  const opening0901HardRequired = opening0901Required;
+  const opening0901GateOk = !opening0901HardRequired
+    || Boolean(opening0901Evidence.ready)
+    || (after0900 && today1mSymbols > 0 && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
+  const opening0901Ready = opening0901GateOk;
   const futoptMappedFromRows = Number.isFinite(Number(futoptRows.mappedCount))
     ? Number(futoptRows.mappedCount)
     : futoptRows.filter((row) => normalizeCode(row.underlying_symbol) && ageSeconds(row.updated_at) <= 120).length;
@@ -2131,9 +3062,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
     && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required)
-    && (!after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
-    && (!after0845 || futoptGateReady)
-    && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
+    && (!REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE || !after0845 || futoptMapped >= MIN_FUTOPT_MAPPED)
+    && (!REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE || !after0845 || futoptGateReady)
+    && (!after0900 || intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS)
+    && opening0901GateOk;
   const scannerCanRunPreopen = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
@@ -2181,6 +3113,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     prioritySourceInjecting,
     priorityPoolSymbols,
     priorityFreshCoverage,
+    motherPoolSymbols,
+    motherFreshCoverage,
     quoteAgeSeconds: latestQuoteAge,
     cooldownRemaining,
     last429AgeSeconds,
@@ -2193,6 +3127,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     futoptGateReady,
     intraday1mStaleSeconds,
     scannerCanRunOpening,
+    strategyChipCompleteLatestRun,
     minPriorityPoolSymbols: minFormalPrioritySymbols,
   });
   const fullMarketGateA = freshFull.length >= TARGET_FRESH_QUOTES && freshQuoteCoverage >= MIN_FRESH_QUOTE_COVERAGE;
@@ -2232,13 +3167,30 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const gateGrade = priorityGateA && formalEntryWindow && webSocketStatus.formalReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
+  const failedChecks = [];
+  if (!offSession && motherPoolSymbols < MOTHER_POOL_MIN_SYMBOLS) failedChecks.push('mother_pool_below_min_300');
+  // Mother pool is a rotating discovery layer. Low freshness is reported as health evidence,
+  // but formal entry is gated by priority_top40 + 1m + daily + optional futopt.
+  const motherPoolFreshnessWarning = !offSession && motherFreshCoverage < 0.8;
+  if (!offSession && priorityPoolSymbols < minFormalPrioritySymbols) failedChecks.push('priority_top40_below_40');
+  if (!offSession && priorityFreshCoverage < MIN_PRIORITY_FRESH_COVERAGE) failedChecks.push('priority_top40_fresh_coverage_below_095');
+  if (!offSession && after0845 && !strategyChipCompleteLatestRun) failedChecks.push('strategy_chip_complete_latest_run_missing');
+  if (!offSession && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
+  if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
+  if (!offSession && after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) failedChecks.push('intraday_1m_not_ready');
+  if (!offSession && opening0901HardRequired && !opening0901GateOk) failedChecks.push('opening_0901_candle_not_ready');
+  if (!offSession && REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE && after0845 && futoptMapped < MIN_FUTOPT_MAPPED) failedChecks.push('futopt_stock_mapping_not_ready');
+  if (!offSession && REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE && after0845 && !futoptGateReady) failedChecks.push('futopt_gate_not_ready');
+  if (!offSession && !webSocketStatus.formalReady) failedChecks.push('websocket_formal_not_ready');
+  if (!offSession && after0845 && !scannerCanRunOpening) failedChecks.push('scanner_opening_not_ready');
+  const reasonCode = failedChecks[0] || (offSession ? "off_session_previous_good" : "");
   const message = offSession
     ? `dedicated daytrade source stopped off-session; latest formal entry disabled; quote=${quoteStatus} priority=${freshPriority.length}/${priorityPoolSymbols} full=${freshFull.length}/${activeCount}`
     : gateGrade === "A"
     ? "dedicated daytrade source priority injecting gate A"
     : priorityGateGrade === "A" && !formalEntryWindow
     ? `dedicated daytrade source warmup priority gate A; formal entry not allowed; phase=${phase}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`
-    : `dedicated daytrade source ${gateGrade}; status=${status}; quote=${quoteStatus}; preopen=${preopenStatus}; daily=${dailyVolumeStatus}; historical1m=${historical1mWarmupStatus}; today1m=${today1mStatus}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`;
+    : `dedicated daytrade source ${gateGrade}; status=${status}; reason=${reasonCode || 'none'}; quote=${quoteStatus}; preopen=${preopenStatus}; daily=${dailyVolumeStatus}; historical1m=${historical1mWarmupStatus}; today1m=${today1mStatus}; priority=${freshPriority.length}/${priorityPoolSymbols}; full=${freshFull.length}/${activeCount}; rate=${rateLimitStatus}`;
 
   const intraday1mReadinessSource = intradayMap.warmupEvidenceSource
     ? `${intradayMap.readinessSource || "unknown"}+natural_0900_warmup_evidence`
@@ -2246,19 +3198,22 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const quoteSourceDaytradeOk = quoteStatus === "ready" && latestQuoteAge <= MAX_QUOTE_AGE_SECONDS;
   const intraday1mSourceDaytradeOk = !after0900
     || (today1mStatus === "ready" && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
-  const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk;
+  const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk && opening0901GateOk;
   const formalPrioritySpeedOk = priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && priorityPoolSymbols >= minFormalPrioritySymbols;
   const payload = {
     source_name: SOURCE_NAME,
     writer_version: "daytrade-source-writer-20260702-03",
     daytrade_gate_grade: gateGrade,
-    gate_grade: gateGrade,
+    gate_grade: offSession ? "D" : gateGrade,
     gate_status: gateGrade === "A" ? "ready" : "not_ready",
     formal_entry_speed_verdict: gateGrade === "A" ? "YES" : "NO",
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
-    formal_gate_scope: "priority_top40",
+    formal_gate_scope: "mother_pool_rotation_priority_top40",
+    formal_scan_scope: "mother_pool_300_600_rotation",
+    mother_pool_scan_min_symbols: MOTHER_POOL_MIN_SYMBOLS,
+    mother_pool_scan_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     formal_source_name: SOURCE_NAME,
     formal_gate_source: "source_status.payload+v_fugle_daytrade_canonical_gate",
     formal_quote_source: "fugle_daytrade_quotes_live",
@@ -2266,9 +3221,17 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     quote_source_daytrade_ok: quoteSourceDaytradeOk,
     intraday_1m_source_daytrade_ok: intraday1mSourceDaytradeOk,
     formal_source_alignment_ok: formalSourceAlignmentOk,
+    reason_code: reasonCode,
+    failed_checks: failedChecks,
+    base_pool_eligible_symbols: priorityRows.basePoolMeta?.basePoolEligibleSymbols || motherPoolSymbols,
+    base_pool_pending_symbols: priorityRows.basePoolMeta?.basePoolPendingSymbols || 0,
+    base_pool_shortfall: Math.max(0, MOTHER_POOL_MIN_SYMBOLS - (priorityRows.basePoolMeta?.basePoolEligibleSymbols || motherPoolSymbols)),
     formal_priority_speed_ok: formalPrioritySpeedOk,
     full_market_speed_ok: fullMarketGateA,
     full_market_speed_blocking: false,
+    mother_pool_freshness_warning: motherPoolFreshnessWarning,
+    mother_pool_freshness_blocking: false,
+    futopt_formal_required: REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE,
     gate_speed_ok: formalPrioritySpeedOk,
     quote_speed_scope: "full_market_scorecard_nonblocking",
     formal_speed_scope: "priority_top40",
@@ -2298,10 +3261,14 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     websocket_subscribed_channels: webSocketStatus.subscribedChannels,
     websocket_streaming_messages: webSocketStatus.streamingMessages,
     websocket_streaming_quotes: webSocketStatus.streamingQuotes,
+    websocket_last_message_at: webSocketStatus.lastMessageAt,
+    websocket_last_message_age_seconds: webSocketStatus.lastMessageAgeSeconds,
+    websocket_symbol_count: webSocketStatus.symbolCount,
+    websocket_fresh_symbols_120s: webSocketStatus.freshSymbols120s,
     websocket_status_age_seconds: webSocketStatus.statusAgeSeconds,
     websocket_rest_disabled: webSocketStatus.restDisabled,
-    websocket_formal_ready: webSocketStatus.formalReady,
-    websocket_formal_ready_reason: webSocketStatus.formalReadyReason,
+    websocket_formal_ready: offSession ? false : webSocketStatus.formalReady,
+    websocket_formal_ready_reason: offSession ? "off_session_source_stopped" : webSocketStatus.formalReadyReason,
     websocket_priority_daytrade_symbols: webSocketStatus.priorityDaytradeSymbols,
     websocket_priority_file_updated_at: webSocketStatus.priorityFileUpdatedAt,
     websocket_status_updated_at: webSocketStatus.updatedAt,
@@ -2311,7 +3278,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     terminal_priority_symbols: runtimePriority.terminal,
     opening_priority_symbols: runtimePriority.opening,
     strategy_priority_symbols: runtimePriority.strategyPriority,
-    strategy1_priority_symbols: runtimePriority.strategy1,
     strategy2_priority_symbols: runtimePriority.strategy2,
     strategy3_priority_symbols: runtimePriority.strategy3,
     strategy4_priority_symbols: runtimePriority.strategy4,
@@ -2319,18 +3285,29 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     institution_priority_symbols: runtimePriority.institution,
     warrant_priority_symbols: runtimePriority.warrant,
     cb_priority_symbols: runtimePriority.cb,
+    strategy_priority_bridge_status: runtimePriority.strategyPriorityBridgeStatus,
+    strategy_priority_bridge_updated_at: runtimePriority.strategyPriorityBridgeUpdatedAt,
+    strategy_priority_bridge_counts: runtimePriority.strategyPriorityBridgeCounts,
+    strategy_priority_bridge_groups: runtimePriority.strategyPriorityBridgeGroups,
+    formal_priority_strategy_chip_status: runtimePriority.formalPriorityStrategyChip.status || 'missing',
+    formal_priority_strategy_chip_trade_date: runtimePriority.formalPriorityStrategyChip.tradeDate || '',
+    formal_priority_strategy_chip_complete_latest_run_evidence: strategyChipCompleteLatestRun,
+    formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun,
+    formal_priority_strategy_chip_reason: strategyChipReason,
     realtime_radar_priority_symbols: runtimePriority.realtimeRadar,
     batch_size: BATCH_SIZE,
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
-    formal_scope: "priority_top40",
+    formal_scope: "mother_pool_rotation_priority_top40",
     opening_boost_active: openingBoostActive,
     opening_boost_effective: openingBoostEffective,
     opening_boost_scope: openingBoostScope,
     opening_boost_reason: openingBoostReason,
-    mother_pool_rule_version: "daytrade_mother_pool_rank_overlap_20260709",
+    mother_pool_rule_version: "daytrade_mother_pool_base_filter_20260731_max600",
     mother_pool_symbols: priorityRows.length,
+    mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
+    mother_pool_fresh_quotes_120s: freshMother.length,
     mother_pool_source: "dynamic_daytrade_mother_pool",
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
@@ -2348,6 +3325,17 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     formal_daytrade_priority_symbols: priorityPoolSymbols,
     priority_fresh_quotes_120s: freshPriority.length,
     priority_fresh_quote_coverage_120s: Number(priorityFreshCoverage.toFixed(4)),
+    priority_top40_symbols: priorityPoolSymbols,
+    priority_top40_fresh_quotes_120s: freshPriority.length,
+    priority_top40_fresh_quote_coverage_120s: Number(priorityFreshCoverage.toFixed(4)),
+    formal_scan_pool_symbols: motherPoolSymbols,
+    mother_pool_fresh_quotes_120s: freshMother.length,
+    mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
+    mother_pool_base_pool_symbols: priorityRows.basePoolMeta?.basePoolEligibleSymbols || 0,
+    mother_pool_base_pool_pending_symbols: priorityRows.basePoolMeta?.basePoolPendingSymbols || 0,
+    mother_pool_base_pool_excluded_symbols: priorityRows.basePoolMeta?.basePoolExcludedSymbols || 0,
+    mother_pool_base_pool_failure_counts: priorityRows.basePoolMeta?.failureCounts || {},
+    mother_pool_base_pool_pending_counts: priorityRows.basePoolMeta?.pendingCounts || {},
     priority_source_injecting: prioritySourceInjecting,
     priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
     priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,
@@ -2390,6 +3378,18 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     futopt_contract_rows: futoptContractRows,
     futopt_reason: futoptReason,
     intraday_1m_readiness_source: intraday1mReadinessSource,
+    opening_0901_candle_required: opening0901Required,
+    opening_0901_candle_hard_required: opening0901HardRequired,
+    opening_0901_candle_gate_ok: opening0901GateOk,
+    opening_0901_candle_ready: opening0901Ready,
+    opening_0901_candle_trade_date: opening0901Evidence.tradeDate || taipeiDate(),
+    opening_0901_candle_rows: numberValue(opening0901Evidence.rows),
+    opening_0901_candle_symbols: opening0901Evidence.symbols || [],
+    opening_0901_candle_required_symbols: opening0901Evidence.requiredSymbolCount || 0,
+    opening_0901_candle_missing_symbols: opening0901Evidence.missingSymbols || [],
+    opening_0901_candle_source: opening0901Evidence.source || "not_checked",
+    opening_0901_candle_rows_written: numberValue(opening0901Evidence.fallbackWritten),
+    opening_0901_candle_schema: opening0901Evidence.schema || [],
     natural_0900_warmup_evidence_source: intradayMap.warmupEvidenceSource || "",
     futopt_readiness_source: futoptRows.readinessSource || "unknown",
     rate_limit_status: rateLimitStatus,
@@ -2422,20 +3422,33 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 
 function sourceGateA(values) {
   return values.selectedSymbolsFreshOk
+    && (!values.after0845 || values.motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS)
+    && true
     && values.priorityPoolSymbols >= (values.minPriorityPoolSymbols || MIN_PRIORITY_POOL_SYMBOLS)
     && values.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
     && values.cooldownRemaining <= 0
     && values.last429AgeSeconds > RECENT_429_BLOCK_SECONDS
     && (!values.after0830 || values.dailyVolumeStatus === "ready")
     && (!values.after0845 || values.scannerCanRunOpening)
+    && (!values.after0845 || values.strategyChipCompleteLatestRun === true)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
     && (!values.after0845 || !REQUIRE_MA35_FOR_FORMAL_DAYTRADE || values.readyMa35 >= (values.effectiveMa35Required || MIN_READY_MA35_CONTINUOUS))
-    && (!values.after0845 || values.futoptMapped >= MIN_FUTOPT_MAPPED)
+    && (!REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE || !values.after0845 || values.futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
 
 async function writeStatusAndScorecard(result) {
+  await ensureWriterLease();
   const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
+  result.payload.source_host_id = SOURCE_HOST_ID;
+  result.payload.source_host_role = SOURCE_HOST_ROLE;
+  result.payload.writer_instance_id = WRITER_INSTANCE_ID;
+  result.payload.writer_lease_required = WRITER_LEASE_REQUIRED;
+  result.payload.writer_lease_status = writerLease.status;
+  result.payload.writer_heartbeat_at = writerLease.heartbeatAt || nowIso();
+  result.payload.writer_lease_expires_at = writerLease.leaseExpiresAt || null;
+  result.payload.source_authority = "dedicated_daytrade_source_host";
+  result.payload.reader_policy = "supabase_read_only_no_writer_no_fugle_fallback";
   const sourceRow = {
     source_name: SOURCE_NAME,
     trade_date: taipeiDate(),
@@ -2493,22 +3506,138 @@ async function writeStatusAndScorecard(result) {
   await supabaseUpsert("source_status", [sourceRow], "source_name");
 }
 
-async function syncDailyVolumeMirror(dailyVolumeMap, priorityRows) {
-  const rows = priorityRows.map((priority) => {
-    const row = dailyVolumeMap.get(priority.symbol);
-    if (!row) return null;
-    return {
-      symbol: priority.symbol,
-      market: row.market || priority.market || "",
+async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, quoteMap, dailyVolumeMap, state, errors = [] }) {
+  if (!APPLY || !priorityRows.length) return;
+  // Enrichment is an in-progress writer phase, not a new source verdict. Do
+  // not overwrite the authoritative source_status with an empty 1m/futopt
+  // payload while the full tick is still reading and writing its contracts.
+  // Otherwise the watchdog observes a false degraded/empty interval between
+  // every completed A result and the next completed tick.
+  writeJson(ENRICHMENT_PENDING_STATE_FILE, {
+    evidence_type: "daytrade_source_enrichment_pending_non_authoritative",
+    source_name: SOURCE_NAME,
+    checked_at: nowIso(),
+    trade_date: taipeiDate(),
+    writer_enrichment_pending: true,
+    writer_enrichment_pending_reason: "slow_enrichment_pending",
+    authoritative_source_status_preserved: true,
+    formal_entry_allowed: null,
+    latest_update_allowed: false,
+    preserve_previous_good: true,
+    priority_pool_symbols: priorityRows.length,
+    priority_fresh_quotes_120s: priorityRows.filter((row) => ageSeconds(quoteFreshnessTime(quoteMap.get(normalizeCode(row.symbol)))) <= WINDOW_SECONDS).length,
+    active_symbols: activeSymbols.length,
+    daily_volume_rows: dailyVolumeMap.size,
+    state_updated_at: state.updatedAt || "",
+    nonfatal_write_errors: errors,
+  });
+}async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
+  if (DRY_RUN) return { written: 0, skipped: true, reason: 'dry_run' };
+  const now = Date.now();
+  if (now - lastDailyVolumeMirrorSyncAt < DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS) {
+    return { written: 0, skipped: true, reason: 'interval_cooldown' };
+  }
+  const activeSet = new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean));
+  const rows = [...dailyVolumeMap.entries()]
+    .filter(([symbol]) => activeSet.has(symbol))
+    .map(([symbol, row]) => ({
+      symbol,
+      market: row.market || '',
       trade_date: row.trade_date,
       volume: row.volume,
       avg_volume5: row.avg_volume5,
+      avg5_volume: row.avg_volume5,
+      daily_volume_status: row.avg_volume5 > 0 ? 'ready' : 'missing',
       updated_at: row.updated_at || nowIso(),
-      source: "fugle_daytrade_writer:daily_volume_avg_mirror",
-      payload: row.payload || {},
-    };
-  }).filter(Boolean);
-  await supabaseUpsert("fugle_daytrade_daily_volume_avg", rows, "symbol", { batchSize: 40 });
+      source: 'fugle_daytrade_writer:daily_volume_avg_full_market_mirror',
+      payload: {
+        ...(row.payload || {}),
+        source: 'fugle_daytrade_writer:daily_volume_avg_full_market_mirror',
+        activeOrdinaryStockUniverse: true,
+      },
+    }));
+  if (!rows.length) return { written: 0, skipped: true, reason: 'no_active_volume_rows' };
+  const result = await supabaseUpsert('fugle_daytrade_daily_volume_avg', rows, 'symbol', { batchSize: 250 });
+  lastDailyVolumeMirrorSyncAt = now;
+  return { written: result.written || 0, skipped: false, rows: rows.length, source: 'full_market_active_ordinary_stock' };
+}
+async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
+  const tradeDate = taipeiDate();
+  const requiredSymbols = [...new Set((formalPriorityRows || []).slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT)
+    .map((row) => normalizeCode(row.symbol)).filter(Boolean))];
+  const schema = ["symbol", "trade_date", "candle_time", "open", "high", "low", "close", "volume", "updated_at", "payload"];
+  const required = taipeiMinutes() >= (9 * 60 + 2);
+  const base = { required, tradeDate, requiredSymbols, requiredSymbolCount: requiredSymbols.length, schema };
+  if (!required) return { ...base, ready: true, source: "not_required_before_0902", rows: 0, symbols: [], missingSymbols: [] };
+  if (!requiredSymbols.length) return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_empty_formal_pool", rows: 0, symbols: [], missingSymbols: [] };
+  const start = `${tradeDate}T01:01:00.000Z`;
+  const end = `${tradeDate}T01:02:00.000Z`;
+  const bySymbol = new Map();
+  try {
+    const rows = await supabaseGetPaged(
+      "fugle_daytrade_intraday_1m",
+      "select=symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,payload"
+        + "&trade_date=eq." + encodeURIComponent(tradeDate)
+        + "&candle_time=gte." + encodeURIComponent(start)
+        + "&candle_time=lt." + encodeURIComponent(end)
+        + "&symbol=in.(" + requiredSymbols.join(",") + ")",
+      { service: true, pageSize: 1000 },
+    );
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      const symbol = normalizeCode(row.symbol);
+      if (!requiredSymbols.includes(symbol) || !numberValue(row.close)) continue;
+      bySymbol.set(symbol, { ...row, symbol, trade_date: tradeDate, payload: { ...(row.payload || {}), opening0901: true, source: row.source || "fugle_daytrade_intraday_1m" } });
+    }
+  } catch (error) {
+    return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_read_failed", rows: 0, symbols: [], missingSymbols: requiredSymbols, error: error?.message || String(error) };
+  }
+
+  let fallbackWritten = 0;
+  const fallbackRows = [];
+  const cache = readFugleWebSocketCandles({ maxAgeMs: 2 * 60 * 60 * 1000 });
+  for (const candle of cache.candles.values()) {
+    const symbol = normalizeCode(candle.symbol || candle.code);
+    const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
+    if (!requiredSymbols.includes(symbol) || !candleTime || taipeiDateFrom(candleTime) !== tradeDate) continue;
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(candleTime));
+    const hhmm = `${parts.find((part) => part.type === "hour")?.value || ""}:${parts.find((part) => part.type === "minute")?.value || ""}`;
+    if (hhmm !== "09:01" || bySymbol.has(symbol) || !numberValue(candle.close)) continue;
+    fallbackRows.push({
+      symbol,
+      market: candle.market || "",
+      trade_date: tradeDate,
+      candle_time: candleTime,
+      open: numberValue(candle.open),
+      high: numberValue(candle.high),
+      low: numberValue(candle.low),
+      close: numberValue(candle.close),
+      volume: numberValue(candle.volume),
+      updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
+      source: "fugle_daytrade_writer:websocket_candle_0901",
+      payload: { ...(candle.payload || {}), opening0901: true, fallback: true, source: "fugle-daytrade-writer:websocket-candle-0901" },
+    });
+    bySymbol.set(symbol, fallbackRows[fallbackRows.length - 1]);
+  }
+  if (fallbackRows.length) {
+    try {
+      const result = await supabaseUpsert("fugle_daytrade_intraday_1m", fallbackRows, "symbol,candle_time", { batchSize: 40 });
+      fallbackWritten = result.written || 0;
+    } catch (error) {
+      return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_fallback_write_failed", rows: bySymbol.size, symbols: [...bySymbol.keys()], missingSymbols: requiredSymbols.filter((symbol) => !bySymbol.has(symbol)), fallbackRows: fallbackRows.length, error: error?.message || String(error) };
+    }
+  }
+  const symbols = [...bySymbol.keys()];
+  const missingSymbols = requiredSymbols.filter((symbol) => !bySymbol.has(symbol));
+  return {
+    ...base,
+    ready: missingSymbols.length === 0,
+    source: fallbackRows.length ? "dedicated_daytrade_1m_0901+websocket_candle_fallback" : "dedicated_daytrade_1m_0901",
+    rows: bySymbol.size,
+    symbols,
+    missingSymbols,
+    fallbackRows: fallbackRows.length,
+    fallbackWritten,
+  };
 }
 
 async function syncWebSocketIntraday1mCandles(priorityRows) {
@@ -2631,14 +3760,110 @@ async function syncWebSocketFutoptQuotes() {
   return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows };
 }
 
+async function captureFutoptPreopenBaseline(futoptRows) {
+  const tradeDate = taipeiDate();
+  const base = {
+    tradeDate,
+    source: "fugle_daytrade_futopt_quotes_live",
+    captureWindow: "0845_natural",
+    naturalScheduleEvidence: false,
+    rows: 0,
+    status: "not_in_window",
+  };
+  if (!APPLY) return { ...base, status: "dry_run" };
+  const minutes = taipeiMinutes();
+  if (minutes < FUTOPT_PREOPEN_BASELINE_START_MINUTES || minutes >= FUTOPT_PREOPEN_BASELINE_END_MINUTES) {
+    return base;
+  }
+  try {
+    const existing = await supabaseGet(
+      "fugle_daytrade_futopt_preopen_baseline",
+      "select=underlying_symbol&trade_date=eq." + encodeURIComponent(tradeDate) + "&limit=1",
+      { service: true },
+    );
+    if (existing.length) {
+      return {
+        ...base,
+        status: "already_captured",
+        naturalScheduleEvidence: true,
+        rows: existing.length,
+      };
+    }
+
+    const byUnderlying = new Map();
+    for (const row of futoptRows || []) {
+      const product = String(row.product || row.payload?.product || "").toUpperCase();
+      const underlying = normalizeCode(row.underlying_symbol || row.payload?.underlying_symbol || row.payload?.underlyingSymbol);
+      const futureSymbol = String(row.future_symbol || "").trim().toUpperCase();
+      const observedAt = normalizeTimestamp(row.updated_at);
+      const price = numberValue(row.last_price ?? row.price ?? row.payload?.lastPrice);
+      if (product !== "STOCK_FUTURE" || !underlying || !futureSymbol || !observedAt || !price) continue;
+      if (taipeiDateFrom(observedAt) !== tradeDate || ageSeconds(observedAt) > 180) continue;
+      const previous = byUnderlying.get(underlying);
+      if (!previous || Date.parse(observedAt) > Date.parse(previous.baseline_observed_at)) {
+        byUnderlying.set(underlying, {
+          trade_date: tradeDate,
+          underlying_symbol: underlying,
+          future_symbol: futureSymbol,
+          baseline_price: price,
+          baseline_change_percent: numberValue(row.change_percent ?? row.payload?.changePercent),
+          baseline_total_volume: numberValue(row.total_volume ?? row.volume ?? row.payload?.total?.tradeVolume),
+          baseline_observed_at: observedAt,
+          captured_at: nowIso(),
+          source: "fugle_daytrade_futopt_quotes_live",
+          capture_window: "0845_natural",
+          payload: {
+            ...(row.payload || {}),
+            natural_schedule_evidence: true,
+            natural_schedule_phase: "0845",
+            source: "fugle_daytrade_futopt_quotes_live",
+          },
+        });
+      }
+    }
+    const rows = [...byUnderlying.values()];
+    if (!rows.length) {
+      return { ...base, status: "baseline_source_rows_missing" };
+    }
+    await supabaseUpsert(
+      "fugle_daytrade_futopt_preopen_baseline",
+      rows,
+      "trade_date,underlying_symbol",
+      { batchSize: 100 },
+    );
+    return {
+      ...base,
+      status: "ready",
+      naturalScheduleEvidence: true,
+      rows: rows.length,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      status: "baseline_write_failed",
+      error: error?.message || String(error),
+    };
+  }
+}
+
 async function tick() {
+  await ensureWriterLease();
   const state = readWriterState();
   const phase = phaseNow();
   const fetchAllowedForPhase = quoteFetchAllowedForPhase(phase);
   const fetchPriorityOnlyForPhase = quoteFetchPriorityOnlyForPhase(phase);
   const activeSymbols = await fetchActiveSymbols();
+  await refreshStrategyChipPriorityBridge();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const quoteMap = await fetchExistingDaytradeQuotes();
+  const provisionalPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, {});
+  await writeEnrichmentPendingHeartbeat({
+    activeSymbols,
+    priorityRows: provisionalPriorityRows,
+    quoteMap,
+    dailyVolumeMap,
+    state,
+  });
   const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = await Promise.all([
     fetchCapitalMap(),
     fetchChipFlowMap(),
@@ -2647,9 +3872,83 @@ async function tick() {
     fetchStockGroupContractMap(),
   ]);
   const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap };
-  const priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  let intradayMap = await fetchIntradayStatus(activeSymbols);
+  intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
   const nonFatalWriteErrors = [];
+  let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
+  if (priorityRows.length) {
+    // Re-read the direct WebSocket cache immediately before the mother-pool write.
+    // Long enrichment reads must not leave the formal source writeback on an older map.
+    const writebackQuoteMap = new Map(quoteMap);
+    mergeWebSocketQuoteCache(writebackQuoteMap);
+    const websocketQuoteRows = priorityRows
+      .map((row) => writebackQuoteMap.get(normalizeCode(row.symbol)))
+      .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
+      .map((quote) => ({
+        symbol: normalizeCode(quote.symbol),
+        name: quote.name || normalizeCode(quote.symbol),
+        market: quote.market || '',
+        quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
+        updated_at: normalizeTimestamp(quote.updated_at || quote.quote_seen_at, nowIso()),
+        last_trade_time: normalizeTimestamp(quote.last_trade_time || quote.quote_seen_at || quote.updated_at, nowIso()),
+        price: numberValue(quote.price),
+        open_price: numberValue(quote.open_price),
+        high_price: numberValue(quote.high_price),
+        low_price: numberValue(quote.low_price),
+        previous_close: numberValue(quote.previous_close) || null,
+        change_percent: numberValue(quote.change_percent),
+        total_volume: numberValue(quote.total_volume),
+        trade_value: numberValue(quote.trade_value),
+        bid_price: numberValue(quote.bid_price),
+        bid_volume: numberValue(quote.bid_volume),
+        ask_price: numberValue(quote.ask_price),
+        ask_volume: numberValue(quote.ask_volume),
+        cumulative_bid_volume: numberValue(quote.cumulative_bid_volume) || null,
+        cumulative_ask_volume: numberValue(quote.cumulative_ask_volume) || null,
+        cumulative_bid_ask_volume: numberValue(quote.cumulative_bid_ask_volume) || null,
+        limit_up_price: numberValue(quote.limit_up_price) || null,
+        limit_down_price: numberValue(quote.limit_down_price) || null,
+        stock_type: quote.stock_type || '',
+        session: quote.session || '',
+        source: quote.source || 'fugle_websocket_cache',
+        payload: quote.payload || {},
+      }))
+      .filter((quote) => quote.symbol);
+    if (websocketQuoteRows.length) {
+      try {
+        await supabaseUpsert('fugle_daytrade_quotes_live', websocketQuoteRows, 'symbol', { batchSize: 40 });
+        websocketQuoteReadthroughSync = {
+          written: websocketQuoteRows.length,
+          skipped: false,
+          reason: 'websocket_cache_mother_pool_readthrough',
+          candidateRows: priorityRows.length,
+          freshRows: websocketQuoteRows.length,
+        };
+      } catch (error) {
+        websocketQuoteReadthroughSync = {
+          written: 0,
+          skipped: false,
+          reason: 'write_failed',
+          candidateRows: priorityRows.length,
+          freshRows: websocketQuoteRows.length,
+          error: error?.message || String(error),
+        };
+        nonFatalWriteErrors.push({ target: 'fugle_daytrade_quotes_live_websocket_readthrough', message: error?.message || String(error) });
+      }
+    }
+  }
+  let dailyVolumeMirrorSync = { written: 0, skipped: true, reason: 'not_attempted' };
+  try {
+    dailyVolumeMirrorSync = await syncDailyVolumeMirror(dailyVolumeMap, activeSymbols);
+  } catch (error) {
+    nonFatalWriteErrors.push({
+      target: 'fugle_daytrade_daily_volume_avg',
+      message: error?.message || String(error),
+    });
+  }
   let websocketCandleSync = { written: 0, skipped: true, cacheCount: 0 };
+  let opening0901Evidence = { required: false, ready: true, source: "not_checked", rows: 0, symbols: [], missingSymbols: [], schema: [] };
   let websocketFutoptSync = { written: 0, skipped: true, cacheCount: 0 };
 
   if (priorityRows.length) {
@@ -2674,14 +3973,6 @@ async function tick() {
       });
     }
     try {
-      await syncDailyVolumeMirror(dailyVolumeMap, priorityRows);
-    } catch (error) {
-      nonFatalWriteErrors.push({
-        target: "fugle_daytrade_daily_volume_avg",
-        message: error?.message || String(error),
-      });
-    }
-    try {
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows);
     } catch (error) {
       nonFatalWriteErrors.push({
@@ -2699,13 +3990,33 @@ async function tick() {
     });
   }
 
-  const intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(await fetchIntradayStatus(), priorityRows);
+  if (priorityRows.length && taipeiMinutes() >= (9 * 60 + 2)) {
+    try {
+      opening0901Evidence = await ensureOpening0901CandleEvidence(priorityRows);
+    } catch (error) {
+      opening0901Evidence = { required: true, ready: false, source: "dedicated_daytrade_1m_0901_unhandled_error", rows: 0, symbols: [], missingSymbols: priorityRows.slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT).map((row) => row.symbol), schema: [], error: error?.message || String(error) };
+    }
+  }
+  const intradayStatusCacheSync = await syncIntradayStatusCache(intradayMap);
+  if (intradayStatusCacheSync.error) {
+    nonFatalWriteErrors.push({
+      target: 'fugle_daytrade_intraday_1m_status_cache',
+      message: intradayStatusCacheSync.error,
+    });
+  }
   const futoptRows = await fetchFutoptRows();
+  const futoptPreopenBaseline = await captureFutoptPreopenBaseline(futoptRows);
+  let intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
+    activeSymbols,
+    dailyVolumeMap,
+    quoteMap,
+    intradayMap,
+  });
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
   const selected = cooldownActive || !fetchAllowedForPhase
     ? { symbols: [], priorityOnly: true }
-    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: true });
+    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase });
   const fetchResult = fetchAllowedForPhase
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
@@ -2715,6 +4026,24 @@ async function tick() {
     for (const row of fetchResult.rows) {
       const symbol = normalizeCode(row.symbol);
       if (symbol) quoteMap.set(symbol, row);
+    }
+  }
+  if (fetchResult.rows.length) {
+    const rebuiltPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+    if (rebuiltPriorityRows.length) {
+      priorityRows = rebuiltPriorityRows;
+      try {
+        // Persist the post-fetch rebuild so the canonical mother-pool view sees
+        // the same fresh quote timestamps used by source_status.payload.
+        publishDaytradePrioritySymbols(priorityRows);
+        await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 });
+        await supabaseDelete(
+          "fugle_daytrade_priority_pool",
+          "updated_at=lt." + encodeURIComponent(priorityRows[0].updated_at),
+        );
+      } catch (error) {
+        fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
+      }
     }
   }
 
@@ -2727,6 +4056,13 @@ async function tick() {
   nextState = applyQuoteNotFoundState(nextState, fetchResult.errors);
   writeWriterState(nextState);
 
+  // Recompute after the current quote batch has been merged so evidence and persisted quotes share one loop.
+  intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
+    activeSymbols,
+    dailyVolumeMap,
+    quoteMap,
+    intradayMap,
+  });
   const result = computeStats({
     activeSymbols,
     priorityRows,
@@ -2734,6 +4070,7 @@ async function tick() {
     fetchedRows: fetchResult.rows,
     dailyVolumeMap,
     intradayMap,
+    opening0901Evidence,
     futoptRows,
     websocketFutoptSync,
     fetchResult,
@@ -2741,9 +4078,21 @@ async function tick() {
     supplementalMaps,
   });
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
+  result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
+  result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
+  result.payload.websocket_quote_readthrough_reason = websocketQuoteReadthroughSync.reason || '';
+  result.payload.websocket_quote_readthrough_candidate_rows = websocketQuoteReadthroughSync.candidateRows || 0;
+  result.payload.websocket_quote_readthrough_fresh_rows = websocketQuoteReadthroughSync.freshRows || 0;
+  result.payload.daily_volume_mirror_sync_written = dailyVolumeMirrorSync.written || 0;
+  result.payload.daily_volume_mirror_sync_skipped = Boolean(dailyVolumeMirrorSync.skipped);
+  result.payload.daily_volume_mirror_sync_reason = dailyVolumeMirrorSync.reason || '';
+  result.payload.daily_volume_mirror_sync_source = dailyVolumeMirrorSync.source || '';
   result.payload.websocket_candles_synced_rows = websocketCandleSync.written || 0;
   result.payload.websocket_candles_cache_count = websocketCandleSync.cacheCount || 0;
   result.payload.websocket_candles_sync_skipped = Boolean(websocketCandleSync.skipped);
+  result.payload.intraday_status_cache_sync_rows = intradayStatusCacheSync.rows || 0;
+  result.payload.intraday_status_cache_sync_written = intradayStatusCacheSync.written || 0;
+  result.payload.intraday_status_cache_sync_skipped = Boolean(intradayStatusCacheSync.skipped);
   result.payload.futopt_websocket_synced_rows = websocketFutoptSync.written || 0;
   result.payload.futopt_websocket_cache_count = websocketFutoptSync.cacheCount || 0;
   result.payload.futopt_websocket_sync_skipped = Boolean(websocketFutoptSync.skipped);
@@ -2755,6 +4104,18 @@ async function tick() {
   result.payload.futopt_stock_quotes_this_loop = websocketFutoptSync.stockRows || 0;
   result.payload.futopt_stock_this_loop = websocketFutoptSync.stockRows || 0;
   result.payload.txf_quotes_this_loop = websocketFutoptSync.txfRows || 0;
+  result.payload.futopt_preopen_baseline_trade_date = futoptPreopenBaseline.tradeDate;
+  result.payload.futopt_preopen_baseline_source = futoptPreopenBaseline.source;
+  result.payload.futopt_preopen_baseline_capture_window = futoptPreopenBaseline.captureWindow;
+  result.payload.futopt_preopen_baseline_status = futoptPreopenBaseline.status;
+  result.payload.futopt_preopen_baseline_rows = futoptPreopenBaseline.rows || 0;
+  result.payload.futopt_preopen_baseline_natural_schedule_evidence = Boolean(futoptPreopenBaseline.naturalScheduleEvidence);
+  if (futoptPreopenBaseline.error) result.payload.futopt_preopen_baseline_error = futoptPreopenBaseline.error;
+  result.payload.full_market_intraday_signal_evidence = intradaySignalEvidence;
+  result.payload.full_market_bullish_gain_volume_candidates = intradaySignalEvidence.bullishGainVolumeCandidates;
+  result.payload.full_market_volume_surge_top100_candidates = intradaySignalEvidence.volumeSurgeTop100Candidates;
+  result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
+  result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
   await writeStatusAndScorecard(result);
   const offSession = Boolean(result.payload.off_session);
   return {
@@ -2808,6 +4169,11 @@ async function main() {
       ok: true,
       mode: "local-check",
       sourceName: SOURCE_NAME,
+      sourceHostId: SOURCE_HOST_ID,
+      sourceHostRole: SOURCE_HOST_ROLE,
+      writerInstanceId: WRITER_INSTANCE_ID,
+      writerLeaseRequired: WRITER_LEASE_REQUIRED,
+      sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
       applyDefault: APPLY,
       fetchEnabled: FETCH_ENABLED,
       runtimeConfigFile: RUNTIME_CONFIG_FILE,
@@ -2827,6 +4193,12 @@ async function main() {
     return;
   }
 
+  if (APPLY && SOURCE_HOST_ROLE !== "writer") {
+    throw new Error("daytrade_writer_host_role_required");
+  }
+  if (APPLY && (!SOURCE_HOST_ID || SOURCE_HOST_ID === "unknown")) {
+    throw new Error("daytrade_writer_host_id_required");
+  }
   if (!APPLY) {
     console.error("[daytrade-source-writer] dry-run mode: no Supabase writes. Use --apply only in an approved release-owner window.");
   }
@@ -2835,17 +4207,20 @@ async function main() {
   }
 
   const runStartedAt = Date.now();
+  let maxRunReached = false;
   const maxRunTimer = MAX_RUN_SECONDS > 0
     ? setTimeout(() => {
+      // Finish the active tick before stopping. Hard process.exit() here can
+      // interrupt a completed source write and leave a false timeout receipt.
+      maxRunReached = true;
       console.error(JSON.stringify({
-        ok: false,
+        ok: true,
         sourceName: SOURCE_NAME,
         mode: APPLY ? "apply" : "dry-run",
-        error: "max_run_seconds_exceeded",
+        stopReason: "max_run_seconds_reached_after_active_tick",
         maxRunSeconds: MAX_RUN_SECONDS,
         checkedAt: nowIso(),
       }, null, 2));
-      process.exit(124);
     }, MAX_RUN_SECONDS * 1000)
     : null;
   if (maxRunTimer && typeof maxRunTimer.unref === "function") maxRunTimer.unref();
@@ -2856,7 +4231,7 @@ async function main() {
       const result = await tick();
       console.log(JSON.stringify(result, null, 2));
       if (ONCE) break;
-      if (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS) break;
+      if (maxRunReached || (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS)) break;
       const elapsed = Math.ceil((Date.now() - started) / 1000);
       const sleepMs = Math.max(1000, (LOOP_SECONDS - elapsed) * 1000);
       if (MAX_RUN_SECONDS > 0 && (Date.now() + sleepMs - runStartedAt) / 1000 >= MAX_RUN_SECONDS) break;
@@ -2877,4 +4252,3 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
-

@@ -4,8 +4,10 @@ const path = require("path");
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "fuman-notify-guard-"));
 process.env.FUMAN_STATE_DIR = stateDir;
+process.env.FUMAN_RUNTIME_DIR = stateDir;
 process.env.NOTIFY_RUNTIME_VERSION = "notify-20260628-02";
 process.env.NOTIFY_MIN_RUNTIME_VERSION = "notify-20260628-01";
+process.env.FUMAN_ENABLE_LEGACY_EXTERNAL_NOTIFICATIONS = "1";
 
 const {
   channelAllowed,
@@ -14,6 +16,7 @@ const {
   fastMode,
   guardedSend,
   localGate,
+  notificationsDisabled,
 } = require("./notification-guard");
 
 function assert(condition, message) {
@@ -25,6 +28,11 @@ async function main() {
   assert(channelAllowed("line"), "line channel should be enabled by default");
   assert(localGate("telegram", { eventTime: new Date().toISOString() }).ok, "fresh event should pass local gate");
   assert(!localGate("line", { eventTime: "2020-01-01T00:00:00+08:00", maxEventAgeSec: 1 }).ok, "stale event should be blocked");
+
+  const rootReport = fs.readFileSync(path.join(__dirname, "..", "send-intraday-report.js"), "utf8");
+  assert(rootReport.includes("notificationsDisabled"), "root legacy SMTP report must honor notification disable guard");
+  const strategy3Scanner = fs.readFileSync(path.join(__dirname, "scan-strategy3-cache.js"), "utf8");
+  assert(strategy3Scanner.includes("legacyNotificationsDisabled()"), "Strategy3 direct notification path must honor legacy disable guard");
 
   const payload = { text: "hello" };
   const first = claimNotification({ channel: "line", target: "u1", payload, options: { dedupeScope: "test" } });
@@ -60,6 +68,12 @@ async function main() {
     send: async () => { sent += 1; },
   });
   assert(fast.sent && Number.isFinite(fast.latencyMs), "fast guarded send should return latency");
+
+  const disableFile = path.join(stateDir, "config", "notifications-disabled.json");
+  fs.mkdirSync(path.dirname(disableFile), { recursive: true });
+  fs.writeFileSync(disableFile, JSON.stringify({ disabled: true }), "utf8");
+  assert(notificationsDisabled(), "runtime disable marker should override enabled env");
+  assert(!localGate("telegram", { eventTime: new Date().toISOString() }).ok, "runtime disable marker should block sends");
 
   console.log("[notification-guard] ok");
 }

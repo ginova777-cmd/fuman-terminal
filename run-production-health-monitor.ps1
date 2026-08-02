@@ -74,6 +74,11 @@ $tailText
   }
 }
 
+function Test-MarketClosedOutput {
+  param([string[]]$Lines)
+  $text = ($Lines -join "`n")
+  return ($text -match '"marketOpen"\s*:\s*false' -and $text -match '"skipReason"\s*:\s*"market_closed"')
+}
 $startedAt = Get-Date
 $exitCode = 0
 $output = New-Object System.Collections.Generic.List[string]
@@ -134,6 +139,16 @@ $payload = [ordered]@{
 Write-Receipt $payload
 
 if ($exitCode -ne 0) {
+  if (Test-MarketClosedOutput -Lines $output.ToArray()) {
+    $payload.ok = $true
+    $payload.marketClosed = $true
+    $payload.alertSuppressed = $true
+    $payload.suppressedReason = "market_closed_previous_good_no_api_alert"
+    $payload.finishedAt = (Get-Date).ToString("o")
+    Write-Receipt $payload
+    Write-MonitorLog "SUPPRESSED production health alert: market closed; previous good preserved"
+    exit 0
+  }
   Write-MonitorLog "FAILED production health monitor exit=$exitCode"
   $alert = Invoke-FailureAlert $payload
   $payload.alert = $alert

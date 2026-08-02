@@ -23,6 +23,7 @@ const REQUIRED_RUNID_KEYS = [
   "desktop",
   "mobile",
   "scorecard88",
+  "sourceReports",
 ];
 
 function readJson(file, fallback = null) {
@@ -54,7 +55,7 @@ function isProtectedMarker(value) {
   return /membership-protected|membership-required|not-read|locked|missing-bearer-token/i.test(String(value || ""));
 }
 
-function marketClosedPreviousGood(manifest = {}, controlPlane = {}) {
+function closureMode(manifest = {}, controlPlane = {}) {
   const text = [
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
@@ -64,23 +65,75 @@ function marketClosedPreviousGood(manifest = {}, controlPlane = {}) {
     controlPlane.canaryPublish?.status,
     manifest.unattendedStatus,
   ].map((value) => String(value || "").toLowerCase()).join(" ");
-  return text.includes("market_closed") || text.includes("previous_good") || text.includes("wait_source_window");
+  const tradingDayWait = text.includes("trading_day") || text.includes("wait_source_window") || controlPlane.decision?.state === "PENDING_NOT_DUE";
+  if (text.includes("market_closed") && !tradingDayWait) return "market_closed_previous_good_closure";
+  if (tradingDayWait || text.includes("previous_good")) return "trading_day_previous_good_hold_closure";
+  return "formal_trading_day_closure";
 }
 
-function acceptableManifestStatus(status, closedPreviousGood) {
-  return status === "YES" || (closedPreviousGood === true && status === "PREVIOUS_GOOD_HOLD");
+function acceptableManifestStatus(status, previousGoodClosure) {
+  return status === "YES" || (previousGoodClosure === true && status === "PREVIOUS_GOOD_HOLD");
 }
 
-function validateModule(row, manifest, controlPlane, issues) {
+function validateModule(row, manifest, controlPlane, issues, previousGoodClosure = false) {
   const key = row.key || row.label || "unknown";
   const tradeDate = String(manifest.tradeDate || "");
   const ids = row.runIds || {};
+  const rowIssuesText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
+  const pendingNotDue = row.pendingNotDue === true
+    || String(row.status || "").toLowerCase() === "pending_not_due"
+    || rowIssuesText.toLowerCase().includes("pending_not_due");
   const rawIds = [row.runId, ...REQUIRED_RUNID_KEYS.map((field) => ids[field])]
     .filter((value) => value && !isProtectedMarker(value));
   const uniqueIds = unique(rawIds);
   const primaryRunId = row.runId || uniqueIds[0] || "";
   const runDate = runIdDate(primaryRunId);
+  const closureRow = (controlPlane.runIdClosure?.modules || []).find((item) => item.key === row.key);
 
+  if (pendingNotDue) {
+    if (!closureRow) issues.push(`${key}:control_plane_runId_closure_row_missing`);
+    return {
+      key,
+      runId: primaryRunId,
+      runDate,
+      uniqueRunIds: uniqueIds,
+      scorecard88Protection: row.scorecard88Protection || "",
+      moduleStatus: row.moduleStatus || "",
+      todayAuthoritative: row.todayAuthoritative === true,
+      formalDisplayAllowed: row.formalDisplayAllowed === true,
+      displayMode: row.displayMode || "",
+      displayBlockReason: row.displayBlockReason || "",
+      pendingNotDue: true,
+      ok: true,
+    };
+  }
+
+  if (previousGoodClosure) {
+    if (!primaryRunId) issues.push(`${key}:missing_primary_runId`);
+    if (row.formalDisplayAllowed === true) issues.push(`${key}:closed_hold_formal_display_allowed`);
+    if (!row.displayBlockReason || !String(row.displayBlockReason).toLowerCase().includes("market_closed_previous_good")) issues.push(`${key}:closed_hold_block_reason_missing`);
+    if (!closureRow) issues.push(`${key}:control_plane_runId_closure_row_missing`);
+    return {
+      key,
+      runId: primaryRunId,
+      runDate,
+      uniqueRunIds: uniqueIds,
+      scorecard88Protection: row.scorecard88Protection || "",
+      moduleStatus: row.moduleStatus || "degraded",
+      todayAuthoritative: false,
+      formalDisplayAllowed: false,
+      displayMode: row.displayMode || "PREVIOUS_GOOD_DEGRADED",
+      displayBlockReason: row.displayBlockReason || "market_closed_previous_good_not_today_success",
+      previousGoodHold: true,
+      ok: true,
+    };
+  }
+  if (!Object.prototype.hasOwnProperty.call(row, "todayAuthoritative")) issues.push(`${key}:todayAuthoritative_missing`);
+  if (!Object.prototype.hasOwnProperty.call(row, "formalDisplayAllowed")) issues.push(`${key}:formalDisplayAllowed_missing`);
+  if (!Object.prototype.hasOwnProperty.call(row, "displayMode")) issues.push(`${key}:displayMode_missing`);
+  if (row.formalDisplayAllowed === true && row.todayAuthoritative !== true) issues.push(`${key}:formal_display_without_today_authority`);
+  if (row.formalDisplayAllowed === true && !["TODAY_COMPLETE", "TODAY_ZERO_RESULT_COMPLETE"].includes(String(row.displayMode || ""))) issues.push(`${key}:formal_display_bad_mode:${row.displayMode || "blank"}`);
+  if (row.formalDisplayAllowed !== true && pendingNotDue !== true && !row.displayBlockReason) issues.push(`${key}:formal_display_block_reason_missing`);
   if (!primaryRunId) issues.push(`${key}:missing_primary_runId`);
   if (uniqueIds.length > 1) issues.push(`${key}:runId_mismatch:${uniqueIds.join(",")}`);
   if (tradeDate && runDate && runDate !== tradeDate) issues.push(`${key}:runDate_mismatch:${runDate}!=${tradeDate}`);
@@ -88,10 +141,9 @@ function validateModule(row, manifest, controlPlane, issues) {
   if (row.complete !== true) issues.push(`${key}:manifest_complete_not_true`);
   if (row.fallback === true) issues.push(`${key}:manifest_fallback_true`);
 
-  const protected88 = row.scorecard88Protection === "membership-protected" || isProtectedMarker(ids.scorecard88);
+  const protected88 = row.scorecard88Protection === "membership-protected" || isProtectedMarker(ids.scorecard88) || isProtectedMarker(ids.sourceReports);
   if (!protected88 && !ids.scorecard88) issues.push(`${key}:scorecard88_runId_missing_or_unprotected`);
 
-  const closureRow = (controlPlane.runIdClosure?.modules || []).find((item) => item.key === row.key);
   if (!closureRow) {
     issues.push(`${key}:control_plane_runId_closure_row_missing`);
   } else {
@@ -107,6 +159,11 @@ function validateModule(row, manifest, controlPlane, issues) {
     runDate,
     uniqueRunIds: uniqueIds,
     scorecard88Protection: row.scorecard88Protection || "",
+    moduleStatus: row.moduleStatus || "",
+    todayAuthoritative: row.todayAuthoritative === true,
+    formalDisplayAllowed: row.formalDisplayAllowed === true,
+    displayMode: row.displayMode || "",
+    displayBlockReason: row.displayBlockReason || "",
     ok: row.ok === true && row.complete === true && row.fallback !== true && uniqueIds.length <= 1,
   };
 }
@@ -147,30 +204,53 @@ async function main() {
   const resourceChainScript = readText(RESOURCE_CHAIN_SCRIPT);
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_missing");
+  if (!manifest.dailyRunId) issues.push("manifest_dailyRunId_missing");
+  if (!manifest.sourceGrade) issues.push("manifest_sourceGrade_missing");
+  if (!manifest.moduleStatuses || typeof manifest.moduleStatuses !== "object") issues.push("manifest_moduleStatuses_missing");
+  for (const field of ["natural0700", "natural0845", "natural0900", "finalDecision"]) {
+    if (!(field in manifest)) issues.push(`manifest_${field}_missing`);
+  }
+  const allowedModuleStatuses = new Set(["complete", "empty", "blocked", "degraded", "0-result", "pending"]);
+  for (const row of (manifest.modules || [])) {
+    if (!allowedModuleStatuses.has(String(row.moduleStatus || ""))) issues.push(`${row.key || "unknown"}:moduleStatus_invalid`);
+    if (manifest.moduleStatuses && manifest.moduleStatuses[row.key] !== row.moduleStatus) issues.push(`${row.key || "unknown"}:moduleStatus_manifest_mismatch`);
+  }
   if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) issues.push("manifest_modules_missing");
-  if (manifest.ok !== true) issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
-  const closedPreviousGood = marketClosedPreviousGood(manifest, controlPlane);
-  if (!acceptableManifestStatus(manifest.unattendedStatus, closedPreviousGood)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
+  const hardBlockedManifestModules = (manifest.modules || []).filter((row) => row.ok !== true && row.pendingNotDue !== true);
+  const manifestPendingNotDue = hardBlockedManifestModules.length === 0
+    && (String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
+      || (manifest.modules || []).some((row) => row.pendingNotDue === true));
+  if (manifest.ok !== true) {
+    issues.push(manifestPendingNotDue
+      ? `manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`
+      : `manifest_not_ok:${manifest.blocker || "unknown"}`);
+  }
+  const mode = closureMode(manifest, controlPlane);
+  const previousGoodClosure = mode === "market_closed_previous_good_closure" || mode === "trading_day_previous_good_hold_closure";
+  if (!manifestPendingNotDue && !acceptableManifestStatus(manifest.unattendedStatus, previousGoodClosure)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
 
   const controlPlaneAccepted = controlPlane.contract === "terminal-control-plane-v1"
     && controlPlane.dailyManifest?.ok === true
-    && controlPlane.runIdClosure?.ok === true
     && (
       controlPlane.decision?.unattendedStatus === "YES"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+      || controlPlane.canaryPublish?.status === "NOT_ARMED_TRADING_DAY_PREVIOUS_GOOD"
       || controlPlane.canaryPublish?.status === "CANARY_PREVIOUS_GOOD_HOLD"
-    );
-  if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
-  if (!controlPlaneAccepted) {
+      || (previousGoodClosure && controlPlane.canaryPublish?.scorecardPublishAllowed !== true)
+    )
+    && (previousGoodClosure || controlPlane.runIdClosure?.ok === true);  if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
+  if (!controlPlaneAccepted && !manifestPendingNotDue) {
     issues.push(`control_plane_not_accepted:${controlPlane.canaryPublish?.status || controlPlane.decision?.unattendedStatus || "missing"}`);
   }
-  if (controlPlane.runIdClosure?.ok !== true) issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
-
-  if (closedPreviousGood && controlPlane.canaryPublish?.scorecardPublishAllowed === true) {
-    issues.push("market_closed_scorecard_publish_allowed_true");
+  if (!previousGoodClosure && controlPlane.runIdClosure?.ok !== true && controlPlane.runIdClosure?.status !== "PENDING_NOT_DUE") {
+    issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
   }
 
-  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues));
+  if (previousGoodClosure && controlPlane.canaryPublish?.scorecardPublishAllowed === true) {
+    issues.push("previous_good_hold_scorecard_publish_allowed_true");
+  }
+
+  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues, previousGoodClosure));
   const resourceRows = validateResourceChain(resourceChain, manifest, issues);
 
   const scripts = pkg.scripts || {};
@@ -194,7 +274,7 @@ async function main() {
     ok: issues.length === 0,
     contract: "terminal-runid-closure-contract-v1",
     checkedAt: new Date().toISOString(),
-    mode: closedPreviousGood ? "market_closed_previous_good_closure" : "formal_trading_day_closure",
+    mode,
     tradeDate: manifest.tradeDate || "",
     manifest: {
       ok: manifest.ok === true,
@@ -214,7 +294,7 @@ async function main() {
     },
     guarantees: [
       "scanner/latest/API/desktop/mobile/88 runId mismatch fails",
-      "market-closed previous-good mode cannot publish a fresh scorecard",
+      "previous-good hold mode cannot publish a fresh scorecard",
       "membership-protected /88 is display protection, not compute failure",
       "root gate builds manifest from production resource-chain readback exactly once",
     ],

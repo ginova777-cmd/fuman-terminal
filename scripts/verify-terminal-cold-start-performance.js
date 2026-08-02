@@ -377,7 +377,20 @@ function collectRows(route) {
   const countMatch = countText.match(/(\d+)\s*\/\s*(\d+)/) || countText.match(/(\d+)\s*筆/);
   const canvasRows = countMatch ? Number(countMatch[1]) || 0 : 0;
   const rowCount = Math.max(rows.length, canvasRows);
-  const blocker = /HTTP\s*503|timeout|讀取失敗|載入失敗|資料載入失敗|fallback|static json|Google Sheet|fuman-terminal-sync/i.test(panelText);
+  const hasSimpleReportMarker = Boolean(activePanel.querySelector('[data-market-api-ai*="market-ai-index-report"], [data-market-api-ai*="weighted-index-simple-report"], [data-market-ai-simple-report]'));
+  const hasSimpleReportText = Boolean(route?.key === "market-ai" || route?.key === "market")
+    && /市場\s*AI\s*總覽/i.test(panelText)
+    && /API\s*only/i.test(panelText)
+    && /盤後等待資料|資料尚未回寫|保留空狀態/i.test(panelText);
+  const simpleReport = Boolean(route?.key === "market-ai" || route?.key === "market")
+    && (hasSimpleReportMarker || hasSimpleReportText);
+  const blockerText = (simpleReport
+    ? panelText.replace(/盤後等待資料|尚未回寫|保留空狀態|API only/gi, "")
+    : panelText)
+    .replace(/不以\s*fallback[^。；;]*/gi, "")
+    .replace(/不顯示舊\s*heatmap\s*cache/gi, "")
+    .replace(/fallback\s*\/\s*壞水源顯示正常盤面/gi, "");
+  const blocker = /HTTP\s*503|timeout|讀取失敗|載入失敗|資料載入失敗|fallback(?:Used)?\s*[=:]\s*true|static json|Google Sheet|fuman-terminal-sync/i.test(blockerText);
   return {
     ok: (rowCount > 0 || route.allowEmpty) && !blocker,
     rows: rowCount,
@@ -391,15 +404,15 @@ function collectRows(route) {
 }
 
 const routes = [
-  { key: "market", nav: "aside.sidebar a[data-view='market']", rowSelectors: [".metric-card", ".sector-card"] },
+  { key: "market", nav: "aside.sidebar a[data-view='market']", expectedPanelId: "market-view", rowSelectors: [".metric-card", ".sector-card"] },
   { key: "market-ai", nav: "aside.sidebar a[data-view='market']", mode: "[data-market-mode='ai']", rowSelectors: [".market-ai-card", ".market-ai-block", ".market-ai-point", ".market-ai-stock-row"] },
-  { key: "strategy2", nav: "aside.sidebar a[data-view='strategy'] .s2" },
-  { key: "strategy3", nav: "aside.sidebar a[data-view='strategy'] .s3" },
-  { key: "strategy4", nav: "aside.sidebar a[data-view='strategy'] .s4" },
-  { key: "strategy5", nav: "aside.sidebar a[data-view='strategy'] .s5" },
-  { key: "institution", nav: "aside.sidebar a[data-view='chip-trade']", allowEmpty: true },
-  { key: "cb", nav: "aside.sidebar a[data-view='cb-detect']" },
-  { key: "warrant", nav: "aside.sidebar a[data-view='warrant-flow']" },
+  { key: "strategy2", nav: "aside.sidebar a[data-view='strategy'][data-strategy-route='intraday_2m']", expectedPanelId: "strategy-view" },
+  { key: "strategy3", nav: "aside.sidebar a[data-view='strategy'][data-strategy-route='strategy3']", expectedPanelId: "strategy-view" },
+  { key: "strategy4", nav: "aside.sidebar a[data-view='strategy'][data-strategy-route='swing_radar']", expectedPanelId: "strategy-view" },
+  { key: "strategy5", nav: "aside.sidebar a[data-view='strategy'][data-strategy-route='strategy5']", expectedPanelId: "strategy-view" },
+  { key: "institution", nav: "aside.sidebar a[data-view='chip-trade']", expectedPanelId: "chip-trade-view", allowEmpty: true },
+  { key: "cb", nav: "aside.sidebar a[data-view='cb-detect']", expectedPanelId: "cb-detect-view" },
+  { key: "warrant", nav: "aside.sidebar a[data-view='warrant-flow']", expectedPanelId: "warrant-flow-view" },
   { key: "watchlist", nav: "aside.sidebar a[data-view='watchlist']", seedWatchlist: true, allowEmpty: true },
 ];
 
@@ -433,7 +446,28 @@ async function measureRoute(cdp, route) {
   if (route.seedWatchlist) await seedWatchlist(cdp);
   const start = Date.now();
   await clickSelector(cdp, route.nav);
-  if (route.mode) await clickSelector(cdp, route.mode);
+  if (route.mode) {
+    const modeState = await evaluate(cdp, (selector) => {
+      const node = document.querySelector(selector);
+      const target = node?.closest?.("button,a,[role=button]") || node;
+      const rect = target?.getBoundingClientRect?.();
+      const style = target ? getComputedStyle(target) : null;
+      const visible = Boolean(rect && rect.width > 2 && rect.height > 2 && style?.display !== "none" && style?.visibility !== "hidden");
+      const market = document.querySelector("#market-view");
+      const activeAi = Boolean(market?.classList.contains("market-ai-mode")
+        || document.documentElement.dataset.fumanMarketDesktopMode === "ai"
+        || market?.querySelector(".market-ai-hero-board"));
+      return { visible, activeAi };
+    }, route.mode, 10000).catch(() => ({ visible: false, activeAi: false }));
+    if (modeState.visible) await clickSelector(cdp, route.mode);
+    else if (!modeState.activeAi) throw new Error(`AI mode control hidden and AI mode is not active: ${route.mode}`);
+  }
+  await waitFor(cdp, (expected) => {
+    const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden);
+    const panelOk = !expected.expectedPanelId || activePanel?.id === expected.expectedPanelId;
+    const aiOk = expected.key !== "market-ai" || Boolean(document.querySelector("#market-view.market-ai-mode, #market-view .market-ai-hero-board"));
+    return { ok: panelOk && aiOk, activePanelId: activePanel?.id || "" };
+  }, route, 15000, 100);
   const ready = await waitFor(cdp, collectRows, route, 25000, 100);
   return {
     route: route.key,
@@ -522,3 +556,4 @@ async function measureRouteInFreshBrowser(route) {
   console.error(error.stack || error.message || error);
   process.exit(1);
 });
+

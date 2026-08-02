@@ -16,6 +16,7 @@ function assert(condition, message) {
 }
 
 const today = "2026-07-08";
+const formalEvidence = { source_status: "ok", gate_grade: "A", gate_status: "ready", formal_entry_speed_verdict: "YES", formal_entry_allowed: true };
 const fixture = [
   {
     trade_date: today,
@@ -29,6 +30,7 @@ const fixture = [
     strategy: "PS1",
     signal_type: "formal",
     source: "fugle-entry-history",
+    evidence: formalEvidence,
     updated_at: "2026-07-08T01:15:05.000Z",
   },
   {
@@ -43,8 +45,10 @@ const fixture = [
     strategy_label: "PS1",
     signal_type: "detected",
     source: "fugle-detected-history",
+    evidence: formalEvidence,
     updated_at: "2026-07-08T05:29:59.000Z",
   },
+  { trade_date: today, detect_time: "09:30:00", symbol: "5483", name: "中美晶", entry_price: 201.5, strategy: "PS1", signal_type: "detected", source: "fugle-detected-history", evidence: { source_status: "degraded", gate_grade: "C", formal_entry_speed_verdict: "NO", formal_entry_allowed: false } },
   { trade_date: "2026-07-07", detect_time: "10:00:00", symbol: "2454", name: "聯發科", entry_price: 1200, strategy: "PS1", signal_type: "formal", source: "fugle-entry-history" },
   { trade_date: today, detect_time: "08:59:59", symbol: "2603", name: "長榮", entry_price: 180, strategy: "PS1", signal_type: "detected", source: "fugle-detected-history" },
   { trade_date: today, detect_time: "13:30:01", symbol: "2618", name: "長榮航", entry_price: 40, strategy: "PS1", signal_type: "detected", source: "fugle-detected-history" },
@@ -64,6 +68,7 @@ const checks = [
   ["html_has_no_qutie_local_json_fetch", !html.includes("fugle-entry-history.json") && !html.includes("fugle-detected-history.json")],
   ["api_table_contract", apiSource.includes("public.seven_strategy_daily_history")],
   ["api_selects_entry_time_strategy_label", apiSource.includes('"entry_time"') && apiSource.includes('"strategy_label"')],
+  ["api_selects_formal_evidence", apiSource.includes("evidence") && apiSource.includes("formalEvidenceNotReady")],
   ["api_has_no_fs_read", !/fs\./.test(apiSource)],
   ["source_reports_connected", scorecardSource.includes("seven_strategy_daily_history") && scorecardSource.includes("/api/seven-strategy-daily-history")],
   ["sql_table", /create table if not exists public\.seven_strategy_daily_history/i.test(sql)],
@@ -83,9 +88,10 @@ const checks = [
   ["filters_outside_window", normalized.filtered.outsideWindow === 2],
   ["filters_replay", normalized.filtered.replay === 1],
   ["filters_blank_required", normalized.filtered.blankRequired === 3],
+  ["filters_formal_evidence", normalized.filtered.formalEvidenceNotReady === 1],
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([issue]) => issue);
 assert(!failed.length, `issues=${failed.join(",")}`);
 
-console.log(`[scorecard-seven-strategy-daily-history-contract] rawOk=true source=${hooks.SOURCE_NAME} table=${hooks.TABLE_NAME} kept=${normalized.rows.length} first=${normalized.rows[0].symbol} formal=${summary.formalCount} detected=${summary.detectedCount} filteredOld=${normalized.filtered.nonToday} filteredWindow=${normalized.filtered.outsideWindow} filteredReplay=${normalized.filtered.replay} filteredBlankRequired=${normalized.filtered.blankRequired} endpoint=/api/seven-strategy-daily-history sourceReports=true localFileRead=false`);
+console.log(`[scorecard-seven-strategy-daily-history-contract] rawOk=true source=${hooks.SOURCE_NAME} table=${hooks.TABLE_NAME} kept=${normalized.rows.length} first=${normalized.rows[0].symbol} formal=${summary.formalCount} detected=${summary.detectedCount} filteredOld=${normalized.filtered.nonToday} filteredWindow=${normalized.filtered.outsideWindow} filteredReplay=${normalized.filtered.replay} filteredBlankRequired=${normalized.filtered.blankRequired} filteredFormalEvidence=${normalized.filtered.formalEvidenceNotReady} endpoint=/api/seven-strategy-daily-history sourceReports=true localFileRead=false`);

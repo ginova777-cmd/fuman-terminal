@@ -6,7 +6,6 @@ const { spawnSync } = require("child_process");
 
 const repo = path.resolve(__dirname, "..");
 const requiredGuardFiles = [
-  "run-open-buy.ps1",
   "run-strategy2-intraday.ps1",
   "run-strategy3-complete-scan.ps1",
   "run-strategy4.ps1",
@@ -14,7 +13,6 @@ const requiredGuardFiles = [
   "run-institution.ps1",
   "run-warrant-flow.ps1",
   "run-cb-detect.ps1",
-  "run-realtime-radar.ps1",
   "run-market-overview.ps1",
   "run-flow.ps1",
 ];
@@ -67,6 +65,21 @@ if (payload) {
   }
 }
 
+const receiptProbe = spawnSync(process.execPath, ["scripts/check-market-calendar-action.js", "--date=2026-07-10", "--label=verify-market-closed-receipt", "--receipt=1"], {
+  cwd: repo,
+  encoding: "utf8",
+  env: { ...process.env, NODE_OPTIONS: "--use-system-ca", FUMAN_RUNTIME_DIR: path.join(repo, "outputs", "market-closed-schedule-contract-fixture"), FUMAN_DATA_DIR: path.join(repo, "outputs", "market-closed-schedule-contract-fixture", "data") },
+});
+let receiptPayload = null;
+try { receiptPayload = JSON.parse(receiptProbe.stdout); } catch {}
+if (receiptProbe.status !== 10) issues.push(`closed day receipt probe exit expected 10 got ${receiptProbe.status}; stderr=${receiptProbe.stderr}`);
+const receiptFile = path.join(repo, "outputs", "market-closed-schedule-contract-fixture", "data", "scan-receipts", "market-closed-verify-market-closed-receipt.json");
+let receipt = null;
+try { receipt = JSON.parse(fs.readFileSync(receiptFile, "utf8")); } catch {}
+if (!receipt) issues.push("closed day receipt probe did not write a receipt");
+if (receipt?.unattendedStatus !== "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD") issues.push(`closed day receipt unattendedStatus must be MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD got ${receipt?.unattendedStatus || "missing"}`);
+if (receipt?.evidenceStatus !== "market_closed") issues.push(`closed day receipt evidenceStatus must be market_closed got ${receipt?.evidenceStatus || "missing"}`);
+if (receipt?.publishAllowed === true) issues.push("closed day receipt publishAllowed must not be true");
 const openProbe = spawnSync(process.execPath, ["scripts/check-market-calendar-action.js", "--date=2026-07-09", "--label=verify-market-open-schedule"], {
   cwd: repo,
   encoding: "utf8",
@@ -82,6 +95,7 @@ const result = {
   contract: "market-closed-schedule-contract-v1",
   checkedFiles: requiredGuardFiles,
   closedDayProbe: payload,
+  closedDayReceiptProbe: receipt,
   openDayProbe: openPayload,
   issues,
 };

@@ -5,6 +5,27 @@ const https = require("https");
 
 const BASE_URL = String(process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 
+function argValue(name) {
+  const prefix = `${name}=`;
+  const inline = process.argv.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : "";
+}
+
+function normalizeDate(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return "";
+}
+
+function explicitExpectedDate() {
+  return normalizeDate(argValue("--date") || argValue("--trade-date") || process.env.FUMAN_SCORECARD_EXPECTED_DATE || "");
+}
+
 function todayTaipeiDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -76,6 +97,7 @@ function daytradeIssues(payload, expectedDate) {
 function sevenStrategyIssues(payload, expectedDate, sourceReportsPayload) {
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const reports = Array.isArray(sourceReportsPayload.sourceReports) ? sourceReportsPayload.sourceReports : [];
+  const sourceReportsProtected = sourceReportsPayload.status === 401 || sourceReportsPayload.protected === true || /membership_required/.test(String(sourceReportsPayload.error || sourceReportsPayload.reason || ""));
   const sourceReport = reports.find((report) => report.key === "seven_strategy_daily_history" || report.sourceName === "seven_strategy_daily_history");
   const issues = [];
   if (payload.ok !== true) issues.push(`seven_payload_ok_${payload.ok}`);
@@ -83,7 +105,7 @@ function sevenStrategyIssues(payload, expectedDate, sourceReportsPayload) {
   if (payload.table !== "public.seven_strategy_daily_history") issues.push(`seven_table_${payload.table || "missing"}`);
   if (payload.tradeDate !== expectedDate) issues.push(`seven_date_${payload.tradeDate || "missing"}_expected_${expectedDate}`);
   if (!String(payload.source || "").includes("supabase:public.seven_strategy_daily_history")) issues.push("seven_source_not_supabase");
-  if (!sourceReport) issues.push("seven_missing_source_report");
+  if (!sourceReport && !sourceReportsProtected) issues.push("seven_missing_source_report");
   if (rows.length < 1) issues.push("seven_strategy_empty_rows");
   for (const [index, row] of rows.entries()) {
     if (row.tradeDate !== expectedDate) issues.push(`seven_row_${index}_old_date`);
@@ -105,14 +127,20 @@ function sevenStrategyIssues(payload, expectedDate, sourceReportsPayload) {
 }
 
 async function main() {
-  const expectedDate = todayTaipeiDate();
-  const [marketCalendar, health, daytrade, seven, reports, page] = await Promise.all([
+  const [marketCalendar, health, page] = await Promise.all([
     fetchJson("/api/market-calendar"),
     fetchJson("/api/scorecard-health"),
-    fetchJson("/api/daytrade-entry-history"),
-    fetchJson("/api/seven-strategy-daily-history?limit=100"),
-    fetchJson("/api/source-reports"),
     fetchJson("/api/scorecard?live=1"),
+  ]);
+  const expectedDate = explicitExpectedDate()
+    || normalizeDate(marketCalendar.json?.displayTradeDate)
+    || normalizeDate(page.json?.selectedDate || page.json?.latestDate || page.json?.marketDate)
+    || todayTaipeiDate();
+  const dateQuery = `date=${encodeURIComponent(expectedDate)}`;
+  const [daytrade, seven, reports] = await Promise.all([
+    fetchJson(`/api/daytrade-entry-history?${dateQuery}`),
+    fetchJson(`/api/seven-strategy-daily-history?limit=100&${dateQuery}`),
+    fetchJson(`/api/source-reports?${dateQuery}`).catch((error) => ({ status: 0, json: { ok: false, error: error.message } })),
   ]);
   const issues = [];
   const marketClosed = marketCalendar.status >= 200 && marketCalendar.status < 300
@@ -127,6 +155,8 @@ async function main() {
   const sevenResult = sevenStrategyIssues(seven.json || {}, expectedDate, reports.json || {});
   const healthClosed = marketClosedEvidence(health.json || {});
   const combinedMarketClosed = marketClosed || healthClosed.marketClosed;
+  if (daytrade.json?.tradeDate !== expectedDate) issues.push(`daytrade_display_date_mismatch_${daytrade.json?.tradeDate || "missing"}_expected_${expectedDate}`);
+  if (seven.json?.tradeDate !== expectedDate) issues.push(`seven_display_date_mismatch_${seven.json?.tradeDate || "missing"}_expected_${expectedDate}`);
   if (!combinedMarketClosed && (health.status < 200 || health.status >= 300 || health.json?.ok !== true)) issues.push(`scorecard_health_${health.status}_${health.json?.ok}`);
   if (!combinedMarketClosed && (page.status < 200 || page.status >= 300 || page.json?.ok !== true)) issues.push(`scorecard_api_${page.status}_${page.json?.ok}`);
   if (!combinedMarketClosed) issues.push(...daytradeResult.issues, ...sevenResult.issues);
@@ -134,6 +164,7 @@ async function main() {
   const summary = [
     `rawOk=${rawOk}`,
     `base=${BASE_URL}`,
+    `expectedDate=${expectedDate}`,
     `marketClosed=${combinedMarketClosed}`,
     `calendarClosed=${marketClosed}`,
     `healthClosed=${healthClosed.marketClosed}`,

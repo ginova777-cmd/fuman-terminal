@@ -16,7 +16,7 @@ $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
-function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
   $receipt = [ordered]@{
     strategy = "cb-detect"
     label = "CB detect full scan"
@@ -29,8 +29,41 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
     total = 0
     matches = $Matches
     complete = $Complete
-    qualityStatus = if ($Complete) { "complete" } else { "" }
-    fallback = $false
+    qualityStatus = if ($PreservePreviousGood) { "preserved_latest" } elseif ($Complete) { "complete" } else { "" }
+    fallback = [bool]$PreservePreviousGood
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = "cb-detect-fail-closed-v1"
+    publishAllowed = ($Complete -and -not $PreservePreviousGood)
+    latestOverwriteAllowed = ($Complete -and -not $PreservePreviousGood)
+    latestWriteAttempted = ($Complete -and -not $PreservePreviousGood)
+    latestPointerUpdated = ($Complete -and -not $PreservePreviousGood)
+    blockedReceiptWritten = [bool]$PreservePreviousGood
+    degradedBlocksLatest = [bool]$PreservePreviousGood
+    preservePreviousGood = [bool]$PreservePreviousGood
+    evidenceStatus = if ($PreservePreviousGood) { "insufficient" } elseif ($Complete) { "complete" } else { "insufficient" }
+    unattendedStatus = if ($PreservePreviousGood) { "NO" } elseif ($Complete) { "YES" } else { "NO" }
+    run_quality_at_publish = [ordered]@{
+      publishAllowed = ($Complete -and -not $PreservePreviousGood)
+      latestOverwriteAllowed = ($Complete -and -not $PreservePreviousGood)
+      latestWriteAttempted = ($Complete -and -not $PreservePreviousGood)
+      latestPointerUpdated = ($Complete -and -not $PreservePreviousGood)
+      blockedReceiptWritten = [bool]$PreservePreviousGood
+      degradedBlocksLatest = [bool]$PreservePreviousGood
+      preservePreviousGood = [bool]$PreservePreviousGood
+      fallbackUsed = $false
+      fallbackScope = @()
+      fallbackAllowed = $false
+      fallbackDetails = @()
+      fallbackContract = "cb-detect-fail-closed-v1"
+      evidenceStatus = if ($PreservePreviousGood) { "insufficient" } elseif ($Complete) { "complete" } else { "insufficient" }
+      unattendedStatus = if ($PreservePreviousGood) { "NO" } elseif ($Complete) { "YES" } else { "NO" }
+      blockedReason = $BlockingReason
+      scanner_block_reason = $BlockingReason
+      resultCount = [int]$Matches
+    }
     runId = $RunId
     payloadPath = "supabase-snapshot:cb_detect_latest"
     warnings = @($Warnings)
@@ -81,6 +114,21 @@ function Assert-CbDetectApi {
 "=== CB detect full scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "CB detect full scan" -LogPath $log
+. "${PSScriptRoot}\scanner-resource-health.ps1"
+$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "cb-detect" -LogPath $log
+if ($resourceGate.PreserveLatest) {
+  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+  "CB detect source gate blocked new publish; preserving latest complete run. $reason" >> $log
+  try {
+    $verifiedPayload = Assert-CbDetectApi
+    Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
+  } catch {
+    $readbackReason = "CB detect previous-good readback unavailable while source gate blocked: $($_.Exception.Message)"
+    $readbackReason >> $log
+    Write-CbDetectReceipt "blocked" 0 $false 0 "" @($reason, $readbackReason) $reason $true
+  }
+  exit 0
+}
 $codeRepo = "${PSScriptRoot}"
 Push-Location $codeRepo
 try {
@@ -125,3 +173,4 @@ try {
 "CB detect API-only: scanner success verifies api/cb-detect-latest and reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
 exit 0
+

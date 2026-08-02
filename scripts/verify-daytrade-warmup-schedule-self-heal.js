@@ -148,9 +148,22 @@ function main() {
   if (!selfHealText.includes("self_heal_counts_as_unattended_yes: false")) issues.push("self_heal_runner_may_fake_unattended_yes");
   const naturalGateRuntimePath = "C:/fuman-runtime/ops/Run-DaytradeUnattendedGate.ps1";
   const naturalGateRuntimeText = fs.existsSync(naturalGateRuntimePath) ? fs.readFileSync(naturalGateRuntimePath, "utf8") : "";
+  const naturalGateRuntimeImplPath = "C:/fuman-runtime/ops/daytrade-unattended-gate-runtime.js";
+  const naturalGateRuntimeImplText = fs.existsSync(naturalGateRuntimeImplPath) ? fs.readFileSync(naturalGateRuntimeImplPath, "utf8") : "";
   if (!naturalGateRuntimeText.includes("check-market-calendar-action.js")) issues.push("natural_gate_missing_market_calendar_guard");
   if (!naturalGateRuntimeText.includes("market_closed")) issues.push("natural_gate_missing_market_closed_branch");
   if (!naturalGateRuntimeText.includes("preserve previous good")) issues.push("natural_gate_missing_previous_good_protection");
+  for (const needle of [
+    "function writePhaseArtifacts(phase, output)",
+    "-evidence-${evidenceDate}-${stamp}-${process.pid}.json",
+    "const existingNatural =",
+    "manual_or_recovery",
+    "natural_schedule",
+  ]) {
+    if (!naturalGateRuntimeImplText.includes(needle)) {
+      issues.push(`natural_gate_missing_immutable_evidence_guard:${needle}`);
+    }
+  }
   const predictivePreflightRuntimePath = "C:/fuman-runtime/ops/daytrade-preflight-0830.js";
   const predictivePreflightWrapperPath = "C:/fuman-runtime/ops/Run-DaytradePreflight0830.ps1";
   const predictivePreflightText = fs.existsSync(predictivePreflightRuntimePath) ? fs.readFileSync(predictivePreflightRuntimePath, "utf8") : "";
@@ -292,5 +305,3 @@ function main() {
 }
 
 main();
-
-

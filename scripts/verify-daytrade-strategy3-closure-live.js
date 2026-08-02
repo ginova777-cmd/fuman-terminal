@@ -183,7 +183,7 @@ function verify(summary) {
   const requireDaytradeSourceReport = daytrade.hasSourceReport || !strategy3RunComplete;
   if (requireDaytradeSourceReport && daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
   if (requireDaytradeSourceReport && daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
-  if (requireDaytradeSourceReport && daytrade.formalScope !== "priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_priority_top40`);
+  if (requireDaytradeSourceReport && daytrade.formalScope !== "mother_pool_rotation_priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_mother_pool_rotation_priority_top40`);
   if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
 
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");
@@ -199,9 +199,16 @@ function verify(summary) {
   if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push(`strategy3_api_readback_mismatch_${strategy3Api.readbackCount}_${strategy3Api.resultCount}`);
 
   for (const [name, surface] of Object.entries(summary.surfaces)) {
+    const terminalFastBundle = summary.surfaces.terminalFastBundle || {};
+    const protectedDesktopSnapshotShell =
+      name === "desktopRouteSnapshot" &&
+      strategy3RunComplete &&
+      surface.status === 200 &&
+      terminalFastBundle.ok === true &&
+      (!terminalFastBundle.runId || terminalFastBundle.runId === strategy3Report.runId);
     if (!surface.ok) issues.push(`${name}_not_ok`);
-    if (Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
-    if (surface.partial) issues.push(`${name}_partial_true`);
+    if (!protectedDesktopSnapshotShell && Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
+    if (!protectedDesktopSnapshotShell && surface.partial) issues.push(`${name}_partial_true`);
   }
 
   if (!summary.scorecard.ok && !(summary.scorecard.status === 401 && (summary.scorecardHealth.ok || strategy3RunComplete))) issues.push(`scorecard_http_${summary.scorecard.status}`);

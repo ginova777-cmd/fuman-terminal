@@ -5,6 +5,7 @@ const https = require("https");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { verifyScorecardStrategyRules, RULE_CONTRACT } = require("../lib/scorecard-rule-locks");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders, publicCredentialSummary } = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -21,10 +22,10 @@ function argValue(name, fallback = "") {
   return found ? found.slice(prefix.length) : fallback;
 }
 
-function fetchJson(pathname, timeoutMs = 35000) {
+function fetchJson(pathname, timeoutMs = 35000, extraHeaders = {}) {
   const url = `${BASE_URL}${pathname}${pathname.includes("?") ? "&" : "?"}rules=${Date.now()}`;
   return new Promise((resolve, reject) => {
-    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache" } }, (response) => {
+    const request = https.get(url, { timeout: timeoutMs, headers: { "cache-control": "no-cache", ...extraHeaders } }, (response) => {
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk) => { body += chunk; });
@@ -74,8 +75,12 @@ async function main() {
     });
   }
 
+  let protectedReadback = null;
   if (CHECK_LIVE) {
-    const live = await fetchJson("/api/scorecard");
+    const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+    protectedReadback = publicCredentialSummary(credential);
+    const authHeaders = credential.token ? { ...protectedReadbackHeaders(credential), "X-Fuman-Readback-Auth": "membership-bearer" } : {};
+    const live = await fetchJson("/api/scorecard?live=1", 35000, authHeaders);
     reports.push({
       source: "live-api",
       httpStatus: live.status,
@@ -85,7 +90,6 @@ async function main() {
       }),
     });
   }
-
   const failed = reports.flatMap((report) => (report.checks || [])
     .filter((check) => !check.ok)
     .map((check) => ({ source: report.source, ...check })));
@@ -95,6 +99,7 @@ async function main() {
     contract: RULE_CONTRACT,
     requireContract: REQUIRE_CONTRACT,
     reports,
+    protectedReadback,
     failed,
   };
 

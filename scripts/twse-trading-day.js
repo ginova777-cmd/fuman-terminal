@@ -3,6 +3,7 @@ const path = require("path");
 
 const HOLIDAY_API_URL = process.env.TWSE_HOLIDAY_API_URL || "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule";
 const CACHE_MAX_AGE_MS = Math.max(60 * 60 * 1000, Number(process.env.TWSE_HOLIDAY_CACHE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000));
+const HOLIDAY_FETCH_TIMEOUT_MS = Math.max(1000, Number(process.env.TWSE_HOLIDAY_FETCH_TIMEOUT_MS || 3000));
 
 function taipeiDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -121,9 +122,17 @@ async function fetchHolidayRows(stateDir, year) {
   }
 
   try {
-    const response = await fetch(HOLIDAY_API_URL, {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HOLIDAY_FETCH_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(HOLIDAY_API_URL, {
       headers: { "User-Agent": "FumanRealtimeRadarTradingDay/1.0" },
-    });
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const rows = await response.json();
     if (!Array.isArray(rows)) throw new Error("unexpected TWSE holiday response");

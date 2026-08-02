@@ -16,9 +16,10 @@ const libSource = fs.readFileSync(path.join(root, "lib", "seven-strategy-daily-h
 
 const now = new Date("2026-07-08T02:00:00Z");
 const today = todayTaipeiDate(now);
+const formalEvidence = { source_status: "ok", gate_grade: "A", gate_status: "ready", formal_entry_speed_verdict: "YES", formal_entry_allowed: true };
 const fixtureRows = [
-  { tradeDate: today, detectTime: "09:15:00", symbol: "2330", name: "台積電", entryPrice: 1000, strategy: "七策略A", signalType: "formal", source: "fugle-entry-history" },
-  { tradeDate: today, detectTime: "09:16:00", symbol: "2317", name: "鴻海", entryPrice: 155, strategy: "七策略B", signalType: "detected", source: "fugle-detected-history" },
+  { tradeDate: today, detectTime: "09:15:00", symbol: "2330", name: "台積電", entryPrice: 1000, strategy: "七策略A", signalType: "formal", source: "fugle-entry-history", evidence: formalEvidence },
+  { tradeDate: today, detectTime: "09:16:00", symbol: "2317", name: "鴻海", entryPrice: 155, strategy: "七策略B", signalType: "detected", source: "fugle-detected-history", evidence: formalEvidence },
   { tradeDate: "2026-07-07", detectTime: "09:16:00", symbol: "2303", name: "聯電", entryPrice: 50, strategy: "七策略B", signalType: "detected", source: "fugle-detected-history" },
   { tradeDate: today, detectTime: "13:31:00", symbol: "2603", name: "長榮", entryPrice: 180, strategy: "七策略B", signalType: "detected", source: "fugle-detected-history" },
   { tradeDate: today, detectTime: "09:20:00", symbol: "2308", name: "台達電", entryPrice: 390, strategy: "replay-七策略", signalType: "detected", source: "replay" },
@@ -32,6 +33,7 @@ const mutationIssues = [
   validateRow({ ...normalized.accepted[0], source: "replay" }, { now }).issues[0],
   validateRow({ ...normalized.accepted[0], symbol: "" }, { now }).issues[0],
   validateRow({ ...normalized.accepted[0], entry_price: null }, { now }).issues[0],
+  ...validateRow({ ...normalized.accepted[1], evidence: { source_status: "degraded", gate_grade: "C", formal_entry_speed_verdict: "NO", formal_entry_allowed: false } }, { now }).issues,
 ];
 
 const issues = [];
@@ -40,13 +42,13 @@ if (normalized.accepted.length !== 2) issues.push(`accepted_count:${normalized.a
 if (normalized.rejected.length !== 4) issues.push(`rejected_count:${normalized.rejected.length}`);
 if (normalized.accepted[0]?.symbol !== "2317") issues.push(`latest_first:${normalized.accepted[0]?.symbol || "missing"}`);
 if (normalized.accepted.some((row) => !row.entry_time || !row.strategy_label)) issues.push("missing_entry_time_or_strategy_label_output");
-for (const expected of ["trade_date_not_today", "detect_time_outside_window", "source_contains_replay", "missing_symbol", "missing_entry_price"]) {
+for (const expected of ["trade_date_not_today", "detect_time_outside_window", "source_contains_replay", "missing_symbol", "missing_entry_price", "source_status_not_ready"]) {
   if (!mutationIssues.some((issue) => String(issue || "").startsWith(expected))) issues.push(`missing_mutation_issue:${expected}`);
 }
 for (const marker of ["--entry-file", "--detected-file", "fugle-entry-history", "fugle-detected-history"]) {
   if (!scriptSource.includes(marker)) issues.push(`missing_cli_marker:${marker}`);
 }
-for (const marker of ["entry_time", "strategy_label", "on_conflict=trade_date,detect_time,symbol,strategy,signal_type,source", "resolution=merge-duplicates", "serverSupabaseKey"]) {
+for (const marker of ["entry_time", "strategy_label", "formal_source_evidence_missing", "on_conflict=trade_date,detect_time,symbol,strategy,signal_type,source", "resolution=merge-duplicates", "serverSupabaseKey"]) {
   if (!libSource.includes(marker)) issues.push(`missing_writer_marker:${marker}`);
 }
 
@@ -55,4 +57,4 @@ if (issues.length) {
   process.exit(1);
 }
 
-console.log(`[seven-strategy-daily-history-writer-contract] rawOk=true table=${TABLE_NAME} accepted=${normalized.accepted.length} rejected=${normalized.rejected.length} first=${normalized.accepted[0].symbol} mutationIssues=${mutationIssues.join("|")} entryFile=true detectedFile=true mode=service_role_upsert`);
+console.log(`[seven-strategy-daily-history-writer-contract] rawOk=true table=${TABLE_NAME} accepted=${normalized.accepted.length} rejected=${normalized.rejected.length} first=${normalized.accepted[0].symbol} mutationIssues=${mutationIssues.join("|")} entryFile=true detectedFile=true degradedRejected=true mode=service_role_upsert`);

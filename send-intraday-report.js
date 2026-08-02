@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
 const { cleanNumber, formatTradePrice } = require("./intraday-radar-rules");
+const { notificationsDisabled } = require("./scripts/notification-guard");
 
 const ROOT = path.resolve(__dirname, "..");
 const SIGNAL_FILE = path.join(ROOT, ".intraday-cache", "signals.json");
@@ -91,6 +92,9 @@ async function smtpCommand(socket, command, expect = /^[23]/) {
 }
 
 async function sendMail({ host, port, user, pass, to, subject, text }) {
+  if (notificationsDisabled()) {
+    return { ok: true, disabled: true, reason: "legacy_notifications_disabled" };
+  }
   const socket = tls.connect({ host, port, servername: host });
   await new Promise((resolve, reject) => {
     socket.once("secureConnect", resolve);

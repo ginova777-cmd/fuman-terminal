@@ -19,16 +19,6 @@ $rules = @{
     Done = @("Cache sync end", "No cache changes to sync")
     Detail = @("Commit cache files", "Push cache commit", "No cache changes to sync")
   }
-  "run-open-buy.ps1" = @{
-    Log = "open-buy-*.log"
-    Done = @("Open buy full scan end")
-    Detail = @("full market scan", "scanned \d+/\d+", "matches \d+", "Open buy cache sync completed")
-  }
-  "run-star-preopen-watch.ps1" = @{
-    Log = "strategy1-preopen-watch-*.log"
-    Done = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip")
-    Detail = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip", "controlled preopen refresh failure")
-  }
   "run-strategy2-intraday.ps1" = @{
     Log = "strategy2-intraday-*.log"
     Done = @("Strategy2 intraday patrol end", "skip intraday scan outside market time")
@@ -63,11 +53,6 @@ $rules = @{
     Log = "strategy5-watchdog-*.log"
     Done = @("strategy5 healthy", "strategy5 recovered")
     Detail = @("strategy5 healthy.*", "strategy5 recovered.*")
-  }
-  "run-realtime-radar.ps1" = @{
-    Log = "realtime-radar-*.log"
-    Done = @("Realtime radar cache end", "realtime radar skipped outside")
-    Detail = @("Realtime radar cache end", "realtime radar skipped outside.*", "rows \d+ status ok")
   }
   "run-market-overview.ps1" = @{
     Log = "market-overview-*.log"

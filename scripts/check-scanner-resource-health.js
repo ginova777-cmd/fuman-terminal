@@ -147,7 +147,7 @@ async function fetchStrategy2ReadinessStatus() {
   }
 }
 
-async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
+async function fetchSourceStatusPayload(sourceName = "fugle_daytrade_source") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);

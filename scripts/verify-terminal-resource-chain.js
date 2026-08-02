@@ -2,6 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
+const { normalizeStrategyScanReceipt } = require("../lib/strategy-scan-receipt-contract");
+const {
+  resolveProtectedReadbackCredential,
+  publicCredentialSummary,
+} = require("../lib/protected-readback-credential");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -26,6 +31,11 @@ const ROUTE_ALIASES = new Map([
   ["market-overview", "market"],
 ]);
 
+function dateFromExpectedDateForCalendar(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+  if (digits.length !== 8) return null;
+  return new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}T10:00:00+08:00`);
+}
 function normalizeRouteFilter(value) {
   const key = String(value || "").trim().replace(/^\/+api\//, "").replace(/^\/+/, "").replace(/\?.*$/, "");
   return ROUTE_ALIASES.get(key) || key;
@@ -68,65 +78,11 @@ function protectedReadbackHeaders(url) {
 }
 
 async function ensureProtectedReadbackToken() {
-  if (PROTECTED_READBACK_TOKEN) return protectedReadbackAuth;
-  if (!MEMBERSHIP_READBACK_EMAIL || !MEMBERSHIP_READBACK_PASSWORD) return protectedReadbackAuth;
-  protectedReadbackAuth = {
-    attempted: true,
-    enabled: false,
-    source: "email-password",
-    status: 0,
-    error: "",
-  };
-  const startedAt = Date.now();
-  try {
-    const response = await fetch(`${MEMBERSHIP_AUTH_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        apikey: MEMBERSHIP_AUTH_KEY,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ email: MEMBERSHIP_READBACK_EMAIL, password: MEMBERSHIP_READBACK_PASSWORD }),
-    });
-    const text = await response.text();
-    let json = null;
-    try { json = JSON.parse(text || "{}"); } catch (_) { json = null; }
-    if (!response.ok || !json?.access_token) {
-      protectedReadbackAuth = {
-        attempted: true,
-        enabled: false,
-        source: "email-password",
-        status: response.status,
-        elapsedMs: Date.now() - startedAt,
-        error: json?.error_description || json?.msg || text.slice(0, 160),
-      };
-      return protectedReadbackAuth;
-    }
-    PROTECTED_READBACK_TOKEN = String(json.access_token || "");
-    protectedReadbackAuth = {
-      attempted: true,
-      enabled: true,
-      source: "email-password",
-      status: response.status,
-      elapsedMs: Date.now() - startedAt,
-      userId: json.user?.id || "",
-      email: MEMBERSHIP_READBACK_EMAIL,
-      error: "",
-    };
-    return protectedReadbackAuth;
-  } catch (error) {
-    protectedReadbackAuth = {
-      attempted: true,
-      enabled: false,
-      source: "email-password",
-      status: 0,
-      elapsedMs: Date.now() - startedAt,
-      error: error?.message || String(error),
-    };
-    return protectedReadbackAuth;
-  }
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+  if (credential.token) PROTECTED_READBACK_TOKEN = credential.token;
+  protectedReadbackAuth = publicCredentialSummary(credential);
+  return protectedReadbackAuth;
 }
-
 const STRATEGIES = [
   {
     key: "strategy2",
@@ -140,6 +96,7 @@ const STRATEGIES = [
     resultTable: "strategy2_scan_results",
     resultStrategy: "strategy2",
     allowMissingDesktopSnapshot: true,
+    allowDesktopSnapshotRunIdDrift: true,
     allowReceiptDriftWhenDownstreamFresh: true,
     scorecardKeys: ["strategy2","策略2成績單","策略2當沖成績單","策略2"],
   },
@@ -237,6 +194,7 @@ const STRATEGIES = [
     label: "市場總覽",
     policy: "same-day live",
     endpoint: "/api/market",
+    allowMissingDesktopSnapshot: true,
   },
 ];
 
@@ -325,12 +283,13 @@ function cleanNumber(value) {
 function receiptSummary(receiptKey) {
   if (!receiptKey) return null;
   const file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
-  const row = readJsonFile(file);
-  if (!row) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  const raw = readJsonFile(file);
+  if (!raw) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
+  const row = normalizeStrategyScanReceipt(raw, { key: receiptKey, strategy: receiptKey });
   const preservedLatest = row.preservedLatest === true && row.publishBlocked === true && Boolean(String(row.runId || ""));
   const fallback = row.fallback === true && !preservedLatest;
   return {
-    ok: row.status === "complete" && row.complete !== false && !fallback,
+    ok: row.status === "complete" && row.complete !== false && Boolean(row.runId) && !fallback && row.publishAllowed !== false && row.preservePreviousGood !== true,
     key: receiptKey,
     file,
     status: String(row.status || ""),
@@ -338,6 +297,16 @@ function receiptSummary(receiptKey) {
     fallback,
     preservedLatest,
     publishBlocked: row.publishBlocked === true,
+    preservePreviousGood: row.preservePreviousGood === true,
+    publishAllowed: row.publishAllowed === true,
+    latestOverwriteAllowed: row.latestOverwriteAllowed === true,
+    latestWriteAttempted: row.latestWriteAttempted === true,
+    latestPointerUpdated: row.latestPointerUpdated === true,
+    blockedReceiptWritten: row.blockedReceiptWritten === true,
+    degradedBlocksLatest: row.degradedBlocksLatest === true,
+    evidenceStatus: row.evidenceStatus || "",
+    unattendedStatus: row.unattendedStatus || "",
+    run_quality_at_publish: row.run_quality_at_publish || null,
     startedAt: row.startedAt || "",
     finishedAt: row.finishedAt || "",
     exitCode: row.exitCode,
@@ -346,7 +315,7 @@ function receiptSummary(receiptKey) {
     matches: cleanNumber(row.matches),
     qualityStatus: row.qualityStatus || "",
     runId: String(row.runId || ""),
-    blockingReason: row.blockingReason || "",
+    blockingReason: row.blockingReason || row.blockedReason || row.scanner_block_reason || "",
     warnings: Array.isArray(row.warnings) ? row.warnings : [],
     log: row.log || "",
   };
@@ -569,8 +538,31 @@ function membershipProtectedSummary(result) {
   };
 }
 
+function firstPresent(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+function payloadQuality(payload = {}) {
+  return payload?.run_quality_at_publish
+    || payload?.runQualityAtPublish
+    || payload?.payload?.run_quality_at_publish
+    || payload?.payload?.runQualityAtPublish
+    || payload?.transport?.payload?.run_quality_at_publish
+    || {};
+}
 function summarizePayload(payload, status = 200, elapsedMs = 0) {
   const rows = rowsOf(payload);
+  const quality = payloadQuality(payload);
+  const evidenceStatus = String(firstPresent(payload?.evidenceStatus, payload?.payload?.evidenceStatus, quality?.evidenceStatus) || "");
+  const unattendedStatus = String(firstPresent(payload?.unattendedStatus, payload?.payload?.unattendedStatus, quality?.unattendedStatus) || "");
+  const publishAllowed = firstPresent(payload?.publishAllowed, payload?.payload?.publishAllowed, quality?.publishAllowed);
+  const fallbackUsed = firstPresent(payload?.fallbackUsed, payload?.payload?.fallbackUsed, quality?.fallbackUsed);
+  const rawPreservePreviousGood = firstPresent(payload?.preservePreviousGood, payload?.payload?.preservePreviousGood, quality?.preservePreviousGood);
+  const preservePreviousGood = rawPreservePreviousGood === true
+    && !(publishAllowed === true && evidenceStatus === "complete" && fallbackUsed !== true);
   return {
     ok: payload?.ok !== false,
     status,
@@ -580,7 +572,16 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
     updatedAt: payload?.updatedAt || payload?.generatedAt || payload?.finishedAt || "",
     count: cleanNumber(payload?.count ?? payload?.matchCount ?? payload?.entryCount ?? rows.length),
     returnedCount: cleanNumber(payload?.returnedCount ?? rows.length),
+    resultCount: cleanNumber(firstPresent(payload?.resultCount, payload?.payload?.resultCount, quality?.resultCount)),
+    readbackCount: cleanNumber(firstPresent(payload?.readbackCount, payload?.payload?.readbackCount, quality?.readbackCount)),
+    expectedTotal: cleanNumber(firstPresent(payload?.expectedTotal, payload?.payload?.expectedTotal, quality?.expectedTotal)),
+    scannedCount: cleanNumber(firstPresent(payload?.scannedCount, payload?.payload?.scannedCount, quality?.scannedCount)),
     qualityStatus: payload?.qualityStatus || payload?.sourceHealth?.status || "",
+    evidenceStatus,
+    unattendedStatus,
+    publishAllowed,
+    fallbackUsed,
+    preservePreviousGood,
     source: payload?.source || "",
     cacheSource: payload?.cacheSource || "",
     transportSource: payload?.transport?.source || "",
@@ -684,6 +685,17 @@ function runDateFromId(value) {
   return match ? match[1] : "";
 }
 
+function runTimeSecondsFromId(value) {
+  const match = String(value || "").match(/-(\d{6})$/);
+  if (!match) return 0;
+  const text = match[1];
+  const hour = Number(text.slice(0, 2));
+  const minute = Number(text.slice(2, 4));
+  const second = Number(text.slice(4, 6));
+  if (![hour, minute, second].every(Number.isFinite)) return 0;
+  return hour * 3600 + minute * 60 + second;
+}
+
 function scorecardMembershipProtectedSummary(scorecardPayload) {
   return {
     status: Number(scorecardPayload?.status || 401),
@@ -698,7 +710,31 @@ function scorecardMembershipProtectedSummary(scorecardPayload) {
   };
 }
 
+function isMobileMembershipLockedHtml(html) {
+  const body = String(html || "");
+  return /membership_required|mobile-terminal-locked|會員權限|請登入已開通帳號|登入已開通帳號/i.test(body);
+}
+
+function mobileMembershipProtectedSummary(result = {}) {
+  return {
+    status: Number(result.status || 401),
+    ok: true,
+    membershipProtected: true,
+    elapsedMs: result.elapsedMs,
+    runId: "",
+    count: 0,
+    returnedCount: 0,
+    cacheSource: "membership-required",
+    transportSource: "membership-gate",
+    title: "membership-required",
+    statusLine: "mobile fragment protected by membership gate",
+    top: [],
+    empty: false,
+  };
+}
+
 function parseMobileFragment(html) {
+  if (isMobileMembershipLockedHtml(html)) return mobileMembershipProtectedSummary({ status: 401 });
   const runId = String(html.match(/data-run-id="([^"]*)"/)?.[1] || "").trim();
   const count = cleanNumber(html.match(/數量\s*<b>([^<]*)<\/b>/)?.[1]);
   const updated = String(html.match(/更新\s*<b>([^<]*)<\/b>/)?.[1] || "").trim();
@@ -794,27 +830,60 @@ function allowedFormalQuoteViewFallback(config, summary) {
 
 function compatibleLiveSurfaceRun(config, left, right) {
   if (!left?.runId || !right?.runId || left.runId === right.runId) return true;
+  if (allowedHighFrequencySnapshotDrift(config, left, right)) return true;
   if (!config?.allowFormalQuoteViewFallback) return false;
   return allowedFormalQuoteViewFallback(config, left)
     && allowedFormalQuoteViewFallback(config, right)
     && left.date
     && left.date === right.date;
 }
+function desktopArtifactCoveredByTerminalApi(config, live, compact, snapshot) {
+  const missingDesktopArtifact = snapshot?.error === "endpoint_not_in_desktop_snapshot"
+    || snapshot?.error === "endpoint_not_in_desktop_artifact";
+  if (!missingDesktopArtifact) return false;
+  if (!compact || compact.membershipProtected || compact.status >= 500 || compact.ok === false) return false;
+  if (obviousFallback(compact) && !allowedFormalQuoteViewFallback(config, compact)) return false;
+  if (live && !live.membershipProtected && !compatibleLiveSurfaceRun(config, live, compact)) return false;
+  if (!compact.runId && !compact.date) return false;
+  return true;
+}
 function timestampMs(value) {
   const ms = Date.parse(String(value || ""));
   return Number.isFinite(ms) ? ms : 0;
 }
 
+function scorecardDeferredForLiveStrategy(config, expectedRunId, scorecard) {
+  if (REQUIRE_UNATTENDED && process.env.FUMAN_ALLOW_INTRADAY_SCORECARD_DEFER !== "1") return false;
+  if (config?.key !== "strategy2") return false;
+  const expectedDate = runDateFromId(expectedRunId) || EXPECTED_DATE;
+  if (expectedDate !== EXPECTED_DATE) return false;
+  if (EXPECTED_DATE !== taipeiDateKey(NOW)) return false;
+  const deferUntil = minuteFromClock(process.env.FUMAN_SCORECARD_INTRADAY_DEFER_UNTIL || "14:30") ?? (14 * 60 + 30);
+  if (taipeiMinuteOfDay(NOW) >= deferUntil) return false;
+  if (scorecard?.status >= 500 || scorecard?.ok === false) return false;
+  return true;
+}
+
 function allowedHighFrequencySnapshotDrift(config, live, snapshot) {
-  if (config?.key !== "realtime-radar") return false;
+  if (REQUIRE_UNATTENDED && process.env.FUMAN_ALLOW_HIGH_FREQUENCY_RUNID_DRIFT !== "1") return false;
+  if (!["realtime-radar", "strategy2"].includes(config?.key)) return false;
   if (!config.allowDesktopSnapshotRunIdDrift) return false;
   if (!live?.runId || !snapshot?.runId || live.runId === snapshot.runId) return false;
   if (live?.status >= 500 || snapshot?.status >= 500 || live?.ok === false || snapshot?.ok === false) return false;
+  if (obviousFallback(live) || obviousFallback(snapshot)) return false;
   if (cleanNumber(live.count || live.returnedCount) <= 0 || cleanNumber(snapshot.count || snapshot.returnedCount) <= 0) return false;
+  const liveDate = runDateFromId(live.runId) || compactDate(live.date || live.tradeDate || live.updatedAt);
+  const snapshotDate = runDateFromId(snapshot.runId) || compactDate(snapshot.date || snapshot.tradeDate || snapshot.updatedAt);
+  if (!liveDate || !snapshotDate || liveDate !== snapshotDate) return false;
+  if (config.key === "strategy2" && liveDate !== EXPECTED_DATE) return false;
+  const maxDriftMs = (config.key === "strategy2" ? 3 : 5) * 60 * 1000;
   const liveAt = timestampMs(live.updatedAt || live.sourceSnapshotCapturedAt || live.servedAt);
   const snapshotAt = timestampMs(snapshot.updatedAt || snapshot.sourceSnapshotCapturedAt || snapshot.servedAt);
-  if (!liveAt || !snapshotAt) return true;
-  return Math.abs(liveAt - snapshotAt) <= 5 * 60 * 1000;
+  if (liveAt && snapshotAt) return Math.abs(liveAt - snapshotAt) <= maxDriftMs;
+  const liveRunSeconds = runTimeSecondsFromId(live.runId);
+  const snapshotRunSeconds = runTimeSecondsFromId(snapshot.runId);
+  if (liveRunSeconds && snapshotRunSeconds) return Math.abs(liveRunSeconds - snapshotRunSeconds) <= maxDriftMs / 1000;
+  return config.key !== "strategy2";
 }
 
 
@@ -871,8 +940,49 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
   return true;
 }
 
+function isClosedPreviousGoodAudit() {
+  if (MARKET_CALENDAR?.marketOpen === false) return true;
+  const text = [MARKET_CALENDAR?.status, MARKET_CALENDAR?.reason, MARKET_CALENDAR?.closedReason].map((value) => String(value || "").toLowerCase()).join(" ");
+  return text.includes("market_closed") || text.includes("weekend") || text.includes("holiday");
+}
+function normalizedTopCodes(surface) {
+  return (Array.isArray(surface?.top) ? surface.top : [])
+    .map((value) => String(value || "").trim())
+    .map((value) => (value.match(/\b\d{4,6}\b/) || [value])[0])
+    .filter(Boolean);
+}
+
+function topRowsMismatchIssues(config, surfaces, options = {}) {
+  if (config.key === "market") return [];
+  const minCompare = options.minCompare || 3;
+  const entries = Object.entries(surfaces || {})
+    .filter(([, surface]) => surface && !surface.membershipProtected)
+    .map(([label, surface]) => [label, normalizedTopCodes(surface)])
+    .filter(([, top]) => top.length >= minCompare);
+  if (entries.length < 2) return [];
+  const [baseLabel, baseTop] = entries[0];
+  const base = baseTop.slice(0, minCompare).join(",");
+  const issues = [];
+  for (const [label, top] of entries.slice(1)) {
+    const sample = top.slice(0, minCompare).join(",");
+    if (sample !== base) issues.push(`top rows mismatch ${baseLabel} != ${label} (${base || "--"} vs ${sample || "--"})`);
+  }
+  return issues;
+}
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile, scorecard) {
   const issues = [];
+  if (isClosedPreviousGoodAudit()) {
+    for (const [label, surface] of [["live API", live], ["terminal API", compact], ["desktop artifact", snapshot], ["mobile fragment", mobile], ["scorecard", scorecard]]) {
+      if (surface && !surface.membershipProtected && Number(surface.status || 0) >= 500) issues.push(`closed-day ${label} ${surface.status}`);
+    }
+    if (config.key !== "market" && config.runView && !config.snapshotKey && !supabase?.runId) issues.push("closed-day previous-good latest missing");
+    const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
+    if (config.scorecardKeys?.length && scorecard && !scorecard.membershipProtected && expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) {
+      issues.push(`closed-day scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
+    }
+    issues.push(...topRowsMismatchIssues(config, { "live API": live, "terminal API": compact, "desktop artifact": snapshot, "mobile fragment": mobile }, { minCompare: 3 }));
+    return issues;
+  }
   const scheduleStatus = scheduleStatusForConfig(config);
   const pendingNotDue = scheduleStatus.pendingNotDue === true;
   const downstreamFresh = previousGoodHoldSupabaseAuthoritative(config, supabase)
@@ -896,8 +1006,11 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     const latestDate = runDateFromId(supabase?.runId) || compactDate(supabase?.date || supabase?.tradeDate || supabase?.updatedAt);
     if (!supabase?.runId && config.key !== "market" && !pendingNotDue) issues.push("unattended: Supabase latest missing runId");
     if (latestDate && latestDate !== EXPECTED_DATE && !pendingNotDue) issues.push(`unattended: Supabase latest date ${latestDate} != expected ${EXPECTED_DATE}`);
-    if (scorecard?.membershipProtected && protectedReadbackAuth.attempted && !protectedReadbackAuth.enabled) {
-      issues.push("unattended: /88 authenticated readback token request failed");
+    if (scorecard?.membershipProtected && config.scorecardKeys?.length && !pendingNotDue) {
+      if (!protectedReadbackAuth.enabled) {
+        const suffix = protectedReadbackAuth.attempted ? ` (${protectedReadbackAuth.source || "auth"} status=${protectedReadbackAuth.status || 0} ${protectedReadbackAuth.error || ""})` : " (token not armed)";
+        issues.push(`unattended: /88 authenticated readback required${suffix}`.trim());
+      }
     }
   }
   if (receipt && !pendingNotDue) {
@@ -923,6 +1036,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`scanner receipt runId != terminal API (${receipt.runId} vs ${compact.runId})`);
     }
   }
+  if (pendingNotDue) return issues;
   if (sourceHealth) {
     const sourceHealthIssues = Array.isArray(sourceHealth.issues) ? sourceHealth.issues : [];
     const sourceHealthWarnings = Array.isArray(sourceHealth.warnings) ? sourceHealth.warnings : [];
@@ -952,10 +1066,14 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (config.requireApiRunId && !compact?.runId && !compact?.membershipProtected) issues.push("terminal API missing runId");
   if (config.requireWriteBudgetDisclosure && !live?.writeBudgetStatus && !live?.membershipProtected) issues.push("live API missing writeBudget disclosure");
   if (config.requireWriteBudgetDisclosure && !compact?.writeBudgetStatus && !compact?.membershipProtected) issues.push("terminal API missing writeBudget disclosure");
-  if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !(config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"))))) {
+  const desktopSnapshotMissingAllowed = Boolean(
+    (config.allowMissingDesktopSnapshot && (snapshot?.error === "endpoint_not_in_desktop_snapshot" || snapshot?.error === "endpoint_not_in_desktop_artifact"))
+    || desktopArtifactCoveredByTerminalApi(config, live, compact, snapshot)
+  );
+  if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !desktopSnapshotMissingAllowed))) {
     issues.push(`desktop artifact endpoint missing/error`);
   }
-  if (mobile && mobile.status >= 500) issues.push(`mobile fragment ${mobile.status}`);
+  if (mobile && !mobile.membershipProtected && mobile.status >= 500 && !pendingNotDue) issues.push(`mobile fragment ${mobile.status}`);
   if (supabase?.ok && live && !live?.membershipProtected && !compatibleRun(supabase, live, { allowDateMismatch: config.key === "strategy5" })) {
     issues.push(`Supabase latest run != live API (${supabase.runId || supabase.date} vs ${live.runId || live.date})`);
   }
@@ -968,8 +1086,9 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     && live.date === snapshot.date
   );
   const allowedRealtimeSnapshotDrift = allowedHighFrequencySnapshotDrift(config, live, snapshot);
-  if (!nonTradingRealtimeZero && !live?.membershipProtected && !snapshot?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop artifact runId (${live.runId} vs ${snapshot.runId})`);
-  if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
+  if (!nonTradingRealtimeZero && !desktopSnapshotMissingAllowed && !live?.membershipProtected && !snapshot?.membershipProtected && !compatibleLiveSurfaceRun(config, live, snapshot) && !allowedDesktopSnapshotDrift && !allowedRealtimeSnapshotDrift) issues.push(`live API != desktop artifact runId (${live.runId} vs ${snapshot.runId})`);
+  const allowedMobileRunIdDrift = allowedHighFrequencySnapshotDrift(config, live, mobile);
+  if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId && !allowedMobileRunIdDrift) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   if (config.scorecardKeys?.length) {
     const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
     if (scorecard?.membershipProtected) {
@@ -977,14 +1096,14 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       // display gate is active; computation continuity is checked via
       // Supabase latest + desktop snapshot above.
     } else if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
-    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
+    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId && !scorecardDeferredForLiveStrategy(config, expectedRunId, scorecard) && !allowedHighFrequencySnapshotDrift(config, { runId: expectedRunId, date: supabase?.date || live?.date || compact?.date, count: supabase?.count || live?.count || compact?.count, ok: true, status: 200, updatedAt: supabase?.updatedAt || live?.updatedAt || compact?.updatedAt }, { ...scorecard, count: scorecard.count || scorecard.returnedCount || supabase?.count || live?.count || compact?.count })) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
     else if (expectedRunId && !scorecard.runId) issues.push(`scorecard /88 row/sourceReport missing runId for ${config.key}`);
   }
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
   if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
   if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
   if (!config.allowZeroTerminal && compact && !compact.membershipProtected && cleanNumber(compact.count || compact.returnedCount) <= 0 && !nonTradingRealtimeZero) issues.push("terminal API has zero rows");
-  if (!config.allowZeroTerminal && mobile && mobile.empty) issues.push("mobile fragment empty");
+  if (!config.allowZeroTerminal && mobile && !mobile.membershipProtected && mobile.empty && !pendingNotDue) issues.push("mobile fragment empty");
   return issues;
 }
 
@@ -992,13 +1111,30 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
   const receipt = receiptSummary(config.receiptKey);
   const endpoint = withQuery(config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
   const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, live: 1, t: Date.now() });
-  const [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
-    fetchLatestRun(config),
-    fetchSnapshotKey(config.snapshotKey),
-    fetchJson(publicUrl(liveEndpoint)),
-    fetchJson(publicUrl(endpoint)),
-    config.mobileTab ? fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 }) : Promise.resolve(null),
-  ]);
+  let latestRun;
+  let snapshotKey;
+  let liveResult;
+  let compactResult;
+  let mobileResult;
+  if (config.key === "strategy2") {
+    [latestRun, snapshotKey, compactResult] = await Promise.all([
+      fetchLatestRun(config),
+      fetchSnapshotKey(config.snapshotKey),
+      fetchJson(publicUrl(endpoint)),
+    ]);
+    liveResult = { ...compactResult, resourceChainSharedRead: true, resourceChainLiveEndpoint: liveEndpoint };
+    mobileResult = config.mobileTab
+      ? await fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 })
+      : null;
+  } else {
+    [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
+      fetchLatestRun(config),
+      fetchSnapshotKey(config.snapshotKey),
+      fetchJson(publicUrl(liveEndpoint)),
+      fetchJson(publicUrl(endpoint)),
+      config.mobileTab ? fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 }) : Promise.resolve(null),
+    ]);
+  }
   const supabase = latestRun || snapshotKey;
   const resultRows = supabase?.runId ? await fetchResultRows(config, supabase.runId) : null;
   const live = isMembershipRequiredPayload(liveResult.json) ? membershipProtectedSummary(liveResult) : liveResult.json ? summarizePayload(liveResult.json, liveResult.status, liveResult.elapsedMs) : {
@@ -1036,9 +1172,11 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
     fastBundleEndpointCount: snapEntry.fastBundleEndpointCount,
     legacyEndpointCount: snapEntry.legacyEndpointCount,
   };
-  const mobile = mobileResult ? (mobileResult.ok
-    ? parseMobileFragment(mobileResult.text)
-    : { status: mobileResult.status, ok: false, error: mobileResult.error || mobileResult.text?.slice(0, 140) || "" }) : null;
+  const mobile = mobileResult ? (isMobileMembershipLockedHtml(mobileResult.text)
+    ? mobileMembershipProtectedSummary(mobileResult)
+    : mobileResult.ok
+      ? parseMobileFragment(mobileResult.text)
+      : { status: mobileResult.status, ok: false, error: mobileResult.error || mobileResult.text?.slice(0, 140) || "" }) : null;
   const sourceHealth = sourceHealthSummary(liveResult.json, supabase)
     || sourceHealthSummary(compactResult.json, supabase)
     || sourceHealthSummary(snapEntry.payload, supabase);
@@ -1122,10 +1260,10 @@ function markdown(results, desktopSnapshot, fastBundle) {
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
-  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  const marketCalendar = await buildMarketCalendarContract({ now: dateFromExpectedDateForCalendar(CLI_EXPECTED_DATE) || NOW }).catch(() => null);
   MARKET_CALENDAR = marketCalendar;
   if (!CLI_EXPECTED_DATE && marketCalendar) {
-    const calendarExpected = marketCalendar.marketOpen === false ? compactDate(marketCalendar.displayTradeDate || marketCalendar.marketDate || marketCalendar.requestedDate) : compactDate(marketCalendar.marketDate || marketCalendar.requestedDate || marketCalendar.displayTradeDate);
+    const calendarExpected = marketCalendar.marketOpen === false ? compactDate(marketCalendar.requestedDate || marketCalendar.marketDate || taipeiDateKey(NOW)) : compactDate(marketCalendar.marketDate || marketCalendar.requestedDate || marketCalendar.displayTradeDate);
     if (calendarExpected) {
       EXPECTED_DATE = calendarExpected;
       EXPECTED_DATE_SOURCE = marketCalendar.marketOpen === false ? "market_calendar_display_trade_date" : "market_calendar_market_date";
@@ -1197,3 +1335,7 @@ main().catch((error) => {
   console.error(`[audit] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
+
+

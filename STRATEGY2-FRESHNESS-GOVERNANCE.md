@@ -1,6 +1,6 @@
 # 策略2 Supabase API-Only Governance
 
-策略2正式資料來源是 Supabase complete run / 分層 shared source health / no-store API。不要再使用舊靜態 freshness verifier 或 `live-freshness-ok.json` 判斷策略2是否可用。
+策略2正式資料來源是 Supabase complete run / dedicated daytrade source (fugle_daytrade_source) health / no-store API。shared source 只可作 diagnostic-only 對照，不得決定 formal entry、canonical gate、latest pointer、publish 或 unattended YES。不要再使用舊靜態 freshness verifier 或 live-freshness-ok.json 判斷策略2是否可用。
 
 ## 分層 Health Gate
 
@@ -11,9 +11,15 @@
 
 口徑：
 
-- quotes 壞：策略2母池不可發布，可保留上一筆 good A report 或回 quote source unhealthy。
-- quotes 好、1 分 K 壞或 stale：母池照常發布，標 `degraded_intraday_1m`，候選只能 WATCH / 待確認，不升級 A 區。
+- quotes 壞：策略2母池不可發布，可保留上一筆 good A report 或回 dedicated daytrade quote source unhealthy。
+- quotes 好、1 分 K 壞或 stale：母池照常發布，標 degraded_intraday_1m，候選只能 WATCH / 待確認，不升級 A 區。
 - `source_status=error/stale/stopped` 不能單獨讓策略2空白；若 quote readback 正常，應走分層 degraded，而不是 `supabase_shared_source_unhealthy`。
+
+## Source authority
+
+- Formal Strategy2 entry and publish authority: fugle_daytrade_source plus its dedicated quote/1m contract.
+- fugle_shared_source and v_fuman_shared_source_readonly_scorecard are diagnostic-only. They may be read for incident comparison, but their status must never upgrade or authorize the dedicated gate.
+- If dedicated and shared readbacks disagree, keep the dedicated result authoritative and record a diagnostic warning.
 
 ## 正式契約
 
@@ -21,7 +27,7 @@
 - `v_strategy2_detection_health` 是策略2專用健康檢查入口。
 - `v_strategy2_entry_events_today` 是 08:45-13:30 live 偵測歷史逐筆資料入口。
 - `strategy2_latest` 必須跟上最新 shared source；若 source 已恢復但 latest 落後，應刷新策略2 run。
-- 盤後 shared source `stopped` 不可被誤判成盤中 1 分 K 壞掉；盤後狀態應是 `afterhours_stopped_ok`。
+- 盤後 dedicated daytrade source stopped 不可被誤判成盤中 1 分 K 壞掉；盤後狀態應是 afterhours_stopped_ok。shared source 的停止狀態只能留在診斷報告。
 - ready cache 必須刷新全股票池：`refresh_strategy2_intraday_ready_cache` 需一路跑到 `next_offset=0`，不能用固定 12 頁或部分 processed 數量當成功；page size 可用 25-100 避免 DB timeout，但必須跑完整 offset；若 `processed < total_expected` 或 `next_offset != 0`，只能警告/阻擋 ready，不可發布成 100% coverage。
 
 ## 禁止恢復的舊路徑
@@ -46,4 +52,4 @@
 - `STRATEGY2_ENTRY_END_MINUTES = 810`
 - `STRATEGY2_SCAN_END_MINUTES = 810`
 
-策略2是 08:45-13:30 live 偵測策略；終端歷史紀錄必須保留整段 live ledger，不能只保留 09:15 或只保留最新 complete run 摘要。策略2是否可交易，要看 Supabase shared source 與策略2 latest 是否一致，不看舊 static JSON freshness gate。
+策略2是 08:45-13:30 live 偵測策略；終端歷史紀錄必須保留整段 live ledger，不能只保留 09:15 或只保留最新 complete run 摘要。策略2是否可交易，要看 Supabase dedicated daytrade source 與策略2 latest 是否一致；shared source 僅供診斷對照，不看舊 static JSON freshness gate。

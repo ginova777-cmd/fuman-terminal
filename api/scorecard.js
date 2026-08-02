@@ -1447,6 +1447,63 @@ function maxSourceReportDate(reports) {
   return Math.max(0, ...(Array.isArray(reports) ? reports.map(sourceReportDateValue) : []));
 }
 
+function sourceReportsCoverDate(reports, selectedDateValue = 0) {
+  const selected = Number(selectedDateValue) || 0;
+  if (!selected) return true;
+  const formalReports = (Array.isArray(reports) ? reports : [])
+    .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
+      && !isRetiredScorecardSurfaceName(report?.strategy)
+      && !isRetiredScorecardSurfaceName(report?.endpoint));
+  if (!formalReports.length) return false;
+  return formalReports.every((report) => {
+    const reportDate = sourceReportDateValue(report);
+    return reportDate >= selected;
+  });
+}
+
+function normalizeSourceReportForSelectedDate(report, selectedDateValue = 0) {
+  const selected = Number(selectedDateValue) || 0;
+  if (!selected) return report;
+  const reportDate = sourceReportDateValue(report);
+  if (reportDate >= selected) return report;
+  const selectedDate = compactDateToIso(String(selected)) || String(selected);
+  const reportDateText = reportDate ? (compactDateToIso(String(reportDate)) || String(reportDate)) : "missing";
+  const reason = `source_report_date_mismatch:${reportDateText}<${selectedDate}`;
+  return {
+    ...report,
+    ok: false,
+    statusCode: Number(report?.statusCode || 0) >= 400 ? report.statusCode : 409,
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    preservePreviousGood: true,
+    fallbackUsed: true,
+    fallbackAllowed: false,
+    degradedBlocksLatest: true,
+    blockedReason: cleanText(report?.blockedReason || reason),
+    scanner_block_reason: cleanText(report?.scanner_block_reason || reason),
+    reason,
+  };
+}
+
+
+function normalizePayloadSourceReportsForDate(payload, selectedDateValue = 0) {
+  if (!Array.isArray(payload?.sourceReports)) return payload;
+  const sourceReports = payload.sourceReports.map((report) => normalizeSourceReportForSelectedDate(report, selectedDateValue));
+  const blockedReports = blockedSourceReports(sourceReports);
+  return {
+    ...payload,
+    sourceReports,
+    blockedSourceReports: blockedReports.map((report) => ({
+      key: cleanText(report.key),
+      strategy: cleanText(report.strategy),
+      runId: cleanText(report.runId),
+      reason: cleanText(report.reason || report.blockedReason),
+    })),
+  };
+}
+
 function readRuntimeTerminalScorecardPayload() {
   const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
   const candidates = [
@@ -1523,13 +1580,29 @@ async function withLiveSourceReports(payload, options = {}) {
     timeoutMs: SCORECARD_DESKTOP_SNAPSHOT_TIMEOUT_MS,
   }).catch(() => null);
   const desktopSnapshotReports = buildDesktopSnapshotSourceReports(desktopSnapshot);
-  const authoritativeLiveReports = desktopSnapshotReports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length
+  const selectedSourceReportDate = Number(compactDate(payload?.selectedDate || payload?.latestDate || payload?.marketDate)) || 0;
+  const desktopSnapshotReportsFresh = desktopSnapshotReports.length === DESKTOP_SNAPSHOT_SOURCE_REPORTS.length
+    && sourceReportsCoverDate(desktopSnapshotReports, selectedSourceReportDate);
+  const authoritativeLiveReports = desktopSnapshotReportsFresh
     ? desktopSnapshotReports
     : await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
+  const livePayload = desktopSnapshotReports.length && !desktopSnapshotReportsFresh
+    ? {
+      ...payload,
+      warnings: [
+        ...(Array.isArray(payload?.warnings) ? payload.warnings : []),
+        `desktop_route_snapshot_source_reports_stale_ignored:selected=${selectedSourceReportDate || "unknown"}`,
+      ],
+    }
+    : payload;
   const refreshFull = options.refreshFull === true;
-  const finalize = async (nextPayload) => alignPayloadDateWithSourceReports(refreshFull
-    ? await withFreshStrategySourceReports(nextPayload)
-    : nextPayload);
+  const finalize = async (nextPayload) => {
+    const refreshedPayload = refreshFull
+      ? await withFreshStrategySourceReports(nextPayload)
+      : nextPayload;
+    const normalizedSourceReportDate = Math.max(selectedSourceReportDate, maxSourceReportDate(refreshedPayload?.sourceReports));
+    return alignPayloadDateWithSourceReports(normalizePayloadSourceReportsForDate(refreshedPayload, normalizedSourceReportDate));
+  };
   const releaseByKey = new Map(releaseReports.map((report) => [cleanText(report?.key).toLowerCase(), report]));
   const mergedReleaseReports = releaseReports.map((report) => {
     const live = authoritativeLiveReports.find((item) => cleanText(item?.key).toLowerCase() === cleanText(report?.key).toLowerCase());
@@ -1542,10 +1615,16 @@ async function withLiveSourceReports(payload, options = {}) {
     const key = cleanText(live?.key).toLowerCase();
     if (!isBlank(live?.runId) && key && !releaseByKey.has(key)) mergedReleaseReports.push(live);
   }
-  const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId));
-  const existingComplete = existingReports.length >= 7 && existingReports.every((report) => !isBlank(report?.runId));
-  const runtimeComplete = runtimeReports.length >= 7 && runtimeReports.every((report) => !isBlank(report?.runId));
-  const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId));
+  const releaseComplete = releaseReports.some((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(releaseReports, selectedSourceReportDate);
+  const existingComplete = existingReports.length >= 7
+    && existingReports.every((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(existingReports, selectedSourceReportDate);
+  const runtimeComplete = runtimeReports.length >= 7
+    && runtimeReports.every((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(runtimeReports, selectedSourceReportDate);
+  const mergedReleaseComplete = mergedReleaseReports.some((report) => !isBlank(report?.runId))
+    && sourceReportsCoverDate(mergedReleaseReports, selectedSourceReportDate);
   if (runtimeComplete && maxSourceReportDate(runtimeReports) >= Math.max(maxSourceReportDate(existingReports), maxSourceReportDate(mergedReleaseReports))) {
     const runtimeDate = cleanText(runtimePayload?.latestDate || runtimePayload?.marketDate || runtimePayload?.selectedDate || payload?.latestDate);
     const runtimeBase = {
@@ -1559,15 +1638,15 @@ async function withLiveSourceReports(payload, options = {}) {
     return finalize(runtimeReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), runtimeBase));
   }
   if (mergedReleaseComplete && maxSourceReportDate(mergedReleaseReports) >= maxSourceReportDate(existingReports)) {
-    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
   if (existingComplete) {
-    return finalize(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return finalize(existingReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
   if (releaseComplete) {
-    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+    return finalize(mergedReleaseReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
   }
-  return finalize(authoritativeLiveReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), payload));
+  return finalize(authoritativeLiveReports.reduce((nextPayload, report) => mergeSourceReport(nextPayload, report), livePayload));
 }
 function withScorecardContract(payload, status, reason = "") {
   const latestDate = isoDate(payload?.latestDate || payload?.summary?.latestDate || "");
@@ -1911,11 +1990,13 @@ function selectPayloadDate(payload, requestedDate = "") {
   const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
     .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
+  const selectedSourceReportDate = Number(compactDate(selectedDate)) || 0;
   const sourceReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint)
-      && !isRetiredScorecardSurfaceName(report?.runId));
+      && !isRetiredScorecardSurfaceName(report?.runId))
+    .map((report) => normalizeSourceReportForSelectedDate(report, selectedSourceReportDate));
   const blockedReports = blockedSourceReports(sourceReports);
   const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
   const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));

@@ -64,7 +64,7 @@ const FILES = [
   "api/scorecard-health.js",
   "api/source-reports.js",
   "api/mobile-boot.js",
-  "api/open-buy-latest.js",
+
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
   "api/strategy2-latest.js",
@@ -114,7 +114,7 @@ const FILES = [
   "scripts/monitor-vercel-cost-health.js",
   "scripts/install-vercel-cost-health-monitor-task.ps1",
   "scripts/guard-source-tree.js",
-  "scripts/scan-open-buy-cache.js",
+
   "scripts/scan-star-preopen.js",
   "scripts/scan-warrant-flow-cache.js",
   "scripts/cleanup-supabase-vercel-history.js",
@@ -128,7 +128,6 @@ const FILES = [
   "scripts/install-deploy-worktree-clean-monitor-task.ps1",
   "scripts/install-api-unattended-scorecard-task.ps1",
   "scripts/scan-institution-cache.js",
-  "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
   "scripts/publish-strategy2-complete-run.js",
   "scripts/publish-strategy2-latest-snapshot.js",
@@ -157,8 +156,6 @@ const FILES = [
   "scripts/verify-strategy2-source-publish-gate.js",
   "scripts/verify-api-unattended-scorecard.js",
   "scripts/verify-production-api-freshness-contract.js",
-  "scripts/verify-realtime-radar-frontend-contract.js",
-  "scripts/install-realtime-radar-watchdog-task.ps1",
   "scripts/verify-strategy5-battle-state.js",
   "scripts/verify-heatmap-realtime.js",
   "scripts/verify-market-ai-freshness-guard.js",
@@ -208,7 +205,6 @@ const FILES = [
   "scripts/export-scorecard-snapshot.py",
   "scripts/publish-scorecard-snapshot.js",
   "scripts/verify-post-scan-snapshot-refresh-contract.js",
-  "ops/public-slot/Strategy1RunIdCompleteGate.sql",
   "ops/public-slot/Strategy2ReadinessContractCache.sql",
   "ops/public-slot/Strategy2Readiness100SourcePatch.sql",
   "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
@@ -251,7 +247,7 @@ const FILES = [
   "ops/install-api-unattended-patrol-task.ps1",
   "VERCEL-COST-UPLOAD-GUARD.md",
   "install-api-only-cleanup-task.ps1",
-  "run-open-buy.ps1",
+
   "run-strategy2-intraday.ps1",
   "run-strategy3.ps1",
   "run-strategy3-complete-scan.ps1",
@@ -264,12 +260,10 @@ const FILES = [
   "run-institution.ps1",
   "run-warrant-flow.ps1",
   "run-cb-detect.ps1",
-  "run-realtime-radar.ps1",
-  "run-realtime-radar-watchdog.ps1",
   "run-flow.ps1",
   "flow-health.ps1",
   "data/chip-trade-exclusions.json",
-  "data/scorecard-latest.json",
+
 ];
 
 const DIRECTORIES = [];
@@ -278,7 +272,6 @@ const STRATEGY4_KEY = "strategy" + "4";
 const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json");
 
 const RETIRED_ARTIFACTS = [
-  "run-open-buy-sync-retry.ps1",
   "run-freshness-gate-task.ps1",
   "run-local-freshness-repair.ps1",
   "open-buy-latest.json",
@@ -292,8 +285,6 @@ const RETIRED_ARTIFACTS = [
   "warrant-flow-latest.json",
   "warrant-flow-backup.json",
   "scan-institution-cache.js",
-  "scan-open-buy-cache.js",
-  "scan-open-buy.js",
   "scan-strategy4-cache.js",
   "scan-strategy4.js",
   "scan-strategy5-cache.js",
@@ -304,6 +295,8 @@ const RETIRED_ARTIFACTS = [
 
   path.join("data", "fugle-open-rebound-latest.json"),
   path.join("data", "institution-mobile-top.json"),
+  path.join("data", "warrant-flow-mobile-top.json"),
+  path.join("data", "strategy5-page-1.json"),
   path.join("data", `${STRATEGY4_KEY}-latest.json`),
   path.join("data", `${STRATEGY4_KEY}-backup.json`),
   path.join("data", `${STRATEGY4_KEY}-summary.json`),
@@ -431,17 +424,3 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
-
-
-
-
-
-
-
-
-
-
-
-
-
-

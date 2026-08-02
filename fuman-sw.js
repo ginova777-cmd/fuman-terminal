@@ -1,6 +1,6 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-10";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260726-01";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260717-01";
-const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-snapshot-first-20260619";
+
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
@@ -29,7 +29,7 @@ const STATIC_ASSETS = [
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-10",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260714-10",
   `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
-  "/terminal-realtime-radar.css?v=radar-ledger-20260630-02",
+
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-10",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260714-10",
   "/terminal-warrant-flow.js?v=public-terminal-fast-20260714-10",
@@ -338,25 +338,3 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

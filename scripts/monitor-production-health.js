@@ -384,13 +384,15 @@ async function main() {
   for (const item of marketAiLive.issues) issues.push(item);
   for (const item of marketAiLive.warnings || []) warnings.push(item);
 
-  const notification = await notifyIfNeeded({
-    ok: issues.length === 0,
-    source: "production-health-monitor",
-    baseUrl: BASE_URL,
-    updatedAt: new Date().toISOString(),
-    issues: issues.map((message) => terminalIssue("critical", message)),
-  });
+  const notification = marketClosed
+    ? { sent: false, reason: "market_closed_no_live_freshness_alert" }
+    : await notifyIfNeeded({
+      ok: issues.length === 0,
+      source: "production-health-monitor",
+      baseUrl: BASE_URL,
+      updatedAt: new Date().toISOString(),
+      issues: issues.map((message) => terminalIssue("critical", message)),
+    });
 
   const payload = {
     ok: issues.length === 0,

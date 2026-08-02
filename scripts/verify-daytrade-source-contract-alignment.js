@@ -164,6 +164,8 @@ function normalizeSourceStatus(row) {
     quoteSourceDaytradeOk: boolValue(payload.quote_source_daytrade_ok),
     intraday1mSourceDaytradeOk: boolValue(payload.intraday_1m_source_daytrade_ok),
     formalSourceAlignmentOk: boolValue(payload.formal_source_alignment_ok),
+    strategyChipStatus: stringValue(payload.formal_priority_strategy_chip_status),
+    strategyChipCompleteLatestRun: boolValue(payload.formal_priority_strategy_chip_complete_latest_run_evidence),
     formalPrioritySpeedOk: boolValue(payload.formal_priority_speed_ok),
     fullMarketSpeedBlocking: payload.full_market_speed_blocking === false ? false : boolValue(payload.full_market_speed_blocking),
     gateSpeedOk: boolValue(payload.gate_speed_ok),
@@ -174,6 +176,7 @@ function normalizeSourceStatus(row) {
 }
 
 function normalizeGate(row) {
+  const payload = row?.payload || {};
   return {
     gateGrade: stringValue(row?.canonical_gate_grade || row?.daytrade_gate_grade || row?.gate_grade || row?.gate),
     gateStatus: stringValue(row?.canonical_gate_status || row?.gate_status || row?.status),
@@ -194,6 +197,8 @@ function normalizeGate(row) {
     intraday1mStaleSeconds: numberValue(row?.intraday_1m_stale_seconds, 999999),
     formalSourceAlignmentOk: boolValue(row?.formal_source_alignment_ok),
     formalEntrySpeedVerdict: stringValue(row?.formal_entry_speed_verdict),
+    strategyChipStatus: stringValue(payload.formal_priority_strategy_chip_status),
+    strategyChipCompleteLatestRun: boolValue(payload.formal_priority_strategy_chip_complete_latest_run_evidence),
     readyMa20Continuous: numberValue(row?.ready_ma20_continuous_symbols ?? row?.ready_ma20_continuous),
     readyMa35Continuous: numberValue(row?.ready_ma35_continuous_symbols ?? row?.ready_ma35_continuous),
     ...websocketEvidence(row || {}),
@@ -228,6 +233,8 @@ function isSourceA(source) {
     && source.hasScannerCanRunOpening === true
     && source.scannerCanRunOpening === true
     && source.rateLimitStatus !== "rate_limited"
+    && source.strategyChipStatus === "ready"
+    && source.strategyChipCompleteLatestRun === true
     && sourceWebsocketOk(source);
 }
 
@@ -236,7 +243,7 @@ function isSourceFailClosed(source) {
   return ["ok", "degraded", "stopped", "not_ready"].includes(source.status)
     && source.daytradeGateGrade !== "A"
     && source.formalEntryAllowed === false
-    && (source.scannerCanRunOpening === true || message.includes("formal entry not allowed") || message.includes("off-session"))
+    && (source.scannerCanRunOpening === true || message.includes("formal entry not allowed") || message.includes("off-session") || message.includes("strategy_chip_complete_latest_run_missing"))
     && source.rateLimitStatus !== "rate_limited";
 }
 
@@ -252,6 +259,8 @@ function isGateA(gate) {
     && gate.scannerCanRunOpening === true
     && gate.quoteAgeSeconds <= 90
     && gate.formalEntrySpeedVerdict === "YES"
+    && gate.strategyChipStatus === "ready"
+    && gate.strategyChipCompleteLatestRun === true
     && gateWebsocketOk(gate);
 }
 
@@ -259,7 +268,7 @@ function isGateFailClosed(gate) {
   return gate.gateGrade !== "A"
     && gate.hasCanonicalGateReason === true
     && gate.gateStatus === "not_ready"
-    && ["off_session_not_formal_entry", "formal_entry_not_allowed", "source_status_not_ok", "websocket_not_formal_ready"].includes(gate.reason)
+    && ["off_session_not_formal_entry", "formal_entry_not_allowed", "source_status_not_ok", "websocket_not_formal_ready", "strategy_chip_complete_latest_run_missing"].includes(gate.reason)
     && gate.formalEntrySpeedVerdict === "NO";
 }
 
@@ -305,17 +314,68 @@ function writerCodeRegressionChecks() {
     websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
     websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
     formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
+    strategyChipCompleteRunHardGate: source.includes('strategyChipCompleteLatestRun') && source.includes('strategy_chip_complete_latest_run_missing'),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 80 })'),
+    websocketQuoteReadthrough: source.includes('supabaseUpsert(\'fugle_daytrade_quotes_live\', websocketQuoteRows, \'symbol\', { batchSize: 40 })')
+      && source.includes('websocket_cache_mother_pool_readthrough')
+      && source.includes('websocket_quote_readthrough_written'),
+    gracefulMaxRunStop: source.includes('maxRunReached = false')
+      && source.includes('max_run_seconds_reached_after_active_tick')
+      && !source.includes('process.exit(124)'),
+    motherPoolBaseEligibilityContract: source.includes('function evaluateMotherPoolBasePool')
+      && source.includes('Five-day average volume ranks liquidity')
+      && source.includes('avg5_volume_pending')
+      && !source.includes('avg5_volume_not_gt_3000')
+      && source.includes('market_not_twse_otc'),
+    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates]'),
+    runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
+      && source.includes('if (!prev)'),
+    fullMarketMotherPoolRotation: source.includes('daytradeMotherPoolSymbols')
+      && source.includes('mother_pool_rotation_priority_top40'),
+    motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
+    motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
+      && source.includes('mother_pool_fresh_coverage_120s'),    stockTickerSchemaCompatible: source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
+      && !source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,is_trial'),
+    reasonCodePayload: source.includes('const failedChecks = []')
+      && source.includes('reason_code: reasonCode')
+      && source.includes('base_pool_shortfall'),
+    fullMarketVolumeMirror: source.includes('syncDailyVolumeMirror(dailyVolumeMap, activeSymbols)')
+      && source.includes('activeOrdinaryStockUniverse: true')
+      && source.includes('DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS')
+      && source.includes('{ batchSize: 250 }'),
+    enrichmentPendingIsNonAuthoritative: source.includes('daytrade-source-writer-enrichment-pending.json')
+      && source.includes('authoritative_source_status_preserved: true')
+      && !source.includes('writeStatusAndScorecard(pendingResult)'),
   };
   const issues = [];
   for (const [key, ok] of Object.entries(checks)) {
     if (!ok) issues.push(`writer_regression_${key}_missing`);
   }
   return { ok: issues.length === 0, path: writerPath, checks, issues };
+}
+function writerSupervisorRegressionChecks() {
+  const wrapperPath = path.join(__dirname, "..", "ops", "public-slot", "Run-DaytradeSourceWriter.ps1");
+  let source = "";
+  try {
+    source = fs.readFileSync(wrapperPath, "utf8");
+  } catch (error) {
+    return { ok: false, path: wrapperPath, checks: {}, issues: [`writer_supervisor_read_failed:${error.message}`] };
+  }
+  const checks = {
+    futoptProcessGuard: source.includes("Get-FugleFutoptWebSocketCollectorProcess"),
+    futoptEnsureFunction: source.includes("function Ensure-FugleFutoptWebSocketCollector"),
+    applyStartsOrReusesFutopt: /if \(\$Apply\)[\s\S]{0,900}Ensure-FugleFutoptWebSocketCollector/.test(source),
+    requiredChannels: source.includes("$env:FUGLE_FUTOPT_STREAMING_CHANNELS = \"trades,aggregates,candles\""),
+    subscriptionBudget: source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = \"1800\"") && source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = \"500\""),
+    missingCollectorRemainsFailClosed: source.includes("formal futopt status is ready"),
+    futoptCollectorStartMutex: source.includes("Global\\FumanFugleDaytradeFutoptCollector"),
+  };
+  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `writer_supervisor_${name}_missing`);
+  return { ok: issues.length === 0, path: wrapperPath, checks, issues };
 }
 function websocketCodeRegressionChecks() {
   const files = {
@@ -329,6 +389,8 @@ function websocketCodeRegressionChecks() {
   const checks = {
     stockCollectorFormalReady: source.stockCollector.includes("formalReady") && source.stockCollector.includes("formalReadyReason"),
     futoptCollectorFormalReady: source.futoptCollector.includes("formalReady") && source.futoptCollector.includes("formalReadyReason"),
+    futoptCollectorRequiresRecentMessage: source.futoptCollector.includes("quoteMessages + candleMessages > 0")
+      && source.futoptCollector.includes("messageAgeSeconds <= 300"),
     verifierReadsFormalReady: source.verifier.includes("formalReady") && source.verifier.includes("websocket_formal_not_ready"),
   };
   const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `websocket_regression_${name}_missing`);
@@ -396,8 +458,10 @@ async function main() {
     : gateVerdict(sourceStatus, canonicalGate, unattendedGate);
   const issues = [...alignment.issues];
   const writerCodeRegression = writerCodeRegressionChecks();
+  const writerSupervisorRegression = writerSupervisorRegressionChecks();
   const websocketCodeRegression = websocketCodeRegressionChecks();
   issues.push(...writerCodeRegression.issues);
+  issues.push(...writerSupervisorRegression.issues);
   issues.push(...websocketCodeRegression.issues);
 
   for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
@@ -407,7 +471,12 @@ async function main() {
     if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
     if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
     if (label !== "source" && item.hasCanonicalGateReason !== true) issues.push(`${label}_canonical_gate_reason_missing`);
-    if (Number.isFinite(item.scorecardRequiredOkCount) && Number.isFinite(item.scorecardRequiredCount) && item.scorecardRequiredOkCount !== item.scorecardRequiredCount) issues.push(`${label}_scorecard_required_count_mismatch`);
+    if (Number.isFinite(item.scorecardRequiredOkCount) && Number.isFinite(item.scorecardRequiredCount)
+      && (item.scorecardRequiredCount <= 0
+        || item.scorecardRequiredOkCount < 0
+        || item.scorecardRequiredOkCount > item.scorecardRequiredCount)) {
+      issues.push(`${label}_scorecard_required_count_invalid`);
+    }
     if (!marketClosed && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
     if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
@@ -493,6 +562,7 @@ async function main() {
     canonicalGate,
     unattendedGate,
     writerCodeRegression,
+    writerSupervisorRegression,
     websocketCodeRegression,
     contractProbes: {
       dailyVolumeAlias: {

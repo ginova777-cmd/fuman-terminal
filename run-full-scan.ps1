@@ -369,6 +369,86 @@ function Invoke-RunnerTask($strategy, $label, $tier, $runner) {
   Write-ScanLog "END [$tier] $label status=$status exit=$exitCode matches=$($receipt.matches) scanned=$($receipt.scanned)/$($receipt.total)"
 }
 
+function Invoke-FullScanFormalEntryGate {
+  Write-ScanLog "START [critical] full scan formal entry gate"
+  $expectedDate = if ($env:FUMAN_SCANNER_TARGET_TRADE_DATE) { [string]$env:FUMAN_SCANNER_TARGET_TRADE_DATE } elseif ($env:FUMAN_SCANNER_TARGET_DATE) { [string]$env:FUMAN_SCANNER_TARGET_DATE } else { "" }
+  $args = @("--use-system-ca", "scripts\verify-daytrade-warmup-unattended.js")
+  if (-not [string]::IsNullOrWhiteSpace($expectedDate)) { $args += "--expected-date=$expectedDate" }
+  $outputLines = New-Object System.Collections.Generic.List[string]
+  $exitCode = 1
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe @args 2>&1 | ForEach-Object {
+        $line = [string]$_
+        $outputLines.Add($line) | Out-Null
+        Write-ScanLog "formal-entry: $line"
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    $outputLines.Add([string]$_.Exception.Message) | Out-Null
+  }
+
+  if ($exitCode -eq 0) {
+    Write-ScanLog "END [critical] full scan formal entry gate allowed"
+    return
+  }
+
+  Write-ScanLog "BLOCK [critical] full scan formal entry gate failed exit=$exitCode; running warmup root apply and preserving previous good"
+  $rootArgs = @("--use-system-ca", "scripts\verify-daytrade-warmup-root.js", "--apply")
+  if (-not [string]::IsNullOrWhiteSpace($expectedDate)) { $rootArgs += "--expected-date=$expectedDate" }
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe @rootArgs 2>&1 | ForEach-Object {
+        $line = [string]$_
+        Write-ScanLog "formal-entry-self-heal: $line"
+      }
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    Write-ScanLog "formal-entry-self-heal exception: $($_.Exception.Message)"
+  }
+
+  $reason = ($outputLines -join " | ")
+  if ([string]::IsNullOrWhiteSpace($reason)) { $reason = "daytrade warmup formal entry gate failed" }
+  $receipt = [ordered]@{
+    strategy = "formal-entry-gate"
+    label = "full scan formal entry gate"
+    tier = "critical"
+    startedAt = (Get-Date).ToString("o")
+    finishedAt = (Get-Date).ToString("o")
+    status = "blocked"
+    exitCode = 0
+    complete = $false
+    qualityStatus = "source_root_not_ready"
+    fallback = $true
+    preservePreviousGood = $true
+    publishAllowed = $false
+    latestOverwriteAllowed = $false
+    latestWriteAttempted = $false
+    latestPointerUpdated = $false
+    blockedReceiptWritten = $true
+    degradedBlocksLatest = $true
+    evidenceStatus = "insufficient"
+    unattendedStatus = "NO"
+    runId = ""
+    payloadPath = "runtime:daytrade-warmup-unattended-summary"
+    warnings = @("formal entry gate blocked full scan", $reason)
+    blockingReason = $reason
+    scanner_block_reason = $reason
+    log = $log
+  }
+  Write-JsonFile (Join-Path $receiptDir "formal-entry-gate.json") $receipt
+  if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir "formal-entry-gate.json") $receipt }
+  Write-ScanLog "STOP full scan before strategy scans; formal entry gate blocked and previous good preserved"
+  exit 0
+}
 function Enter-FullScanLock {
   if (Test-Path -LiteralPath $lockFile) {
     $age = (Get-Date) - (Get-Item -LiteralPath $lockFile).LastWriteTime
@@ -506,13 +586,92 @@ function Invoke-FullScanDatePreflight {
 
   Write-ScanLog "END [critical] full scan date preflight targetDate=$($env:FUMAN_SCANNER_TARGET_DATE)"
 }
+function Invoke-FullScanFormalEntryGate {
+  Write-ScanLog "START [critical] full scan formal entry gate"
+  $expectedDate = if ($env:FUMAN_SCANNER_TARGET_TRADE_DATE) { [string]$env:FUMAN_SCANNER_TARGET_TRADE_DATE } elseif ($env:FUMAN_SCANNER_TARGET_DATE) { [string]$env:FUMAN_SCANNER_TARGET_DATE } else { "" }
+  $args = @("--use-system-ca", "scripts\verify-daytrade-warmup-unattended.js")
+  if (-not [string]::IsNullOrWhiteSpace($expectedDate)) { $args += "--expected-date=$expectedDate" }
+  $outputLines = New-Object System.Collections.Generic.List[string]
+  $exitCode = 1
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe @args 2>&1 | ForEach-Object {
+        $line = [string]$_
+        $outputLines.Add($line) | Out-Null
+        Write-ScanLog "formal-entry: $line"
+      }
+      $exitCode = $LASTEXITCODE
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    $exitCode = 1
+    $outputLines.Add([string]$_.Exception.Message) | Out-Null
+  }
+
+  if ($exitCode -eq 0) {
+    Write-ScanLog "END [critical] full scan formal entry gate allowed"
+    return
+  }
+
+  Write-ScanLog "BLOCK [critical] full scan formal entry gate failed exit=$exitCode; running warmup root apply and preserving previous good"
+  $rootArgs = @("--use-system-ca", "scripts\verify-daytrade-warmup-root.js", "--apply")
+  if (-not [string]::IsNullOrWhiteSpace($expectedDate)) { $rootArgs += "--expected-date=$expectedDate" }
+  try {
+    Push-Location $syncRoot
+    try {
+      & $nodeExe @rootArgs 2>&1 | ForEach-Object {
+        $line = [string]$_
+        Write-ScanLog "formal-entry-self-heal: $line"
+      }
+    } finally {
+      Pop-Location
+    }
+  } catch {
+    Write-ScanLog "formal-entry-self-heal exception: $($_.Exception.Message)"
+  }
+
+  $reason = ($outputLines -join " | ")
+  if ([string]::IsNullOrWhiteSpace($reason)) { $reason = "daytrade warmup formal entry gate failed" }
+  $receipt = [ordered]@{
+    strategy = "formal-entry-gate"
+    label = "full scan formal entry gate"
+    tier = "critical"
+    startedAt = (Get-Date).ToString("o")
+    finishedAt = (Get-Date).ToString("o")
+    status = "blocked"
+    exitCode = 0
+    complete = $false
+    qualityStatus = "source_root_not_ready"
+    fallback = $true
+    preservePreviousGood = $true
+    publishAllowed = $false
+    latestOverwriteAllowed = $false
+    latestWriteAttempted = $false
+    latestPointerUpdated = $false
+    blockedReceiptWritten = $true
+    degradedBlocksLatest = $true
+    evidenceStatus = "insufficient"
+    unattendedStatus = "NO"
+    runId = ""
+    payloadPath = "runtime:daytrade-warmup-unattended-summary"
+    warnings = @("formal entry gate blocked full scan", $reason)
+    blockingReason = $reason
+    scanner_block_reason = $reason
+    log = $log
+  }
+  Write-JsonFile (Join-Path $receiptDir "formal-entry-gate.json") $receipt
+  if ($syncReceiptDir) { Write-JsonFile (Join-Path $syncReceiptDir "formal-entry-gate.json") $receipt }
+  Write-ScanLog "STOP full scan before strategy scans; formal entry gate blocked and previous good preserved"
+  exit 0
+}
 Enter-FullScanLock
 try {
   Write-ScanLog "Full scan started"
   Write-ScanLog "scan receipts mode=$(if ($syncReceiptDir) { 'runtime+code-repo' } else { 'runtime-only' })"
 
-  Invoke-FullScanDatePreflight
-  if (-not $SkipStrategy2) {
+  Invoke-FullScanDatePreflight`r`n  Invoke-FullScanFormalEntryGate`r`n  if (-not $SkipStrategy2) {
     Invoke-ScanTask "star-preopen" "STAR preopen raw refresh" "optional" "scripts\scan-star-preopen.js" (Join-Path $runtimeRoot "data\star-preopen-latest.json") @{}
     Invoke-ScanTask "strategy2" "strategy2 intraday raw refresh" "optional" "scripts\scan-intraday-signals.js" (Join-Path $runtimeRoot "data\strategy2-intraday-latest.json") @{
       INTRADAY_PATROL_INTERVAL_MS = "3000"
@@ -583,5 +742,7 @@ try {
 } finally {
   Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }
+
+
 
 

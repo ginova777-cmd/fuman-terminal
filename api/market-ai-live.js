@@ -500,6 +500,178 @@ function heatmapStocks(payload) {
     })));
 }
 
+
+function sectorValueYi(row) {
+  const yi = firstNumber(row, ["totalValue", "amountYi", "valueYi", "tradeValueYi"]);
+  if (yi) return yi;
+  const raw = firstNumber(row, ["value", "tradeValue", "TradeValue", "amount"]);
+  return raw ? raw / 100000000 : 0;
+}
+
+function sectorPreviousValueYi(row) {
+  const yi = firstNumber(row, [
+    "previousTotalValue",
+    "prevTotalValue",
+    "yesterdayTotalValue",
+    "previousAmountYi",
+    "prevAmountYi",
+    "yesterdayAmountYi",
+    "previousValueYi",
+    "prevValueYi",
+    "yesterdayValueYi",
+  ]);
+  if (yi) return yi;
+  const raw = firstNumber(row, [
+    "previousValue",
+    "prevValue",
+    "yesterdayValue",
+    "previousTradeValue",
+    "prevTradeValue",
+    "yesterdayTradeValue",
+    "previousAmount",
+    "prevAmount",
+    "yesterdayAmount",
+  ]);
+  return raw ? raw / 100000000 : 0;
+}
+
+function normalizeIndustrySector(sector) {
+  const stocks = normalizeArray(sector?.stocks || sector?.rows)
+    .map((stock) => ({
+      code: firstText(stock, ["code", "Code", "stockId", "symbol"], ""),
+      name: firstText(stock, ["name", "Name", "stockName"], ""),
+      pct: firstNumber(stock, ["pct", "percent", "changePercent", "change_percent"]),
+      valueYi: sectorValueYi(stock),
+    }))
+    .filter((stock) => /^\d{4}$/.test(stock.code))
+    .sort((a, b) => b.valueYi - a.valueYi || b.pct - a.pct)
+    .slice(0, 5);
+  const valueYi = sectorValueYi(sector);
+  const previousValueYi = sectorPreviousValueYi(sector) || stocks.reduce((sum, stock) => sum + sectorPreviousValueYi(stock), 0);
+  return {
+    name: firstText(sector, ["name", "industry", "sector"], "--"),
+    pct: firstNumber(sector, ["pct", "avgPct", "percent", "changePercent"]),
+    valueYi,
+    previousValueYi,
+    deltaYi: previousValueYi ? valueYi - previousValueYi : null,
+    count: firstNumber(sector, ["count", "total"], stocks.length),
+    up: firstNumber(sector, ["up"], 0),
+    down: firstNumber(sector, ["down"], 0),
+    leader: firstText(sector, ["leader"], stocks[0] ? `${stocks[0].name || stocks[0].code} ${stocks[0].pct >= 0 ? "+" : ""}${stocks[0].pct.toFixed(2)}%` : ""),
+    leaderCode: firstText(sector, ["leaderCode"], stocks[0]?.code || ""),
+    stocks,
+  };
+}
+
+function industrySignal(key, label, title, metric, detail, tone, sectors = []) {
+  return {
+    key,
+    label,
+    title: title || "--",
+    metric: metric || "--",
+    detail: detail || "",
+    tone: tone || "neutral",
+    sectors: normalizeArray(sectors).slice(0, 5),
+  };
+}
+
+function buildIndustryDynamics(sectors, meta = {}) {
+  const rows = normalizeArray(sectors)
+    .map(normalizeIndustrySector)
+    .filter((sector) => sector.name && sector.name !== "--");
+  const byPctDesc = [...rows].sort((a, b) => b.pct - a.pct || b.valueYi - a.valueYi);
+  const byPctAsc = [...rows].sort((a, b) => a.pct - b.pct || b.valueYi - a.valueYi);
+  const byValue = [...rows].sort((a, b) => b.valueYi - a.valueYi).slice(0, 5);
+  const withDelta = rows.filter((sector) => Number.isFinite(sector.deltaYi));
+  const byDeltaDesc = [...withDelta].sort((a, b) => b.deltaYi - a.deltaYi).slice(0, 5);
+  const byDeltaAsc = [...withDelta].sort((a, b) => a.deltaYi - b.deltaYi).slice(0, 5);
+  const strongest = byPctDesc[0] || null;
+  const weakest = byPctAsc[0] || null;
+  const hasPreviousValue = withDelta.length > 0;
+  return {
+    source: meta.source || "industry-dynamics",
+    tradeDate: meta.tradeDate || "",
+    updatedAt: meta.updatedAt || "",
+    count: rows.length,
+    hasPreviousValue,
+    items: [
+      industrySignal(
+        "strongest",
+        "目前最強勢",
+        strongest?.name,
+        strongest ? `${strongest.pct >= 0 ? "+" : ""}${strongest.pct.toFixed(2)}%` : "--",
+        strongest ? "目前產業漲幅最大" : "等待產業資料",
+        "up",
+        strongest ? [strongest] : []
+      ),
+      industrySignal(
+        "weakest",
+        "目前最弱勢",
+        weakest?.name,
+        weakest ? `${weakest.pct >= 0 ? "+" : ""}${weakest.pct.toFixed(2)}%` : "--",
+        weakest ? "目前產業跌幅最大" : "等待產業資料",
+        "down",
+        weakest ? [weakest] : []
+      ),
+      industrySignal(
+        "volumeTop",
+        "量能增強",
+        byValue.length ? "成交金額 TOP5" : "--",
+        byValue.length ? `${byValue[0].valueYi.toFixed(1)} 億` : "--",
+        byValue.length ? "產業累計成交金額排序" : "等待成交金額",
+        "volume",
+        byValue
+      ),
+      industrySignal(
+        "inflow",
+        "吸金焦點",
+        byDeltaDesc[0]?.name || (hasPreviousValue ? "--" : "昨成交額待補"),
+        byDeltaDesc[0] ? `+${byDeltaDesc[0].deltaYi.toFixed(1)} 億` : "--",
+        byDeltaDesc[0] ? "較昨日成交金額增加最多" : "資料源尚未提供昨日成交金額",
+        byDeltaDesc[0] ? "up" : "neutral",
+        byDeltaDesc
+      ),
+      industrySignal(
+        "outflow",
+        "資金渙散",
+        byDeltaAsc[0]?.name || (hasPreviousValue ? "--" : "昨成交額待補"),
+        byDeltaAsc[0] ? `${byDeltaAsc[0].deltaYi.toFixed(1)} 億` : "--",
+        byDeltaAsc[0] ? "較昨日成交金額減少最多" : "資料源尚未提供昨日成交金額",
+        byDeltaAsc[0] ? "down" : "neutral",
+        byDeltaAsc
+      ),
+    ],
+  };
+}
+
+function cachedSummarySectors(clock) {
+  const summary = readCachedMarketSummary() || {};
+  const summaryDate = compactDate(summary.resolvedTradeDate || summary.today || summary.updatedAt || "");
+  if (summaryDate && summaryDate !== clock.ymd) return [];
+  return normalizeArray(summary.sectors);
+}
+
+async function loadFastIndustrySectors(request, clock, deps = {}) {
+  if (Array.isArray(deps.industrySectors)) return deps.industrySectors;
+  const cached = cachedSummarySectors(clock);
+  if (cached.length) return cached;
+  const snapshot = await withTimeout(readSnapshot("heatmap_latest", {
+    tradeDate: clock.date,
+    allowLatestFallback: true,
+    timeoutMs: 900,
+  }), 1000, null);
+  const snapshotDate = compactDate(snapshot?.tradeDate || snapshot?.payload?.resolvedTradeDate || snapshot?.payload?.today || "");
+  const snapshotSectors = normalizeArray(snapshot?.payload?.sectors);
+  if (snapshotSectors.length && (!snapshotDate || snapshotDate === clock.ymd)) return snapshotSectors;
+  const req = {
+    ...request,
+    method: "GET",
+    query: { ...(request.query || {}), snapshot: "1", fast: "1", compact: "1", source: "market-ai-industry-summary" },
+  };
+  const result = await withTimeout(capture(heatmap, req), 1200, { statusCode: 504, payload: null });
+  return normalizeArray(result?.payload?.sectors);
+}
+
 const PCT_KEYS = ["percent", "pct", "changePercent", "change_percent"];
 
 function scoreRow(row, source = "") {
@@ -646,6 +818,11 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const weakSectors = sectors.filter((sector) => cleanNumber(sector?.pct ?? sector?.avgPct) < 0)
     .sort((a, b) => cleanNumber(a?.pct ?? a?.avgPct) - cleanNumber(b?.pct ?? b?.avgPct))
     .slice(0, 5);
+  const industryDynamics = buildIndustryDynamics(sectors, {
+    source: heatmapPayload?.source || heatmapPayload?.cacheSource || "heatmap-sectors",
+    tradeDate: heatmapTradeDate || clock.ymd,
+    updatedAt: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || "",
+  });
 
   const normalizedRadar = radarRows.map((row) => normalizeStockRow(row, "盤中訊號", [firstText(row, ["side", "direction"], "多")])).filter(Boolean);
   const normalizedBase = baseRows.map((row) => normalizeStockRow(row, "AI 判讀", ["AI 判讀"])).filter(Boolean);
@@ -752,6 +929,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     todayPoints,
     riskNotes,
     priorityObservation,
+    industryDynamics,
     sectorFocus: {
       title: strongNames.length ? strongNames.join("、") : "等待族群擴散",
       sectors: strongSectors.map((sector) => ({
@@ -800,6 +978,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       riskNotes: riskNotes.length >= 2,
       priorityObservation: Boolean(priorityObservation),
       sectorFocus: Boolean(strongSectors.length || weakSectors.length || sectors.length || allGroupRows.length || staleSources.length),
+      industryDynamics: industryDynamics.count > 0,
       hotStocks: allGroupRows.length > 0 || staleSources.length > 0,
       reasoning: reasoning.length >= 4,
       filters: filters.length === 5,
@@ -1023,6 +1202,12 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
     ? "可用指數資料不足，這份報告只能顯示保守結論，不寫 latest。"
     : "此模式不掃全市場、不訂 Fugle WebSocket；只適合簡報觀察，不作正式進場水源。";
   const rows = buildIndexReportRows({ weighted, otc, futures, weightedPct, otcPct, futuresPct, action, riskText, updatedAt, tradeDate });
+  const industrySectors = await loadFastIndustrySectors(request, clock, deps);
+  const industryDynamics = buildIndustryDynamics(industrySectors, {
+    source: industrySectors.length ? "heatmap-snapshot-first" : "industry-summary-empty",
+    tradeDate,
+    updatedAt,
+  });
   const groups = groupIndexReportRows(rows);
   const filters = ["all", "momentum", "institution", "intraday", "risk"].map((key) => ({ key, ...groups[key] }));
   const up = pctValues.filter((value) => value > 0).length;
@@ -1098,9 +1283,10 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       staleBlocked: false,
     },
     sectorFocus: {
-      title: "停用熱力圖",
-      sectors: [],
+      title: industryDynamics.items.find((item) => item.key === "strongest")?.title || "停用熱力圖",
+      sectors: industrySectors.slice(0, 5),
     },
+    industryDynamics,
     reasoning,
     dashboard,
     dataFreshness: {
@@ -1119,6 +1305,8 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       sourceIssues: [],
       reportWarnings: ok ? [] : [marketPayload.error || "market_index_source_unavailable"],
       heatmapQuoteCoverage: { status: "not_required", ok: true, reason: "simple_index_report_no_heatmap" },
+      industryDynamicsTradeDate: industryDynamics.tradeDate || "",
+      industryDynamicsSource: industryDynamics.source || "",
       priorityStaleBlocked: false,
     },
     fieldCompleteness: {
@@ -1126,6 +1314,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       riskNotes: riskNotes.length >= 2,
       priorityObservation: true,
       sectorFocus: true,
+      industryDynamics: industryDynamics.count > 0,
       hotStocks: true,
       reasoning: reasoning.length >= 4,
       filters: filters.length === 5,
@@ -1144,6 +1333,7 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       action,
       rows: rows.length,
       hotStocks: Math.min(3, rows.length),
+      industryDynamics: industryDynamics.count,
       strategy2Count: 0,
       realtimeRadarCount: 0,
       reportMode: "weighted-index-simple-report",
@@ -1217,6 +1407,7 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
     riskNotes: insights.riskNotes,
     priorityObservation: insights.priorityObservation,
     sectorFocus: insights.sectorFocus,
+    industryDynamics: insights.industryDynamics,
     reasoning: insights.reasoning,
     dashboard: insights.dashboard,
     dataFreshness: insights.dataFreshness,
@@ -1548,6 +1739,7 @@ module.exports.__test = {
   canServeCachedPayload,
   heatmapQueryForMarketAi,
 };
+
 
 
 

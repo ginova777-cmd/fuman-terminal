@@ -34,7 +34,7 @@ const ROUTE_TIMEOUT_MS = Number(optionValue("--route-timeout") || process.env.FU
 const DESKTOP_ROUTES = [
   { key: "market", label: "market overview", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", requiredFieldSignals: ["runOrDate", "sourceFreshness", "reasonScoreActionRisk"] },
   { key: "market-ai", label: "market ai", selector: "aside.sidebar a[data-view=\"market\"]", expectedRouteKey: "market|市場總覽", expectedPanelId: "market-view", postClickSelector: "#market-view .market-mode-tabs [data-market-mode=\"ai\"]", requiredText: ["AI 判讀", "操作建議", "風險"] },
-  { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"] .s2", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
+  { key: "strategy2", label: "strategy2 live", selector: "aside.sidebar a[data-view=\"strategy\"][data-strategy-route=\"intraday_2m\"]", expectedRouteKey: "strategy|策略2", expectedPanelId: "strategy-view" },
   { key: "strategy3", label: "strategy3", selector: "aside.sidebar a[data-view=\"strategy\"] .s3", expectedRouteKey: "strategy|策略3", expectedPanelId: "strategy-view" },
   { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
   { key: "strategy5", label: "strategy5", selector: "aside.sidebar a[data-view=\"strategy\"] .s5", expectedRouteKey: "strategy|策略5", expectedPanelId: "strategy-view" },
@@ -592,11 +592,13 @@ async function waitForDesktopRoute(cdp, route, timeoutMs = 7000) {
     const activeRouteKey = document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
     const activeNav = document.querySelector("[data-view].active,[data-view][aria-current='page']");
     const panelOk = !expected.expectedPanelId || activePanel?.id === expected.expectedPanelId;
-    const routeOk = !expected.expectedRouteKey || activeRouteKey === expected.expectedRouteKey;
+    const membershipLocked = Boolean(activePanel?.querySelector('[data-membership-required="1"], .fuman-entitlement-preview'));
+    const routeOk = membershipLocked || !expected.expectedRouteKey || activeRouteKey === expected.expectedRouteKey;
     return {
       ok: panelOk && routeOk,
       activePanelId: activePanel?.id || "",
       activeRouteKey,
+      membershipLocked,
       activeNavView: activeNav?.dataset?.view || "",
       expectedPanelId: expected.expectedPanelId || "",
       expectedRouteKey: expected.expectedRouteKey || "",
@@ -953,6 +955,16 @@ async function verifyMobileRouteWatchAdd(cdp, route) {
 }
 
 async function activateMobileRoute(cdp, route, timeoutMs = 18000) {
+  const locked = await evaluate(cdp, () => {
+    const root = document.querySelector('[data-mobile-auth-lock]');
+    const protectedRoots = document.querySelectorAll('[data-mobile-terminal-fragment], .market-ai-stock-row, .mobile-terminal-row, .watch-row');
+    return {
+      locked: Boolean(root && document.documentElement.dataset.mobileLocked === "1"),
+      protectedContentHidden: protectedRoots.length === 0,
+      reason: String(root?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180),
+    };
+  }).catch(() => ({ locked: false }));
+  if (locked.locked) return { ok: true, locked: true, ...locked };
   let last = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await clickSelector(cdp, `#tabs button[data-fragment="${route.fragment}"]`);
@@ -1237,6 +1249,7 @@ function collectDesktopStats(route) {
   };
   const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
   const activePanel = [...document.querySelectorAll(".view-panel")].find((el) => el.classList.contains("active") && !el.hidden) || document.body;
+  const desktopMembershipLocked = Boolean(activePanel.querySelector('[data-membership-required="1"], .fuman-entitlement-preview'));
   if (route.key === "market-ai" && activePanel.id === "market-view" && !activePanel.classList.contains("market-ai-mode")) {
     if (typeof window.FUMAN_SELECT_MARKET_DESKTOP_MODE === "function") {
       window.FUMAN_SELECT_MARKET_DESKTOP_MODE("ai", "ui-e2e-stats-guard");
@@ -1247,7 +1260,7 @@ function collectDesktopStats(route) {
   const activeRouteKey = document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
   const activeNav = document.querySelector("[data-view].active,[data-view][aria-current='page']");
   const routeIdentityOk = (!route.expectedPanelId || activePanel.id === route.expectedPanelId)
-    && (!route.expectedRouteKey || activeRouteKey === route.expectedRouteKey);
+    && (desktopMembershipLocked || !route.expectedRouteKey || activeRouteKey === route.expectedRouteKey);
   const panelText = text(activePanel).slice(0, 16000);
   const rowSelectors = [
     ".metric-card",
@@ -1339,7 +1352,7 @@ function collectDesktopStats(route) {
       activated: activeButtons.length === 1 && activeKey === key,
     };
   })();
-  const marketAiDashboard = route.key === "market-ai" ? (() => {
+  const marketAiDashboard = (route.key === "market-ai" || route.key === "market") ? (() => {
     const filterButtons = [...activePanel.querySelectorAll("[data-market-ai-filter]")];
     const labels = filterButtons.map((button) => text(button).replace(/\s+\d+$/, "").trim());
     const clicked = [];
@@ -1347,6 +1360,10 @@ function collectDesktopStats(route) {
       button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       clicked.push({ key: button.dataset.marketAiFilter || "", active: button.classList.contains("active") });
     });
+    const aiPanel = activePanel.querySelector("[data-market-api-ai],.market-ai-panel");
+    const sourceMarker = String(aiPanel?.dataset?.marketApiAi || "");
+    const simpleReport = /^(?:market-ai-index-report|weighted-index-simple-report)$/.test(sourceMarker)
+      || Boolean(aiPanel?.querySelector?.("[data-market-ai-simple-report]"));
     const overflow = Math.max(0, Math.ceil((document.documentElement.scrollWidth || document.body.scrollWidth || 0) - window.innerWidth));
     return {
       heroBoard: visible(activePanel.querySelector(".market-ai-hero-board")),
@@ -1356,6 +1373,8 @@ function collectDesktopStats(route) {
       filters: labels,
       clicked,
       stockRows: [...activePanel.querySelectorAll(".market-ai-stock-row")].filter(visible).length,
+      simpleReport,
+      sourceMarker,
       horizontalOverflow: overflow,
     };
   })() : null;
@@ -1402,7 +1421,11 @@ function collectDesktopStats(route) {
   const softEmptyPattern = /^(?:fallback|等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)$/i;
   const hardBlockers = rowsVisible > 0 ? blockerMatches.filter((match) => !softEmptyPattern.test(match)) : blockerMatches;
   const requiredText = Array.isArray(route.requiredText) ? route.requiredText : [];
-  const missingRequiredText = requiredText.filter((needle) => !panelText.includes(needle));
+  const simpleMarketAi = route.key === "market-ai" && marketAiDashboard?.simpleReport === true;
+  const effectiveRequiredText = simpleMarketAi
+    ? requiredText.filter((needle) => needle !== "操作建議")
+    : requiredText;
+  const missingRequiredText = effectiveRequiredText.filter((needle) => !panelText.includes(needle));
   const fieldSignals = {
     codeName: /(?:\b\d{4}\b\s*[\u4e00-\u9fffA-Za-z]{1,}|(?:股票|代號|標的|權證|CB).{0,42}(?:[\u4e00-\u9fff]{2,}|名稱))/.test(panelText),
     runOrDate: dateSignals.length > 0,
@@ -1479,7 +1502,7 @@ function collectDesktopStats(route) {
   }
   const unifiedFilterRequiredRoutes = new Set(["strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
   const unifiedFilterBlockers = [];
-  if (unifiedFilterRequiredRoutes.has(route.key)) {
+  if (!desktopMembershipLocked && unifiedFilterRequiredRoutes.has(route.key)) {
     if (!unifiedFilterContract.buttonCount) {
       unifiedFilterBlockers.push("unified strategy detail filter buttons missing");
     } else {
@@ -1501,7 +1524,7 @@ function collectDesktopStats(route) {
     && (marketAiDashboard?.evidenceCards || 0) >= 4
     && /等待今日|已排除|舊 snapshot|等待方向/.test(panelText);
   const marketClosedProtection = /休市保護啟動|颱風假休市|市場休市/.test(String(document.body?.textContent || ""));
-  if (route.key === "heatmap" || route.key === "market") {
+  if (route.key === "heatmap" || (route.key === "market" && !activePanel.querySelector("[data-market-api-ai] .market-ai-hero-board,.market-ai-panel .market-ai-hero-board"))) {
     const metricText = normalizeArray(marketOverviewContract?.metricTexts).join(" | ");
     const requiredMetrics = ["加權指數", "櫃買指數", "台指期夜"];
     if ((marketOverviewContract?.metricCards || 0) !== 3) marketOverviewBlockers.push(`market overview metric cards must be 3 actual=${marketOverviewContract?.metricCards || 0}`);
@@ -1522,19 +1545,42 @@ function collectDesktopStats(route) {
     if (marketOverviewContract?.tickerVisible) marketOverviewBlockers.push("market overview must not show ticker strip");
     if (marketOverviewContract?.strengthVisible) marketOverviewBlockers.push("market overview must not show strength panel");
   }
-  if (route.key === "market-ai") {
-    const requiredFilters = ["全部", "動能強", "法人買超", "當沖熱", "風險高"];
+  if (route.key === "market-ai" || (route.key === "market" && marketAiDashboard?.heroBoard)) {
     if (!marketAiDashboard?.heroBoard) marketAiBlockers.push("market AI hero board missing");
-    if ((marketAiDashboard?.metricCards || 0) < 4) marketAiBlockers.push(`market AI metric cards ${marketAiDashboard?.metricCards || 0}<4`);
-    if ((marketAiDashboard?.keyCards || 0) < 3) marketAiBlockers.push(`market AI key cards ${marketAiDashboard?.keyCards || 0}<3`);
-    if ((marketAiDashboard?.evidenceCards || 0) < 4) marketAiBlockers.push(`market AI evidence cards ${marketAiDashboard?.evidenceCards || 0}<4`);
-    for (const label of requiredFilters) {
-      if (!marketAiDashboard?.filters?.some((item) => item.includes(label))) marketAiBlockers.push(`market AI filter missing ${label}`);
+    if (marketAiDashboard?.simpleReport) {
+      if ((marketAiDashboard?.metricCards || 0) < 3) marketAiBlockers.push(`market AI simple report metric cards ${marketAiDashboard?.metricCards || 0}<3`);
+      if (!/盤後等待資料|收盤快照|資料尚未穩定|publish|保留上一筆|display.only|簡易報告/i.test(panelText)) {
+        marketAiBlockers.push("market AI simple report state marker missing");
+      }
+    } else {
+      const requiredFilters = ["全部", "動能強", "法人買超", "當沖熱", "風險高"];
+      if ((marketAiDashboard?.metricCards || 0) < 4) marketAiBlockers.push(`market AI metric cards ${marketAiDashboard?.metricCards || 0}<4`);
+      if ((marketAiDashboard?.keyCards || 0) < 3) marketAiBlockers.push(`market AI key cards ${marketAiDashboard?.keyCards || 0}<3`);
+      if ((marketAiDashboard?.evidenceCards || 0) < 4) marketAiBlockers.push(`market AI evidence cards ${marketAiDashboard?.evidenceCards || 0}<4`);
+      for (const label of requiredFilters) {
+        if (!marketAiDashboard?.filters?.some((item) => item.includes(label))) marketAiBlockers.push(`market AI filter missing ${label}`);
+      }
+      if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
     }
-    if (!marketAiDashboard?.clicked?.every((item) => item.active)) marketAiBlockers.push("market AI capsule filter click did not activate every tab");
     if ((marketAiDashboard?.horizontalOverflow || 0) > 8) marketAiBlockers.push(`market AI desktop horizontal overflow ${marketAiDashboard.horizontalOverflow}px`);
   }
-  const blockers = [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...unifiedFilterBlockers, ...marketOverviewBlockers, ...marketAiBlockers])]
+  const lockedGateBlockers = [];
+  if (desktopMembershipLocked) {
+    const preview = activePanel.querySelector('[data-membership-required="1"], .fuman-entitlement-preview');
+    const actions = preview ? [...preview.querySelectorAll('[data-entitlement-action]')] : [];
+    if (!preview) lockedGateBlockers.push("desktop locked preview missing");
+    if (!actions.some((node) => node.dataset.entitlementAction === "signup")) lockedGateBlockers.push("desktop locked preview signup action missing");
+    if (!actions.some((node) => node.dataset.entitlementAction === "login")) lockedGateBlockers.push("desktop locked preview login action missing");
+    if (!actions.some((node) => node.dataset.entitlementAction === "market")) lockedGateBlockers.push("desktop locked preview market action missing");
+    const protectedSelectors = ["#strategy-table [data-stock-code]", ".strategy5-stock-card[data-code]", "#chip-trade-body tr[data-code]", "#cb-detect-list [data-code]", ".warrant-flow-panel tr[data-code]", ".warrant-flow-card[data-code]"];
+    if (protectedSelectors.some((selector) => [...activePanel.querySelectorAll(selector)].some(visible))) lockedGateBlockers.push("desktop locked preview leaked protected rows");
+  }
+  const lockedSoftBlockers = desktopMembershipLocked
+    ? blockerMatches.filter((item) => !/^(等待資料載入|尚未產生 CB|權證快照尚未建立|更新策略資料中)$/.test(String(item || "")))
+    : [];
+  const blockers = desktopMembershipLocked
+    ? [...new Set([...lockedSoftBlockers, ...lockedGateBlockers])]
+    : [...new Set([...hardBlockers, ...fieldBlockers, ...contractBlockers, ...unifiedFilterBlockers, ...marketOverviewBlockers, ...marketAiBlockers])]
     .filter((item) => !(marketAiStaleWaiting && /^(fallback|等待資料|沒有資料)$/.test(String(item || ""))));
   return {
     kind: "desktop",
@@ -1566,7 +1612,12 @@ function collectDesktopStats(route) {
     missingRequiredText,
     blockerMatches: blockers,
     warnings,
-    ok: routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && blockers.length === 0 && missingRequiredText.length === 0,
+    state: desktopMembershipLocked ? "membership_locked" : "data",
+    membershipLocked: desktopMembershipLocked,
+    protectedContentHidden: desktopMembershipLocked && lockedGateBlockers.length === 0,
+    ok: desktopMembershipLocked
+      ? lockedGateBlockers.length === 0 && blockers.length === 0
+      : routeIdentityOk && (rowsVisible > 0 || waitingEmptyOk) && blockers.length === 0 && missingRequiredText.length === 0,
   };
 }
 
@@ -1574,6 +1625,7 @@ function collectMobileStats(route) {
   const text = (el) => String(el?.textContent || "").replace(/\s+/g, " ").trim();
   const content = document.querySelector("#content");
   const status = document.querySelector("#status");
+  const membershipLocked = Boolean(content?.querySelector("[data-mobile-auth-lock]") && document.documentElement.dataset.mobileLocked === "1");
   const root = content?.querySelector("[data-mobile-terminal-fragment]") || content?.firstElementChild || content;
   const rows = [...content.querySelectorAll(".mobile-terminal-row,.market-ai-stock-row,.watch-row,article")]
     .map((el) => text(el))
@@ -1624,13 +1676,13 @@ function collectMobileStats(route) {
   if (!layout.bodyBackground || layout.bodyBackground === "rgba(0, 0, 0, 0)" || layout.bodyBackground === "rgb(255, 255, 255)") {
     layoutBlockers.push(`mobile CSS not applied: background=${layout.bodyBackground || "<missing>"}`);
   }
-  if (layout.tabsDisplay !== "flex") layoutBlockers.push(`mobile tabs must be flex actual=${layout.tabsDisplay || "<missing>"}`);
+  if (layout.tabsDisplay !== "flex" && !membershipLocked) layoutBlockers.push(`mobile tabs must be flex actual=${layout.tabsDisplay || "<missing>"}`);
   if (layout.heroBorder === "none" || !layout.heroBorder) layoutBlockers.push("mobile hero card border is missing");
   if (card && (layout.cardBorder === "none" || !layout.cardBorder)) layoutBlockers.push("mobile data card border is missing");
   if (layout.shellWidth <= 0) layoutBlockers.push("mobile shell width is zero");
   if (layout.shellWidth > Math.min(window.innerWidth, 860)) layoutBlockers.push(`mobile shell is too wide actual=${layout.shellWidth} viewport=${window.innerWidth}`);
   if (horizontalOverflow > 8) layoutBlockers.push(`mobile page has horizontal overflow ${horizontalOverflow}px`);
-  if (route.fragment === "watch") {
+  if (!membershipLocked && route.fragment === "watch") {
     const watchRows = [...content.querySelectorAll(".watch-row")];
     const removeButtons = [...content.querySelectorAll("[data-watch-remove]")];
     const addInput = content.querySelector("#mobile-watch-input");
@@ -1666,7 +1718,7 @@ function collectMobileStats(route) {
     if (removeButtons.length < watchRows.length) contractBlockers.push(`mobile watch tab remove buttons missing rows=${watchRows.length} buttons=${removeButtons.length}`);
     if (!/自選\s+10/.test(statusTextForWatch)) contractBlockers.push(`mobile watch status must show self-selected count 10 actual=${statusTextForWatch || "<missing>"}`);
   }
-  const mobileAiDashboard = route.fragment === "ai" ? (() => {
+  const mobileAiDashboard = !membershipLocked && route.fragment === "ai" ? (() => {
     const filters = [...content.querySelectorAll("[data-market-ai-filter]")];
     const clicked = [];
     filters.forEach((button) => {
@@ -1687,7 +1739,7 @@ function collectMobileStats(route) {
       clicked,
     };
   })() : null;
-  if (route.fragment === "ai") {
+  if (!membershipLocked && route.fragment === "ai") {
     if (!mobileAiDashboard.root) layoutBlockers.push("mobile AI fragment must come from API fragment root");
     if (mobileAiDashboard.cards < 4) layoutBlockers.push(`mobile AI cards ${mobileAiDashboard.cards}<4`);
     if (mobileAiDashboard.blocks < 4) layoutBlockers.push(`mobile AI blocks ${mobileAiDashboard.blocks}<4`);
@@ -1702,8 +1754,8 @@ function collectMobileStats(route) {
     }
     if (!mobileAiDashboard.clicked.every((item) => item.active && item.visibleList)) layoutBlockers.push("mobile AI capsule filter click did not reveal every list");
   }
-  const mobileRouteWatchAdd = route.verifyWatchAdd ? (window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E || null) : null;
-  if (route.verifyWatchAdd) {
+  const mobileRouteWatchAdd = !membershipLocked && route.verifyWatchAdd ? (window.__FUMAN_MOBILE_ROUTE_WATCH_ADD_E2E || null) : null;
+  if (!membershipLocked && route.verifyWatchAdd) {
     if (!mobileRouteWatchAdd?.ok) {
       layoutBlockers.push(`mobile ${route.fragment} watch add contract failed ${mobileRouteWatchAdd?.reason || "<missing>"}`);
     } else {
@@ -1716,7 +1768,14 @@ function collectMobileStats(route) {
       }
     }
   }
-  const keyOk = route.fragment === "watch" || rootKey === route.fragment;
+  const lockedGateBlockers = [];
+  if (membershipLocked) {
+    const authLinks = [...document.querySelectorAll('.mobile-auth-lock a[href*="/auth.html"]')];
+    if (!authLinks.some((link) => /mode=login/.test(link.getAttribute('href') || ""))) lockedGateBlockers.push("mobile locked shell login link missing");
+    if (!authLinks.some((link) => /mode=signup/.test(link.getAttribute('href') || ""))) lockedGateBlockers.push("mobile locked shell signup link missing");
+    if (document.querySelector('[data-mobile-terminal-fragment], .market-ai-stock-row, .mobile-terminal-row, .watch-row')) lockedGateBlockers.push("mobile locked shell leaked protected content");
+  }
+  const keyOk = membershipLocked ? true : route.fragment === "watch" || rootKey === route.fragment;
   const warnings = [];
   if (!dateSignals.length && !route.allowEmpty) warnings.push("freshness/date/run signal not visible enough");
   const blockers = [...new Set([...blockerMatches, ...layoutBlockers, ...contractBlockers])]
@@ -1745,10 +1804,15 @@ function collectMobileStats(route) {
     layoutBlockers,
     blockerMatches: blockers,
     warnings,
-    ok: keyOk
-      && (route.allowEmpty || rows.length > 0)
-      && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
-      && blockers.length === 0,
+    state: membershipLocked ? "membership_locked" : "data",
+    membershipLocked,
+    protectedContentHidden: membershipLocked && lockedGateBlockers.length === 0,
+    ok: membershipLocked
+      ? lockedGateBlockers.length === 0 && blockers.length === 0
+      : keyOk
+        && (route.allowEmpty || rows.length > 0)
+        && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
+        && blockers.length === 0,
   };
 }
 
@@ -1850,7 +1914,7 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
     if (last?.ok && !(last.blockerMatches || []).length) {
-      if (route.key === "market-ai") {
+      if (route.key === "market-ai" || (route.key === "market" && last?.marketAiDashboard?.heroBoard)) {
         const stability = await collectMarketAiLayoutStability(cdp).catch((error) => ({
           ok: false,
           error: error.message,
@@ -1946,6 +2010,7 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
     const market = document.querySelector("#market-view");
     const marketClosedProtection = /休市保護啟動|颱風假休市|市場休市/.test(String(document.body?.textContent || ""));
     if (!market) return { ok: false, blocker: "market view missing for mode toggle contract", steps: [] };
+    const aiOnly = !market.querySelector('.market-mode-tabs [data-market-mode="overview"]');
     const read = (expectedMode, label) => {
       const activeButton = market.querySelector(".market-mode-tabs [data-market-mode].active");
       const aiPanel = market.querySelector("[data-market-api-ai],.market-ai-panel");
@@ -1968,12 +2033,13 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
       };
       const metricText = metricTexts.join(" | ");
       state.ok = expectedMode === "ai"
-        ? state.activeButton === "ai" && /market-ai-mode/.test(state.className) && state.aiVisible && /AI 判讀/.test(state.title)
+        ? state.activeButton === "ai" && /market-ai-mode/.test(state.className) && state.aiVisible && /AI/.test(state.title) && state.heroVisible
         : state.activeButton === "overview" && /market-overview-mode/.test(state.className) && !state.aiVisible && /市場總覽/.test(state.title) && state.metricCards === 3 && /加權指數/.test(metricText) && /櫃買指數/.test(metricText) && /台指期夜/.test(metricText) && (marketClosedProtection || state.sectorCards >= 8);
       return state;
     };
     const clickMode = async (mode, label) => {
       const button = market.querySelector(`.market-mode-tabs [data-market-mode="${mode}"]`);
+      if (!button && aiOnly && mode === "overview") return { ok: true, label, expectedMode: mode, skipped: true, reason: "ai_only_shell" };
       if (!button) return { ok: false, label, expectedMode: mode, blocker: `market mode button missing: ${mode}` };
       button.click();
       await wait(mode === "ai" ? 1200 : 520);
@@ -1984,12 +2050,13 @@ async function collectMarketModeToggleContract(cdp, finalMode = "overview") {
     steps.push(await clickMode("overview", "overview-1"));
     steps.push(await clickMode("ai", "ai-2"));
     steps.push(await clickMode("overview", "overview-2"));
-    if (expectedFinalMode === "ai") steps.push(await clickMode("ai", "restore-ai"));
+    if (expectedFinalMode === "ai" || aiOnly) steps.push(await clickMode("ai", aiOnly ? "restore-ai-only" : "restore-ai"));
     else steps.push(read("overview", "restore-overview"));
     const failed = steps.find((item) => !item.ok);
     return {
       ok: !failed,
       finalMode: expectedFinalMode,
+      aiOnly,
       steps,
       blocker: failed ? `market mode toggle failed at ${failed.label}: active=${failed.activeButton || ""} classes=${failed.className || ""} title=${failed.title || ""}` : "",
     };
@@ -2050,6 +2117,20 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
           await reloadMobilePage(cdp, theme);
         }
         await prepareMobileRoute(cdp, effectiveRoute);
+        const accessState = await evaluate(cdp, () => {
+          const root = document.querySelector('[data-mobile-auth-lock]');
+          const protectedRoots = document.querySelectorAll('[data-mobile-terminal-fragment], .market-ai-stock-row, .mobile-terminal-row, .watch-row');
+          return {
+            locked: Boolean(root && document.documentElement.dataset.mobileLocked === "1"),
+            protectedContentHidden: protectedRoots.length === 0,
+            reason: String(root?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180),
+          };
+        }).catch(() => ({ locked: false }));
+        if (accessState.locked) {
+          const lockedStats = await evaluate(cdp, collectMobileStats, effectiveRoute);
+          lockedStats.accessState = accessState;
+          return lockedStats;
+        }
         await activateMobileRoute(cdp, effectiveRoute);
         if (effectiveRoute.fragment !== "watch") {
           await verifyMobileRouteWatchAdd(cdp, effectiveRoute);

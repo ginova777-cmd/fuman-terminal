@@ -17,7 +17,6 @@ const ROUTE_ALIASES = new Map([
   ["cb-detect-latest", "cb"],
   ["warrant-flow", "warrant"],
   ["warrant-flow-latest", "warrant"],
-  ["realtime-radar-latest", "realtime-radar"],
   ["market-overview", "market"],
 ]);
 
@@ -98,7 +97,13 @@ const CONTRACTS = [
         "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30 }),
+      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], {
+        order: "updated_at.desc",
+        maxAgeDays: 30,
+        level: "warning",
+        requiredWhenEnv: "STRATEGY3_REQUIRE_TURNOVER",
+        purpose: "optional turnover enrichment; hard only when STRATEGY3_REQUIRE_TURNOVER=1",
+      }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
     ],
   },
@@ -108,8 +113,10 @@ const CONTRACTS = [
     checks: [
       runTable("strategy4_scan_runs", "strategy4"),
       resultTable("strategy4_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "zone", "zone_label", "price_source", "volume_unit", "data_contract_source"]),
-      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
+      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "open", "high", "low", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
       sourceTable("fugle_daily_volume", ["symbol", "trade_date", "volume", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
+      sourceTable("v_stock_daily_ohlcv", ["symbol", "market", "trade_date", "open", "high", "low", "close", "volume", "updated_at"], { order: "trade_date.desc", maxAgeDays: 3 }),
+      sourceTable("v_stock_daily_ohlcv_completeness", ["trade_date", "rows", "ohlc_rows", "ohlc_symbols"], { order: "trade_date.desc", maxAgeDays: 3 }),
       sourceTable("strategy4_daily_ohlcv_view", ["symbol", "trade_date", "close", "volume_lots", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
     ],
   },
@@ -121,7 +128,7 @@ const CONTRACTS = [
       resultTable("strategy5_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "signals", "data_contract_source"]),
       sourceTable("v_chip_flows_latest", ["symbol", "trade_date", "foreign_net", "investment_trust_net", "dealer_net", "institution_total_net", "source"], { order: "trade_date.desc", maxAgeDays: 3, level: "warning" }),
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30, level: "warning" }),
-      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
+      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "open", "high", "low", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
     ],
   },
   {
@@ -167,17 +174,6 @@ const CONTRACTS = [
     checks: [
       runView("v_warrant_flow_latest_complete_run", "warrant_flow"),
       resultTable("warrant_flow_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "result_type", "underlying_code", "underlying_name", "score", "data_contract_source"]),
-    ],
-  },
-  {
-    key: "realtime-radar",
-    label: "realtime radar",
-    checks: [
-      realtimeRadarCache(),
-      sourceTable("fugle_realtime_quote_latest", [
-        "symbol", "name", "market", "price", "open_price", "high_price", "low_price", "previous_close",
-        "change_percent", "volume_lots", "trade_value_twd", "last_trade_time", "quote_updated_at",
-      ], { order: "quote_updated_at.desc.nullslast", requireToday: true, minRows: 1, purpose: "formal quote-view fallback for stale/missing radar cache" }),
     ],
   },
 ];
@@ -239,6 +235,7 @@ function sourceTable(table, fields, options = {}) {
     select: fields.join(","),
     query: [options.order ? `order=${options.order}` : "", "limit=5"].filter(Boolean).join("&"),
     level: options.level || "error",
+    requiredWhenEnv: options.requiredWhenEnv || "",
     minRows: Number(options.minRows || 0),
     requireToday: options.requireToday === true,
     maxAgeDays: Number(options.maxAgeDays || 0),
@@ -599,6 +596,10 @@ async function checkOne(strategy, check) {
       issues: [],
     };
   }
+  const requiredByEnv = check.requiredWhenEnv
+    ? process.env[check.requiredWhenEnv] === "1"
+    : false;
+  const effectiveLevel = requiredByEnv ? "error" : (check.level || "error");
   const result = await fetchRows(check.table, check.select, check.query);
   const tradingDay = await currentTradingDayStatus();
   const marketClosedLiveSource = isMarketClosedLiveSourceCheck(check, tradingDay);
@@ -619,13 +620,15 @@ async function checkOne(strategy, check) {
   }
   if (result.ok && check.requireToday && !liveSourceSkipped) {
     const expected = await expectedQuoteDateKey();
-    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const today = taipeiDateKey();
     if (!newest) issues.push(`${check.table} newest date missing; expected at least quote date ${expected}`);
     else if (newest < expected) issues.push(`${check.table} newest date ${newest} < expected quote date ${expected}`);
     else if (newest > today) issues.push(`${check.table} newest date ${newest} > Taipei today ${today}`);
   }
-  if (result.ok && check.maxAgeDays) {
+  // Historical source freshness is not a live requirement on market-closed days.
+  // Closed days preserve previous-good; trading days remain strict.
+    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
+  if (result.ok && check.maxAgeDays && tradingDay?.isTradingDay !== false) {
     const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const ageDays = dateAgeDays(newest);
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
@@ -665,7 +668,8 @@ async function checkOne(strategy, check) {
   return {
     ...check,
     ok: issues.length === 0,
-    level: check.level || "error",
+    level: effectiveLevel,
+    requiredByEnv,
     rowCount: result.rows.length,
     newestDate: check.kind === "realtime-radar-cache"
       ? realtimeRadarPayloadDate(result.rows[0]?.payload || {}) || rowDate(result.rows[0] || {})

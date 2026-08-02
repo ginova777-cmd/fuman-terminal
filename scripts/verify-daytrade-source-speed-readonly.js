@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
@@ -275,6 +276,15 @@ async function readSourceStatus(anonKey) {
 async function main() {
   const phase = daytradePhase();
   const currentTaipeiMinutes = taipeiMinutes();
+  const marketDay = await isTwseTradingDay(new Date(), {
+    stateDir: process.env.FUMAN_STATE_DIR || "C:\\fuman-runtime\\state",
+  }).catch((error) => ({
+    isTradingDay: true,
+    reason: "calendar_probe_failed",
+    source: "error",
+    error: error.message,
+  }));
+  const marketClosed = marketDay && marketDay.isTradingDay === false;
   const openingPriorityFirstWindow = currentTaipeiMinutes >= 525 && currentTaipeiMinutes < 550;
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
     path.join("C:", "fuman-runtime", "secrets", "supabase-anon-key.txt"),
@@ -406,7 +416,7 @@ async function main() {
   if (!writerGateGrade) issues.push(issue("daytrade_gate_grade_missing_or_invalid", "critical", { value: stringValue(writerGateGradeRaw), rule: "missing or invalid daytrade_gate_grade => D" }));
   if (!daytradeSourceSpeedOk && !prioritySourceInjecting) warnings.push(issue("daytrade_source_speed_not_a_yet", "warning", { daytradeSourceSpeedOk, rule: "not formal-entry A yet; source may still be injecting" }));
   if (gateMode !== "priority_first") issues.push(issue("daytrade_gate_mode_not_priority_first", "critical", { gateMode, required: "priority_first" }));
-  if (formalScope && formalScope !== "priority_top40") issues.push(issue("formal_scope_not_priority_top40", "critical", { formalScope, required: "priority_top40" }));
+  if (formalScope && formalScope !== "mother_pool_rotation_priority_top40") issues.push(issue("formal_scope_not_mother_pool_rotation_priority_top40", "critical", { formalScope, required: "mother_pool_rotation_priority_top40" }));
   if (freshQuoteCoverage120 < MIN_FRESH_QUOTE_COVERAGE) warnings.push(issue("daytrade_full_market_fresh_quote_coverage_low_nonblocking", "warning", { coverage: freshQuoteCoverage120, min: MIN_FRESH_QUOTE_COVERAGE, freshQuotes120, targetFreshQuotes: TARGET_FRESH_QUOTES, rule: "full market is scorecard-only for priority-first daytrade gate" }));
   if (freshQuotes120 < TARGET_FRESH_QUOTES) warnings.push(issue("daytrade_full_market_fresh_quote_speed_low_nonblocking", "warning", { freshQuotes120, targetFreshQuotes: TARGET_FRESH_QUOTES, measuredSymbolsPerSecond, requiredSymbolsPerSecond, rule: "full market is scorecard-only for priority-first daytrade gate" }));
   if (quoteAgeSeconds > MAX_QUOTE_AGE_SECONDS) issues.push(issue("daytrade_quote_age_too_old", "critical", { quoteAgeSeconds, max: MAX_QUOTE_AGE_SECONDS }));
@@ -504,8 +514,9 @@ async function main() {
     issues.push(issue("writer_gate_grade_a_but_evidence_not_a", "critical", { writerGateGrade, computedGateGrade }));
   }
   const effectiveGateGrade = offSession ? (normalizeGateGrade(writerGateGrade) || computedGateGrade) : gateGrade;
-  const reportedIssues = offSession ? [] : issues;
-  const reportedWarnings = offSession
+  const sessionOff = offSession || marketClosed;
+  const reportedIssues = sessionOff ? [] : issues;
+  const reportedWarnings = sessionOff
     ? [
       ...warnings,
       issue("off_session_freshness_not_required", "warning", {
@@ -517,9 +528,18 @@ async function main() {
     : warnings;
 
   const result = {
-    ok: effectiveGateGrade === "A" || offSession,
-    gateGrade: effectiveGateGrade,
+    ok: marketClosed || effectiveGateGrade === "A" || offSession,
+    gateGrade: marketClosed ? "CLOSED" : effectiveGateGrade,
     rawGateGrade: gateGrade,
+    status: marketClosed ? "market_closed_previous_good" : sessionOff ? "off_session_previous_good" : "live_source_check",
+    marketClosed,
+    marketContext: {
+      isTradingDay: marketDay?.isTradingDay !== false,
+      date: marketDay?.date || "",
+      reason: marketDay?.reason || "",
+      source: marketDay?.source || "",
+      closedPolicy: marketClosed ? "preserve_previous_good_no_formal_entry" : "trading_day_strict_source_gate",
+    },
     writerGateGrade,
     computedGateGrade,
     computedPriorityGateGrade,
@@ -527,10 +547,10 @@ async function main() {
     sourceStatusGateGrade,
     gateMode,
     openingPriorityFirstWindow,
-    offSession,
-    formalEntryAllowed: !offSession && effectiveGateGrade === "A" && formalWindow,
-    observationOnly: !offSession && ["B", "C"].includes(effectiveGateGrade),
-    stopNewSignals: offSession || effectiveGateGrade === "D",
+    offSession: sessionOff,
+    formalEntryAllowed: !marketClosed && !offSession && effectiveGateGrade === "A" && formalWindow,
+    observationOnly: !marketClosed && !offSession && ["B", "C"].includes(effectiveGateGrade),
+    stopNewSignals: marketClosed || offSession || effectiveGateGrade === "D",
     phase,
     mode: "read-only",
     report: "dedicated-daytrade-source-speed",
@@ -582,7 +602,13 @@ async function main() {
       fullMarketBlocksA: false,
     },
     issues: reportedIssues,
-    warnings: reportedWarnings,
+    warnings: marketClosed
+      ? [...reportedWarnings, issue("market_closed_previous_good", "warning", {
+        phase,
+        reason: marketDay?.reason || "market_closed",
+        rule: "休市日保留上一交易日良好資料；不產生自然暖機 A，也不允許正式進場。",
+      })]
+      : reportedWarnings,
     evidence: {
       sourceName: SOURCE_NAME,
       sourceStatus,

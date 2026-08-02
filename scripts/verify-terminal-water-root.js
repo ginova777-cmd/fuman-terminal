@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
+const { buildSubscriptionBudget } = require("../lib/fugle-websocket-subscription-contract");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-water-root");
@@ -9,6 +10,7 @@ const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.ve
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR }).replace(/\/+$/, "");
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const TIMEOUT_MS = Math.max(1000, Number(process.env.FUMAN_WATER_ROOT_TIMEOUT_MS || "3000") || 3000);
+const QUERY_ATTEMPTS = Math.max(1, Number(process.env.FUMAN_WATER_ROOT_QUERY_ATTEMPTS || "3") || 3);
 const EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || taipeiDateKey()).replace(/\D/g, "").slice(0, 8);
 
 function taipeiDateKey(date = new Date()) {
@@ -29,7 +31,34 @@ function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
-async function timedFetch(url, options = {}) {
+
+function localWebSocketSubscriptionBudget() {
+  const stock = buildSubscriptionBudget({
+    channels: process.env.FUGLE_STREAMING_CHANNELS || "trades,candles",
+    channelLimitsText: process.env.FUGLE_STREAMING_CHANNEL_SYMBOL_LIMITS || "trades=1650,candles=300",
+    maxSymbols: process.env.FUGLE_STREAMING_MAX_SYMBOLS || "2000",
+    maxTotalSubscriptions: process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || "2000",
+    planLimit: process.env.FUGLE_STREAMING_PLAN_LIMIT || "2000",
+    connections: process.env.FUGLE_STREAMING_CONNECTIONS || "1",
+    safetyMargin: process.env.FUGLE_STREAMING_SAFETY_MARGIN || "50",
+  });
+  const futopt = buildSubscriptionBudget({
+    channels: process.env.FUGLE_FUTOPT_STREAMING_CHANNELS || "trades,aggregates,candles",
+    maxSymbols: process.env.FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS || "500",
+    maxTotalSubscriptions: process.env.FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || "1800",
+    planLimit: process.env.FUGLE_FUTOPT_STREAMING_PLAN_LIMIT || "2000",
+    connections: process.env.FUGLE_FUTOPT_STREAMING_CONNECTIONS || "1",
+    safetyMargin: process.env.FUGLE_FUTOPT_STREAMING_SAFETY_MARGIN || "50",
+  });
+  return {
+    contract: "fugle-websocket-subscription-budget-v1",
+    source: "local-launcher-configuration",
+    productionReadback: "NOT_RUN",
+    stock,
+    futopt,
+    ok: stock.operationalBudgetOk && futopt.operationalBudgetOk,
+  };
+}async function timedFetch(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || TIMEOUT_MS);
   const startedAt = Date.now();
@@ -80,7 +109,13 @@ function restUrl(pathname, params = {}) {
 }
 
 async function query(name, pathname, params = {}, options = {}) {
-  const result = await timedFetch(restUrl(pathname, params), { timeoutMs: options.timeoutMs || TIMEOUT_MS });
+  const attempts = Math.max(1, Number(options.attempts || QUERY_ATTEMPTS) || QUERY_ATTEMPTS);
+  let result = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    result = await timedFetch(restUrl(pathname, params), { timeoutMs: options.timeoutMs || TIMEOUT_MS });
+    if (result.ok || attempt === attempts) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(250 * attempt, 1000)));
+  }
   const rows = Array.isArray(result.json) ? result.json : [];
   const row = rows[0] || null;
   return {
@@ -93,6 +128,7 @@ async function query(name, pathname, params = {}, options = {}) {
     row,
     error: result.error,
     maxElapsedMs: options.timeoutMs || TIMEOUT_MS,
+    attempts,
   };
 }
 
@@ -120,6 +156,15 @@ async function marketCalendar() {
   }
 }
 
+function sourceWriteErrors(row = {}) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const rows = Array.isArray(payload.nonfatal_write_errors) ? payload.nonfatal_write_errors : [];
+  return rows.map((error) => ({
+    target: String(error?.target || "unknown"),
+    message: String(error?.message || "").slice(0, 500),
+  })).filter((error) => error.message || error.target !== "unknown");
+}
+
 function sourceStatusSummary(row = {}) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   return {
@@ -130,10 +175,13 @@ function sourceStatusSummary(row = {}) {
     scannerCanRunOpening: payload.scanner_can_run_opening === true || row.scanner_can_run_opening === true,
     priorityFreshQuoteCoverage120s: asNumber(payload.priority_fresh_quote_coverage_120s ?? row.priority_fresh_quote_coverage_120s),
     quoteAgeSeconds: asNumber(payload.quote_age_seconds ?? row.quote_age_seconds, 999999),
+    hasIntraday1mStaleSeconds: payload.intraday_1m_stale_seconds !== undefined || row.intraday_1m_stale_seconds !== undefined,
     intraday1mStaleSeconds: asNumber(payload.intraday_1m_stale_seconds ?? row.intraday_1m_stale_seconds, 999999),
     dailyVolumeStatus: String(payload.daily_volume_status || row.daily_volume_status || ""),
     phase: String(payload.phase || row.phase || ""),
     message: String(row.message || payload.message || ""),
+    writeErrors: sourceWriteErrors(row),
+    writeErrorCount: sourceWriteErrors(row).length,
   };
 }
 
@@ -166,7 +214,7 @@ function intradayStatusSummary(row = {}, checkedAt = new Date().toISOString()) {
     updatedAt,
     latestCandleAgeSeconds: Number.isFinite(explicitAge) ? explicitAge : computedAge,
     updatedAgeSeconds: computedAge,
-    readyMa20Continuous: row.ready_ma20_continuous === true || row.ready_ge_20 === true,
+    readyMa20Continuous: row.ready_ma20_continuous === true || asNumber(row.continuous_candle_count) >= 20,
     readyMa35Continuous: row.ready_ma35_continuous === true || row.ready_ge_35 === true,
   };
 }
@@ -182,10 +230,12 @@ function effectiveSourceOperational(payload) {
     asNumber(intraday.updatedAgeSeconds, 999999),
   );
   const sourceStatusOk = ["ok", "ready"].includes(source.status);
+  const sourceIntradayFresh = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
+  const intradayReady = intraday.hasTodayData === true || sourceIntradayFresh;
   const objectiveOk = Boolean(
     source.priorityFreshQuoteCoverage120s >= required.priorityCoverage
     && source.quoteAgeSeconds <= required.quoteAgeSeconds
-    && intraday.hasTodayData === true
+    && intradayReady
     && intradayAge <= required.intraday1mStaleSeconds
     && (!required.dailyVolume || ["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase()))
   );
@@ -233,17 +283,37 @@ function statusIssues(payload) {
   const effective = payload.effectiveSource || effectiveSourceOperational(payload);
   const daily = payload.dailyVolume.row || {};
   const motherRows = payload.motherPool.rowCount;
-  const priorityRows = payload.priorityTop40.rowCount;
 
-  for (const item of payload.probes) {
-    if (!item.ok) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
-    if (item.elapsedMs > item.maxElapsedMs) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
+  const priorityRows = payload.priorityTop40.rowCount;
+  const websocketBudget = payload.websocketSubscriptionBudget;
+  if (websocketBudget && websocketBudget.ok !== true) issues.push("websocket_subscription_budget_exceeded");
+
+  if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
+    return issues;
+  }
+  for (const error of source.writeErrors || []) {
+    const target = String(error.target || "unknown");
+    const text = `${target} ${error.message}`.toLowerCase();
+    const diagnosticStatusCacheTimeout = target === "fugle_daytrade_intraday_1m_status_cache"
+      && /timeout|aborted/.test(text)
+      && effective.intraday1mStaleSeconds <= required.intraday1mStaleSeconds
+      && payload.intraday1m?.summary?.hasTodayData === true;
+    if (diagnosticStatusCacheTimeout) continue;
+    if (/22007|invalid input syntax for type timestamp with time zone/.test(text)) {
+      issues.push("source_write_schema_invalid:timestamp_with_time_zone");
+    } else {
+      issues.push(`source_write_error:${target}`);
+    }
+  }
+for (const item of payload.probes) {
+    const diagnosticIntradayCoveredBySource = item.name === "intraday_1m_status"
+      && source.hasIntraday1mStaleSeconds
+      && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
+    if (!item.ok && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
+    if (item.elapsedMs > item.maxElapsedMs && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
   }
   if (required.tradingDay && payload.marketCalendar.ok && payload.marketCalendar.row?.isTradingDay === false) {
     issues.push("market_calendar_not_trading_day");
-  }
-  if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
-    return issues;
   }
   if (!effective.ok) issues.push(`source_status_not_ready:${source.status || "missing"}`);
   if (source.priorityFreshQuoteCoverage120s < required.priorityCoverage) {
@@ -265,6 +335,7 @@ function statusIssues(payload) {
     if (gate.formalEntryAllowed !== true) issues.push("formal_entry_allowed_false");
     if (gate.scannerCanRunOpening !== true) issues.push("scanner_can_run_opening_false");
   }
+  const intradayDiagnosticCoveredBySource = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
   const intradayHasTodayData = intradaySummary.hasTodayData === true || asNumber(intraday.today_candle_count) > 0;
   if ((intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
     issues.push("intraday_1m_today_candle_count_zero");
@@ -287,7 +358,7 @@ function markdown(payload) {
   for (const probe of payload.probes) {
     const row = probe.row || {};
     const evidence = probe.name === "source_status"
-      ? `status=${payload.sourceStatus.summary.status}; coverage=${payload.sourceStatus.summary.priorityFreshQuoteCoverage120s}; quoteAge=${payload.sourceStatus.summary.quoteAgeSeconds}`
+      ? `status=${payload.sourceStatus.summary.status}; coverage=${payload.sourceStatus.summary.priorityFreshQuoteCoverage120s}; quoteAge=${payload.sourceStatus.summary.quoteAgeSeconds}; writeErrors=${payload.sourceStatus.summary.writeErrorCount || 0}`
       : probe.name === "canonical_gate"
         ? `grade=${payload.canonicalGate.summary.canonicalGateGrade}; status=${payload.canonicalGate.summary.canonicalGateStatus}; verdict=${payload.canonicalGate.summary.formalEntrySpeedVerdict}`
         : `updated=${row.updated_at || row.checked_at || row.latest_candle_time || row.trade_date || "--"}`;
@@ -312,6 +383,7 @@ async function main() {
     dailyVolume: true,
     motherPoolRows: asNumber(process.env.FUMAN_WATER_ROOT_MOTHER_POOL_ROWS || "1", 1),
     priorityTop40Rows: asNumber(process.env.FUMAN_WATER_ROOT_PRIORITY_TOP40_ROWS || "1", 1),
+    requireWebSocketProductionReadback: process.argv.includes("--require-websocket-production-readback"),
   };
   const [
     calendar,
@@ -342,6 +414,7 @@ async function main() {
     }),
     query("intraday_1m_status", "v_fugle_daytrade_intraday_1m_status", {
       select: "*",
+      order: "latest_candle_time.desc",
       limit: "1",
     }),
     query("daily_volume", "fugle_daytrade_daily_volume_avg", {
@@ -365,6 +438,7 @@ async function main() {
     priorityTop40,
     intraday1m: { ...intraday1m, summary: intradayStatusSummary(intraday1m.row || {}, checkedAt) },
     dailyVolume,
+    websocketSubscriptionBudget: localWebSocketSubscriptionBudget(),
   };
   payload.marketClosedPreviousGood = isMarketClosedPreviousGood(payload);
   payload.effectiveSource = effectiveSourceOperational(payload);
@@ -381,6 +455,12 @@ async function main() {
     ? (payload.marketClosedPreviousGood ? previousGoodHoldReason : "terminal_water_root_ready")
     : payload.issues[0];
 
+  if (required.requireWebSocketProductionReadback && payload.websocketSubscriptionBudget.productionReadback !== "PASS") {
+    payload.issues.push("websocket_subscription_budget_production_readback_not_run");
+    payload.ok = false;
+    payload.status = "blocked";
+    payload.reason = "websocket_subscription_budget_production_readback_not_run";
+  }
   const jsonFile = path.join(OUT_DIR, "terminal-water-root.json");
   const mdFile = path.join(OUT_DIR, "terminal-water-root.md");
   await fs.promises.writeFile(jsonFile, JSON.stringify(payload, null, 2));
@@ -397,6 +477,12 @@ async function main() {
     intraday1mStaleSeconds: payload.effectiveSource.intraday1mStaleSeconds,
     sourceIntraday1mStaleSeconds: payload.effectiveSource.sourceIntraday1mStaleSeconds,
     intradayStatusAgeSeconds: payload.effectiveSource.intradayStatusAgeSeconds,
+    websocketSubscriptionBudget: {
+      ok: payload.websocketSubscriptionBudget.ok,
+      productionReadback: payload.websocketSubscriptionBudget.productionReadback,
+      stockPlannedSubscriptions: payload.websocketSubscriptionBudget.stock.plannedSubscriptions,
+      futoptPlannedSubscriptions: payload.websocketSubscriptionBudget.futopt.plannedSubscriptions,
+    },
     output: jsonFile,
   }, null, 2));
   if (!payload.ok) process.exitCode = 1;

@@ -70,6 +70,10 @@
     {
       "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
       "destination": "/api/desktop-static-disabled"
+    },
+    {
+      "source": "/data/scorecard-latest.json",
+      "destination": "/api/desktop-static-disabled"
     }
   ],
   "headers": [
@@ -665,4 +669,3 @@
     }
   ]
 }
-

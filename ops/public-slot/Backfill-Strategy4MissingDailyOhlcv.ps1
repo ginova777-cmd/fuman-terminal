@@ -6,6 +6,7 @@ param(
   [int]$MaxSymbols = 20,
   [int]$DelaySeconds = 8,
   [int]$BatchSize = 300,
+  [int]$MinimumCoveragePercent = 90,
   [switch]$DryRun
 )
 
@@ -71,12 +72,28 @@ function Invoke-PublicSlotUpsert {
     Prefer = "resolution=merge-duplicates,return=minimal"
   }
   $body = @($Rows) | ConvertTo-Json -Depth 40 -Compress
-  Invoke-WebRequest `
-    -Uri "$($ProjectUrl.TrimEnd('/'))/rest/v1/${Table}?on_conflict=$OnConflict" `
-    -Method Post `
-    -Headers $headers `
-    -Body $body `
-    -TimeoutSec 120 | Out-Null
+  try {
+    $response = Invoke-WebRequest `
+      -Uri "$($ProjectUrl.TrimEnd('/') )/rest/v1/${Table}?on_conflict=$OnConflict" `
+      -Method Post `
+      -Headers $headers `
+      -Body $body `
+      -TimeoutSec 120 `
+      -SkipHttpErrorCheck
+    if ([int]$response.StatusCode -lt 200 -or [int]$response.StatusCode -ge 300) {
+      $detail = [string]$response.Content
+      if ($detail.Length -gt 800) { $detail = $detail.Substring(0, 800) }
+      throw "HTTP $($response.StatusCode) table=$Table detail=$detail"
+    }
+  } catch {
+    if ($Rows.Count -le 1) {
+      throw "upsert failed table=$Table rows=$($Rows.Count) on_conflict=$OnConflict error=$($_.Exception.Message)"
+    }
+    $mid = [math]::Floor($Rows.Count / 2)
+    Write-Host ("  write retry table={0} rows={1} -> {2}+{3}" -f $Table, $Rows.Count, $mid, ($Rows.Count - $mid)) -ForegroundColor Yellow
+    Invoke-PublicSlotUpsert -Table $Table -OnConflict $OnConflict -Rows @($Rows[0..($mid - 1)]) -ServiceRoleKey $ServiceRoleKey
+    Invoke-PublicSlotUpsert -Table $Table -OnConflict $OnConflict -Rows @($Rows[$mid..($Rows.Count - 1)]) -ServiceRoleKey $ServiceRoleKey
+  }
 }
 
 function Get-Strategy4UniverseSet {
@@ -90,7 +107,7 @@ function Get-Strategy4UniverseSet {
     $industry = [string]$row.industry
     if ($symbol -notmatch '^\d{4}$') { continue }
     if ($symbol.StartsWith("00")) { continue }
-    if ($row.is_active -eq $false) { continue }
+    if ($row.is_active -ne $true) { continue }
     if ($row.is_etf -eq $true) { continue }
     if ($row.is_warrant -eq $true) { continue }
     if ($row.is_cb -eq $true) { continue }
@@ -107,40 +124,78 @@ function Get-Strategy4UniverseSet {
   return $set
 }
 
+function Test-WeekdayDate {
+  param([string]$Text)
+  try {
+    $date = [DateTime]::ParseExact($Text, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+    return $date.DayOfWeek -ne [DayOfWeek]::Saturday -and $date.DayOfWeek -ne [DayOfWeek]::Sunday
+  } catch {
+    return $false
+  }
+}
+
 function Get-Strategy4Coverage {
   param(
     [hashtable]$UniverseSet,
     [string]$ReadKey
   )
-  $ohlcvRows = Invoke-PublicSlotGetAll -PathAndQuery "fugle_daily_ohlcv?select=symbol,trade_date" -ApiKey $ReadKey
-  $ohlcvBySymbol = @{}
+  $coverageFromDate = (Get-Date).AddDays(-60).ToString('yyyy-MM-dd')
+  $ohlcvRows = Invoke-PublicSlotGetAll -PathAndQuery "fugle_daily_ohlcv?trade_date=gte.$coverageFromDate&select=symbol,trade_date,open,high,low,close" -ApiKey $ReadKey
+  $ohlcvCompleteBySymbol = @{}
+  $ohlcvCompleteBySymbolDate = @{}
+  $latestBySymbol = @{}
+  $allLatestDates = @{}
   foreach ($row in @($ohlcvRows)) {
     $symbol = [string]$row.symbol
     if (-not $UniverseSet.ContainsKey($symbol)) { continue }
-    if (-not $ohlcvBySymbol.ContainsKey($symbol)) { $ohlcvBySymbol[$symbol] = 0 }
-    $ohlcvBySymbol[$symbol] += 1
+    $tradeDate = [string]$row.trade_date
+    $complete = $null -ne $row.open -and $null -ne $row.high -and $null -ne $row.low -and $null -ne $row.close
+    if (-not $complete -or -not (Test-WeekdayDate $tradeDate)) { continue }
+    if (-not $ohlcvCompleteBySymbol.ContainsKey($symbol)) { $ohlcvCompleteBySymbol[$symbol] = 0 }
+    $ohlcvCompleteBySymbol[$symbol] += 1
+    if (-not $ohlcvCompleteBySymbolDate.ContainsKey($symbol)) { $ohlcvCompleteBySymbolDate[$symbol] = @{} }
+    $ohlcvCompleteBySymbolDate[$symbol][$tradeDate] = $true
+    $allLatestDates[$tradeDate] = $true
+    if (-not $latestBySymbol.ContainsKey($symbol) -or $tradeDate -gt $latestBySymbol[$symbol]) { $latestBySymbol[$symbol] = $tradeDate }
   }
 
-  $volumeRows = Invoke-PublicSlotGetAll -PathAndQuery "fugle_daily_volume?select=symbol,trade_date" -ApiKey $ReadKey
+  $targetTradeDate = @($allLatestDates.Keys | Sort-Object | Select-Object -Last 1)[0]
+  # Target symbols with missing recent trading dates, not only low total history.
+  $recentTradeDates = @($allLatestDates.Keys | Sort-Object -Descending | Select-Object -First 20)
+  $missingByDate = @{}
+  foreach ($tradeDate in $recentTradeDates) {
+    $missingByDate[$tradeDate] = @($UniverseSet.Keys | Where-Object {
+      -not $ohlcvCompleteBySymbolDate.ContainsKey($_) -or
+      -not $ohlcvCompleteBySymbolDate[$_].ContainsKey($tradeDate)
+    })
+  }
+
+  $volumeRows = Invoke-PublicSlotGetAll -PathAndQuery "fugle_daily_volume?trade_date=gte.$coverageFromDate&select=symbol,trade_date" -ApiKey $ReadKey
   $volumeBySymbol = @{}
   foreach ($row in @($volumeRows)) {
     $symbol = [string]$row.symbol
-    if (-not $UniverseSet.ContainsKey($symbol)) { continue }
+    $tradeDate = [string]$row.trade_date
+    if (-not $UniverseSet.ContainsKey($symbol) -or -not (Test-WeekdayDate $tradeDate)) { continue }
     if (-not $volumeBySymbol.ContainsKey($symbol)) { $volumeBySymbol[$symbol] = @{} }
-    $volumeBySymbol[$symbol][[string]$row.trade_date] = $true
+    $volumeBySymbol[$symbol][$tradeDate] = $true
   }
 
   $loadedSet = @{}
   foreach ($symbol in $UniverseSet.Keys) {
-    $ohlcvCount = if ($ohlcvBySymbol.ContainsKey($symbol)) { $ohlcvBySymbol[$symbol] } else { 0 }
+    $ohlcvCount = if ($ohlcvCompleteBySymbol.ContainsKey($symbol)) { $ohlcvCompleteBySymbol[$symbol] } else { 0 }
     $volumeCount = if ($volumeBySymbol.ContainsKey($symbol)) { $volumeBySymbol[$symbol].Count } else { 0 }
-    if ($ohlcvCount -ge 60 -and $volumeCount -ge 5) { $loadedSet[$symbol] = $true }
+    $latestOk = -not [string]::IsNullOrWhiteSpace($targetTradeDate) -and $latestBySymbol.ContainsKey($symbol) -and $latestBySymbol[$symbol] -ge $targetTradeDate
+    $hasRecentDateGap = @($missingByDate.Values | Where-Object { $_ -contains $symbol }).Count -gt 0
+    if ($ohlcvCount -ge 20 -and $volumeCount -ge 5 -and $latestOk -and -not $hasRecentDateGap) { $loadedSet[$symbol] = $true }
   }
   $missing = @($UniverseSet.Keys | Where-Object { -not $loadedSet.ContainsKey($_) } | Sort-Object)
   return [ordered]@{
     expected = $UniverseSet.Count
     loaded = $loadedSet.Count
     missing = $missing.Count
+    target_trade_date = $targetTradeDate
+    recent_trade_dates = $recentTradeDates
+    missing_by_date = $missingByDate
     missing_symbols = $missing
   }
 }
@@ -157,7 +212,7 @@ function Fetch-FugleDailyCandles {
     Referer = "https://developer.fugle.tw/"
     Accept = "application/json"
   }
-  $uri = "https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/$Symbol?symbol=$Symbol&from=$FromDate&to=$ToDate"
+  $uri = "https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/$Symbol?timeframe=D&from=$FromDate&to=$ToDate&sort=asc&fields=open,high,low,close,volume"
   Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -TimeoutSec 45
 }
 
@@ -246,7 +301,7 @@ function Fetch-OfficialDailyCandles {
 
   foreach ($source in $sources) {
     $rows = @()
-    foreach ($month in (Get-MonthStarts -Months 10)) {
+    foreach ($month in (Get-MonthStarts -Months 3)) {
       try {
         if ($source -eq "twse") {
           $dateText = $month.ToString("yyyyMM01")
@@ -272,7 +327,7 @@ function Fetch-OfficialDailyCandles {
           $dateText = $month.ToString("yyyy/MM/01")
           $uri = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock?code=$Symbol&date=$dateText&id=&response=json"
           $payload = Invoke-RestMethod -Uri $uri -Headers @{ Referer = "https://www.tpex.org.tw/"; "User-Agent" = "Mozilla/5.0"; Accept = "application/json" } -Method Get -TimeoutSec 45
-          $dataRows = @($payload.data)
+          $dataRows = if ($payload.tables -and $payload.tables[0].data) { @($payload.tables[0].data) } else { @($payload.data) }
           foreach ($item in $dataRows) {
             $date = ConvertFrom-RocDate ([string]$item[0])
             if (-not $date) { continue }
@@ -307,10 +362,17 @@ function Normalize-FugleRows {
   elseif ($Payload.candles) { $rows = @($Payload.candles) }
   elseif ($Payload.items) { $rows = @($Payload.items) }
   elseif ($Payload -is [array]) { $rows = @($Payload) }
-  return @($rows | Where-Object {
+  $valid = @($rows | Where-Object {
     $date = [string]($_.date ?? $_.trade_date)
-    $date -match '^\d{4}-\d{2}-\d{2}$' -and $null -ne $_.close -and [double]$_.close -gt 0
+    $values = @($_.open, $_.high, $_.low, $_.close)
+    $complete = $true
+    foreach ($value in $values) {
+      $number = 0.0
+      if ($null -eq $value -or -not [double]::TryParse(([string]$value).Replace(',', ''), [ref]$number) -or $number -le 0) { $complete = $false; break }
+    }
+    $date -match '^\d{4}-\d{2}-\d{2}$' -and (Test-WeekdayDate $date) -and $complete
   } | Sort-Object { [string]($_.date ?? $_.trade_date) } -Descending | Select-Object -First $RetainTradeDays)
+  return $valid
 }
 
 function Write-Strategy4SyncStatus {
@@ -322,7 +384,8 @@ function Write-Strategy4SyncStatus {
     [string]$StatusNote
   )
   $coverage = Get-Strategy4Coverage -UniverseSet $UniverseSet -ReadKey $ReadKey
-  $status = if ($coverage.missing -eq 0) { "complete" } elseif ($coverage.loaded -gt 0) { "partial" } else { "failed" }
+  $coveragePercent = if ($coverage.expected -gt 0) { [math]::Round(($coverage.loaded * 100.0) / $coverage.expected, 2) } else { 100 }
+  $status = if ($coveragePercent -ge $MinimumCoveragePercent) { "ready_with_exclusions" } elseif ($coverage.loaded -gt 0) { "partial" } else { "failed" }
   $now = ConvertTo-IsoUtc
   $row = @([ordered]@{
     trade_date = (Get-Date).ToString("yyyy-MM-dd")
@@ -342,6 +405,9 @@ function Write-Strategy4SyncStatus {
       loaded_symbols = $coverage.loaded
       missing_symbols = $coverage.missing
       missing_sample = @($coverage.missing_symbols | Select-Object -First 100)
+      target_trade_date = $coverage.target_trade_date
+      minimum_coverage_percent = $MinimumCoveragePercent
+      coverage_percent = $coveragePercent
     }
   })
   Invoke-PublicSlotUpsert -Table "fugle_daily_sync_status" -OnConflict "trade_date,source" -Rows $row -ServiceRoleKey $ServiceRoleKey
@@ -362,7 +428,7 @@ if ($serviceRoleKey -notmatch '^eyJ') {
 
 $startedAt = ConvertTo-IsoUtc
 $toDate = (Get-Date).ToString("yyyy-MM-dd")
-$fromDate = (Get-Date).AddDays(-280).ToString("yyyy-MM-dd")
+$fromDate = (Get-Date).AddDays(-90).ToString("yyyy-MM-dd")
 
 Write-Host "Strategy4 missing daily OHLCV backfill"
 Write-Host "Project: $ProjectUrl"
@@ -377,12 +443,14 @@ Write-Host ("Before: loaded={0} / expected={1}, missing={2}" -f $coverage.loaded
 
 $targets = @($coverage.missing_symbols | Select-Object -First $MaxSymbols)
 $done = 0
+$attempted = 0
 $rowsWritten = 0
 $rateLimited = $false
 
 foreach ($symbol in $targets) {
   $meta = $universeSet[$symbol]
-  Write-Host ("[{0}/{1}] {2} {3}" -f ($done + 1), $targets.Count, $symbol, $meta.name)
+  $attempted += 1
+  Write-Host ("[{0}/{1}] {2} {3}" -f $attempted, $targets.Count, $symbol, $meta.name)
   try {
     $source = "fugle"
     try {
@@ -390,15 +458,9 @@ foreach ($symbol in $targets) {
     } catch {
       $fugleMessage = $_.Exception.Message
       if ($fugleMessage -match "429|Too Many Requests") { throw }
-      Write-Host ("  Fugle unavailable, fallback Yahoo: {0}" -f $fugleMessage) -ForegroundColor Yellow
-      try {
-        $payload = Fetch-YahooDailyCandles -Symbol $symbol -Market ([string]$meta.market)
-        $source = [string]$payload.source
-      } catch {
-        Write-Host ("  Yahoo unavailable, fallback official: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
-        $payload = Fetch-OfficialDailyCandles -Symbol $symbol -Market ([string]$meta.market)
-        $source = [string]$payload.source
-      }
+      Write-Host ("  Fugle historical unavailable; fallback official exchange: {0}" -f $fugleMessage) -ForegroundColor Yellow
+      $payload = Fetch-OfficialDailyCandles -Symbol $symbol -Market ([string]$meta.market)
+      $source = [string]$payload.source
     }
     $rows = @(Normalize-FugleRows -Payload $payload)
     if ($rows.Count -lt 5) {
@@ -434,6 +496,7 @@ foreach ($symbol in $targets) {
 
     $ohlcvBatch = @()
     $volumeBatch = @()
+    $stockDailyBatch = @()
     foreach ($row in $cachePayload.rows) {
       $volumeLots = ConvertTo-Lots $row.volume
       if ($null -eq $volumeLots) { continue }
@@ -469,13 +532,31 @@ foreach ($symbol in $targets) {
           volume_unit = "lots"
         }
       }
+      $stockDailyBatch += [ordered]@{
+        symbol = $symbol
+        code = $symbol
+        market = $meta.market
+        date = $row.date
+        trade_date = $row.date
+        open = $row.open
+        high = $row.high
+        low = $row.low
+        close = $row.close
+        volume = $volumeLots
+        volume_lots = $volumeLots
+        volume_shares = [double]$volumeLots * 1000
+        updated_at = $now
+      }
     }
 
-    foreach ($chunkStart in 0..([math]::Floor(($ohlcvBatch.Count - 1) / $BatchSize))) {
-      $start = $chunkStart * $BatchSize
-      $count = [math]::Min($BatchSize, $ohlcvBatch.Count - $start)
-      Invoke-PublicSlotUpsert -Table "fugle_daily_ohlcv" -OnConflict "symbol,trade_date" -Rows @($ohlcvBatch[$start..($start + $count - 1)]) -ServiceRoleKey $serviceRoleKey
-      Invoke-PublicSlotUpsert -Table "fugle_daily_volume" -OnConflict "symbol,trade_date" -Rows @($volumeBatch[$start..($start + $count - 1)]) -ServiceRoleKey $serviceRoleKey
+    if ($ohlcvBatch.Count -gt 0) {
+      for ($start = 0; $start -lt $ohlcvBatch.Count; $start += $BatchSize) {
+        $count = [math]::Min($BatchSize, $ohlcvBatch.Count - $start)
+        $end = $start + $count - 1
+        Invoke-PublicSlotUpsert -Table "fugle_daily_ohlcv" -OnConflict "symbol,trade_date" -Rows @($ohlcvBatch[$start..$end]) -ServiceRoleKey $serviceRoleKey
+        Invoke-PublicSlotUpsert -Table "fugle_daily_volume" -OnConflict "symbol,trade_date" -Rows @($volumeBatch[$start..$end]) -ServiceRoleKey $serviceRoleKey
+        # stock_daily_volume is a read-only compatibility view; canonical OHLC is fugle_daily_ohlcv.
+      }
     }
 
     $rowsWritten += $ohlcvBatch.Count
@@ -505,3 +586,5 @@ Write-Host ("Backfilled symbols: {0}" -f $done)
 Write-Host ("Rows written: {0}" -f $rowsWritten)
 Write-Host ("After: loaded={0} / expected={1}, missing={2}" -f $after.loaded, $after.expected, $after.missing)
 if ($rateLimited) { Write-Host "Stopped by Fugle 429. Wait and resume later." -ForegroundColor Yellow }
+
+
