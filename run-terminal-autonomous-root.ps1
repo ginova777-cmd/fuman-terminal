@@ -199,6 +199,7 @@ try {
     # Water Root is an observation gate; failure must reach self-heal.
   $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "warmup-phase-state-machine" "verify:daytrade-warmup-root" -ToleratedExitCodes @(1)))
+  $steps.Add((Invoke-NpmStep "rewater-runner" "daytrade-warmup:root" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "reason-code-classifier" "verify:terminal-reason-code-classifier"))
   $steps.Add((Invoke-NpmStep "formal-entry-gate" "verify:strategy-scan-formal-gate"))
   $steps.Add((Invoke-NpmStep "job-queue-contract" "verify:terminal-job-queue-contract"))
@@ -211,6 +212,7 @@ try {
   } else {
     $steps.Add((Invoke-NpmStep "job-queue-roll-forward" "rollforward:terminal:apply"))
   }
+  $steps.Add((Invoke-NpmStep "rewater-verification" "verify:terminal-water-root" -MaxAttempts 2 -RetryDelaySeconds 10 -ToleratedExitCodes @(1)))
     $steps.Add((Invoke-NpmStep "canary-publish-readback" "verify:terminal-canary-publish:live" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "control-plane-readback" "verify:terminal-control-plane:from-existing"))
   $steps.Add((Invoke-NpmStep "resource-chain-readback" "verify:terminal-resource-chain:unattended" -ToleratedExitCodes @(1)))
