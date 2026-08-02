@@ -2,7 +2,8 @@ param(
   [string]$ProjectRoot = $PSScriptRoot,
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
   [switch]$ApplyScanners,
-  [switch]$RequireProtectedReadback
+  [switch]$RequireProtectedReadback,
+  [int]$StepTimeoutSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,15 +45,41 @@ function Invoke-NpmStep {
     [string]$Script,
     [int]$MaxAttempts = 1,
     [int]$RetryDelaySeconds = 0,
-    [int[]]$ToleratedExitCodes = @()
+    [int[]]$ToleratedExitCodes = @(),
+    [int]$TimeoutSeconds = $StepTimeoutSeconds
   )
   $attempt = 1
   $stepStarted = Get-Date
   $exitCode = 0
+  $timedOut = $false
   do {
-    Write-RunnerLog "START $Name attempt=$attempt/$MaxAttempts :: npm run $Script"
-    & npm run $Script 2>&1 | Tee-Object -FilePath $LogFile -Append
-    $exitCode = $LASTEXITCODE
+    $attemptStarted = Get-Date
+    $stdoutFile = Join-Path $LogDir ("step-{0}-{1}-{2}-stdout.log" -f $Name, $PID, $attempt)
+    $stderrFile = Join-Path $LogDir ("step-{0}-{1}-{2}-stderr.log" -f $Name, $PID, $attempt)
+    Write-RunnerLog "START $Name attempt=$attempt/$MaxAttempts timeout=${TimeoutSeconds}s :: npm run $Script"
+    $process = $null
+    try {
+      $process = Start-Process -FilePath "cmd.exe" -ArgumentList @("/d", "/s", "/c", "npm run $Script") -WorkingDirectory $ProjectRoot -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -WindowStyle Hidden -PassThru
+      if (!$process.WaitForExit($TimeoutSeconds * 1000)) {
+        $timedOut = $true
+        $exitCode = 124
+        Write-RunnerLog "TIMEOUT $Name after=${TimeoutSeconds}s pid=$($process.Id)"
+        try { & taskkill.exe /PID $process.Id /T /F | Out-Null } catch { Write-RunnerLog "taskkill skipped: $($_.Exception.Message)" }
+      } else {
+        $exitCode = $process.ExitCode
+      }
+    } catch {
+      $exitCode = 1
+      Write-RunnerLog "EXEC_ERROR $Name error=$($_.Exception.Message)"
+    }
+    foreach ($file in @($stdoutFile, $stderrFile)) {
+      if (Test-Path -LiteralPath $file) {
+        Get-Content -LiteralPath $file -ErrorAction SilentlyContinue | ForEach-Object {
+          Add-Content -LiteralPath $LogFile -Value $_ -Encoding UTF8
+          Write-Host $_
+        }
+      }
+    }
     if ($exitCode -eq 0) { break }
     if ($attempt -lt $MaxAttempts) {
       Write-RunnerLog "RETRY $Name exit=$exitCode wait=${RetryDelaySeconds}s"
@@ -66,6 +93,8 @@ function Invoke-NpmStep {
     script = $Script
     attempts = $attempt
     exitCode = $exitCode
+    timeoutSeconds = $TimeoutSeconds
+    timedOut = $timedOut
     startedAt = $stepStarted.ToString("o")
     finishedAt = $stepFinished.ToString("o")
     durationSeconds = [math]::Round(($stepFinished - $stepStarted).TotalSeconds, 3)
@@ -95,13 +124,13 @@ function Invoke-NpmStep {
       Write-RunnerLog "PASS $Name toleratedExit=$exitCode reason=IDLE_NO_RETRY_NEEDED"
       return $row
     }
+    if ($timedOut) { throw [System.Exception]::new(("step_timeout:{0}:{1}s" -f $Name, $TimeoutSeconds)) }
     Write-RunnerLog "FAIL $Name exit=$exitCode"
     throw [System.Exception]::new(("step_failed:{0}:{1}" -f $Name, $exitCode))
   }
   Write-RunnerLog "PASS $Name"
   return $row
 }
-
 function Write-Receipt {
   param(
     [bool]$Ok,
@@ -125,6 +154,7 @@ function Write-Receipt {
     runtimeRoot = $RuntimeRoot
     applyScanners = [bool]$ApplyScanners
     requireProtectedReadback = [bool]$RequireProtectedReadback
+    stepTimeoutSeconds = $StepTimeoutSeconds
     recovery = [ordered]@{ mode = $RecoveryMode; reasons = $RecoveryReasons.ToArray(); previousRunId = if ($PreviousReceipt) { [string]$PreviousReceipt.runId } else { "" }; previousOk = if ($PreviousReceipt) { [bool]$PreviousReceipt.ok } else { $null }; previousOrchestratorState = if ($PreviousOrchestrator) { [string]$PreviousOrchestrator.overallState } else { "" } }
     failedStep = $FailedStep
     errorMessage = $ErrorMessage
@@ -196,5 +226,4 @@ try {
   Write-RunnerLog "Autonomous root failed failedStep=$failedStep error=$message receipt=$ReceiptFile"
   exit 1
 }
-
 

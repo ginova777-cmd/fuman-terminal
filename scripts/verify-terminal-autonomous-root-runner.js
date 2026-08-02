@@ -95,13 +95,21 @@ async function main() {
     "terminal-autonomous-root-latest.json",
     "IDLE_NO_RETRY_NEEDED",
     "toleratedExitCode",
+    "StepTimeoutSeconds",
+    "Start-Process",
+    "WaitForExit",
+    "taskkill.exe",
+    "step_timeout",
   ];
   for (const marker of runnerMarkers) requireMarker(issues, "run-terminal-autonomous-root.ps1", runner, marker);
 
   const installerMarkers = [
     "Fuman Terminal Autonomous Root Monitor",
     "Register-ScheduledTask",
+    "07:00",
+    "08:45",
     "08:55",
+    "09:00",
     "09:10",
     "09:40",
     "13:35",
@@ -170,6 +178,7 @@ async function main() {
       "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, surface monitor, and readback-only closure",
       "failure writes a receipt and attempts workflow alert",
       "water root failure is recorded and handed to the self-heal queue instead of aborting before repair",
+      "every child verifier has a hard timeout and process-tree termination receipt",
     ],
     issues,
   };
