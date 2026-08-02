@@ -59,6 +59,7 @@ function selfTest(issues) {
   const cases = [
     ["protected_readback_credential_not_armed", "AUTH_PROTECTED_READBACK_NOT_ARMED"],
     ["protected_surface_needs_authenticated_readback_token", "AUTH_PROTECTED_READBACK_NOT_ARMED"],
+    ["preflight_date_mismatch:20260802!=20260731;market_closed", "MARKET_CLOSED_PREVIOUS_GOOD_HOLD"],
     ["unattended: /88 authenticated readback required (token not armed)", "AUTH_PROTECTED_READBACK_NOT_ARMED"],
     ["canonical_gate_not_A:D", "SOURCE_WATER_ROOT_NOT_READY"],
     ["manifest_raw_fallback_true", "SCANNER_RAW_FALLBACK"],
@@ -68,7 +69,9 @@ function selfTest(issues) {
     ["pending_not_due:21:00", "SCHEDULE_PENDING_NOT_DUE"],
     ["production_release_sha_mismatch", "PRODUCTION_RELEASE_SHA_MISMATCH"],
     ["ROLL_FORWARD_QUEUE_ARMED", "AUTO_ROLL_FORWARD_QUEUE_ARMED"],
-    ["scorecard_latestDate_mismatch:20260717!=20260721", "TRADE_DATE_MISMATCH"],
+    ["scorecard_latestDate_mismatch:20260717!=20260721", "SCORECARD_SOURCE_REPORT_STALE"],
+    ["scorecard /88 row/sourceReport runId != latest pointer", "SCORECARD_SOURCE_REPORT_STALE"],
+    ["sourceReport_runId_mismatch:strategy2", "SCORECARD_SOURCE_REPORT_STALE"],
   ];
   for (const [text, expected] of cases) {
     const classification = classifyReason(text);

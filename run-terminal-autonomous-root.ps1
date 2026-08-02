@@ -14,6 +14,15 @@ $ReceiptDir = Join-Path $RuntimeRoot "data\scan-receipts"
 $LogFile = Join-Path $LogDir "terminal-autonomous-root-$($StartedAt.ToString("yyyyMMdd-HHmmss"))-$PID.log"
 $ReceiptFile = Join-Path $ReceiptDir "terminal-autonomous-root-latest.json"
 $AlertReceiptFile = Join-Path $ReceiptDir "terminal-autonomous-root-alert.json"
+$PreviousReceipt = $null
+$PreviousOrchestrator = $null
+$RecoveryReasons = New-Object System.Collections.Generic.List[string]
+if (Test-Path -LiteralPath $ReceiptFile) { try { $PreviousReceipt = Get-Content -LiteralPath $ReceiptFile -Raw | ConvertFrom-Json } catch { $RecoveryReasons.Add("previous_root_receipt_unreadable") } }
+$OrchestratorStateFile = Join-Path $ProjectRoot "outputs\terminal-orchestrator\terminal-orchestrator-state.json"
+if (Test-Path -LiteralPath $OrchestratorStateFile) { try { $PreviousOrchestrator = Get-Content -LiteralPath $OrchestratorStateFile -Raw | ConvertFrom-Json } catch { $RecoveryReasons.Add("previous_orchestrator_state_unreadable") } }
+if ($PreviousReceipt -and $PreviousReceipt.ok -ne $true) { $RecoveryReasons.Add("previous_root_run_not_complete") }
+if ($PreviousOrchestrator -and @("RUNNING","RETRYING","PENDING","RECOVERY_PENDING") -contains [string]$PreviousOrchestrator.overallState) { $RecoveryReasons.Add("orchestrator_was_in_flight") }
+$RecoveryMode = $RecoveryReasons.Count -gt 0
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReceiptDir | Out-Null
@@ -116,6 +125,7 @@ function Write-Receipt {
     runtimeRoot = $RuntimeRoot
     applyScanners = [bool]$ApplyScanners
     requireProtectedReadback = [bool]$RequireProtectedReadback
+    recovery = [ordered]@{ mode = $RecoveryMode; reasons = $RecoveryReasons.ToArray(); previousRunId = if ($PreviousReceipt) { [string]$PreviousReceipt.runId } else { "" }; previousOk = if ($PreviousReceipt) { [bool]$PreviousReceipt.ok } else { $null }; previousOrchestratorState = if ($PreviousOrchestrator) { [string]$PreviousOrchestrator.overallState } else { "" } }
     failedStep = $FailedStep
     errorMessage = $ErrorMessage
     logFile = $LogFile
@@ -152,9 +162,11 @@ if ($RequireProtectedReadback) {
 
 $steps = New-Object System.Collections.Generic.List[object]
 try {
-  Write-RunnerLog "Autonomous root started contract=$Contract applyScanners=$([bool]$ApplyScanners) requireProtectedReadback=$([bool]$RequireProtectedReadback)"
+  Write-RunnerLog "Autonomous root started contract=$Contract recovery=$RecoveryMode reasons=$($RecoveryReasons -join ",") applyScanners=$([bool]$ApplyScanners) requireProtectedReadback=$([bool]$RequireProtectedReadback)"
+  $steps.Add((Invoke-NpmStep "power-recovery-contract" "verify:terminal-power-recovery-contract"))
   $steps.Add((Invoke-NpmStep "predictive-preflight" "ops:predictive-preflight"))
-  $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20))
+    # Water Root is an observation gate; failure must reach self-heal.
+  $steps.Add((Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "state-machine" "orchestrator:state:from-existing"))
   $steps.Add((Invoke-NpmStep "autonomous-policy" "policy:autonomous-ops"))
@@ -166,6 +178,7 @@ try {
     $steps.Add((Invoke-NpmStep "canary-publish-readback" "verify:terminal-canary-publish:live" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "control-plane-readback" "verify:terminal-control-plane:from-existing"))
   $steps.Add((Invoke-NpmStep "resource-chain-readback" "verify:terminal-resource-chain:unattended" -ToleratedExitCodes @(1)))
+  $steps.Add((Invoke-NpmStep "surface-monitor-readback" "verify:terminal-surface-monitor" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "runid-closure-readback" "verify:terminal-runid-closure" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "ops-status-export" "ops:status:export"))
   $steps.Add((Invoke-NpmStep "ops-status-api-readback" "verify:terminal-ops-status-api"))

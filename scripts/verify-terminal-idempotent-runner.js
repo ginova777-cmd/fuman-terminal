@@ -19,6 +19,19 @@ function assert(condition, issue, details, issues) {
   if (!condition) issues.push({ issue, details });
 }
 
+const VALID_SCANNER_GUARDS = new Set([
+  "scanner_requires_apply_scanners",
+  "scanner_apply_enabled",
+  "formal_scan_not_allowed_by_policy",
+  "formal_entry_not_allowed_by_water_root",
+  "water_root_not_ok_scanner_blocked",
+  "market_closed_no_scanner_previous_good_hold",
+]);
+
+function isMarketClosedScannerGuard(action = {}) {
+  return action.executionGuard === "market_closed_no_scanner_previous_good_hold";
+}
+
 function verifyCurrent(issues) {
   const rollForward = readJson(ROLL_FORWARD_FILE, {});
   const orchestrator = readJson(ORCHESTRATOR_FILE, {});
@@ -45,7 +58,7 @@ function verifyCurrent(issues) {
       assert(action.executable !== true, "auth_action_must_not_execute", action, issues);
     }
     if (String(action.state || "").includes("SCAN")) {
-      assert(["scanner_requires_apply_scanners", "scanner_apply_enabled", "formal_scan_not_allowed_by_policy", "formal_entry_not_allowed_by_water_root", "water_root_not_ok_scanner_blocked"].includes(action.executionGuard), "scanner_action_guard_invalid", action, issues);
+      assert(VALID_SCANNER_GUARDS.has(action.executionGuard), "scanner_action_guard_invalid", action, issues);
       assert(action.commands.some((cmd) => String(cmd.label || "").includes("terminal-water-root")), "scanner_action_missing_water_root_precheck", action, issues);
       if (action.executionGuard === "formal_scan_not_allowed_by_policy") {
         assert(action.executable !== true, "scanner_policy_block_must_not_execute", action, issues);

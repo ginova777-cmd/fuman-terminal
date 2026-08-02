@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = process.env.FUMAN_ROOT || path.resolve(__dirname, "..");
 const CONTRACT_PATH = path.join(ROOT, "ops", "daytrade-warmup-schedule-self-heal-contract.json");
@@ -150,7 +151,8 @@ function main() {
   for (const scriptName of contract.requiredPackageScripts || []) {
     if (!scripts[scriptName]) issues.push(`package_script_missing:${scriptName}`);
   }
-  if (!scripts["verify:terminal-unattended-root"] || !scripts["verify:terminal-unattended-root"].includes("verify:daytrade-warmup-root")) {
+  const rootSteps = readTerminalRootSteps().rootScripts;
+  if (!rootSteps.includes("verify:daytrade-warmup-root")) {
     issues.push("terminal_unattended_root_missing_verify_daytrade_warmup_root");
   }
   if (!scripts["verify:daytrade-warmup-root"] || !scripts["verify:daytrade-warmup-root"].includes("verify:daytrade-warmup-schedule-self-heal")) {

@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = process.env.FUMAN_ROOT || path.resolve(__dirname, "..");
 const CONTRACT = "strategy-scan-formal-gate-contract-v1";
@@ -64,7 +65,8 @@ function main() {
 
   const scripts = pkg.scripts || {};
   if (!scripts["verify:strategy-scan-formal-gate"]) issues.push("package_script_missing:verify:strategy-scan-formal-gate");
-  if (!scripts["verify:terminal-unattended-root"] || !scripts["verify:terminal-unattended-root"].includes("verify:strategy-scan-formal-gate")) {
+  const rootSteps = readTerminalRootSteps().rootScripts;
+  if (!rootSteps.includes("verify:strategy-scan-formal-gate")) {
     issues.push("terminal_unattended_root_missing_strategy_scan_formal_gate");
   }
 

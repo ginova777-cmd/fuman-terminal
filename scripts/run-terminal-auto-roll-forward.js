@@ -53,6 +53,21 @@ function buildReasonCodeSummary(actions = []) {
     codes: [...new Set(actions.flatMap((row) => row.reasonCodes || []))].sort(),
   };
 }
+function refreshActionReasonClassification(action = {}, extra = {}) {
+  const updated = compactReasonClassification({
+    key: action.key,
+    label: action.label,
+    state: action.state,
+    blocker: action.blocker || "",
+    nextAction: action.nextAction || "",
+    executionGuard: action.executionGuard || "",
+    reason: extra.reason || "",
+    notes: action.notes || [],
+    ...extra,
+  });
+  Object.assign(action, updated);
+  return action;
+}
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -117,6 +132,14 @@ function degradedDisplayPublishSteps(tradeDate = currentTradeDate()) {
       FUMAN_SCORECARD_MIN_ROWS: "1",
       FUMAN_SCORECARD_MIN_ROW_RATIO: "0",
     })),
+  ];
+}
+function manifestGatedScorecardPublishSteps(tradeDate = currentTradeDate()) {
+  const candidate = scorecardCandidateFile();
+  return [
+    alwaysRun(nodeScriptStep("terminal-canary-publish:manifest-gated", "verify-terminal-canary-publish.js", ["--scorecard=" + candidate])),
+    alwaysRun(nodeScriptStep("scorecard-publish-guard:manifest-gated", "guard-daily-manifest-before-scorecard-publish.js", ["--expected-date=" + tradeDate])),
+    alwaysRun(nodeScriptStep("scorecard-publish-raw:manifest-gated", "publish-scorecard-snapshot.js", ["--file=" + candidate, "--expected-date=" + tradeDate])),
   ];
 }
 
@@ -238,6 +261,19 @@ function scannerWaterRootGate(key, waterRoot = null) {
   }
   return strategySourceReadinessGate(key, artifact);
 }
+function isCalendarHoldReason(value = "") {
+  const text = String(value || "").toLowerCase();
+  return text.includes("market_closed")
+    || text.includes("holiday")
+    || text.includes("weekend")
+    || text.includes("off_session")
+    || text.includes("previous_good")
+    || text.includes("not_due")
+    || text.includes("before_formal_source_window")
+    || text.includes("wait_source_window")
+    || text.includes("formal_scan_skipped");
+}
+
 function policyAllowsScannerRetryForStrategy(key, policy = {}) {
   const profile = scannerProfileForKey(key);
   const decision = policy.decision || {};
@@ -406,15 +442,50 @@ function manifestDerivedJobs(displayTradeDate = currentTradeDate()) {
   return jobs;
 }
 
+function sourceRecoveryJobForWaterBlockedScans(jobs = [], displayTradeDate = currentTradeDate()) {
+  const scannerJobs = jobs.filter((job) => String(job.state || "").includes("SCAN"));
+  const blocked = scannerJobs
+    .map((job) => ({ job, gate: scannerWaterRootGate(String(job.key || ""), null) }))
+    .filter((row) => row.gate && row.gate.ok === false);
+  if (!blocked.length) return null;
+  const rewaterable = blocked.filter((row) => {
+    const reasonText = `${row.gate.reason || ""} ${row.gate.guard || ""} ${row.job.blocker || ""} ${row.job.state || ""}`;
+    return !isCalendarHoldReason(reasonText);
+  });
+  if (!rewaterable.length) return null;
+  const tradeDate = normalizeTradeDate(rewaterable[0].job.repairTradeDate) || displayTradeDate || currentTradeDate();
+  const affectedKeys = rewaterable.map((row) => String(row.job.key || "")).filter(Boolean);
+  const reasons = [...new Set(rewaterable.map((row) => row.gate.reason || row.gate.guard || "water_root_not_ready"))];
+  return {
+    key: "terminal-water-root",
+    label: "Terminal Water Root Rewater",
+    state: "BLOCKED_SOURCE",
+    layer: ["source", "water_root", "self_heal"],
+    priority: 18,
+    retryable: true,
+    repairTradeDate: tradeDate,
+    blocker: reasons[0] || "scanner_blocked_by_water_root",
+    nextAction: "run_idempotent_rewater_self_heal_then_verify_water_root_before_scanner_retry",
+    idempotencyKey: safeId([tradeDate, "terminal-water-root", "BLOCKED_SOURCE", reasons.join("+")].join(":")),
+    receiptRequired: true,
+    issues: reasons.map((reason) => "scanner_water_root_blocked:" + reason),
+    affectedKeys,
+    generatedFrom: "scanner-water-root-guard",
+  };
+}
+
 function normalizeJobs(orchestrator = {}, queue = [], displayTradeDate = currentTradeDate()) {
   const jobs = Array.isArray(queue) && queue.length ? queue : Array.isArray(orchestrator.jobQueue) ? orchestrator.jobQueue : [];
   const seen = new Set();
-  const merged = [...manifestDerivedJobs(displayTradeDate), ...jobs].filter((job) => {
+  let merged = [...manifestDerivedJobs(displayTradeDate), ...jobs].filter((job) => {
     const id = safeId([job.repairTradeDate || displayTradeDate, job.key, job.state].join(":"));
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
   });
+  const hasSourceRecovery = merged.some((job) => String(job.state || "").includes("SOURCE"));
+  const waterRecovery = hasSourceRecovery ? null : sourceRecoveryJobForWaterBlockedScans(merged, displayTradeDate);
+  if (waterRecovery) merged = [waterRecovery, ...merged];
   return coalesceDisplayClosureJobs(merged, displayTradeDate);
 }
 function planForJob(job = {}, policy = {}, options = {}) {
@@ -435,6 +506,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
     idempotencyKey: actionIdempotencyKey(job, key, state, job.repairTradeDate || options.displayTradeDate || options.tradeDate || currentTradeDate()),
     receiptFile: "",
     receiptRequired: true,
+    affectedKeys: Array.isArray(job.affectedKeys) ? job.affectedKeys : [],
     ...compactReasonClassification({ key, label: job.label || key, state, blocker: job.blocker || "", nextAction: job.nextAction || "" }),
   };
   if (isDisplayClosureState(state)) {
@@ -459,6 +531,14 @@ function planForJob(job = {}, policy = {}, options = {}) {
 
 
   if (state.includes("SOURCE")) {
+    if (isCalendarHoldReason(`${job.blocker || ""} ${job.nextAction || ""} ${issueList.join(" ")}`)) {
+      base.executable = false;
+      base.executionGuard = "market_closed_no_rewater_previous_good_hold";
+      base.commands.push(npmRun("verify:terminal-water-root"));
+      base.notes.push("Market calendar or previous-good hold is not a source failure; do not rewater, scan, or publish until the next formal source window.");
+      refreshActionReasonClassification(base, { reason: job.blocker || "market_closed_previous_good_hold" });
+      return base;
+    }
     base.executable = true;
     base.executionGuard = "source_rewater_then_verify_no_scanner_publish";
     base.commands.push(npmRun(APPLY ? "daytrade-warmup:self-heal:apply" : "daytrade-warmup:self-heal"));
@@ -481,11 +561,28 @@ function planForJob(job = {}, policy = {}, options = {}) {
     base.commands.push(npmRun("verify:terminal-water-root"));
     base.commands.push(...recoveryCommands);
 
-    if (!waterGate.ok) {
-      base.executionGuard = waterGate.guard;
+    if (options.formalScanSkipped === true) {
+      base.executionGuard = "market_closed_no_scanner_previous_good_hold";
       base.executable = false;
-      base.notes.push(`Scanner reruns are blocked until current Water Root PASS and the strategy source profile is ready: ${waterGate.reason}`);
-      base.notes.push("Recovery chain is listed for transparency but will not execute until the gate passes; this prevents silent stale latest and makes the next roll-forward deterministic.");
+      base.notes.push("Market Calendar says formal scans are skipped; preserve previous good and wait for the next valid trading/source window.");
+      base.notes.push("Scanner recovery commands are listed for transparency but are not executable while the market calendar gate is closed.");
+      refreshActionReasonClassification(base, { reason: "market_closed_formal_scan_skipped_preserve_previous_good", marketClosedPreviousGood: true });
+      return base;
+    }
+
+    if (!waterGate.ok) {
+      const calendarHold = isCalendarHoldReason(`${waterGate.reason || ""} ${waterGate.guard || ""}`);
+      base.executionGuard = calendarHold ? "market_closed_no_scanner_previous_good_hold" : waterGate.guard;
+      base.executable = false;
+      if (calendarHold) {
+        base.notes.push(`Scanner reruns are blocked by Market Calendar / source window hold: ${waterGate.reason}`);
+        base.notes.push("This is not a source outage. Preserve previous good and wait for the next valid trading/source window; do not rewater, scan, publish, or rebuild snapshots.");
+        refreshActionReasonClassification(base, { reason: waterGate.reason, waterGate, marketClosedPreviousGood: true });
+      } else {
+        base.notes.push(`Scanner reruns are blocked until current Water Root PASS and the strategy source profile is ready: ${waterGate.reason}`);
+        base.notes.push("Recovery chain is listed for transparency but will not execute until the gate passes; this prevents silent stale latest and makes the next roll-forward deterministic.");
+        refreshActionReasonClassification(base, { reason: waterGate.reason, waterGate });
+      }
       return base;
     }
     if (!policyGate.ok) {
@@ -493,6 +590,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
       base.executable = false;
       base.notes.push(`Scanner reruns are blocked by Autonomous Ops Policy: ${policyGate.reason}`);
       base.notes.push("Recovery chain is listed for transparency but will not execute until policy allows the scanner retry.");
+      refreshActionReasonClassification(base, { reason: policyGate.reason, policyGate });
       return base;
     }
     base.executionGuard = scannerApply ? "scanner_apply_enabled" : "scanner_requires_apply_scanners";
@@ -536,7 +634,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
     base.commands.push(alwaysRun(npmRun("scorecard:terminal-source")));
     base.commands.push(manifestFromExistingStep(tradeDate));
     base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]))));
-    base.commands.push(...degradedDisplayPublishSteps(tradeDate));
+    base.commands.push(...manifestGatedScorecardPublishSteps(tradeDate));
     base.commands.push(alwaysRun(npmRun("snapshot:desktop")));
     base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${tradeDate}`]))));
     base.commands.push(alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", `--expected-date=${tradeDate}`]))));
@@ -598,7 +696,7 @@ function scannerPostRunSteps(key, tradeDate = currentTradeDate()) {
     alwaysRun(npmRun("scorecard:terminal-source")),
     manifestFromExistingStep(tradeDate),
     alwaysRun(allowBlockedVerifier(npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + tradeDate]))),
-    ...degradedDisplayPublishSteps(tradeDate),
+    ...manifestGatedScorecardPublishSteps(tradeDate),
     alwaysRun(npmRun("snapshot:desktop")),
     alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-resource-chain:unattended", ["--", "--expected-date=" + tradeDate]))),
     alwaysRun(allowBlockedVerifier(npmRun("verify:terminal-runid-closure", ["--", "--expected-date=" + tradeDate]))),
@@ -613,6 +711,27 @@ function normalizeTradeDate(value = "") {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function formalScanSkippedByCalendar(orchestrator = {}) {
+  const calendar = orchestrator.marketCalendar || orchestrator.market || {};
+  const modeText = [
+    calendar.displayMode,
+    calendar.marketStatus,
+    calendar.skipReason,
+    calendar.reason,
+    orchestrator.state,
+    orchestrator.overallState,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  return calendar.formalScanSkipped === true
+    || calendar.formalSourceWindowOpen === false
+    || calendar.marketOpen === false
+    || calendar.isTradingDay === false
+    || modeText.includes("previous_good")
+    || modeText.includes("wait_source_window")
+    || modeText.includes("before_formal_source_window")
+    || modeText.includes("market_closed")
+    || modeText.includes("holiday");
+}
+
 function displayClosureTargetTradeDate(orchestrator = {}) {
   const calendar = orchestrator.marketCalendar || orchestrator.market || {};
   const displayDate = normalizeTradeDate(
@@ -623,28 +742,11 @@ function displayClosureTargetTradeDate(orchestrator = {}) {
     || orchestrator.displayTradeDate
   );
   const current = normalizeTradeDate(orchestrator.tradeDate || currentTradeDate()) || currentTradeDate();
-  const modeText = [
-    calendar.displayMode,
-    calendar.marketStatus,
-    calendar.skipReason,
-    calendar.reason,
-    orchestrator.state,
-    orchestrator.overallState,
-  ].map((value) => String(value || "").toLowerCase()).join(" ");
-  const formalSkipped = calendar.formalScanSkipped === true
-    || calendar.formalSourceWindowOpen === false
-    || calendar.marketOpen === false
-    || calendar.isTradingDay === false
-    || modeText.includes("previous_good")
-    || modeText.includes("wait_source_window")
-    || modeText.includes("before_formal_source_window")
-    || modeText.includes("market_closed")
-    || modeText.includes("holiday");
-  return formalSkipped && displayDate ? displayDate : current;
+  return formalScanSkippedByCalendar(orchestrator) && displayDate ? displayDate : current;
 }
 
-function buildSafeRecoveryPreview(jobs = [], policy = {}, tradeDate = currentTradeDate(), displayTradeDate = tradeDate) {
-  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true, tradeDate, displayTradeDate }));
+function buildSafeRecoveryPreview(jobs = [], policy = {}, tradeDate = currentTradeDate(), displayTradeDate = tradeDate, formalScanSkipped = false) {
+  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true, tradeDate, displayTradeDate, formalScanSkipped }));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   const decision = decide(actions, policy);
@@ -664,8 +766,9 @@ function buildSafeRecoveryPreview(jobs = [], policy = {}, tradeDate = currentTra
 function buildPlan({ orchestrator, policy, queue }) {
   const tradeDate = String(orchestrator.tradeDate || currentTradeDate());
   const displayTradeDate = displayClosureTargetTradeDate(orchestrator);
+  const formalScanSkipped = formalScanSkippedByCalendar(orchestrator);
   const jobs = normalizeJobs(orchestrator, queue, displayTradeDate).sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
-  const actions = jobs.map((job) => planForJob(job, policy, { tradeDate, displayTradeDate }));
+  const actions = jobs.map((job) => planForJob(job, policy, { tradeDate, displayTradeDate, formalScanSkipped }));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   return {
@@ -683,7 +786,7 @@ function buildPlan({ orchestrator, policy, queue }) {
     actions,
     idempotencyContract: IDEMPOTENCY_CONTRACT,
     reasonCodeSummary: buildReasonCodeSummary(actions),
-    safeRecoveryPreview: buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate),
+    safeRecoveryPreview: buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate, formalScanSkipped),
     decision: decide(actions, policy),
   };
 }
@@ -793,7 +896,8 @@ function markdown(plan) {
   for (const result of plan.executed || []) {
     lines.push(`| ${result.command} | ${result.exitCode} | ${result.ok} |`);
   }
-  return `${lines.join("\n")}\n`;
+  return `${lines.join("\n")}
+`;
 }
 
 function selfTest() {

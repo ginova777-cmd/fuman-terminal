@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -30,6 +31,7 @@ const FILES = {
 const REQUIRED_SCRIPTS = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
+  "verify:terminal-power-recovery-contract",
   "verify:fugle-websocket-sources",
   "verify:terminal-water-root",
   "verify:terminal-water-root-contract",
@@ -54,9 +56,12 @@ const REQUIRED_SCRIPTS = [
   "verify:backend-auth-isolation",
   "verify:backend-service-token-schedule",
   "verify:terminal-resource-chain:unattended",
+  "verify:market-calendar-display-date-gate",
+  "verify:terminal-display-correctness",
+  "verify:terminal-surface-monitor",
   "verify:terminal-runid-closure",
   "control:terminal",
-  "verify:terminal-control-plane",
+  "verify:terminal-control-plane:from-existing",
   "verify:terminal-control-plane:from-existing",
   "policy:autonomous-ops",
   "verify:autonomous-ops-action-matrix",
@@ -67,7 +72,7 @@ const REQUIRED_SCRIPTS = [
   "verify:terminal-autonomous-completion-audit",
   "verify:protected-readback-credential-contract",
   "verify:protected-readback-credential",
-  "ops:production-unattended-readiness-report",
+  "ops:production-unattended-readiness-report:authenticated",
   "verify:production-unattended-readiness-report",
 ];
 
@@ -217,7 +222,8 @@ function verifyPackageScripts(pkg, issues) {
     assert(Boolean(command), issues, `package_script_missing:${name}`);
     rows.push({ name, ok: Boolean(command), command });
   }
-  const root = scripts["verify:terminal-unattended-root"] || "";
+  const rootSteps = readTerminalRootSteps().rootScripts;
+  const root = rootSteps.join(" && ");
   for (const required of [
     "ops:predictive-preflight",
     "verify:fugle-websocket-sources",
@@ -227,7 +233,7 @@ function verifyPackageScripts(pkg, issues) {
     "daytrade-warmup:root",
     "verify:strategy-scan-formal-gate",
     "verify:strategy-scan-receipt-contract",
-    "verify:terminal-control-plane",
+    "verify:terminal-control-plane:from-existing",
     "verify:terminal-state-machine-contract",
     "verify:terminal-reason-code-classifier",
     "verify:terminal-auto-roll-forward",
@@ -235,6 +241,9 @@ function verifyPackageScripts(pkg, issues) {
     "manifest:daily-terminal-run",
     "verify:terminal-canary-publish",
     "verify:terminal-resource-chain:unattended",
+  "verify:market-calendar-display-date-gate",
+  "verify:terminal-display-correctness",
+  "verify:terminal-surface-monitor",
     "verify:manifest-publish-wiring",
     "verify:terminal-runid-closure",
     "verify:backend-auth-isolation",
@@ -245,10 +254,10 @@ function verifyPackageScripts(pkg, issues) {
     "verify:terminal-autonomous-completion-audit",
     "verify:protected-readback-credential-contract",
     "verify:protected-readback-credential",
-    "ops:production-unattended-readiness-report",
+    "ops:production-unattended-readiness-report:authenticated",
     "verify:production-unattended-readiness-report",
   ]) {
-    assert(root.includes(required), issues, `root_gate_missing:${required}`, { root });
+    assert(rootSteps.includes(required), issues, `root_gate_missing:${required}`, { root });
   }
   return rows;
 }
@@ -361,7 +370,15 @@ function verifyInvariants(artifacts, issues) {
     assert(acceptableCompletionStatus(manifest?.unattendedStatus, completionClosed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
     assert(manifest?.ok === true, issues, "manifest_not_ok", { ok: manifest?.ok, blocker: manifest?.blocker });
   }
-  const jobQueue = Array.isArray(orchestrator?.jobQueue) ? orchestrator.jobQueue : [];
+    if (manifest?.unattendedStatus === "YES") {
+      for (const row of modules) {
+        assert(row?.complete === true, issues, `manifest_yes_module_not_complete:${row?.key || "unknown"}`, { row });
+        assert(row?.fallback !== true && row?.rawFallback !== true, issues, `manifest_yes_module_uses_fallback:${row?.key || "unknown"}`, { row });
+        assert(Boolean(row?.runId), issues, `manifest_yes_module_runid_missing:${row?.key || "unknown"}`, { row });
+        assert(compactDate(row?.tradeDate) === compactDate(manifest?.tradeDate), issues, `manifest_yes_module_tradedate_mismatch:${row?.key || "unknown"}`, { row, manifestTradeDate: manifest?.tradeDate });
+        assert(compactDate(row?.sourceDate) === compactDate(manifest?.tradeDate), issues, `manifest_yes_module_sourcedate_mismatch:${row?.key || "unknown"}`, { row, manifestTradeDate: manifest?.tradeDate });
+      }
+    }  const jobQueue = Array.isArray(orchestrator?.jobQueue) ? orchestrator.jobQueue : [];
   for (const job of jobQueue) {
     assert(Boolean(job.idempotencyKey), issues, "job_missing_idempotency_key", job);
     assert(Boolean(job.retryPolicy), issues, "job_missing_retry_policy", job);
@@ -477,7 +494,8 @@ function markdown(payload) {
   lines.push("| script | wired | command |");
   lines.push("|---|---:|---|");
   for (const row of payload.packageScripts) lines.push(`| ${row.name} | ${row.ok} | ${(row.command || "--").replace(/\|/g, "/")} |`);
-  return `${lines.join("\n")}\n`;
+  return `${lines.join("\n")}
+`;
 }
 
 async function main() {

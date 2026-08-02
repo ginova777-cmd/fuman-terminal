@@ -33,11 +33,12 @@ if ($RequireProtectedReadback) { $argumentParts += "-RequireProtectedReadback" }
 
 $action = New-ScheduledTaskAction -Execute $Pwsh -Argument ($argumentParts -join " ") -WorkingDirectory $ProjectRoot
 $triggers = @()
+$triggers += New-ScheduledTaskTrigger -AtStartup
 foreach ($time in $At) {
   $triggers += New-ScheduledTaskTrigger -Daily -At ([DateTime]::ParseExact($time, "HH:mm", $null))
 }
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
-$description = "Autonomous root monitor: predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback. Membership gates display only."
+$description = "Autonomous root monitor: startup recovery, predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback. Membership gates display only."
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Description $description -Force | Out-Null
 Write-Host ("[terminal-autonomous-root-task] installed task={0} root={1} triggers={2} applyScanners={3} requireProtectedReadback={4}" -f $TaskName, $ProjectRoot, ($At -join ","), [bool]$ApplyScanners, [bool]$RequireProtectedReadback)

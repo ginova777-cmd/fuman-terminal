@@ -218,10 +218,10 @@ function retryPolicyForState(state) {
   const policies = {
     BLOCKED_AUTH: { maxAttempts: 0, backoffSeconds: 0, fuseAfterAttempts: 0, autoRetry: false, manualRepairRequired: true },
     BLOCKED_SOURCE: { maxAttempts: 12, backoffSeconds: 60, fuseAfterAttempts: 12, autoRetry: true, manualRepairRequired: false },
-    FAILED_SCAN: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
+    FAILED_SCAN: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: true, manualRepairRequired: false },
     FAILED_PUBLISH: { maxAttempts: 2, backoffSeconds: 120, fuseAfterAttempts: 2, autoRetry: true, manualRepairRequired: false },
     BLOCKED_RUNID_MISMATCH: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
-    BLOCKED_DATE_MISMATCH: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
+    BLOCKED_DATE_MISMATCH: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: true, manualRepairRequired: false },
     DEGRADED_PREVIOUS_GOOD: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
     FAILED_DISPLAY: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
   };
@@ -235,6 +235,8 @@ function idempotencyKeyFor(row = {}, classification = {}) {
 function jobForRow(row, classification) {
   if (classification.state === "CLOSED" || classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return null;
   const command = commandFor(row.key, classification.state);
+  const idempotencyKey = idempotencyKeyFor(row, classification);
+  const receiptFile = path.join(OUT_DIR, "receipts", idempotencyKey.replace(/[^a-zA-Z0-9_.-]+/g, "_") + ".json");
   return {
     key: row.key,
     label: row.label || row.key,
@@ -245,8 +247,11 @@ function jobForRow(row, classification) {
     blocker: classification.blocker,
     nextAction: classification.nextAction,
     command,
-    idempotencyKey: idempotencyKeyFor(row, classification),
+    idempotencyKey,
+    receiptFile,
+    receiptRequired: true,
     retryPolicy: retryPolicyForState(classification.state),
+    executable: retryPolicyForState(classification.state).autoRetry === true && retryPolicyForState(classification.state).manualRepairRequired !== true,
     requiresWaterRootOk: ["FAILED_SCAN", "FAILED_PUBLISH", "DEGRADED_PREVIOUS_GOOD", "FAILED_DISPLAY"].includes(classification.state),
     expectedDate: EXPECTED_DATE,
     runId: row.runId || "",
@@ -538,4 +543,3 @@ main().catch((error) => {
   console.error(`[terminal-orchestrator-state] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-

@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { MODULES, CONTRACT } = require("../lib/strategy-scan-receipt-contract");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
@@ -35,7 +36,7 @@ function main() {
   const scripts = PKG.scripts || {};
   if (!scripts["verify:strategy-scan-receipt-contract"]) issues.push("package_script_missing:verify:strategy-scan-receipt-contract");
   if (!scripts["scan-receipts:normalize"]) issues.push("package_script_missing:scan-receipts:normalize");
-  if (!scripts["verify:terminal-unattended-root"] || !scripts["verify:terminal-unattended-root"].includes("verify:strategy-scan-receipt-contract")) {
+  if (!readTerminalRootSteps().rootScripts.includes("verify:strategy-scan-receipt-contract")) {
     issues.push("terminal_unattended_root_missing_strategy_scan_receipt_contract");
   }
   const payload = {

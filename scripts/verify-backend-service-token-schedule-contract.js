@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "backend-service-token-schedule-contract");
@@ -177,9 +178,10 @@ function verifyPackageWiring(issues) {
   if (!String(scripts["verify:protected-readback-credential-contract"] || "").includes("verify-protected-readback-credential-contract.js")) {
     addIssue(issues, "package_missing_verify_protected_readback_credential_contract");
   }
-  const root = String(scripts["verify:terminal-unattended-root"] || "");
+  const rootSteps = readTerminalRootSteps().rootScripts;
+  const root = rootSteps.join(" && ");
   for (const required of ["verify:backend-auth-isolation", "verify:backend-service-token-schedule", "verify:terminal-runid-closure", "verify:protected-readback-credential-contract", "verify:protected-readback-credential"]) {
-    if (!root.includes(required)) addIssue(issues, `terminal_unattended_root_missing:${required}`, { root });
+    if (!rootSteps.includes(required)) addIssue(issues, `terminal_unattended_root_missing:${required}`, { root });
   }
   return {
     hasBackendAuthIsolation: Boolean(scripts["verify:backend-auth-isolation"]),

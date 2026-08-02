@@ -619,7 +619,7 @@ async function main() {
     }
   }
   const pendingModules = modules.filter((item) => item.pendingNotDue === true);
-  const previousGoodHold = issues.length === 0 && pendingModules.length === 0 && isPreviousGoodHoldWaterRoot(water);
+  const previousGoodHold = isPreviousGoodHoldWaterRoot(water);
   const manifest = {
     contract: "daily-terminal-run-manifest-v1",
     checkedAt: new Date().toISOString(),

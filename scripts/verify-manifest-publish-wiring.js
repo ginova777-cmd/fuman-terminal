@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const issues = [];
@@ -41,7 +42,7 @@ function assertOrdered(text, orderedNeedles, label) {
 const pkg = readJson("package.json");
 const scripts = pkg.scripts || {};
 const scorecardPublish = String(scripts["scorecard:publish"] || "");
-const unattendedRoot = String(scripts["verify:terminal-unattended-root"] || "");
+const unattendedRoot = readTerminalRootSteps().rootScripts.join(" && ");
 const scorecardSync = String(scripts["scorecard:sync"] || "");
 const scorecardSyncWrapped = String(scripts["scorecard:sync:wrapped"] || "");
 const dailyRunner = read("run-scorecard-daily-automation.ps1");
@@ -79,6 +80,24 @@ assertOrdered(unattendedRoot, [
   "verify:terminal-canary-publish:live",
 ], "unattended_root_rollforward_plan");
 
+const scannerPostRunStart = rollForward.indexOf("function scannerPostRunSteps");
+const currentTradeDateStart = rollForward.indexOf("function currentTradeDate", scannerPostRunStart);
+const scannerPostRun = scannerPostRunStart >= 0 && currentTradeDateStart > scannerPostRunStart
+  ? rollForward.slice(scannerPostRunStart, currentTradeDateStart)
+  : "";
+assert(scannerPostRun.includes("manifestFromExistingStep(tradeDate)"), "scanner_post_run_missing_manifest_refresh", { scannerPostRun });
+assert(scannerPostRun.includes("manifestGatedScorecardPublishSteps(tradeDate)"), "scanner_post_run_not_manifest_gated", { scannerPostRun });
+assert(!scannerPostRun.includes("degradedDisplayPublishSteps(tradeDate)"), "scanner_post_run_must_not_publish_degraded", { scannerPostRun });
+
+const manifestPublishStart = rollForward.indexOf("function manifestGatedScorecardPublishSteps");
+const manifestPublishEnd = rollForward.indexOf("function allowBlockedVerifier", manifestPublishStart);
+const manifestPublishBlock = manifestPublishStart >= 0 && manifestPublishEnd > manifestPublishStart
+  ? rollForward.slice(manifestPublishStart, manifestPublishEnd)
+  : "";
+assert(manifestPublishBlock.includes("verify-terminal-canary-publish.js"), "manifest_gated_publish_missing_canary", { manifestPublishBlock });
+assert(manifestPublishBlock.includes("guard-daily-manifest-before-scorecard-publish.js"), "manifest_gated_publish_missing_guard", { manifestPublishBlock });
+assert(manifestPublishBlock.includes("publish-scorecard-snapshot.js"), "manifest_gated_publish_missing_raw_publish", { manifestPublishBlock });
+assert(!manifestPublishBlock.includes("--allow-degraded"), "manifest_gated_publish_must_not_allow_degraded", { manifestPublishBlock });
 const payload = {
   ok: issues.length === 0,
   contract: "manifest-publish-wiring-v1",

@@ -105,6 +105,15 @@ async function main() {
   const formalTop40Rows = Array.isArray(formalRows) ? formalRows.length : 0;
   const priorityTop40MaxRank = Array.isArray(priorityRows) ? Math.max(0, ...priorityRows.map((item) => numberValue(item.mother_pool_rank))) : 0;
   const formalTop40MaxRank = Array.isArray(formalRows) ? Math.max(0, ...formalRows.map((item) => numberValue(item.mother_rank))) : 0;
+  const motherFreshQuoteCoverage120s = numberValue(health.mother_fresh_quote_coverage_120s);
+  const formalFreshQuoteCoverage120s = numberValue(health.formal_fresh_quote_coverage_120s);
+  const formalMaxQuoteAgeSeconds = numberValue(health.formal_max_quote_age_seconds, 999999);
+  const intraday1mStaleSeconds = numberValue(health.intraday_1m_stale_seconds, 999999);
+  const dailyVolumeStatus = String(health.daily_volume_status || "");
+  const futoptStatus = String(health.futopt_gate_status || health.futopt_status || "not_required");
+  const scannerCanRunOpening = health.scanner_can_run_opening === true;
+  const formalEntryAllowed = health.formal_entry_allowed === true;
+
   const issues = [];
   if (!Array.isArray(motherRows) || motherRows.length === 0) issues.push("mother_pool_view_empty_or_missing");
   if (!Array.isArray(formalRows) || formalRows.length === 0) issues.push("formal_priority_top40_view_empty_or_missing");
@@ -112,14 +121,23 @@ async function main() {
   if (!motherContractRow || Object.keys(motherContractRow).length === 0) issues.push("mother_pool_star_contract_empty_or_missing");
   if (!priorityContractRow || Object.keys(priorityContractRow).length === 0) issues.push("priority_top40_star_contract_empty_or_missing");
   if (!health || Object.keys(health).length === 0) issues.push("mother_pool_contract_health_empty_or_missing");
-  if (motherPoolSymbols < 180) issues.push(`mother_pool_symbols_${motherPoolSymbols}_below_min_180`);
+  if (motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${motherPoolSymbols}_below_min_300`);
+  if (motherPoolSymbols > 600) issues.push(`mother_pool_symbols_${motherPoolSymbols}_above_max_600`);
   if (formalPriorityLimit !== 40) issues.push(`formal_priority_limit_${formalPriorityLimit}_must_equal_40`);
   if (formalPrioritySymbols !== 40) issues.push(`formal_priority_symbols_${formalPrioritySymbols}_must_equal_40`);
+  if (priorityTop40Rows !== 40) issues.push(`priority_top40_view_returned_${priorityTop40Rows}_rows_must_equal_40`);
+  if (formalTop40Rows !== 40) issues.push(`formal_priority_top40_view_returned_${formalTop40Rows}_rows_must_equal_40`);
   if (formalMaxMotherRank > 40) issues.push(`formal_max_mother_rank_${formalMaxMotherRank}_above_40`);
-  if (priorityTop40Rows > 40) issues.push(`priority_top40_view_returned_${priorityTop40Rows}_rows_above_40`);
-  if (formalTop40Rows > 40) issues.push(`formal_priority_top40_view_returned_${formalTop40Rows}_rows_above_40`);
   if (priorityTop40MaxRank > 40) issues.push(`priority_top40_max_rank_${priorityTop40MaxRank}_above_40`);
   if (formalTop40MaxRank > 40) issues.push(`formal_priority_top40_max_rank_${formalTop40MaxRank}_above_40`);
+  if (formalFreshQuoteCoverage120s < 0.95) issues.push(`formal_fresh_quote_coverage_120s_${formalFreshQuoteCoverage120s}_below_0_95`);
+  if (formalMaxQuoteAgeSeconds > 90) issues.push(`formal_max_quote_age_seconds_${formalMaxQuoteAgeSeconds}_above_90`);
+  if (intraday1mStaleSeconds > 120) issues.push(`intraday_1m_stale_seconds_${intraday1mStaleSeconds}_above_120`);
+  if (dailyVolumeStatus !== "ready") issues.push(`daily_volume_status_${dailyVolumeStatus || "missing"}_not_ready`);
+  if (!["ready", "not_required"].includes(futoptStatus)) issues.push(`futopt_status_${futoptStatus || "missing"}_not_ready`);
+  if (!scannerCanRunOpening) issues.push("scanner_can_run_opening_not_true");
+  if (!formalEntryAllowed) issues.push("formal_entry_allowed_not_true");
+
   for (const field of requiredContractFields) {
     if (!Object.prototype.hasOwnProperty.call(motherContractRow, field)) issues.push(`mother_pool_missing_field:${field}`);
     if (!Object.prototype.hasOwnProperty.call(priorityContractRow, field)) issues.push(`priority_top40_missing_field:${field}`);
@@ -127,13 +145,15 @@ async function main() {
   if (String(health.mother_pool_source || "") !== "dynamic_daytrade_mother_pool") {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
   }
-  if (String(health.formal_scope || "") !== "priority_top40") {
-    issues.push(`formal_scope_not_priority_top40:${health.formal_scope || "missing"}`);
+  if (!["priority_top40", "mother_pool_300_rotating_deep_scan", "mother_pool_rotation_priority_top40"].includes(String(health.formal_scope || ""))) {
+    issues.push(`formal_scope_not_supported:${health.formal_scope || "missing"}`);
   }
 
   const result = {
     ok: issues.length === 0,
     checkedAt: new Date().toISOString(),
+    contract: "daytrade-mother-pool-contract-v2",
+    rule: "Formal daytrade scan requires ordinary-stock universe, dynamic mother pool 300-600, TOP40 freshness, 1m readiness, daily/futopt readiness, scanner_can_run_opening, and formal_entry_allowed.",
     views: {
       motherPool: "v_fugle_daytrade_mother_pool",
       priorityTop40: "v_fugle_daytrade_priority_top40",
@@ -151,9 +171,14 @@ async function main() {
       formalTop40Rows,
       priorityTop40MaxRank,
       formalTop40MaxRank,
-      motherFreshQuoteCoverage120s: numberValue(health.mother_fresh_quote_coverage_120s),
-      formalFreshQuoteCoverage120s: numberValue(health.formal_fresh_quote_coverage_120s),
-      formalMaxQuoteAgeSeconds: numberValue(health.formal_max_quote_age_seconds, 999999),
+      motherFreshQuoteCoverage120s,
+      formalFreshQuoteCoverage120s,
+      formalMaxQuoteAgeSeconds,
+      intraday1mStaleSeconds,
+      dailyVolumeStatus,
+      futoptStatus,
+      scannerCanRunOpening,
+      formalEntryAllowed,
       contractStatus: health.contract_status || "",
       contractReason: health.contract_reason || "",
       motherPoolSource: health.mother_pool_source || "",

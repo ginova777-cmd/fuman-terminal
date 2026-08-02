@@ -22,6 +22,17 @@ function assert(condition, issues, issue, details = {}) {
   if (!condition) issues.push({ issue, details });
 }
 
+function isCalendarHoldAction(action = {}) {
+  const text = `${action.executionGuard || ""} ${action.blocker || ""} ${(action.reasonCodes || []).join(" ")} ${(action.notes || []).join(" ")}`.toLowerCase();
+  return text.includes("market_closed")
+    || text.includes("holiday")
+    || text.includes("weekend")
+    || text.includes("off_session")
+    || text.includes("previous_good")
+    || text.includes("not_due")
+    || text.includes("formal_scan_skipped");
+}
+
 function verifyCurrentPlan(issues) {
   if (!fs.existsSync(OUTPUT_FILE)) {
     return { exists: false, contract: "", mode: "", decision: "", actionCount: 0 };
@@ -93,6 +104,33 @@ function verifyCurrentPlan(issues) {
       commands: action.commands || [],
     });
   }
+  const waterBlockedScanActions = actions.filter((action) => (
+    String(action.state || "").includes("SCAN")
+    && action.executable !== true
+    && /water_root|formal_entry_not_allowed|source_profile/.test(String(action.executionGuard || ""))
+    && !isCalendarHoldAction(action)
+  ));
+  if (waterBlockedScanActions.length > 0) {
+    const sourceRecoveryActions = actions.filter((action) => (
+      String(action.state || "").includes("SOURCE")
+      && action.executable === true
+      && JSON.stringify(action.commands || []).includes("daytrade-warmup:self-heal")
+      && JSON.stringify(action.commands || []).includes("verify:terminal-water-root")
+    ));
+    assert(sourceRecoveryActions.length > 0, issues, "water_blocked_scanner_missing_rewater_job", {
+      waterBlockedScanActions: waterBlockedScanActions.map((action) => ({
+        key: action.key || "",
+        guard: action.executionGuard || "",
+        blocker: action.blocker || "",
+      })),
+      actions: actions.map((action) => ({
+        key: action.key || "",
+        state: action.state || "",
+        executable: action.executable,
+        guard: action.executionGuard || "",
+      })),
+    });
+  }
   return {
     exists: true,
     contract: plan.contract || "",
@@ -130,10 +168,11 @@ function main() {
     "verify:daily-terminal-run-manifest",
     "verify:terminal-runid-closure",
     "safeRecoveryPreview",
+    "market_closed_no_rewater_previous_good_hold",
     "idempotencyKey",
     "options.tradeDate || currentTradeDate()",
     "orchestrator.tradeDate || currentTradeDate()",
-    "buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate)",
+    "buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate, formalScanSkipped)",
     "manifestDerivedJobs(displayTradeDate)",
     "daily-terminal-run-latest.json",
     "rerun_idempotent_scanner_then_reverify_manifest_closure",
@@ -154,7 +193,33 @@ function main() {
   assert(runnerText.includes("function scannerClosureStepsForKey"), issues, "scanner_closure_mapping_missing");
   assert(runnerText.includes("function scannerPostRunSteps"), issues, "scanner_post_run_closure_missing");
   assert(runnerText.includes("idempotent-skip-after-partial"), issues, "partial_action_idempotency_missing");
-  for (const scriptName of scannerScripts) {
+  const scannerPostRunStart = runnerText.indexOf("function scannerPostRunSteps");
+  const currentTradeDateStart = runnerText.indexOf("function currentTradeDate", scannerPostRunStart);
+  const scannerPostRunBlock = scannerPostRunStart >= 0 && currentTradeDateStart > scannerPostRunStart
+    ? runnerText.slice(scannerPostRunStart, currentTradeDateStart)
+    : "";
+  const scannerPostRunRequiredMarkers = [
+    "scannerClosureStepsForKey(key, tradeDate)",
+    "scorecard:terminal-source",
+    "manifestFromExistingStep(tradeDate)",
+    "verify:daily-terminal-run-manifest",
+    "manifestGatedScorecardPublishSteps(tradeDate)",
+    "snapshot:desktop",
+    "verify:terminal-resource-chain:unattended",
+    "verify:terminal-runid-closure",
+  ];
+  for (const marker of scannerPostRunRequiredMarkers) {
+    assert(scannerPostRunBlock.includes(marker), issues, "scanner_post_run_required_step_missing", {
+      marker,
+      scannerPostRunBlock,
+    });
+  }
+  assert(!scannerPostRunBlock.includes("degradedDisplayPublishSteps(tradeDate)"), issues, "scanner_post_run_must_not_degraded_publish", {
+    scannerPostRunBlock,
+  });    assert(!runnerText.includes("base.commands.push(...degradedDisplayPublishSteps(tradeDate));"), issues, "auto_roll_forward_must_not_degraded_publish", {
+    marker: "base.commands.push(...degradedDisplayPublishSteps(tradeDate));",
+  });
+for (const scriptName of scannerScripts) {
     assert(runnerText.includes(scriptName), issues, "scanner_runner_mapping_missing", { scriptName });
     assert(fs.existsSync(path.join(ROOT, scriptName)), issues, "scanner_script_missing", { scriptName });
   }
@@ -218,5 +283,3 @@ function main() {
 }
 
 main();
-
-

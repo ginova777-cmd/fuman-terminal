@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const issues = [];
@@ -90,7 +91,7 @@ function verifyRootGateWiring() {
   const pkg = packageJson();
   const scripts = pkg.scripts || {};
   assert(String(scripts["verify:backend-auth-isolation"] || "").includes("scripts/verify-backend-auth-isolation.js"), "package_missing_verify_backend_auth_isolation");
-  assert(String(scripts["verify:terminal-unattended-root"] || "").includes("verify:backend-auth-isolation"), "unattended_root_missing_backend_auth_isolation");
+  assert(readTerminalRootSteps().rootScripts.includes("verify:backend-auth-isolation"), "unattended_root_missing_backend_auth_isolation");
   assert(String(scripts["verify:membership-e2e-layering"] || "").includes("scripts/verify-membership-e2e-layering.js"), "package_missing_membership_e2e_layering");
   assert(String(scripts["verify:membership-access-contract"] || "").includes("scripts/verify-membership-access-contract.js"), "package_missing_membership_access_contract");
 }

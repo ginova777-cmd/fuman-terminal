@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 const MANIFEST_FILE = path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
@@ -205,10 +206,11 @@ async function main() {
 
   const scripts = pkg.scripts || {};
   if (!scripts["verify:terminal-resource-chain:unattended"]) issues.push("package_missing_verify_terminal_resource_chain_unattended");
+  if (!scripts["verify:terminal-display-correctness"]) issues.push("package_missing_verify_terminal_display_correctness");
   if (!scripts["verify:terminal-runid-closure"]) issues.push("package_missing_verify_terminal_runid_closure");
-  const rootScript = String(scripts["verify:terminal-unattended-root"] || "");
-  for (const required of ["manifest:daily-terminal-run", "orchestrator:state:from-existing", "verify:terminal-control-plane:from-existing", "verify:terminal-runid-closure"]) {
-    if (!rootScript.includes(required)) issues.push(`root_gate_missing_${required}`);
+  const rootScripts = readTerminalRootSteps().rootScripts;
+  for (const required of ["manifest:daily-terminal-run", "orchestrator:state:from-existing", "verify:terminal-control-plane:from-existing", "verify:terminal-display-correctness", "verify:terminal-runid-closure"]) {
+    if (!rootScripts.includes(required)) issues.push(`root_gate_missing_${required}`);
   }
   const manifestCommands = Array.isArray(manifest.commands) ? manifest.commands : [];
   const manifestRanResourceChain = manifestCommands.some((cmd) => cmd.label === "terminal-resource-chain:unattended" && cmd.ok === true);

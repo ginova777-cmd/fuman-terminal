@@ -2,12 +2,14 @@
 
 const fs = require("fs");
 const path = require("path");
+const { readTerminalRootSteps } = require("../lib/terminal-root-script-steps");
 
 const ROOT = path.resolve(__dirname, "..");
 
 const REQUIRED_IN_ROOT = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
+  "verify:terminal-power-recovery-contract",
   "verify:fugle-websocket-sources",
   "verify:terminal-water-root",
   "verify:terminal-water-root-contract",
@@ -32,6 +34,9 @@ const REQUIRED_IN_ROOT = [
   "verify:terminal-canary-publish",
   "verify:terminal-control-plane:from-existing",
   "verify:terminal-resource-chain:unattended",
+  "verify:market-calendar-display-date-gate",
+  "verify:terminal-display-correctness",
+  "verify:terminal-surface-monitor",
   "verify:terminal-runid-closure",
   "verify:manifest-publish-wiring",
   "verify:backend-auth-isolation",
@@ -80,6 +85,9 @@ const SNAPSHOT_ONLY_PRODUCTION_SCRIPTS = [
   "verify:terminal-ops-production-live:authenticated",
   "verify:terminal-resource-chain",
   "verify:terminal-resource-chain:unattended",
+  "verify:market-calendar-display-date-gate",
+  "verify:terminal-display-correctness",
+  "verify:terminal-surface-monitor",
   "verify:protected-readback-credential",
 ];
 
@@ -91,18 +99,6 @@ function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }
 
-function splitRootCommands(rootCommand) {
-  return String(rootCommand || "")
-    .split(/\s+&&\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function npmScriptName(command) {
-  const match = command.match(/^npm\s+run\s+([^\s]+)/);
-  return match ? match[1] : "";
-}
-
 function issue(issues, code, details = {}) {
   issues.push({ code, details });
 }
@@ -110,6 +106,7 @@ function issue(issues, code, details = {}) {
 function verifyRootOrder(rootScripts, issues) {
   const positions = Object.fromEntries(rootScripts.map((name, index) => [name, index]));
   const orderedPairs = [
+    ["verify:terminal-power-recovery-contract", "ops:predictive-preflight"],
     ["ops:predictive-preflight", "verify:terminal-water-root"],
     ["verify:terminal-water-root", "verify:strategy-scan-formal-gate"],
     ["verify:strategy-scan-formal-gate", "verify:daily-manifest-schedule-transition"],
@@ -122,7 +119,10 @@ function verifyRootOrder(rootScripts, issues) {
     ["rollforward:terminal", "verify:terminal-canary-publish:live"],
     ["verify:terminal-canary-publish:live", "verify:terminal-canary-publish"],
     ["verify:terminal-canary-publish", "verify:terminal-resource-chain:unattended"],
-    ["verify:terminal-resource-chain:unattended", "verify:terminal-runid-closure"],
+    ["verify:terminal-resource-chain:unattended", "verify:market-calendar-display-date-gate"],
+    ["verify:market-calendar-display-date-gate", "verify:terminal-display-correctness"],
+    ["verify:terminal-display-correctness", "verify:terminal-surface-monitor"],
+    ["verify:terminal-surface-monitor", "verify:terminal-runid-closure"],
     ["verify:terminal-runid-closure", "verify:manifest-publish-wiring"],
     ["verify:terminal-autonomous-completion-audit", "verify:terminal-ops-production-live:authenticated"],
     ["verify:terminal-ops-production-live:authenticated", "ops:production-unattended-readiness-report:authenticated"],
@@ -199,10 +199,7 @@ function verifyTerminalLiveScopeGuards(issues) {
 }
 
 function main() {
-  const pkg = readJson("package.json");
-  const scripts = pkg.scripts || {};
-  const rootCommand = String(scripts["verify:terminal-unattended-root"] || "");
-  const rootScripts = splitRootCommands(rootCommand).map(npmScriptName).filter(Boolean);
+  const { scripts, rootCommand, rootScripts, source } = readTerminalRootSteps();
   const issues = [];
 
   if (!rootCommand) issue(issues, "root_gate_script_missing");
