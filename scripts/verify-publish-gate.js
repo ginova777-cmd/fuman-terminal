@@ -82,6 +82,7 @@ function main() {
     ["terminal_modules_contract", node, ["scripts/verify-terminal-modules-contract.js"]],
     ["runtime_ownership", node, ["scripts/verify-runtime-ownership.js"]],
     ["fast_shell_self_contained", node, ["scripts/verify-fast-shell-self-contained.js"]],
+    ["terminal_no_fake_unattended", node, ["scripts/verify-terminal-no-fake-unattended.js"]],
     ["deploy_worktree_clean", node, ["scripts/verify-deploy-worktree-clean.js"]],
     ["scorecard_no_rollback", node, ["scripts/verify-scorecard-no-rollback.js", "--no-live", "--no-output", "--skip-schedule"]],
     ["scorecard_strategy_rules", node, ["scripts/verify-scorecard-strategy-rules.js", "--no-live", "--no-output"]],
