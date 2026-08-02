@@ -17,6 +17,7 @@ const OUT_DIR = path.join(RUNTIME_DIR, "reports");
 const OUT_FILE = path.join(OUT_DIR, "fugle-websocket-source-readiness.json");
 const STOCK_COLLECTOR_FILE = path.join(ROOT_DIR, "scripts", "fugle-websocket-collector.js");
 const DAYTRADE_WRITER_FILE = path.join(ROOT_DIR, "scripts", "run-daytrade-source-writer.js");
+const SOURCE_HOST_APPROVAL_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-host-approval.json");
 
 const STOCK_MAX_SUBSCRIPTIONS = 2000;
 const FUTOPT_MAX_SUBSCRIPTIONS = 2000;
@@ -32,6 +33,23 @@ function readJson(file, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function readSourceHostApproval() {
+  return readJson(SOURCE_HOST_APPROVAL_FILE, {});
+}
+
+function localSourceHostPolicy() {
+  const approval = readSourceHostApproval();
+  const host = String(process.env.COMPUTERNAME || "").trim().toUpperCase();
+  const role = String(approval?.sourceRole || "").trim().toLowerCase();
+  return {
+    host,
+    role,
+    approved: approval?.approved === true,
+    readerOnly: role === "reader" && approval?.approved !== true,
+    writer: role === "writer" && approval?.approved === true,
+  };
 }
 
 function ageSeconds(value) {
@@ -225,13 +243,16 @@ async function main() {
   const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
   const marketClosed = marketDay.isTradingDay === false;
   const taipeiNowMinutes = taipeiHourMinute(new Date().toISOString()) ?? -1;
-  const sourceWindowClosed = marketClosed || (marketDay.isTradingDay === true && taipeiNowMinutes >= (13 * 60 + 30));
+  const sourceWindowStartMinutes = 6 * 60;
+  const sourceWindowEndMinutes = 13 * 60 + 30;
+  const sourceWindowClosed = marketClosed || (marketDay.isTradingDay === true && (taipeiNowMinutes < sourceWindowStartMinutes || taipeiNowMinutes >= sourceWindowEndMinutes));
   const stockStatus = readJson(STOCK_STATUS_FILE, {});
   const sharedStockStatus = readJson(SHARED_STOCK_STATUS_FILE, {});
   const futoptStatus = readJson(FUTOPT_STATUS_FILE, {});
   const daytrade = readJson(DAYTRADE_CONFIG_FILE, {});
   const shared = readJson(SHARED_CONFIG_FILE, {});
   const recoveryLock = readJson(RECOVERY_LOCK_FILE, {});
+  const sourceHostPolicy = localSourceHostPolicy();
 
   const stock = summarizeWebSocket(stockStatus, {
     maxSubscriptions: STOCK_MAX_SUBSCRIPTIONS,
@@ -325,12 +346,16 @@ async function main() {
   ];
   for (const task of tasks) {
     addIssue(issues, task.exists, "required_task_missing", task);
-    addIssue(issues, /^(ready|running)$/i.test(String(task.state)), "required_task_not_ready_or_running", task);
-    addIssue(issues, taskLastResultOk(task), "required_task_last_result_nonzero", {
-      ...task,
-      interpretation: taskResultInterpretation(task),
-      allowedResults: [0, TASK_STILL_RUNNING, TASK_SHARING_VIOLATION, ...(isExpectedDaytradeWriterWindowClose(task) ? [TASK_TERMINATED] : [])],
-    });
+    const isWriterTask = String(task.taskName || "") === "\\Fuman Daytrade Source Writer 0600-1330";
+    const readerOnlyRemoteWriter = isWriterTask && sourceHostPolicy.readerOnly;
+    if (!readerOnlyRemoteWriter) {
+      addIssue(issues, /^(ready|running)$/i.test(String(task.state)), "required_task_not_ready_or_running", task);
+      addIssue(issues, taskLastResultOk(task), "required_task_last_result_nonzero", {
+        ...task,
+        interpretation: taskResultInterpretation(task),
+        allowedResults: [0, TASK_STILL_RUNNING, TASK_SHARING_VIOLATION, ...(isExpectedDaytradeWriterWindowClose(task) ? [TASK_TERMINATED] : [])],
+      });
+    }
   }
 
   const report = {
@@ -375,6 +400,7 @@ async function main() {
       allowed: recoveryLock.allowed || [],
       blocked: recoveryLock.blocked || [],
     },
+    sourceHostPolicy,
     tasks,
     taskResultPolicy: {
       allowedResults: [
