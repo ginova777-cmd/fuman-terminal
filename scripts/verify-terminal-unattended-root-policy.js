@@ -10,6 +10,7 @@ const REQUIRED_IN_ROOT = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
   "verify:terminal-power-recovery-contract",
+  "verify:terminal-autonomous-task-live",
   "verify:fugle-websocket-sources",
   "verify:terminal-water-root",
   "verify:terminal-water-root-contract",
@@ -106,7 +107,8 @@ function issue(issues, code, details = {}) {
 function verifyRootOrder(rootScripts, issues) {
   const positions = Object.fromEntries(rootScripts.map((name, index) => [name, index]));
   const orderedPairs = [
-    ["verify:terminal-power-recovery-contract", "ops:predictive-preflight"],
+    ["verify:terminal-power-recovery-contract",
+  "verify:terminal-autonomous-task-live", "ops:predictive-preflight"],
     ["ops:predictive-preflight", "verify:terminal-water-root"],
     ["verify:terminal-water-root", "verify:strategy-scan-formal-gate"],
     ["verify:strategy-scan-formal-gate", "verify:daily-manifest-schedule-transition"],

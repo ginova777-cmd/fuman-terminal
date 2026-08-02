@@ -8,6 +8,7 @@ const OUT_FILE = path.join(OUT_DIR, "terminal-unattended-root-report.json");
 
 const STEPS = [
   "verify:terminal-power-recovery-contract",
+  "verify:terminal-autonomous-task-live",
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
   "verify:fugle-websocket-sources",
