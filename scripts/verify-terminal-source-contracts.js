@@ -97,9 +97,12 @@ const CONTRACTS = [
         "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
+      // Issued-share capital is a slow-moving enrichment, not a live quote source.
+      // Keep it bounded, but do not make a monthly corporate-action feed fail the
+      // intraday source root after a normal holiday/reporting gap.
       sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], {
         order: "updated_at.desc",
-        maxAgeDays: 30,
+        maxAgeDays: 90,
         level: "warning",
         requiredWhenEnv: "STRATEGY3_REQUIRE_TURNOVER",
         purpose: "optional turnover enrichment; hard only when STRATEGY3_REQUIRE_TURNOVER=1",
@@ -127,7 +130,10 @@ const CONTRACTS = [
       runView("v_strategy5_latest_complete_run", "strategy5"),
       resultTable("strategy5_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "signals", "data_contract_source"]),
       sourceTable("v_chip_flows_latest", ["symbol", "trade_date", "foreign_net", "investment_trust_net", "dealer_net", "institution_total_net", "source"], { order: "trade_date.desc", maxAgeDays: 3, level: "warning" }),
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30, level: "warning" }),
+      // Issued-share capital is a slow-moving enrichment, not a live quote source.
+      // Keep it bounded, but do not make a monthly corporate-action feed fail the
+      // intraday source root after a normal holiday/reporting gap.
+      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 90, level: "warning" }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "open", "high", "low", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
     ],
   },
