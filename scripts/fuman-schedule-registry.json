@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T00:44:23.0726379+08:00",
+  "updatedAt": "2026-08-02T15:54:42.029Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -422,27 +422,6 @@
       "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Open Buy Cache 2130",
-      "displayName": "Fuman Open Buy Cache 2130",
-      "description": "Strategy1 open-buy cache.",
-      "time": "21:30",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Open Buy Preopen 0855",
-      "displayName": "Fuman Open Buy Preopen 0855",
-      "description": "Strategy1 preopen final runner.",
-      "time": "08:55",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Open Buy Preopen Prepare 0845",
-      "displayName": "Fuman Open Buy Preopen Prepare 0845",
-      "description": "Strategy1 preopen prepare runner.",
-      "time": "08:45",
-      "expectedState": "Ready"
-    },
-    {
       "taskName": "\\Fuman PC Wake 0430",
       "displayName": "Fuman PC Wake 0430",
       "description": "Mini PC wake timer.",
@@ -492,34 +471,6 @@
       "displayName": "Fuman Scorecard Daily Automation 1400",
       "description": "Scorecard daily automation.",
       "time": "14:00",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman STAR Preopen Watch 0845",
-      "displayName": "Fuman STAR Preopen Watch 0845",
-      "description": "Strategy1 STAR preopen watch. Non-zero result is covered by later preopen prepare/final success.",
-      "time": "08:45",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Strategy1 Candidate Verify 2135",
-      "displayName": "Fuman Strategy1 Candidate Verify 2135",
-      "description": "Strategy1 candidate verify.",
-      "time": "21:35",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Strategy1 Flame Gate Verify 0852",
-      "displayName": "Fuman Strategy1 Flame Gate Verify 0852",
-      "description": "Strategy1 flame gate verify.",
-      "time": "08:52",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Strategy1 Futopt Preopen Verify 0850",
-      "displayName": "Fuman Strategy1 Futopt Preopen Verify 0850",
-      "description": "Strategy1 futures/options preopen verify.",
-      "time": "08:50",
       "expectedState": "Ready"
     },
     {
@@ -667,23 +618,6 @@
       "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman ?單??琿?",
-      "displayName": "Fuman ?單??琿?",
-      "description": "Realtime radar. 267014 is allowed when the market window has ended.",
-      "time": "08:58",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman ?單??琿? Watchdog",
-      "displayName": "Fuman ?單??琿? Watchdog",
-      "description": "Realtime radar watchdog. Repeats every minute from 08:59 and restarts the radar task if it is stopped or stale during 09:00-13:30.",
-      "time": "08:59-13:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "08:59"
-      ]
-    },
-    {
       "taskName": "\\Fuman 買賣超 Cache 2100",
       "displayName": "Fuman 買賣超 Cache 2100",
       "description": "Institution flow cache.",
@@ -740,20 +674,6 @@
       "expectedState": "Disabled"
     },
     {
-      "taskName": "\\Fuman Market Overview Patrol 0900",
-      "displayName": "Fuman Market Overview Patrol 0900",
-      "description": "Disabled: market overview is covered by API surfaces.",
-      "time": "09:00",
-      "expectedState": "Disabled"
-    },
-    {
-      "taskName": "\\Fuman Market Overview Watchdog 0901",
-      "displayName": "Fuman Market Overview Watchdog 0901",
-      "description": "Disabled: market overview patrol is disabled.",
-      "time": "09:01",
-      "expectedState": "Disabled"
-    },
-    {
       "taskName": "\\Fuman Strategy3 Battle Verify 1323",
       "displayName": "Fuman Strategy3 Battle Verify 1323",
       "description": "Disabled: duplicate Strategy3 battle verify.",
@@ -786,13 +706,6 @@
       "displayName": "Fuman Terminal API Health",
       "description": "Disabled: production monitor supersedes this task.",
       "time": "17:28",
-      "expectedState": "Disabled"
-    },
-    {
-      "taskName": "\\Fuman ?單??琿??交炎 0910",
-      "displayName": "Fuman ?單??琿??交炎 0910",
-      "description": "Disabled: realtime radar health is covered by the main radar and monitor chain.",
-      "time": "09:10",
       "expectedState": "Disabled"
     },
     {
