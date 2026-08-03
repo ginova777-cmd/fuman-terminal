@@ -84,7 +84,9 @@ function candleTime(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : "";
 }
 function rowMinute(value) {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value));
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(date);
   return `${parts.find((part) => part.type === "hour")?.value || "00"}:${parts.find((part) => part.type === "minute")?.value || "00"}`;
 }
 function normalizeRestCandle(symbol, raw, tradeDate) {
