@@ -85,6 +85,9 @@ const MAX_PRIORITY_POOL_SYMBOLS = positiveNumber(CONFIG.priorityPool?.targetSymb
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.95);
 const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFreshQuotesForInjectingA, 1);
 const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT, 40));
+const FORMAL_SIGNAL_MIN_TOTAL_VOLUME = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TOTAL_VOLUME, 5000);
+const FORMAL_SIGNAL_MIN_TRADE_VALUE = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TRADE_VALUE, 30000000);
+const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MAX_VOLUME_RANK, 300);
 const MOTHER_POOL_MIN_SYMBOLS = Math.max(
   FORMAL_DAYTRADE_PRIORITY_LIMIT,
   positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 180),
@@ -1507,6 +1510,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
     const valueRank = valueRanks.get(row.symbol)?.rank || 0;
     const turnoverRank = turnoverRanks.get(row.symbol)?.rank || 0;
+    const formalLiquidityEligible = metrics.totalVolume >= FORMAL_SIGNAL_MIN_TOTAL_VOLUME
+      && metrics.tradeValue >= FORMAL_SIGNAL_MIN_TRADE_VALUE
+      && volumeRank > 0
+      && volumeRank <= FORMAL_SIGNAL_MAX_VOLUME_RANK;
+    const formalLiquidityRejectReason = formalLiquidityEligible
+      ? ""
+      : `LIQUIDITY_TOO_LOW:${metrics.totalVolume < FORMAL_SIGNAL_MIN_TOTAL_VOLUME ? "total_volume" : metrics.tradeValue < FORMAL_SIGNAL_MIN_TRADE_VALUE ? "trade_value" : "volume_rank"}`;
     const groupLeader = (metrics.groupKeys || [])
       .map((key) => groupLimitUpLeaders.get(key))
       .find((leader) => leader && leader.symbol !== row.symbol);
@@ -1646,6 +1656,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         projectedVolume: Math.round(metrics.projectedVolume),
         estimatedVolumeRatio: Number(metrics.estimatedVolumeRatio.toFixed(4)),
         estimatedVolumeRatioUsable: metrics.estimatedVolumeRatioUsable,
+        formalLiquidityEligible,
+        formalLiquidityRejectReason,
         changeRank,
         volumeSurgeRank,
         estimatedVolumeRank,
@@ -1686,6 +1698,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 
   for (const row of rankedCandidates) {
     if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) break;
+    if (!row.formalLiquidityEligible) continue;
     bySymbol.set(row.symbol, {
       ...row,
       score: row.score,
@@ -1693,9 +1706,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       priorityReason: row.priorityReason,
     });
   }
+  const rankedBySymbol = new Map(rankedCandidates.map((row) => [row.symbol, row]));
   for (const seed of seeds.symbols) {
-    const row = activeBySymbol.get(seed.symbol);
-    if (!row) continue;
+    const row = rankedBySymbol.get(seed.symbol);
+    if (!row || !row.formalLiquidityEligible) continue;
     const prev = bySymbol.get(seed.symbol);
     if (prev) {
       prev.score += seed.score;
