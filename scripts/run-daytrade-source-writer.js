@@ -853,8 +853,19 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   );
   const totalVolume = firstNumber(quote.total_volume, quote.trade_volume, payload.totalVolume, payload.tradeVolume);
   const tradeValue = firstNumber(quote.trade_value, payload.tradeValue, payload.trade_value, price > 0 ? price * totalVolume * 1000 : 0);
+  const previousVolume = firstNumber(daily.volume, dailyPayload.volume, payload.previousVolume, payload.previous_volume);
   const avgVolume5 = firstNumber(daily.avg_volume5, dailyPayload.avgVolume5, dailyPayload.avg_volume5, payload.avgVolume5, payload.avg_volume5);
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
+  const quoteFresh = ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
+  const currentMinutes = taipeiMinutes();
+  const sessionElapsedMinutes = currentMinutes >= 540 && currentMinutes <= 810
+    ? Math.max(1, Math.min(270, currentMinutes - 540 + 1))
+    : 0;
+  const projectedVolume = quoteFresh && sessionElapsedMinutes > 0
+    ? totalVolume * 270 / sessionElapsedMinutes
+    : 0;
+  const estimatedVolumeRatio = previousVolume > 0 ? projectedVolume / previousVolume : 0;
+  const estimatedVolumeRatioUsable = quoteFresh && sessionElapsedMinutes > 0 && previousVolume > 0;
   const issuedShares = firstNumber(capital.issuedShares, payload.issuedShares, payload.issued_shares, dailyPayload.issuedShares, dailyPayload.issued_shares);
   const currentTurnoverRate = issuedShares > 0 && totalVolume > 0 ? (totalVolume * 1000 / issuedShares) * 100 : 0;
   const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
@@ -988,8 +999,12 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     totalVolume,
     tradeValue,
     avgVolume5,
+    previousVolume,
     issuedShares,
     volumeRatio5,
+    projectedVolume,
+    estimatedVolumeRatio,
+    estimatedVolumeRatioUsable,
     highPrice,
     lowPrice,
     limitUpPrice,
@@ -1026,7 +1041,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     daytradeCrowded,
     daytradeCrowded3To5d,
     daytradeCrowdedBasis,
-    quoteFresh: ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS,
+    quoteFresh,
     fieldCoverage: {
       quote: Boolean(quoteMap?.has(symbol)),
       changePercent: Number.isFinite(changePercent),
@@ -1457,6 +1472,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   }));
   const changeRanks = rankMap(candidates, (row) => row.metrics.changePercent, { minValue: 0 });
   const volumeSurgeRanks = rankMap(candidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
+  const estimatedVolumeRanks = rankMap(candidates, (row) => row.metrics.estimatedVolumeRatio, { minValue: 0 });
   const volumeRanks = rankMap(candidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(candidates, (row) => row.metrics.tradeValue, { minValue: 0 });
   const turnoverRanks = rankMap(candidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
@@ -1487,6 +1503,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const metrics = row.metrics;
     const changeRank = changeRanks.get(row.symbol)?.rank || 0;
     const volumeSurgeRank = volumeSurgeRanks.get(row.symbol)?.rank || 0;
+    const estimatedVolumeRank = estimatedVolumeRanks.get(row.symbol)?.rank || 0;
     const volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
     const valueRank = valueRanks.get(row.symbol)?.rank || 0;
     const turnoverRank = turnoverRanks.get(row.symbol)?.rank || 0;
@@ -1499,6 +1516,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     score += Math.min(130, Math.log10(Math.max(1, metrics.avgVolume5)) * 30);
     score += topRankScore(changeRank, 120, 190);
     score += topRankScore(volumeSurgeRank, 120, 180);
+    score += topRankScore(estimatedVolumeRank, 120, 180);
     score += topRankScore(volumeRank, 150, 130);
     score += topRankScore(valueRank, 150, 130);
     score += topRankScore(turnoverRank, 50, 160);
@@ -1519,6 +1537,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       score += 80;
       reasons.push("volume_ratio_gt1");
     }
+    if (metrics.estimatedVolumeRatioUsable && metrics.estimatedVolumeRatio >= 2) {
+      score += 160;
+      reasons.push("estimated_volume_ratio_gt2");
+    }
     if (changeRank && changeRank <= 100) reasons.push(`gain_rank_top${changeRank}`);
     if (volumeSurgeRank && volumeSurgeRank <= 100) reasons.push(`volume_surge_rank_top${volumeSurgeRank}`);
     if (changeRank && changeRank <= 120 && volumeSurgeRank && volumeSurgeRank <= 120) {
@@ -1532,6 +1554,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     if (metrics.volumeRatio5 >= 2 && metrics.totalVolume >= 10000 && volumeRank && volumeRank <= 100) {
       score += 210;
       reasons.push("volume_ratio_gt2_volume_rank_top100");
+    }
+    if (metrics.estimatedVolumeRatioUsable && metrics.estimatedVolumeRatio >= 2 && metrics.totalVolume >= 10000 && volumeRank && volumeRank <= 100) {
+      score += 210;
+      reasons.push("estimated_volume_ratio_gt2_volume_rank_top100");
     }
     if (metrics.tradeValue >= 30000000) {
       score += 80;
@@ -1616,8 +1642,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         avgVolume5: Math.round(metrics.avgVolume5),
         issuedShares: Math.round(metrics.issuedShares),
         volumeRatio5: Number(metrics.volumeRatio5.toFixed(4)),
+        previousVolume: Math.round(metrics.previousVolume),
+        projectedVolume: Math.round(metrics.projectedVolume),
+        estimatedVolumeRatio: Number(metrics.estimatedVolumeRatio.toFixed(4)),
+        estimatedVolumeRatioUsable: metrics.estimatedVolumeRatioUsable,
         changeRank,
         volumeSurgeRank,
+        estimatedVolumeRank,
         volumeRank,
         valueRank,
         turnoverRank,
