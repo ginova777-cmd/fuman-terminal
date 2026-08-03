@@ -32,6 +32,7 @@ const STREAMING_CHANNELS = [...new Set(String(process.env.FUGLE_STREAMING_CHANNE
   .filter(Boolean))];
 if (!STREAMING_CHANNELS.length) STREAMING_CHANNELS.push("trades", "aggregates");
 const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
+const INTRADAY_ODD_LOT = false;
 const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600));
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
@@ -1053,6 +1054,12 @@ async function runStreamingCollector() {
     let ws;
     let openedAt = "";
     let authenticated = false;
+    let authenticatedAt = "";
+    let authenticationCount = 0;
+    let subscriptionAckCount = 0;
+    const subscriptionAckChannels = new Set();
+    let subscriptionAckReady = false;
+    let lastCandleTime = "";
     let messages = 0;
     let quoteMessages = 0;
     let candleMessages = 0;
@@ -1084,6 +1091,16 @@ async function runStreamingCollector() {
         streamingOpenedAt: openedAt,
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        authenticatedAt,
+        authenticationCount,
+        intradayOddLot: INTRADAY_ODD_LOT,
+        subscriptionMode: "one-symbol-one-channel",
+        subscriptionAckCount,
+        subscriptionAckExpected: selection.selected.length * STREAMING_CHANNELS.length,
+        subscriptionAckChannels: [...subscriptionAckChannels],
+        subscriptionAckReady,
+        reconnectRequiresReauth: true,
+        lastCandleTime,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
         streamingCandles: candleMessages,
@@ -1136,7 +1153,7 @@ async function runStreamingCollector() {
       });
     };
     const subscribe = () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
       selection = selectStreamingSymbols();
       chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
       const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selected.join(",")}`;
@@ -1152,9 +1169,15 @@ async function runStreamingCollector() {
       cycles += 1;
       lastSubscribeCycleAt = nowIso();
       for (const channel of STREAMING_CHANNELS) {
-        for (const symbols of chunks) {
-          ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbols } }));
-          chunksSent += 1;
+        for (const chunk of chunks) {
+          for (const symbol of chunk) {
+            ws.send(JSON.stringify({ event: "subscribe", data: {
+              channel,
+              symbol,
+              intradayOddLot: INTRADAY_ODD_LOT,
+            } }));
+            chunksSent += 1;
+          }
         }
       }
       writeStreamingStatus();
@@ -1165,7 +1188,9 @@ async function runStreamingCollector() {
       ws.addEventListener("open", () => {
         openedAt = nowIso();
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
-        setTimeout(subscribe, 800);
+        authenticated = false;
+        subscriptionAckReady = false;
+        subscriptionAckChannels.clear();
         writeStreamingStatus();
       });
       ws.addEventListener("message", (event) => {
@@ -1173,7 +1198,20 @@ async function runStreamingCollector() {
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
-        if (/authenticated|auth/i.test(text)) authenticated = true;
+        const eventName = String(payload?.event || payload?.type || "").toLowerCase();
+        if (eventName === "authenticated" || eventName === "auth") {
+          authenticated = true;
+          authenticatedAt = nowIso();
+          authenticationCount += 1;
+          subscribe();
+        }
+        if (/^(subscribe|subscribed|subscription|subscriptions|ack)$/.test(eventName)) {
+          subscriptionAckCount += 1;
+          const ackData = payload?.data || {};
+          const ackChannel = String(ackData.channel || payload?.channel || "").toLowerCase();
+          if (ackChannel) subscriptionAckChannels.add(ackChannel);
+          subscriptionAckReady = subscriptionAckCount > 0 && subscriptionAckChannels.size >= STREAMING_CHANNELS.length;
+        }
         const notice = getStreamingNotice(payload, text);
         if (/forbidden|rate.?limit|subscribe.?limit|exceed/i.test(notice.noticeText)) {
           forbiddenChunks += 1;
@@ -1197,6 +1235,7 @@ async function runStreamingCollector() {
             candleMessages += 1;
             if (Object.prototype.hasOwnProperty.call(channelCandles, inferredChannel)) channelCandles[inferredChannel] += 1;
             lastMessageAt = nowIso();
+            lastCandleTime = candle.candleTime || lastCandleTime;
             mergeStreamingCandles([candle]);
           }
           return;
@@ -1216,6 +1255,8 @@ async function runStreamingCollector() {
       });
       ws.addEventListener("close", () => {
         closed = true;
+        authenticated = false;
+        subscriptionAckReady = false;
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });

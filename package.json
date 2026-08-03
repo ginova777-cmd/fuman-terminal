@@ -67,6 +67,8 @@
     "verify:daytrade-strategy3-closure-live": "node --use-system-ca scripts/verify-daytrade-strategy3-closure-live.js",
     "verify:daytrade-strategy3-closure:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daytrade-strategy3-closure-verify.ps1",
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",
+    "repair:daytrade-intraday-1m-gaps": "node --use-system-ca scripts/repair-daytrade-intraday-1m-gaps.js --apply --synthesize",
+    "verify:daytrade-intraday-1m-timeline": "node --use-system-ca scripts/verify-daytrade-intraday-1m-timeline.js",
     "daytrade-source:writer": "node --use-system-ca scripts/run-daytrade-source-writer.js --apply",
     "daytrade-source:writer:dry-run": "node --use-system-ca scripts/run-daytrade-source-writer.js --dry-run --no-fetch --once",
     "futopt-websocket:collector": "node scripts/fugle-futopt-websocket-collector.js",

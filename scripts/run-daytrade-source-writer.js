@@ -193,6 +193,7 @@ const SUPABASE_READ_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecret("supabase-anon-key.txt")
   || SUPABASE_SERVICE_KEY;
+const WRITER_LEASE_OWNER = `${process.env.COMPUTERNAME || "writer-host"}:${process.pid}:daytrade-source-writer`;
 const FUGLE_API_KEY = process.env.FUGLE_API_KEY
   || process.env.FUMAN_FUGLE_API_KEY
   || readSecret("fugle-api-key.txt");
@@ -323,6 +324,19 @@ function requireSupabaseKey(write = false) {
   const key = write ? SUPABASE_SERVICE_KEY : SUPABASE_READ_KEY;
   if (!key) throw new Error(write ? "missing Supabase service role key" : "missing Supabase read key");
   return key;
+}
+
+async function ensureWriterLease() {
+  if (!APPLY) return;
+  const key = requireSupabaseKey(true);
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/acquire_fugle_daytrade_intraday_writer_lease`, {
+    method: "POST", headers: headers(key), body: JSON.stringify({ p_owner_id: WRITER_LEASE_OWNER, p_lease_seconds: 180 }),
+    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`writer lease RPC HTTP ${response.status}: ${text.slice(0, 240)}`);
+  const result = text ? JSON.parse(text) : {};
+  if (!result.ok) throw new Error(`writer lease unavailable: ${result.reason || "unknown"}`);
 }
 
 async function supabaseGet(resource, query = "", options = {}) {
@@ -1147,7 +1161,7 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
   if (!prioritySymbols.size) return intradayMap;
   const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
   let merged = 0;
-  for (const quote of quoteCache.quotes.values()) {
+  if (envFlag("DAYTRADE_ALLOW_QUOTE_DERIVED_1M")) for (const quote of quoteCache.quotes.values()) {
     const symbol = normalizeCode(quote.symbol || quote.code);
     if (!symbol || !prioritySymbols.has(symbol)) continue;
     const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, "");
@@ -1783,6 +1797,16 @@ function readWebSocketStatusSummary() {
     streamingChannels: Array.isArray(status.streamingChannels) ? status.streamingChannels : [],
     connected: Boolean(status.websocketConnected),
     authenticated: Boolean(status.websocketAuthenticated),
+    authenticatedAt: status.authenticatedAt || "",
+    authenticationCount: numberValue(status.authenticationCount),
+    subscriptionAckCount: numberValue(status.subscriptionAckCount),
+    subscriptionAckExpected: numberValue(status.subscriptionAckExpected),
+    subscriptionAckChannels: Array.isArray(status.subscriptionAckChannels) ? status.subscriptionAckChannels : [],
+    subscriptionAckReady: Boolean(status.subscriptionAckReady),
+    intradayOddLot: status.intradayOddLot === false ? false : null,
+    subscriptionMode: status.subscriptionMode || "",
+    lastMessageAt: status.lastMessageAt || "",
+    lastCandleTime: status.lastCandleTime || "",
     subscribed: numberValue(status.subscribed),
     subscribedSymbols: numberValue(status.subscribedSymbols),
     subscribedChannels: numberValue(status.subscribedChannels),
@@ -2211,6 +2235,16 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     websocket_streaming_channels: webSocketStatus.streamingChannels,
     websocket_connected: webSocketStatus.connected,
     websocket_authenticated: webSocketStatus.authenticated,
+    websocket_authenticated_at: webSocketStatus.authenticatedAt,
+    websocket_authentication_count: webSocketStatus.authenticationCount,
+    websocket_subscription_ack_count: webSocketStatus.subscriptionAckCount,
+    websocket_subscription_ack_expected: webSocketStatus.subscriptionAckExpected,
+    websocket_subscription_ack_channels: webSocketStatus.subscriptionAckChannels,
+    websocket_subscription_ack_ready: webSocketStatus.subscriptionAckReady,
+    websocket_intraday_odd_lot: webSocketStatus.intradayOddLot,
+    websocket_subscription_mode: webSocketStatus.subscriptionMode,
+    websocket_last_message_at: webSocketStatus.lastMessageAt,
+    websocket_last_candle_time: webSocketStatus.lastCandleTime,
     websocket_subscribed: webSocketStatus.subscribed,
     websocket_subscribed_symbols: webSocketStatus.subscribedSymbols,
     websocket_subscribed_channels: webSocketStatus.subscribedChannels,
@@ -2439,18 +2473,32 @@ async function syncWebSocketIntraday1mCandles(priorityRows) {
       close: numberValue(candle.close),
       volume: numberValue(candle.volume),
       source: "fugle_daytrade_writer:websocket_candles",
+      source_channel: "candles",
+      candle_origin: "websocket_candle",
+      synthetic: false,
+      volume_strategy_usable: true,
+      websocket_row: true,
+      rest_repair_row: false,
+      intraday_odd_lot: false,
       updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
       payload: {
         ...(candle.payload || {}),
         cacheUpdatedAt: cache.payload?.updatedAt || "",
         source: "fugle-websocket-candles-cache",
+        source_channel: "candles",
+        candle_origin: "websocket_candle",
+        synthetic: false,
+        volume_strategy_usable: true,
+        websocket_row: true,
+        rest_repair_row: false,
+        intradayOddLot: false,
       },
     });
   }
   const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
   const rowKeys = new Set(rows.map((row) => `${row.symbol}|${row.candle_time}`));
   const candleRowCount = rows.length;
-  for (const quote of quoteCache.quotes.values()) {
+  if (envFlag("DAYTRADE_ALLOW_QUOTE_DERIVED_1M")) for (const quote of quoteCache.quotes.values()) {
     const symbol = normalizeCode(quote.symbol || quote.code);
     if (!symbol || (prioritySymbols.size && !prioritySymbols.has(symbol))) continue;
     const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, nowIso());
@@ -2474,12 +2522,26 @@ async function syncWebSocketIntraday1mCandles(priorityRows) {
       close,
       volume: numberValue(quote.tradeVolume ?? quote.total_volume ?? quote.volume),
       source: "fugle_daytrade_writer:websocket_quote_derived_1m",
+      source_channel: "aggregates",
+      candle_origin: "quote_derived_disallowed",
+      synthetic: false,
+      volume_strategy_usable: false,
+      websocket_row: false,
+      rest_repair_row: false,
+      intraday_odd_lot: false,
       updated_at: seenAt,
       payload: {
         ...(quote.payload || {}),
         quoteSeenAt: seenAt,
         cacheUpdatedAt: quoteCache.payload?.updatedAt || "",
         source: "fugle-websocket-quote-derived-current-1m",
+        source_channel: "aggregates",
+        candle_origin: "quote_derived_disallowed",
+        synthetic: false,
+        volume_strategy_usable: false,
+        websocket_row: false,
+        rest_repair_row: false,
+        intradayOddLot: false,
       },
     });
   }
@@ -2540,6 +2602,7 @@ async function syncWebSocketFutoptQuotes() {
 }
 
 async function tick() {
+  await ensureWriterLease();
   const state = readWriterState();
   const phase = phaseNow();
   const fetchAllowedForPhase = quoteFetchAllowedForPhase(phase);
