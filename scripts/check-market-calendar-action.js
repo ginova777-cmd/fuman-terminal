@@ -15,8 +15,21 @@ function argValue(name, fallback = "") {
 function parseDate(value) {
   const text = String(value || "").trim();
   if (!text) return new Date();
-  if (/^\d{8}$/.test(text)) return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return new Date(`${text}T12:00:00+08:00`);
+  const todayTw = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const compactTodayTw = todayTw.replace(/-/g, "");
+  if (/^\d{8}$/.test(text)) {
+    if (text === compactTodayTw) return new Date();
+    return new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T12:00:00+08:00`);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    if (text === todayTw) return new Date();
+    return new Date(`${text}T12:00:00+08:00`);
+  }
   return new Date(text);
 }
 
@@ -42,7 +55,7 @@ async function main() {
     runner: label,
     label,
     checkedAt: new Date().toISOString(),
-    action: contract.marketOpen ? "allow_formal_scan" : "skip_formal_scan",
+    action: contract.scannerAction,
     marketOpen: contract.marketOpen,
     marketStatus: contract.marketStatus,
     marketDate: contract.marketDate,

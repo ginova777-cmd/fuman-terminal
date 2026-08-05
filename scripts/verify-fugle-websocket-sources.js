@@ -5,7 +5,8 @@ const { spawnSync } = require("child_process");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const ROOT_DIR = path.resolve(__dirname, "..");
 
-const STOCK_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-websocket-status.json");
+const STOCK_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+const LEGACY_STOCK_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-websocket-status.json");
 const FUTOPT_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-futopt-websocket-status.json");
 const STOCK_QUOTES_FILE = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-quotes.json");
 const DAYTRADE_CONFIG_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-speed.json");
@@ -182,16 +183,23 @@ function auditFinMindPolicyCode() {
 
 function main() {
   const issues = [];
-  const stockStatus = readJson(STOCK_STATUS_FILE, {});
+  const primaryStockStatus = readJson(STOCK_STATUS_FILE, null);
+  const legacyStockStatus = readJson(LEGACY_STOCK_STATUS_FILE, null);
+  const stockStatus = primaryStockStatus || legacyStockStatus || {};
+  const stockStatusFile = primaryStockStatus ? STOCK_STATUS_FILE : (legacyStockStatus ? LEGACY_STOCK_STATUS_FILE : STOCK_STATUS_FILE);
   const futoptStatus = readJson(FUTOPT_STATUS_FILE, {});
   const daytrade = readJson(DAYTRADE_CONFIG_FILE, {});
   const shared = readJson(SHARED_CONFIG_FILE, {});
   const recoveryLock = readJson(RECOVERY_LOCK_FILE, {});
 
-  const stock = summarizeWebSocket(stockStatus, {
-    maxSubscriptions: STOCK_MAX_SUBSCRIPTIONS,
-    requiredChannels: ["trades", "aggregates", "candles"],
-  });
+  const stock = {
+    statusFile: stockStatusFile,
+    statusSource: primaryStockStatus ? "daytrade-formal" : (legacyStockStatus ? "legacy-fallback" : "missing"),
+    ...summarizeWebSocket(stockStatus, {
+      maxSubscriptions: STOCK_MAX_SUBSCRIPTIONS,
+      requiredChannels: ["trades", "aggregates", "candles"],
+    }),
+  };
   const futopt = summarizeWebSocket(futoptStatus, {
     maxSubscriptions: FUTOPT_MAX_SUBSCRIPTIONS,
     requiredChannels: ["trades", "aggregates", "candles"],
