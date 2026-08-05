@@ -214,9 +214,9 @@ function main() {
     receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "market_calendar", status: marketStatus, result: market, artifact: marketArtifact, parsed: market.parsed, reasonCode: marketStatus === "PASS" ? "ok" : reasonCodeFor("market_calendar", market.parsed, `${market.stdout}\n${market.stderr}`) }));
 
     if (marketStatus === "PASS" && market.parsed?.marketOpen === false) {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure", "autonomous_completion_audit"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
     } else if (marketStatus !== "PASS") {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure", "autonomous_completion_audit"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
     } else {
       const preflightWrite = runNode(["--use-system-ca", "scripts/write-terminal-predictive-preflight.js", `--expected-date=${tradeDate}`, "--out=outputs/terminal-predictive-preflight"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const preflightVerify = runNode(["--use-system-ca", "scripts/verify-terminal-predictive-preflight.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
@@ -279,6 +279,25 @@ function main() {
         artifact: displayArtifact,
         parsed: displayEvidence,
         reasonCode: displayStatus === "PASS" ? "ok" : reasonCodeFor("display_closure", displayClosure.parsed || displayControl.parsed || displayManifest.parsed, displayManifest.stdout + "\n" + displayManifest.stderr + "\n" + displayControl.stdout + "\n" + displayControl.stderr + "\n" + displayClosure.stdout + "\n" + displayClosure.stderr),
+      }));
+      const reasonClassifier = runNode(["scripts/verify-terminal-reason-code-classifier.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const notificationPlan = runNode(["scripts/write-autonomous-ops-notification-plan.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const protectedReadbackCredential = runNode(["--use-system-ca", "scripts/verify-protected-readback-credential.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const autonomousCompletion = runNode(["scripts/verify-terminal-autonomous-completion-audit.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const autonomousEvidence = { reason_classifier: reasonClassifier, notification_plan: notificationPlan, protected_readback_credential: protectedReadbackCredential, autonomous_completion: autonomousCompletion };
+      const autonomousArtifact = artifactFile(runDir, "autonomous_completion_audit");
+      saveArtifact(autonomousArtifact, autonomousEvidence);
+      const autonomousStatus = [reasonClassifier, notificationPlan, protectedReadbackCredential, autonomousCompletion].every((item) => item.exit_code === 0) && autonomousCompletion.parsed?.ok === true ? "PASS" : "BLOCKED";
+      receipts.push(writeReceipt({
+        auditRoot,
+        tradeDate,
+        dailyRunId,
+        stage: "autonomous_completion_audit",
+        status: autonomousStatus,
+        result: autonomousCompletion,
+        artifact: autonomousArtifact,
+        parsed: autonomousEvidence,
+        reasonCode: autonomousStatus === "PASS" ? "ok" : reasonCodeFor("autonomous_completion_audit", autonomousCompletion.parsed || reasonClassifier.parsed || notificationPlan.parsed || protectedReadbackCredential.parsed, reasonClassifier.stdout + "\n" + reasonClassifier.stderr + "\n" + notificationPlan.stdout + "\n" + notificationPlan.stderr + "\n" + protectedReadbackCredential.stdout + "\n" + protectedReadbackCredential.stderr + "\n" + autonomousCompletion.stdout + "\n" + autonomousCompletion.stderr),
       }));
     }
     const manifestArgs = ["scripts/write-terminal-daily-manifest.js", `--trade-date=${tradeDate}`, `--daily-run-id=${dailyRunId}`, `--out=${auditRoot}`, `--registry=${registryFile}`];

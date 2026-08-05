@@ -69,6 +69,8 @@ function selfTest(issues) {
     ["production_release_sha_mismatch", "PRODUCTION_RELEASE_SHA_MISMATCH"],
     ["ROLL_FORWARD_QUEUE_ARMED", "AUTO_ROLL_FORWARD_QUEUE_ARMED"],
     ["scorecard_latestDate_mismatch:20260717!=20260721", "TRADE_DATE_MISMATCH"],
+    ["runDate_mismatch:20260727!=20260801", "TRADE_DATE_MISMATCH"],
+    ["resume_window_due", "PREDICTIVE_PREFLIGHT_WAIT_SOURCE_WINDOW"],
   ];
   for (const [text, expected] of cases) {
     const classification = classifyReason(text);
