@@ -30,6 +30,10 @@ function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function rowTradeDate(row = {}) {
+  return compactDate(row.trade_date || row.source_trade_date || row.quote_trade_date || "");
+}
+
 async function timedFetch(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || TIMEOUT_MS);
@@ -274,6 +278,14 @@ function statusIssues(payload) {
   if (motherRows < required.motherPoolRows) issues.push(`mother_pool_rows_low:${motherRows}`);
   if (priorityRows < required.priorityTop40Rows) issues.push(`priority_top40_rows_low:${priorityRows}`);
   if (required.formalNow) {
+    for (const [name, probe] of [["mother_pool", payload.motherPool], ["priority_top40", payload.priorityTop40]]) {
+      const actual = rowTradeDate(probe.row || {});
+      if (probe.rowCount > 0 && actual && actual !== payload.expectedDate) {
+        issues.push(`${name}_trade_date_mismatch:expected=${payload.expectedDate}:actual=${actual}`);
+      } else if (probe.rowCount === 0) {
+        issues.push(`${name}_trade_date_not_current:${payload.expectedDate}`);
+      }
+    }
     if (gate.canonicalGateGrade !== "A") issues.push(`canonical_gate_not_A:${gate.canonicalGateGrade || "missing"}`);
     if (!["ready", "ok"].includes(gate.canonicalGateStatus)) issues.push(`canonical_gate_not_ready:${gate.canonicalGateStatus || "missing"}`);
     if (gate.formalEntrySpeedVerdict !== "YES") issues.push(`formal_entry_speed_not_yes:${gate.formalEntrySpeedVerdict || "missing"}`);
@@ -350,10 +362,12 @@ async function main() {
     }),
     query("mother_pool", "v_fugle_daytrade_mother_pool", {
       select: "symbol,trade_date,updated_at",
+      ...(required.formalNow ? { trade_date: `eq.${EXPECTED_DATE}` } : {}),
       limit: "1",
     }),
     query("priority_top40", "v_fugle_daytrade_priority_top40", {
       select: "symbol,trade_date,updated_at",
+      ...(required.formalNow ? { trade_date: `eq.${EXPECTED_DATE}` } : {}),
       limit: "1",
     }),
     query("intraday_1m_status", "v_fugle_daytrade_intraday_1m_status", {
@@ -429,6 +443,7 @@ if (require.main === module) {
 module.exports = {
   asNumber,
   compactDate,
+  rowTradeDate,
   sourceStatusSummary,
   gateSummary,
   isMarketClosedPreviousGood,

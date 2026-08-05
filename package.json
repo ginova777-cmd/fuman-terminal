@@ -366,6 +366,7 @@
     "verify:terminal-live-scope": "node scripts/verify-terminal-live-scope.js",
     "verify:terminal-unattended-root-policy": "node scripts/verify-terminal-unattended-root-policy.js",
     "final-audit:terminal": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
+    "verify:terminal-power-recovery": "node scripts/verify-terminal-power-recovery.js",
     "verify:terminal-final-audit": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
     "verify:terminal-final-audit-contract": "node scripts/verify-terminal-final-audit-contract.js"
   },

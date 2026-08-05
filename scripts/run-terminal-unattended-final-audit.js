@@ -134,9 +134,9 @@ function main() {
     receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "market_calendar", status: marketStatus, result: market, artifact: marketArtifact, parsed: market.parsed, reasonCode: marketStatus === "PASS" ? "ok" : reasonCodeFor("market_calendar", market.parsed, `${market.stdout}\n${market.stderr}`) }));
 
     if (marketStatus === "PASS" && market.parsed?.marketOpen === false) {
-      for (const stage of ["preflight", "websocket", "water_root", "formal_gate"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
     } else if (marketStatus !== "PASS") {
-      for (const stage of ["preflight", "websocket", "water_root", "formal_gate"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
     } else {
       const preflightWrite = runNode(["--use-system-ca", "scripts/write-terminal-predictive-preflight.js", `--expected-date=${tradeDate}`, "--out=outputs/terminal-predictive-preflight"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const preflightVerify = runNode(["--use-system-ca", "scripts/verify-terminal-predictive-preflight.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
@@ -146,6 +146,14 @@ function main() {
       const preflightStatus = preflightWrite.exit_code === 0 && preflightVerify.exit_code === 0 && preflightVerify.parsed?.ok === true ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "preflight", status: preflightStatus, result: preflightVerify, artifact: preflightArtifact, parsed: preflightEvidence, reasonCode: preflightStatus === "PASS" ? "ok" : reasonCodeFor("preflight", preflightVerify.parsed, `${preflightWrite.stdout}\n${preflightVerify.stdout}\n${preflightVerify.stderr}`) }));
 
+      const powerOut = path.join(runDir, "power-recovery");
+      const power = runNode(["scripts/verify-terminal-power-recovery.js", `--trade-date=${tradeDate}`, `--out=${powerOut}`, `--runtime-dir=${runtimeDir}`], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId, FUMAN_RUNTIME_DIR: runtimeDir });
+      const powerFull = readJson(path.join(powerOut, "terminal-power-recovery.json"), power.parsed);
+      const powerArtifact = artifactFile(runDir, "power_recovery");
+      saveArtifact(powerArtifact, powerFull);
+      const powerStatus = power.exit_code === 0 && powerFull?.ok === true ? "PASS" : "BLOCKED";
+      receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "power_recovery", status: powerStatus, result: power, artifact: powerArtifact, parsed: powerFull, reasonCode: powerStatus === "PASS" ? "ok" : reasonCodeFor("power_recovery", powerFull, `${power.stdout}\n${power.stderr}`) }));
+
       const websocket = runNode(["--use-system-ca", "scripts/verify-fugle-websocket-sources.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const websocketArtifact = artifactFile(runDir, "websocket");
       saveArtifact(websocketArtifact, websocket.parsed || { ok: false, stdout: websocket.stdout, stderr: websocket.stderr });
@@ -153,7 +161,10 @@ function main() {
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "websocket", status: websocketStatus, result: websocket, artifact: websocketArtifact, parsed: websocket.parsed, reasonCode: websocketStatus === "PASS" ? "ok" : reasonCodeFor("websocket", websocket.parsed, `${websocket.stdout}\n${websocket.stderr}`) }));
 
       const waterOut = path.join(runDir, "water-root");
-      const water = runNode(["--use-system-ca", "scripts/verify-terminal-water-root.js", `--expected-date=${tradeDate}`, `--out=${waterOut}`], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const waterArgs = ["--use-system-ca", "scripts/verify-terminal-water-root.js", `--expected-date=${tradeDate}`, `--out=${waterOut}`];
+      if (market.parsed?.isTradingDay === true || market.parsed?.row?.isTradingDay === true || market.parsed?.marketOpen === true) waterArgs.push("--require-trading-day");
+      if (market.parsed?.formalSourceWindowOpen === true || market.parsed?.row?.formalSourceWindowOpen === true || market.parsed?.sourceFreshnessRequired === true || market.parsed?.row?.sourceFreshnessRequired === true) waterArgs.push("--require-formal-now");
+      const water = runNode(waterArgs, { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const waterFull = readJson(path.join(waterOut, "terminal-water-root.json"), water.parsed);
       const waterArtifact = artifactFile(runDir, "water_root");
       saveArtifact(waterArtifact, waterFull);
