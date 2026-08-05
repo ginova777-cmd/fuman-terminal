@@ -367,6 +367,9 @@
     "verify:terminal-unattended-root-policy": "node scripts/verify-terminal-unattended-root-policy.js",
     "final-audit:terminal": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
     "verify:terminal-power-recovery": "node scripts/verify-terminal-power-recovery.js",
+    "ops:terminal-self-heal": "node --use-system-ca scripts/run-terminal-self-heal-job-queue.js",
+    "ops:terminal-self-heal:apply": "node --use-system-ca scripts/run-terminal-self-heal-job-queue.js --apply",
+    "verify:terminal-self-heal": "node --check scripts/run-terminal-self-heal-job-queue.js && node --use-system-ca scripts/run-terminal-self-heal-job-queue.js",
     "verify:terminal-final-audit": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
     "verify:terminal-final-audit-contract": "node scripts/verify-terminal-final-audit-contract.js"
   },

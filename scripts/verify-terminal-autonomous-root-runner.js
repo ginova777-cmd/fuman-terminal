@@ -42,6 +42,8 @@ async function main() {
     "terminal-autonomous-root-runner-v1",
     "ops:predictive-preflight",
     "verify:terminal-water-root",
+    "verify:terminal-final-audit",
+    "ops:terminal-self-heal:apply",
     "manifest:daily-terminal-run",
     "orchestrator:state:from-existing",
     "policy:autonomous-ops",
@@ -112,7 +114,7 @@ async function main() {
     guarantees: [
       "autonomous root is callable as a first-class npm script",
       "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
+      "runner executes preflight, water root, final audit, self-heal job queue, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
       "failure writes a receipt and attempts workflow alert",
     ],
     issues,
