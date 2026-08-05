@@ -109,15 +109,58 @@ function selfHealJobForFailure(failure = {}, index = 0) {
   return { ...base, ...(policies[reason] || { action: base.allowed_action, verify: "npm run verify:terminal-final-audit", safety: "fail_closed" }) };
 }
 
-function buildSelfHealQueue({ tradeDate, dailyRunId, manifest }) {
-  const failures = Array.isArray(manifest?.failed_stages) ? manifest.failed_stages : [];
+function buildSelfHealQueue({ tradeDate, dailyRunId, manifest, displayClosureSummary = null }) {
+  const rawFailures = Array.isArray(manifest?.failed_stages) ? manifest.failed_stages : [];
+  const displayOnlyPending = displayClosureSummary?.module_counts?.blocked === 0 && displayClosureSummary?.module_counts?.pending_not_due > 0;
+  const failures = rawFailures.filter((failure) => !(failure.key === "display_closure" && displayOnlyPending));
+  const waitingNotDue = displayOnlyPending ? (displayClosureSummary.pending_not_due_modules || []) : [];
   return {
     contract: "terminal-self-heal-job-queue-v1",
     generated_at: new Date().toISOString(),
     daily_run_id: dailyRunId,
     trade_date: tradeDate,
     mode: "queue_only_no_implicit_side_effects",
+    waiting_not_due: waitingNotDue.map((row) => ({ key: row.key, runId: row.runId, tradeDate: row.tradeDate, issues: row.issues, action: "wait_until_scheduled_time_then_rerun_final_audit" })),
     jobs: failures.map((failure, index) => selfHealJobForFailure(failure, index)),
+  };
+}
+
+
+function summarizeDisplayClosure() {
+  const dailyRunFile = path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
+  const closureFile = path.join(ROOT, "outputs", "terminal-runid-closure-contract", "terminal-runid-closure-contract.json");
+  const dailyRun = readJson(dailyRunFile, null);
+  const closure = readJson(closureFile, null);
+  const moduleRows = Object.entries(dailyRun?.modules || {}).map(([index, row]) => ({
+    index: Number(index),
+    key: row.key || row.module || row.strategy || String(index),
+    status: row.status || "unknown",
+    ok: row.ok === true,
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || "",
+    sourceDate: row.sourceDate || "",
+    complete: row.complete === true,
+    fallback: row.fallback === true,
+    publishAllowed: row.publishAllowed === true,
+    resultCount: row.resultCount ?? null,
+    issues: Array.isArray(row.issues) ? row.issues.slice(0, 5).map(String) : [],
+  }));
+  const pending = moduleRows.filter((row) => String(row.status).startsWith("PENDING"));
+  const blocked = moduleRows.filter((row) => row.ok !== true && !String(row.status).startsWith("PENDING"));
+  const closed = moduleRows.filter((row) => row.status === "CLOSED");
+  return {
+    contract: "terminal-display-closure-summary-v1",
+    daily_run_manifest_file: fs.existsSync(dailyRunFile) ? dailyRunFile : "",
+    runid_closure_file: fs.existsSync(closureFile) ? closureFile : "",
+    ok: dailyRun?.ok === true && closure?.ok === true,
+    tradeDate: dailyRun?.tradeDate || closure?.tradeDate || "",
+    unattendedStatus: dailyRun?.unattendedStatus || "NO",
+    blocker: dailyRun?.blocker || "",
+    issues: [...(dailyRun?.issues || []), ...(closure?.issues || [])].slice(0, 20).map(String),
+    module_counts: { total: moduleRows.length, closed: closed.length, pending_not_due: pending.length, blocked: blocked.length },
+    closed_modules: closed.map((row) => ({ key: row.key, runId: row.runId, resultCount: row.resultCount })),
+    pending_not_due_modules: pending.map((row) => ({ key: row.key, runId: row.runId, tradeDate: row.tradeDate, issues: row.issues })),
+    blocked_modules: blocked.map((row) => ({ key: row.key, runId: row.runId, tradeDate: row.tradeDate, status: row.status, issues: row.issues })),
   };
 }
 
@@ -242,7 +285,8 @@ function main() {
     const manifestRun = runNode(manifestArgs, { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
     const manifest = readJson(path.join(auditRoot, tradeDate, dailyRunId, "terminal-daily-manifest.json"), manifestRun.parsed || {});
     const lockRelease = releaseOrchestratorLock(lock);
-    const selfHealQueue = buildSelfHealQueue({ tradeDate, dailyRunId, manifest });
+    const displayClosureSummary = summarizeDisplayClosure();
+    const selfHealQueue = buildSelfHealQueue({ tradeDate, dailyRunId, manifest, displayClosureSummary });
     writeJson(path.join(runDir, "terminal-self-heal-job-queue.json"), selfHealQueue);
     writeJson(path.join(auditRoot, "terminal-self-heal-job-queue-latest.json"), selfHealQueue);
     if (process.env.FUMAN_FINAL_AUDIT_WRITE_RUNTIME !== "0") writeJson(path.join(runtimeDir, "state", "terminal-self-heal-job-queue.json"), selfHealQueue);
@@ -259,6 +303,7 @@ function main() {
       receipts: receipts.map((row) => ({ stage: row.payload.stage, file: row.file, status: row.payload.status, complete: row.payload.complete, reason_code: row.payload.reason_code, allowed_action: row.payload.allowed_action })),
       missing_receipts: manifest.missing_receipts || [],
       failed_stages: manifest.failed_stages || [],
+      display_closure: displayClosureSummary,
       self_heal_jobs: selfHealQueue.jobs,
       decision: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
       unattended_status: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
