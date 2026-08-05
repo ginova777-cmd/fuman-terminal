@@ -364,7 +364,10 @@
     "install:terminal-autonomous-root-task": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-terminal-autonomous-root-task.ps1 -ApplyScanners -RequireProtectedReadback",
     "ops:autonomous-root:contract": "node scripts/verify-terminal-autonomous-root-runner.js",
     "verify:terminal-live-scope": "node scripts/verify-terminal-live-scope.js",
-    "verify:terminal-unattended-root-policy": "node scripts/verify-terminal-unattended-root-policy.js"
+    "verify:terminal-unattended-root-policy": "node scripts/verify-terminal-unattended-root-policy.js",
+    "final-audit:terminal": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
+    "verify:terminal-final-audit": "node --use-system-ca scripts/run-terminal-unattended-final-audit.js",
+    "verify:terminal-final-audit-contract": "node scripts/verify-terminal-final-audit-contract.js"
   },
   "engines": {
     "node": "24.x"
