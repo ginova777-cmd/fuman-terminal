@@ -290,6 +290,25 @@ function main() {
     writeJson(path.join(runDir, "terminal-self-heal-job-queue.json"), selfHealQueue);
     writeJson(path.join(auditRoot, "terminal-self-heal-job-queue-latest.json"), selfHealQueue);
     if (process.env.FUMAN_FINAL_AUDIT_WRITE_RUNTIME !== "0") writeJson(path.join(runtimeDir, "state", "terminal-self-heal-job-queue.json"), selfHealQueue);
+    const displayClosureOnlyPending = displayClosureSummary?.module_counts?.blocked === 0 && displayClosureSummary?.module_counts?.pending_not_due > 0;
+    const finalHardOk = registryOk && manifest.ok === true && lockRelease.ok === true;
+    const finalDecisionFields = displayClosureOnlyPending
+      ? {
+          decision: "NO",
+          unattended_status: "NO",
+          first_blocker: "pending_not_due",
+          reason_code: "stage_not_due_or_source_window_not_open",
+          allowed_action: "wait_until_scheduled_time_then_rerun_final_audit",
+          ok: false,
+        }
+      : {
+          decision: finalHardOk ? "YES" : "NO",
+          unattended_status: finalHardOk ? "YES" : "NO",
+          first_blocker: !registryOk ? "active_module_registry" : (manifest.first_blocker || (lockRelease.ok ? "" : "orchestrator_lock_release")),
+          reason_code: !registryOk ? "active_module_registry_not_written_or_identity_mismatch" : (manifest.reason_code || (lockRelease.ok ? "ok" : lockRelease.reasonCode || "orchestrator_lock_release_failed")),
+          allowed_action: !registryOk ? "repair_active_module_registry_writer_then_retry" : (manifest.allowed_action || (lockRelease.ok ? "none" : "repair_orchestrator_lock_then_retry")),
+          ok: finalHardOk,
+        };
     const finalPayload = {
       contract: "terminal-unattended-final-audit-v1",
       generated_at: new Date().toISOString(),
@@ -305,12 +324,12 @@ function main() {
       failed_stages: manifest.failed_stages || [],
       display_closure: displayClosureSummary,
       self_heal_jobs: selfHealQueue.jobs,
-      decision: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
-      unattended_status: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
-      first_blocker: !registryOk ? "active_module_registry" : (manifest.first_blocker || (lockRelease.ok ? "" : "orchestrator_lock_release")),
-      reason_code: !registryOk ? "active_module_registry_not_written_or_identity_mismatch" : (manifest.reason_code || (lockRelease.ok ? "ok" : lockRelease.reasonCode || "orchestrator_lock_release_failed")),
-      allowed_action: !registryOk ? "repair_active_module_registry_writer_then_retry" : (manifest.allowed_action || (lockRelease.ok ? "none" : "repair_orchestrator_lock_then_retry")),
-      ok: registryOk && manifest.ok === true && lockRelease.ok === true,
+      decision: finalDecisionFields.decision,
+      unattended_status: finalDecisionFields.unattended_status,
+      first_blocker: finalDecisionFields.first_blocker,
+      reason_code: finalDecisionFields.reason_code,
+      allowed_action: finalDecisionFields.allowed_action,
+      ok: finalDecisionFields.ok,
     };
     const latest = path.join(auditRoot, "terminal-unattended-final-audit.json");
     const runFile = path.join(runDir, "terminal-unattended-final-audit.json");
