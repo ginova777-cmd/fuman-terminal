@@ -137,7 +137,7 @@ function main() {
       started_at: startedAt,
       daily_run_id: dailyRunId,
       trade_date: tradeDate,
-      scope: "final_audit_convergence_gates_only",
+      scope: "final_audit_with_display_closure",
       decision: "NO",
       unattended_status: "NO",
       first_blocker: "orchestrator_lock",
@@ -171,9 +171,9 @@ function main() {
     receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "market_calendar", status: marketStatus, result: market, artifact: marketArtifact, parsed: market.parsed, reasonCode: marketStatus === "PASS" ? "ok" : reasonCodeFor("market_calendar", market.parsed, `${market.stdout}\n${market.stderr}`) }));
 
     if (marketStatus === "PASS" && market.parsed?.marketOpen === false) {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
     } else if (marketStatus !== "PASS") {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
+      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
     } else {
       const preflightWrite = runNode(["--use-system-ca", "scripts/write-terminal-predictive-preflight.js", `--expected-date=${tradeDate}`, "--out=outputs/terminal-predictive-preflight"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const preflightVerify = runNode(["--use-system-ca", "scripts/verify-terminal-predictive-preflight.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
@@ -216,6 +216,27 @@ function main() {
       saveArtifact(formalArtifact, formalEvidence);
       const formalStatus = formal.exit_code === 0 && formal.parsed?.ok === true && liveFormalReady ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "formal_gate", status: formalStatus, result: formal, artifact: formalArtifact, parsed: formalEvidence, reasonCode: formalStatus === "PASS" ? "ok" : (formal.exit_code !== 0 || formal.parsed?.ok !== true ? reasonCodeFor("formal_gate", formal.parsed, `${formal.stdout}\n${formal.stderr}`) : "formal_gate_live_status_not_ready") }));
+      const displayManifest = runNode(["--use-system-ca", "scripts/write-daily-terminal-run-manifest.js", "--expected-date=" + tradeDate], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayState = runNode(["--use-system-ca", "scripts/write-terminal-orchestrator-state.js", "--from-existing", "--expected-date=" + tradeDate], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayPolicy = runNode(["--use-system-ca", "scripts/write-autonomous-ops-policy.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayCanary = runNode(["scripts/verify-terminal-canary-publish.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayControl = runNode(["--use-system-ca", "scripts/write-terminal-control-plane.js", "--from-existing", "--expected-date=" + tradeDate, "--require-unattended"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayClosure = runNode(["scripts/verify-terminal-runid-closure-contract.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      const displayEvidence = { manifest: displayManifest, state: displayState, policy: displayPolicy, canary: displayCanary, control_plane: displayControl, runid_closure: displayClosure };
+      const displayArtifact = artifactFile(runDir, "display_closure");
+      saveArtifact(displayArtifact, displayEvidence);
+      const displayStatus = [displayManifest, displayState, displayPolicy, displayCanary, displayControl, displayClosure].every((item) => item.exit_code === 0) && displayClosure.parsed?.ok === true ? "PASS" : "BLOCKED";
+      receipts.push(writeReceipt({
+        auditRoot,
+        tradeDate,
+        dailyRunId,
+        stage: "display_closure",
+        status: displayStatus,
+        result: displayClosure,
+        artifact: displayArtifact,
+        parsed: displayEvidence,
+        reasonCode: displayStatus === "PASS" ? "ok" : reasonCodeFor("display_closure", displayClosure.parsed || displayControl.parsed || displayManifest.parsed, displayManifest.stdout + "\n" + displayManifest.stderr + "\n" + displayControl.stdout + "\n" + displayControl.stderr + "\n" + displayClosure.stdout + "\n" + displayClosure.stderr),
+      }));
     }
     const manifestArgs = ["scripts/write-terminal-daily-manifest.js", `--trade-date=${tradeDate}`, `--daily-run-id=${dailyRunId}`, `--out=${auditRoot}`, `--registry=${registryFile}`];
     const manifestRun = runNode(manifestArgs, { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
@@ -231,7 +252,7 @@ function main() {
       started_at: startedAt,
       daily_run_id: dailyRunId,
       trade_date: tradeDate,
-      scope: "final_audit_convergence_gates_only",
+      scope: "final_audit_with_display_closure",
       registry: { file: registryFile, ok: registryOk, exit_code: registryRun.exit_code },
       orchestrator_lock: { acquired: true, released: lockRelease.released === true, file: lock.file, release: lockRelease },
       manifest: { file: path.join(auditRoot, tradeDate, dailyRunId, "terminal-daily-manifest.json"), ok: manifest.ok === true, first_blocker: manifest.first_blocker || "", reason_code: manifest.reason_code || "", allowed_action: manifest.allowed_action || "" },
@@ -255,7 +276,7 @@ function main() {
     if (!finalPayload.ok || manifestRun.exit_code !== 0) process.exitCode = 1;
   } catch (error) {
     const release = releaseOrchestratorLock(lock);
-    const payload = { contract: "terminal-unattended-final-audit-v1", generated_at: new Date().toISOString(), daily_run_id: dailyRunId, trade_date: tradeDate, scope: "final_audit_convergence_gates_only", decision: "NO", unattended_status: "NO", first_blocker: "final_audit_exception", reason_code: "final_audit_exception", allowed_action: "inspect_final_audit_error_then_retry", error: String(error.stack || error.message || error), lock_release: release, ok: false };
+    const payload = { contract: "terminal-unattended-final-audit-v1", generated_at: new Date().toISOString(), daily_run_id: dailyRunId, trade_date: tradeDate, scope: "final_audit_with_display_closure", decision: "NO", unattended_status: "NO", first_blocker: "final_audit_exception", reason_code: "final_audit_exception", allowed_action: "inspect_final_audit_error_then_retry", error: String(error.stack || error.message || error), lock_release: release, ok: false };
     writeJson(path.join(runDir, "terminal-unattended-final-audit.json"), payload);
     writeJson(path.join(auditRoot, "terminal-unattended-final-audit.json"), payload);
     console.error(JSON.stringify(payload, null, 2));
