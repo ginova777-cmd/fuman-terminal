@@ -84,6 +84,43 @@ function blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode = 
   return writeStageReceipt({ auditRoot, tradeDate, dailyRunId, stage, status: "BLOCKED", exitCode: 1, command: "upstream_gate_blocked", artifact: "", parsed, reasonCode });
 }
 
+function selfHealJobForFailure(failure = {}, index = 0) {
+  const reason = String(failure.reason_code || "");
+  const stage = String(failure.key || "");
+  const base = {
+    id: `${String(index + 1).padStart(2, "0")}-${stage || "stage"}-${reason || "not_ready"}`,
+    stage,
+    reason_code: reason,
+    status: "QUEUED",
+    mode: "manual_or_autonomous_policy_can_execute",
+    created_at: new Date().toISOString(),
+    allowed_action: failure.allowed_action || "inspect_receipt_reason_code_then_rerun_only_affected_stage",
+  };
+  const policies = {
+    stock_websocket_status_stale: { action: "restart_stock_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    stock_websocket_not_connected: { action: "restart_stock_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    stock_websocket_not_streaming: { action: "restart_stock_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    futopt_websocket_status_stale: { action: "restart_futopt_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    futopt_websocket_not_connected: { action: "restart_futopt_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    futopt_websocket_not_streaming: { action: "restart_futopt_fugle_websocket_collector", verify: "npm run verify:fugle-websocket-sources", safety: "idempotent_restart_only; no_strategy_publish" },
+    water_root_source_date_mismatch: { action: "rebuild_today_mother_pool_and_priority_top40", verify: "npm run verify:terminal-final-audit", safety: "do_not_publish_until_manifest_passes" },
+    formal_gate_live_status_not_ready: { action: "wait_or_fix_water_root_then_rerun_formal_gate", verify: "npm run verify:terminal-final-audit", safety: "preserve_previous_good" },
+  };
+  return { ...base, ...(policies[reason] || { action: base.allowed_action, verify: "npm run verify:terminal-final-audit", safety: "fail_closed" }) };
+}
+
+function buildSelfHealQueue({ tradeDate, dailyRunId, manifest }) {
+  const failures = Array.isArray(manifest?.failed_stages) ? manifest.failed_stages : [];
+  return {
+    contract: "terminal-self-heal-job-queue-v1",
+    generated_at: new Date().toISOString(),
+    daily_run_id: dailyRunId,
+    trade_date: tradeDate,
+    mode: "queue_only_no_implicit_side_effects",
+    jobs: failures.map((failure, index) => selfHealJobForFailure(failure, index)),
+  };
+}
+
 function main() {
   const tradeDate = compactDate(argValue("--trade-date", process.env.FUMAN_TRADE_DATE || ""));
   const auditRoot = path.resolve(argValue("--out", defaultAuditRoot(ROOT)));
@@ -184,6 +221,10 @@ function main() {
     const manifestRun = runNode(manifestArgs, { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
     const manifest = readJson(path.join(auditRoot, tradeDate, dailyRunId, "terminal-daily-manifest.json"), manifestRun.parsed || {});
     const lockRelease = releaseOrchestratorLock(lock);
+    const selfHealQueue = buildSelfHealQueue({ tradeDate, dailyRunId, manifest });
+    writeJson(path.join(runDir, "terminal-self-heal-job-queue.json"), selfHealQueue);
+    writeJson(path.join(auditRoot, "terminal-self-heal-job-queue-latest.json"), selfHealQueue);
+    if (process.env.FUMAN_FINAL_AUDIT_WRITE_RUNTIME !== "0") writeJson(path.join(runtimeDir, "state", "terminal-self-heal-job-queue.json"), selfHealQueue);
     const finalPayload = {
       contract: "terminal-unattended-final-audit-v1",
       generated_at: new Date().toISOString(),
@@ -197,6 +238,7 @@ function main() {
       receipts: receipts.map((row) => ({ stage: row.payload.stage, file: row.file, status: row.payload.status, complete: row.payload.complete, reason_code: row.payload.reason_code, allowed_action: row.payload.allowed_action })),
       missing_receipts: manifest.missing_receipts || [],
       failed_stages: manifest.failed_stages || [],
+      self_heal_jobs: selfHealQueue.jobs,
       decision: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
       unattended_status: registryOk && manifest.ok === true && lockRelease.ok === true ? "YES" : "NO",
       first_blocker: !registryOk ? "active_module_registry" : (manifest.first_blocker || (lockRelease.ok ? "" : "orchestrator_lock_release")),
