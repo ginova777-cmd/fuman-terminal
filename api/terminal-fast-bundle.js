@@ -137,7 +137,10 @@ function removeStaleManifestRunIdEndpoints(endpoints = {}) {
       return Boolean(key && canonicalByKey.get(key) === runId);
     });
     const canonicalEndpoint = staleKeys.some((key) => isCanonicalStrategyEndpoint(endpoint, key));
-    if (canonicalEndpoint && hasCanonicalRunId) {
+    const endpointKey = canonicalStrategyEndpointKey(endpoint);
+    const endpointOwnCanonicalRunId = endpointKey ? canonicalByKey.get(endpointKey) : "";
+    const endpointHasOwnCanonicalRunId = Boolean(endpointOwnCanonicalRunId && runIds.includes(endpointOwnCanonicalRunId));
+    if ((canonicalEndpoint && hasCanonicalRunId) || endpointHasOwnCanonicalRunId) {
       endpoints[endpoint] = redactUnexpectedManifestRunIds(payload, canonicalByKey);
       removals.push({ endpoint, action: "redacted", staleRunIds });
     } else {
@@ -146,6 +149,17 @@ function removeStaleManifestRunIdEndpoints(endpoints = {}) {
     }
   }
   return removals;
+}
+
+function sanitizeBundleManifestRunIds(payload, endpoints = {}) {
+  const canonicalByKey = new Map(canonicalRunIdsFromArtifacts());
+  for (const endpointPayload of Object.values(endpoints || {})) {
+    const runId = String(endpointPayload?.runId || endpointPayload?.transport?.runId || '').trim();
+    const key = strategyKeyFromRunId(runId);
+    if (key && runId) canonicalByKey.set(key, runId);
+  }
+  if (!canonicalByKey.size) return payload;
+  return redactUnexpectedManifestRunIds(payload, canonicalByKey);
 }
 
 function isPublicBundleEndpoint(endpoint) {
@@ -1081,7 +1095,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
+      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(payload, endpoints), endpoints), marketCalendar), entitlement));
       return;
     }
     if (!liveFallbackEnabled(request)) {
@@ -1097,7 +1111,7 @@ module.exports = async function handler(request, response) {
         : null;
       if (sourceReportsBundle) {
         response.setHeader("X-Fuman-Fast-Bundle-Mode", "source-reports-fallback");
-        response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(sourceReportsBundle, sourceReportsBundle.endpoints || {}), marketCalendar), entitlement));
+        response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(sourceReportsBundle, sourceReportsBundle.endpoints || {}), sourceReportsBundle.endpoints || {}), marketCalendar), entitlement));
         return;
       }
       const missPayload = {
@@ -1171,5 +1185,7 @@ module.exports = async function handler(request, response) {
     response.status(200).end("");
     return;
   }
-  response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
+  response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(payload, endpoints), endpoints), marketCalendar), entitlement));
 };
+
+
