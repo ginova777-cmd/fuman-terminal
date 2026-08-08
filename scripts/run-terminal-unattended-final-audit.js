@@ -112,7 +112,8 @@ function pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, 
 }
 
 function pendingStageKeys() {
-  return STAGES.filter((stage) => stage.key !== "market_calendar").map((stage) => stage.key);
+  const alreadyVerifiedBeforeMarketDecision = new Set(["market_calendar", "power_recovery", "production_project"]);
+  return STAGES.filter((stage) => !alreadyVerifiedBeforeMarketDecision.has(stage.key)).map((stage) => stage.key);
 }
 function selfHealJobForFailure(failure = {}, index = 0) {
   const reason = String(failure.reason_code || "");
@@ -243,8 +244,19 @@ function main() {
     const market = runNode(["--use-system-ca", "scripts/check-market-calendar-action.js", `--date=${tradeDate}`, "--label=terminal-final-audit"], { FUMAN_MARKET_CALENDAR_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
     const marketArtifact = artifactFile(runDir, "market_calendar");
     saveArtifact(marketArtifact, market.parsed || { ok: false, reason: "market_calendar_no_json_evidence" });
-    const marketStatus = market.exit_code === 0 && market.parsed?.ok === true ? "PASS" : "BLOCKED";
+    const marketClosedSkipOk = market.parsed?.ok === true && (market.parsed?.marketOpen === false || market.parsed?.scannerAction === "skip_formal_scan" || market.parsed?.action === "skip_formal_scan");
+    const marketStatus = (market.exit_code === 0 && market.parsed?.ok === true) || marketClosedSkipOk ? "PASS" : "BLOCKED";
     receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "market_calendar", status: marketStatus, result: market, artifact: marketArtifact, parsed: market.parsed, reasonCode: marketStatus === "PASS" ? "ok" : reasonCodeFor("market_calendar", market.parsed, `${market.stdout}\n${market.stderr}`) }));
+    const powerOut = path.join(runDir, "power-recovery");
+    const power = runNode(["scripts/verify-terminal-power-recovery.js", `--trade-date=${tradeDate}`, `--out=${powerOut}`, `--runtime-dir=${runtimeDir}`], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId, FUMAN_RUNTIME_DIR: runtimeDir });
+    const powerFull = readJson(path.join(powerOut, "terminal-power-recovery.json"), power.parsed);
+    const powerArtifact = artifactFile(runDir, "power_recovery");
+    saveArtifact(powerArtifact, powerFull);
+    const powerStatus = power.exit_code === 0 && powerFull?.ok === true ? "PASS" : "BLOCKED";
+    receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "power_recovery", status: powerStatus, result: power, artifact: powerArtifact, parsed: powerFull, reasonCode: powerStatus === "PASS" ? "ok" : reasonCodeFor("power_recovery", powerFull, `${power.stdout}\n${power.stderr}`) }));
+
+    const productionProject = runNode(["scripts/verify-vercel-production-project.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+    pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "production_project", result: productionProject });
 
     if (marketStatus === "PASS" && market.parsed?.marketOpen === false) {
       for (const stage of pendingStageKeys()) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
@@ -258,14 +270,6 @@ function main() {
       saveArtifact(preflightArtifact, preflightEvidence);
       const preflightStatus = preflightWrite.exit_code === 0 && preflightVerify.exit_code === 0 && preflightVerify.parsed?.ok === true ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "preflight", status: preflightStatus, result: preflightVerify, artifact: preflightArtifact, parsed: preflightEvidence, reasonCode: preflightStatus === "PASS" ? "ok" : reasonCodeFor("preflight", preflightVerify.parsed, `${preflightWrite.stdout}\n${preflightVerify.stdout}\n${preflightVerify.stderr}`) }));
-
-      const powerOut = path.join(runDir, "power-recovery");
-      const power = runNode(["scripts/verify-terminal-power-recovery.js", `--trade-date=${tradeDate}`, `--out=${powerOut}`, `--runtime-dir=${runtimeDir}`], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId, FUMAN_RUNTIME_DIR: runtimeDir });
-      const powerFull = readJson(path.join(powerOut, "terminal-power-recovery.json"), power.parsed);
-      const powerArtifact = artifactFile(runDir, "power_recovery");
-      saveArtifact(powerArtifact, powerFull);
-      const powerStatus = power.exit_code === 0 && powerFull?.ok === true ? "PASS" : "BLOCKED";
-      receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "power_recovery", status: powerStatus, result: power, artifact: powerArtifact, parsed: powerFull, reasonCode: powerStatus === "PASS" ? "ok" : reasonCodeFor("power_recovery", powerFull, `${power.stdout}\n${power.stderr}`) }));
 
       const websocket = runNode(["--use-system-ca", "scripts/verify-fugle-websocket-sources.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const websocketArtifact = artifactFile(runDir, "websocket");

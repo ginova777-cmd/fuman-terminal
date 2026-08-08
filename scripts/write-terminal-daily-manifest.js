@@ -36,7 +36,8 @@ function main() {
       receipts.push({ key: stage.key, receipt_present: false, file });
       continue;
     }
-    const accepted = receipt.complete === true && receipt.status === "PASS";
+    const marketClosedSkipped = receipt.status === "SKIPPED" && receipt.reason_code === "market_closed_previous_good";
+    const accepted = (receipt.complete === true && receipt.status === "PASS") || marketClosedSkipped;
     if (!accepted) failedStages.push({ key: stage.key, status: receipt.status, reason_code: receipt.reason_code, allowed_action: receipt.allowed_action });
     receipts.push({ key: stage.key, receipt_present: true, complete: accepted, status: receipt.status, reason_code: receipt.reason_code, allowed_action: receipt.allowed_action, file });
   }
