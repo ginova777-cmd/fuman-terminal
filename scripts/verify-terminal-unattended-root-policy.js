@@ -46,6 +46,8 @@ const REQUIRED_IN_ROOT = [
   "verify:terminal-autonomous-completion-audit",
   "verify:protected-readback-credential-contract",
   "verify:protected-readback-credential",
+  "verify:vercel-production-project:contract",
+  "verify:vercel-production-project",
   "verify:terminal-ops-production-live:authenticated",
   "ops:production-unattended-readiness-report:authenticated",
   "verify:production-unattended-readiness-report",
@@ -130,7 +132,9 @@ function verifyRootOrder(rootScripts, issues) {
     ["verify:terminal-runid-closure", "verify:manifest-publish-wiring"],
     ["ops:status:export:pre-final", "verify:terminal-autonomous-completion-audit"],
     ["verify:terminal-autonomous-completion-audit", "verify:terminal-ops-status-api"],
-    ["verify:terminal-ops-status-api", "verify:terminal-ops-production-live:authenticated"],
+    ["verify:terminal-ops-status-api", "verify:protected-readback-credential"],
+    ["verify:protected-readback-credential", "verify:vercel-production-project"],
+    ["verify:vercel-production-project", "verify:terminal-ops-production-live:authenticated"],
     ["verify:terminal-ops-production-live:authenticated", "ops:production-unattended-readiness-report:authenticated"],
   ];
   for (const [before, after] of orderedPairs) {
@@ -160,6 +164,7 @@ function verifySnapshotOnlyScriptContent(scripts, issues) {
   const scriptToFiles = {
     "verify:terminal-ops-production-live": ["scripts/verify-terminal-ops-production-live.js"],
     "verify:terminal-ops-production-live:authenticated": ["scripts/verify-terminal-ops-production-live.js"],
+    "verify:vercel-production-project": ["scripts/verify-vercel-production-project.js"],
     "verify:terminal-resource-chain": ["scripts/verify-terminal-resource-chain.js"],
     "verify:terminal-resource-chain:unattended": ["scripts/verify-terminal-resource-chain.js"],
     "verify:protected-readback-credential": ["scripts/verify-protected-readback-credential.js"],
