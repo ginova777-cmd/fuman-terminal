@@ -36,7 +36,7 @@ function main() {
       receipts.push({ key: stage.key, receipt_present: false, file });
       continue;
     }
-    const accepted = receipt.complete === true && ["PASS", "SKIPPED"].includes(receipt.status);
+    const accepted = receipt.complete === true && receipt.status === "PASS";
     if (!accepted) failedStages.push({ key: stage.key, status: receipt.status, reason_code: receipt.reason_code, allowed_action: receipt.allowed_action });
     receipts.push({ key: stage.key, receipt_present: true, complete: accepted, status: receipt.status, reason_code: receipt.reason_code, allowed_action: receipt.allowed_action, file });
   }

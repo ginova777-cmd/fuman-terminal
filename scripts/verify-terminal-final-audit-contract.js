@@ -39,6 +39,16 @@ function main() {
     if (receipt && (receipt.daily_run_id !== audit.daily_run_id || receipt.trade_date !== audit.trade_date)) issue(issues, "receipt_identity_mismatch", { stage: stage.key });
   }
   if (!audit?.manifest?.file || !fs.existsSync(audit.manifest.file)) issue(issues, "daily_manifest_missing");
+  if (audit?.decision === "YES") {
+    if (audit?.ok !== true || audit?.unattended_status !== "YES") issue(issues, "final_audit_yes_without_ok", { ok: audit?.ok, unattended_status: audit?.unattended_status });
+    if (audit?.manifest?.ok !== true) issue(issues, "final_audit_yes_manifest_not_ok", { manifestOk: audit?.manifest?.ok });
+    if ((audit?.missing_receipts || []).length) issue(issues, "final_audit_yes_with_missing_receipts", { missing_receipts: audit.missing_receipts });
+    if ((audit?.failed_stages || []).length) issue(issues, "final_audit_yes_with_failed_stages", { failed_stages: audit.failed_stages });
+    if ((audit?.self_heal_jobs || []).length) issue(issues, "final_audit_yes_with_self_heal_jobs", { self_heal_jobs: audit.self_heal_jobs });
+    for (const row of audit?.receipts || []) {
+      if (row.status !== "PASS" || row.complete !== true) issue(issues, "final_audit_yes_with_incomplete_receipt", { stage: row.stage, status: row.status, complete: row.complete });
+    }
+  }
   if (REQUIRE_YES && audit?.decision !== "YES") issue(issues, "final_audit_not_yes", { decision: audit?.decision || "missing" });
   const payload = {
     contract: "terminal-final-audit-contract-verifier-v1",
