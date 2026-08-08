@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const ROLL_FORWARD_FILE = path.join(ROOT, "outputs", "terminal-roll-forward", "terminal-auto-roll-forward.json");
@@ -19,7 +20,22 @@ function assert(condition, issue, details, issues) {
   if (!condition) issues.push({ issue, details });
 }
 
+function ensureRollForwardArtifact() {
+  const current = readJson(ROLL_FORWARD_FILE, null);
+  if (current?.contract === "terminal-auto-roll-forward-v1") return;
+  try {
+    execFileSync(process.execPath, ["--use-system-ca", "scripts/run-terminal-auto-roll-forward.js"], {
+      cwd: ROOT,
+      stdio: "ignore",
+      env: process.env,
+    });
+  } catch {
+    // Dry-run can exit non-zero when recovery is currently blocked, but it still
+    // writes the plan artifact that this verifier needs to audit idempotency.
+  }
+}
 function verifyCurrent(issues) {
+  ensureRollForwardArtifact();
   const rollForward = readJson(ROLL_FORWARD_FILE, {});
   const orchestrator = readJson(ORCHESTRATOR_FILE, {});
   const actions = Array.isArray(rollForward.actions) ? rollForward.actions : [];

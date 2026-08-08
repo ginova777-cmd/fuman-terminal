@@ -104,10 +104,11 @@ function resolveExpectedDateFromPreflight(preflight = {}) {
 function preflightGate(preflight = {}, expectedDate = "") {
   const scannerTargetDate = compactDate(preflight.scannerTargetDate || preflight.scannerTargetTradeDate);
   const displayTradeDate = compactDate(preflight.displayTradeDate || preflight.marketCalendar?.displayTradeDate);
-  const artifactDate = compactDate(preflight.taipeiToday || preflight.marketDate || preflight.marketCalendar?.marketDate || scannerTargetDate || displayTradeDate);
-  const stale = Boolean(expectedDate && artifactDate && artifactDate !== expectedDate);
+  const rawArtifactDate = compactDate(preflight.taipeiToday || preflight.marketDate || preflight.marketCalendar?.marketDate || scannerTargetDate || displayTradeDate);
   const tradingDayWait = preflightIsTradingDayWait(preflight) && String(preflight.action || "") === "skip_formal_scan";
   const marketClosed = !tradingDayWait && (String(preflight.action || "") === "skip_formal_scan" || String(preflight.status || "") === "market_closed");
+  const artifactDate = marketClosed && displayTradeDate ? displayTradeDate : rawArtifactDate;
+  const stale = Boolean(expectedDate && artifactDate && artifactDate !== expectedDate);
   const ready = preflight.ok === true && (preflight.status === "ready" || marketClosed || tradingDayWait) && !stale;
   const baseReason = preflight.reason || "";
   return {

@@ -1,5 +1,7 @@
 "use strict";
 
+const { STAGES: FINAL_AUDIT_STAGES } = require("../lib/terminal-final-audit-contract");
+
 function createResponse() {
   return {
     statusCode: 200,
@@ -113,7 +115,7 @@ async function main() {
   }
 
   assert(payload.gates?.finalAudit?.status || payload.finalAudit?.contract === "terminal-autonomous-completion-audit-v1", "final_audit_gate_missing", { gate: payload.gates?.finalAudit, finalAudit: payload.finalAudit }, issues);
-  assert(payload.finalAudit?.layers === 21, "final_audit_layers_not_21", { finalAudit: payload.finalAudit }, issues);
+  assert(payload.finalAudit?.layers === FINAL_AUDIT_STAGES.length, "final_audit_layers_mismatch", { expected: FINAL_AUDIT_STAGES.length, finalAudit: payload.finalAudit }, issues);
   assert(payload.finalAudit?.ok === true || isPendingNotDue(payload), "final_audit_not_ok", { finalAudit: payload.finalAudit, state: payload.state }, issues);
   assert(payload.gates?.predictivePreflight?.status, "predictive_preflight_gate_missing", { gate: payload.gates?.predictivePreflight }, issues);
   assert(payload.predictivePreflight?.contract === "terminal-predictive-preflight-v1", "predictive_preflight_contract_missing", { predictivePreflight: payload.predictivePreflight }, issues);
