@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
   },
   priorityPool: {
     targetSymbolsMin: 300,
-    targetSymbolsMax: 500,
+    targetSymbolsMax: 600,
     minFreshQuoteCoverageForA: 0.95,
     minFreshQuotesForInjectingA: 1,
   },
@@ -90,11 +90,11 @@ const FORMAL_SIGNAL_MIN_TRADE_VALUE = positiveNumber(process.env.DAYTRADE_FORMAL
 const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MAX_VOLUME_RANK, 300);
 const MOTHER_POOL_MIN_SYMBOLS = Math.max(
   FORMAL_DAYTRADE_PRIORITY_LIMIT,
-  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 180),
+  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin || CONFIG.priorityPool?.targetSymbolsMin, 300),
 );
 const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
-  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 300),
+  positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax || CONFIG.priorityPool?.targetSymbolsMax, 600),
 );
 const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 40));
 const BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT, REST_PRIORITY_BATCH_LIMIT, positiveNumber(CONFIG.collector?.quoteBatchSize, 40)));
@@ -2245,7 +2245,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     daytrade_gate_grade: gateGrade,
     daytrade_source_speed_ok: gateGrade === "A",
     gate_mode: "priority_first",
-    formal_gate_scope: "priority_top40",
+    formal_gate_scope: "mother_pool_300_rotating_deep_scan",
     formal_source_name: SOURCE_NAME,
     formal_gate_source: "source_status.payload+v_fugle_daytrade_canonical_gate",
     formal_quote_source: "fugle_daytrade_quotes_live",
@@ -2254,11 +2254,12 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     intraday_1m_source_daytrade_ok: intraday1mSourceDaytradeOk,
     formal_source_alignment_ok: formalSourceAlignmentOk,
     formal_priority_speed_ok: formalPrioritySpeedOk,
+    formal_mother_pool_ok: priorityRows.length >= MOTHER_POOL_MIN_SYMBOLS,
     full_market_speed_ok: fullMarketGateA,
     full_market_speed_blocking: false,
     gate_speed_ok: formalPrioritySpeedOk,
     quote_speed_scope: "full_market_scorecard_nonblocking",
-    formal_speed_scope: "priority_top40",
+    formal_speed_scope: "priority_top40_fast_refresh",
     priority_gate_grade: priorityGateGrade,
     full_market_gate_grade: fullMarketGateA ? "A" : "C",
     fresh_quote_window_seconds: WINDOW_SECONDS,
@@ -2318,13 +2319,15 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
-    formal_scope: "priority_top40",
+    formal_scope: "mother_pool_300_rotating_deep_scan",
     opening_boost_active: openingBoostActive,
     opening_boost_effective: openingBoostEffective,
     opening_boost_scope: openingBoostScope,
     opening_boost_reason: openingBoostReason,
     mother_pool_rule_version: "daytrade_mother_pool_rank_overlap_20260709",
     mother_pool_symbols: priorityRows.length,
+    mother_pool_min_symbols: MOTHER_POOL_MIN_SYMBOLS,
+    mother_pool_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     mother_pool_source: "dynamic_daytrade_mother_pool",
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
@@ -2340,6 +2343,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_field_coverage_counts: motherFieldCoverageCounts,
     formal_daytrade_priority_limit: FORMAL_DAYTRADE_PRIORITY_LIMIT,
     formal_daytrade_priority_symbols: priorityPoolSymbols,
+    priority_top40_symbols: priorityPoolSymbols,
     priority_fresh_quotes_120s: freshPriority.length,
     priority_fresh_quote_coverage_120s: Number(priorityFreshCoverage.toFixed(4)),
     priority_source_injecting: prioritySourceInjecting,

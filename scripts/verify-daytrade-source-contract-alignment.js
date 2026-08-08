@@ -151,6 +151,12 @@ function normalizeSourceStatus(row) {
     readyMa20Continuous: numberValue(payload.ready_ma20_continuous),
     readyMa35Continuous: numberValue(payload.ready_ma35_continuous),
     formalGateScope: stringValue(payload.formal_gate_scope),
+    formalScope: stringValue(payload.formal_scope),
+    formalMotherPoolOk: boolValue(payload.formal_mother_pool_ok),
+    motherPoolSymbols: numberValue(payload.mother_pool_symbols),
+    motherPoolMinSymbols: numberValue(payload.mother_pool_min_symbols, 300),
+    motherPoolMaxSymbols: numberValue(payload.mother_pool_max_symbols, 600),
+    priorityTop40Symbols: numberValue(payload.priority_top40_symbols ?? payload.formal_daytrade_priority_symbols ?? payload.priority_pool_symbols),
     formalSourceName: stringValue(payload.formal_source_name),
     formalGateSource: stringValue(payload.formal_gate_source),
     formalQuoteSource: stringValue(payload.formal_quote_source),
@@ -292,6 +298,8 @@ function writerCodeRegressionChecks() {
     dailyVolumeSourceEvidence: source.includes("daily_volume_source"),
     formalSourceAlignmentPayload: source.includes("formal_source_alignment_ok"),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
+    formalMotherPoolPayload: source.includes("formal_mother_pool_ok"),
+    formalMotherPoolScope: source.includes("mother_pool_300_rotating_deep_scan"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
       && source.includes('supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time", { batchSize: 40 })')
@@ -370,7 +378,11 @@ async function main() {
     if ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A")) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
-        if (item.formalGateScope !== "priority_top40") issues.push("source_formal_gate_scope_not_priority_top40");
+        if (item.formalGateScope !== "mother_pool_300_rotating_deep_scan") issues.push("source_formal_gate_scope_not_mother_pool");
+        if (item.formalScope !== "mother_pool_300_rotating_deep_scan") issues.push("source_formal_scope_not_mother_pool");
+        if (item.motherPoolSymbols < Math.max(300, item.motherPoolMinSymbols || 300)) issues.push("source_mother_pool_symbols_below_300");
+        if (item.priorityTop40Symbols !== 40) issues.push("source_priority_top40_symbols_not_40");
+        if (item.formalMotherPoolOk !== true) issues.push("source_formal_mother_pool_not_ok_for_a");
         if (item.formalSourceName !== SOURCE_NAME) issues.push("source_formal_source_name_mismatch");
         if (!item.formalGateSource.includes("v_fugle_daytrade_canonical_gate")) issues.push("source_formal_gate_source_missing_canonical_gate");
         if (item.formalQuoteSource !== "fugle_daytrade_quotes_live") issues.push("source_formal_quote_source_mismatch");
@@ -380,7 +392,7 @@ async function main() {
         if (item.formalSourceAlignmentOk !== true) issues.push("source_formal_source_alignment_not_ok_for_a");
         if (item.formalPrioritySpeedOk !== true || item.gateSpeedOk !== true) issues.push("source_formal_priority_speed_not_ok_for_a");
         if (item.fullMarketSpeedBlocking !== false) issues.push("source_full_market_speed_should_be_nonblocking");
-        if (item.formalSpeedScope !== "priority_top40") issues.push("source_formal_speed_scope_not_priority_top40");
+        if (item.formalSpeedScope !== "priority_top40_fast_refresh") issues.push("source_formal_speed_scope_not_priority_top40_fast_refresh");
       }
     }
   }
