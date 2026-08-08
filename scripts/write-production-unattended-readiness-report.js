@@ -418,12 +418,12 @@ function classifyRootCause(blocker = "") {
   if (/protectedreadbackcredential|protected_readback|authenticated readback|authenticated_readback|\/88|membership|required \(token not armed\)|bearer/.test(text)) return "auth_readback";
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
-  if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot/.test(text)) return "production_live_readback";
+  if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot|ops_status_snapshot|refresh_failed:ops_status/.test(text)) return "production_live_readback";
   if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
   if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
-  if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
-  if (/auto_roll_forward|autorollforward|roll_forward/.test(text)) return "auto_roll_forward";
+  if (/servicetoken|service_token|windows task|windowstask|windows_task|schedule/.test(text)) return "schedule_service_token";
+  if (/auto_roll_forward|autorollforward|roll_forward|safe_recovery_preview|saferecoverypreview/.test(text)) return "auto_roll_forward";
   if (/final_audit|finalaudit/.test(text)) return "final_audit";
   if (/root_cause_summary|reason_code|classifier/.test(text)) return "reason_code_classifier";
   return "unknown";
