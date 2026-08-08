@@ -1092,6 +1092,8 @@ async function main() {
   }
   const opsStatusFailure = runNodeScriptBestEffort(path.join("scripts", "export-terminal-ops-status-snapshot.js"), [], "ops_status_snapshot");
   if (opsStatusFailure) refreshFailures.push(opsStatusFailure);
+  const reasonCodeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-reason-code-classifier.js"), [], "reason_code_classifier");
+  if (reasonCodeFailure) refreshFailures.push(reasonCodeFailure);
 
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});

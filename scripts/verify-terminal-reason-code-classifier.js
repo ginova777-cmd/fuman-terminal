@@ -89,12 +89,12 @@ function collectEntries(opsStatus, manifest, readiness) {
   addIssueRows(entries, "opsStatus", "module", opsStatus?.modules || []);
   add(entries, "opsStatus", "protectedReadbackCredential", opsStatus?.protectedReadbackCredential || opsStatus?.gates?.protectedReadbackCredential);
 
-  if (manifest?.waterRoot?.ok === false) add(entries, "manifest", "waterRoot", manifest.waterRoot);
+  if (manifest?.waterRoot?.ok === false) add(entries, "manifest", "waterRoot", manifest.waterRoot, { waterRoot: manifest.waterRoot });
   if (manifest?.ok === false || manifest?.unattendedStatus === "NO") add(entries, "manifest", "root", manifest);
   addIssueRows(entries, "manifest", "module", manifest?.modules || []);
 
   for (const blocker of readiness?.blockers || []) add(entries, "readiness", `blocker:${blocker.blocker || blocker.code || "row"}`, blocker);
-  if (readiness?.waterRoot?.ok === false) add(entries, "readiness", "waterRoot", readiness.waterRoot);
+  if (readiness?.waterRoot?.ok === false) add(entries, "readiness", "waterRoot", readiness.waterRoot, { waterRoot: readiness.waterRoot });
   addIssueRows(entries, "readiness", "resourceChain", readiness?.resourceChain?.rows || []);
   addIssueRows(entries, "readiness", "dailyManifest", readiness?.dailyManifest?.modules || []);
   const membershipSummary = readiness?.resourceChain?.membershipProtectedSummary;
