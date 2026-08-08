@@ -6,10 +6,12 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-autonomous-completion-audit");
+const { STAGES: FINAL_AUDIT_STAGES } = require("../lib/terminal-final-audit-contract");
 const REQUIRED_ACTIVE_MODULES = ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"];
 
 const FILES = {
   predictivePreflight: path.join(ROOT, "outputs", "terminal-predictive-preflight", "terminal-predictive-preflight.json"),
+  powerRecovery: path.join(ROOT, "outputs", "terminal-power-recovery", "terminal-power-recovery.json"),
   fugleWebSocket: path.join(RUNTIME_DIR, "reports", "fugle-websocket-source-readiness.json"),
   warmupFinal: path.join(RUNTIME_DIR, "state", "daytrade-unattended-final-verdict.json"),
   warmupSelfHeal: path.join(RUNTIME_DIR, "state", "daytrade-warmup-self-heal", "daytrade-warmup-self-heal-plan.json"),
@@ -29,6 +31,7 @@ const FILES = {
 const REQUIRED_SCRIPTS = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
+  "verify:terminal-power-recovery",
   "verify:fugle-websocket-sources",
   "verify:terminal-water-root",
   "verify:terminal-water-root-contract",
@@ -70,29 +73,7 @@ const REQUIRED_SCRIPTS = [
   "verify:production-unattended-readiness-report",
 ];
 
-const DREAM_LAYERS = [
-  "Market Calendar",
-  "Predictive Preflight",
-  "Fugle WebSocket Source Layer",
-  "Water Root",
-  "Warmup Phase State Machine",
-  "0700 / 0845 / 0900 Natural Evidence",
-  "Reason Code Classifier",
-  "Self-Heal Job Queue",
-  "Idempotent Rewater Runner",
-  "Re-Water Verification",
-  "Formal Entry Gate",
-  "Strategy Scan State Machine",
-  "Idempotent Scanners",
-  "Daily Manifest",
-  "Canary Publish",
-  "RunId Closure",
-  "Scorecard / Desktop / Mobile / 88 Closure",
-  "Auto Roll Forward",
-  "Control Plane",
-  "Autonomous Ops Policy",
-  "Unattended YES / NO Final Audit",
-];
+const DREAM_LAYERS = FINAL_AUDIT_STAGES.map((stage) => stage.label);
 
 function readJson(file, fallback = null) {
   try {
@@ -255,6 +236,7 @@ function verifyPackageScripts(pkg, issues) {
 function verifyArtifacts(artifacts, issues) {
   const rows = [];
   rows.push(fileEvidence("predictivePreflight", FILES.predictivePreflight, "terminal-predictive-preflight-v1", artifacts.predictivePreflight, issues));
+  rows.push(fileEvidence("powerRecovery", FILES.powerRecovery, "terminal-power-recovery-check-v1", artifacts.powerRecovery, issues));
   rows.push(fileEvidence("fugleWebSocket", FILES.fugleWebSocket, "fugle-websocket-source-readiness-v1", artifacts.fugleWebSocket, issues));
   rows.push(fileEvidence("warmupFinal", FILES.warmupFinal, null, artifacts.warmupFinal, issues));
   rows.push(fileEvidence("warmupSelfHeal", FILES.warmupSelfHeal, "daytrade-warmup-self-heal-runner-v1", artifacts.warmupSelfHeal, issues));
@@ -273,12 +255,13 @@ function verifyArtifacts(artifacts, issues) {
 }
 
 function verifyInvariants(artifacts, issues) {
-  const { predictivePreflight, fugleWebSocket, warmupFinal, warmupSelfHeal, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus, reasonCodeClassifier, protectedReadbackCredential } = artifacts;
+  const { predictivePreflight, powerRecovery, fugleWebSocket, warmupFinal, warmupSelfHeal, waterRoot, orchestrator, rollForward, manifest, canary, controlPlane, policy, notificationPlan, opsStatus, reasonCodeClassifier, protectedReadbackCredential } = artifacts;
   const closed = marketClosedMode(artifacts);
   const tradeDate = compactDate(controlPlane?.tradeDate || manifest?.tradeDate || policy?.tradeDate || opsStatus?.tradeDate);
   const displayTradeDate = compactDate(predictivePreflight?.displayTradeDate || waterRoot?.marketCalendar?.row?.displayTradeDate || manifest?.tradeDate);
 
-  assert(DREAM_LAYERS.length === 21, issues, "dream_layers_incomplete", { layers: DREAM_LAYERS });
+  assert(DREAM_LAYERS.length === FINAL_AUDIT_STAGES.length, issues, "dream_layers_incomplete", { actual: DREAM_LAYERS.length, expected: FINAL_AUDIT_STAGES.length, layers: DREAM_LAYERS });
+  assert(powerRecovery?.ok === true, issues, "power_recovery_not_ready", { powerRecovery });
   assert(fugleWebSocket?.ok === true, issues, "fugle_websocket_source_layer_not_ready", { fugleWebSocket });
   assert(fugleWebSocket?.stock?.connected === true && fugleWebSocket?.stock?.authenticated === true, issues, "fugle_stock_websocket_not_connected_authenticated", { stock: fugleWebSocket?.stock });
   assert(fugleWebSocket?.futopt?.connected === true && fugleWebSocket?.futopt?.authenticated === true, issues, "fugle_futopt_websocket_not_connected_authenticated", { futopt: fugleWebSocket?.futopt });
@@ -446,29 +429,36 @@ async function main() {
   const packageScripts = verifyPackageScripts(pkg, issues);
   const artifactRows = verifyArtifacts(artifacts, issues);
   const summary = verifyInvariants(artifacts, issues);
-  const layers = [
-    { layer: "Market Calendar", evidence: "terminal-predictive-preflight + terminal-water-root marketCalendar rows decide trading day/source window" },
-    { layer: "Predictive Preflight", evidence: "terminal-predictive-preflight artifact + package root gate + fail-closed date/market-calendar invariants" },
-    { layer: "Fugle WebSocket Source Layer", evidence: "fugle-websocket-source-readiness-v1 stock/futopt connected/authenticated/streaming with conservative speed policy" },
-    { layer: "Water Root", evidence: "terminal-water-root artifact + market calendar + Fugle/Supabase/source status probes" },
-    { layer: "Warmup Phase State Machine", evidence: "daytrade-warmup-unattended final verdict phases 0700/0845/0900 and schedule self-heal contract" },
-    { layer: "0700 / 0845 / 0900 Natural Evidence", evidence: "warmup final verdict requires natural evidence; self-heal cannot backfill natural success" },
-    { layer: "Reason Code Classifier", evidence: "terminal-reason-code-classifier-verifier-v1 plus opsStatus.reasonCodeSummary/rootCauseSummary prove every blocker has a stable reason code, root cause, action/layer and unknownEntries=0" },
-    { layer: "Self-Heal Job Queue", evidence: "daytrade-warmup-self-heal-runner-v1 and terminal orchestrator jobQueue produce idempotent recovery plans" },
-    { layer: "Idempotent Rewater Runner", evidence: "daytrade warmup self-heal plan has no fake natural evidence and uses rewater commands only under apply" },
-    { layer: "Re-Water Verification", evidence: "self-heal rewaterVerification plus verify:daytrade-source-contract-alignment / daytrade warmup root" },
-    { layer: "Formal Entry Gate", evidence: "strategy-scan-formal-gate contract and run-full-scan warmup/formal guard before scanner publish" },
-    { layer: "Strategy Scan State Machine", evidence: "terminal-orchestrator-state lifecycle/failure/invariants" },
-    { layer: "Idempotent Scanners", evidence: "terminal-auto-roll-forward idempotencyContract; scanner jobs require current Water Root PASS and --apply-scanners" },
-    { layer: "Daily Manifest", evidence: "daily-terminal-run-manifest-v1 active module rows and unattended YES / previous-good hold support" },
-    { layer: "Canary Publish", evidence: "terminal-canary-publish-v1 + manifest-publish-wiring-v1; scorecard publish paths require manifest/canary gates" },
-    { layer: "RunId Closure", evidence: "terminal-runid-closure-contract-v1 validates scanner/latest/API/Desktop/Mobile/88 runId equality" },
-    { layer: "Scorecard / Desktop / Mobile / 88 Closure", evidence: "terminal-resource-chain:unattended + protected-readback-credential-v1 + runIdClosure resource rows including authenticated /88 readback" },
-    { layer: "Auto Roll Forward", evidence: "terminal-auto-roll-forward decision and queue plan" },
-    { layer: "Control Plane", evidence: "terminal-control-plane-v1 final decision state/action/reason" },
-    { layer: "Autonomous Ops Policy", evidence: "autonomous-ops-policy-v1 + action matrix protected invariants" },
-    { layer: "Unattended YES / NO Final Audit", evidence: "terminal-autonomous-completion-audit-v1 and production unattended readiness report" },
-  ];
+  const layerEvidence = {
+    market_calendar: "terminal-predictive-preflight + terminal-water-root marketCalendar rows decide trading day/source window",
+    preflight: "terminal-predictive-preflight artifact + package root gate + fail-closed date/market-calendar invariants",
+    power_recovery: "terminal-power-recovery receipt proves post-outage locks/tasks/runtime state before later stages count",
+    websocket: "fugle-websocket-source-readiness-v1 stock/futopt connected/authenticated/streaming with conservative speed policy",
+    water_root: "terminal-water-root artifact + market calendar + Fugle/Supabase/source status probes",
+    warmup_phase_state: "daytrade-warmup-unattended final verdict phases 0700/0845/0900 and schedule self-heal contract",
+    natural_evidence: "warmup final verdict requires natural evidence; self-heal cannot backfill natural success",
+    reason_code_classifier: "terminal-reason-code-classifier-verifier-v1 plus opsStatus.reasonCodeSummary/rootCauseSummary prove every blocker has a stable reason code, root cause, action/layer and unknownEntries=0",
+    self_heal_queue: "terminal self-heal queue produces idempotent recovery jobs from current manifest/final audit blockers",
+    idempotent_rewater_runner: "daytrade warmup self-heal plan has no fake natural evidence and uses rewater commands only under apply",
+    rewater_verification: "self-heal rewaterVerification plus verify:daytrade-source-contract-alignment / daytrade warmup root",
+    formal_gate: "strategy-scan-formal-gate contract and run-full-scan warmup/formal guard before scanner publish",
+    strategy_scan_state: "terminal-orchestrator-state lifecycle/failure/invariants",
+    idempotent_scanners: "terminal-auto-roll-forward idempotencyContract; scanner jobs require current Water Root PASS and --apply-scanners",
+    daily_manifest: "daily-terminal-run-manifest-v1 active module rows and unattended YES / previous-good hold support",
+    canary_publish: "terminal-canary-publish-v1 + manifest-publish-wiring-v1; scorecard publish paths require manifest/canary gates",
+    runid_closure: "terminal-runid-closure-contract-v1 validates scanner/latest/API/Desktop/Mobile/88 runId equality",
+    display_closure: "terminal-resource-chain:unattended + protected-readback-credential-v1 + runIdClosure resource rows including authenticated /88 readback",
+    auto_roll_forward: "terminal-auto-roll-forward decision and queue plan",
+    control_plane: "terminal-control-plane-v1 final decision state/action/reason",
+    autonomous_ops_policy: "autonomous-ops-policy-v1 + action matrix protected invariants",
+    autonomous_completion_audit: "terminal-autonomous-completion-audit-v1 and production unattended readiness report",
+  };
+  const layers = FINAL_AUDIT_STAGES.map((stage) => ({
+    layer: stage.label,
+    stageKey: stage.key,
+    verifier: stage.verifier,
+    evidence: layerEvidence[stage.key] || stage.verifier || "stage receipt required",
+  }));
 
   const payload = {
     contract: "terminal-autonomous-completion-audit-v1",

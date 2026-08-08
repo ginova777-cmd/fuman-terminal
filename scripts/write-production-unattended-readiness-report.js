@@ -6,6 +6,8 @@ const { execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "production-unattended-readiness");
+const { STAGES: FINAL_AUDIT_STAGES } = require("../lib/terminal-final-audit-contract");
+const FINAL_AUDIT_LAYER_COUNT = FINAL_AUDIT_STAGES.length;
 
 const FILES = {
   waterRoot: path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"),
@@ -585,7 +587,7 @@ function rootCauseRecoveryStep(row = {}) {
     final_audit: {
       automation: "final_audit_after_upstream",
       canAutoExecute: true,
-      requires: ["upstream_recovery_plan_green", "all_21_layers_evidence_readable"],
+      requires: ["upstream_recovery_plan_green", "all_final_audit_layers_evidence_readable"],
       commands: [command("cd C:\\fuman-terminal; npm run verify:terminal-autonomous-completion-audit")],
       reason: "Final audit is the last evidence readback after upstream gates clear.",
       stopMode: "final_audit_required",
@@ -648,7 +650,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
   const scheduleOk = payload.windowsTaskAndServiceTokenAudit?.ok === true;
   const safeRecoveryOk = payload.autoRollForward?.safeRecoveryPreview?.contract === "terminal-safe-recovery-preview-v1"
     && payload.autoRollForward?.safeRecoveryPreview?.ok === true;
-  const finalAuditLayersOk = payload.finalAudit?.layers === 21;
+  const finalAuditLayersOk = payload.finalAudit?.layers === FINAL_AUDIT_LAYER_COUNT;
   const reasonCodesOk = payload.reasonCodeClassifier?.ok === true && Number(payload.reasonCodeClassifier?.unknownEntries || 0) === 0;
   const priorUnresolved = steps
     .filter((row) => Number(row.order || 0) < Number(step.order || 0))
@@ -685,7 +687,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
     }
     else if (requirement === "idempotency_key" && !payload.autoRollForward?.idempotencyContract?.contract) add("idempotency_contract_missing");
     else if (requirement === "upstream_recovery_plan_green" && priorUnresolved.length > 0) add("upstream_recovery_unresolved:" + priorUnresolved.join(","));
-    else if (requirement === "all_21_layers_evidence_readable" && !finalAuditLayersOk) add("final_audit_layers_not_21");
+    else if (requirement === "all_final_audit_layers_evidence_readable" && !finalAuditLayersOk) add(`final_audit_layers_mismatch:${payload.finalAudit?.layers || 0}_of_${FINAL_AUDIT_LAYER_COUNT}`);
     else if (requirement === "unknown_entries_zero" && !reasonCodesOk) add("reason_code_unknown_entries");
     else if (["windows_task_present", "machine_service_token", "strict_schedule_logs"].includes(requirement) && !scheduleOk) add("service_token_schedule_not_ok");
     else if (requirement === "stable_reason_code_mapping" && !reasonCodesOk) add("reason_code_classifier_not_ok");
@@ -829,7 +831,7 @@ function classifyPasses(payload) {
   if (payload.resourceChain.ok) nonProductionOrPreviousGoodPasses.push("Resource-chain unattended verifier PASS; protected production surfaces are classified separately.");
   if (payload.autoRollForward.ok) nonProductionOrPreviousGoodPasses.push(`Auto Roll Forward ${payload.autoRollForward.mode || "dry-run"} PASS with ${payload.autoRollForward.jobs} queued jobs.`);
   if (payload.reasonCodeClassifier.ok) nonProductionOrPreviousGoodPasses.push(`Reason Code Classifier PASS: entries=${payload.reasonCodeClassifier.entries}; unknownEntries=${payload.reasonCodeClassifier.unknownEntries}; primary=${payload.reasonCodeClassifier.opsStatusSummary?.primaryCode || "--"}.`);
-  if (payload.finalAudit.layers === 21) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
+  if (payload.finalAudit.layers === FINAL_AUDIT_LAYER_COUNT) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers}/${FINAL_AUDIT_LAYER_COUNT} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
   if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
   if (!authReadback.enabled) nonProductionOrPreviousGoodPasses.push(`Authenticated protected readback is ${authReadback.mode || "not_armed"}; run with member token/email to prove protected API runId display after login.`);
@@ -1012,7 +1014,7 @@ function verifyPayload(payload, issues) {
   if (payload.reasonCodeClassifier?.opsStatusSummary?.ok !== true || Number(payload.reasonCodeClassifier?.opsStatusSummary?.unknownEntries || 0) !== 0) issue(issues, "ops_status_reason_code_summary_not_ok", { reasonCodeSummary: payload.reasonCodeClassifier?.opsStatusSummary });
   const reasonCodeList = Array.isArray(payload.reasonCodeClassifier?.codes) ? payload.reasonCodeClassifier.codes : Object.keys(payload.reasonCodeClassifier?.codes || {});
   if (reasonCodeList.length === 0) issue(issues, "reason_code_classifier_codes_missing");
-  if (payload.finalAudit.layers !== 21) issue(issues, "final_audit_layers_not_21");
+  if (payload.finalAudit.layers !== FINAL_AUDIT_LAYER_COUNT) issue(issues, "final_audit_layers_mismatch", { actual: payload.finalAudit.layers, expected: FINAL_AUDIT_LAYER_COUNT });
   if (payload.finalAudit.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "final_audit_not_ok");
   if (!payload.productionLivePasses.length) issue(issues, "production_live_passes_missing");
   if (!payload.nonProductionOrPreviousGoodPasses.length) issue(issues, "nonproduction_passes_missing");
