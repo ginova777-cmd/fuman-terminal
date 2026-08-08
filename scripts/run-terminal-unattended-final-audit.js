@@ -84,6 +84,36 @@ function blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode = 
   return writeStageReceipt({ auditRoot, tradeDate, dailyRunId, stage, status: "BLOCKED", exitCode: 1, command: "upstream_gate_blocked", artifact: "", parsed, reasonCode });
 }
 
+function resultLooksOk(result = {}) {
+  if (result.exit_code !== 0) return false;
+  const parsed = result.parsed;
+  if (parsed && Object.prototype.hasOwnProperty.call(parsed, "ok")) return parsed.ok === true;
+  if (parsed && Array.isArray(parsed.issues)) return parsed.issues.length === 0;
+  return true;
+}
+
+function pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage, result, parsed = result?.parsed, reasonInput = "" }) {
+  const artifact = artifactFile(runDir, stage);
+  saveArtifact(artifact, parsed || { ok: false, stdout: result?.stdout || "", stderr: result?.stderr || "" });
+  const status = resultLooksOk({ ...result, parsed }) ? "PASS" : "BLOCKED";
+  const receipt = writeReceipt({
+    auditRoot,
+    tradeDate,
+    dailyRunId,
+    stage,
+    status,
+    result,
+    artifact,
+    parsed,
+    reasonCode: status === "PASS" ? "ok" : reasonCodeFor(stage, parsed, `${reasonInput}\n${result?.stdout || ""}\n${result?.stderr || ""}`),
+  });
+  receipts.push(receipt);
+  return { result, parsed, status, artifact, receipt };
+}
+
+function pendingStageKeys() {
+  return STAGES.filter((stage) => stage.key !== "market_calendar").map((stage) => stage.key);
+}
 function selfHealJobForFailure(failure = {}, index = 0) {
   const reason = String(failure.reason_code || "");
   const stage = String(failure.key || "");
@@ -112,7 +142,10 @@ function selfHealJobForFailure(failure = {}, index = 0) {
 function buildSelfHealQueue({ tradeDate, dailyRunId, manifest, displayClosureSummary = null }) {
   const rawFailures = Array.isArray(manifest?.failed_stages) ? manifest.failed_stages : [];
   const displayOnlyPending = displayClosureSummary?.module_counts?.blocked === 0 && displayClosureSummary?.module_counts?.pending_not_due > 0;
-  const failures = rawFailures.filter((failure) => !(failure.key === "display_closure" && displayOnlyPending));
+  const nonActionableReasons = new Set(["market_closed_previous_good", "stage_not_due_or_source_window_not_open", "market_calendar_not_ready", "market_calendar_not_verified"]);
+  const failures = rawFailures
+    .filter((failure) => !(failure.key === "display_closure" && displayOnlyPending))
+    .filter((failure) => !nonActionableReasons.has(String(failure.reason_code || "")));
   const waitingNotDue = displayOnlyPending ? (displayClosureSummary.pending_not_due_modules || []) : [];
   return {
     contract: "terminal-self-heal-job-queue-v1",
@@ -214,9 +247,9 @@ function main() {
     receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "market_calendar", status: marketStatus, result: market, artifact: marketArtifact, parsed: market.parsed, reasonCode: marketStatus === "PASS" ? "ok" : reasonCodeFor("market_calendar", market.parsed, `${market.stdout}\n${market.stderr}`) }));
 
     if (marketStatus === "PASS" && market.parsed?.marketOpen === false) {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure", "autonomous_completion_audit"]) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
+      for (const stage of pendingStageKeys()) receipts.push(skippedReceipt({ auditRoot, tradeDate, dailyRunId, stage }));
     } else if (marketStatus !== "PASS") {
-      for (const stage of ["preflight", "power_recovery", "websocket", "water_root", "formal_gate", "display_closure", "autonomous_completion_audit"]) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
+      for (const stage of pendingStageKeys()) receipts.push(blockedReceipt({ auditRoot, tradeDate, dailyRunId, stage, reasonCode: "market_calendar_not_verified" }));
     } else {
       const preflightWrite = runNode(["--use-system-ca", "scripts/write-terminal-predictive-preflight.js", `--expected-date=${tradeDate}`, "--out=outputs/terminal-predictive-preflight"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const preflightVerify = runNode(["--use-system-ca", "scripts/verify-terminal-predictive-preflight.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
@@ -251,6 +284,21 @@ function main() {
       const waterStatus = water.exit_code === 0 && waterFull?.ok === true ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "water_root", status: waterStatus, result: water, artifact: waterArtifact, parsed: waterFull, reasonCode: waterStatus === "PASS" ? "ok" : reasonCodeFor("water_root", waterFull, `${water.stdout}\n${water.stderr}`) }));
 
+      const warmupPhase = runNode(["--use-system-ca", "scripts/verify-daytrade-warmup-root.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "warmup_phase_state", result: warmupPhase });
+
+      const naturalEvidence = runNode(["--use-system-ca", "scripts/verify-daytrade-warmup-nine-day-window.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "natural_evidence", result: naturalEvidence });
+
+      const reasonClassifier = runNode(["scripts/verify-terminal-reason-code-classifier.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "reason_code_classifier", result: reasonClassifier });
+
+      const idempotentRewater = runNode(["scripts/run-daytrade-warmup-self-heal.js", "--self-test"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "idempotent_rewater_runner", result: idempotentRewater });
+
+      const rewaterVerification = runNode(["scripts/verify-daytrade-warmup-schedule-self-heal.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "rewater_verification", result: rewaterVerification });
+
       const formal = runNode(["scripts/verify-strategy-scan-formal-gate.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const liveGate = waterFull?.canonicalGate?.summary || {};
       const liveFormalReady = waterFull?.marketClosedPreviousGood === true || (waterFull?.ok === true && (liveGate.formalEntryAllowed === true || liveGate.formal_entry_allowed === true || ["ready", "a"].includes(String(liveGate.canonicalGateStatus || liveGate.canonicalGateGrade || "").toLowerCase())));
@@ -260,34 +308,39 @@ function main() {
       const formalStatus = formal.exit_code === 0 && formal.parsed?.ok === true && liveFormalReady ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({ auditRoot, tradeDate, dailyRunId, stage: "formal_gate", status: formalStatus, result: formal, artifact: formalArtifact, parsed: formalEvidence, reasonCode: formalStatus === "PASS" ? "ok" : (formal.exit_code !== 0 || formal.parsed?.ok !== true ? reasonCodeFor("formal_gate", formal.parsed, `${formal.stdout}\n${formal.stderr}`) : "formal_gate_live_status_not_ready") }));
       const displayManifest = runNode(["--use-system-ca", "scripts/write-daily-terminal-run-manifest.js", "--expected-date=" + tradeDate], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
-      const displayState = runNode(["--use-system-ca", "scripts/write-terminal-orchestrator-state.js", "--from-existing", "--expected-date=" + tradeDate], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
-      const displayPolicy = runNode(["--use-system-ca", "scripts/write-autonomous-ops-policy.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "daily_manifest", result: displayManifest });
+
+      const displayState = runNode(["--use-system-ca", "scripts/verify-terminal-state-machine-contract.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "strategy_scan_state", result: displayState });
+
+      const idempotentScanners = runNode(["--use-system-ca", "scripts/verify-strategy-scan-receipt-contract.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "idempotent_scanners", result: idempotentScanners });
+
       const displayCanary = runNode(["scripts/verify-terminal-canary-publish.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
-      const displayControl = runNode(["--use-system-ca", "scripts/write-terminal-control-plane.js", "--from-existing", "--expected-date=" + tradeDate, "--require-unattended"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "canary_publish", result: displayCanary });
+
       const displayClosure = runNode(["scripts/verify-terminal-runid-closure-contract.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
-      const displayEvidence = { manifest: displayManifest, state: displayState, policy: displayPolicy, canary: displayCanary, control_plane: displayControl, runid_closure: displayClosure };
-      const displayArtifact = artifactFile(runDir, "display_closure");
-      saveArtifact(displayArtifact, displayEvidence);
-      const displayStatus = [displayManifest, displayState, displayPolicy, displayCanary, displayControl, displayClosure].every((item) => item.exit_code === 0) && displayClosure.parsed?.ok === true ? "PASS" : "BLOCKED";
-      receipts.push(writeReceipt({
-        auditRoot,
-        tradeDate,
-        dailyRunId,
-        stage: "display_closure",
-        status: displayStatus,
-        result: displayClosure,
-        artifact: displayArtifact,
-        parsed: displayEvidence,
-        reasonCode: displayStatus === "PASS" ? "ok" : reasonCodeFor("display_closure", displayClosure.parsed || displayControl.parsed || displayManifest.parsed, displayManifest.stdout + "\n" + displayManifest.stderr + "\n" + displayControl.stdout + "\n" + displayControl.stderr + "\n" + displayClosure.stdout + "\n" + displayClosure.stderr),
-      }));
-      const reasonClassifier = runNode(["scripts/verify-terminal-reason-code-classifier.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "runid_closure", result: displayClosure });
+
+      const resourceClosure = runNode(["--use-system-ca", "scripts/verify-terminal-resource-chain.js", "--require-unattended"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "display_closure", result: resourceClosure });
+
+      const autoRollForward = runNode(["--use-system-ca", "scripts/run-terminal-auto-roll-forward.js", "--self-test"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "auto_roll_forward", result: autoRollForward });
+
+      const displayControl = runNode(["--use-system-ca", "scripts/write-terminal-control-plane.js", "--from-existing", "--expected-date=" + tradeDate, "--require-unattended"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "control_plane", result: displayControl });
+
+      const displayPolicy = runNode(["--use-system-ca", "scripts/write-autonomous-ops-policy.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
+      pushCommandStage({ receipts, auditRoot, tradeDate, dailyRunId, runDir, stage: "autonomous_ops_policy", result: displayPolicy });
+
       const notificationPlan = runNode(["scripts/write-autonomous-ops-notification-plan.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const protectedReadbackCredential = runNode(["--use-system-ca", "scripts/verify-protected-readback-credential.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
       const autonomousCompletion = runNode(["scripts/verify-terminal-autonomous-completion-audit.js"], { FUMAN_TRADE_DATE: tradeDate, FUMAN_DAILY_RUN_ID: dailyRunId });
-      const autonomousEvidence = { reason_classifier: reasonClassifier, notification_plan: notificationPlan, protected_readback_credential: protectedReadbackCredential, autonomous_completion: autonomousCompletion };
+      const autonomousEvidence = { notification_plan: notificationPlan, protected_readback_credential: protectedReadbackCredential, autonomous_completion: autonomousCompletion };
       const autonomousArtifact = artifactFile(runDir, "autonomous_completion_audit");
       saveArtifact(autonomousArtifact, autonomousEvidence);
-      const autonomousStatus = [reasonClassifier, notificationPlan, protectedReadbackCredential, autonomousCompletion].every((item) => item.exit_code === 0) && autonomousCompletion.parsed?.ok === true ? "PASS" : "BLOCKED";
+      const autonomousStatus = [notificationPlan, protectedReadbackCredential, autonomousCompletion].every((item) => item.exit_code === 0) && autonomousCompletion.parsed?.ok === true ? "PASS" : "BLOCKED";
       receipts.push(writeReceipt({
         auditRoot,
         tradeDate,
@@ -297,7 +350,40 @@ function main() {
         result: autonomousCompletion,
         artifact: autonomousArtifact,
         parsed: autonomousEvidence,
-        reasonCode: autonomousStatus === "PASS" ? "ok" : reasonCodeFor("autonomous_completion_audit", autonomousCompletion.parsed || reasonClassifier.parsed || notificationPlan.parsed || protectedReadbackCredential.parsed, reasonClassifier.stdout + "\n" + reasonClassifier.stderr + "\n" + notificationPlan.stdout + "\n" + notificationPlan.stderr + "\n" + protectedReadbackCredential.stdout + "\n" + protectedReadbackCredential.stderr + "\n" + autonomousCompletion.stdout + "\n" + autonomousCompletion.stderr),
+        reasonCode: autonomousStatus === "PASS" ? "ok" : reasonCodeFor("autonomous_completion_audit", autonomousCompletion.parsed || notificationPlan.parsed || protectedReadbackCredential.parsed, notificationPlan.stdout + "\n" + notificationPlan.stderr + "\n" + protectedReadbackCredential.stdout + "\n" + protectedReadbackCredential.stderr + "\n" + autonomousCompletion.stdout + "\n" + autonomousCompletion.stderr),
+      }));
+
+      const preManifestDisplayClosureSummary = summarizeDisplayClosure();
+      const preManifestFailures = receipts
+        .filter((row) => row?.payload?.complete !== true || row?.payload?.status !== "PASS")
+        .map((row) => ({
+          key: row.payload.stage,
+          status: row.payload.status,
+          reason_code: row.payload.reason_code,
+          allowed_action: row.payload.allowed_action,
+        }));
+      const preManifestSelfHealQueue = buildSelfHealQueue({
+        tradeDate,
+        dailyRunId,
+        manifest: { failed_stages: preManifestFailures },
+        displayClosureSummary: preManifestDisplayClosureSummary,
+      });
+      writeJson(path.join(runDir, "terminal-self-heal-job-queue.json"), preManifestSelfHealQueue);
+      writeJson(path.join(auditRoot, "terminal-self-heal-job-queue-latest.json"), preManifestSelfHealQueue);
+      if (process.env.FUMAN_FINAL_AUDIT_WRITE_RUNTIME !== "0") writeJson(path.join(runtimeDir, "state", "terminal-self-heal-job-queue.json"), preManifestSelfHealQueue);
+      const selfHealArtifact = artifactFile(runDir, "self_heal_queue");
+      saveArtifact(selfHealArtifact, preManifestSelfHealQueue);
+      receipts.push(writeStageReceipt({
+        auditRoot,
+        tradeDate,
+        dailyRunId,
+        stage: "self_heal_queue",
+        status: "PASS",
+        exitCode: 0,
+        command: "build_self_heal_queue_from_stage_receipts",
+        artifact: selfHealArtifact,
+        parsed: preManifestSelfHealQueue,
+        reasonCode: "ok",
       }));
     }
     const manifestArgs = ["scripts/write-terminal-daily-manifest.js", `--trade-date=${tradeDate}`, `--daily-run-id=${dailyRunId}`, `--out=${auditRoot}`, `--registry=${registryFile}`];
