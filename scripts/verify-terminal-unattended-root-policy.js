@@ -48,6 +48,8 @@ const REQUIRED_IN_ROOT = [
   "verify:protected-readback-credential",
   "verify:vercel-production-project:contract",
   "verify:vercel-production-project",
+  "verify:terminal-final-audit",
+  "verify:terminal-final-audit-contract",
   "verify:terminal-ops-production-live:authenticated",
   "ops:production-unattended-readiness-report:authenticated",
   "verify:production-unattended-readiness-report",
@@ -134,7 +136,9 @@ function verifyRootOrder(rootScripts, issues) {
     ["verify:terminal-autonomous-completion-audit", "verify:terminal-ops-status-api"],
     ["verify:terminal-ops-status-api", "verify:protected-readback-credential"],
     ["verify:protected-readback-credential", "verify:vercel-production-project"],
-    ["verify:vercel-production-project", "verify:terminal-ops-production-live:authenticated"],
+    ["verify:vercel-production-project", "verify:terminal-final-audit"],
+    ["verify:terminal-final-audit", "verify:terminal-final-audit-contract"],
+    ["verify:terminal-final-audit-contract", "verify:terminal-ops-production-live:authenticated"],
     ["verify:terminal-ops-production-live:authenticated", "ops:production-unattended-readiness-report:authenticated"],
   ];
   for (const [before, after] of orderedPairs) {
