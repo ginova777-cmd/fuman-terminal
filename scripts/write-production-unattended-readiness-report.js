@@ -23,6 +23,7 @@ const FILES = {
   policy: path.join(ROOT, "outputs", "autonomous-ops-policy", "autonomous-ops-policy.json"),
   finalAudit: path.join(ROOT, "outputs", "terminal-autonomous-completion-audit", "terminal-autonomous-completion-audit.json"),
   reasonCodeClassifier: path.join(ROOT, "outputs", "terminal-reason-code-classifier", "terminal-reason-code-classifier.json"),
+  powerRecovery: path.join(ROOT, "outputs", "terminal-power-recovery", "terminal-power-recovery.json"),
 };
 
 const REQUIRED_SECTIONS = [
@@ -32,6 +33,7 @@ const REQUIRED_SECTIONS = [
   "dailyManifest",
   "productionLiveOpsReadback",
   "windowsTaskAndServiceTokenAudit",
+  "powerRecovery",
   "autoRollForward",
   "reasonCodeClassifier",
   "finalAudit",
@@ -345,6 +347,28 @@ function buildServiceToken(serviceTokenSchedule) {
   };
 }
 
+function buildPowerRecovery(powerRecovery) {
+  return {
+    command: "npm run verify:terminal-power-recovery",
+    artifact: FILES.powerRecovery,
+    exists: fileExists(FILES.powerRecovery),
+    contract: powerRecovery?.contract || "",
+    ok: powerRecovery?.ok === true,
+    status: powerRecovery?.status || "",
+    reason: powerRecovery?.reason || "",
+    allowedAction: powerRecovery?.allowed_action || "",
+    checkedAt: powerRecovery?.checked_at || "",
+    tradeDate: powerRecovery?.trade_date || "",
+    host: powerRecovery?.host || "",
+    boot: powerRecovery?.boot || {},
+    task: powerRecovery?.task || {},
+    orchestratorLock: powerRecovery?.orchestrator_lock || {},
+    runtimeFinalAudit: powerRecovery?.runtime_final_audit || {},
+    issues: Array.isArray(powerRecovery?.issues) ? powerRecovery.issues : [],
+    warnings: Array.isArray(powerRecovery?.warnings) ? powerRecovery.warnings : [],
+  };
+}
+
 function buildRollForward(rollForward) {
   const ok = rollForward?.ok === true || rollForward?.decision?.ok === true;
   return {
@@ -364,6 +388,19 @@ function buildRollForward(rollForward) {
     safeRecoveryPreview: rollForward?.safeRecoveryPreview || {},
     actions: rollForward?.actions || [],
     executed: rollForward?.executed || [],
+  };
+}
+
+function bootstrapReasonCodeClassifier() {
+  return {
+    contract: "terminal-reason-code-classifier-verifier-v1",
+    ok: true,
+    summary: {
+      entries: 1,
+      unknownEntries: 0,
+      codes: ["BOOTSTRAP_READY"],
+    },
+    failures: [],
   };
 }
 
@@ -416,6 +453,7 @@ function classifyRootCause(blocker = "") {
   const text = String(blocker || "").toLowerCase();
   if (/pending_not_due|pending not due|PENDING_NOT_DUE/i.test(blocker)) return "schedule_pending";
   if (/protectedreadbackcredential|protected_readback|authenticated readback|authenticated_readback|\/88|membership|required \(token not armed\)|bearer/.test(text)) return "auth_readback";
+  if (/powerrecovery|power_recovery|unexpected_shutdown|kernel_power|last_boot|boot|orchestrator_lock_before_last_boot|autonomous_root_task/.test(text)) return "power_recovery";
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
   if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot|ops_status_snapshot|refresh_failed:ops_status/.test(text)) return "production_live_readback";
@@ -440,6 +478,7 @@ function rootCauseAction(category) {
     runid_closure: "Verify production API, desktop, mobile and /88 all expose the same module runId after authentication.",
     daily_manifest_publish: "Inspect Daily Manifest modules; only manifest-green modules may pass canary publish, otherwise preserve previous good/degraded.",
     schedule_service_token: "Repair Windows Task/service-token schedule contract and rerun strict schedule verifier.",
+    power_recovery: "Clear stale post-outage locks, verify StartWhenAvailable task recovery, then rerun autonomous root/final audit.",
     auto_roll_forward: "Inspect auto roll-forward queue; apply only safe idempotent jobs after their pre-gates pass.",
     final_audit: "Rerun final audit after upstream blockers clear.",
     reason_code_classifier: "Fix unmapped reason codes so blockers always have stable reason/action/layer.",
@@ -476,6 +515,7 @@ const RECOVERY_ORDER = {
   schedule_pending: 15,
   source_water_root: 20,
   schedule_service_token: 25,
+  power_recovery: 27,
   release_deploy: 30,
   production_live_readback: 40,
   resource_chain: 50,
@@ -537,6 +577,14 @@ function rootCauseRecoveryStep(row = {}) {
       commands: [command("cd C:\\fuman-terminal; npm run schedule:check -- -StrictLogs")],
       reason: "Backend schedules must run with machine/service credentials, not member login state.",
       stopMode: "manual_repair_required",
+    },
+    power_recovery: {
+      automation: "post_boot_recovery_check",
+      canAutoExecute: true,
+      requires: ["windows_task_present", "post_boot_recovery_verified"],
+      commands: [command("cd C:\\fuman-terminal; npm run verify:terminal-power-recovery")],
+      reason: "After power loss, stale orchestrator locks and disabled recovery tasks must block unattended YES until verified.",
+      stopMode: "post_boot_recovery_required",
     },
     release_deploy: {
       automation: "deploy_required",
@@ -648,6 +696,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
   const manifestOk = payload.dailyManifest?.ok === true;
   const productionLiveOk = payload.productionLiveOpsReadback?.ok === true;
   const scheduleOk = payload.windowsTaskAndServiceTokenAudit?.ok === true;
+  const powerRecoveryOk = payload.powerRecovery?.ok === true;
   const safeRecoveryOk = payload.autoRollForward?.safeRecoveryPreview?.contract === "terminal-safe-recovery-preview-v1"
     && payload.autoRollForward?.safeRecoveryPreview?.ok === true;
   const finalAuditLayersOk = payload.finalAudit?.layers === FINAL_AUDIT_LAYER_COUNT;
@@ -690,6 +739,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
     else if (requirement === "all_final_audit_layers_evidence_readable" && !finalAuditLayersOk) add(`final_audit_layers_mismatch:${payload.finalAudit?.layers || 0}_of_${FINAL_AUDIT_LAYER_COUNT}`);
     else if (requirement === "unknown_entries_zero" && !reasonCodesOk) add("reason_code_unknown_entries");
     else if (["windows_task_present", "machine_service_token", "strict_schedule_logs"].includes(requirement) && !scheduleOk) add("service_token_schedule_not_ok");
+    else if (requirement === "post_boot_recovery_verified" && !powerRecoveryOk) add("power_recovery_not_ok");
     else if (requirement === "stable_reason_code_mapping" && !reasonCodesOk) add("reason_code_classifier_not_ok");
   }
   return failures;
@@ -733,6 +783,7 @@ function collectBlockers(payload, issues) {
     productionLiveOpsReadback: payload.productionLiveOpsReadback,
     protectedReadbackCredential: payload.protectedReadbackCredential,
     windowsTaskAndServiceTokenAudit: payload.windowsTaskAndServiceTokenAudit,
+    powerRecovery: payload.powerRecovery,
     autoRollForward: payload.autoRollForward,
     reasonCodeClassifier: payload.reasonCodeClassifier,
     finalAudit: payload.finalAudit,
@@ -768,6 +819,9 @@ function collectBlockers(payload, issues) {
   }
   for (const row of payload.windowsTaskAndServiceTokenAudit.issues || []) {
     blockers.push({ blocker: `service_token_schedule_issue:${formatIssue(row)}`, severity: "critical" });
+  }
+  for (const row of payload.powerRecovery.issues || []) {
+    blockers.push({ blocker: `power_recovery_issue:${formatIssue(row)}`, severity: "critical" });
   }
   if (payload.reasonCodeClassifier.ok !== true) {
     blockers.push({ blocker: "reason_code_classifier_not_ok", severity: "critical", failures: payload.reasonCodeClassifier.failures || [] });
@@ -833,6 +887,7 @@ function classifyPasses(payload) {
   if (payload.reasonCodeClassifier.ok) nonProductionOrPreviousGoodPasses.push(`Reason Code Classifier PASS: entries=${payload.reasonCodeClassifier.entries}; unknownEntries=${payload.reasonCodeClassifier.unknownEntries}; primary=${payload.reasonCodeClassifier.opsStatusSummary?.primaryCode || "--"}.`);
   if (payload.finalAudit.layers === FINAL_AUDIT_LAYER_COUNT) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers}/${FINAL_AUDIT_LAYER_COUNT} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
+  if (payload.powerRecovery.ok) nonProductionOrPreviousGoodPasses.push(`Power Recovery PASS: task=${payload.powerRecovery.task?.name || "--"}; state=${payload.powerRecovery.task?.state || "--"}; boot=${payload.powerRecovery.boot?.boot_time || "--"}.`);
   if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
   if (!authReadback.enabled) nonProductionOrPreviousGoodPasses.push(`Authenticated protected readback is ${authReadback.mode || "not_armed"}; run with member token/email to prove protected API runId display after login.`);
   if (!payload.protectedReadbackCredential?.ok) nonProductionOrPreviousGoodPasses.push(`Protected readback credential gate is not ready: ${(payload.protectedReadbackCredential?.failures || []).join(",") || "missing"}.`);
@@ -929,7 +984,17 @@ function markdown(payload) {
   lines.push(`- required tasks: ${payload.windowsTaskAndServiceTokenAudit.requiredActiveTasks.join(", ")}`);
   lines.push(`- scanner service files: ${payload.windowsTaskAndServiceTokenAudit.scannerServiceKeys.map((row) => `${row.file}:${row.ok}`).join(", ")}`);
   lines.push("");
-  lines.push("## 8. Auto Roll Forward");
+  lines.push("## 8. Power Recovery");
+  lines.push(`- command: ${payload.powerRecovery.command}`);
+  lines.push(`- ok/status/reason: ${payload.powerRecovery.ok} / ${payload.powerRecovery.status} / ${payload.powerRecovery.reason}`);
+  lines.push(`- boot: host=${payload.powerRecovery.host || "--"}; bootTime=${payload.powerRecovery.boot?.boot_time || "--"}; uptimeSeconds=${payload.powerRecovery.boot?.uptime_seconds || ""}`);
+  lines.push(`- task: name=${payload.powerRecovery.task?.name || "--"}; state=${payload.powerRecovery.task?.state || "--"}; startWhenAvailable=${payload.powerRecovery.task?.startWhenAvailable}; lastResult=${payload.powerRecovery.task?.lastResult || "--"}`);
+  lines.push(`- orchestrator lock: exists=${payload.powerRecovery.orchestratorLock?.exists === true}; beforeLastBoot=${payload.powerRecovery.orchestratorLock?.before_last_boot === true}`);
+  lines.push(`- runtime final audit: exists=${payload.powerRecovery.runtimeFinalAudit?.exists === true}; afterLastBoot=${payload.powerRecovery.runtimeFinalAudit?.after_last_boot === true}`);
+  lines.push(`- issues/warnings: ${(payload.powerRecovery.issues || []).join(",") || "none"} / ${(payload.powerRecovery.warnings || []).join(",") || "none"}`);
+  lines.push("");
+
+  lines.push("## 9. Auto Roll Forward");
   lines.push(`- command: ${payload.autoRollForward.command}`);
   lines.push(`- ok/mode/state/jobs/executable/blocked: ${payload.autoRollForward.ok} / ${payload.autoRollForward.mode} / ${payload.autoRollForward.decision?.state || "--"} / ${payload.autoRollForward.jobs} / ${payload.autoRollForward.executableJobs} / ${payload.autoRollForward.blockedJobs}`);
   const safePreview = payload.autoRollForward.safeRecoveryPreview || {};
@@ -938,42 +1003,42 @@ function markdown(payload) {
   lines.push(`- safeRecoveryPreview: contract=${safePreview.contract || "--"}; state=${safePreview.state || "--"}; executable=${(safePreview.executableKeys || []).join(",") || "none"}; blocked=${(safePreview.blockedKeys || []).join(",") || "none"}`);
   if (safePreview.commandHint) lines.push(`- safe recovery command hint: ${safePreview.commandHint}`);
   lines.push("");
-  lines.push("## 9. Reason Code Classifier");
+  lines.push("## 10. Reason Code Classifier");
   lines.push(`- command: ${payload.reasonCodeClassifier.command}`);
   lines.push(`- ok/entries/unknown: ${payload.reasonCodeClassifier.ok} / ${payload.reasonCodeClassifier.entries} / ${payload.reasonCodeClassifier.unknownEntries}`);
   lines.push(`- ops summary: ok=${payload.reasonCodeClassifier.opsStatusSummary?.ok === true}; primary=${payload.reasonCodeClassifier.opsStatusSummary?.primaryCode || "--"}; unknown=${payload.reasonCodeClassifier.opsStatusSummary?.unknownEntries ?? "--"}`);
   const reasonCodes = Array.isArray(payload.reasonCodeClassifier.codes) ? payload.reasonCodeClassifier.codes : Object.keys(payload.reasonCodeClassifier.codes || {});
   lines.push(`- codes: ${reasonCodes.join(",") || "none"}`);
   lines.push("");
-  lines.push("## 10. Final Audit");
+  lines.push("## 11. Final Audit");
   lines.push(`- command: ${payload.finalAudit.command}`);
   lines.push(`- ok/layers/issues: ${payload.finalAudit.ok} / ${payload.finalAudit.layers} / ${payload.finalAudit.issues.join(",") || "none"}`);
   lines.push("");
-  lines.push("## 11. Root Cause Summary");
+  lines.push("## 12. Root Cause Summary");
   lines.push(`- contract: ${payload.rootCauseSummary?.contract || "--"}`);
   lines.push(`- ok/total/rootCauses/critical/unknown: ${payload.rootCauseSummary?.ok === true} / ${payload.rootCauseSummary?.totalBlockers ?? 0} / ${payload.rootCauseSummary?.rootCauseCount ?? 0} / ${payload.rootCauseSummary?.criticalRootCauseCount ?? 0} / ${payload.rootCauseSummary?.unknownBlockers ?? 0}`);
   for (const row of payload.rootCauseSummary?.categories || []) lines.push(`- ${row.severity || "unknown"}: ${row.category} (${row.count}) -> ${row.action}`);
   lines.push("");
   lines.push("");
-  lines.push("## 12. Root Cause Recovery Plan");
+  lines.push("## 13. Root Cause Recovery Plan");
   lines.push(`- contract: ${payload.rootCauseRecoveryPlan?.contract || "--"}`);
   lines.push(`- ok/steps/auto/autoNow/blockedAuto/manual/firstManual/firstExecutable/firstBlocked: ${payload.rootCauseRecoveryPlan?.ok === true} / ${payload.rootCauseRecoveryPlan?.stepCount ?? 0} / ${payload.rootCauseRecoveryPlan?.autoExecutableSteps ?? 0} / ${payload.rootCauseRecoveryPlan?.autoExecutableNow ?? 0} / ${payload.rootCauseRecoveryPlan?.blockedAutoExecutableSteps ?? 0} / ${payload.rootCauseRecoveryPlan?.manualSteps ?? 0} / ${payload.rootCauseRecoveryPlan?.firstManualStep || "--"} / ${payload.rootCauseRecoveryPlan?.firstExecutableStep || "--"} / ${payload.rootCauseRecoveryPlan?.firstBlockedStep || "--"}`);
   for (const row of payload.rootCauseRecoveryPlan?.steps || []) lines.push(`- #${row.order} ${row.category}: auto=${row.canAutoExecute === true}; now=${row.canExecuteNow === true}; mode=${row.automation}; stop=${row.stopMode}; blockedBy=${(row.blockedBy || []).join(",") || "none"}; requires=${(row.requires || []).join(",")}`);
   lines.push("");
-  lines.push("## 13. Blockers");
+  lines.push("## 14. Blockers");
   if (payload.blockers.length === 0) lines.push("- none");
   for (const row of payload.blockers) lines.push(`- ${row.severity || "unknown"}: ${row.blocker}`);
   lines.push("");
-  lines.push("## 14. Production Live PASS");
+  lines.push("## 15. Production Live PASS");
   for (const row of payload.productionLivePasses) lines.push(`- ${row}`);
   lines.push("");
-  lines.push("## 15. Local / Dry-Run / Previous-Good PASS");
+  lines.push("## 16. Local / Dry-Run / Previous-Good PASS");
   for (const row of payload.nonProductionOrPreviousGoodPasses) lines.push(`- ${row}`);
   lines.push("");
-  lines.push("## 16. Next Trading Day Runbook");
+  lines.push("## 17. Next Trading Day Runbook");
   payload.nextTradingDayRunbook.forEach((row, index) => lines.push(`${index + 1}. ${row}`));
   lines.push("");
-  lines.push("## 17. Remaining Conditions Before Fresh Unattended YES");
+  lines.push("## 18. Remaining Conditions Before Fresh Unattended YES");
   payload.remainingConditionsBeforeFreshUnattendedYes.forEach((row) => lines.push(`- ${row}`));
   return `${lines.join("\n")}\n`;
 }
@@ -989,6 +1054,7 @@ function verifyPayload(payload, issues) {
   if (payload.productionLiveOpsReadback?.authenticatedReadback?.enabled === true && !resourceChainProtectedReadbackOk(payload)) issue(issues, "resource_chain_authenticated_readback_missing_or_not_armed", { membershipProtectedSummary: payload.resourceChain.membershipProtectedSummary });
   if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "manifest_not_ok");
   if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
+  if (payload.powerRecovery.ok !== true) issue(issues, "power_recovery_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
   if (requiresAuthenticatedReadbackForReady(payload) && !authenticatedReadbackOk(payload)) issue(issues, "production_live_authenticated_readback_required_for_ready", { authenticatedReadback: payload.productionLiveOpsReadback.authenticatedReadback });
   if (requiresAuthenticatedReadbackForReady(payload) && payload.protectedReadbackCredential?.ok !== true) issue(issues, "protected_readback_credential_not_ok", { failures: payload.protectedReadbackCredential?.failures || [] });
@@ -1092,8 +1158,6 @@ async function main() {
   }
   const opsStatusFailure = runNodeScriptBestEffort(path.join("scripts", "export-terminal-ops-status-snapshot.js"), [], "ops_status_snapshot");
   if (opsStatusFailure) refreshFailures.push(opsStatusFailure);
-  const reasonCodeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-reason-code-classifier.js"), [], "reason_code_classifier");
-  if (reasonCodeFailure) refreshFailures.push(reasonCodeFailure);
 
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});
@@ -1103,8 +1167,8 @@ async function main() {
   const protectedReadbackCredential = readJson(FILES.protectedReadbackCredential, {});
   const serviceTokenSchedule = readJson(FILES.serviceTokenSchedule, {});
   const rollForward = readJson(FILES.rollForward, {});
+  const powerRecovery = readJson(FILES.powerRecovery, {});
   const finalAudit = readJson(FILES.finalAudit, {});
-  const reasonCodeClassifier = readJson(FILES.reasonCodeClassifier, {});
   const opsStatus = readJson(path.join(ROOT, "data", "terminal-ops-status-latest.json"), {});
 
   const payload = {
@@ -1117,8 +1181,9 @@ async function main() {
     productionLiveOpsReadback: buildProductionLive(productionLive),
     protectedReadbackCredential: buildProtectedReadbackCredential(protectedReadbackCredential),
     windowsTaskAndServiceTokenAudit: buildServiceToken(serviceTokenSchedule),
+    powerRecovery: buildPowerRecovery(powerRecovery),
     autoRollForward: buildRollForward(rollForward),
-    reasonCodeClassifier: buildReasonCodeClassifier(reasonCodeClassifier, opsStatus),
+    reasonCodeClassifier: buildReasonCodeClassifier(bootstrapReasonCodeClassifier(), opsStatus),
     finalAudit: buildFinalAudit(finalAudit),
     blockers: [],
     rootCauseSummary: buildRootCauseSummary([]),
@@ -1146,6 +1211,13 @@ async function main() {
   payload.nonProductionOrPreviousGoodPasses = passBuckets.nonProductionOrPreviousGoodPasses;
   payload.nextTradingDayRunbook = nextRunbook(payload);
   payload.remainingConditionsBeforeFreshUnattendedYes = remainingConditions(payload);
+  await fs.promises.writeFile(reportFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+
+  const reasonCodeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-reason-code-classifier.js"), [], "reason_code_classifier");
+  if (reasonCodeFailure) refreshFailures.push(reasonCodeFailure);
+  const reasonCodeClassifier = readJson(FILES.reasonCodeClassifier, {});
+  payload.reasonCodeClassifier = buildReasonCodeClassifier(reasonCodeClassifier, opsStatus);
+
   const finalIssues = [];
   for (const failure of refreshFailures) issue(finalIssues, `refresh_failed:${failure.step}`, failure);
   verifyPayload(payload, finalIssues);
@@ -1188,3 +1260,5 @@ main().catch((error) => {
   console.error(`[production-unattended-readiness-report] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
