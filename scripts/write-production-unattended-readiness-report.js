@@ -7,6 +7,9 @@ const { classifyReason } = require("../lib/terminal-reason-code-classifier");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "production-unattended-readiness");
+const GENERATED_DIRTY_ALLOWLIST = new Set([
+  "data/terminal-ops-status-latest.json",
+]);
 
 const FILES = {
   waterRoot: path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"),
@@ -130,6 +133,18 @@ function summarizeEndpoint(row = {}) {
   };
 }
 
+function parseGitStatusLine(line) {
+  const raw = String(line || "");
+  if (raw.length >= 4 && raw[2] === " ") {
+    return { status: raw.slice(0, 2), file: raw.slice(3).replace(/\\/g, "/") };
+  }
+  return { status: raw.slice(0, 2), file: raw.slice(2).trim().replace(/\\/g, "/") };
+}
+
+function gitStatusFile(line) {
+  return parseGitStatusLine(line).file;
+}
+
 function buildDirtySummary(statusLines) {
   const summary = {
     total: statusLines.length,
@@ -160,8 +175,7 @@ function buildDirtySummary(statusLines) {
     if (summary.samples[key] && summary.samples[key].length < 12) summary.samples[key].push(file);
   };
   for (const line of statusLines) {
-    const status = line.slice(0, 2);
-    const file = line.slice(3);
+    const { status, file } = parseGitStatusLine(line);
     if (status.includes("?")) summary.untracked += 1;
     else if (status.includes("A")) summary.added += 1;
     else summary.trackedModified += 1;
@@ -186,7 +200,10 @@ function buildReleaseIdentity(productionLive) {
   const originSha = sh(["git", "rev-parse", "origin/main"]);
   const status = sh(["git", "status", "--short"]);
   const statusLines = status.split(/\r?\n/).filter(Boolean);
-  const dirtySummary = buildDirtySummary(statusLines);
+  const generatedStatusLines = statusLines.filter((line) => GENERATED_DIRTY_ALLOWLIST.has(gitStatusFile(line)));
+  const blockingStatusLines = statusLines.filter((line) => !GENERATED_DIRTY_ALLOWLIST.has(gitStatusFile(line)));
+  const dirtySummary = buildDirtySummary(blockingStatusLines);
+  const generatedDirtySummary = buildDirtySummary(generatedStatusLines);
   const release = productionLive?.release || {};
   const releaseSha = productionLive?.releaseSha || release.gitSha || "";
   const productionReleaseAligned = Boolean(releaseSha && originSha && releaseSha === originSha);
@@ -195,14 +212,17 @@ function buildReleaseIdentity(productionLive) {
     branch,
     headSha,
     originMainSha: originSha,
-    worktreeClean: status.length === 0,
-    localStatusShort: statusLines.slice(0, 80),
+    worktreeClean: blockingStatusLines.length === 0,
+    rawWorktreeClean: statusLines.length === 0,
+    generatedDirtyAllowlisted: generatedStatusLines.slice(0, 80),
+    generatedDirtySummary,
+    localStatusShort: blockingStatusLines.slice(0, 80),
     dirtySummary,
     deploymentUrl: productionLive?.baseUrl || "https://fuman-terminal.vercel.app",
     releaseSha,
     productionReleaseAligned,
     localHeadMatchesProduction,
-    localWorktreeReadyForProduction: status.length === 0 && localHeadMatchesProduction,
+    localWorktreeReadyForProduction: blockingStatusLines.length === 0 && localHeadMatchesProduction,
     deployId: release.deployId || "",
     deploymentPreviewUrl: release.deploymentUrl || "",
     releaseBranch: release.branch || "",
