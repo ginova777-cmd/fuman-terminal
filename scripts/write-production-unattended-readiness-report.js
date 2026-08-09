@@ -620,7 +620,7 @@ function classifyRootCause(blocker = "") {
   if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
   if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
-  if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
+  if (/service_token|servicetoken|windows task|windowstask|schedule/.test(text)) return "schedule_service_token";
   if (/auto_roll_forward|autorollforward|roll_forward/.test(text)) return "auto_roll_forward";
   if (/final_audit|finalaudit/.test(text)) return "final_audit";
   if (/root_cause_summary|reason_code|classifier/.test(text)) return "reason_code_classifier";
@@ -1528,26 +1528,3 @@ main().catch((error) => {
   console.error(`[production-unattended-readiness-report] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

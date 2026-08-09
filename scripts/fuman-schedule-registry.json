@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-08T20:33:16.764Z",
+  "updatedAt": "2026-08-09T20:01:51.945Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -17,7 +17,6 @@
       "Fuman Global Cost Janitor Scorecard 1555",
       "Fuman Institution Battle Verify 2110",
       "Fuman PC Wake 0430",
-      "Fuman Public Slot Shared Source 0800",
       "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
@@ -53,9 +52,19 @@
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
-      "Fuman Terminal Autonomous Root Monitor"
+      "Fuman Terminal Autonomous Root Monitor",
+      "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
+      "Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "Fuman Opening Report 0830 LINE",
+      "Fuman Strategy3 LINE Card 1308",
+      "Fuman Strategy4 LINE Card 1610",
+      "Fuman Terminal Full Unattended Final Audit"
     ],
-    "expectedDisabledTasks": [],
+    "expectedDisabledTasks": [
+      "Fuman Terminal Autonomous Ops 5m",
+      "Fuman Terminal Autonomous Ops User 5m",
+      "Fuman Public Slot Shared Source 0800"
+    ],
     "retiredTasks": [
       "Fuman 即時雷達",
       "Fuman 即時雷達 Watchdog",
@@ -126,7 +135,8 @@
       ],
       "Fuman Public Slot Shared Source 0800": [
         0,
-        267009
+        267009,
+        267014
       ],
       "Fuman Public Slot Shared Source Watchdog": [
         0,
@@ -249,6 +259,47 @@
         0,
         267009,
         267011
+      ],
+      "Fuman Fugle Daytrade WebSocket Collector 0600-1330": [
+        0,
+        267009,
+        267011,
+        267014
+      ],
+      "Fuman Daytrade Warmup Nine-Day Audit 0915": [
+        0,
+        267011
+      ],
+      "Fuman Opening Report 0830 LINE": [
+        0,
+        267011
+      ],
+      "Fuman Strategy3 LINE Card 1308": [
+        0,
+        267011
+      ],
+      "Fuman Strategy4 LINE Card 1610": [
+        0,
+        267011
+      ],
+      "Fuman Terminal Full Unattended Final Audit": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Terminal Autonomous Ops 5m": [
+        0,
+        1,
+        267009,
+        267011,
+        267014
+      ],
+      "Fuman Terminal Autonomous Ops User 5m": [
+        0,
+        1,
+        267009,
+        267011,
+        267014
       ]
     },
     "coveredBy": {
@@ -312,7 +363,14 @@
       "FORBIDDEN_TRIGGER": "critical",
       "RETIRED_PRESENT": "critical",
       "FAIL": "critical",
-      "LOG_ERROR": "critical"
+      "LOG_ERROR": "critical",
+      "NON_BLOCKING_FAIL": "warning",
+      "OK_MARKET_CLOSED": "none"
+    },
+    "nonBlockingFailures": {
+      "Fuman Supabase Vercel History Cleanup 1545": {
+        "reason": "retention cleanup/cost hygiene is tracked separately; it must not block terminal data unattended closure"
+      }
     }
   },
   "tasks": [
@@ -459,9 +517,9 @@
     {
       "taskName": "\\Fuman Public Slot Shared Source 0800",
       "displayName": "Fuman Public Slot Shared Source 0800",
-      "description": "Public slot shared source.",
+      "description": "Disabled: heavy shared source 0800 bootstrap is not part of live scope; covered by conservative watchdog and terminal water-root. Do not re-enable without cost review.",
       "time": "08:00",
-      "expectedState": "Ready"
+      "expectedState": "Disabled"
     },
     {
       "taskName": "\\Fuman Public Slot Quote Fast Flush 0845",
@@ -927,6 +985,85 @@
         "21:35",
         "22:00"
       ]
+    },
+    {
+      "taskName": "\\\\Fuman Fugle Daytrade WebSocket Collector 0600-1330",
+      "displayName": "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
+      "description": "Fugle WebSocket collector for daytrade trades/aggregates/candles source layer. Must be ready during 06:00-13:30 and power-recovery safe.",
+      "time": "06:00-13:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "06:00"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "displayName": "Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "description": "Nine-day warmup evidence audit. Read-only evidence checker for daytrade warmup quality.",
+      "time": "09:15",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:15"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Opening Report 0830 LINE",
+      "displayName": "Fuman Opening Report 0830 LINE",
+      "description": "Opening readiness report. Waiting/not-run before its due window is allowed.",
+      "time": "08:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:30"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Strategy3 LINE Card 1308",
+      "displayName": "Fuman Strategy3 LINE Card 1308",
+      "description": "Strategy3 LINE card notification after Strategy3 13:00 scan window. Waiting/not-run before due is allowed.",
+      "time": "13:08",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "13:08"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Strategy4 LINE Card 1610",
+      "displayName": "Fuman Strategy4 LINE Card 1610",
+      "description": "Strategy4 LINE card notification after Strategy4 16:00 scan window. Waiting/not-run before due is allowed.",
+      "time": "16:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "16:10"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Terminal Full Unattended Final Audit",
+      "displayName": "Fuman Terminal Full Unattended Final Audit",
+      "description": "Full unattended final audit task. Produces final YES/NO receipt after daily closures.",
+      "time": "07:00,09:00,16:00,22:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "07:00",
+        "09:00",
+        "16:00",
+        "22:30"
+      ]
+    },
+    {
+      "taskName": "\\\\Fuman Terminal Autonomous Ops 5m",
+      "displayName": "Fuman Terminal Autonomous Ops 5m",
+      "description": "Disabled legacy autonomous ops loop; replaced by Fuman Terminal Autonomous Root Monitor.",
+      "time": "every 5 minutes",
+      "expectedState": "Disabled",
+      "expectedTriggers": []
+    },
+    {
+      "taskName": "\\\\Fuman Terminal Autonomous Ops User 5m",
+      "displayName": "Fuman Terminal Autonomous Ops User 5m",
+      "description": "Disabled legacy user autonomous ops loop; replaced by Fuman Terminal Autonomous Root Monitor.",
+      "time": "every 5 minutes",
+      "expectedState": "Disabled",
+      "expectedTriggers": []
     }
   ]
 }

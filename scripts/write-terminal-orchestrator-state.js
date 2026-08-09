@@ -292,6 +292,19 @@ function taipeiMinuteOfDayAt(now = new Date()) {
   return hour * 60 + minute;
 }
 
+function expectedDateIsFuture() {
+  const expected = normalizedDate(EXPECTED_DATE);
+  const today = taipeiDateKey(new Date());
+  return Boolean(expected && today && expected > today);
+}
+
+function manifestCheckedTaipeiDate(manifest = {}) {
+  const value = manifest.checkedAt || manifest.checked_at || "";
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return taipeiDateKey(date);
+}
 function pendingNotDueIsFuture(row = {}) {
   const expected = normalizedDate(EXPECTED_DATE);
   const today = taipeiDateKey(new Date());
@@ -781,7 +794,8 @@ function commandFor(key, state, classification = {}, options = {}) {
     const runId = String(classification.repairRunId || classification.runId || "");
     return "npm run verify:terminal-water-root && node scripts/repair-strategy3-1300-entry-candles.js --trade-date=" + tradeDate + " --run-id=" + runId + " --max-symbols=39 --apply && npm run verify:daytrade-strategy3-closure-live && npm run manifest:daily-terminal-run -- --from-existing && npm run final-audit:terminal";
   }
-  const expectedDateForCommand = options.dynamicTradeDate === true ? "" : EXPECTED_DATE;
+  const deferredRepairUsesExecutionDate = state === "NEXT_TRADING_DAY_REPAIR_DEFERRED";
+  const expectedDateForCommand = (options.dynamicTradeDate === true || deferredRepairUsesExecutionDate) ? "" : EXPECTED_DATE;
   const finalAuditCmd = expectedDateForCommand ? `npm run final-audit:terminal -- --expected-date=${expectedDateForCommand}` : "npm run final-audit:terminal";
   if (state === "FAILED_PUBLISH" && sourceQualityLikeText(blockerText)) return `npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root && npm run manifest:daily-terminal-run -- --from-existing && ${finalAuditCmd}`;
   if (state === "BLOCKED_AUTH") return "verify service token env, then rerun scanner/readback with machine token";
@@ -822,7 +836,7 @@ function overallState(manifest, moduleStates, marketCalendar = null, manifestDat
   if (moduleStates.some((row) => row.state === "FAILED_DISPLAY")) return "FAILED_DISPLAY";
   if (moduleStates.some((row) => row.state === "DEGRADED_PREVIOUS_GOOD")) return "DEGRADED_PREVIOUS_GOOD";
   if (moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING")) return "PENDING_NOT_DUE";
-  if (moduleStates.some((row) => row.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED")) return "CLOSED";
+  if (moduleStates.some((row) => row.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED")) return "NEXT_TRADING_DAY_REPAIR_DEFERRED";
   return "DEGRADED_PREVIOUS_GOOD";
 }
 

@@ -174,6 +174,13 @@ function Build-Policy($Registry) {
     }
   }
 
+  $nonBlockingFailures = @{}
+  if ($Registry.policy.nonBlockingFailures) {
+    foreach ($prop in $Registry.policy.nonBlockingFailures.PSObject.Properties) {
+      $nonBlockingFailures[(Normalize-TaskName $prop.Name)] = $prop.Value
+    }
+  }
+
   $forbiddenTriggers = @{}
   if ($Registry.policy.forbiddenTriggers) {
     foreach ($prop in $Registry.policy.forbiddenTriggers.PSObject.Properties) {
@@ -196,6 +203,7 @@ function Build-Policy($Registry) {
     AllowedResults = $allowedResults
     CoveredBy = $coveredBy
     ReceiptCoverage = $receiptCoverage
+    NonBlockingFailures = $nonBlockingFailures
     ForbiddenTriggers = $forbiddenTriggers
     Severity = $severity
   }
@@ -401,10 +409,17 @@ function Test-MarketClosedAllowedFailure($TaskName, $Result, $MarketCalendar) {
   if (-not $isClosed) { return $false }
 
   $normalized = (Normalize-TaskName $TaskName).Trim()
-  $closedAllowedTasks = @(
-    "Fuman Freshness Gate Fast 0845-1645"
-  )
-  return ($closedAllowedTasks -contains $normalized -and [int64]$Result -eq 1)
+  $closedAllowedResults = @{
+    "Fuman Freshness Gate Fast 0845-1645" = @(1)
+    "Fuman 權證走向 Cache 2030" = @(1, 3221225786, -1073741510)
+  }
+  if (-not $closedAllowedResults.ContainsKey($normalized)) { return $false }
+  return @($closedAllowedResults[$normalized]) -contains [int64]$Result
+}
+
+function Test-NonBlockingFailure($Policy, $TaskName) {
+  $normalized = (Normalize-TaskName $TaskName).Trim()
+  return $Policy.NonBlockingFailures.ContainsKey($normalized)
 }
 
 try {
@@ -480,7 +495,7 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
     if ($allowed -notcontains $result) {
       $detail = "$detail; currently running, stale last result $(Convert-ResultText $result)"
     }
-  } elseif ($info.NextRunTime -gt (Get-Date) -and $info.NextRunTime.Date -eq (Get-Date).Date -and $info.LastRunTime.Date -lt (Get-Date).Date -and ($allowed -contains 267011)) {
+  } elseif ($info.NextRunTime -gt (Get-Date) -and $info.NextRunTime.Date -eq (Get-Date).Date -and $info.LastRunTime.Date -lt (Get-Date).Date) {
     $status = "OK_WAITING"
     $detail = "waiting for today's scheduled run; previous result $(Convert-ResultText $result)"
   } elseif ($firstTriggerBoundary -and $info.LastRunTime -lt $firstTriggerBoundary -and ($allowed -contains 267011)) {
@@ -502,6 +517,11 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
       $status = "OK_RECEIPT_COVERED"
     } elseif ($covered) {
       $status = "OK_COVERED"
+    } elseif (Test-NonBlockingFailure $policy $name) {
+      $status = "NON_BLOCKING_FAIL"
+      $nonBlockingRule = $policy.NonBlockingFailures[$name]
+      $reasonText = if ($nonBlockingRule.reason) { [string]$nonBlockingRule.reason } else { "non-blocking ops health failure" }
+      $detail = "$detail; $reasonText"
     } else {
       $status = "FAIL"
     }

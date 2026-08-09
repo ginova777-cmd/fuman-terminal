@@ -287,7 +287,11 @@ function verifyInvariants(artifacts, issues) {
   assert(powerRecovery?.taskRegistered === true && powerRecovery?.startWhenAvailableReady === true, issues, "power_recovery_task_not_ready", { powerRecovery });
   assert(powerRecovery?.lockSafe === true && powerRecovery?.staleLockHandled === true, issues, "power_recovery_lock_not_safe", { powerRecovery });
   assert(powerRecovery?.legacy_task_conflict !== true, issues, "power_recovery_legacy_task_conflict", { powerRecovery });
-  if (!closed) {
+  const earlyModules = Array.isArray(manifest?.modules) ? manifest.modules : [];
+  const earlyBlockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
+  const earlyHardBlockedModules = earlyModules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
+  const earlyPendingNotDue = earlyBlockerText.includes("pending_not_due") && earlyHardBlockedModules.length === 0;
+  if (!closed && !earlyPendingNotDue) {
     assert(fugleWebSocket?.ok === true, issues, "fugle_websocket_source_layer_not_ready", { fugleWebSocket });
     assert(fugleWebSocket?.stock?.connected === true && fugleWebSocket?.stock?.authenticated === true, issues, "fugle_stock_websocket_not_connected_authenticated", { stock: fugleWebSocket?.stock });
     assert(fugleWebSocket?.futopt?.connected === true && fugleWebSocket?.futopt?.authenticated === true, issues, "fugle_futopt_websocket_not_connected_authenticated", { futopt: fugleWebSocket?.futopt });

@@ -316,7 +316,7 @@ function publicEndpointMap(results) {
   const map = {};
   for (const [endpoint, result] of Object.entries(results)) {
     if (Number(result.statusCode || 0) >= 500) continue;
-    if (result.payload && typeof result.payload === "object" && result.payload.ok === false) continue;
+    if (result.payload && typeof result.payload === "object" && result.payload.ok === false && !isDisplayableFailClosedPayload(result.payload)) continue;
     map[endpoint] = result.payload;
     const canonical = new URL(endpoint, "https://fuman.local").pathname;
     if (canonical && !map[canonical]) map[canonical] = result.payload;
@@ -408,8 +408,39 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
     },
   });
 }
-async function repairStrategy3LatestSnapshot() {
-  return null;
+function endpointHasRunId(endpoints = {}, prefix = "", expectedRunId = "") {
+  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
+    if (!String(endpoint || "").startsWith(prefix)) return false;
+    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
+    return expectedRunId ? runId === expectedRunId : Boolean(runId);
+  });
+}
+
+async function repairStrategy3LatestSnapshot(request, endpoints, expectedRunId = "") {
+  if (endpointHasRunId(endpoints, "/api/strategy3-latest", expectedRunId)) return;
+  const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
+    ...compactQuery(60),
+    live: "1",
+    verify: "1",
+    noSnapshot: "1",
+  }, 12000);
+  const replacement = result?.payload;
+  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
+  if (Number(result?.statusCode || 0) >= 500) return;
+  if (!replacementRunId.startsWith("strategy3-")) return;
+  if (expectedRunId && replacementRunId !== expectedRunId) return;
+  Object.keys(endpoints || {}).forEach((endpoint) => {
+    if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
+  });
+  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
+    ...replacement,
+    transport: {
+      ...(replacement.transport || {}),
+      fastBundleRepair: "strategy3-latest-ops-authority-runid",
+      expectedRunId,
+      fetchedAt: new Date().toISOString(),
+    },
+  });
 }
 
 function isStrategy4Endpoint(endpoint) {
@@ -442,6 +473,29 @@ function isOptionalLiveSnapshotEndpoint(endpoint) {
   return false;
 }
 
+function isDisplayableFailClosedPayload(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const runId = String(payload.runId || payload.transport?.runId || "").trim();
+  if (!runId) return false;
+  const text = [
+    payload.evidenceStatus,
+    payload.unattendedStatus,
+    payload.qualityStatus,
+    payload.blockedReason,
+    payload.scanner_block_reason,
+    payload.reason,
+    payload.error,
+    payload.displayBlockReason,
+    payload.run_quality_at_publish?.evidenceStatus,
+    payload.run_quality_at_publish?.unattendedStatus,
+    payload.run_quality_at_publish?.blockedReason,
+  ].join(" ").toLowerCase();
+  return payload.preservePreviousGood === true
+    || payload.run_quality_at_publish?.preservePreviousGood === true
+    || payload.publishAllowed === false
+    || payload.run_quality_at_publish?.publishAllowed === false
+    || /insufficient|degraded|blocked|source_quality_fail|market_closed|previous_good/.test(text);
+}
 function buildSoftSnapshotFallback(endpoint, result, via) {
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
   const isStrategy2 = isStrategy2SnapshotEndpoint(endpoint);
@@ -616,7 +670,10 @@ module.exports = async function handler(request, response) {
       if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
-        await repairStrategy3LatestSnapshot(request, endpoints);
+        await repairStrategy3LatestSnapshot(request, endpoints, opsAuthority.byKey?.strategy3?.runId || "");
+      }
+      if (entitlement?.ok && !endpointHasRunId(endpoints, "/api/strategy3-latest", opsAuthority.byKey?.strategy3?.runId || "")) {
+        await repairStrategy3LatestSnapshot(request, endpoints, opsAuthority.byKey?.strategy3?.runId || "");
       }
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
@@ -724,6 +781,3 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
-
-
-

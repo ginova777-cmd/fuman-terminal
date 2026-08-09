@@ -13,6 +13,10 @@ const REQUESTED_DATE = EXPECTED_DATE;
 const SKIP_RUN = process.argv.includes("--from-existing");
 const REQUIRE_FORMAL_NOW = process.argv.includes("--require-formal-now");
 const ALLOW_NON_GREEN_EXIT_ZERO = process.argv.includes("--allow-non-green-exit-zero");
+const SELF_TEST_SCHEDULE = process.argv.includes("--self-test-schedule");
+const MOCK_TAIPEI_MINUTE_ARG = process.argv.find((arg) => arg.startsWith("--mock-taipei-minute="))?.slice("--mock-taipei-minute=".length) || "";
+const MOCK_TAIPEI_MINUTE_RAW = MOCK_TAIPEI_MINUTE_ARG || process.env.FUMAN_MOCK_TAIPEI_MINUTE || "";
+const MOCK_TAIPEI_MINUTE = MOCK_TAIPEI_MINUTE_RAW === "" ? NaN : Number(MOCK_TAIPEI_MINUTE_RAW);
 const SCORECARD_CANDIDATE_FILE = process.argv.find((arg) => arg.startsWith("--scorecard-candidate-file="))?.slice("--scorecard-candidate-file=".length) || "";
 const DAILY_RUN_ID_ARG = process.argv.find((arg) => arg.startsWith("--daily-run-id="))?.slice("--daily-run-id=".length) || "";
 const SCORECARD_PUBLISH_MODE = Boolean(SCORECARD_CANDIDATE_FILE);
@@ -177,7 +181,6 @@ function minuteFromClock(value) {
 function scheduleStatusForKey(key, currentMinute = taipeiMinuteOfDay()) {
   const dueTime = STRATEGY_DUE_TIMES[key] || "00:00";
   const dueMinute = minuteFromClock(dueTime);
-  const currentMinute = taipeiMinuteOfDay();
   const today = taipeiDateKey();
   const expectedIsFuture = EXPECTED_DATE > today;
   const expectedIsToday = EXPECTED_DATE === today;
@@ -1096,14 +1099,3 @@ main().catch((error) => {
   console.error(`[daily-terminal-run-manifest] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-

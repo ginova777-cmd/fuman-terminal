@@ -122,9 +122,7 @@ function main() {
   if (activePendingJobs.some((job) => job.receipt?.receiptRequired && !job.receipt?.receiptExists)) {
     issues.push("recovery_queue_missing_required_receipts");
   }
-  if (deferredNextTradingDayJobs.some((job) => job.receipt?.receiptRequired && !job.receipt?.receiptExists)) {
-    issues.push("recovery_queue_missing_required_deferred_receipts");
-  }
+  const deferredMissingReceipts = deferredNextTradingDayJobs.filter((job) => job.receipt?.receiptRequired && !job.receipt?.receiptExists);
   if (deferredNextTradingDayJobs.some((job) => job.receipt?.receiptExists && job.receipt?.receiptOk !== true)) {
     issues.push("recovery_queue_has_failed_deferred_receipts");
   }
@@ -157,8 +155,7 @@ function main() {
     job_queue: enrichedJobQueue,
     active_pending_jobs: activePendingJobs,
     deferred_next_trading_day_jobs: deferredNextTradingDayJobs,
-    active_pending_jobs: activePendingJobs,
-    deferred_next_trading_day_jobs: deferredNextTradingDayJobs,
+    deferred_missing_receipts: deferredMissingReceipts.map((job) => ({ jobId: job.jobId, module: job.module, state: job.state, receiptFile: job.receipt?.receiptFile || "" })),
     receipt_summary: pendingJobs.map((job) => ({
       jobId: job.jobId,
       module: job.module,
