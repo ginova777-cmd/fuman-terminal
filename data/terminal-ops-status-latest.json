@@ -2,13 +2,13 @@
   "ok": false,
   "contract": "terminal-ops-status-v1",
   "source": "runtime-output-artifacts",
-  "generatedAt": "2026-08-09T20:36:32.872Z",
+  "generatedAt": "2026-08-09T21:01:55.734Z",
   "checkedAt": "2026-08-09T18:38:47.112Z",
   "daily_run_id": "terminal-daily-20260809-20260809221108-4972-ae8dac",
   "dailyRunId": "terminal-daily-20260809-20260809221108-4972-ae8dac",
   "finalAuditDailyRunId": "terminal-daily-20260809-20260809221108-4972-ae8dac",
-  "manifestDailyRunId": "daily-terminal-manifest-20260810-20260809200850",
-  "orchestratorDailyRunId": "daily-terminal-manifest-20260810-20260809200850",
+  "manifestDailyRunId": "daily-terminal-manifest-20260810-20260809205344",
+  "orchestratorDailyRunId": "daily-terminal-manifest-20260810-20260809205344",
   "controlPlaneDailyRunId": "daily-terminal-manifest-20260810-20260809183609",
   "policyDailyRunId": "daily-terminal-manifest-20260810-20260809183609",
   "dailyRunIdentityMismatch": true,
@@ -702,7 +702,7 @@
     "contract": "production-unattended-readiness-report-v1",
     "status": "NOT_READY",
     "ok": false,
-    "checkedAt": "2026-08-09T20:08:51.002Z"
+    "checkedAt": "2026-08-09T20:53:44.858Z"
   },
   "predictivePreflight": {
     "contract": "terminal-predictive-preflight-v1",
