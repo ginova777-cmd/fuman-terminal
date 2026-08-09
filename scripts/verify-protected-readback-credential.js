@@ -12,11 +12,11 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || path.join(ROOT, "outputs", "protected-readback-credential"));
 const BASE_URL = String(process.env.FUMAN_VERIFY_BASE_URL || process.env.FUMAN_PRODUCTION_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const TIMEOUT_MS = Number(process.env.FUMAN_PROTECTED_READBACK_TIMEOUT_MS || 60000);
+const TIMEOUT_MS = Number(process.env.FUMAN_PROTECTED_READBACK_TIMEOUT_MS || 20000);
 const DIRECT_ENDPOINTS = [
   { key: "terminal_ops_status", path: "/api/terminal-ops-status" },
-  { key: "scorecard", path: "/api/scorecard" },
-  { key: "source_reports", path: "/api/source-reports" },
+  { key: "scorecard", path: "/api/scorecard?live=1" },
+  { key: "source_reports", path: "/api/source-reports?live=1" },
 ];
 
 function safeJson(text, fallback) {
@@ -110,6 +110,18 @@ async function fetchText(url, options = {}) {
       headers: Object.fromEntries(response.headers.entries()),
       text,
     };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      elapsedMs: Date.now() - startedAt,
+      headers: {},
+      text: "",
+      error: {
+        name: String(error?.name || "Error"),
+        message: String(error?.message || error).slice(0, 240),
+      },
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -117,6 +129,8 @@ async function fetchText(url, options = {}) {
 
 function classifyProtectedResponse(item) {
   const text = String(item.text || "").slice(0, 2000).toLowerCase();
+  if (item.error?.name === "AbortError" || /aborted|timeout/i.test(String(item.error?.message || ""))) return "protected_readback_timeout";
+  if (item.error) return "protected_readback_request_error";
   if (item.status === 401) return "protected_readback_unauthorized";
   if (text.includes("missing_bearer_token")) return "protected_readback_missing_bearer_token_rendered";
   if (text.includes("membership_required") || text.includes("membership-required")) return "protected_readback_membership_required";

@@ -5,10 +5,6 @@
 
 begin;
 
-drop view if exists public.v_fugle_daytrade_mother_pool_contract_health;
-drop view if exists public.v_fugle_daytrade_formal_priority_top40;
-drop view if exists public.v_fugle_daytrade_priority_top40;
-drop view if exists public.v_fugle_daytrade_mother_pool;
 
 create or replace view public.v_fugle_daytrade_mother_pool as
 select
@@ -27,7 +23,7 @@ select
   end as amplitude_from_open,
   coalesce(q.total_volume, 0) as total_volume,
   coalesce(q.trade_value, 0) as trade_value,
-  coalesce(d.avg_volume5, 0) as avg5_volume,
+  coalesce(d.avg_volume5, d.avg5_volume, 0) as avg5_volume,
   coalesce(nullif(p.payload ->> 'score', '')::numeric, 0) as mother_pool_score,
   coalesce(nullif(p.payload ->> 'priorityScore', '')::numeric, nullif(p.payload ->> 'score', '')::numeric, 0) as priority_score,
   p.priority_rank,
@@ -51,7 +47,7 @@ select
   p.source as mother_source,
   p.updated_at as mother_updated_at,
   coalesce(nullif(p.payload ->> 'score', '')::numeric, 0) as mother_score,
-  coalesce(p.payload ->> 'motherPoolRuleVersion', 'daytrade_mother_pool_rank_overlap_20260709') as mother_pool_rule_version,
+  coalesce(p.payload ->> 'motherPoolRuleVersion', 'daytrade_mother_pool_base_filter_20260727') as mother_pool_rule_version,
   coalesce(p.payload -> 'motherPoolRuleHits', '[]'::jsonb) as mother_pool_rule_hits,
   coalesce(p.payload -> 'motherPoolMetrics', '{}'::jsonb) as mother_pool_metrics,
   coalesce(nullif(p.payload #>> '{motherPoolMetrics,tradeValue}', '')::numeric, 0) as mother_metric_trade_value,
@@ -67,7 +63,7 @@ select
   q.total_volume as live_total_volume,
   q.trade_value as live_trade_value,
   d.trade_date as daily_volume_trade_date,
-  coalesce(d.avg_volume5, 0) as live_avg_volume5,
+  coalesce(d.avg_volume5, d.avg5_volume, 0) as live_avg_volume5,
   case
     when p.priority_rank <= 40 then true
     else false
@@ -75,22 +71,67 @@ select
   case
     when q.symbol is null then 'quote_missing'
     when coalesce(extract(epoch from (now() - q.quote_seen_at))::integer, 999999) > 120 then 'quote_stale'
-    when coalesce(d.avg_volume5, 0) <= 0 then 'daily_volume_missing'
+    when coalesce(d.avg_volume5, d.avg5_volume, 0) <= 0 then 'daily_volume_missing'
     else 'ready'
   end as mother_readiness_status,
   (
     p.priority_rank <= 40
+    and p.payload ->> 'basePoolEligible' = 'true'
     and q.symbol is not null
     and coalesce(extract(epoch from (now() - q.quote_seen_at))::integer, 999999) <= 120
-    and coalesce(d.avg_volume5, 0) > 0
+    and coalesce(d.avg_volume5, d.avg5_volume, 0) > 0
   ) as is_formal_entry_eligible,
   'fugle_daytrade_source'::text as source_name,
   greatest(p.updated_at, coalesce(q.updated_at, p.updated_at), coalesce(d.updated_at, p.updated_at)) as updated_at,
-  p.payload
+  p.payload,
+  coalesce(d.trade_date, (p.updated_at at time zone 'Asia/Taipei')::date) as source_trade_date,
+  (q.quote_seen_at at time zone 'Asia/Taipei')::date as quote_trade_date,
+  (p.updated_at at time zone 'Asia/Taipei')::date as pool_updated_trade_date,
+  'live_quote_with_previous_daily_volume_basis'::text as pool_context,
+  coalesce(d.avg_volume5, d.avg5_volume, 0) as avg_volume5,
+  q.high_price as high_price,
+  q.low_price as low_price,
+  s.latest_candle_time,
+  coalesce(s.latest_candle_age_seconds, 999999)::integer as intraday_1m_stale_seconds,
+  coalesce(s.ready_ma5, false) as ready_ma5,
+  coalesce(s.ready_ma10, false) as ready_ma10,
+  coalesce(s.ready_ma30, false) as ready_ma30,
+  s.ma5 as ma5,
+  s.ma10 as ma10,
+  s.ma35 as ma35,
+  coalesce(s.ma5_ma10_ma35_bullish, false) as ma5_ma10_ma35_bullish,
+  coalesce(s.ma5_ma10_ma35_bullish, false) as ma_bullish_alignment,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,volumeRatio5}', '')::numeric,
+    case when coalesce(d.avg_volume5, d.avg5_volume, 0) > 0
+      then coalesce(q.total_volume, 0) / coalesce(d.avg_volume5, d.avg5_volume, 1)
+      else 0 end) as volume_vs_avg5_ratio,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,volumeRank}', '')::integer, 0) as volume_rank,
+  coalesce(si.relative_volume_5m, nullif(p.payload #>> '{motherPoolMetrics,relativeVolume5m}', '')::numeric, 0) as relative_volume_5m,
+  coalesce(nullif(si.recent_1m_volume_trend, ''), nullif(p.payload #>> '{motherPoolMetrics,recent1mVolumeTrend}', ''), 'unknown')::text as recent_1m_volume_trend,
+  coalesce(si.ma5_rising, nullif(p.payload #>> '{motherPoolMetrics,ma5Rising}', '')::boolean, false) as ma5_rising,
+  coalesce(si.ma10_rising, nullif(p.payload #>> '{motherPoolMetrics,ma10Rising}', '')::boolean, false) as ma10_rising,
+  coalesce(si.ma30_rising, nullif(p.payload #>> '{motherPoolMetrics,ma30Rising}', '')::boolean, false) as ma30_rising,
+  coalesce(si.ma35_rising, nullif(p.payload #>> '{motherPoolMetrics,ma35Rising}', '')::boolean, false) as ma35_rising,
+  coalesce(q.price >= q.open_price and q.open_price > 0, false) as above_open_price,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,aboveVwap}', '')::boolean, false) as above_vwap,
+  coalesce(q.price >= q.high_price * 0.985 and q.high_price > 0, false) as near_day_high,
+  case when s.ma5 > 0 and q.price is not null then ((q.price - s.ma5) / s.ma5) * 100 else 0 end as distance_from_ma5_percent,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,sectorName}', ''), '')::text as sector_name,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,sectorStrengthScore}', '')::numeric, 0) as sector_strength_score,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,sectorMemberActiveCount}', '')::integer, 0) as sector_member_active_count,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,futoptSyncScore}', '')::numeric, 0) as futopt_sync_score,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,liquidityScore}', '')::numeric, 0) as liquidity_score,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,spreadScore}', '')::numeric, 0) as spread_score,
+  coalesce(nullif(p.payload #>> '{motherPoolMetrics,fakeStrengthPenalty}', '')::numeric, 0) as fake_strength_penalty,
+  s.latest_candle_time as latest_1m_time,
+  s.ma30 as ma30
 from public.fugle_daytrade_priority_pool p
 left join public.fugle_daytrade_quotes_live q on q.symbol = p.symbol
 left join public.fugle_daytrade_daily_volume_avg d on d.symbol = p.symbol
-left join public.source_status ss on ss.source_name = 'fugle_daytrade_source';
+left join public.v_fugle_daytrade_intraday_1m_status s on s.symbol = p.symbol
+left join public.v_fugle_daytrade_intraday_1m_technical_status si on si.symbol = p.symbol
+left join public.source_status ss on ss.source_name = 'fugle_daytrade_source'
+where p.payload ->> 'basePoolEligible' = 'true';
 
 create or replace view public.v_fugle_daytrade_formal_priority_top40 as
 select
@@ -151,7 +192,45 @@ select
   is_formal_entry_eligible,
   source_name,
   updated_at,
-  payload
+  payload,
+  source_trade_date,
+  quote_trade_date,
+  pool_updated_trade_date,
+  pool_context,
+  avg5_volume as avg_volume5,
+  high_price,
+  low_price,
+  latest_candle_time,
+  intraday_1m_stale_seconds,
+  ready_ma5,
+  ready_ma10,
+  ready_ma30,
+  ma5,
+  ma10,
+  ma35,
+  ma5_ma10_ma35_bullish,
+  ma_bullish_alignment,
+  volume_vs_avg5_ratio,
+  volume_rank,
+  relative_volume_5m,
+  recent_1m_volume_trend,
+  ma5_rising,
+  ma10_rising,
+  ma30_rising,
+  ma35_rising,
+  above_open_price,
+  above_vwap,
+  near_day_high,
+  distance_from_ma5_percent,
+  sector_name,
+  sector_strength_score,
+  sector_member_active_count,
+  futopt_sync_score,
+  liquidity_score,
+  spread_score,
+  fake_strength_penalty,
+  latest_1m_time,
+  ma30
 from (
   select
     mp.*,
@@ -221,7 +300,45 @@ select
   is_formal_entry_eligible,
   source_name,
   updated_at,
-  payload
+  payload,
+  source_trade_date,
+  quote_trade_date,
+  pool_updated_trade_date,
+  pool_context,
+  avg5_volume as avg_volume5,
+  high_price,
+  low_price,
+  latest_candle_time,
+  intraday_1m_stale_seconds,
+  ready_ma5,
+  ready_ma10,
+  ready_ma30,
+  ma5,
+  ma10,
+  ma35,
+  ma5_ma10_ma35_bullish,
+  ma_bullish_alignment,
+  volume_vs_avg5_ratio,
+  volume_rank,
+  relative_volume_5m,
+  recent_1m_volume_trend,
+  ma5_rising,
+  ma10_rising,
+  ma30_rising,
+  ma35_rising,
+  above_open_price,
+  above_vwap,
+  near_day_high,
+  distance_from_ma5_percent,
+  sector_name,
+  sector_strength_score,
+  sector_member_active_count,
+  futopt_sync_score,
+  liquidity_score,
+  spread_score,
+  fake_strength_penalty,
+  latest_1m_time,
+  ma30
 from (
   select
     mp.*,
@@ -232,101 +349,9 @@ from (
 where rn <= 40
 order by rn asc, mother_pool_rank asc, symbol asc;
 
-create or replace view public.v_fugle_daytrade_mother_pool_contract_health as
-with status_row as (
-  select
-    s.status,
-    s.updated_at,
-    s.message,
-    s.payload
-  from public.source_status s
-  where s.source_name = 'fugle_daytrade_source'
-  limit 1
-),
-mother as (
-  select
-    count(*)::integer as mother_pool_symbols,
-    count(*) filter (where mother_readiness_status = 'ready')::integer as mother_ready_rows,
-    count(*) filter (where quote_age_seconds <= 120)::integer as mother_fresh_quote_rows,
-    count(*) filter (where live_avg_volume5 > 0)::integer as mother_daily_volume_rows,
-    min(mother_rank)::integer as min_mother_rank,
-    max(mother_rank)::integer as max_mother_rank,
-    max(mother_updated_at) as mother_updated_at
-  from public.v_fugle_daytrade_mother_pool
-),
-formal as (
-  select
-    count(*)::integer as formal_priority_symbols,
-    count(*) filter (where mother_readiness_status = 'ready')::integer as formal_ready_rows,
-    count(*) filter (where quote_age_seconds <= 120)::integer as formal_fresh_quote_rows,
-    count(*) filter (where live_avg_volume5 > 0)::integer as formal_daily_volume_rows,
-    max(quote_age_seconds)::integer as formal_max_quote_age_seconds,
-    max(mother_rank)::integer as formal_max_mother_rank,
-    (percentile_disc(0.95) within group (order by quote_age_seconds))::integer as formal_p95_quote_age_seconds
-  from public.v_fugle_daytrade_formal_priority_top40
-)
-select
-  'fugle_daytrade_source'::text as source_name,
-  coalesce(sr.status, 'missing') as source_status,
-  sr.updated_at as source_updated_at,
-  sr.message as source_message,
-  coalesce(sr.payload ->> 'mother_pool_source', 'dynamic_daytrade_mother_pool') as mother_pool_source,
-  coalesce(sr.payload ->> 'mother_pool_rule_version', 'daytrade_mother_pool_rank_overlap_20260709') as mother_pool_rule_version,
-  coalesce((sr.payload ->> 'formal_scope'), 'priority_top40') as formal_scope,
-  40::integer as formal_priority_limit,
-  coalesce(m.mother_pool_symbols, 0) as mother_pool_symbols,
-  coalesce(m.mother_ready_rows, 0) as mother_ready_rows,
-  coalesce(m.mother_fresh_quote_rows, 0) as mother_fresh_quote_rows,
-  case
-    when coalesce(m.mother_pool_symbols, 0) > 0
-      then round((m.mother_fresh_quote_rows::numeric / greatest(m.mother_pool_symbols, 1)), 4)
-    else 0::numeric
-  end as mother_fresh_quote_coverage_120s,
-  coalesce(m.mother_daily_volume_rows, 0) as mother_daily_volume_rows,
-  coalesce(nullif(sr.payload ->> 'ready_ma20_continuous_symbols', '')::integer, 0) as daytrade_ready_ma20_continuous_symbols,
-  coalesce(nullif(sr.payload ->> 'ready_ma35_continuous_symbols', '')::integer, 0) as daytrade_ready_ma35_continuous_symbols,
-  coalesce(m.min_mother_rank, 0) as min_mother_rank,
-  coalesce(m.max_mother_rank, 0) as max_mother_rank,
-  m.mother_updated_at,
-  coalesce(f.formal_priority_symbols, 0) as formal_priority_symbols,
-  coalesce(f.formal_ready_rows, 0) as formal_ready_rows,
-  coalesce(f.formal_fresh_quote_rows, 0) as formal_fresh_quote_rows,
-  case
-    when coalesce(f.formal_priority_symbols, 0) > 0
-      then round((f.formal_fresh_quote_rows::numeric / greatest(f.formal_priority_symbols, 1)), 4)
-    else 0::numeric
-  end as formal_fresh_quote_coverage_120s,
-  coalesce(f.formal_daily_volume_rows, 0) as formal_daily_volume_rows,
-  coalesce(f.formal_max_quote_age_seconds, 999999) as formal_max_quote_age_seconds,
-  coalesce(f.formal_max_mother_rank, 0) as formal_max_mother_rank,
-  coalesce(f.formal_p95_quote_age_seconds, 999999) as formal_p95_quote_age_seconds,
-  case
-    when coalesce(m.mother_pool_symbols, 0) >= 300
-      and coalesce(f.formal_priority_symbols, 0) = 40
-      and coalesce(f.formal_max_mother_rank, 0) <= 40
-      then 'ready'
-    when coalesce(m.mother_pool_symbols, 0) >= 180
-      and coalesce(f.formal_priority_symbols, 0) >= 40
-      then 'partial'
-    else 'not_ready'
-  end as contract_status,
-  case
-    when coalesce(m.mother_pool_symbols, 0) < 180 then 'mother_pool_below_min_180'
-    when coalesce(f.formal_priority_symbols, 0) > 40 then 'formal_priority_top40_above_40'
-    when coalesce(f.formal_max_mother_rank, 0) > 40 then 'formal_priority_rank_above_40'
-    when coalesce(f.formal_priority_symbols, 0) < 40 then 'formal_priority_top40_below_40'
-    when coalesce(m.mother_pool_symbols, 0) < 300 then 'mother_pool_below_target_300'
-    else ''
-  end as contract_reason
-from status_row sr
-cross join mother m
-cross join formal f;
-
 grant select on public.v_fugle_daytrade_mother_pool to anon, authenticated, service_role;
 grant select on public.v_fugle_daytrade_formal_priority_top40 to anon, authenticated, service_role;
 grant select on public.v_fugle_daytrade_priority_top40 to anon, authenticated, service_role;
 grant select on public.v_fugle_daytrade_mother_pool_contract_health to anon, authenticated, service_role;
 
 commit;
-
-

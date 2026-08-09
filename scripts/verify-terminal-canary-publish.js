@@ -34,6 +34,7 @@ function marketClosedPreviousGood(manifest = {}) {
     manifest.waterRoot?.reason,
     manifest.blocker,
     manifest.status,
+    manifest.unattendedStatus,
   ].map(lower).join(" ");
   const tradingDay = bits.includes("trading_day") || bits.includes("after_formal_source_window");
   if (tradingDay && !bits.includes("market_closed")) return false;
@@ -106,8 +107,13 @@ function manifestFullyClosed(manifest = {}, modules = []) {
 
 function manifestPreviousGoodHoldClosure(manifest = {}, modules = []) {
   const status = lower(manifest.unattendedStatus || manifest.status || "");
+  const waterStatus = lower(manifest.waterRoot?.status || "");
+  const waterReason = lower(manifest.waterRoot?.reason || "");
   if (!status.includes("previous_good_hold")) return false;
-  return manifestFullyClosed(manifest, modules);
+  if (manifest.ok !== true || !modules.length) return false;
+  if (!waterStatus.includes("market_closed") && !waterReason.includes("market_closed")) return false;
+  // A closed day may retain an older complete run; it must not be re-published as today's run.
+  return modules.every((row) => row.ok === true && clean(row.runId));
 }
 
 function validateCanary(manifest, scorecard, options = {}) {
@@ -119,14 +125,101 @@ function validateCanary(manifest, scorecard, options = {}) {
   const hardBlockedModules = modules.filter((row) => row.ok !== true && !isPendingNotDueModule(row));
   const pendingPreviousGood = manifestPendingNotDuePreviousGood(modules);
   const hasPendingNotDue = hardBlockedModules.length === 0 && (modules.some((row) => isPendingNotDueModule(row)) || lower(manifest.blocker).includes("pending_not_due"));
-  const allowPendingRollForward = hasPendingNotDue && hardBlockedModules.length === 0;
   const previousGoodDate = maxModuleRunDate(modules);
   const closed = marketClosedPreviousGood(manifest) || pendingPreviousGood;
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
-  const expectedReportDate = (pendingPreviousGood || allowPendingRollForward) ? previousGoodDate : tradeDate;
+  const expectedReportDate = pendingPreviousGood ? previousGoodDate : tradeDate;
+
+  if (closed && previousGoodHoldClosure) {
+    return {
+      ok: true,
+      contract: "terminal-canary-publish-v1",
+      checkedAt: new Date().toISOString(),
+      status: "CANARY_PREVIOUS_GOOD_HOLD",
+      scorecardPublishAllowed: false,
+      partialScorecardReadbackAllowed: false,
+      degraded: true,
+      holdReason: "market_closed_previous_good_preserved_no_new_scorecard_publish",
+      marketClosedPreviousGood: true,
+      tradeDate,
+      manifestTradeDate: tradeDate,
+      manifest: {
+        ok: manifest.ok === true,
+        unattendedStatus: manifest.unattendedStatus || "",
+        modules: modules.length,
+        blocker: manifest.blocker || "",
+      },
+      scorecard: {
+        ok: scorecard.ok === true,
+        latestDate: scorecard.latestDate || scorecard.summary?.latestDate || "",
+        records: Array.isArray(scorecard.records) ? scorecard.records.length : 0,
+        sourceReports: Array.isArray(scorecard.sourceReports) ? scorecard.sourceReports.length : 0,
+        cacheSource: scorecard.cacheSource || "",
+      },
+      issues: [],
+      mode: options.mode || "artifact",
+    };
+  }
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
   if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
+  if (hasPendingNotDue && manifest.ok !== true) {
+    if (!tradeDate) issues.push("manifest_tradeDate_missing");
+    if (scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+    if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
+    if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
+    if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
+    if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
+    for (const row of modules) {
+      if (isPendingNotDueModule(row)) continue;
+      const key = lower(row.key);
+      const report = reports.get(key);
+      if (!report) {
+        issues.push(`sourceReport_missing:${row.key}`);
+        continue;
+      }
+      const reportRunId = clean(report.runId || report.run_id);
+      const expectedRunId = clean(row.runId);
+      const reportDate = compactDate(report.date || report.tradeDate || report.marketDate || report.updatedAt || reportRunId);
+      if (!expectedRunId) issues.push(`manifest_module_runId_missing:${row.key}`);
+      if (reportRunId !== expectedRunId) issues.push(`sourceReport_runId_mismatch:${row.key}:${reportRunId || "missing"}!=${expectedRunId || "missing"}`);
+      if (reportDate !== tradeDate) issues.push(`sourceReport_date_mismatch:${row.key}:${reportDate || "missing"}!=${tradeDate || "missing"}`);
+      if (report.ok !== true) issues.push(`sourceReport_not_ok:${row.key}`);
+      if (Number(report.statusCode || 200) >= 400) issues.push(`sourceReport_http_bad:${row.key}:${report.statusCode}`);
+      if (hasFallbackSignal(report)) issues.push(`sourceReport_fallback_or_stale:${row.key}`);
+      if (row.ok !== true || row.complete !== true || row.fallback === true) {
+        issues.push(`manifest_module_not_publishable:${row.key}`);
+      }
+    }
+    const pendingIssue = `manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`;
+    const partialReady = issues.length === 0;
+    return {
+      ok: partialReady,
+      contract: "terminal-canary-publish-v1",
+      checkedAt: new Date().toISOString(),
+      status: partialReady ? "CANARY_PARTIAL_PENDING_NOT_DUE_HOLD" : "PENDING_NOT_DUE_BLOCKED",
+      scorecardPublishAllowed: false,
+      partialScorecardReadbackAllowed: partialReady,
+      marketClosedPreviousGood: false,
+      tradeDate,
+      manifestTradeDate: tradeDate,
+      manifest: {
+        ok: manifest.ok === true,
+        unattendedStatus: manifest.unattendedStatus || "",
+        modules: modules.length,
+        blocker: manifest.blocker || "",
+      },
+      scorecard: {
+        ok: scorecard.ok === true,
+        latestDate: scorecard.latestDate || scorecard.summary?.latestDate || "",
+        records: Array.isArray(scorecard.records) ? scorecard.records.length : 0,
+        sourceReports: Array.isArray(scorecard.sourceReports) ? scorecard.sourceReports.length : 0,
+        cacheSource: scorecard.cacheSource || "",
+      },
+      issues: issues.length === 0 ? [pendingIssue] : issues,
+      mode: options.mode || "artifact",
+    };
+  }
   if (!tradeDate) issues.push("manifest_tradeDate_missing");
   if (!(pendingPreviousGood || allowPendingRollForward) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
   if ((pendingPreviousGood || allowPendingRollForward) && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
@@ -134,13 +227,13 @@ function validateCanary(manifest, scorecard, options = {}) {
   if (scorecard.qualityStatus && lower(scorecard.qualityStatus) !== "complete") issues.push(`scorecard_quality_not_complete:${scorecard.qualityStatus}`);
   if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
   if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
-  const allowMarketClosedPublish = closed && (manifestFullyClosed(manifest, modules) || pendingPreviousGood);
-  const allowPreviousGoodHoldClosurePublish = previousGoodHoldClosure && !pendingPreviousGood;
-  const enforcePublishable = !closed || allowMarketClosedPublish;
-  if (!closed && !allowPreviousGoodHoldClosurePublish && !allowPendingRollForward && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
+  const allowMarketClosedHold = closed && previousGoodHoldClosure && !pendingPreviousGood;
+  const allowPreviousGoodHoldClosurePublish = allowMarketClosedHold;
+  const enforcePublishable = !closed || allowMarketClosedHold;
+  if (!closed && !allowPreviousGoodHoldClosurePublish && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
     issues.push(`manifest_not_green:${manifest.unattendedStatus || "missing"}`);
   }
-  if (closed && !allowMarketClosedPublish) {
+  if (closed && !allowMarketClosedHold) {
     issues.push(`manifest_market_closed_not_publishable:${manifest.unattendedStatus || "missing"}`);
   }
 
@@ -166,26 +259,17 @@ function validateCanary(manifest, scorecard, options = {}) {
     }
   }
 
-  const scorecardPublishAllowed = issues.length === 0
-    && !closed
-    && !allowPendingRollForward
-    && !allowPreviousGoodHoldClosurePublish
-    && manifest.ok === true
-    && manifest.unattendedStatus === "YES";
-  const guardedPreviousGood = issues.length === 0 && (closed || allowPendingRollForward || allowPreviousGoodHoldClosurePublish);
-  const ok = issues.length === 0;
+  const publishAllowed = issues.length === 0 && !closed;
   return {
     ok,
     contract: "terminal-canary-publish-v1",
     checkedAt: new Date().toISOString(),
-    status: allowPendingRollForward && guardedPreviousGood
-      ? "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD"
-      : (closed
-        ? "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
-        : (allowPreviousGoodHoldClosurePublish && guardedPreviousGood
-          ? "NOT_ARMED_TRADING_DAY_PREVIOUS_GOOD"
-          : (scorecardPublishAllowed ? "CANARY_READY" : "BLOCKED"))),
-    scorecardPublishAllowed,
+    status: closed
+      ? (issues.length === 0 ? "CANARY_PREVIOUS_GOOD_HOLD" : "BLOCKED")
+      : (publishAllowed && allowPreviousGoodHoldClosurePublish ? "CANARY_READY_PREVIOUS_GOOD_HOLD_CLOSURE" : (publishAllowed ? "CANARY_READY" : "BLOCKED")),
+    scorecardPublishAllowed: publishAllowed,
+    degraded: closed,
+    holdReason: closed ? "market_closed_previous_good_preserved_no_new_scorecard_publish" : "",
     marketClosedPreviousGood: closed,
     tradeDate: expectedReportDate,
     manifestTradeDate: tradeDate,
@@ -215,6 +299,7 @@ function markdown(payload) {
   lines.push(`- tradeDate: ${payload.tradeDate}`);
   lines.push(`- status: ${payload.status}`);
   lines.push(`- scorecardPublishAllowed: ${payload.scorecardPublishAllowed}`);
+  lines.push(`- partialScorecardReadbackAllowed: ${payload.partialScorecardReadbackAllowed === true}`);
   lines.push(`- marketClosedPreviousGood: ${payload.marketClosedPreviousGood}`);
   lines.push(`- issues: ${payload.issues.join("; ") || "none"}`);
   lines.push("");
@@ -252,7 +337,8 @@ function selfTests() {
     { name: "runid-mismatch", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], runId: "old" }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_runId_mismatch:strategy2" },
     { name: "fallback-report", mutate: (m, s) => [m, { ...s, sourceReports: [{ ...s.sourceReports[0], fallbackUsed: true }, s.sourceReports[1]] }], expectOk: false, issue: "sourceReport_fallback_or_stale:strategy2" },
     { name: "trading-day-previous-good-is-blocked-not-market-closed", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", waterRoot: { status: "trading_day_wait_source_window_previous_good", reason: "trading_day_outside_formal_source_window_preserve_previous_good" }, blocker: "terminal_resource_chain_unattended_failed" }, { ...s, latestDate: "2026-07-16" }], expectOk: false, expectedStatus: "BLOCKED", issue: "scorecard_latestDate_mismatch" },
-    { name: "manifest-pending-not-due-allows-current-nonpending-roll-forward", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, s], expectOk: true, expectedStatus: "NOT_ARMED_PENDING_NOT_DUE_ROLL_FORWARD" },
+    { name: "market-closed-previous-good-hold-never-publishes", mutate: (m, s) => [{ ...m, unattendedStatus: "PREVIOUS_GOOD_HOLD", waterRoot: { status: "market_closed_previous_good", reason: "market_closed_formal_scan_skipped_preserve_previous_good" }, blocker: "market_closed_previous_good" }, s], expectOk: true, expectedStatus: "CANARY_PREVIOUS_GOOD_HOLD", expectScorecardPublishAllowed: false },
+    { name: "manifest-pending-not-due-allows-partial-readback-blocks-formal-publish", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "pending_not_due:strategy4@16:00", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260716-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:16:00"] }] }, s], expectOk: true, expectedStatus: "CANARY_PARTIAL_PENDING_NOT_DUE_HOLD", issue: "manifest_pending_not_due" },
     { name: "manifest-hard-blocker-overrides-later-pending", mutate: (m, s) => [{ ...m, ok: false, unattendedStatus: "NO", blocker: "strategy4:manifest_tradeDate_mismatch:20260720!=20260721", modules: [...m.modules, { key: "strategy4", runId: "strategy4-20260720-a", ok: false, complete: false, pendingNotDue: false, issues: ["manifest_tradeDate_mismatch:20260720!=20260721"] }, { key: "strategy5", runId: "strategy5-20260720-a", ok: true, complete: false, pendingNotDue: true, issues: ["pending_not_due:21:00"] }] }, { ...s, latestDate: "2026-07-20", sourceReports: [] }], expectOk: false, expectedStatus: "BLOCKED", issue: "manifest_not_green" },
   ];
   const failures = [];
@@ -261,6 +347,7 @@ function selfTests() {
     const result = validateCanary(m, s, { mode: `self-test:${item.name}` });
     const hasIssue = item.issue ? result.issues.some((issue) => issue.includes(item.issue)) : true;
     if (item.expectedStatus && result.status !== item.expectedStatus) failures.push({ name: item.name, result, expectedStatus: item.expectedStatus });
+    if (item.expectScorecardPublishAllowed !== undefined && result.scorecardPublishAllowed !== item.expectScorecardPublishAllowed) failures.push({ name: item.name, result, expectedScorecardPublishAllowed: item.expectScorecardPublishAllowed });
     if (result.ok !== item.expectOk || !hasIssue) failures.push({ name: item.name, result });
   }
   return failures;
@@ -285,6 +372,7 @@ async function main() {
     ok: payload.ok,
     status: payload.status,
     scorecardPublishAllowed: payload.scorecardPublishAllowed,
+    partialScorecardReadbackAllowed: payload.partialScorecardReadbackAllowed === true,
     tradeDate: payload.tradeDate,
     issues: payload.issues,
     output: jsonFile,
@@ -298,3 +386,12 @@ main().catch((error) => {
 });
 
 module.exports = { validateCanary, selfTests };
+
+
+
+
+
+
+
+
+

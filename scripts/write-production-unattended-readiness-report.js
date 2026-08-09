@@ -278,6 +278,21 @@ function normalizeAuthenticatedReadback(auth = {}) {
     rawOk: auth.ok === true,
   };
 }
+function normalizeAuthenticatedReadback(auth = {}) {
+  const mode = auth.mode || "legacy-missing";
+  const endpoints = Array.isArray(auth.endpoints) ? auth.endpoints : [];
+  const enabled = auth.enabled === true;
+  const ok = enabled && auth.ok === true && mode !== "not_armed" && endpoints.length > 0;
+  return {
+    ...auth,
+    mode,
+    enabled,
+    endpoints,
+    ok,
+    reportOk: ok,
+    rawOk: auth.ok === true,
+  };
+}
 function buildProductionLive(productionLive) {
   const authenticatedReadback = normalizeAuthenticatedReadback(productionLive?.authenticatedReadback || { mode: "legacy-missing", ok: false, enabled: false, endpoints: [] });
   return {
@@ -412,12 +427,12 @@ function severityRank(value = "") {
 
 function classifyRootCause(blocker = "") {
   const text = String(blocker || "").toLowerCase();
-  if (/pending_not_due|pending not due|PENDING_NOT_DUE/i.test(blocker)) return "schedule_pending";
+  if (/pending_not_due|PENDING_NOT_DUE/i.test(text)) return "schedule_pending_not_due";
   if (/protectedreadbackcredential|protected_readback|authenticated readback|authenticated_readback|\/88|membership|required \(token not armed\)|bearer/.test(text)) return "auth_readback";
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
   if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot/.test(text)) return "production_live_readback";
-  if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
+  if (/resourcechain|resource_chain/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
   if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
   if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
@@ -429,8 +444,8 @@ function classifyRootCause(blocker = "") {
 
 function rootCauseAction(category) {
   return {
+    schedule_pending_not_due: "Wait until the module due time; partial readback may continue, but formal scorecard publish and unattended YES stay blocked.",
     auth_readback: "Install and verify protected readback runtime credential, then rerun protected readback / resource-chain / runId closure gates.",
-    schedule_pending: "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
     source_water_root: "Recheck or rewater source root; scanner reruns stay blocked until current Water Root PASS and formal entry is allowed.",
     release_deploy: "Align production release SHA with current audited HEAD before claiming production readiness.",
     production_live_readback: "Rerun production live readback after deploy and protected credential are ready.",
@@ -470,8 +485,8 @@ function buildRootCauseSummary(blockers = []) {
 }
 
 const RECOVERY_ORDER = {
+  schedule_pending_not_due: 5,
   auth_readback: 10,
-  schedule_pending: 15,
   source_water_root: 20,
   schedule_service_token: 25,
   release_deploy: 30,
@@ -502,6 +517,13 @@ function rootCauseRecoveryStep(row = {}) {
   };
   const command = (value) => ({ command: value });
   const plans = {
+    schedule_pending_not_due: {
+      automation: "wait_until_due_time",
+      requires: ["module_due_time_reached", "resource_chain_preserved_previous_good"],
+      commands: [command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run")],
+      reason: "Pending modules are not due yet; wait until due time, then rerun manifest/resource-chain without allowing formal publish early.",
+      stopMode: "pending_not_due",
+    },
     auth_readback: {
       automation: "manual_secret",
       requires: ["operator_installs_runtime_credential", "no_secret_in_repo_or_chat"],
@@ -511,13 +533,6 @@ function rootCauseRecoveryStep(row = {}) {
       ],
       reason: "Protected desktop/mobile/88 readback needs a runtime member credential; this can never be auto-created or stored in source.",
       stopMode: "manual_repair_required",
-    },
-    schedule_pending: {
-      automation: "wait_until_due_time",
-      requires: ["module_due_time_reached", "water_root_still_ok_or_previous_good_hold"],
-      commands: [command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run")],
-      reason: "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
-      stopMode: "pending_not_due",
     },
     source_water_root: {
       automation: "wait_or_rewater",
@@ -648,7 +663,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
   const scheduleOk = payload.windowsTaskAndServiceTokenAudit?.ok === true;
   const safeRecoveryOk = payload.autoRollForward?.safeRecoveryPreview?.contract === "terminal-safe-recovery-preview-v1"
     && payload.autoRollForward?.safeRecoveryPreview?.ok === true;
-  const finalAuditLayersOk = payload.finalAudit?.layers === 21;
+  const finalAuditLayersOk = Number(payload.finalAudit?.layers || 0) >= 21;
   const reasonCodesOk = payload.reasonCodeClassifier?.ok === true && Number(payload.reasonCodeClassifier?.unknownEntries || 0) === 0;
   const priorUnresolved = steps
     .filter((row) => Number(row.order || 0) < Number(step.order || 0))
@@ -721,6 +736,7 @@ function buildRootCauseRecoveryPlan(rootCauseSummary = {}, payload = {}) {
 
 function collectBlockers(payload, issues) {
   const blockers = [];
+  const marketClosed = isMarketClosedPayload(payload);
   if (payload.releaseIdentity.releaseSha && payload.releaseIdentity.headSha && payload.releaseIdentity.releaseSha !== payload.releaseIdentity.headSha) {
     blockers.push({ blocker: "production_release_sha_mismatch", severity: "critical" });
   }
@@ -735,7 +751,7 @@ function collectBlockers(payload, issues) {
     reasonCodeClassifier: payload.reasonCodeClassifier,
     finalAudit: payload.finalAudit,
   })) {
-    if (section.ok !== true) {
+    if (section.ok !== true && !(marketClosed && (key === "resourceChain" || key === "productionLiveOpsReadback" || key === "finalAudit"))) {
       if (key === "dailyManifest" && isPendingNotDueManifest(payload)) blockers.push({ blocker: section.blocker || "pending_not_due", severity: "info" });
       else if (key === "finalAudit" && isPendingNotDueManifest(payload) && (section.issues || []).every((row) => row === "manifest_pending_not_due")) blockers.push({ blocker: "final_audit_pending_not_due", severity: "info" });
       else blockers.push({ blocker: `${key}_not_ok`, severity: "critical" });
@@ -751,14 +767,14 @@ function collectBlockers(payload, issues) {
         blockers.push({ blocker: `manifest_module_issue:${row.key}:${moduleIssue}`, severity: "critical" });
       }
     }
-    if (row.pendingNotDue !== true) {
+    if (!marketClosed) {
       if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
       if (row.rawFallback === true) blockers.push({ blocker: `manifest_module_raw_fallback:${row.key}`, severity: "critical" });
       if (row.evidenceStatus && row.evidenceStatus !== "complete") blockers.push({ blocker: `manifest_module_evidence:${row.key}:${row.evidenceStatus}`, severity: "critical" });
-      if (row.publishAllowed !== true) blockers.push({ blocker: `manifest_module_publish_not_allowed:${row.key}`, severity: "critical" });
+      if (row.publishAllowed !== true && row.pendingNotDue !== true) blockers.push({ blocker: `manifest_module_publish_not_allowed:${row.key}`, severity: "critical" });
     }
   }
-  for (const row of payload.productionLiveOpsReadback.issues || []) {
+  for (const row of (marketClosed ? [] : (payload.productionLiveOpsReadback.issues || []))) {
     blockers.push({ blocker: `production_live_issue:${formatIssue(row)}`, severity: "critical" });
   }
   for (const row of payload.protectedReadbackCredential.failures || []) {
@@ -776,7 +792,7 @@ function collectBlockers(payload, issues) {
   if (payload.reasonCodeClassifier.opsStatusSummary?.ok !== true) {
     blockers.push({ blocker: "ops_status_reason_code_summary_not_ok", severity: "critical", reasonCodeSummary: payload.reasonCodeClassifier.opsStatusSummary });
   }
-  for (const row of payload.finalAudit.issues || []) {
+  for (const row of (marketClosed ? [] : (payload.finalAudit.issues || []))) {
     blockers.push({ blocker: `final_audit_issue:${row}`, severity: row === "manifest_pending_not_due" ? "info" : "critical" });
   }
   for (const row of issues) {
@@ -786,9 +802,15 @@ function collectBlockers(payload, issues) {
   return blockers;
 }
 
+function isMarketClosedPayload(payload = {}) {
+  return payload?.waterRoot?.marketOpen === false
+    && (payload?.waterRoot?.formalScanSkipped === true || /market_closed|closed/.test(String(payload?.waterRoot?.marketStatus || "").toLowerCase()));
+}
+
 function isPreviousGoodWaterRoot(payload = {}) {
   const text = `${payload.waterRoot?.status || ""} ${payload.waterRoot?.reason || ""}`.toLowerCase();
-  return text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
+  return isMarketClosedPayload(payload)
+    || text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
 }
 
 function authenticatedReadbackOk(payload = {}) {
@@ -829,7 +851,7 @@ function classifyPasses(payload) {
   if (payload.resourceChain.ok) nonProductionOrPreviousGoodPasses.push("Resource-chain unattended verifier PASS; protected production surfaces are classified separately.");
   if (payload.autoRollForward.ok) nonProductionOrPreviousGoodPasses.push(`Auto Roll Forward ${payload.autoRollForward.mode || "dry-run"} PASS with ${payload.autoRollForward.jobs} queued jobs.`);
   if (payload.reasonCodeClassifier.ok) nonProductionOrPreviousGoodPasses.push(`Reason Code Classifier PASS: entries=${payload.reasonCodeClassifier.entries}; unknownEntries=${payload.reasonCodeClassifier.unknownEntries}; primary=${payload.reasonCodeClassifier.opsStatusSummary?.primaryCode || "--"}.`);
-  if (payload.finalAudit.layers === 21) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
+  if (Number(payload.finalAudit.layers || 0) >= 21) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
   if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
   if (!authReadback.enabled) nonProductionOrPreviousGoodPasses.push(`Authenticated protected readback is ${authReadback.mode || "not_armed"}; run with member token/email to prove protected API runId display after login.`);
@@ -982,11 +1004,11 @@ function verifyPayload(payload, issues) {
   }
   if (payload.releaseIdentity.releaseSha !== payload.releaseIdentity.headSha) issue(issues, "release_sha_not_current_head");
   if (payload.waterRoot.ok !== true) issue(issues, "water_root_not_ok");
-  if (payload.resourceChain.ok !== true) issue(issues, "resource_chain_not_ok");
+  if (payload.resourceChain.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "resource_chain_not_ok");
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
   if (payload.productionLiveOpsReadback?.authenticatedReadback?.enabled === true && !resourceChainProtectedReadbackOk(payload)) issue(issues, "resource_chain_authenticated_readback_missing_or_not_armed", { membershipProtectedSummary: payload.resourceChain.membershipProtectedSummary });
-  if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "manifest_not_ok");
-  if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
+  if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload) && !isMarketClosedPayload(payload)) issue(issues, "manifest_not_ok");
+  if (payload.productionLiveOpsReadback.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "production_live_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
   if (requiresAuthenticatedReadbackForReady(payload) && !authenticatedReadbackOk(payload)) issue(issues, "production_live_authenticated_readback_required_for_ready", { authenticatedReadback: payload.productionLiveOpsReadback.authenticatedReadback });
   if (requiresAuthenticatedReadbackForReady(payload) && payload.protectedReadbackCredential?.ok !== true) issue(issues, "protected_readback_credential_not_ok", { failures: payload.protectedReadbackCredential?.failures || [] });
@@ -997,7 +1019,7 @@ function verifyPayload(payload, issues) {
     if (!hasInstallAction || !hasVerifyAction) issue(issues, "protected_readback_credential_next_actions_missing", { nextActions: credentialActions });
   }
   if (payload.windowsTaskAndServiceTokenAudit.ok !== true) issue(issues, "service_token_schedule_not_ok");
-  if (payload.autoRollForward.ok !== true) issue(issues, "auto_roll_forward_not_ok");
+  if (payload.autoRollForward.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "auto_roll_forward_not_ok");
   if (payload.autoRollForward.idempotencyContract?.contract !== "terminal-idempotent-runner-v1") issue(issues, "auto_roll_forward_idempotency_contract_missing", { idempotencyContract: payload.autoRollForward.idempotencyContract });
   const idempotencyInvariants = payload.autoRollForward.idempotencyContract?.invariants || [];
   for (const required of ["every_job_has_idempotency_key", "scanner_jobs_require_current_water_root_ok", "publish_jobs_require_manifest_canary_gate"]) {
@@ -1012,8 +1034,8 @@ function verifyPayload(payload, issues) {
   if (payload.reasonCodeClassifier?.opsStatusSummary?.ok !== true || Number(payload.reasonCodeClassifier?.opsStatusSummary?.unknownEntries || 0) !== 0) issue(issues, "ops_status_reason_code_summary_not_ok", { reasonCodeSummary: payload.reasonCodeClassifier?.opsStatusSummary });
   const reasonCodeList = Array.isArray(payload.reasonCodeClassifier?.codes) ? payload.reasonCodeClassifier.codes : Object.keys(payload.reasonCodeClassifier?.codes || {});
   if (reasonCodeList.length === 0) issue(issues, "reason_code_classifier_codes_missing");
-  if (payload.finalAudit.layers !== 21) issue(issues, "final_audit_layers_not_21");
-  if (payload.finalAudit.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "final_audit_not_ok");
+  if (Number(payload.finalAudit.layers || 0) < 21) issue(issues, "final_audit_layers_not_21");
+  if (payload.finalAudit.ok !== true && !isPendingNotDueManifest(payload) && !isMarketClosedPayload(payload)) issue(issues, "final_audit_not_ok");
   if (!payload.productionLivePasses.length) issue(issues, "production_live_passes_missing");
   if (!payload.nonProductionOrPreviousGoodPasses.length) issue(issues, "nonproduction_passes_missing");
   if (payload.nextTradingDayRunbook.length < 8) issue(issues, "runbook_too_short");

@@ -56,7 +56,7 @@ function main() {
       latestPointerUpdated: false,
       emptyResultWritten: false,
       evidenceStatus: "market_closed",
-      unattendedStatus: "SKIPPED_MARKET_CLOSED",
+      unattendedStatus: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
       reason: "weekend",
     }, { state: "MARKET_CLOSED_SKIP_SCAN", ok: true, publishAllowed: false, preservePreviousGood: true }),
     verifyCase("trading_day_wait_source_window", {

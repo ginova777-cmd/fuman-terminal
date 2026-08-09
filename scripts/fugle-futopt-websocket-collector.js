@@ -273,7 +273,7 @@ function writeStatus(extra = {}) {
 async function run() {
   const apiKey = readSecret(API_KEY_FILES);
   if (!apiKey) {
-    writeStatus({ ok: false, error: "fugle api key missing" });
+    writeStatus({ ok: false, formalReady: false, formalReadyReason: "api_key_missing", error: "fugle api key missing" });
     return;
   }
 
@@ -296,9 +296,41 @@ async function run() {
     let lastForbiddenMessage = "";
 
     const writeStreamingStatus = (extra = {}) => {
+      const messageAgeSeconds = lastMessageAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastMessageAt)) / 1000)) : null;
+      const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
+      const formalReady = extra.ok !== false
+        && Boolean(ws && ws.readyState === WebSocket.OPEN)
+        && authenticated
+        && requiredChannelsReady
+        && selection.selectedSymbols.length > 0
+        && selection.allRows.length > 0
+        && quoteMessages + candleMessages > 0
+        && lastMessageAt
+        && Number.isFinite(messageAgeSeconds)
+        && messageAgeSeconds <= 300
+        && forbiddenChunks === 0;
+      const formalReadyReason = formalReady
+        ? "streaming_authenticated_required_channels_and_subscription_ready"
+        : extra.ok === false
+          ? "websocket_status_error"
+          : !ws || ws.readyState !== WebSocket.OPEN
+            ? "websocket_not_open"
+            : !authenticated
+              ? "websocket_not_authenticated"
+              : !requiredChannelsReady
+                ? "websocket_required_channel_missing"
+                : !lastMessageAt
+                  ? "websocket_no_message"
+                  : !Number.isFinite(messageAgeSeconds) || messageAgeSeconds > 300
+                    ? "websocket_last_message_stale"
+                    : forbiddenChunks > 0
+                      ? "websocket_subscription_forbidden"
+                      : "websocket_transport_not_formal_ready";
       writeStatus({
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        formalReady,
+        formalReadyReason,
         streamingOpenedAt: openedAt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,

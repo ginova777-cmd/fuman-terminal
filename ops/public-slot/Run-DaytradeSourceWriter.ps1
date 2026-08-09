@@ -68,10 +68,154 @@ if (-not (Test-Path -LiteralPath $WriterScript)) {
 }
 
 $env:FUMAN_RUNTIME_DIR = $RuntimeDir
+$DaytradePrioritySymbolsFile = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-priority-symbols.json"
+$env:FUGLE_COLLECTOR_ROLE = "daytrade"
+$SourceHostId = if ($env:FUMAN_DAYTRADE_SOURCE_HOST_ID) { [string]$env:FUMAN_DAYTRADE_SOURCE_HOST_ID } else { [string]$env:COMPUTERNAME }
+$env:FUMAN_DAYTRADE_SOURCE_ROLE = if ($Apply) { "writer" } else { "reader" }
+$env:FUMAN_DAYTRADE_SOURCE_HOST_ID = $SourceHostId
+$env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID = if ($env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID) { $env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID } else { "$($SourceHostId):daytrade-writer" }
+$env:FUMAN_DAYTRADE_WRITER_LEASE_REQUIRED = "1"
+$env:FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE = $DaytradePrioritySymbolsFile
+$env:FUGLE_WS_PRIORITY_SYMBOLS_FILE = $DaytradePrioritySymbolsFile
+$env:FUGLE_WS_SYMBOLS_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-symbols.json"
+$env:FUGLE_WS_QUOTES_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-quotes.json"
+$env:FUGLE_WS_CANDLES_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-candles.json"
+$env:FUGLE_WS_STATUS_FILE = Join-Path $RuntimeDir "state\fugle-daytrade-websocket-status.json"
+$HostApprovalFile = Join-Path $RuntimeDir "config\daytrade-source-host-approval.json"
+
+function Assert-DaytradeSourceHostApproval {
+  if (-not $Apply) { return }
+  if (-not (Test-Path -LiteralPath $HostApprovalFile)) {
+    Write-FailureArtifact 9003 "daytrade_source_host_approval_missing"
+    throw "Missing approved source host file: $HostApprovalFile"
+  }
+  try {
+    $approval = Get-Content -LiteralPath $HostApprovalFile -Raw | ConvertFrom-Json
+  } catch {
+    Write-FailureArtifact 9003 "daytrade_source_host_approval_invalid"
+    throw "Invalid source host approval file: $HostApprovalFile"
+  }
+  if ($approval.approved -ne $true -or [string]$approval.sourceRole -ne "writer" -or [string]$approval.hostId -ne $SourceHostId) {
+    Write-FailureArtifact 9003 "daytrade_source_host_not_approved"
+    throw "This computer is not the approved daytrade source writer host: $SourceHostId"
+  }
+}
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "$RepoRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
+
+function Get-FugleWebSocketCollectorProcess {
+  $collectorMarker = "fugle-websocket-collector.js"
+  try {
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+      $_.Name -match '^(node|nodejs)(\.exe)?$' -and
+      [string]$_.CommandLine -match [regex]::Escape($collectorMarker) -and
+      [string]$_.CommandLine -match "--daytrade-source"
+    })
+    if ($processes.Count -gt 0) { return $processes[0] }
+  } catch {
+    Write-WrapperLog "WARN unable to inspect websocket collector process: $($_.Exception.Message)"
+  }
+  return $null
+}
+
+function Ensure-FugleWebSocketCollector {
+  $collector = Join-Path $RepoRoot "scripts\fugle-websocket-collector.js"
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $collector)) {
+    Write-WrapperLog "WARN websocket collector missing: $collector"
+    return $false
+  }
+  if (-not (Test-Path -LiteralPath $nodeExe)) {
+    Write-WrapperLog "WARN node executable missing: $nodeExe"
+    return $false
+  }
+  $existing = Get-FugleWebSocketCollectorProcess
+  if ($null -ne $existing) {
+    Write-WrapperLog "websocket collector already running pid=$($existing.ProcessId)"
+    return $true
+  }
+
+  $env:FUGLE_STREAMING_CHANNELS = "trades,aggregates,candles"
+  $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
+  $process = Start-Process -FilePath $nodeExe `
+    -ArgumentList @("--use-system-ca", $collector, "--daytrade-source") `
+    -WorkingDirectory (Split-Path -Parent $collector) `
+    -WindowStyle Hidden `
+    -PassThru
+  Start-Sleep -Milliseconds 500
+  Write-WrapperLog "websocket collector started pid=$($process.Id) channels=$($env:FUGLE_STREAMING_CHANNELS) subscriptions=$($env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS)"
+  return $true
+}
+
+function Get-FugleFutoptWebSocketCollectorProcess {
+  $collectorMarker = "fugle-futopt-websocket-collector.js"
+  try {
+    $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+      $_.Name -match '^(node|nodejs)(\.exe)?$' -and
+      [string]$_.CommandLine -match [regex]::Escape($collectorMarker)
+    })
+    if ($processes.Count -gt 0) { return $processes[0] }
+  } catch {
+    Write-WrapperLog "WARN unable to inspect futopt websocket collector process: $($_.Exception.Message)"
+  }
+  return $null
+}
+function Ensure-FugleFutoptWebSocketCollector {
+  $collectorMutex = New-Object System.Threading.Mutex($false, "Global\FumanFugleDaytradeFutoptCollector")
+  $collectorMutexAcquired = $false
+  try {
+    $collectorMutexAcquired = $collectorMutex.WaitOne(0)
+    if (-not $collectorMutexAcquired) {
+      Write-WrapperLog "futopt websocket collector start lock busy; defer to next writer tick"
+      return $false
+    }
+  $collector = Join-Path $RepoRoot "scripts\fugle-futopt-websocket-collector.js"
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $collector)) {
+    Write-WrapperLog "WARN futopt websocket collector missing: $collector"
+    return $false
+  }
+  if (-not (Test-Path -LiteralPath $nodeExe)) {
+    Write-WrapperLog "WARN node executable missing for futopt collector: $nodeExe"
+    return $false
+  }
+  $existing = Get-FugleFutoptWebSocketCollectorProcess
+  if ($null -ne $existing) {
+    Write-WrapperLog "futopt websocket collector already running pid=$($existing.ProcessId)"
+    return $true
+  }
+
+  $env:FUGLE_FUTOPT_STREAMING_CHANNELS = "trades,aggregates,candles"
+  $env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
+  $env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = "500"
+  $process = Start-Process -FilePath $nodeExe `
+    -ArgumentList @("--use-system-ca", $collector) `
+    -WorkingDirectory (Split-Path -Parent $collector) `
+    -WindowStyle Hidden `
+    -PassThru
+  Start-Sleep -Milliseconds 500
+  Write-WrapperLog "futopt websocket collector started pid=$($process.Id) channels=$($env:FUGLE_FUTOPT_STREAMING_CHANNELS) subscriptions=$($env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS)"
+  return $true
+  } finally {
+    if ($collectorMutexAcquired) {
+      try { $collectorMutex.ReleaseMutex() | Out-Null } catch {}
+    }
+    try { $collectorMutex.Dispose() } catch {}
+  }
+}
+if ($Apply) {
+  Assert-DaytradeSourceHostApproval
+  if (-not (Ensure-FugleWebSocketCollector)) {
+    Write-WrapperLog "WARN websocket collector was not confirmed; writer remains fail-closed until formal WS status is ready"
+  }
+  if (-not (Ensure-FugleFutoptWebSocketCollector)) {
+    Write-WrapperLog "WARN futopt websocket collector was not confirmed; writer remains fail-closed until formal futopt status is ready"
+  }
+} else {
+  Write-WrapperLog "READ_ONLY mode: collector start skipped; no source writes allowed"
+}
 
 $node = "node"
 $args = @("--use-system-ca", $WriterScript)
@@ -80,7 +224,10 @@ if ($LocalCheck) {
   $args += "--local-check"
 } elseif ($Apply) {
   $args += "--apply"
-  if ($Once) {
+  # The Windows task runs every minute. One bounded tick per task keeps the
+  # mutex, wrapper timeout, and natural evidence cadence aligned. Explicit
+  # -Continuous remains available for an approved long-running writer window.
+  if ($Once -or -not $Continuous) {
     $args += "--once"
   } else {
     $args += "--max-seconds=300"
@@ -115,13 +262,25 @@ try {
     exit 0
   }
 
-  & $node @args > $StdoutLog 2> $StderrLog
-  $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+  $timeoutSeconds = if ($Apply) { 330 } elseif ($Fetch) { 120 } else { 120 }
+  $process = Start-Process -FilePath $node -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru
+  if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
+    try { $process.Kill() } catch {}
+    try { $process.WaitForExit(5000) } catch {}
+    Write-FailureArtifact 9004 "writer_timeout_${timeoutSeconds}s"
+    Write-WrapperLog "FAIL writer_timeout_${timeoutSeconds}s stdout=$StdoutLog stderr=$StderrLog"
+    exit 1
+  }
+  $exitCode = [int]$process.ExitCode
   if ($exitCode -ne 0) {
     Write-FailureArtifact $exitCode "writer_exit_$exitCode"
     Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
   }
+  # Keep historical logs, but remove the current failure pointer after a
+  # successful tick so watchdogs do not read an obsolete timeout as live state.
+  $failureArtifact = Join-Path $StateDir "daytrade-source-writer.failure.json"
+  Remove-Item -LiteralPath $failureArtifact -Force -ErrorAction SilentlyContinue
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0
 } catch {

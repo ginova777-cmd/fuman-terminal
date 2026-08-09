@@ -183,7 +183,7 @@ function verify(summary) {
   const requireDaytradeSourceReport = daytrade.hasSourceReport || !strategy3RunComplete;
   if (requireDaytradeSourceReport && daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
   if (requireDaytradeSourceReport && daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
-  if (requireDaytradeSourceReport && daytrade.formalScope !== "priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_priority_top40`);
+  if (requireDaytradeSourceReport && daytrade.formalScope !== "mother_pool_rotation_priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_mother_pool_rotation_priority_top40`);
   if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
 
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");

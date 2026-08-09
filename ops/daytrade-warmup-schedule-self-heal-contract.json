@@ -1,5 +1,25 @@
 {
   "contract": "daytrade-warmup-schedule-self-heal-contract-v1",
+  "predictivePreflightTask": {
+    "name": "Fuman Daytrade Source Preflight 0830",
+    "time": "08:30",
+    "expectedTriggers": [
+      "08:30"
+    ],
+    "allowedResults": [
+      0,
+      267011
+    ],
+    "expectedCommandContains": [
+      "Run-DaytradePreflight0830.ps1"
+    ],
+    "runtimeScript": "C:/fuman-runtime/ops/Run-DaytradePreflight0830.ps1",
+    "runtimeMustContain": [
+      "daytrade-preflight-0830.js",
+      "market_closed_previous_good",
+      "no_latest_pointer_update"
+    ]
+  },
   "naturalEvidenceTasks": [
     {
       "name": "Fuman Daytrade Source Gate 0700",
@@ -109,6 +129,9 @@
   ],
   "invariants": [
     "natural_gate_tasks_exist_and_are_readonly",
+    "market_calendar_precedes_warmup_and_closed_market_preserves_previous_good",
+    "predictive_preflight_uses_websocket_transport_and_fail_closed_exit",
+    "predictive_preflight_task_exists_at_0830",
     "final_verdict_task_exists_at_0912",
     "final_verdict_runs_root_apply_after_original_verdict",
     "writer_and_watchdog_rewater_tasks_exist",
@@ -120,6 +143,8 @@
     "rewater_must_be_followed_by_verification",
     "self_heal_apply_failure_keeps_unattended_no",
     "success_requires_rewater_verification_not_action_exit_only",
-    "warmup_tasks_run_on_battery_power"
+    "warmup_tasks_run_on_battery_power",
+    "warmup_run_id_is_filesystem_safe",
+    "preflight_failure_evidence_is_immutable_and_reason_preserving"
   ]
 }

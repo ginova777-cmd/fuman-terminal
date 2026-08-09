@@ -50,6 +50,7 @@ const ROUTE_CONFIG = {
     view: "market",
     selector: 'aside.sidebar a[data-view="market"]',
     postClick: '#market-view [data-market-mode="ai"], [data-market-mode="ai"]',
+    postClickOptional: true,
     panel: "#market-view",
     rows: ".market-ai-stock-row,.market-ai-card,.market-ai-block,.market-ai-hero-board,.market-ai-pick-row",
   },

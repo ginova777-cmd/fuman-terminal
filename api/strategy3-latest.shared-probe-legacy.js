@@ -20,7 +20,6 @@ const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_str
 const SNAPSHOT_KEY = process.env.STRATEGY3_SUPABASE_SNAPSHOT_KEY || "strategy3_latest";
 const DESKTOP_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || process.env.FUMAN_STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2500);
 const STRATEGY3_INTRADAY_STATUS_SOURCE = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
-const STRATEGY3_INTRADAY_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
 const FORMAL_SOURCE_CHAIN = `fugle_quotes_latest+${STRATEGY3_INTRADAY_STATUS_SOURCE}+stock_daily_volume`;
 const STRATEGY3_PREWATER_RESPONSE_FIELDS = [
   "source_snapshot_captured_at",
@@ -126,334 +125,6 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function compactDate(value) {
-  return String(value || "").replace(/\D/g, "").slice(0, 8);
-}
-
-function isoDate(value) {
-  const digits = compactDate(value);
-  return /^\d{8}$/.test(digits) ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : "";
-}
-
-function symbolOf(row = {}) {
-  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
-  return String(row.code || row.symbol || payload.code || payload.symbol || payload.stock_id || "").trim();
-}
-
-function chunkValues(values = [], size = 80) {
-  const chunks = [];
-  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
-  return chunks;
-}
-
-function candleMinute(row = {}) {
-  const raw = String(row.candle_time || row.time || row.timestamp || row.datetime || row.updated_at || "").trim();
-  const parsed = Date.parse(raw);
-  if (Number.isFinite(parsed)) {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Taipei",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(new Date(parsed));
-    const hour = Number(parts.find((part) => part.type === "hour")?.value);
-    const minute = Number(parts.find((part) => part.type === "minute")?.value);
-    if (Number.isInteger(hour) && Number.isInteger(minute)) return hour * 60 + minute;
-  }
-  const match = raw.match(/(?:T|\s)(\d{2}):(\d{2})(?::\d{2})?/);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
-  return hour * 60 + minute;
-}
-
-function strategy3RunDateFromPayload(payload = {}, rows = []) {
-  const direct = isoDate(payload.scanDate || payload.scan_date || payload.usedDate || payload.tradeDate || payload.trade_date || payload.date || payload.latestDate);
-  if (direct) return direct;
-  for (const row of rows) {
-    const payloadRow = row?.payload && typeof row.payload === "object" ? row.payload : {};
-    const rowDate = isoDate(row.scan_date || row.scanDate || row.trade_date || row.tradeDate || payloadRow.scanDate || payloadRow.tradeDate || payloadRow.usedDate);
-    if (rowDate) return rowDate;
-  }
-  const runId = String(payload.runId || payload.run_id || rows[0]?.run_id || rows[0]?.runId || "").trim();
-  return isoDate(runId);
-}
-
-async function fetchStrategy3Entry1mMap(tradeDate, rows = []) {
-  const date = isoDate(tradeDate);
-  const symbols = [...new Set(rows.map(symbolOf).filter(Boolean))];
-  const map = new Map();
-  if (!date || !symbols.length) return { date, expectedSymbols: symbols, map, missingSymbols: symbols };
-  for (const chunk of chunkValues(symbols)) {
-    const query = [
-      "select=symbol,trade_date,candle_time,close,volume",
-      `trade_date=eq.${encodeURIComponent(date)}`,
-      `symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
-      `candle_time=gte.${encodeURIComponent(`${date}T04:50:00+00:00`)}`,
-      `candle_time=lte.${encodeURIComponent(`${date}T05:00:59+00:00`)}`,
-      "order=candle_time.asc",
-      "limit=2000",
-    ].join("&");
-    const candleRows = await fetchRowsFrom(STRATEGY3_INTRADAY_1M_TABLE, query);
-    for (const candle of candleRows) {
-      const symbol = String(candle.symbol || "").trim();
-      const minute = candleMinute(candle);
-      const close = cleanNumber(candle.close);
-      if (!symbol || !(close > 0) || minute === null || minute < 12 * 60 + 50 || minute > 13 * 60) continue;
-      const current = map.get(symbol);
-      if (!current || minute >= current.minute) {
-        map.set(symbol, {
-          symbol,
-          close,
-          minute,
-          candle_time: String(candle.candle_time || candle.time || candle.timestamp || "").trim(),
-          trade_date: String(candle.trade_date || date).trim(),
-          volume: cleanNumber(candle.volume),
-        });
-      }
-    }
-  }
-  const missingSymbols = symbols.filter((symbol) => !map.has(symbol));
-  return { date, expectedSymbols: symbols, map, missingSymbols };
-}
-
-function appendReason(reason, text) {
-  const base = String(reason || "").trim();
-  if (!text || base.includes(text)) return base;
-  return `${base}${base ? "；" : ""}${text}`;
-}
-
-function strategy3MotherPoolScope(payload = {}) {
-  const scanCoverage = payload?.scanCoverage && typeof payload.scanCoverage === "object" ? payload.scanCoverage : {};
-  const resultCount = cleanNumber(payload.count ?? payload.resultCount ?? payload.run_quality_at_publish?.resultCount ?? scanCoverage.resultCount);
-  const resultInMotherPool = cleanNumber(scanCoverage.resultInMotherPool);
-  const motherPoolSymbols = cleanNumber(scanCoverage.daytradeMotherPoolSymbols || payload.sourceCoverage?.rawStatus?.payload?.mother_pool_symbols);
-  const overlayOk = scanCoverage.daytradeMotherPoolOverlayOk === true;
-  const source = String(scanCoverage.daytradeMotherPoolSource || payload.sourceCoverage?.rawStatus?.payload?.mother_pool_source || "").trim();
-  const ok = resultCount === 0 || (overlayOk && motherPoolSymbols > 0 && resultInMotherPool === resultCount);
-  const reason = ok ? "" : `strategy3_result_not_all_in_daytrade_mother_pool:${resultInMotherPool}/${resultCount}`;
-  return { ok, reason, resultCount, resultInMotherPool, motherPoolSymbols, overlayOk, source };
-}
-
-function blockedStrategy3MotherPoolScopePayload(payload = {}, scope = strategy3MotherPoolScope(payload)) {
-  const reason = scope.reason || "strategy3_result_not_all_in_daytrade_mother_pool";
-  const next = attachStrategy3UnattendedContract({
-    ...payload,
-    ok: false,
-    matches: [],
-    rows: [],
-    returnedCount: 0,
-    count: 0,
-  });
-  return {
-    ...next,
-    ok: false,
-    status: "blocked",
-    sourceStatus: "blocked",
-    qualityStatus: "degraded",
-    evidenceStatus: "insufficient",
-    unattendedStatus: "NO",
-    publishAllowed: false,
-    latestOverwriteAllowed: false,
-    degradedBlocksLatest: true,
-    preservePreviousGood: true,
-    blockedReason: reason,
-    scanner_block_reason: reason,
-    issues: [...new Set([...asArray(next.issues), reason])],
-    run_quality_at_publish: {
-      ...(next.run_quality_at_publish || {}),
-      publishAllowed: false,
-      latestOverwriteAllowed: false,
-      degradedBlocksLatest: true,
-      preservePreviousGood: true,
-      blockedReason: reason,
-      scanner_block_reason: reason,
-    },
-    matches: [],
-    rows: [],
-    returnedCount: 0,
-    count: 0,
-    sourceCoverage: {
-      ...(next.sourceCoverage || {}),
-      strategy3MotherPoolScopeStatus: "blocked",
-      strategy3MotherPoolScopeReason: reason,
-      strategy3MotherPoolResultCount: scope.resultCount,
-      strategy3MotherPoolResultInPool: scope.resultInMotherPool,
-      strategy3MotherPoolSymbols: scope.motherPoolSymbols,
-      strategy3MotherPoolOverlayOk: scope.overlayOk,
-      strategy3MotherPoolSource: scope.source,
-    },
-  };
-}
-
-async function applyStrategy3MotherPoolScopeGate(payload = {}) {
-  if (!payload || typeof payload !== "object") return payload;
-  const rows = normalizeSnapshotRows(payload);
-  if (!rows.length) return payload;
-  const scope = strategy3MotherPoolScope(payload);
-  if (!scope.ok) return blockedStrategy3MotherPoolScopePayload(payload, scope);
-  return {
-    ...payload,
-    sourceCoverage: {
-      ...(payload.sourceCoverage || {}),
-      strategy3MotherPoolScopeStatus: "complete",
-      strategy3MotherPoolScopeReason: "",
-      strategy3MotherPoolResultCount: scope.resultCount,
-      strategy3MotherPoolResultInPool: scope.resultInMotherPool,
-      strategy3MotherPoolSymbols: scope.motherPoolSymbols,
-      strategy3MotherPoolOverlayOk: scope.overlayOk,
-      strategy3MotherPoolSource: scope.source,
-    },
-  };
-}
-function blockedStrategy3EntryPayload(payload = {}, reason = "strategy3_1300_intraday_1m_unavailable") {
-  const next = attachStrategy3UnattendedContract({
-    ...payload,
-    ok: false,
-    matches: [],
-    rows: [],
-    returnedCount: 0,
-    count: 0,
-  });
-  return {
-    ...next,
-    ok: false,
-    status: "blocked",
-    sourceStatus: "blocked",
-    qualityStatus: "degraded",
-    evidenceStatus: "insufficient",
-    unattendedStatus: "NO",
-    publishAllowed: false,
-    latestOverwriteAllowed: false,
-    degradedBlocksLatest: true,
-    preservePreviousGood: true,
-    blockedReason: reason,
-    scanner_block_reason: reason,
-    issues: [...new Set([...asArray(next.issues), reason])],
-    run_quality_at_publish: {
-      ...(next.run_quality_at_publish || {}),
-      publishAllowed: false,
-      latestOverwriteAllowed: false,
-      degradedBlocksLatest: true,
-      preservePreviousGood: true,
-      blockedReason: reason,
-      scanner_block_reason: reason,
-    },
-    matches: [],
-    rows: [],
-    returnedCount: 0,
-    count: 0,
-    sourceCoverage: {
-      ...(next.sourceCoverage || {}),
-      strategy3Entry1mStatus: "blocked",
-      reason,
-    },
-  };
-}
-
-async function applyStrategy3Entry1mGate(payload = {}) {
-  if (!payload || typeof payload !== "object") return payload;
-  const rows = normalizeSnapshotRows(payload);
-  if (!rows.length) return payload;
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return blockedStrategy3EntryPayload(payload, "strategy3_1300_intraday_1m_supabase_not_configured");
-  }
-  const tradeDate = strategy3RunDateFromPayload(payload, rows);
-  if (!tradeDate) return blockedStrategy3EntryPayload(payload, "strategy3_1300_intraday_1m_trade_date_missing");
-  let entryMapResult;
-  try {
-    entryMapResult = await fetchStrategy3Entry1mMap(tradeDate, rows);
-  } catch (error) {
-    return blockedStrategy3EntryPayload(payload, `strategy3_1300_intraday_1m_read_failed:${error?.message || String(error)}`);
-  }
-  const enrichedRows = [];
-  for (const row of rows) {
-    const symbol = symbolOf(row);
-    const candle = entryMapResult.map.get(symbol);
-    if (!candle) continue;
-    const payloadRow = row?.payload && typeof row.payload === "object" ? row.payload : {};
-    const reason = appendReason(row.reason || payloadRow.reason, `Strategy3 13:00進場價=intraday_1m ${candle.candle_time || candle.trade_date}`);
-    enrichedRows.push({
-      ...row,
-      price: candle.close,
-      close: candle.close,
-      entry_price: candle.close,
-      entryPrice: candle.close,
-      entry_time: "13:00",
-      entryPriceSource: "intraday_1m_1300",
-      entry_price_source: "intraday_1m_1300",
-      entry_candle_time: candle.candle_time,
-      entry_trade_date: candle.trade_date || tradeDate,
-      reason,
-      payload: {
-        ...payloadRow,
-        price: candle.close,
-        close: candle.close,
-        entry_price: candle.close,
-        entryPrice: candle.close,
-        entry_time: "13:00",
-        entryPriceSource: "intraday_1m_1300",
-        entry_price_source: "intraday_1m_1300",
-        entry_candle_time: candle.candle_time,
-        entry_trade_date: candle.trade_date || tradeDate,
-        reason,
-      },
-    });
-  }
-  const found = enrichedRows.length;
-  const expected = entryMapResult.expectedSymbols.length;
-  const missing = entryMapResult.missingSymbols;
-  const partialReason = found === expected
-    ? ""
-    : `strategy3_1300_intraday_1m_partial:${found}/${expected}; missing=${missing.join(",")}`;
-  const entryCoverage = {
-    strategy3Entry1mStatus: partialReason ? "partial" : "complete",
-    strategy3Entry1mTradeDate: tradeDate,
-    strategy3Entry1mExpectedSymbols: expected,
-    strategy3Entry1mFoundSymbols: found,
-    strategy3Entry1mSuppressedSymbols: Math.max(0, expected - found),
-    strategy3Entry1mMissingSymbols: missing,
-  };
-  const next = attachStrategy3UnattendedContract({
-    ...payload,
-    matches: enrichedRows,
-    rows: enrichedRows,
-    count: found,
-    returnedCount: found,
-  });
-  return {
-    ...next,
-    ok: partialReason ? false : next.ok,
-    matches: enrichedRows,
-    rows: enrichedRows,
-    count: found,
-    returnedCount: found,
-    qualityStatus: partialReason ? "degraded" : (next.qualityStatus || "complete"),
-    evidenceStatus: partialReason ? "insufficient" : (next.evidenceStatus || "complete"),
-    unattendedStatus: partialReason ? "NO" : next.unattendedStatus,
-    publishAllowed: partialReason ? false : next.publishAllowed,
-    latestOverwriteAllowed: partialReason ? false : next.latestOverwriteAllowed,
-    degradedBlocksLatest: partialReason ? true : next.degradedBlocksLatest,
-    preservePreviousGood: partialReason ? true : next.preservePreviousGood,
-    blockedReason: partialReason || next.blockedReason || "",
-    scanner_block_reason: partialReason || next.scanner_block_reason || "",
-    issues: partialReason ? [...new Set([...asArray(next.issues), partialReason])] : asArray(next.issues),
-    run_quality_at_publish: partialReason ? {
-      ...(next.run_quality_at_publish || {}),
-      publishAllowed: false,
-      latestOverwriteAllowed: false,
-      degradedBlocksLatest: true,
-      preservePreviousGood: true,
-      blockedReason: partialReason,
-      scanner_block_reason: partialReason,
-    } : next.run_quality_at_publish,
-    sourceCoverage: {
-      ...(next.sourceCoverage || {}),
-      ...entryCoverage,
-    },
-  };
-}
 function secondsSince(value) {
   const parsed = Date.parse(String(value || ""));
   if (!Number.isFinite(parsed)) return null;
@@ -1159,7 +830,7 @@ async function handler(request, response) {
     });
     if (cached) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(normalizeStrategy3ApiContract(cached, { liveProbe }))));
+      response.status(200).json(normalizeStrategy3ApiContract(cached, { liveProbe }));
       return;
     }
   }
@@ -1173,7 +844,7 @@ async function handler(request, response) {
       const snapshot = await readLatestSnapshot({ ...options, liveProbe });
       if (snapshot) {
         setDesktopSnapshotCache(response);
-        response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(normalizeStrategy3ApiContract(snapshot, { liveProbe }))));
+        response.status(200).json(normalizeStrategy3ApiContract(snapshot, { liveProbe }));
         return;
       }
     }
@@ -1183,7 +854,7 @@ async function handler(request, response) {
       return;
     }
     setDesktopSnapshotCache(response);
-    response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(buildPayload(latest.rows, latest.run, { ...options, liveProbe }))));
+    response.status(200).json(buildPayload(latest.rows, latest.run, { ...options, liveProbe }));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
@@ -1191,12 +862,3 @@ async function handler(request, response) {
 
 module.exports = withEntitlementRequired(handler, "strategy3");
 module.exports.normalizeStrategy3ApiContract = normalizeStrategy3ApiContract;
-module.exports.__test = {
-  applyStrategy3MotherPoolScopeGate,
-  applyStrategy3Entry1mGate,
-  buildPayload,
-  fetchLatestCompleteRows,
-  fetchStrategy3Entry1mMap,
-  normalizeSnapshotRows,
-};
-

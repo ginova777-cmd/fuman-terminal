@@ -25,6 +25,10 @@ const FINMIND_TOKEN_FILES = [
 ];
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
 const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
+const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || (process.argv.includes("--daytrade-source") ? "daytrade" : "shared")).toLowerCase();
+const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
+const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || (COLLECTOR_ROLE === "daytrade" ? "writer" : "shared")).trim().toLowerCase();
+const SOURCE_HOST_APPROVAL_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-host-approval.json");
 const STREAMING_URL = process.env.FUGLE_STREAMING_URL || "wss://api.fugle.tw/marketdata/v1.0/stock/streaming";
 const STREAMING_CHANNELS = [...new Set(String(process.env.FUGLE_STREAMING_CHANNELS || process.env.FUGLE_STREAMING_CHANNEL || "trades,aggregates,candles")
   .split(",")
@@ -47,6 +51,7 @@ const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Numb
   || 30000,
 ));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
+const STREAMING_STALE_RECONNECT_MS = Math.max(60000, Number(process.env.FUGLE_STREAMING_STALE_RECONNECT_MS || 120000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
 const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 2)));
@@ -67,7 +72,9 @@ const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.e
 const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
 const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
-const PRIORITY_SYMBOLS_FILE = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-priority-symbols.json");
+const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE || path.join(RUNTIME_DIR, "cache", "intraday", COLLECTOR_ROLE === "daytrade" ? "fugle-daytrade-ws-priority-symbols.json" : "fugle-ws-priority-symbols.json");
+const STREAMING_ROTATION_STATE_FILE = path.join(STATE_DIR, "fugle-ws-streaming-rotation.json");
+const STREAMING_ROTATION_INTERVAL_MS = Math.max(180000, Number(process.env.FUGLE_STREAMING_ROTATION_MS || 300000));
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -99,6 +106,17 @@ function readSecret(paths) {
 
 function normalizeCode(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 4);
+}
+
+function assertApprovedDaytradeSourceHost() {
+  if (COLLECTOR_ROLE !== "daytrade") return;
+  let approval = null;
+  try { approval = JSON.parse(fs.readFileSync(SOURCE_HOST_APPROVAL_FILE, "utf8")); } catch {
+    throw new Error("daytrade_source_host_approval_missing");
+  }
+  if (approval?.approved !== true || String(approval.sourceRole || "") !== "writer" || String(approval.hostId || "") !== SOURCE_HOST_ID) {
+    throw new Error("daytrade_source_host_not_approved");
+  }
 }
 
 function nowIso() {
@@ -133,6 +151,11 @@ function writeStatus(extra = {}) {
     quoteTtlMs: QUOTE_TTL_MS,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
     requestRetries: REQUEST_RETRIES,
+    collectorRole: COLLECTOR_ROLE,
+    sourceHostId: SOURCE_HOST_ID,
+    sourceHostRole: SOURCE_HOST_ROLE,
+    authoritativeWriter: COLLECTOR_ROLE === "daytrade" && SOURCE_HOST_ROLE === "writer",
+    prioritySymbolsFile: PRIORITY_SYMBOLS_FILE,
     primarySource: "fugle",
     fallbackSource: "finmind",
     finmindPolicy: "diagnostic_low_frequency_only_not_formal_publish",
@@ -360,6 +383,7 @@ function readPrioritySymbols(symbols) {
   const ordered = [];
   const prioritySeen = new Set();
   const priorityOrdered = [];
+  const daytradeOrdered = [];
   const counts = {
     strategy1: 0,
     strategy2: 0,
@@ -398,6 +422,11 @@ function readPrioritySymbols(symbols) {
   };
 
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
+  const daytradePayloadSymbols = payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade || [];
+  for (const value of (Array.isArray(daytradePayloadSymbols) ? daytradePayloadSymbols : [])) {
+    const code = normalizeCode(value?.symbol || value?.code || value);
+    if (/^\d{4}$/.test(code) && universe.has(code) && !daytradeOrdered.includes(code)) daytradeOrdered.push(code);
+  }
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
   counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
@@ -416,6 +445,7 @@ function readPrioritySymbols(symbols) {
 
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
+    daytradeSymbols: daytradeOrdered,
     allSymbols: ordered,
     counts,
     updatedAt: payload.updatedAt || "",
@@ -956,11 +986,35 @@ function chunkArray(values, size) {
   return out;
 }
 
-function selectStreamingSymbols() {
+function readStreamingRotationState() {
+  const payload = readJson(STREAMING_ROTATION_STATE_FILE, {});
+  return {
+    offset: Number.isFinite(Number(payload?.offset)) ? Math.max(0, Number(payload.offset)) : 0,
+    cycle: Number.isFinite(Number(payload?.cycle)) ? Math.max(0, Number(payload.cycle)) : 0,
+    updatedAt: payload?.updatedAt || "",
+  };
+}
+
+function writeStreamingRotationState(state) {
+  writeJson(STREAMING_ROTATION_STATE_FILE, {
+    offset: Math.max(0, Number(state?.offset) || 0),
+    cycle: Math.max(0, Number(state?.cycle) || 0),
+    updatedAt: nowIso(),
+    rotationIntervalMs: STREAMING_ROTATION_INTERVAL_MS,
+  });
+}
+
+function selectStreamingSymbols(options = {}) {
   const allSymbols = readSymbols();
   const priority = readPrioritySymbols(allSymbols);
   const maxSymbolsBySubscriptionBudget = Math.max(1, Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, STREAMING_CHANNELS.length)));
   const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, maxSymbolsBySubscriptionBudget);
+  const stablePriority = (priority.daytradeSymbols.length ? priority.daytradeSymbols : priority.symbols)
+    .slice(0, Math.min(300, symbolLimit));
+  const stableSet = new Set(stablePriority);
+  const rotatingSymbols = allSymbols.filter((code) => !stableSet.has(code));
+  const rotation = readStreamingRotationState();
+  const offset = rotatingSymbols.length ? rotation.offset % rotatingSymbols.length : 0;
   const seen = new Set();
   const ordered = [];
   const add = (code) => {
@@ -970,15 +1024,31 @@ function selectStreamingSymbols() {
       ordered.push(symbol);
     }
   };
-  for (const code of priority.symbols) add(code);
-  for (const code of allSymbols) add(code);
+  for (const code of stablePriority) add(code);
+  for (let index = 0; index < rotatingSymbols.length && ordered.length < symbolLimit; index += 1) {
+    add(rotatingSymbols[(offset + index) % rotatingSymbols.length]);
+  }
+  const selected = ordered.slice(0, symbolLimit);
+  const rotatingSelectedCount = Math.max(0, selected.length - stablePriority.length);
+  if (options.advance && rotatingSymbols.length && rotatingSelectedCount > 0) {
+    writeStreamingRotationState({
+      offset: (offset + rotatingSelectedCount) % rotatingSymbols.length,
+      cycle: rotation.cycle + 1,
+    });
+  }
   return {
     allSymbols,
     priority,
-    selected: ordered.slice(0, symbolLimit),
+    streamingPrioritySymbols: stablePriority,
+    rotatingSymbols,
+    selected,
     requested: ordered.length,
     symbolLimit,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+    rotationOffset: offset,
+    rotationCycle: rotation.cycle,
+    rotationIntervalMs: STREAMING_ROTATION_INTERVAL_MS,
+    rotatingSelectedCount,
   };
 }
 
@@ -1044,12 +1114,14 @@ async function runStreamingCollector() {
       source: "fugle-websocket-streaming",
       error: "fugle api key missing",
       restDisabled: true,
+      formalReady: false,
+      formalReadyReason: "api_key_missing",
     });
     return;
   }
 
   const runOnce = () => new Promise((resolve) => {
-    let selection = selectStreamingSymbols();
+    let selection = selectStreamingSymbols({ advance: true });
     let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     let ws;
     let openedAt = "";
@@ -1076,15 +1148,50 @@ async function runStreamingCollector() {
     let lastForbiddenChannel = "";
     let lastSubscribeCycleAt = "";
     let lastSubscribeSignature = "";
+    let staleRecoveryLastActionAt = "";
+    let staleRecoveryAction = "";
     let closed = false;
+    let rotationTimer;
     const writeStreamingStatus = (extra = {}) => {
-      const freshCount = countFreshCachedQuotes(selection.selected);
+      const freshSymbols120s = countFreshCachedQuotes(selection.selected);
+      const freshPrioritySymbols120s = countFreshCachedQuotes(selection.streamingPrioritySymbols);
+      const messageAgeSeconds = lastMessageAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastMessageAt)) / 1000)) : null;
+      const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
+      const formalReady = extra.ok !== false
+        && Boolean(ws && ws.readyState === WebSocket.OPEN)
+        && authenticated
+        && requiredChannelsReady
+        && selection.selected.length > 0
+        && messages > 0
+        && lastMessageAt
+        && Number.isFinite(messageAgeSeconds)
+        && messageAgeSeconds <= 300
+        && forbiddenChunks === 0;
+      const formalReadyReason = formalReady
+        ? "streaming_authenticated_required_channels_and_subscription_ready"
+        : extra.ok === false
+          ? "websocket_status_error"
+          : !ws || ws.readyState !== WebSocket.OPEN
+            ? "websocket_not_open"
+            : !authenticated
+              ? "websocket_not_authenticated"
+              : !requiredChannelsReady
+                ? "websocket_required_channel_missing"
+                : !lastMessageAt
+                  ? "websocket_no_message"
+                  : !Number.isFinite(messageAgeSeconds) || messageAgeSeconds > 300
+                    ? "websocket_last_message_stale"
+                    : forbiddenChunks > 0
+                      ? "websocket_subscription_forbidden"
+                      : "websocket_transport_not_formal_ready";
       writeStatus({
         mode: "streaming",
         channel: `websocket:${STREAMING_CHANNEL}`,
         primarySource: "fugle-websocket",
         fallbackSource: "none",
         restDisabled: true,
+        formalReady,
+        formalReadyReason,
         streamingUrl: STREAMING_URL,
         streamingChannel: STREAMING_CHANNEL,
         streamingChannels: STREAMING_CHANNELS,
@@ -1114,8 +1221,19 @@ async function runStreamingCollector() {
         requestedSymbols: selection.requested,
         allSymbols: selection.allSymbols.length,
         prioritySymbols: selection.priority.symbols.length,
-        priorityFreshCount: freshCount,
+        priorityFreshCount: freshPrioritySymbols120s,
+        freshSymbols120s,
+        freshPrioritySymbols120s,
+        websocketLastMessageAt: lastMessageAt,
+        websocketLastMessageAgeSeconds: messageAgeSeconds,
+        websocketSymbolCount: selection.selected.length,
         prioritySource: selection.priority.source,
+        streamingPrioritySymbols: selection.streamingPrioritySymbols.length,
+        rotatingSymbols: selection.rotatingSymbols.length,
+        rotatingSelectedCount: selection.rotatingSelectedCount,
+        rotationOffset: selection.rotationOffset,
+        rotationCycle: selection.rotationCycle,
+        rotationIntervalMs: selection.rotationIntervalMs,
         priorityFileUpdatedAt: selection.priority.updatedAt,
         priorityDaytradeSymbols: selection.priority.counts.daytrade,
         priorityTerminalSymbols: selection.priority.counts.terminalPriority,
@@ -1149,12 +1267,16 @@ async function runStreamingCollector() {
         subscribeForbiddenLastMessage: lastForbiddenMessage,
         reconnectInitialMs: STREAMING_RECONNECT_INITIAL_MS,
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
+        staleRecoveryEnabled: true,
+        staleRecoveryThresholdMs: STREAMING_STALE_RECONNECT_MS,
+        staleRecoveryLastActionAt,
+        staleRecoveryAction,
         ...extra,
       });
     };
     const subscribe = () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
-      selection = selectStreamingSymbols();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      selection = selectStreamingSymbols({ advance: false });
       chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
       const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selected.join(",")}`;
       if (lastSubscribeSignature && signature === lastSubscribeSignature) {
@@ -1187,6 +1309,8 @@ async function runStreamingCollector() {
       ws = new WebSocket(STREAMING_URL);
       ws.addEventListener("open", () => {
         openedAt = nowIso();
+        lastMessageAt = "";
+        staleRecoveryAction = "";
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
         authenticated = false;
         subscriptionAckReady = false;
@@ -1255,19 +1379,44 @@ async function runStreamingCollector() {
       });
       ws.addEventListener("close", () => {
         closed = true;
-        authenticated = false;
-        subscriptionAckReady = false;
+        if (rotationTimer) clearInterval(rotationTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
       const statusTimer = setInterval(() => {
         if (closed) clearInterval(statusTimer);
-        else writeStreamingStatus();
+        else {
+          const connectionAgeMs = openedAt ? Date.now() - Date.parse(openedAt) : 0;
+          const messageAgeMs = lastMessageAt ? Date.now() - Date.parse(lastMessageAt) : Number.POSITIVE_INFINITY;
+          const staleDataWindow = inOpeningBoostWindow()
+            && authenticated
+            && ws
+            && ws.readyState === WebSocket.OPEN
+            && connectionAgeMs >= STREAMING_STALE_RECONNECT_MS
+            && (!lastMessageAt || !Number.isFinite(messageAgeMs) || messageAgeMs > 300000);
+          if (staleDataWindow) {
+            staleRecoveryLastActionAt = nowIso();
+            staleRecoveryAction = "reconnect_stale_source";
+            writeStreamingStatus({ staleRecoveryAction });
+            ws.close(1000, "stale source self-heal");
+          } else {
+            writeStreamingStatus();
+          }
+        }
       }, STREAMING_STATUS_MS);
       const subscribeTimer = setInterval(() => {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
+      rotationTimer = setInterval(() => {
+        if (closed) {
+          clearInterval(rotationTimer);
+          return;
+        }
+        if (openedAt && Date.now() - Date.parse(openedAt) >= STREAMING_ROTATION_INTERVAL_MS) {
+          ws.close(1000, "full-market rotation");
+        }
+      }, Math.min(30000, STREAMING_STATUS_MS));
     } catch (error) {
       writeStreamingStatus({ ok: false, websocketError: error?.message || String(error) });
       resolve();
@@ -1289,6 +1438,7 @@ async function runStreamingCollector() {
 }
 
 async function main() {
+  assertApprovedDaytradeSourceHost();
   writeStatus({ subscribed: readSymbols().length, quotes: 0, starting: true });
   // eslint-disable-next-line no-constant-condition
   while (true) {

@@ -4,6 +4,27 @@ const BASE_URL = String(process.env.FUMAN_SCORECARD_BASE_URL || process.env.FUMA
 const REQUIRE_ROWS = process.argv.includes("--require-rows") || process.env.FUMAN_DAYTRADE_ENTRY_REQUIRE_ROWS === "1";
 const ENDPOINT = "/api/daytrade-entry-history";
 
+function argValue(name) {
+  const prefix = `${name}=`;
+  const inline = process.argv.find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : "";
+}
+
+function normalizeDate(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return "";
+}
+
+function expectedTradeDate() {
+  return normalizeDate(argValue("--date") || argValue("--trade-date") || process.env.FUMAN_SCORECARD_EXPECTED_DATE || "") || todayTaipeiDate();
+}
+
 function todayTaipeiDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
@@ -47,8 +68,8 @@ function hasReplayObservation(row) {
 }
 
 async function main() {
-  const expectedDate = todayTaipeiDate();
-  const response = await fetchJson(ENDPOINT, 60000);
+  const expectedDate = expectedTradeDate();
+  const response = await fetchJson(`${ENDPOINT}?date=${encodeURIComponent(expectedDate)}`, 60000);
   const payload = response.json || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const issues = [];

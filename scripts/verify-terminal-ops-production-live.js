@@ -121,8 +121,15 @@ function fetchTextOnce(pathname, options = {}, redirects = 0) {
       });
       res.on("end", () => resolve({ url, status: res.statusCode, headers: res.headers, body, redirects }));
     });
-    req.on("timeout", () => req.destroy(new Error("timeout " + url)));
-    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error(`timeout ${url}`)));
+    req.on("error", (error) => resolve({
+      url,
+      status: 0,
+      headers: {},
+      body: "",
+      redirects,
+      error: { name: String(error?.name || "Error"), message: String(error?.message || error).slice(0, 240) },
+    }));
   });
 }
 
@@ -204,37 +211,8 @@ function endpointRunIds(targetName, payload, body) {
   return Array.from(collectRunIds(payload || body)).sort();
 }
 
-function runDateFromId(value) {
-  const match = String(value || "").match(/(?:^|[-_])(\d{8})(?:[-_]|$)/);
-  return match ? match[1] : "";
-}
-
-function strategyKeyFromRunId(value) {
-  const text = String(value || "");
-  if (text.startsWith("strategy2-")) return "strategy2";
-  if (text.startsWith("strategy3-")) return "strategy3";
-  if (text.startsWith("strategy4-")) return "strategy4";
-  if (text.startsWith("strategy5-")) return "strategy5";
-  if (text.startsWith("institution-")) return "institution";
-  if (text.startsWith("cb-detect-")) return "cb";
-  if (text.startsWith("warrant-flow-")) return "warrant";
-  return "";
-}
-
-function sameDayStrategy2RollingAllowed(runId, expectedDates, endpointCounts, options = {}) {
-  if (strategyKeyFromRunId(runId) !== "strategy2") return false;
-  const date = runDateFromId(runId);
-  if (!date || !expectedDates.has(date)) return false;
-  if (options.allowSingleEndpoint === true) return true;
-  return Number(endpointCounts.get(runId) || 0) >= 2;
-}
-
-function isBatchSnapshotReadbackEndpoint(name) {
-  return name === "scorecard" || name === "source_reports";
-}
-
-async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {}) {
-  const credential = await resolveProtectedReadbackCredentialWithRetry();
+async function verifyAuthenticatedProtectedReadback(issues) {
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: TIMEOUT_MS });
   const auth = publicCredentialSummary(credential);
   const result = {
     attempted: auth.attempted,
@@ -268,43 +246,32 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
     { name: "mobile_warrant", path: "/api/mobile-fragment?tab=warrant", expectedKey: "warrant" },
   ];
   for (const target of targets) {
-    let row;
-    try {
-      const response = await fetchText(target.path, { headers: credentialReadbackHeaders(credential) });
-      const payload = parseJson(response.body);
-      const runIds = endpointRunIds(target.name, payload, response.body);
-      row = {
-        name: target.name,
-        path: target.path,
-        status: response.status,
-        ok: response.status === 200 && !membershipError(payload || {}),
-        membershipRequired: membershipError(payload || {}),
-        runIds,
-        runIdCount: runIds.length,
-        noStore: noStore(response.headers),
-        error: payload?.error || "",
-        reason: memberLockReason(payload),
-      };
-    } catch (error) {
-      row = {
-        name: target.name,
-        path: target.path,
-        status: 0,
-        ok: false,
-        membershipRequired: false,
-        runIds: [],
-        runIdCount: 0,
-        noStore: false,
-        error: String(error?.code || error?.message || error || ""),
-        reason: "protected_readback_fetch_error",
-      };
-    }
+    const response = await fetchText(target.path, { headers: credentialReadbackHeaders(credential) });
+    const payload = parseJson(response.body);
+    const runIds = endpointRunIds(target.name, payload, response.body);
+    const row = {
+      name: target.name,
+      path: target.path,
+      status: response.status,
+      ok: response.status === 200 && !membershipError(payload || {}),
+      membershipRequired: membershipError(payload || {}),
+      runIds,
+      runIdCount: runIds.length,
+      noStore: noStore(response.headers),
+      error: payload?.error || response.error?.message || "",
+      reason: memberLockReason(payload) || response.error?.message || (response.status === 200 ? "" : "production_live_request_error"),
+    };
     if (!row.ok) issues.push({ issue: `authenticated_protected_endpoint_not_open:${target.name}`, details: row });
     result.endpoints.push(row);
   }
 
-  const reference = result.endpoints.find((row) => row.name === "source_reports" && row.ok && row.runIds.length) || result.endpoints.find((row) => row.name === "scorecard" && row.ok && row.runIds.length) || result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
-  const expectedRunIds = new Set((reference?.runIds && reference.runIds.length) ? reference.runIds : ((localOpsStatus.expectedRunIds && localOpsStatus.expectedRunIds.length) ? localOpsStatus.expectedRunIds : []));
+  // Scorecard/sourceReports are canonical published surfaces. Do not use
+  // terminal-ops-status as the reference: a stale control-plane snapshot
+  // must be detected instead of validating itself.
+  const reference = result.endpoints.find((row) => row.name === "scorecard" && row.ok && row.runIds.length)
+    || result.endpoints.find((row) => row.name === "source_reports" && row.ok && row.runIds.length)
+    || result.endpoints.find((row) => row.name === "terminal_ops_status" && row.ok && row.runIds.length);
+  const expectedRunIds = new Set(reference?.runIds || []);
   if (expectedRunIds.size) {
     const targetByName = new Map(targets.map((target) => [target.name, target]));
     const expectedRunIdsSorted = Array.from(expectedRunIds).sort();
@@ -326,89 +293,27 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
       for (const runId of row.runIds) endpointCounts.set(runId, Number(endpointCounts.get(runId) || 0) + 1);
     }
     for (const row of result.endpoints) {
-      const target = targetByName.get(row.name) || {};
-      if (!row.runIds.length) {
-        if (target.requireAllRunIds || target.expectedKey) {
-          row.ok = false;
-          issues.push({
-            issue: "authenticated_protected_endpoint_missing_run_ids:" + row.name,
-            details: {
-              endpoint: row.path,
-              expectedRunIds: expectedRunIdsSorted,
-              expectedKey: target.expectedKey || "",
-              reason: row.reason || row.error || "protected_endpoint_missing_run_ids",
-            },
-          });
-        }
-        continue;
-      }
-      if (target.requireAllRunIds) {
-        const missingRunIds = expectedRunIdsSorted.filter((runId) => {
-          if (strategyKeyFromRunId(runId) === "strategy2" && target.allowStrategy2Rolling) {
-            return !row.runIds.some((actualRunId) => sameDayStrategy2RollingAllowed(actualRunId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: true }));
-          }
-          return !row.runIds.includes(runId);
-        });
-        row.missingRunIds = missingRunIds;
-        if (missingRunIds.length) {
-          row.ok = false;
-          issues.push({
-            issue: "authenticated_protected_endpoint_missing_expected_run_ids:" + row.name,
-            details: {
-              endpoint: row.path,
-              missingRunIds,
-              actualRunIds: row.runIds,
-              expectedRunIds: expectedRunIdsSorted,
-            },
-          });
-        }
-      }
-      if (target.expectedKey) {
-        const expectedRunId = expectedByKey.get(target.expectedKey) || "";
-        row.expectedKey = target.expectedKey;
-        row.expectedRunId = expectedRunId;
-        const hasExpectedRunId = expectedRunId && row.runIds.includes(expectedRunId);
-        const hasAllowedStrategy2RollingRunId = target.expectedKey === "strategy2"
-          && row.runIds.some((actualRunId) => sameDayStrategy2RollingAllowed(actualRunId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: true }));
-        if (expectedRunId && !hasExpectedRunId && !hasAllowedStrategy2RollingRunId) {
-          row.ok = false;
-          issues.push({
-            issue: "authenticated_mobile_fragment_run_id_mismatch:" + row.name,
-            details: {
-              endpoint: row.path,
-              expectedKey: target.expectedKey,
-              expectedRunId,
-              actualRunIds: row.runIds,
-            },
-          });
-        }
-      }
-      if (isBatchSnapshotReadbackEndpoint(row.name)) {
-        row.batchSnapshotReadback = true;
-        row.unexpectedRunIds = [];
-        row.allowedRollingRunIds = [];
-        continue;
-      }
-      const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
-        && !sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: target.allowStrategy2Rolling === true || target.expectedKey === "strategy2" }));
+      const unexpectedRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId));
+      const missingExpectedRunIds = Array.from(expectedRunIds).filter((runId) => !row.runIds.includes(runId));
       row.unexpectedRunIds = unexpectedRunIds;
-      row.allowedRollingRunIds = row.runIds.filter((runId) => !expectedRunIds.has(runId)
-        && sameDayStrategy2RollingAllowed(runId, expectedStrategy2Dates, endpointCounts, { allowSingleEndpoint: target.allowStrategy2Rolling === true || target.expectedKey === "strategy2" }));
-      if (unexpectedRunIds.length) {
+      row.missingExpectedRunIds = missingExpectedRunIds;
+      if (!row.runIds.length || unexpectedRunIds.length || missingExpectedRunIds.length) {
         row.ok = false;
         issues.push({
-          issue: "authenticated_protected_endpoint_has_stale_or_unexpected_run_id:" + row.name,
+          issue: !row.runIds.length
+            ? "authenticated_protected_endpoint_missing_run_id:" + row.name
+            : "authenticated_protected_endpoint_has_stale_or_unexpected_run_id:" + row.name,
           details: {
             endpoint: row.path,
             unexpectedRunIds,
+            missingExpectedRunIds,
             expectedRunIds: Array.from(expectedRunIds).sort(),
-            allowedRollingRunIds: row.allowedRollingRunIds,
+            referenceEndpoint: reference?.name || "",
           },
         });
       }
     }
   }
-
   result.ok = result.endpoints.every((row) => row.ok);
   return result;
 }
@@ -439,6 +344,7 @@ async function verifyReleaseManifest(issues) {
   assert(result.status === 200, issues, "release_manifest_http_not_200", { status: result.status, url: result.url });
   assert(payload?.ok === true, issues, "release_manifest_not_ok", { payload });
   assert(Boolean(payload?.gitSha), issues, "release_manifest_missing_git_sha", { payload });
+  assert(Boolean(payload?.scorecardShellVersion), issues, "release_manifest_missing_scorecard_shell_version", { payload });
   assert(!EXPECTED_SHA || normalizeSha(payload?.gitSha) === EXPECTED_SHA, issues, "release_manifest_sha_mismatch", {
     live: payload?.gitSha || "",
     expected: EXPECTED_SHA,
@@ -451,6 +357,7 @@ async function verifyReleaseManifest(issues) {
     status: result.status,
     ok: result.status === 200 && payload?.ok === true && (!EXPECTED_SHA || normalizeSha(payload?.gitSha) === EXPECTED_SHA),
     version: payload?.version || "",
+    scorecardShellVersion: payload?.scorecardShellVersion || "",
     gitSha: payload?.gitSha || "",
     deployId: payload?.deployId || payload?.deploymentId || "",
     deploymentUrl: payload?.deploymentUrl || "",
@@ -535,7 +442,9 @@ async function verifyShell(pathname, markers, issues) {
     status: result.status,
     ok: result.status === 200 && markers.every((marker) => body.includes(marker)) && !/>[^<]*missing_bearer_token[^<]*</i.test(visibleHtml),
     markers,
-    shellVersion: body.match(/(?:version|cache|membership-lock)=([0-9A-Za-z._-]+)/)?.[1] || "",
+    shellVersion: body.match(/data-scorecard-shell-version="([^"]+)"/i)?.[1]
+      || body.match(/(?:version|cache|membership-lock)=([0-9A-Za-z._-]+)/)?.[1]
+      || "",
   };
 }
 
@@ -619,6 +528,10 @@ async function main() {
   shells.push(await verifyShell("/", ["terminal-core.js"], issues));
   shells.push(await verifyShell("/88", ["FUMAN SCORECARD", "/api/scorecard", "scorecard-membership-lock"], issues));
   shells.push(await verifyShell("/auth.html", ["Fuman", "Google"], issues));
+  const scorecardShell = shells.find((row) => row.path === "/88");
+  assert(Boolean(scorecardShell?.shellVersion) && Boolean(release.scorecardShellVersion), issues, "scorecard_shell_version_missing", { shellVersion: scorecardShell?.shellVersion || "", releaseScorecardShellVersion: release.scorecardShellVersion || "" });
+  assert(scorecardShell?.shellVersion === release.scorecardShellVersion, issues, "scorecard_shell_release_identity_mismatch", { shellVersion: scorecardShell?.shellVersion || "", releaseScorecardShellVersion: release.scorecardShellVersion || "" });
+  const localOpsStatus = localOpsStatusSummary(issues);
   const payload = {
     contract: "terminal-ops-production-live-readback-v2",
     checkedAt: new Date().toISOString(),
@@ -631,7 +544,7 @@ async function main() {
     shells,
     desktopArtifactVersion: protectedEndpoints.find((row) => row.name === "terminal_fast_bundle")?.artifactVersion || "",
     mobileArtifactVersion: protectedEndpoints.find((row) => row.name === "mobile_boot")?.artifactVersion || "",
-    scorecardShellVersion: shells.find((row) => row.path === "/88")?.shellVersion || "",
+    scorecardShellVersion: scorecardShell?.shellVersion || "",
     localOpsStatus,
     issues,
   };

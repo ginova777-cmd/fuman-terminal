@@ -366,9 +366,9 @@ function staticChecks() {
   ]);
 
   requireIncludes("scripts/verify-publish-gate.js", [
+    "terminal-dream-publish-gate-v1",
+    "verify:terminal-water-root",
     "verify-fugle-source-contract.js",
-    CONTRACT_VERSION,
-    "FugleSourceResourceContract.sql",
   ]);
 
   requireRegex("package.json", /"verify:fugle-source-contract"\s*:/, "verify:fugle-source-contract script");

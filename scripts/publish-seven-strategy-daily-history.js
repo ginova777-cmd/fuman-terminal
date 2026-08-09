@@ -41,6 +41,7 @@ function readPayloads() {
   rows.push(...readJsonFile(entryFile).map((row) => ({ ...row, signal_type: row.signal_type || row.signalType || "formal", source: row.source || "fugle-entry-history" })));
   rows.push(...readJsonFile(detectedFile).map((row) => ({ ...row, signal_type: row.signal_type || row.signalType || "detected", source: row.source || "fugle-detected-history" })));
   if (process.argv.includes("--fixture=valid") || process.argv.includes("--fixture")) {
+    const fixtureEvidence = { source_status: "ok", gate_grade: "A", gate_status: "ready", formal_entry_speed_verdict: "YES", formal_entry_allowed: true };
     rows.push(
       {
         tradeDate: process.env.FUMAN_SEVEN_STRATEGY_FIXTURE_DATE || todayTaipeiDate(),
@@ -54,6 +55,7 @@ function readPayloads() {
         strategy: "七策略正式進場",
         signalType: "formal",
         source: "fugle-entry-history",
+        evidence: fixtureEvidence,
         runId: "fixture-seven-strategy-daily-history",
       },
       {
@@ -68,6 +70,7 @@ function readPayloads() {
         strategy: "七策略觀察",
         signalType: "detected",
         source: "fugle-detected-history",
+        evidence: fixtureEvidence,
         runId: "fixture-seven-strategy-daily-history",
       },
     );

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const strategy2Latest = require("./strategy2-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const {
@@ -7,10 +8,11 @@ const {
 } = require("../lib/desktop-route-snapshot-cache");
 const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
-const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 7000);
+const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 18000);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
@@ -64,6 +66,52 @@ const TAB_CONFIG = {
     points: ["權證先熱", "標的型態", "只看候選觀察"],
   },
 };
+
+function tabAuthorityKey(tab) {
+  const key = String(tab || "").toLowerCase();
+  if (key === "chip") return "institution";
+  if (["strategy2", "strategy3", "strategy4", "strategy5", "cb", "warrant"].includes(key)) return key;
+  return "";
+}
+
+function terminalAuthorityForTab(tab) {
+  const key = tabAuthorityKey(tab);
+  if (!key) return null;
+  const status = buildLatestOpsStatus();
+  const row = (Array.isArray(status.modules) ? status.modules : []).find((item) => item?.key === key);
+  if (!row) return null;
+  return {
+    key,
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || "",
+    sourceDate: row.sourceDate || "",
+    moduleStatus: row.moduleStatus || "",
+    todayAuthoritative: row.todayAuthoritative === true,
+    formalDisplayAllowed: row.formalDisplayAllowed === true,
+    displayMode: row.displayMode || "",
+    displayBlockReason: row.displayBlockReason || row.issue || "",
+    pendingNotDue: row.pendingNotDue === true,
+    evidenceStatus: row.evidenceStatus || "",
+    publishAllowed: row.publishAllowed === true,
+    fallback: row.fallback === true,
+    resultCount: Number(row.resultCount || 0),
+    readbackCount: Number(row.readbackCount || 0),
+  };
+}
+
+function attachTerminalAuthority(tab, payload = {}) {
+  const terminalAuthority = payload?.terminalAuthority || terminalAuthorityForTab(tab);
+  if (!terminalAuthority) return payload;
+  return {
+    ...payload,
+    terminalAuthority,
+    todayAuthoritative: terminalAuthority.todayAuthoritative,
+    formalDisplayAllowed: terminalAuthority.formalDisplayAllowed,
+    displayMode: terminalAuthority.displayMode,
+    displayBlockReason: terminalAuthority.displayBlockReason,
+    moduleStatus: terminalAuthority.moduleStatus,
+  };
+}
 
 function setNoStore(response, contentType = "text/html; charset=utf-8") {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -126,6 +174,7 @@ async function readMobileFragmentHtmlSnapshot(tab) {
   }).catch(() => null);
   const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
   if (!payload?.html || !htmlMatchesTab(tab, payload.html)) return null;
+  if (tabAuthorityKey(tab) && !/data-formal-display-allowed=/i.test(String(payload.html || ""))) return null;
   const snapshotRunId = String(payload.runId || "");
   if (/waiting|aborted|mobile-fragment-fast-waiting/i.test(`${snapshotRunId} ${payload.html}`)) return null;
   if (snapshotPayloadAgeMs(payload) > MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS) return null;
@@ -226,6 +275,38 @@ function createCaptureResponse(resolve) {
   };
 }
 
+function fetchStrategy2Internal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
+  delete query.live;
+  delete query.noSnapshot;
+  delete query.snapshot;
+  delete query.cache;
+  delete query.snapshotFirst;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("strategy2_internal_timeout")), MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS);
+    const finish = (result) => {
+      clearTimeout(timer);
+      const payload = result.payload && typeof result.payload === "object" ? result.payload : null;
+      const rowCount = normalizeRows(payload, "strategy2").length || Number(payload?.count ?? payload?.displayCount ?? payload?.resultCount ?? payload?.readbackCount ?? 0) || 0;
+      if (Number(result.statusCode || 0) >= 400 || (payload?.ok === false && rowCount <= 0)) {
+        reject(new Error(payload?.detail || payload?.error || "HTTP " + result.statusCode));
+        return;
+      }
+      resolve(payload);
+    };
+    strategy2Latest({
+      method: "GET",
+      headers: request?.headers || {},
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish)).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
 function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = Object.fromEntries(url.searchParams.entries());
@@ -592,6 +673,7 @@ function rowHtml(row, index, tab = "") {
 
 function renderFragment(tab, config, payload) {
   if (tab === "ai") return renderAiFragment(tab, config, payload);
+  payload = attachTerminalAuthority(tab, payload);
   const rows = normalizeRows(payload, tab);
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
@@ -602,7 +684,11 @@ function renderFragment(tab, config, payload) {
   const unattendedStatus = payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "";
   const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
   const preservePreviousGood = payload?.preservePreviousGood ?? payload?.run_quality_at_publish?.preservePreviousGood;
-  const blockedReason = payload?.blockedReason || payload?.scanner_block_reason || payload?.run_quality_at_publish?.blockedReason || "";
+  const displayMode = payload?.displayMode || payload?.terminalAuthority?.displayMode || "";
+  const formalDisplayAllowed = payload?.formalDisplayAllowed ?? payload?.terminalAuthority?.formalDisplayAllowed;
+  const todayAuthoritative = payload?.todayAuthoritative ?? payload?.terminalAuthority?.todayAuthoritative;
+  const authorityBlockReason = payload?.displayBlockReason || payload?.terminalAuthority?.displayBlockReason || "";
+  const blockedReason = authorityBlockReason || payload?.blockedReason || payload?.scanner_block_reason || payload?.run_quality_at_publish?.blockedReason || "";
   const publishLabel = publishAllowed === false ? "publish blocked" : publishAllowed === true ? "publish allowed" : "";
   const preserveLabel = preservePreviousGood === true ? "preserve previous good" : "";
   const statusLine = [
@@ -612,14 +698,16 @@ function renderFragment(tab, config, payload) {
     evidenceStatus ? `evidence ${evidenceStatus}` : "",
     publishLabel,
     preserveLabel,
+    displayMode ? `display ${displayMode}` : "",
+    todayAuthoritative === false ? "today-authority blocked" : "",
   ].filter(Boolean).join("｜");
-  const blockedHtml = publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO"
-    ? `<p class="mobile-terminal-blocked" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
+  const blockedHtml = formalDisplayAllowed === false || publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO"
+    ? `<p class="mobile-terminal-blocked" data-mobile-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-mobile-display-mode="${esc(displayMode)}" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
     : "";
 
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
-  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}">
+  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>API-only complete run</small>
         <strong>${esc(config.title)}</strong>
@@ -911,7 +999,7 @@ module.exports = async function handler(request, response) {
       maxAgeMs: tab === "strategy2" ? 24 * 60 * 60 * 1000 : undefined,
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = shouldUseLiveFragment(tab, request);
+    const forceLivePayload = tab !== "ai" && tab !== "strategy2";
     const payload = forceLivePayload
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 
@@ -921,7 +1009,7 @@ module.exports = async function handler(request, response) {
         : tab === "strategy5"
           ? await fetchStrategy5Internal(request, endpoint)
           : tab === "strategy2"
-            ? await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS, authHeadersFrom(request))
+            ? await fetchStrategy2Internal(request, endpoint)
               .catch((error) => (hasUsableSnapshotPayload(snapshotPayload, tab)
                 ? snapshotPayload
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))

@@ -184,7 +184,7 @@ async function buildPreflight(options = {}) {
       latestPointerUpdated: false,
       emptyResultWritten: false,
       evidenceStatus: contract.marketOpen ? "waiting_source_window" : "market_closed",
-      unattendedStatus: contract.marketOpen ? "WAITING_SOURCE_WINDOW" : "SKIPPED_MARKET_CLOSED",
+      unattendedStatus: contract.marketOpen ? "WAITING_SOURCE_WINDOW" : "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
       reason: contract.skipReason || contract.closedReason || "market_closed",
       exitCode: contract.marketOpen ? 11 : 10
     };

@@ -9,6 +9,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
 const APPLY = process.argv.includes("--apply");
 const SELF_TEST = process.argv.includes("--self-test");
+const MANIFEST_FILE = path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -18,6 +19,18 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function explicitPendingNotDue(manifest, key) {
+  const row = Array.isArray(manifest?.modules) ? manifest.modules.find((item) => item?.key === key) : null;
+  return Boolean(row?.pendingNotDue === true
+    || row?.status === "PENDING_NOT_DUE"
+    || row?.displayMode === "PENDING_NOT_DUE"
+    || row?.scheduleStatus?.pendingNotDue === true);
+}
+function explicitMarketClosedHold(manifest) {
+  return String(manifest?.unattendedStatus || "") === "PREVIOUS_GOOD_HOLD"
+    || String(manifest?.closureStatus || "") === "PREVIOUS_GOOD_HOLD"
+    || String(manifest?.status || "") === "MARKET_CLOSED_PREVIOUS_GOOD_HOLD";
+}
 function selfTest() {
   const cases = [
     { name: "complete_publish", input: { strategy: "x", status: "complete", complete: true, exitCode: 0, fallback: false, runId: "x-20260721-1", matches: 3 }, expect: { publishAllowed: true, unattendedStatus: "YES" } },
@@ -40,6 +53,8 @@ function selfTest() {
 function current() {
   const rows = [];
   const issues = [];
+  const manifest = readJson(MANIFEST_FILE) || {};
+  const marketClosedHold = explicitMarketClosedHold(manifest);
   for (const mod of MODULES) {
     const file = path.join(RECEIPT_DIR, `${mod.receiptKey}.json`);
     const original = readJson(file);
@@ -49,8 +64,9 @@ function current() {
       continue;
     }
     const normalized = normalizeStrategyScanReceipt(original, { key: mod.key, strategy: mod.receiptKey });
-    const rowIssues = receiptContractIssues(normalized);
-    rows.push({ key: mod.key, receiptKey: mod.receiptKey, file, changed: JSON.stringify(original) !== JSON.stringify(normalized), runId: normalized.runId || "", publishAllowed: normalized.publishAllowed, preservePreviousGood: normalized.preservePreviousGood, evidenceStatus: normalized.evidenceStatus, unattendedStatus: normalized.unattendedStatus, issues: rowIssues });
+    const pendingNotDue = explicitPendingNotDue(manifest, mod.key);
+    const rowIssues = receiptContractIssues(normalized, { requireRunIdForAll: !pendingNotDue && !marketClosedHold });
+    rows.push({ key: mod.key, receiptKey: mod.receiptKey, file, changed: JSON.stringify(original) !== JSON.stringify(normalized), runId: normalized.runId || "", publishAllowed: normalized.publishAllowed, preservePreviousGood: normalized.preservePreviousGood, evidenceStatus: normalized.evidenceStatus, unattendedStatus: normalized.unattendedStatus, pendingNotDue, issues: rowIssues });
     if (APPLY && rowIssues.length === 0 && JSON.stringify(original) !== JSON.stringify(normalized)) writeJson(file, { ...normalized, normalizedAt: new Date().toISOString() });
     for (const issue of rowIssues) issues.push(`${mod.key}:${issue}`);
   }

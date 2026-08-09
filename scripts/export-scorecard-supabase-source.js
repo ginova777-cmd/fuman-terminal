@@ -269,6 +269,39 @@ function selectLatestDate(dateInfo, records, expectedDate) {
     reason: "fallback newest date; verifier must block if incomplete",
   };
 }
+
+function sourceReportReady(report) {
+  if (!report || typeof report !== "object") return false;
+  const evidenceStatus = cleanText(report.evidenceStatus || report.sourceEvidenceStatus || "").toLowerCase();
+  const unattendedStatus = cleanText(report.unattendedStatus || report.unattended?.status || "").toUpperCase();
+  const fallbackUsed = report.fallbackUsed === true || report.fallback === true;
+  const publishAllowed = report.publishAllowed === true
+    || report.run_quality_at_publish?.publishAllowed === true
+    || report.runQualityAtPublish?.publishAllowed === true;
+  if (report.ok === false) return false;
+  if (fallbackUsed) return false;
+  if (evidenceStatus && !["complete", "sufficient"].includes(evidenceStatus)) return false;
+  if (unattendedStatus && unattendedStatus !== "YES") return false;
+  if (Object.prototype.hasOwnProperty.call(report, "publishAllowed") && !publishAllowed) return false;
+  return true;
+}
+
+function sourceReportIssues(sourceReports = []) {
+  return (Array.isArray(sourceReports) ? sourceReports : [])
+    .filter((report) => !sourceReportReady(report))
+    .map((report) => ({
+      key: cleanText(report.key || report.strategyKey || report.strategy || "unknown"),
+      strategy: cleanText(report.strategy || report.strategyName || report.key || "unknown"),
+      runId: cleanText(report.runId || report.latestRunId || ""),
+      date: cleanText(report.date || report.tradeDate || report.marketDate || ""),
+      reason: cleanText(report.reason || report.blockedReason || report.evidenceStatus || "source_report_not_ready"),
+      evidenceStatus: cleanText(report.evidenceStatus || report.sourceEvidenceStatus || ""),
+      unattendedStatus: cleanText(report.unattendedStatus || report.unattended?.status || ""),
+      publishAllowed: report.publishAllowed === true,
+      fallbackUsed: report.fallbackUsed === true || report.fallback === true,
+    }));
+}
+
 async function main() {
   const outFile = argValue("out", OUT_FILE);
   const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
@@ -325,6 +358,8 @@ async function main() {
     5000,
   )).map(normalizeDaily).filter((row) => row.strategy);
   const sourceReports = readSourceReports();
+  const reportIssues = sourceReportIssues(sourceReports);
+  const qualityStatus = reportIssues.length ? "degraded" : "complete";
   const dateInfo = completeDateInfo(records, sourceReports);
   const latestSelection = selectLatestDate(dateInfo, records, expectedDate);
   const latestDate = latestSelection.latestDate;
@@ -334,7 +369,7 @@ async function main() {
   const payload = {
     ok: true,
     contract: SCORECARD_CONTRACT,
-    qualityStatus: "complete",
+    qualityStatus,
     marketDate: latestDate,
     runId: scorecardRunId(latestDate),
     source: "supabase-scorecard-source",
@@ -353,6 +388,8 @@ async function main() {
     days: DAYS,
     records,
     sourceReports,
+    issues: reportIssues,
+    warnings: reportIssues.map((issue) => `${issue.key || issue.strategy}: ${issue.reason || "source_report_not_ready"}`),
     summary: summarize(records, dailyRows, latestDate),
   };
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
@@ -364,6 +401,8 @@ async function main() {
     rows: records.length,
     dailyRows: dailyRows.length,
     sourceReports: sourceReports.length,
+    qualityStatus,
+    issues: reportIssues.length,
     recordLimit: RECORD_LIMIT,
     fetchedRows: records.length,
     cacheSource: payload.cacheSource,

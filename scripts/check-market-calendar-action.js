@@ -81,7 +81,7 @@ async function main() {
       complete: true,
       qualityStatus: "market_closed_previous_good",
       evidenceStatus: "market_closed",
-      unattendedStatus: "YES",
+      unattendedStatus: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
       warnings: [`market closed: ${contract.closedReasonText || contract.closedReason}`],
       blockingReason: "market_closed",
       noLatestWritesWhenBlocked: true,

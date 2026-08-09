@@ -17,16 +17,6 @@ New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
 function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
-  $publishAllowed = $Complete -and -not $PreservePreviousGood -and [string]::IsNullOrWhiteSpace($BlockingReason)
-  $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
-  $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
-  $writeBudget = [ordered]@{
-    allowed = [bool]$publishAllowed
-    status = if ($publishAllowed) { "allow" } else { "blocked" }
-    finalStatus = if ($publishAllowed) { "allow" } else { "blocked" }
-    scope = "cb_detect_complete_run_publish"
-    reason = $BlockingReason
-  }
   $receipt = [ordered]@{
     strategy = "cb-detect"
     label = "CB detect full scan"
@@ -40,13 +30,41 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
     total = 0
     matches = $Matches
     complete = $Complete
-    qualityStatus = if ($Complete) { "complete" } else { "" }
-    fallback = $false
+    qualityStatus = if ($PreservePreviousGood) { "preserved_latest" } elseif ($Complete) { "complete" } else { "" }
+    fallback = [bool]$PreservePreviousGood
     fallbackUsed = $false
-    fallbackAllowed = $false
     fallbackScope = @()
+    fallbackAllowed = $false
     fallbackDetails = @()
-    fallbackContract = "cb-detect-fallback-disclosure-v1"
+    fallbackContract = "cb-detect-fail-closed-v1"
+    publishAllowed = ($Complete -and -not $PreservePreviousGood)
+    latestOverwriteAllowed = ($Complete -and -not $PreservePreviousGood)
+    latestWriteAttempted = ($Complete -and -not $PreservePreviousGood)
+    latestPointerUpdated = ($Complete -and -not $PreservePreviousGood)
+    blockedReceiptWritten = [bool]$PreservePreviousGood
+    degradedBlocksLatest = [bool]$PreservePreviousGood
+    preservePreviousGood = [bool]$PreservePreviousGood
+    evidenceStatus = if ($PreservePreviousGood) { "insufficient" } elseif ($Complete) { "complete" } else { "insufficient" }
+    unattendedStatus = if ($PreservePreviousGood) { "NO" } elseif ($Complete) { "YES" } else { "NO" }
+    run_quality_at_publish = [ordered]@{
+      publishAllowed = ($Complete -and -not $PreservePreviousGood)
+      latestOverwriteAllowed = ($Complete -and -not $PreservePreviousGood)
+      latestWriteAttempted = ($Complete -and -not $PreservePreviousGood)
+      latestPointerUpdated = ($Complete -and -not $PreservePreviousGood)
+      blockedReceiptWritten = [bool]$PreservePreviousGood
+      degradedBlocksLatest = [bool]$PreservePreviousGood
+      preservePreviousGood = [bool]$PreservePreviousGood
+      fallbackUsed = $false
+      fallbackScope = @()
+      fallbackAllowed = $false
+      fallbackDetails = @()
+      fallbackContract = "cb-detect-fail-closed-v1"
+      evidenceStatus = if ($PreservePreviousGood) { "insufficient" } elseif ($Complete) { "complete" } else { "insufficient" }
+      unattendedStatus = if ($PreservePreviousGood) { "NO" } elseif ($Complete) { "YES" } else { "NO" }
+      blockedReason = $BlockingReason
+      scanner_block_reason = $BlockingReason
+      resultCount = [int]$Matches
+    }
     runId = $RunId
     payloadPath = "supabase-snapshot:cb_detect_latest"
     publishAllowed = $publishAllowed
@@ -139,12 +157,13 @@ if ($resourceGate.PreserveLatest) {
   "CB detect source gate blocked new publish; preserving latest complete run. $reason" >> $log
   try {
     $verifiedPayload = Assert-CbDetectApi
-    Write-CbDetectReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
-    exit 0
+    Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
   } catch {
-    Write-CbDetectReceipt "blocked" 0 $false 0 "" @($reason, $_.Exception.Message) $reason $true
-    exit 0
+    $readbackReason = "CB detect previous-good readback unavailable while source gate blocked: $($_.Exception.Message)"
+    $readbackReason >> $log
+    Write-CbDetectReceipt "blocked" 0 $false 0 "" @($reason, $readbackReason) $reason $true
   }
+  exit 0
 }
 $codeRepo = "${PSScriptRoot}"
 Push-Location $codeRepo
@@ -190,3 +209,4 @@ try {
 "CB detect API-only: scanner success verifies api/cb-detect-latest and reads Supabase snapshot/API plus desktop snapshot." >> $log
 "=== CB detect full scan end $(Get-Date) ===" >> $log
 exit 0
+

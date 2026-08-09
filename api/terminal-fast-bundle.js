@@ -18,9 +18,11 @@ const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
 
 const TERMINAL_ROOT = path.resolve(__dirname, "..");
 const TERMINAL_OPS_STATUS_FILE = path.join(TERMINAL_ROOT, "data", "terminal-ops-status-latest.json");
@@ -363,6 +365,69 @@ function callJson(label, handler, request, query = {}, timeoutMs = 5500) {
   });
 }
 
+function opsModuleKeyForEndpoint(endpoint) {
+  const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname.toLowerCase();
+  if (path.includes("strategy2-latest")) return "strategy2";
+  if (path.includes("strategy3-latest")) return "strategy3";
+  if (path.includes("strategy4-latest") || path.includes("latest-signals")) return "strategy4";
+  if (path.includes("strategy5-latest")) return "strategy5";
+  if (path.includes("institution-latest")) return "institution";
+  if (path.includes("cb-detect-latest")) return "cb";
+  if (path.includes("warrant-flow-latest")) return "warrant";
+  return "";
+}
+
+function compactOpsAuthority(row = {}) {
+  return {
+    key: row.key || "",
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || "",
+    sourceDate: row.sourceDate || "",
+    moduleStatus: row.moduleStatus || "",
+    todayAuthoritative: row.todayAuthoritative === true,
+    formalDisplayAllowed: row.formalDisplayAllowed === true,
+    displayMode: row.displayMode || "",
+    displayBlockReason: row.displayBlockReason || row.issue || "",
+    pendingNotDue: row.pendingNotDue === true,
+    evidenceStatus: row.evidenceStatus || "",
+    publishAllowed: row.publishAllowed === true,
+    fallback: row.fallback === true,
+    resultCount: Number(row.resultCount || 0),
+    readbackCount: Number(row.readbackCount || 0),
+  };
+}
+
+function buildOpsAuthorityIndex() {
+  const status = buildLatestOpsStatus();
+  const modules = Array.isArray(status.modules) ? status.modules : [];
+  const byKey = Object.fromEntries(modules.filter((row) => row?.key).map((row) => [row.key, compactOpsAuthority(row)]));
+  return {
+    contract: "terminal-display-authority-v1",
+    source: status.source || "",
+    tradeDate: status.tradeDate || "",
+    state: status.state || "",
+    unattendedStatus: status.unattendedStatus || "NO",
+    generatedAt: status.generatedAt || new Date().toISOString(),
+    byKey,
+  };
+}
+
+function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
+  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
+    if (!payload || typeof payload !== "object") continue;
+    const key = opsModuleKeyForEndpoint(endpoint);
+    const row = key ? authority.byKey?.[key] : null;
+    if (!row) continue;
+    payload.terminalAuthority = row;
+    payload.todayAuthoritative = row.todayAuthoritative;
+    payload.formalDisplayAllowed = row.formalDisplayAllowed;
+    payload.displayMode = row.displayMode;
+    payload.displayBlockReason = row.displayBlockReason;
+    payload.moduleStatus = row.moduleStatus;
+  }
+  return endpoints;
+}
+
 function summarize(payload) {
   if (!payload || typeof payload !== "object") return { ok: false, count: 0 };
   const rows = Array.isArray(payload.matches) ? payload.matches
@@ -382,6 +447,11 @@ function summarize(payload) {
     latestOverwriteAllowed: payload.latestOverwriteAllowed ?? payload.run_quality_at_publish?.latestOverwriteAllowed ?? null,
     preservePreviousGood: payload.preservePreviousGood ?? payload.run_quality_at_publish?.preservePreviousGood ?? null,
     blockedReason: payload.blockedReason || payload.scanner_block_reason || payload.run_quality_at_publish?.blockedReason || "",
+    terminalAuthority: payload.terminalAuthority || null,
+    todayAuthoritative: payload.todayAuthoritative === true || payload.terminalAuthority?.todayAuthoritative === true,
+    formalDisplayAllowed: payload.formalDisplayAllowed === true || payload.terminalAuthority?.formalDisplayAllowed === true,
+    displayMode: payload.displayMode || payload.terminalAuthority?.displayMode || "",
+    displayBlockReason: payload.displayBlockReason || payload.terminalAuthority?.displayBlockReason || "",
   };
 }
 
@@ -397,138 +467,15 @@ function publicEndpointMap(results) {
   return map;
 }
 
-function sanitizeStrategy2RunIds(value, canonicalRunId) {
-  if (!canonicalRunId || !String(canonicalRunId).startsWith("strategy2-")) return value;
-  const pattern = /strategy2-\d{8}-\d+/g;
-  if (typeof value === "string") {
-    return value.replace(pattern, (match) => (match === canonicalRunId ? match : canonicalRunId));
-  }
-  if (Array.isArray(value)) return value.map((item) => sanitizeStrategy2RunIds(item, canonicalRunId));
-  if (value && typeof value === "object") {
-    const next = {};
-    for (const [key, item] of Object.entries(value)) next[key] = sanitizeStrategy2RunIds(item, canonicalRunId);
-    return next;
-  }
-  return value;
-}
-
-function strategy2RunIdSortKey(runId) {
-  const match = String(runId || "").trim().match(/^strategy2-(\d{8})-(\d+)/);
-  if (!match) return "";
-  return `${match[1]}-${String(match[2]).padStart(14, "0")}`;
-}
-
-function latestStrategy2Candidate(candidates = []) {
-  return candidates
-    .filter((candidate) => String(candidate?.runId || "").startsWith("strategy2-"))
-    .sort((a, b) => strategy2RunIdSortKey(b.runId).localeCompare(strategy2RunIdSortKey(a.runId)))[0] || null;
-}
-
-function findStrategy2CanonicalRunId(endpoints = {}) {
-  const candidates = [];
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (!runId.startsWith("strategy2-")) continue;
-    candidates.push({ runId, payload, endpoint, approved: payload?.publishAllowed === true && payload?.evidenceStatus === "complete" });
-  }
-  return (latestStrategy2Candidate(candidates.filter((candidate) => candidate.approved)) || latestStrategy2Candidate(candidates))?.runId || "";
-}
-
-function findApprovedStrategy2CanonicalPayload(endpoints = {}) {
-  const candidates = [];
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    if (!runId.startsWith("strategy2-")) continue;
-    if (payload?.publishAllowed === true && payload?.evidenceStatus === "complete") candidates.push({ runId, payload, endpoint });
-  }
-  return latestStrategy2Candidate(candidates)?.payload || null;
-}
-function normalizeApprovedStrategy2Evidence(value, canonicalPayload) {
-  const canonicalRunId = String(canonicalPayload?.runId || canonicalPayload?.transport?.runId || "").trim();
-  if (!canonicalRunId.startsWith("strategy2-")) return value;
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map((item) => normalizeApprovedStrategy2Evidence(item, canonicalPayload));
-  if (!value || typeof value !== "object") return value;
-
-  const next = {};
-  for (const [key, item] of Object.entries(value)) {
-    next[key] = normalizeApprovedStrategy2Evidence(item, canonicalPayload);
-  }
-
-  const ownRunId = String(next.runId || next.transport?.runId || next.payload?.runId || "").trim();
-  const looksStrategy2 = ownRunId === canonicalRunId
-    || String(next.strategyKey || next.key || "").toLowerCase() === "strategy2"
-    || (next.payload && String(next.payload.runId || next.payload?.transport?.runId || "").trim() === canonicalRunId);
-  if (!looksStrategy2) return next;
-
-  const runQuality = next.run_quality_at_publish && typeof next.run_quality_at_publish === "object"
-    ? next.run_quality_at_publish
-    : {};
-  const unattended = next.unattended && typeof next.unattended === "object" ? next.unattended : {};
-  return {
-    ...next,
-    ok: next.ok !== false,
-    status: next.status === "degraded" ? "ready" : next.status,
-    qualityStatus: next.qualityStatus === "degraded" ? "complete" : next.qualityStatus,
-    evidenceStatus: "complete",
-    sourceEvidenceStatus: "complete",
-    sourceEvidenceIssues: [],
-    unattendedStatus: "YES",
-    unattended: {
-      ...unattended,
-      status: "YES",
-      evidenceStatus: "complete",
-      canRunUnattended: true,
-      reason: "",
-    },
-    publishAllowed: true,
-    publishBlocked: false,
-    publishBlockedReason: "",
-    degradedBlocksLatest: false,
-    preservePreviousGood: false,
-    mustPreserveLatest: false,
-    blockedReason: "",
-    scanner_block_reason: "",
-    issues: Array.isArray(next.issues)
-      ? next.issues.filter((issue) => !String(issue || "").includes("source_quality_fail"))
-      : next.issues,
-    run_quality_at_publish: {
-      ...runQuality,
-      publishAllowed: true,
-      degradedBlocksLatest: false,
-      preservePreviousGood: false,
-      blockedReason: "",
-      scanner_block_reason: "",
-      reason: runQuality.reason === "source_quality_fail" ? "" : runQuality.reason,
-    },
-  };
-}
-
 function sanitizeStrategy2Endpoints(endpoints = {}) {
+  // Preserve source evidence and runIds exactly; only remove retired endpoints.
   stripRetiredTerminalEndpoints(endpoints);
-  const canonicalRunId = findStrategy2CanonicalRunId(endpoints);
-  if (!canonicalRunId) return endpoints;
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    if (!isStrategy2SnapshotEndpoint(endpoint)) continue;
-    endpoints[endpoint] = sanitizeStrategy2RunIds(payload, canonicalRunId);
-  }
-  const approvedPayload = findApprovedStrategy2CanonicalPayload(endpoints);
-  if (approvedPayload) {
-    for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-      endpoints[endpoint] = normalizeApprovedStrategy2Evidence(payload, approvedPayload);
-    }
-  }
   return endpoints;
 }
 
-function sanitizeStrategy2BundlePayload(payload, endpoints = {}) {
-  const canonicalRunId = findStrategy2CanonicalRunId(endpoints || payload?.endpoints || {});
-  if (!canonicalRunId) return payload;
-  const runIdSanitized = sanitizeStrategy2RunIds(payload, canonicalRunId);
-  const approvedPayload = findApprovedStrategy2CanonicalPayload(endpoints || payload?.endpoints || {});
-  return approvedPayload ? normalizeApprovedStrategy2Evidence(runIdSanitized, approvedPayload) : runIdSanitized;
+function sanitizeStrategy2BundlePayload(payload) {
+  // A fast bundle must never promote stale/degraded evidence to unattended YES.
+  return payload;
 }
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};
@@ -1027,6 +974,12 @@ module.exports = async function handler(request, response) {
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   setAuthenticatedNoStore(response, entitlement);
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  const opsAuthority = buildOpsAuthorityIndex();
+  if (entitlement?.ok) {
+    response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.setHeader("CDN-Cache-Control", "no-store");
+    response.setHeader("Vercel-CDN-Cache-Control", "no-store");
+  }
 
   const requestedLiveFanout = request.query?.live === "1"
     || request.query?.refresh === "1"
@@ -1047,22 +1000,15 @@ module.exports = async function handler(request, response) {
     const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || defaultSnapshotTimeoutMs) || defaultSnapshotTimeoutMs);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
-      : await readDesktopRouteSnapshot({ timeoutMs: snapshotReadTimeoutMs }).catch(() => null);
+      : await readDesktopRouteSnapshot({
+        timeoutMs: FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS,
+        allowStale: marketCalendar?.marketOpen === false && (marketCalendar?.preservePreviousGood === true || marketCalendar?.formalScanSkipped === true),
+      });
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
-      if (entitlement?.ok === true) {
-        setAuthenticatedNoStore(response, entitlement);
-      } else {
-        response.setHeader("Cache-Control", "public, max-age=45, stale-while-revalidate=180");
-        response.setHeader("CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
-        response.setHeader("Vercel-CDN-Cache-Control", "public, max-age=45, stale-while-revalidate=240");
-      }
       const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
-      const allowSnapshotRepair = terminalSnapshotRepairEnabled(request);
-      let realtimeRadarRepairs = isReleaseReadbackSnapshot
-        ? { skipped: "release-readback-snapshot" }
-        : { skipped: allowSnapshotRepair ? "retired-realtime-radar" : "snapshot-repair-disabled" };
-      if (allowSnapshotRepair && !isReleaseReadbackSnapshot) {
+      let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
+      if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
@@ -1074,8 +1020,17 @@ module.exports = async function handler(request, response) {
         });
         await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-repair" });
       }
+      if (liveFallbackEnabled(request)) {
+        await repairStrategy5FullSnapshot(request, endpoints);
+        await repairStrategy4LatestSnapshot(request, endpoints);
+        await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
+          via: "api/terminal-fast-bundle:snapshot",
+          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+        });
+      }
       sanitizeStrategy2Endpoints(endpoints);
-      const staleManifestEndpointRemovals = removeStaleManifestRunIdEndpoints(endpoints);
+      attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -1086,10 +1041,8 @@ module.exports = async function handler(request, response) {
         partial: Boolean(snapshot.payload.partial),
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
         snapshotHit: !isReleaseReadbackSnapshot,
-        snapshotRepairs: {
-          ...(realtimeRadarRepairs && typeof realtimeRadarRepairs === "object" ? realtimeRadarRepairs : { value: realtimeRadarRepairs }),
-          staleManifestEndpointRemovals,
-        },
+        snapshotRepairs: realtimeRadarRepairs,
+        terminalAuthority: opsAuthority,
       };
       if (request.method === "HEAD") {
         response.status(200).end("");
@@ -1105,26 +1058,13 @@ module.exports = async function handler(request, response) {
         return;
       }
       const endpoints = {};
-      const authenticatedSnapshotMiss = entitlement?.ok === true;
-      const sourceReportsBundle = authenticatedSnapshotMiss
-        ? await buildSourceReportsDerivedBundle(request, "desktop_route_snapshot_timeout_or_missing").catch(() => null)
-        : null;
-      if (sourceReportsBundle) {
-        response.setHeader("X-Fuman-Fast-Bundle-Mode", "source-reports-fallback");
-        response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(sourceReportsBundle, sourceReportsBundle.endpoints || {}), sourceReportsBundle.endpoints || {}), marketCalendar), entitlement));
-        return;
-      }
       const missPayload = {
-        ...snapshotMissPayload("desktop_route_snapshot_timeout_or_missing"),
-        ok: true,
-        error: authenticatedSnapshotMiss ? "authenticated_desktop_route_snapshot_pending" : undefined,
+        ...snapshotMissPayload(),
+        terminalAuthority: opsAuthority,
         endpoints,
-        summary: {},
+        summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
         misses: ["desktop_route_snapshot"],
-        snapshotRepairs: { skipped: "snapshot-miss-fast-fail" },
-        preservePreviousGood: true,
-        latestPointerUpdated: false,
-        emptyResultWritten: false,
+        snapshotRepairs: { skipped: "published_snapshot_required" },
       };
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(missPayload, endpoints), marketCalendar), entitlement));
       return;
@@ -1161,7 +1101,7 @@ module.exports = async function handler(request, response) {
     via: "api/terminal-fast-bundle",
   });
   sanitizeStrategy2Endpoints(endpoints);
-  const staleManifestEndpointRemovals = removeStaleManifestRunIdEndpoints(endpoints);
+  attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
   const misses = rows
@@ -1178,7 +1118,7 @@ module.exports = async function handler(request, response) {
     summary,
     misses,
     timings: Object.fromEntries(rows.map((item) => [item.label, item.elapsedMs || 0])),
-    snapshotRepairs: { staleManifestEndpointRemovals },
+    terminalAuthority: opsAuthority,
   };
 
   if (request.method === "HEAD") {

@@ -62,12 +62,19 @@ function pendingPreviousGoodModules(manifest = {}) {
     && clean(row.runId));
 }
 
-function modulesGreen(manifest = {}) {
-  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
-  return rows.length > 0 && rows.every((row) => row.ok === true
+function moduleFormalDisplayGreen(row = {}) {
+  return row.ok === true
     && row.complete === true
     && row.fallback !== true
-    && clean(row.runId));
+    && row.rawFallback !== true
+    && row.todayAuthoritative === true
+    && row.formalDisplayAllowed === true
+    && clean(row.runId);
+}
+
+function modulesGreen(manifest = {}) {
+  const rows = Array.isArray(manifest.modules) ? manifest.modules : [];
+  return rows.length > 0 && rows.every((row) => moduleFormalDisplayGreen(row));
 }
 
 function allowMarketClosedClosurePublish(manifest = {}) {
@@ -95,7 +102,48 @@ function main() {
   if (String(manifest.contract || "") !== "daily-terminal-run-manifest-v1") {
     fail("manifest_contract_invalid", { contract: manifest.contract || "" });
   }
-
+  const manifestTradeDate = String(manifest.tradeDate || "");
+  const marketClosedClosureAllowed = allowMarketClosedClosurePublish(manifest);
+  const publishDate = marketClosedClosureAllowed ? (previousGoodDate(manifest) || manifestTradeDate) : EXPECTED_DATE;
+  const manifestDateMatchesExpected = manifestTradeDate === EXPECTED_DATE;
+  const manifestDateIsPreviousGood = Boolean(manifestTradeDate && manifestTradeDate < EXPECTED_DATE && publishDate === manifestTradeDate);
+  const expectedDateIsPublishDate = Boolean(marketClosedClosureAllowed && publishDate === EXPECTED_DATE);
+  if (!manifestDateMatchesExpected && !manifestDateIsPreviousGood && !expectedDateIsPublishDate) {
+    fail("manifest_tradeDate_mismatch", {
+      tradeDate: manifestTradeDate,
+      expectedDate: EXPECTED_DATE,
+      publishDate,
+      marketClosedClosureAllowed,
+    });
+  }
+  const partialPendingPublishCandidate = String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
+    || (Array.isArray(manifest.modules) && manifest.modules.some((row) => isPendingNotDueModule(row)));
+  if (!marketClosedClosureAllowed && (manifest.ok !== true || manifest.unattendedStatus !== "YES")) {
+    if (!ALLOW_DEGRADED && !partialPendingPublishCandidate) {
+      fail("manifest_not_green_refuse_scorecard_publish", {
+        unattendedStatus: manifest.unattendedStatus || "",
+        blocker: manifest.blocker || "",
+        issues: manifest.issues || [],
+        marketClosedClosureAllowed,
+        pendingPreviousGoodModules: pendingPreviousGoodModules(manifest),
+      });
+    }
+  }
+  const badModules = Array.isArray(manifest.modules)
+    ? manifest.modules.filter((row) => !isPendingNotDueModule(row) && !moduleFormalDisplayGreen(row))
+    : [];
+  if (badModules.length && !ALLOW_DEGRADED) {
+    fail("manifest_modules_not_green", {
+      modules: badModules.map((row) => ({
+        key: row.key,
+        runId: row.runId,
+        displayMode: row.displayMode || "",
+        formalDisplayAllowed: row.formalDisplayAllowed === true,
+        todayAuthoritative: row.todayAuthoritative === true,
+        issues: row.issues || [],
+      })),
+    });
+  }
   let canary;
   try {
     canary = readJson(CANARY_FILE);

@@ -1710,35 +1710,50 @@ function Write-WebSocketPrioritySymbols {
         $existingPriority = Get-Content -LiteralPath $PrioritySymbolsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
       }
     } catch {}
+    $strategy2Symbols = @($groups.strategy2)
+    if ($strategy2Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy2.status -eq "ready") { $strategy2Symbols = @($existingPriority.priorityBridge.groups.strategy2.symbols) }
+    $strategy3Symbols = @($groups.strategy3)
+    if ($strategy3Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy3.status -eq "ready") { $strategy3Symbols = @($existingPriority.priorityBridge.groups.strategy3.symbols) }
+    $strategy4Symbols = @($groups.strategy4)
+    if ($strategy4Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy4.status -eq "ready") { $strategy4Symbols = @($existingPriority.priorityBridge.groups.strategy4.symbols) }
+    $strategy5Symbols = @($groups.strategy5)
+    if ($strategy5Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy5.status -eq "ready") { $strategy5Symbols = @($existingPriority.priorityBridge.groups.strategy5.symbols) }
+    $institutionSymbols = @($groups.institution)
+    if ($institutionSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.institution.status -eq "ready") { $institutionSymbols = @($existingPriority.priorityBridge.groups.institution.symbols) }
+    $warrantSymbols = @($groups.warrant)
+    if ($warrantSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.warrant.status -eq "ready") { $warrantSymbols = @($existingPriority.priorityBridge.groups.warrant.symbols) }
+    $cbSymbols = @($groups.cb)
+    if ($cbSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.cb.status -eq "ready") { $cbSymbols = @($existingPriority.priorityBridge.groups.cb.symbols) }
     $daytradePrioritySymbols = @($existingPriority.daytradePrioritySymbols + $existingPriority.daytradeSymbols + $existingPriority.daytrade) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $terminalPrioritySymbols = @($daytradePrioritySymbols + @($groups.terminalPrioritySymbols)) |
+    $terminalPrioritySymbols = @($daytradePrioritySymbols + @($groups.terminalPrioritySymbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $openingPrioritySymbols = @($daytradePrioritySymbols + @($groups.openingPrioritySymbols)) |
+    $openingPrioritySymbols = @($daytradePrioritySymbols + @($groups.openingPrioritySymbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $allPrioritySymbols = @($daytradePrioritySymbols + @($groups.symbols)) |
+    $allPrioritySymbols = @($daytradePrioritySymbols + @($groups.symbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
     Write-JsonFile -Path $PrioritySymbolsFile -Value ([ordered]@{
       updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
       source = "public-slot-shared-source-priority-pool"
+      priorityBridge = $existingPriority.priorityBridge
       reason = $Reason
       policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
       daytradePrioritySymbols = @($daytradePrioritySymbols)
       daytradePriorityCount = @($daytradePrioritySymbols).Count
       terminalPrioritySymbols = @($terminalPrioritySymbols)
       strategy1 = @($groups.strategy1)
-      strategy2 = @($groups.strategy2)
-      strategy3 = @($groups.strategy3)
+      strategy2 = @($strategy2Symbols)
+      strategy3 = @($strategy3Symbols)
       strategy3QuotePriority = @($groups.strategy3QuotePriority)
-      strategy4 = @($groups.strategy4)
-      strategy5 = @($groups.strategy5)
-      institution = @($groups.institution)
-      warrant = @($groups.warrant)
-      cb = @($groups.cb)
+      strategy4 = @($strategy4Symbols)
+      strategy5 = @($strategy5Symbols)
+      institution = @($institutionSymbols)
+      warrant = @($warrantSymbols)
+      cb = @($cbSymbols)
       realtimeRadar = @($groups.realtimeRadar)
       threeDayOpenHighFade = @($groups.threeDayOpenHighFade)
       dynamic = @($groups.dynamicAmplitudeBull) + @($groups.dynamicVolumeSurge)
@@ -1751,14 +1766,14 @@ function Write-WebSocketPrioritySymbols {
       counts = [ordered]@{
         daytrade = @($daytradePrioritySymbols).Count
         strategy1 = @($groups.strategy1).Count
-        strategy2 = @($groups.strategy2).Count
-        strategy3 = @($groups.strategy3).Count
+        strategy2 = @($strategy2Symbols).Count
+        strategy3 = @($strategy3Symbols).Count
         strategy3QuotePriority = @($groups.strategy3QuotePriority).Count
-        strategy4 = @($groups.strategy4).Count
-        strategy5 = @($groups.strategy5).Count
-        institution = @($groups.institution).Count
-        warrant = @($groups.warrant).Count
-        cb = @($groups.cb).Count
+        strategy4 = @($strategy4Symbols).Count
+        strategy5 = @($strategy5Symbols).Count
+        institution = @($institutionSymbols).Count
+        warrant = @($warrantSymbols).Count
+        cb = @($cbSymbols).Count
         realtimeRadar = @($groups.realtimeRadar).Count
         strategyPriority = $script:ApiUniverseStats.strategy_priority_symbols
         terminalPriority = $script:ApiUniverseStats.terminal_priority_symbols
@@ -3424,11 +3439,10 @@ function Invoke-FugleFutoptTickers {
   try {
     if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
       $age = ((Get-Date) - (Get-Item -LiteralPath $FutoptTickersCacheFile).LastWriteTime).TotalSeconds
-      if ($age -lt $FutoptTickersEverySeconds) {
-        $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
-        if ($null -ne $cached) {
-          $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
-        }
+      $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
+      $cachedRows = @($cached.data)
+      if ($age -lt $FutoptTickersEverySeconds -and $null -ne $cached -and $cachedRows.Count -gt 0) {
+        $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
         return $cached
       }
     }
@@ -3441,6 +3455,18 @@ function Invoke-FugleFutoptTickers {
   try {
     $uri = "https://api.fugle.tw/marketdata/v1.0/futopt/intraday/tickers?type=FUTURE"
     $payload = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 25 -ErrorAction Stop
+    $payloadRows = @($payload.data)
+    if ($payloadRows.Count -eq 0) {
+      Write-Log "WARN fugle futopt tickers returned empty payload; preserve previous non-empty cache"
+      if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
+        $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
+        if (@($cached.data).Count -gt 0) {
+          $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+          return $cached
+        }
+      }
+      return $payload
+    }
     $payload | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $false -Force
     Write-JsonFile -Path $FutoptTickersCacheFile -Value $payload
     return $payload
@@ -3448,10 +3474,10 @@ function Invoke-FugleFutoptTickers {
     Write-Log "WARN fugle futopt tickers failed: $($_.Exception.Message)"
     if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
       $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
-      if ($null -ne $cached) {
+      if (@($cached.data).Count -gt 0) {
         $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+        return $cached
       }
-      return $cached
     }
     return $null
   }

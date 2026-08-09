@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { evaluateFormalEntryGate } = require("../lib/terminal-formal-entry-gate");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/autonomous-ops-policy");
@@ -22,6 +23,18 @@ function unique(values) {
 }
 
 function isMarketClosedPreviousGood(manifest = {}, orchestrator = {}, waterRoot = {}) {
+  const calendarRow = waterRoot.marketCalendar?.row || {};
+  const calendarStatus = lower(calendarRow.marketStatus || waterRoot.marketCalendar?.marketStatus);
+  const closedReason = lower(calendarRow.closedReason || waterRoot.marketCalendar?.closedReason || calendarRow.reason);
+  const calendarDisplayMode = lower(calendarRow.displayMode || waterRoot.marketCalendar?.displayMode);
+  const calendarSkipReason = lower(calendarRow.skipReason || waterRoot.marketCalendar?.skipReason);
+  const explicitMarketClosed = calendarRow.marketOpen === false
+    && (calendarStatus === "closed"
+      || closedReason.includes("weekend")
+      || closedReason.includes("holiday")
+      || calendarDisplayMode.includes("market_closed")
+      || calendarSkipReason.includes("market_closed"));
+  if (explicitMarketClosed) return true;
   const rootReady = waterRoot.ok === true && /ready|ok/.test(lower(waterRoot.status));
   const rootOpen = waterRoot.marketCalendar?.marketOpen === true
     || waterRoot.marketCalendar?.tradingDayOpen === true
@@ -34,12 +47,15 @@ function isMarketClosedPreviousGood(manifest = {}, orchestrator = {}, waterRoot 
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
     manifest.blocker,
+    manifest.unattendedStatus,
+    manifest.previousGoodHold,
     orchestrator.overallState,
     orchestrator.blocker,
     waterRoot.status,
     waterRoot.reason,
     waterRoot.marketCalendar?.row?.skipReason,
     waterRoot.marketCalendar?.row?.marketStatus,
+    waterRoot.marketCalendar?.row?.displayMode,
   ].map(lower).join(" ");
   const tradingDayWait = bits.includes("trading_day") || bits.includes("wait_source_window");
   if (tradingDayWait) return false;
@@ -138,8 +154,10 @@ function modulePolicy(row = {}, context = {}) {
 
 function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPreviousGood }) {
   const jobQueue = Array.isArray(orchestrator.jobQueue) ? orchestrator.jobQueue : [];
-  const sourceFreshnessRequired = orchestrator.marketCalendar?.sourceFreshnessRequired !== false;
-  const waterOk = manifest.waterRoot?.ok === true || waterRoot.ok === true || sourceFreshnessRequired === false;
+  const expectedDate = String(manifest.tradeDate || orchestrator.tradeDate || "").replace(/\D/g, "").slice(0, 8);
+  const formalEntryGate = evaluateFormalEntryGate({ ...waterRoot, manifest }, expectedDate);
+  const waterOk = manifest.waterRoot?.ok === true || waterRoot.ok === true;
+  const formalScanGateOk = waterOk && formalEntryGate.ok;
   const manifestOk = manifest.ok === true;
   const allModulesClosed = modules.every((row) => row.state === "CLOSED" || (marketClosedPreviousGood && row.displayMode === "market_closed_previous_good"));
   const hasAuthBlock = jobQueue.some((job) => String(job.state || "").includes("AUTH"));
@@ -196,7 +214,7 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
     };
   }
 
-  if (manifestOk && allModulesClosed && jobQueue.length === 0) {
+  if (manifestOk && allModulesClosed && jobQueue.length === 0 && formalScanGateOk) {
     return {
       opsState: "UNATTENDED_YES",
       unattendedStatus: "YES",
@@ -211,7 +229,7 @@ function decide({ manifest, orchestrator, waterRoot, modules, marketClosedPrevio
   return {
     opsState: "DEGRADED_RETRY_QUEUE",
     unattendedStatus: "NO",
-    formalScanAllowed: waterOk && hasScanRetry,
+    formalScanAllowed: formalScanGateOk && hasScanRetry,
     scorecardPublishAllowed: false,
     terminalSnapshotAllowed: true,
     autoRecoveryAllowed: true,

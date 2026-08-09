@@ -19,16 +19,6 @@ $rules = @{
     Done = @("Cache sync end", "No cache changes to sync")
     Detail = @("Commit cache files", "Push cache commit", "No cache changes to sync")
   }
-  "run-open-buy.ps1" = @{
-    Log = "open-buy-*.log"
-    Done = @("Open buy full scan end")
-    Detail = @("full market scan", "scanned \d+/\d+", "matches \d+", "Open buy cache sync completed")
-  }
-  "run-star-preopen-watch.ps1" = @{
-    Log = "strategy1-preopen-watch-*.log"
-    Done = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip")
-    Detail = @("strategy1 preopen runner complete", "outside STAR preopen watch window; skip", "controlled preopen refresh failure")
-  }
   "run-strategy2-intraday.ps1" = @{
     Log = "strategy2-intraday-*.log"
     Done = @("Strategy2 intraday patrol end", "skip intraday scan outside market time")
@@ -63,11 +53,6 @@ $rules = @{
     Log = "strategy5-watchdog-*.log"
     Done = @("strategy5 healthy", "strategy5 recovered")
     Detail = @("strategy5 healthy.*", "strategy5 recovered.*")
-  }
-  "run-realtime-radar.ps1" = @{
-    Log = "realtime-radar-*.log"
-    Done = @("Realtime radar cache end", "realtime radar skipped outside")
-    Detail = @("Realtime radar cache end", "realtime radar skipped outside.*", "rows \d+ status ok")
   }
   "run-market-overview.ps1" = @{
     Log = "market-overview-*.log"
@@ -353,10 +338,19 @@ function Test-RetiredPattern($Policy, $TaskName) {
   return $false
 }
 
-function Test-ExpectedTriggers($Expected, $Actual) {
+function Test-ExpectedTriggers($Expected, $Actual, $Task) {
   $expectedSet = @($Expected | Sort-Object -Unique)
   if ($expectedSet.Count -eq 0) { return $true }
   $actualSet = @($Actual | Sort-Object -Unique)
+  # The autonomous controller is installed as one repeated trigger per audit day.
+  # Its first day may begin at install time, while later days begin at 06:00.
+  if ($expectedSet -contains "repeat 5m") {
+    $hasSixAmStart = $actualSet -contains "06:00"
+    $hasFiveMinuteRepeat = @($Task.Triggers | Where-Object {
+      [string]$_.Repetition.Interval -eq "PT5M"
+    }).Count -gt 0
+    if ($hasSixAmStart -and $hasFiveMinuteRepeat) { return $true }
+  }
   if ($expectedSet.Count -ne $actualSet.Count) { return $false }
   for ($i = 0; $i -lt $expectedSet.Count; $i++) {
     if ($expectedSet[$i] -ne $actualSet[$i]) { return $false }
@@ -472,7 +466,7 @@ foreach ($task in ($scheduledTasks | Sort-Object TaskName)) {
   } elseif ($forbiddenHit.Count -gt 0) {
     $status = "FORBIDDEN_TRIGGER"
     $detail = "forbidden trigger present: $($forbiddenHit -join ', ')"
-  } elseif (-not (Test-ExpectedTriggers $entry.ExpectedTriggers $triggers)) {
+  } elseif (-not (Test-ExpectedTriggers $entry.ExpectedTriggers $triggers $task)) {
     $status = "TRIGGER_MISMATCH"
     $detail = "expected triggers $($entry.ExpectedTriggers -join ', '); actual $($triggers -join ', ')"
   } elseif ($state -eq "Running" -and ($allowed -contains 267009)) {

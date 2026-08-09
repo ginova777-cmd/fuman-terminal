@@ -32,7 +32,34 @@ function Write-Strategy3CompleteLog($Message) {
   Add-Content -LiteralPath $log -Value $line -Encoding utf8
 }
 
-function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
+function Write-JsonNoBom($Path, $Object) {
+  $json = $Object | ConvertTo-Json -Depth 8
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, $json + "`n", $utf8NoBom)
+}
+function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", [bool]$PreservePreviousGood = $false) {
+  $publishAllowed = ($Complete -eq $true) -and ([int]$ExitCode -eq 0) -and (-not $PreservePreviousGood)
+  $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
+  $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
+  $runQualityAtPublish = [ordered]@{
+    publishAllowed = $publishAllowed
+    latestOverwriteAllowed = $publishAllowed
+    latestWriteAttempted = $publishAllowed
+    latestPointerUpdated = $publishAllowed
+    blockedReceiptWritten = $PreservePreviousGood
+    degradedBlocksLatest = (-not $publishAllowed)
+    preservePreviousGood = $PreservePreviousGood
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = "strategy3-complete-scan-receipt-v1"
+    evidenceStatus = $evidenceStatus
+    unattendedStatus = $unattendedStatus
+    blockedReason = $BlockingReason
+    scanner_block_reason = $BlockingReason
+    resultCount = $Matches
+  }
   $receipt = [ordered]@{
     strategy = "strategy3"
     label = "strategy3 raw refresh"
@@ -52,10 +79,27 @@ function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     warnings = @($Warnings)
     blockingReason = $BlockingReason
     log = $log
+    contract = "strategy-scan-receipt-contract-v1"
+    normalizationSource = "native_strategy3_complete_scan_v1"
+    preservePreviousGood = $PreservePreviousGood
+    publishAllowed = $publishAllowed
+    latestOverwriteAllowed = $publishAllowed
+    latestWriteAttempted = $publishAllowed
+    latestPointerUpdated = $publishAllowed
+    blockedReceiptWritten = $PreservePreviousGood
+    degradedBlocksLatest = (-not $publishAllowed)
+    fallbackUsed = $false
+    fallbackScope = @()
+    fallbackAllowed = $false
+    fallbackDetails = @()
+    fallbackContract = "strategy3-complete-scan-receipt-v1"
+    evidenceStatus = $evidenceStatus
+    unattendedStatus = $unattendedStatus
+    run_quality_at_publish = $runQualityAtPublish
   }
-  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy3.json") -Encoding utf8
+  Write-JsonNoBom (Join-Path $receiptDir "strategy3.json") $receipt
   if ($syncReceiptDir) {
-    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $syncReceiptDir "strategy3.json") -Encoding utf8
+    Write-JsonNoBom (Join-Path $syncReceiptDir "strategy3.json") $receipt
   }
 }
 
@@ -213,6 +257,16 @@ function Get-TaipeiTodayYmd {
   return $taipeiNow.ToString("yyyyMMdd")
 }
 
+function Get-Strategy3ExpectedYmd {
+  $forced = ""
+  if ($env:STRATEGY3_TRADE_DATE) { $forced = [string]$env:STRATEGY3_TRADE_DATE }
+  elseif ($env:STRATEGY3_SCAN_TRADE_DATE) { $forced = [string]$env:STRATEGY3_SCAN_TRADE_DATE }
+  $forced = ($forced -replace "[^0-9]", "")
+  if ($env:STRATEGY3_ALLOW_BACKFILL_SCAN -eq "1" -and $forced.Length -ge 8) {
+    return $forced.Substring(0, 8)
+  }
+  return Get-TaipeiTodayYmd
+}
 function Convert-DateTextToYmd($Value) {
   $text = [string]$Value
   if ($text -match "^\d{8}$") { return $text }
@@ -224,30 +278,51 @@ function Assert-Strategy3CompleteApi {
   param(
     [switch]$AllowPreviousComplete
   )
-  $args = @("scripts\verify-strategy3-live-readback.js", "--expect-complete")
-  if ($AllowPreviousComplete) { $args += "--allow-previous-complete" }
-  $output = & $nodeExe "--use-system-ca" @args 2>&1
+  $verifyArgs = @("scripts\verify-strategy3-live-readback.js", "--expect-complete")
+  if ($AllowPreviousComplete) { $verifyArgs += "--allow-previous-complete" }
+  $stamp = Get-Date -Format yyyyMMdd-HHmmssfff
+  $verifyOut = Join-Path $env:FUMAN_CACHE_DIR ("strategy3-live-readback-{0}.json" -f $stamp)
+  $verifyErr = Join-Path $env:FUMAN_CACHE_DIR ("strategy3-live-readback-{0}.err.txt" -f $stamp)
+  $quotedArgs = @()
+  foreach ($item in $verifyArgs) { $quotedArgs += ('"' + ([string]$item).Replace('"', '\"') + '"') }
+  $verifyCommand = "`"$nodeExe`" --use-system-ca " + ($quotedArgs -join " ") + " > `"$verifyOut`" 2> `"$verifyErr`""
+  & cmd.exe /d /s /c $verifyCommand
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
-  $text = ($output | Out-String).Trim()
+  $text = ""
   $readback = $null
-  try {
-    $readback = $text | ConvertFrom-Json -AsHashtable
-  } catch {
-    throw "Strategy3 internal Supabase readback produced invalid JSON exit=$exitCode text=$($text.Substring(0, [Math]::Min(500, $text.Length)))"
-  }
-  if ($exitCode -ne 0 -or -not $readback["ok"]) {
-    $issueText = ""
-    if ($readback -and $readback["verification"] -and $readback["verification"]["issues"]) {
-      $issueText = (@($readback["verification"]["issues"]) -join "; ")
+  $jsonParseError = $null
+  for ($parseAttempt = 1; $parseAttempt -le 10; $parseAttempt++) {
+    if (Test-Path -LiteralPath $verifyOut) {
+      $text = (Get-Content -LiteralPath $verifyOut -Raw -Encoding UTF8 -ErrorAction SilentlyContinue).Trim()
     }
-    if (-not $issueText) { $issueText = [string]$readback["error"]; if (-not $issueText) { $issueText = "internal_readback_failed" } }
-    throw "Strategy3 internal Supabase readback failed exit=$exitCode issues=$issueText"
+    if (-not $text -and (Test-Path -LiteralPath $verifyErr)) {
+      $text = (Get-Content -LiteralPath $verifyErr -Raw -Encoding UTF8 -ErrorAction SilentlyContinue).Trim()
+    }
+    try {
+      $readback = $text | ConvertFrom-Json
+      $jsonParseError = $null
+      break
+    } catch {
+      $jsonParseError = $_.Exception.Message
+      Start-Sleep -Milliseconds 250
+    }
   }
-  $pointer = $readback["latestPointer"]
-  $runId = [string]$pointer["runId"]
-  $today = Get-TaipeiTodayYmd
-  $usedDate = if ($runId -match "strategy3-(\d{8})") { $Matches[1] } else { [string]$readback["targetDate"] }
-  $count = if ($null -ne $pointer["resultCount"]) { [int]$pointer["resultCount"] } else { 0 }
+  if ($null -eq $readback) {
+    throw "Strategy3 internal Supabase readback produced invalid JSON exit=$exitCode jsonFile=$verifyOut errFile=$verifyErr parseError=$jsonParseError text=$($text.Substring(0, [Math]::Min(500, $text.Length)))"
+  }
+  if ($exitCode -ne 0 -or -not $readback.ok) {
+    $issueText = ""
+    if ($readback -and $readback.verification -and $readback.verification.issues) {
+      $issueText = (@($readback.verification.issues) -join "; ")
+    }
+    if (-not $issueText) { $issueText = [string]$readback.error; if (-not $issueText) { $issueText = "internal_readback_failed" } }
+    throw "Strategy3 internal Supabase readback failed exit=$exitCode issues=$issueText jsonFile=$verifyOut errFile=$verifyErr"
+  }
+  $pointer = $readback.latestPointer
+  $runId = [string]$pointer.runId
+  $today = Get-Strategy3ExpectedYmd
+  $usedDate = if ($runId -match "strategy3-(\d{8})") { $Matches[1] } else { [string]$readback.targetDate }
+  $count = if ($null -ne $pointer.resultCount) { [int]$pointer.resultCount } else { 0 }
   if (-not $AllowPreviousComplete -and $usedDate -ne $today) { throw "Strategy3 Supabase latest pointer stale; usedDate=$usedDate today=$today" }
   if ($count -le 0 -and -not ((-not $AllowPreviousComplete) -and $usedDate -eq $today)) { throw "Strategy3 Supabase latest pointer empty; count=$count" }
   $payload = [pscustomobject]@{
@@ -311,13 +386,14 @@ if ($resourceGate.PreserveLatest) {
     }
   }
   $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-resource-gate"
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason $true
   Write-Strategy3CompleteLog "Strategy3 resource-gated scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
 $scannerError = ""
 try {
-  & $nodeExe "scripts\scan-strategy3-cache.js" >> $log 2>&1
+  $nodeCommand = "`"$nodeExe`" scripts\scan-strategy3-cache.js >> `"$log`" 2>&1"
+  & cmd.exe /d /s /c $nodeCommand
   $exitCode = $LASTEXITCODE
   if ($null -eq $exitCode) { $exitCode = 0 }
   if ($exitCode -ne 0) { throw "Strategy3 complete scanner failed with exit code $exitCode; log=$log" }
@@ -338,7 +414,7 @@ try {
   }
   $reason = "source not ready; preserved latest complete run: $scannerError"
   $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-scanner-controlled-failure"
-  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
+  Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason $true
   Write-Strategy3CompleteLog "Strategy3 deferred complete scan end; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
@@ -371,3 +447,7 @@ if (Test-Path -LiteralPath $snapshotScript) {
 
 Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
+
+
+
+

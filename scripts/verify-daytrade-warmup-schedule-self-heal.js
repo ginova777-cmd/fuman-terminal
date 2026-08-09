@@ -12,6 +12,10 @@ const LIVE = process.argv.includes("--live");
 const CONTRACT = "daytrade-warmup-schedule-self-heal-contract-v1";
 const REQUIRED_INVARIANTS = [
   "natural_gate_tasks_exist_and_are_readonly",
+  "market_calendar_precedes_warmup_and_closed_market_preserves_previous_good",
+  "predictive_preflight_uses_websocket_transport_and_fail_closed_exit",
+  "predictive_preflight_task_exists_at_0830",
+  "warmup_run_id_is_filesystem_safe",
   "final_verdict_task_exists_at_0912",
   "final_verdict_runs_root_apply_after_original_verdict",
   "writer_and_watchdog_rewater_tasks_exist",
@@ -24,6 +28,7 @@ const REQUIRED_INVARIANTS = [
   "self_heal_apply_failure_keeps_unattended_no",
   "success_requires_rewater_verification_not_action_exit_only",
   "warmup_tasks_run_on_battery_power",
+  "preflight_failure_evidence_is_immutable_and_reason_preserving",
 ];
 const SELF_HEAL_RUNNER_PATH = path.join(ROOT, "scripts", "run-daytrade-warmup-self-heal.js");
 
@@ -102,7 +107,14 @@ function checkLiveTask({ contractTask, issues, role }) {
     return;
   }
   const task = live.task || {};
-  if (task.State !== "Ready") issues.push(`${role}:${contractTask.name}:live_state_not_ready:${task.State || "missing"}`);
+  const allowedLiveStates = role === "rewater" ? new Set(["Ready", "Running"]) : new Set(["Ready"]);
+  if (!allowedLiveStates.has(String(task.State || ""))) {
+    issues.push(`${role}:${contractTask.name}:live_state_not_ready:${task.State || "missing"}`);
+  }
+  const allowedResults = new Set((contractTask.allowedResults || []).map((value) => Number(value)));
+  if (allowedResults.size > 0 && !allowedResults.has(Number(task.LastTaskResult))) {
+    issues.push(`${role}:${contractTask.name}:live_last_result_not_allowed:${task.LastTaskResult}`);
+  }
   if (task.DisallowStartIfOnBatteries !== false) issues.push(`${role}:${contractTask.name}:live_disallow_start_on_battery`);
   if (task.StopIfGoingOnBatteries !== false) issues.push(`${role}:${contractTask.name}:live_stop_on_battery`);
   const actions = Array.isArray(task.Actions) ? task.Actions : (task.Actions ? [task.Actions] : []);
@@ -134,7 +146,101 @@ function main() {
   if (!selfHealText.includes("completedReceipt(job)")) issues.push("self_heal_runner_missing_idempotent_receipt_skip");
   if (!selfHealText.includes("verificationOk")) issues.push("self_heal_runner_missing_verification_ok_gate");
   if (!selfHealText.includes("self_heal_counts_as_unattended_yes: false")) issues.push("self_heal_runner_may_fake_unattended_yes");
+  const naturalGateRuntimePath = "C:/fuman-runtime/ops/Run-DaytradeUnattendedGate.ps1";
+  const naturalGateRuntimeText = fs.existsSync(naturalGateRuntimePath) ? fs.readFileSync(naturalGateRuntimePath, "utf8") : "";
+  const naturalGateRuntimeImplPath = "C:/fuman-runtime/ops/daytrade-unattended-gate-runtime.js";
+  const naturalGateRuntimeImplText = fs.existsSync(naturalGateRuntimeImplPath) ? fs.readFileSync(naturalGateRuntimeImplPath, "utf8") : "";
+  if (!naturalGateRuntimeText.includes("check-market-calendar-action.js")) issues.push("natural_gate_missing_market_calendar_guard");
+  if (!naturalGateRuntimeText.includes("market_closed")) issues.push("natural_gate_missing_market_closed_branch");
+  if (!naturalGateRuntimeText.includes("preserve previous good")) issues.push("natural_gate_missing_previous_good_protection");
+  for (const needle of [
+    "function writePhaseArtifacts(phase, output)",
+    "-evidence-${evidenceDate}-${stamp}-${process.pid}.json",
+    "const existingNatural =",
+    "manual_or_recovery",
+    "natural_schedule",
+  ]) {
+    if (!naturalGateRuntimeImplText.includes(needle)) {
+      issues.push(`natural_gate_missing_immutable_evidence_guard:${needle}`);
+    }
+  }
+  const predictivePreflightRuntimePath = "C:/fuman-runtime/ops/daytrade-preflight-0830.js";
+  const predictivePreflightWrapperPath = "C:/fuman-runtime/ops/Run-DaytradePreflight0830.ps1";
+  const predictivePreflightText = fs.existsSync(predictivePreflightRuntimePath) ? fs.readFileSync(predictivePreflightRuntimePath, "utf8") : "";
+  const predictivePreflightWrapperText = fs.existsSync(predictivePreflightWrapperPath) ? fs.readFileSync(predictivePreflightWrapperPath, "utf8") : "";
+  if (!predictivePreflightText) issues.push("predictive_preflight_runtime_missing");
+  for (const needle of ["websocketTransportReady", "websocket_formal_ready", "connectionTimeoutMillis", "query_timeout", "process.exitCode = output.ok ? 0 : 1"]) {
+    if (!predictivePreflightText.includes(needle)) issues.push(`predictive_preflight_runtime_missing:${needle}`);
+  }
+  if (!predictivePreflightWrapperText) issues.push("predictive_preflight_wrapper_missing");
+  for (const needle of [
+    "daytrade-preflight-0830-evidence-",
+    "$preflightPayload = $stdoutText | ConvertFrom-Json",
+    "$rawFailedChecks = @($preflightPayload.failed_checks",
+    "preflight_payload = $preflightPayload",
+    "$artifact | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $runEvidence",
+  ]) {
+    if (!predictivePreflightWrapperText.includes(needle)) {
+      issues.push(`predictive_preflight_wrapper_missing_failure_evidence_guard:${needle}`);
+    }
+  }
+  for (const needle of ["Write-GuardArtifact", "market_closed_previous_good", "daytrade-preflight-0830.json"]) {
+    if (!predictivePreflightWrapperText.includes(needle)) issues.push(`predictive_preflight_wrapper_missing:${needle}`);
+  }
+  if (!selfHealText.includes("if (summary.market_closed === true)")) issues.push("self_heal_runner_missing_market_closed_protection");
+  if (!selfHealText.includes("market closed; no rewater and no formal entry")) issues.push("self_heal_runner_market_closed_may_rewater");
 
+  const unattendedPath = path.join(ROOT, "scripts", "verify-daytrade-warmup-unattended.js");
+  const rootPath = path.join(ROOT, "scripts", "verify-daytrade-warmup-root.js");
+  const unattendedText = fs.existsSync(unattendedPath) ? fs.readFileSync(unattendedPath, "utf8") : "";
+  const unattendedRunIdNeedles = [
+    "replace(/^(\\d{4})(\\d{2})(\\d{2})$/",
+    "replace(/\\D/g, \"\")",
+  ];
+  for (const needle of unattendedRunIdNeedles) {
+    if (!unattendedText.includes(needle)) issues.push(`warmup_run_id_regression_missing:${needle}`);
+  }
+  const rootText = fs.existsSync(rootPath) ? fs.readFileSync(rootPath, "utf8") : "";
+  const unattendedRegressionNeedles = [
+    "const naturalYes = failedChecks.length === 0 && pendingPhase.length === 0;",
+    "const formalEntryAllowed = naturalYes || rewaterRecovery.ok === true;",
+    "unattended_yes: yes ? \"YES\" : \"NO\"",
+    "formal_entry_allowed: formalEntryAllowed",
+    "const { isTwseTradingDay } = require(\"./twse-trading-day\");",
+    "function buildMarketClosedSummary(",
+    "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+  ];
+  for (const needle of unattendedRegressionNeedles) {
+    if (!unattendedText.includes(needle)) issues.push(`unattended_regression_missing:${needle}`);
+  }
+  const rootRegressionNeedles = [
+    "const marketClosed = finalPayload.market_closed === true || selfHealPayload.market_closed === true;",
+    "const ok = unattendedYes || marketClosed;",
+    "WARMUP_MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+    "const ok = unattendedYes || marketClosed;",
+    "contract: \"daytrade-warmup-root-with-self-heal-v2\"",
+    "market-closed policy may pass without formal entry, but only natural 0700/0845/0900 evidence can set unattended_yes=YES",
+  ];
+  for (const needle of rootRegressionNeedles) {
+    if (!rootText.includes(needle)) issues.push(`root_regression_missing:${needle}`);
+  }
+
+  const predictivePreflightTask = contract.predictivePreflightTask;
+  if (!predictivePreflightTask) {
+    issues.push("predictive_preflight_task_contract_missing");
+  } else {
+    checkTask({ contractTask: predictivePreflightTask, registry, issues, role: "predictive_preflight" });
+    checkLiveTask({ contractTask: predictivePreflightTask, issues, role: "predictive_preflight" });
+    const preflightRuntime = predictivePreflightTask.runtimeScript;
+    if (!preflightRuntime || !fs.existsSync(preflightRuntime)) {
+      issues.push(`predictive_preflight_runtime_script_missing:${preflightRuntime || "missing"}`);
+    } else {
+      const preflightRuntimeText = fs.readFileSync(preflightRuntime, "utf8");
+      if (!hasAll(preflightRuntimeText, predictivePreflightTask.runtimeMustContain || [])) {
+        issues.push("predictive_preflight_runtime_contract_missing");
+      }
+    }
+  }
   for (const task of contract.naturalEvidenceTasks || []) {
     checkTask({ contractTask: task, registry, issues, role: "natural_evidence" });
     checkLiveTask({ contractTask: task, issues, role: "natural_evidence" });
@@ -183,6 +289,10 @@ function main() {
     contract_path: CONTRACT_PATH,
     final_verdict_runtime: runtimeScript || null,
     self_heal_runner: SELF_HEAL_RUNNER_PATH,
+    natural_gate_runtime: naturalGateRuntimePath,
+    predictive_preflight_runtime: predictivePreflightRuntimePath,
+    predictive_preflight_wrapper: predictivePreflightWrapperPath,
+    predictive_preflight_task: predictivePreflightTask ? predictivePreflightTask.name : null,
     natural_evidence_tasks: (contract.naturalEvidenceTasks || []).map((task) => task.name),
     rewater_tasks: (contract.rewaterTasks || []).map((task) => task.name),
     final_verdict_task: contract.finalVerdictTask ? contract.finalVerdictTask.name : null,

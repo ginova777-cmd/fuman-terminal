@@ -10,6 +10,31 @@ const PREDICTIVE_PREFLIGHT_FILE = path.join(ROOT, "outputs", "terminal-predictiv
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const REQUIRE_UNATTENDED = process.argv.includes("--require-unattended");
 let EXPECTED_DATE = (process.argv.find((arg) => arg.startsWith("--expected-date="))?.slice("--expected-date=".length) || "").replace(/\D/g, "").slice(0, 8);
+const MASTER_CONTROLLER_STAGE_ORDER = [
+  "market_calendar",
+  "single_daily_orchestrator_lock",
+  "active_module_registry",
+  "predictive_preflight",
+  "fugle_websocket_source",
+  "water_root",
+  "warmup_phase_state_machine",
+  "natural_0700_0845_0900_evidence",
+  "reason_code_classifier",
+  "self_heal_job_queue",
+  "idempotent_rewater_runner",
+  "rewater_verification",
+  "formal_entry_gate",
+  "strategy_scan_state_machine",
+  "idempotent_scanners",
+  "daily_manifest",
+  "canary_publish",
+  "runid_closure",
+  "display_closure",
+  "auto_roll_forward",
+  "autonomous_ops_policy",
+  "unattended_final_audit",
+];
+
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -74,9 +99,28 @@ function preflightIsTradingDayWait(preflight = {}) {
 }
 
 function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
+  const currentDate = taipeiDateKey();
+  const manifestDate = compactDate(manifest.tradeDate);
+  const manifestBits = [
+    manifest.unattendedStatus,
+    manifest.finalDecision,
+    manifest.publishDecision,
+    manifest.closureStatus,
+    manifest.waterRoot?.status,
+    manifest.waterRoot?.reason,
+  ].map((item) => String(item || "").toLowerCase()).join(" ");
+  const manifestClosed = manifestDate === currentDate && manifestBits.includes("market_closed");
+  if (manifestClosed) return true;
+
   const manifestWaterReady = manifest.waterRoot?.ok === true && /ready|ok/.test(String(manifest.waterRoot?.status || "").toLowerCase());
   const preflightReady = preflight.ok === true && preflight.action !== "skip_formal_scan" && preflight.status !== "market_closed";
   const tradingDayWait = preflightIsTradingDayWait(preflight);
+  const preflightClosed = preflight.marketOpen === false
+    && (String(preflight.status || "").toLowerCase() === "market_closed"
+      || String(preflight.marketStatus || "").toLowerCase() === "closed"
+      || String(preflight.closedReason || "").toLowerCase().includes("weekend")
+      || String(preflight.closedReason || "").toLowerCase().includes("holiday"));
+  if (preflightClosed) return true;
   if (manifestWaterReady || preflightReady || tradingDayWait) return false;
   const bits = [
     manifest.waterRoot?.status,
@@ -89,7 +133,6 @@ function marketClosedPreviousGood(manifest = {}, policy = {}, preflight = {}) {
   ].map((item) => String(item || "").toLowerCase()).join(" ");
   return bits.includes("market_closed") || (policy.marketClosedPreviousGood === true && !tradingDayWait);
 }
-
 function resolveExpectedDateFromPreflight(preflight = {}) {
   const tradingDayWait = preflightIsTradingDayWait(preflight);
   const marketClosed = !tradingDayWait && (String(preflight.action || "") === "skip_formal_scan" || String(preflight.status || "") === "market_closed");
@@ -178,7 +221,7 @@ function runIdClosureGate(manifest = {}, expectedDate = "") {
       };
     }
     const ids = row.runIds || {};
-    const raw = [row.runId, ids.scanner, ids.supabase, ids.productionApi, ids.desktop, ids.mobile, ids.scorecard88]
+    const raw = [row.runId, ids.scanner, ids.supabase, ids.productionApi, ids.desktop, ids.mobile, ids.scorecard88, ids.sourceReports]
       .filter((value) => value && !String(value).includes("membership-protected") && !String(value).includes("not-read"));
     const uniqueIds = unique(raw);
     const runDate = runIdDate(row.runId || uniqueIds[0] || "");
@@ -247,10 +290,29 @@ function decide({ preflight, manifest, orchestrator, policy, canary, closure, ro
   if (decision.opsState === "BLOCKED_SOURCE") {
     return { state: "BLOCKED_SOURCE", unattendedStatus: "NO", reason: decision.reason || "water_root_not_ready", action: "wait_water_root_then_auto_retry" };
   }
-  if (marketClosedPreviousGood(manifest, policy, preflight) && manifest.ok === true && closure.ok === true) {
-    return { state: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", unattendedStatus: "PREVIOUS_GOOD_HOLD", reason: "previous_good_hold_wait_source_window_or_market_closed", action: "preserve_last_good_and_resume_next_trading_day" };
-  }
-  if (manifest.ok === true && closure.ok === true && canary.ok === true && decision.unattendedStatus === "YES") {
+  if (marketClosedPreviousGood(manifest, policy, preflight)) {
+    const currentDate = taipeiDateKey();
+    const dateValues = [
+      ["manifest", manifest.tradeDate],
+      ["water_root", manifest.waterRoot?.expectedDate],
+      ["preflight_market", preflight.marketDate],
+      ["orchestrator", orchestrator.tradeDate],
+      ["policy", policy.tradeDate],
+    ];
+    const dateMismatches = dateValues
+      .filter(([, value]) => compactDate(value) && compactDate(value) !== currentDate)
+      .map(([name, value]) => name + "=" + compactDate(value) + "!=" + currentDate);
+    const blockers = [];
+    if (dateMismatches.length) blockers.push("date_hard_gate_mismatch:" + dateMismatches.join(","));
+    return {
+      state: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
+      unattendedStatus: "PREVIOUS_GOOD_HOLD",
+      reason: blockers.length
+        ? "market_closed_preserve_previous_good;" + blockers.join(";")
+        : "market_closed_preserve_previous_good",
+      action: "preserve_last_good_and_resume_next_trading_day",
+    };
+  }  if (manifest.ok === true && closure.ok === true && canary.ok === true && decision.unattendedStatus === "YES") {
     return { state: "UNATTENDED_YES", unattendedStatus: "YES", reason: "all_layers_green", action: "continue_autonomous_monitoring" };
   }
   if (rollForward.ok === true) {
@@ -320,12 +382,15 @@ async function main() {
   const closure = runIdClosureGate(manifest, EXPECTED_DATE);
   const rollForward = autoRollForwardGate(orchestrator, policy);
   const decision = decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward });
+  const preflightExpectedDate = preflight.status === "market_closed" || preflight.marketOpen === false
+    ? compactDate(preflight.taipeiToday || preflight.marketDate || EXPECTED_DATE)
+    : EXPECTED_DATE;
   const payload = {
     contract: "terminal-control-plane-v1",
     checkedAt: new Date().toISOString(),
     tradeDate: EXPECTED_DATE,
     commands,
-    predictivePreflight: preflightGate(preflight, EXPECTED_DATE),
+    predictivePreflight: preflightGate(preflight, preflightExpectedDate),
     waterRoot: {
       ok: waterRoot.ok === true || manifest.waterRoot?.ok === true,
       status: waterRoot.status || manifest.waterRoot?.status || "",
@@ -355,21 +420,42 @@ async function main() {
       action: policy.decision?.action || "",
       actionMatrix: policy.actionMatrix || null,
     },
+    masterController: {
+      contract: "terminal-master-controller-v1",
+      entrypoint: "scripts/run-terminal-autonomous-ops.js",
+      decisionSource: "scripts/write-terminal-control-plane.js",
+      lockContract: "terminal-orchestrator-lock-v1",
+      authority: "single_decision_source_fail_closed",
+      strictUnattended: true,
+      stageOrder: MASTER_CONTROLLER_STAGE_ORDER,
+      decision: {
+        state: decision.state,
+        unattendedStatus: decision.unattendedStatus,
+        action: decision.action,
+        reason: decision.reason,
+      },
+    },
     decision,
   };
   const jsonFile = path.join(OUT_DIR, "terminal-control-plane.json");
   const mdFile = path.join(OUT_DIR, "terminal-control-plane.md");
   await fs.promises.writeFile(jsonFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await fs.promises.writeFile(mdFile, markdown(payload), "utf8");
-  const decisionOperationallyValid = decision.unattendedStatus === "YES"
-    || decision.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+  const unattendedReady = decision.state === "UNATTENDED_YES" && decision.unattendedStatus === "YES";
+  const previousGoodHold = decision.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    || decision.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD";
+  const decisionOperationallyValid = unattendedReady
+    || previousGoodHold
     || decision.state === "PENDING_NOT_DUE"
     || rollForward.ok === true;
   const evidenceFresh = payload.predictivePreflight.ok === true;
-  const pendingNotDue = decision.state === "PENDING_NOT_DUE";
-  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || evidenceFresh || pendingNotDue);
+  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || evidenceFresh);
+  const verifierOk = REQUIRE_UNATTENDED ? unattendedReady : operationallyValid;
   console.log(JSON.stringify({
-    ok: operationallyValid,
+    ok: verifierOk,
+    operationallyValid,
+    unattendedReady,
+    previousGoodHold,
     state: decision.state,
     unattendedStatus: decision.unattendedStatus,
     tradeDate: EXPECTED_DATE,
@@ -377,7 +463,7 @@ async function main() {
     reason: decision.reason,
     output: jsonFile,
   }, null, 2));
-  if (REQUIRE_UNATTENDED && !operationallyValid) process.exitCode = 1;
+  if (!verifierOk) process.exitCode = 1;
 }
 
 main().catch((error) => {

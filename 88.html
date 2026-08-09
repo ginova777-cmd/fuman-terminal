@@ -474,7 +474,7 @@
   </style>
 </head>
 <body>
-<main>
+<main data-scorecard-shell-version="scorecard-date-strict-v2">
   <section class="top" data-testid="scorecard-hero">
     <div>
       <div class="badge">FUMAN SCORECARD</div>
@@ -792,9 +792,48 @@ function renderTableRows(rows, emptyText = "沒有符合條件的資料") {
   `).join("") : `<tr><td colspan="9" class="empty">${esc(emptyText)}</td></tr>`;
 }
 
+function scorecardSelectedDate() {
+  return activeDate || payload?.selectedDate || payload?.latestDate || "";
+}
+
+function rowDisplayDate(row = {}) {
+  return String(row.record_date || row.tradeDate || row.usedDate || row.date || row.marketDate || "").slice(0, 10);
+}
+
+function sameSelectedDate(row, date = scorecardSelectedDate()) {
+  return !date || rowDisplayDate(row) === date;
+}
+
+function scorecardRowsForSelectedDate() {
+  const rows = Array.isArray(payload?.records) ? payload.records : [];
+  return rows.filter((row) => sameSelectedDate(row));
+}
+
+function scorecardFallbackEvidence(sourceName, date = scorecardSelectedDate()) {
+  return {
+    sourceName,
+    source: payload?.cacheSource || payload?.source || "scorecard",
+    table: "scorecard_latest.records",
+    tradeDate: date,
+    runId: payload?.runId || "",
+    displayOnly: true,
+    reason: "same_date_scorecard_snapshot_fallback",
+  };
+}
+
 function daytradeRowsForTable() {
   const data = daytradeEntryPayload || {};
-  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const date = scorecardSelectedDate();
+  const rows = Array.isArray(data.rows) && (!data.tradeDate || data.tradeDate === date) ? data.rows : [];
+  if (!rows.length) {
+    return scorecardRowsForSelectedDate()
+      .filter((row) => /當沖|ps1|策略2|strategy2/i.test([row.strategy, row.strategyName, row.rule_group, row.source, row.endpoint].join(" ")))
+      .map((row) => ({
+        ...row,
+        supplementalSource: "scorecard_records",
+        supplementalEvidence: scorecardFallbackEvidence("scorecard_records:daytrade_ps1", date),
+      }));
+  }
   return rows.map((row) => ({
     supplementalSource: "daytrade_ps1",
     record_date: row.trade_date || data.tradeDate || "",
@@ -822,7 +861,16 @@ function daytradeRowsForTable() {
 
 function sevenStrategyRowsForTable() {
   const data = sevenStrategyDailyHistoryPayload || {};
-  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const date = scorecardSelectedDate();
+  const rows = Array.isArray(data.rows) && (!data.tradeDate || data.tradeDate === date) ? data.rows : [];
+  if (!rows.length) {
+    return scorecardRowsForSelectedDate()
+      .map((row) => ({
+        ...row,
+        supplementalSource: "scorecard_records",
+        supplementalEvidence: scorecardFallbackEvidence("scorecard_records:seven_strategy_daily_history", date),
+      }));
+  }
   return rows.map((row) => ({
     supplementalSource: "seven_strategy_daily_history",
     record_date: row.tradeDate || data.tradeDate || "",
@@ -1072,7 +1120,6 @@ function sourceReportForStrategy(strategy) {
     const keys = [report.key, report.strategy, report.strategyName, report.label]
       .map((value) => String(value || "").toLowerCase());
     return keys.includes(normalized)
-      || (normalized.includes("策略1") && keys.some((key) => key.includes("strategy1") || key.includes("open-buy")))
       || (normalized.includes("策略2") && keys.some((key) => key.includes("strategy2")))
       || (normalized.includes("策略3") && keys.some((key) => key.includes("strategy3")))
       || (normalized.includes("策略4") && keys.some((key) => key.includes("strategy4")))
@@ -1295,6 +1342,7 @@ async function load(date = "") {
     }
     if (!payload.ok) throw new Error(payload.reason || payload.error || "scorecard unavailable");
     activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
+    await Promise.all([loadDaytradeEntries(activeDate), loadSevenStrategyDailyHistory(activeDate)]);
     render();
   } catch (error) {
     if (isMembershipFailure(null, error)) {
@@ -1322,7 +1370,15 @@ async function loadStrategy4Live() {
   }
 }
 
-async function loadDaytradeEntries() {
+function supplementalDate() {
+  return activeDate || payload?.selectedDate || payload?.latestDate || "";
+}
+
+function supplementDateQuery(date) {
+  return date ? `&date=${encodeURIComponent(date)}` : "";
+}
+
+async function loadDaytradeEntries(date = supplementalDate()) {
   daytradeEntryPayload = {
     ok: false,
     source: "supabase:public.fugle_daytrade_entry_history",
@@ -1330,7 +1386,7 @@ async function loadDaytradeEntries() {
     rows: [],
   };
   try {
-    const response = await fetch(`/api/daytrade-entry-history?t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/api/daytrade-entry-history?limit=300${supplementDateQuery(date)}&t=${Date.now()}`, { cache: "no-store" });
     daytradeEntryPayload = await response.json();
   } catch (error) {
     daytradeEntryPayload = {
@@ -1344,7 +1400,7 @@ async function loadDaytradeEntries() {
   if (activeSupplement === "daytradeEntryPanel") render();
 }
 
-async function loadSevenStrategyDailyHistory() {
+async function loadSevenStrategyDailyHistory(date = supplementalDate()) {
   sevenStrategyDailyHistoryPayload = {
     ok: false,
     sourceName: "seven_strategy_daily_history",
@@ -1353,7 +1409,7 @@ async function loadSevenStrategyDailyHistory() {
     rows: [],
   };
   try {
-    const response = await fetch(`/api/seven-strategy-daily-history?limit=100&t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`/api/seven-strategy-daily-history?limit=100${supplementDateQuery(date)}&t=${Date.now()}`, { cache: "no-store" });
     sevenStrategyDailyHistoryPayload = await response.json();
   } catch (error) {
     sevenStrategyDailyHistoryPayload = {
@@ -1403,14 +1459,10 @@ byId("themeToggle").addEventListener("click", () => {
 byId("reload").addEventListener("click", () => {
   load(activeDate);
   loadStrategy4Live();
-  loadDaytradeEntries();
-  loadSevenStrategyDailyHistory();
 });
 applyTheme(preferredTheme());
 load();
 loadStrategy4Live();
-loadDaytradeEntries();
-loadSevenStrategyDailyHistory();
 </script>
 <script data-market-closed-banner="v1">
 (()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;function label(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function show(p){if(!p||p.marketOpen!==false)return;let n=document.querySelector("#fuman-market-closed-banner");if(!n){n=document.createElement("aside");n.id="fuman-market-closed-banner";n.setAttribute("role","status");n.style.cssText="margin:10px 0 12px;border:1px solid #f59e0b;border-radius:8px;background:#78350f;color:#fff7ed;padding:10px 12px;font-weight:800;line-height:1.5";const target=document.querySelector("main")||document.body;target.prepend(n)}n.textContent=label(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();

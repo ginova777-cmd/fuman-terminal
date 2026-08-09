@@ -19,7 +19,6 @@ const RETIRED_SCORECARD_STRATEGIES = [
   "策略1成績單",
   "策略1開盤入成績單",
   "策略2-A區進場",
-  "策略3成績單",
 ];
 
 function arg(name, fallback = "") {

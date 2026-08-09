@@ -435,6 +435,30 @@ function Write-PublicSlotDailyOhlcv {
   }
 
   Invoke-PublicSlotUpsert -Table "fugle_daily_ohlcv" -OnConflict "symbol,trade_date" -Rows @($normalized)
+
+  # Keep the legacy strategy-reader contract in sync with the canonical OHLCV
+  # table. This is a mirror only; it never fabricates missing OHLC values.
+  if (Test-PublicSlotColumnAvailable -Table "stock_daily_volume" -Column "symbol") {
+    $stockDailyRows = foreach ($row in @($normalized)) {
+      $volumeLots = ConvertTo-PublicSlotLots $row.volume
+      [ordered]@{
+        symbol = [string]$row.symbol
+        code = [string]$row.symbol
+        market = $row.market
+        date = $row.trade_date
+        trade_date = $row.trade_date
+        open = $row.open
+        high = $row.high
+        low = $row.low
+        close = $row.close
+        volume = $volumeLots
+        volume_lots = $volumeLots
+        volume_shares = if ($null -ne $volumeLots) { [double]$volumeLots * 1000 } else { $null }
+        updated_at = if ($row.updated_at) { $row.updated_at } else { $now }
+      }
+    }
+    Invoke-PublicSlotUpsert -Table "stock_daily_volume" -OnConflict "symbol,trade_date" -Rows @($stockDailyRows)
+  }
 }
 
 function Write-PublicSlotDailySyncStatus {

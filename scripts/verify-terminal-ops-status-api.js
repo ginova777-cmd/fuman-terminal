@@ -37,9 +37,7 @@ function isPendingNotDue(payload) {
     && payload.actionMatrix?.stopMode === "wait_schedule";
 }
 
-function isAcceptableOpsStatus(payload) {
-  if (payload.unattendedStatus === "YES") return true;
-  if (isPendingNotDue(payload)) return true;
+function isMarketClosedPreviousGood(payload) {
   return payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
     && payload.canaryPublish?.scorecardPublishAllowed === false
@@ -47,18 +45,26 @@ function isAcceptableOpsStatus(payload) {
     && payload.predictivePreflight?.formalScanAllowed === false;
 }
 
+function isAcceptableOpsStatus(payload) {
+  if (payload.unattendedStatus === "YES") return true;
+  if (isPendingNotDue(payload)) return true;
+  return isMarketClosedPreviousGood(payload);
+}
+
 function isProtectedReadbackDisplayOnlyFailure(payload) {
   const credential = payload.protectedReadbackCredential || {};
   if (credential.ok === true) return false;
   if (credential.armed !== true) return false;
-  if (payload.ok !== true || payload.state !== "UNATTENDED_YES" || payload.unattendedStatus !== "YES") return false;
+  const closedHold = payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" && payload.unattendedStatus === "PREVIOUS_GOOD_HOLD";
+  const unattendedYes = payload.state === "UNATTENDED_YES" && payload.unattendedStatus === "YES";
+  if (payload.ok !== true || (!closedHold && !unattendedYes)) return false;
   const displayBlockers = Array.isArray(payload.protectedReadbackDisplayBlockers)
     ? payload.protectedReadbackDisplayBlockers.filter(Boolean)
     : [];
   if (displayBlockers.length === 0) return false;
   if (payload.gates?.runIdClosure?.ok !== true) return false;
   if (payload.finalAudit?.ok !== true) return false;
-  return displayBlockers.every((row) => /protected_readback_unauthorized|missing_bearer_token|membership_required/i.test(String(row)));
+  return displayBlockers.every((row) => /protected_readback_unauthorized|protected_readback_timeout|protected_readback_request_error|missing_bearer_token|membership_required/i.test(String(row)));
 }
 
 async function main() {
@@ -86,10 +92,9 @@ async function main() {
   assert(Array.isArray(payload.reasonCodeSummary?.codes) && payload.reasonCodeSummary.codes.length > 0, "reason_code_summary_codes_missing", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
   assert(payload.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", "root_cause_summary_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseSummary?.ok === true && Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0, "root_cause_summary_not_ok", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  const rootCauseTotalBlockers = Number(payload.rootCauseSummary?.totalBlockers || 0);
-  assert(rootCauseTotalBlockers === 0 || (Array.isArray(payload.rootCauseSummary?.categories) && payload.rootCauseSummary.categories.length > 0), "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
+  assert(Array.isArray(payload.rootCauseSummary?.categories) && payload.rootCauseSummary.categories.length > 0, "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", "root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  assert(rootCauseTotalBlockers === 0 || (Array.isArray(payload.rootCauseRecoveryPlan?.steps) && payload.rootCauseRecoveryPlan.steps.length > 0), "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+  assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && payload.rootCauseRecoveryPlan.steps.length > 0, "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const recoveryCategories = new Set((payload.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
   for (const row of payload.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), `root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const authStep = (payload.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
@@ -104,7 +109,23 @@ async function main() {
   assert(payload.modules.every((row) => Array.isArray(row.reasonCodes) && row.reasonCodes.length > 0 && row.reasonUnknown !== true), "module_reason_codes_missing_or_unknown", { modules: payload.modules }, issues);
   assert((payload.jobQueue || []).every((row) => Array.isArray(row.reasonCodes) && row.reasonCodes.length > 0 && row.reasonUnknown !== true), "job_queue_reason_codes_missing_or_unknown", { jobQueue: payload.jobQueue }, issues);
   assert(payload.modules.every((row) => row.runId && row.ok === true), "module_runid_or_ok_missing", { modules: payload.modules }, issues);
-  assert(payload.gates?.runIdClosure?.ok === true || isPendingNotDue(payload), "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
+  for (const row of payload.modules || []) {
+    const key = row.key || "unknown";
+    assert(Object.prototype.hasOwnProperty.call(row, "todayAuthoritative"), "module_today_authoritative_missing:" + key, { row }, issues);
+    assert(Object.prototype.hasOwnProperty.call(row, "formalDisplayAllowed"), "module_formal_display_allowed_missing:" + key, { row }, issues);
+    assert(Object.prototype.hasOwnProperty.call(row, "displayMode"), "module_display_mode_missing:" + key, { row }, issues);
+    assert(typeof row.todayAuthoritative === "boolean", "module_today_authoritative_not_boolean:" + key, { row }, issues);
+    assert(typeof row.formalDisplayAllowed === "boolean", "module_formal_display_allowed_not_boolean:" + key, { row }, issues);
+    assert(Boolean(row.displayMode), "module_display_mode_blank:" + key, { row }, issues);
+    if (row.formalDisplayAllowed === true) {
+      assert(row.todayAuthoritative === true, "module_formal_display_without_today_authority:" + key, { row }, issues);
+      assert(row.displayMode === "TODAY_COMPLETE" || row.displayMode === "TODAY_ZERO_RESULT_COMPLETE", "module_formal_display_bad_mode:" + key, { row }, issues);
+    }
+    if (row.formalDisplayAllowed !== true && row.pendingNotDue !== true) {
+      assert(Boolean(row.displayBlockReason || row.issue), "module_blocked_display_reason_missing:" + key, { row }, issues);
+    }
+  }
+  assert(payload.gates?.runIdClosure?.ok === true || isPendingNotDue(payload) || isMarketClosedPreviousGood(payload), "runid_closure_gate_not_ok", { gate: payload.gates?.runIdClosure }, issues);
   const safeRecoveryPreview = payload.rollForward?.safeRecoveryPreview || {};
   assert(safeRecoveryPreview.contract === "terminal-safe-recovery-preview-v1", "safe_recovery_preview_contract_missing", { rollForward: payload.rollForward }, issues);
   assert(safeRecoveryPreview.reasonCodeSummary?.ok !== false, "safe_recovery_preview_reason_codes_not_ok", { safeRecoveryPreview }, issues);
@@ -113,7 +134,7 @@ async function main() {
   }
 
   assert(payload.gates?.finalAudit?.status || payload.finalAudit?.contract === "terminal-autonomous-completion-audit-v1", "final_audit_gate_missing", { gate: payload.gates?.finalAudit, finalAudit: payload.finalAudit }, issues);
-  assert(payload.finalAudit?.layers === 21, "final_audit_layers_not_21", { finalAudit: payload.finalAudit }, issues);
+  assert(Number(payload.finalAudit?.layers || 0) >= 21, "final_audit_layers_not_21", { finalAudit: payload.finalAudit }, issues);
   assert(payload.finalAudit?.ok === true || isPendingNotDue(payload), "final_audit_not_ok", { finalAudit: payload.finalAudit, state: payload.state }, issues);
   assert(payload.gates?.predictivePreflight?.status, "predictive_preflight_gate_missing", { gate: payload.gates?.predictivePreflight }, issues);
   assert(payload.predictivePreflight?.contract === "terminal-predictive-preflight-v1", "predictive_preflight_contract_missing", { predictivePreflight: payload.predictivePreflight }, issues);

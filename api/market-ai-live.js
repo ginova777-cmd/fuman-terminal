@@ -536,38 +536,20 @@ function sectorPreviousValueYi(row) {
 }
 
 function normalizeIndustrySector(sector) {
-  const sectorName = firstText(sector, ["name", "industry", "sector"], "--");
   const stocks = normalizeArray(sector?.stocks || sector?.rows)
-    .map((stock) => {
-      const valueYi = sectorValueYi(stock);
-      const close = firstNumber(stock, ["close", "price", "ClosingPrice", "lastPrice", "latestClose"]);
-      const volume = firstNumber(stock, ["volume", "tradeVolume", "TradeVolume", "totalVolume"]);
-      const previousValueYi = sectorPreviousValueYi(stock);
-      return {
-        code: firstText(stock, ["code", "Code", "stockId", "symbol"], ""),
-        name: firstText(stock, ["name", "Name", "stockName", "stock_name"], ""),
-        pct: firstNumber(stock, ["pct", "percent", "changePercent", "change_percent"]),
-        valueYi,
-        previousValueYi,
-        deltaYi: previousValueYi ? valueYi - previousValueYi : null,
-        close,
-        price: close,
-        value: valueYi ? valueYi * 100000000 : firstNumber(stock, ["value", "tradeValue", "TradeValue", "amount"]),
-        volume,
-        tradeVolume: volume,
-        quoteDate: firstText(stock, ["quoteDate", "tradeDate", "date", "Date"], ""),
-        quoteTime: firstText(stock, ["quoteTime", "time", "updatedTime"], ""),
-        industry: firstText(stock, ["industry", "sector", "category", "group"], sectorName),
-        officialIndustry: firstText(stock, ["officialIndustry", "primaryIndustry", "twseIndustry"], ""),
-      };
-    })
+    .map((stock) => ({
+      code: firstText(stock, ["code", "Code", "stockId", "symbol"], ""),
+      name: firstText(stock, ["name", "Name", "stockName"], ""),
+      pct: firstNumber(stock, ["pct", "percent", "changePercent", "change_percent"]),
+      valueYi: sectorValueYi(stock),
+    }))
     .filter((stock) => /^\d{4}$/.test(stock.code))
     .sort((a, b) => b.valueYi - a.valueYi || b.pct - a.pct)
-    .slice(0, 12);
+    .slice(0, 5);
   const valueYi = sectorValueYi(sector);
   const previousValueYi = sectorPreviousValueYi(sector) || stocks.reduce((sum, stock) => sum + sectorPreviousValueYi(stock), 0);
   return {
-    name: sectorName,
+    name: firstText(sector, ["name", "industry", "sector"], "--"),
     pct: firstNumber(sector, ["pct", "avgPct", "percent", "changePercent"]),
     valueYi,
     previousValueYi,
@@ -596,72 +578,69 @@ function industrySignal(key, label, title, metric, detail, tone, sectors = []) {
 function buildIndustryDynamics(sectors, meta = {}) {
   const rows = normalizeArray(sectors)
     .map(normalizeIndustrySector)
-    .filter((sector) => sector.name && sector.name !== "--" && (Number.isFinite(sector.pct) || sector.valueYi > 0 || sector.stocks.length > 0));
-  const clock = meta.clock || taipeiClock();
-  const isPreopen = clock.seconds < AI_WINDOW_START_SECONDS;
-  const isDetecting = isMarketAiDetectWindow(clock);
-  const isPostClose = isMarketAiPostClose(clock);
-  const byPctDesc = [...rows].filter((row) => Number.isFinite(row.pct)).sort((a, b) => b.pct - a.pct || b.valueYi - a.valueYi);
-  const byPctAsc = [...rows].filter((row) => Number.isFinite(row.pct)).sort((a, b) => a.pct - b.pct || b.valueYi - a.valueYi);
-  const byValue = [...rows].filter((row) => row.valueYi > 0).sort((a, b) => b.valueYi - a.valueYi).slice(0, 5);
-  const withDelta = rows.filter((sector) => Number.isFinite(sector.deltaYi) && sector.previousValueYi > 0);
+    .filter((sector) => sector.name && sector.name !== "--");
+  const byPctDesc = [...rows].sort((a, b) => b.pct - a.pct || b.valueYi - a.valueYi);
+  const byPctAsc = [...rows].sort((a, b) => a.pct - b.pct || b.valueYi - a.valueYi);
+  const byValue = [...rows].sort((a, b) => b.valueYi - a.valueYi).slice(0, 5);
+  const withDelta = rows.filter((sector) => Number.isFinite(sector.deltaYi));
   const byDeltaDesc = [...withDelta].sort((a, b) => b.deltaYi - a.deltaYi).slice(0, 5);
   const byDeltaAsc = [...withDelta].sort((a, b) => a.deltaYi - b.deltaYi).slice(0, 5);
   const strongest = byPctDesc[0] || null;
   const weakest = byPctAsc[0] || null;
   const hasPreviousValue = withDelta.length > 0;
-  const detectionState = rows.length
-    ? (hasPreviousValue ? "ready" : "today-live-no-previous-value")
-    : (isPreopen ? "preopen-waiting" : isDetecting ? "intraday-waiting-today-industry" : isPostClose ? "postclose-no-industry" : "waiting-industry");
-  const waitingTitle = isPreopen ? "盤前等待開盤" : isDetecting ? "盤中偵測中" : isPostClose ? "盤後等待資料" : "等待產業資料";
-  const waitingDetail = isPreopen
-    ? "09:00 後依即時成交與產業資料更新"
-    : isDetecting
-      ? "尚未取得今日產業即時摘要；不產生假事件"
-      : isPostClose
-        ? "今日產業摘要尚未回寫；保留空狀態"
-        : "等待產業資料";
-  const deltaMissingDetail = rows.length ? "資料源尚未提供昨日成交金額；吸金與資金渙散暫不畫線" : waitingDetail;
-  const items = rows.length ? [
-    industrySignal("strongest", "目前最強勢", strongest?.name || "--", strongest ? `${strongest.pct >= 0 ? "+" : ""}${strongest.pct.toFixed(2)}%` : "--", strongest ? "目前產業漲幅最大" : "等待產業漲跌資料", "up", strongest ? [strongest] : []),
-    industrySignal("weakest", "目前最弱勢", weakest?.name || "--", weakest ? `${weakest.pct >= 0 ? "+" : ""}${weakest.pct.toFixed(2)}%` : "--", weakest ? "目前產業跌幅最大" : "等待產業漲跌資料", "down", weakest ? [weakest] : []),
-    industrySignal("volumeTop", "量能增強", byValue.length ? "成交金額 TOP5" : "--", byValue.length ? `${byValue[0].valueYi.toFixed(1)} 億` : "--", byValue.length ? "產業累計成交金額排序" : "等待成交金額", "volume", byValue),
-    industrySignal("inflow", "吸金焦點", byDeltaDesc[0]?.name || "--", byDeltaDesc[0] ? `+${byDeltaDesc[0].deltaYi.toFixed(1)} 億` : "--", byDeltaDesc[0] ? "較昨日成交金額增加最多" : deltaMissingDetail, byDeltaDesc[0] ? "up" : "neutral", byDeltaDesc),
-    industrySignal("outflow", "資金渙散", byDeltaAsc[0]?.name || "--", byDeltaAsc[0] ? `${byDeltaAsc[0].deltaYi.toFixed(1)} 億` : "--", byDeltaAsc[0] ? "較昨日成交金額減少最多" : deltaMissingDetail, byDeltaAsc[0] ? "down" : "neutral", byDeltaAsc),
-  ] : [
-    industrySignal("waiting", "偵測狀態", waitingTitle, "--", waitingDetail, "neutral", []),
-  ];
-  const eventTimes = { strongest: "10:28", weakest: "12:52", volumeTop: "09:33", inflow: "09:27", outflow: "13:21" };
-  const eventSourceItems = items.filter((item) => normalizeArray(item.sectors).length > 0 && item.title && item.title !== "--");
-  const events = eventSourceItems.map((item) => {
-    const sector = normalizeArray(item.sectors)[0] || {};
-    return {
-      key: item.key,
-      time: eventTimes[item.key] || "",
-      label: item.label,
-      name: sector.name || item.title || item.label,
-      title: item.title || sector.name || item.label,
-      tone: item.tone || "neutral",
-      metric: item.metric || "--",
-      detail: item.detail || "",
-      pct: firstNumber(sector, ["pct"], 0),
-      valueYi: firstNumber(sector, ["valueYi"], 0),
-      deltaYi: Number.isFinite(sector.deltaYi) ? sector.deltaYi : null,
-      stocks: normalizeArray(sector.stocks).slice(0, 12),
-      sectors: normalizeArray(item.sectors).slice(0, 5),
-    };
-  }).filter((event) => event.name && event.name !== "--" && event.name !== "昨成交額待補");
   return {
     source: meta.source || "industry-dynamics",
     tradeDate: meta.tradeDate || "",
     updatedAt: meta.updatedAt || "",
     count: rows.length,
     hasPreviousValue,
-    detectionState,
-    waitingTitle,
-    waitingDetail,
-    items,
-    events,
+    items: [
+      industrySignal(
+        "strongest",
+        "目前最強勢",
+        strongest?.name,
+        strongest ? `${strongest.pct >= 0 ? "+" : ""}${strongest.pct.toFixed(2)}%` : "--",
+        strongest ? "目前產業漲幅最大" : "等待產業資料",
+        "up",
+        strongest ? [strongest] : []
+      ),
+      industrySignal(
+        "weakest",
+        "目前最弱勢",
+        weakest?.name,
+        weakest ? `${weakest.pct >= 0 ? "+" : ""}${weakest.pct.toFixed(2)}%` : "--",
+        weakest ? "目前產業跌幅最大" : "等待產業資料",
+        "down",
+        weakest ? [weakest] : []
+      ),
+      industrySignal(
+        "volumeTop",
+        "量能增強",
+        byValue.length ? "成交金額 TOP5" : "--",
+        byValue.length ? `${byValue[0].valueYi.toFixed(1)} 億` : "--",
+        byValue.length ? "產業累計成交金額排序" : "等待成交金額",
+        "volume",
+        byValue
+      ),
+      industrySignal(
+        "inflow",
+        "吸金焦點",
+        byDeltaDesc[0]?.name || (hasPreviousValue ? "--" : "昨成交額待補"),
+        byDeltaDesc[0] ? `+${byDeltaDesc[0].deltaYi.toFixed(1)} 億` : "--",
+        byDeltaDesc[0] ? "較昨日成交金額增加最多" : "資料源尚未提供昨日成交金額",
+        byDeltaDesc[0] ? "up" : "neutral",
+        byDeltaDesc
+      ),
+      industrySignal(
+        "outflow",
+        "資金渙散",
+        byDeltaAsc[0]?.name || (hasPreviousValue ? "--" : "昨成交額待補"),
+        byDeltaAsc[0] ? `${byDeltaAsc[0].deltaYi.toFixed(1)} 億` : "--",
+        byDeltaAsc[0] ? "較昨日成交金額減少最多" : "資料源尚未提供昨日成交金額",
+        byDeltaAsc[0] ? "down" : "neutral",
+        byDeltaAsc
+      ),
+    ],
   };
 }
 
@@ -679,21 +658,17 @@ async function loadFastIndustrySectors(request, clock, deps = {}) {
   const snapshot = await withTimeout(readSnapshot("heatmap_latest", {
     tradeDate: clock.date,
     allowLatestFallback: true,
-    timeoutMs: 3000,
-  }), 3200, null);
+    timeoutMs: 900,
+  }), 1000, null);
   const snapshotDate = compactDate(snapshot?.tradeDate || snapshot?.payload?.resolvedTradeDate || snapshot?.payload?.today || "");
   const snapshotSectors = normalizeArray(snapshot?.payload?.sectors);
   if (snapshotSectors.length && (!snapshotDate || snapshotDate === clock.ymd)) return snapshotSectors;
-  const liveIndustryRequired = isMarketAiDetectWindow(clock);
   const req = {
     ...request,
     method: "GET",
-    query: liveIndustryRequired
-      ? { ...(request.query || {}), compact: "1", source: "market-ai-live", limit: "999", stocks: "999" }
-      : { ...(request.query || {}), snapshot: "1", fast: "1", compact: "1", source: "market-ai-industry-summary" },
+    query: { ...(request.query || {}), snapshot: "1", fast: "1", compact: "1", source: "market-ai-industry-summary" },
   };
-  const timeoutMs = liveIndustryRequired ? 16000 : 1400;
-  const result = await withTimeout(capture(heatmap, req), timeoutMs, { statusCode: 504, payload: null });
+  const result = await withTimeout(capture(heatmap, req), 1200, { statusCode: 504, payload: null });
   return normalizeArray(result?.payload?.sectors);
 }
 
@@ -847,7 +822,6 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     source: heatmapPayload?.source || heatmapPayload?.cacheSource || "heatmap-sectors",
     tradeDate: heatmapTradeDate || clock.ymd,
     updatedAt: heatmapPayload?.updatedAt || heatmapPayload?.servedAt || "",
-    clock,
   });
 
   const normalizedRadar = radarRows.map((row) => normalizeStockRow(row, "盤中訊號", [firstText(row, ["side", "direction"], "多")])).filter(Boolean);
@@ -1234,7 +1208,6 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
     source: industrySectors.length ? "heatmap-snapshot-first" : "industry-summary-empty",
     tradeDate,
     updatedAt,
-    clock,
   });
   const groups = groupIndexReportRows(rows);
   const filters = ["all", "momentum", "institution", "intraday", "risk"].map((key) => ({ key, ...groups[key] }));
@@ -1438,7 +1411,6 @@ async function enrichMarketAiPayload(payload, request, clock, session, deps = {}
     priorityObservation: insights.priorityObservation,
     sectorFocus: insights.sectorFocus,
     industryDynamics: insights.industryDynamics,
-    weightedIndexTrend: payload?.weightedIndexTrend || payload?.market?.weightedIndexTrend || null,
     reasoning: insights.reasoning,
     dashboard: insights.dashboard,
     dataFreshness: insights.dataFreshness,
@@ -1770,7 +1742,6 @@ module.exports.__test = {
   canServeCachedPayload,
   heatmapQueryForMarketAi,
 };
-
 
 
 
