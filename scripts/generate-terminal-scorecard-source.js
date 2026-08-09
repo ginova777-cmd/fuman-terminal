@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { isTwseTradingDay } = require("./twse-trading-day");
-const { RULE_CONTRACT, applyScorecardRuleMetadata } = require("../lib/scorecard-rule-locks");
+const { RULE_CONTRACT, applyScorecardRuleMetadata, verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -277,6 +277,79 @@ function arraysFromTaskPayload(task, payload) {
   });
 }
 
+function lowerText(value) {
+  return cleanText(value).toLowerCase();
+}
+
+function boolFalse(value) {
+  return value === false || lowerText(value) === "false" || lowerText(value) === "no";
+}
+
+function boolTrue(value) {
+  return value === true || lowerText(value) === "true" || lowerText(value) === "yes";
+}
+
+function payloadDecisionDate(payload = {}) {
+  return normalizeDate(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date || payload.scanDate || payload.marketDate || latestRunIdDate(payload.runId || payload.transport?.runId));
+}
+
+function rowPublishDecision(task, payload = {}, result = {}, context = {}) {
+  const quality = payload.run_quality_at_publish || payload.runQualityAtPublish || {};
+  const sourceCoverage = payload.sourceCoverage || payload.source_coverage || {};
+  const evidence = lowerText(payload.evidenceStatus || payload.sourceEvidenceStatus || quality.evidenceStatus || payload.qualityStatus);
+  const reasonText = lowerText([
+    payload.reason,
+    payload.error,
+    payload.detail,
+    payload.status,
+    payload.qualityStatus,
+    payload.cacheSource,
+    payload.source,
+    payload.fallbackReason,
+  ].join(" "));
+  const payloadDate = payloadDecisionDate(payload);
+  const expectedDisplayDate = normalizeDate(context.expectedDisplayDate || "");
+  const marketClosedLastGood = context.marketClosed === true
+    && expectedDisplayDate
+    && payloadDate === expectedDisplayDate
+    && !boolTrue(payload.fallbackUsed)
+    && !boolTrue(payload.fallback)
+    && !boolTrue(payload.rawFallback)
+    && !/source_quality_fail|insufficient|stale|degraded|not_ready|blocked/.test([reasonText, evidence].join(" "));
+  const runIdDate = latestRunIdDate(payload.runId || payload.transport?.runId);
+  const todayCompleteAuthoritative = Boolean(
+    expectedDisplayDate
+    && payloadDate === expectedDisplayDate
+    && (!runIdDate || runIdDate === expectedDisplayDate)
+    && Number(result.statusCode || 0) < 400
+    && payload.ok !== false
+    && !boolFalse(payload.publishAllowed)
+    && !boolFalse(quality.publishAllowed)
+    && !boolTrue(payload.fallbackUsed)
+    && !boolTrue(payload.fallback)
+    && !boolTrue(payload.rawFallback)
+    && /complete|ok|ready/.test(evidence || lowerText(payload.qualityStatus))
+    && !/source_quality_fail|insufficient|stale|degraded|not_ready|blocked|fallback/.test([reasonText, evidence].join(" "))
+  );
+  const blockers = [];
+  if (Number(result.statusCode || 0) >= 400) blockers.push(`http_${result.statusCode}`);
+  if (payload.ok === false) blockers.push("payload_ok_false");
+  if (boolFalse(payload.publishAllowed) || boolFalse(quality.publishAllowed)) blockers.push("publish_not_allowed");
+  if ((boolTrue(payload.fallbackUsed) || boolTrue(payload.fallback) || boolTrue(payload.rawFallback)) && !marketClosedLastGood) blockers.push("fallback_used");
+  if ((payload.preservePreviousGood === true || quality.preservePreviousGood === true) && !marketClosedLastGood && !todayCompleteAuthoritative) blockers.push("preserve_previous_good");
+  if (sourceCoverage.ok === false && !todayCompleteAuthoritative) blockers.push("source_coverage_not_ok");
+  if (/insufficient|source_quality_fail|degraded|blocked|not_ready|fallback|previous_good|stale/.test(evidence)) blockers.push(`evidence_${evidence || "not_complete"}`);
+  if (/source_quality_fail|fallback|previous_good|stale|degraded|not_ready|blocked/.test(reasonText) && !marketClosedLastGood && !todayCompleteAuthoritative) blockers.push("reason_blocked_or_stale");
+  return {
+    allow: blockers.length === 0,
+    reason: blockers[0] || (marketClosedLastGood ? "market_closed_last_good" : "publishable"),
+    blockers,
+    marketClosedLastGood,
+    payloadDate,
+    expectedDisplayDate,
+  };
+}
+
 function codeOf(row, fallback) {
   return cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || fallback);
 }
@@ -526,6 +599,7 @@ async function enrichWithQuoteHighs(records) {
   const quoteMap = await fetchQuoteHighMap(records);
   if (!quoteMap.size) return records;
   return records.map((row) => {
+    if (cleanText(row.strategy) === "策略3隔日沖成績單") return row;
     const quote = quoteMap.get(cleanText(row.ticker));
     if (!quote) return row;
     const entryPrice = cleanNumber(row.entry_price);
@@ -576,6 +650,79 @@ async function previousTwseTradingDate(dateText) {
   return "";
 }
 
+function chunkValues(values = [], size = 80) {
+  const out = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
+function candleMinute(row = {}) {
+  const text = cleanText(row.candle_time || row.candleTime || row.time || "");
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(parsed));
+    const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+    const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+    return hour * 60 + minute;
+  }
+  return timeMinutes(text);
+}
+
+function normalizeCandleRow(row = {}) {
+  return {
+    symbol: codeOf(row, ""),
+    trade_date: normalizeDate(row.trade_date || ""),
+    candle_time: cleanText(row.candle_time || row.candleTime || row.time || ""),
+    open: cleanNumber(row.open),
+    high: cleanNumber(row.high),
+    low: cleanNumber(row.low),
+    close: cleanNumber(row.close),
+    volume: cleanNumber(row.volume),
+    updated_at: cleanText(row.updated_at || row.updatedAt || ""),
+  };
+}
+
+async function fetchStrategy3Entry1mMap(scanDate, rows = []) {
+  const tradeDate = normalizeDate(scanDate || "");
+  const symbols = [...new Set((rows || []).map((row) => codeOf(row, "")).filter((code) => /^\d{4}$/.test(code)))];
+  const byCode = new Map();
+  if (!tradeDate || !symbols.length) return { ok: false, byCode, missing: symbols, source: "fugle_daytrade_intraday_1m", reason: "missing_trade_date_or_symbols" };
+  const table = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
+  for (const group of chunkValues(symbols, 80)) {
+    const query = [
+      "select=symbol,market,candle_time,open,high,low,close,volume,updated_at,trade_date",
+      `trade_date=eq.${encodeURIComponent(tradeDate)}`,
+      `symbol=in.(${group.map(encodeURIComponent).join(",")})`,
+      "order=symbol.asc,candle_time.desc",
+      `limit=${Math.max(1000, group.length * 260)}`,
+    ].join("&");
+    const candles = await fetchSupabaseRows(table, query);
+    for (const raw of candles) {
+      const candle = normalizeCandleRow(raw);
+      const minute = candleMinute(candle);
+      if (!/^\d{4}$/.test(candle.symbol)) continue;
+      if (candle.trade_date !== tradeDate) continue;
+      if (!(candle.close > 0)) continue;
+      if (minute == null || minute < 12 * 60 + 50 || minute > 13 * 60) continue;
+      const current = byCode.get(candle.symbol);
+      if (!current || minute > current.minute || (minute === current.minute && Date.parse(candle.candle_time) > Date.parse(current.candle_time))) byCode.set(candle.symbol, { ...candle, minute });
+    }
+  }
+  const missing = symbols.filter((symbol) => !byCode.has(symbol));
+  return { ok: missing.length === 0, byCode, missing, source: `${table}:12:50-13:00`, tradeDate, found: byCode.size, expected: symbols.length, reason: missing.length ? "strategy3_1300_intraday_1m_missing_symbols" : "strategy3_1300_intraday_1m_ready" };
+}
+
+function applyStrategy3Entry1m(rows = [], entryMapResult = {}) {
+  const byCode = entryMapResult.byCode || new Map();
+  return (rows || []).map((row) => {
+    const code = codeOf(row, "");
+    const candle = byCode.get(code);
+    if (!candle) return row;
+    const entryPrice = roundPrice(candle.close);
+    const reason = `${cleanText(row.reason)}；Strategy3 13:00進場價=intraday_1m ${candle.candle_time}`.slice(0, 500);
+    return { ...row, entry_price: entryPrice, entryPrice: entryPrice, entry_price_source: "intraday_1m_1300", entryPriceSource: "intraday_1m_1300", entry_candle_time: candle.candle_time, entry_trade_date: candle.trade_date, entry_price_source_detail: entryMapResult.source || "fugle_daytrade_intraday_1m", high_price: entryPrice, highPrice: entryPrice, highestPrice: entryPrice, pnl: 0, reason };
+  });
+}
 async function fetchStrategy3PayloadForScanDate(scanDate) {
   const runRows = await fetchSupabaseRows(
     process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs",
@@ -625,17 +772,35 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
       _strategy3ScorecardSourceDate: scanDate,
     };
   });
+  const entryMapResult = await fetchStrategy3Entry1mMap(scanDate, rows);
+  const enrichedRows = applyStrategy3Entry1m(rows, entryMapResult)
+    .filter((row) => cleanText(row.entry_price_source || row.entryPriceSource) === "intraday_1m_1300");
   return {
-    ok: true,
-    source: "supabase:strategy3_scan_results",
+    ok: enrichedRows.length > 0,
+    source: "supabase:strategy3_scan_results+fugle_daytrade_intraday_1m_1300",
     runId: cleanText(run.run_id),
     usedDate: scanDate,
     date: scanDate,
     updatedAt: cleanText(run.finished_at || run.updated_at),
-    count: Math.max(rows.length, cleanNumber(run.result_count)),
-    matches: rows,
-    rows,
-    reason: `scorecard_source_previous_trading_day:${scanDate}`,
+    count: Math.max(enrichedRows.length, cleanNumber(run.result_count)),
+    matches: enrichedRows,
+    rows: enrichedRows,
+    publishAllowed: enrichedRows.length > 0,
+    qualityStatus: entryMapResult.ok === true ? "complete" : "degraded",
+    evidenceStatus: entryMapResult.ok === true ? "complete" : "degraded",
+    sourceCoverage: {
+      ok: entryMapResult.ok === true,
+      source: entryMapResult.source,
+      tradeDate: entryMapResult.tradeDate,
+      expectedSymbols: entryMapResult.expected,
+      foundSymbols: entryMapResult.found,
+      emittedSymbols: enrichedRows.length,
+      suppressedSymbols: entryMapResult.missing.length,
+      missingSymbols: entryMapResult.missing,
+    },
+    reason: entryMapResult.ok === true
+      ? `scorecard_source_previous_trading_day:${scanDate}; strategy3_1300_intraday_1m_ready`
+      : `strategy3_1300_intraday_1m_partial:${enrichedRows.length}/${entryMapResult.expected}; missing=${entryMapResult.missing.slice(0, 20).join(",")}`,
   };
 }
 
@@ -865,6 +1030,9 @@ function strategySetOf(records) {
 }
 
 function scorecardCurrentWriteDecision(nextPayload, outFile) {
+  if (nextPayload?.ok === false) {
+    return { allow: false, reason: cleanText(nextPayload.ruleVerification?.issues?.join(",") || nextPayload.issues?.join(",") || "scorecard_payload_not_ok") };
+  }
   if (path.resolve(outFile) !== path.resolve(DEFAULT_OUT_FILE)) {
     return { allow: true, reason: "non_default_out_file" };
   }
@@ -968,25 +1136,41 @@ function alignRecordDate(row, recordDate) {
 async function main() {
   const reports = [];
   const records = [];
+  const tradingDay = await isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
+  const requestedScorecardDate = normalizeDate(process.env.FUMAN_SCORECARD_EXPECTED_DATE || process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || "");
+  const expectedDisplayDate = requestedScorecardDate || (tradingDay.isTradingDay ? tradingDay.date : (await previousTwseTradingDate(tradingDay.date) || tradingDay.date));
+  const explicitExpectedDateMode = Boolean(requestedScorecardDate);
   for (const task of TASKS) {
     const result = await callApi(task);
     const payload = result.payload || {};
     const rows = arraysFromTaskPayload(task, payload);
-    rows.forEach((row, index) => records.push(normalizeRecord(task, payload, row, index)));
+    const publishDecision = rowPublishDecision(task, payload, result, {
+      marketClosed: explicitExpectedDateMode ? false : tradingDay.isTradingDay === false,
+      expectedDisplayDate,
+    });
+    const emittedRows = publishDecision.allow ? rows : [];
+    emittedRows.forEach((row, index) => records.push(normalizeRecord(task, payload, row, index)));
     reports.push({
       key: task.key,
       strategy: task.strategy,
       statusCode: result.statusCode,
-      ok: payload.ok !== false && Number(result.statusCode || 0) < 400,
+      ok: payload.ok !== false && Number(result.statusCode || 0) < 400 && publishDecision.allow,
       runId: cleanText(payload.runId || payload.transport?.runId),
       count: cleanNumber(payload.count ?? payload.total ?? rows.length),
-      emittedRows: rows.length,
+      emittedRows: emittedRows.length,
+      suppressedRows: rows.length - emittedRows.length,
+      rowSuppressionReason: publishDecision.allow ? "" : publishDecision.reason,
+      rowSuppressionBlockers: publishDecision.blockers,
+      publishAllowed: payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed,
+      evidenceStatus: cleanText(payload.evidenceStatus || payload.sourceEvidenceStatus || payload.run_quality_at_publish?.evidenceStatus || payload.qualityStatus),
+      fallbackUsed: payload.fallbackUsed === true || payload.fallback === true || payload.rawFallback === true,
+      marketClosedLastGood: publishDecision.marketClosedLastGood === true,
+      expectedDisplayDate: publishDecision.expectedDisplayDate || "",
       date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-      reason: cleanText(payload.reason || payload.detail || payload.error),
+      reason: cleanText(payload.reason || payload.detail || payload.error || publishDecision.reason),
     });
   }
   let rawRecords = records.filter((row) => row.record_date && row.ticker);
-  const tradingDay = await isTwseTradingDay(new Date(), { stateDir: path.join(RUNTIME_DIR, "state") });
   const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
   let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
@@ -1002,7 +1186,13 @@ async function main() {
     if (report) {
       report.runId = cleanText(strategy3Payload.runId);
       report.count = cleanNumber(strategy3Payload.count);
-      report.emittedRows = strategy3Payload.matches.length;
+      report.emittedRows = strategy3Payload.ok === true ? strategy3Payload.matches.length : 0;
+      report.suppressedRows = cleanNumber(strategy3Payload.sourceCoverage?.suppressedSymbols || 0);
+      report.rowSuppressionReason = report.suppressedRows ? (strategy3Payload.reason || "strategy3_1300_intraday_1m_partial") : "";
+      report.rowSuppressionBlockers = report.suppressedRows ? ["strategy3_1300_intraday_1m_partial"] : [];
+      report.ok = strategy3Payload.ok === true && !report.suppressedRows;
+      report.publishAllowed = strategy3Payload.publishAllowed === true;
+      report.evidenceStatus = strategy3Payload.evidenceStatus || strategy3Payload.qualityStatus || "";
       report.date = strategy3SourceDate;
       report.reason = strategy3Payload.reason;
     }
@@ -1054,12 +1244,18 @@ async function main() {
   const filtered = await enrichWithQuoteHighs(scorecardRecords.map((row) => alignRecordDate(row, latestDate)));
   const activeFiltered = filtered.filter((row) => !isRetiredScorecardStrategy(`${row.strategy || ""} ${row.source || ""} ${row.endpoint || ""}`));
   const activeReports = reports.filter((report) => !isRetiredScorecardStrategy(`${report.key || ""} ${report.strategy || ""} ${report.endpoint || ""}`));
+  const blockedReports = activeReports.filter((report) => report.ok !== true || Number(report.statusCode || 0) >= 400 || Number(report.suppressedRows || 0) > 0);
   const daily = summarize(activeFiltered);
   const payload = {
     ok: true,
+    contract: "scorecard-resource-chain-v1",
     source: "terminal-complete-run-scorecard",
     cacheSource: "json-snapshot",
     exportSource: "terminal-complete-run-scorecard",
+    qualityStatus: blockedReports.length ? "degraded" : "complete",
+    unattendedStatus: blockedReports.length ? "NO" : "YES",
+    displayMode: blockedReports.length ? "same-day-degraded-source-report" : "same-day-complete",
+    issues: blockedReports.map((report) => String(report.key || report.strategy || "unknown") + ":rows_suppressed_or_source_blocked:" + String(report.rowSuppressionReason || report.reason || report.statusCode || "unknown")),
     updatedAt: new Date().toISOString(),
     latestDate,
     marketStatus: {
@@ -1098,6 +1294,15 @@ async function main() {
     },
     sourceReports: activeReports,
   };
+  const ruleVerification = verifyScorecardStrategyRules(payload, { source: "terminal-complete-run-scorecard", requireContract: true });
+  payload.ruleVerification = ruleVerification;
+  if (!ruleVerification.ok) {
+    payload.ok = false;
+    payload.qualityStatus = "degraded";
+    payload.unattendedStatus = "NO";
+    payload.displayMode = "same-day-rule-verification-failed";
+    payload.issues = [...(payload.issues || []), ...ruleVerification.issues];
+  }
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   const writeDecision = scorecardCurrentWriteDecision(payload, OUT_FILE);
   if (!writeDecision.allow) {
@@ -1135,3 +1340,10 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+
+
+
+
+
+
+
