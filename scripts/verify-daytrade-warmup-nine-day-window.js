@@ -9,8 +9,8 @@ const STATE_DIR = process.env.FUMAN_WARMUP_STATE_DIR || 'C:\\fuman-runtime\\stat
 const MANIFEST_DIR = process.env.FUMAN_DAILY_MANIFEST_DIR || path.join(ROOT, 'outputs', 'daily-terminal-run');
 const CHECKPOINT_DIR = process.env.FUMAN_WARMUP_CHECKPOINT_DIR || path.join(ROOT, 'outputs', 'daytrade-warmup-nine-day', 'checkpoints');
 const BASELINE_FILE = process.env.FUMAN_WARMUP_NINE_DAY_BASELINE_FILE || path.join(STATE_DIR, 'daytrade-warmup-nine-day-baseline.json');
-const DEFAULT_START = '20260727';
-const DEFAULT_END = '20260804';
+const DEFAULT_START = '';
+const DEFAULT_END = '';
 const MODULE_KEYS = ['strategy2', 'strategy3', 'strategy4', 'strategy5', 'institution', 'cb', 'warrant'];
 const PHASES = ['0700', '0845', '0900'];
 const CHECKPOINT_PHASES = ['0705', '0847', '0912'];
@@ -275,8 +275,8 @@ async function main() {
   const baseline = baselineResult.baseline;
   const explicitStart = hasArg('start');
   const explicitEnd = hasArg('end');
-  const observedStart = normalizeDateKey(argValue('start', DEFAULT_START));
-  const observedEnd = normalizeDateKey(argValue('end', DEFAULT_END));
+  const observedStart = explicitStart ? normalizeDateKey(argValue('start', DEFAULT_START)) : todayKey;
+  const observedEnd = explicitEnd ? normalizeDateKey(argValue('end', DEFAULT_END)) : addDays(todayKey, 8);
   const trackingStart = baseline.valid ? normalizeDateKey(explicitStart ? argValue('start', baseline.payload.trackingStartDate) : baseline.payload.trackingStartDate) : observedStart;
   const trackingEnd = baseline.valid
     ? normalizeDateKey(explicitEnd ? argValue('end', baseline.payload.trackingEndDate) : baseline.payload.trackingEndDate)
