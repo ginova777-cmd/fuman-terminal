@@ -224,6 +224,89 @@ function appendReason(reason, text) {
   return `${base}${base ? "；" : ""}${text}`;
 }
 
+function strategy3MotherPoolScope(payload = {}) {
+  const scanCoverage = payload?.scanCoverage && typeof payload.scanCoverage === "object" ? payload.scanCoverage : {};
+  const resultCount = cleanNumber(payload.count ?? payload.resultCount ?? payload.run_quality_at_publish?.resultCount ?? scanCoverage.resultCount);
+  const resultInMotherPool = cleanNumber(scanCoverage.resultInMotherPool);
+  const motherPoolSymbols = cleanNumber(scanCoverage.daytradeMotherPoolSymbols || payload.sourceCoverage?.rawStatus?.payload?.mother_pool_symbols);
+  const overlayOk = scanCoverage.daytradeMotherPoolOverlayOk === true;
+  const source = String(scanCoverage.daytradeMotherPoolSource || payload.sourceCoverage?.rawStatus?.payload?.mother_pool_source || "").trim();
+  const ok = resultCount === 0 || (overlayOk && motherPoolSymbols > 0 && resultInMotherPool === resultCount);
+  const reason = ok ? "" : `strategy3_result_not_all_in_daytrade_mother_pool:${resultInMotherPool}/${resultCount}`;
+  return { ok, reason, resultCount, resultInMotherPool, motherPoolSymbols, overlayOk, source };
+}
+
+function blockedStrategy3MotherPoolScopePayload(payload = {}, scope = strategy3MotherPoolScope(payload)) {
+  const reason = scope.reason || "strategy3_result_not_all_in_daytrade_mother_pool";
+  const next = attachStrategy3UnattendedContract({
+    ...payload,
+    ok: false,
+    matches: [],
+    rows: [],
+    returnedCount: 0,
+    count: 0,
+  });
+  return {
+    ...next,
+    ok: false,
+    status: "blocked",
+    sourceStatus: "blocked",
+    qualityStatus: "degraded",
+    evidenceStatus: "insufficient",
+    unattendedStatus: "NO",
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    blockedReason: reason,
+    scanner_block_reason: reason,
+    issues: [...new Set([...asArray(next.issues), reason])],
+    run_quality_at_publish: {
+      ...(next.run_quality_at_publish || {}),
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      degradedBlocksLatest: true,
+      preservePreviousGood: true,
+      blockedReason: reason,
+      scanner_block_reason: reason,
+    },
+    matches: [],
+    rows: [],
+    returnedCount: 0,
+    count: 0,
+    sourceCoverage: {
+      ...(next.sourceCoverage || {}),
+      strategy3MotherPoolScopeStatus: "blocked",
+      strategy3MotherPoolScopeReason: reason,
+      strategy3MotherPoolResultCount: scope.resultCount,
+      strategy3MotherPoolResultInPool: scope.resultInMotherPool,
+      strategy3MotherPoolSymbols: scope.motherPoolSymbols,
+      strategy3MotherPoolOverlayOk: scope.overlayOk,
+      strategy3MotherPoolSource: scope.source,
+    },
+  };
+}
+
+async function applyStrategy3MotherPoolScopeGate(payload = {}) {
+  if (!payload || typeof payload !== "object") return payload;
+  const rows = normalizeSnapshotRows(payload);
+  if (!rows.length) return payload;
+  const scope = strategy3MotherPoolScope(payload);
+  if (!scope.ok) return blockedStrategy3MotherPoolScopePayload(payload, scope);
+  return {
+    ...payload,
+    sourceCoverage: {
+      ...(payload.sourceCoverage || {}),
+      strategy3MotherPoolScopeStatus: "complete",
+      strategy3MotherPoolScopeReason: "",
+      strategy3MotherPoolResultCount: scope.resultCount,
+      strategy3MotherPoolResultInPool: scope.resultInMotherPool,
+      strategy3MotherPoolSymbols: scope.motherPoolSymbols,
+      strategy3MotherPoolOverlayOk: scope.overlayOk,
+      strategy3MotherPoolSource: scope.source,
+    },
+  };
+}
 function blockedStrategy3EntryPayload(payload = {}, reason = "strategy3_1300_intraday_1m_unavailable") {
   const next = attachStrategy3UnattendedContract({
     ...payload,
@@ -1076,7 +1159,7 @@ async function handler(request, response) {
     });
     if (cached) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(cached, { liveProbe })));
+      response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(normalizeStrategy3ApiContract(cached, { liveProbe }))));
       return;
     }
   }
@@ -1090,7 +1173,7 @@ async function handler(request, response) {
       const snapshot = await readLatestSnapshot({ ...options, liveProbe });
       if (snapshot) {
         setDesktopSnapshotCache(response);
-        response.status(200).json(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(snapshot, { liveProbe })));
+        response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(normalizeStrategy3ApiContract(snapshot, { liveProbe }))));
         return;
       }
     }
@@ -1100,7 +1183,7 @@ async function handler(request, response) {
       return;
     }
     setDesktopSnapshotCache(response);
-    response.status(200).json(await applyStrategy3Entry1mGate(buildPayload(latest.rows, latest.run, { ...options, liveProbe })));
+    response.status(200).json(await applyStrategy3Entry1mGate(await applyStrategy3MotherPoolScopeGate(buildPayload(latest.rows, latest.run, { ...options, liveProbe }))));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
@@ -1109,19 +1192,11 @@ async function handler(request, response) {
 module.exports = withEntitlementRequired(handler, "strategy3");
 module.exports.normalizeStrategy3ApiContract = normalizeStrategy3ApiContract;
 module.exports.__test = {
+  applyStrategy3MotherPoolScopeGate,
   applyStrategy3Entry1mGate,
   buildPayload,
   fetchLatestCompleteRows,
   fetchStrategy3Entry1mMap,
   normalizeSnapshotRows,
 };
-
-
-
-
-
-
-
-
-
 

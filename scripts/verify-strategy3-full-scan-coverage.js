@@ -194,6 +194,11 @@ async function main() {
   const expectedTotal = cleanNumber(run.expected_total || payload.expectedTotal || payload.total || selfTest.sourceUniverseCount || scanCoverage.sourceUniverseCount);
   const scannedCount = cleanNumber(run.scanned_count || payload.scannedCount || selfTest.scannedCount || scanCoverage.scannedCount);
   const resultCount = cleanNumber(run.result_count || payload.count || payload.resultCount || selfTest.resultCount);
+  const motherPoolSymbols = cleanNumber(scanCoverage.daytradeMotherPoolSymbols || sourceCoverage.rawStatus?.payload?.mother_pool_symbols);
+  const resultInMotherPool = cleanNumber(scanCoverage.resultInMotherPool);
+  const motherPoolOverlayOk = scanCoverage.daytradeMotherPoolOverlayOk === true;
+  const motherPoolScopeOk = resultCount === 0 || (motherPoolOverlayOk && motherPoolSymbols > 0 && resultInMotherPool === resultCount);
+  const scanScope = cleanText(scanCoverage.scanScope || payload.scanScope || "");
   const issues = [];
 
   addIssue(issues, run.status === "complete" && run.complete === true, "strategy3_run_not_complete", { status: run.status, complete: run.complete });
@@ -204,6 +209,16 @@ async function main() {
   addIssue(issues, results.length === resultCount, "strategy3_result_count_mismatch", { readbackResults: results.length, resultCount });
   addIssue(issues, sourceHealth.status === "ok", "strategy3_source_health_not_ok", { sourceHealthStatus: sourceHealth.status, sourceHealthIssues: sourceHealth.issues || [] });
   addIssue(issues, sourceCoverage.ready === true || sourceCoverage.ok === true, "strategy3_source_coverage_not_ready", { sourceCoverageStatus: sourceCoverage.status, sourceCoverageReason: sourceCoverage.reason });
+  addIssue(issues, motherPoolScopeOk, "strategy3_result_not_all_in_daytrade_mother_pool", {
+    resultCount,
+    resultInMotherPool,
+    motherPoolSymbols,
+    motherPoolOverlayOk,
+  });
+  addIssue(issues, resultCount === 0 || scanScope === "daytrade_mother_pool", "strategy3_scan_scope_not_daytrade_mother_pool", {
+    scanScope,
+    required: "daytrade_mother_pool",
+  });
   addIssue(issues, entryMap.size === symbols.length && symbols.length === resultCount, "strategy3_1300_entry_1m_not_full", {
     expectedEntryEvidence: symbols.length,
     foundEntryEvidence: entryMap.size,
@@ -219,7 +234,9 @@ async function main() {
     first_blocker: issues[0]?.code || "",
     reason_code: issues[0]?.code || "strategy3_full_scan_verified",
     allowed_action: issues.length
-      ? "repair_missing_1300_intraday_1m_then_rerun_strategy3_full_scan_verifier"
+      ? (issues[0]?.code === "strategy3_result_not_all_in_daytrade_mother_pool"
+        ? "rerun_strategy3_with_daytrade_mother_pool_scope_then_rerun_full_scan_verifier"
+        : "repair_missing_1300_intraday_1m_then_rerun_strategy3_full_scan_verifier")
       : "strategy3_full_scan_can_be_accepted",
     fullScan: {
       expectedTotal,
@@ -230,11 +247,14 @@ async function main() {
     },
     motherPoolAtRun: {
       source: scanCoverage.daytradeMotherPoolSource || sourceCoverage.rawStatus?.payload?.mother_pool_source || "",
-      symbols: cleanNumber(scanCoverage.daytradeMotherPoolSymbols || sourceCoverage.rawStatus?.payload?.mother_pool_symbols),
+      symbols: motherPoolSymbols,
       overlapWithSourceUniverse: cleanNumber(scanCoverage.daytradeMotherPoolUniverseOverlap),
-      resultInMotherPool: cleanNumber(scanCoverage.resultInMotherPool),
+      resultInMotherPool,
       updatedAt: scanCoverage.daytradeMotherPoolUpdatedAt || sourceCoverage.rawStatus?.payload?.runtime_priority_updated_at || "",
-      overlayOk: scanCoverage.daytradeMotherPoolOverlayOk === true,
+      overlayOk: motherPoolOverlayOk,
+      scopeOk: motherPoolScopeOk,
+      requiredRule: "resultInMotherPool must equal resultCount for Strategy3 formal publish",
+      scanScope,
     },
     funnel: {
       sourceUniverse: cleanNumber(scanCoverage.sourceUniverseCount || selfTest.sourceUniverseCount || expectedTotal),
@@ -276,3 +296,4 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error.message || String(error), verifier: "verify-strategy3-full-scan-coverage" }, null, 2));
   process.exit(1);
 });
+

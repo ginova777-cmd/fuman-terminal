@@ -52,6 +52,7 @@ const STRATEGY3_MIN_INTRADAY_1M_CANDIDATES = Number(process.env.STRATEGY3_MIN_IN
 const STRATEGY3_MIN_INTRADAY_1M_COVERAGE = Number(process.env.STRATEGY3_MIN_INTRADAY_1M_COVERAGE || 0.95);
 const STRATEGY3_SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_APPLY_BLACKLIST = process.env.STRATEGY3_APPLY_BLACKLIST !== "0";
+const STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE = process.env.STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE !== "0";
 const STRATEGY3_MIN_CHANGE_PERCENT = Number(process.env.STRATEGY3_MIN_CHANGE_PERCENT || 3);
 const STRATEGY3_MIN_VOLUME_RATIO = Number(process.env.STRATEGY3_MIN_VOLUME_RATIO || 1);
 const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_VOLUME_LOTS || 0);
@@ -2690,6 +2691,58 @@ async function main() {
   stocks = exclusionResult.stocks;
   exclusionStats = { ...exclusionResult.stats };
   if (!stocks.length) throw new Error("No stock universe after strategy3 exclusions");
+  const preMotherPoolScopeUniverseCount = stocks.length;
+  const daytradeMotherPoolUniverseOverlap = stocks.filter((stock) => stock.inDaytradeMotherPool === true).length;
+  if (STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE) {
+    if (daytradeMotherPool.ok !== true || cleanNumber(daytradeMotherPool.symbols) <= 0 || daytradeMotherPoolUniverseOverlap <= 0) {
+      const blockReason = `Strategy3 mother pool scope failed: motherPoolOk=${daytradeMotherPool.ok === true}, motherPoolSymbols=${cleanNumber(daytradeMotherPool.symbols)}, overlap=${daytradeMotherPoolUniverseOverlap}`;
+      const receipt = writeStrategy3BlockedReceipt({
+        ok: false,
+        source,
+        startedAt,
+        updatedAt: new Date().toISOString(),
+        usedDate: taipeiDateKeyFromValue(new Date().toISOString()),
+        total: 0,
+        count: 0,
+        complete: false,
+        sourceWarnings,
+        qualityStatus: "failed",
+        sourceHealth: { status: "failed", issues: [blockReason] },
+        sourceCoverage: { status: "failed", reason: blockReason },
+        sourceDriftHealth: { status: "failed", reason: blockReason },
+        scanCoverage: {
+          completeScan: false,
+          scanScope: "daytrade_mother_pool",
+          originalSourceUniverseCount: preMotherPoolScopeUniverseCount,
+          sourceUniverseCount: 0,
+          scannedCount: 0,
+          daytradeMotherPoolSource: daytradeMotherPool.source,
+          daytradeMotherPoolSymbols: cleanNumber(daytradeMotherPool.symbols),
+          daytradeMotherPoolOverlayOk: daytradeMotherPool.ok === true,
+          daytradeMotherPoolUniverseOverlap,
+          resultInMotherPool: 0,
+          resultCount: 0,
+          reason: blockReason,
+        },
+      }, blockReason, "mother-pool-scope");
+      console.error(`strategy3 mother pool scope block reason: ${blockReason}`);
+      console.error(`strategy3 blocked receipt: ${receipt.receiptFile}`);
+      throw new Error(blockReason);
+    }
+    stocks = stocks.filter((stock) => stock.inDaytradeMotherPool === true);
+    exclusionStats = {
+      ...exclusionStats,
+      strategy3MotherPoolScope: {
+        enabled: true,
+        input: preMotherPoolScopeUniverseCount,
+        kept: stocks.length,
+        excluded: Math.max(0, preMotherPoolScopeUniverseCount - stocks.length),
+        source: daytradeMotherPool.source,
+        motherPoolSymbols: cleanNumber(daytradeMotherPool.symbols),
+        overlap: daytradeMotherPoolUniverseOverlap,
+      },
+    };
+  }
   const datePreflight = await fetchStrategy3DatePreflight(stocks, new Date(startedAt));
   if (!datePreflight.ok) {
     const blockReason = `Strategy3 date preflight failed: ${datePreflight.reason}`;
@@ -2710,6 +2763,8 @@ async function main() {
       sourceDriftHealth: { status: "failed", reason: blockReason },
       scanCoverage: {
         completeScan: false,
+        scanScope: STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE ? "daytrade_mother_pool" : "source_universe",
+        originalSourceUniverseCount: preMotherPoolScopeUniverseCount,
         sourceUniverseCount: stocks.length,
         scannedCount: 0,
         resultCount: 0,
@@ -2755,6 +2810,8 @@ async function main() {
       datePreflight,
       scanCoverage: {
         completeScan: false,
+        scanScope: STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE ? "daytrade_mother_pool" : "source_universe",
+        originalSourceUniverseCount: preMotherPoolScopeUniverseCount,
         sourceUniverseCount: stocks.length,
         scannedCount: 0,
         resultCount: 0,
@@ -2773,13 +2830,15 @@ async function main() {
   const matchDiagnostics = lastStrategy3MatchDiagnostics || {};
   const scanCoverage = {
     completeScan: true,
-    sourceUniverseCount: stocks.length,
+    scanScope: STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL_SCOPE ? "daytrade_mother_pool" : "source_universe",
+        originalSourceUniverseCount: preMotherPoolScopeUniverseCount,
+        sourceUniverseCount: stocks.length,
     scannedCount: stocks.length,
     daytradeMotherPoolSource: daytradeMotherPool.source,
     daytradeMotherPoolSymbols: cleanNumber(daytradeMotherPool.symbols),
     daytradeMotherPoolUpdatedAt: daytradeMotherPool.updatedAt || "",
     daytradeMotherPoolOverlayOk: daytradeMotherPool.ok === true,
-    daytradeMotherPoolUniverseOverlap: stocks.filter((stock) => stock.inDaytradeMotherPool === true).length,
+    daytradeMotherPoolUniverseOverlap,
     sessionReadyCandidates: cleanNumber(matchDiagnostics.sessionReadyCandidates),
     hardFieldGateCandidates: cleanNumber(matchDiagnostics.hardFieldGateCandidates),
     hardFieldGateInMotherPool: stocks.filter((stock) => stock.inDaytradeMotherPool === true && stock.strategy3FieldGate?.ok).length,
@@ -2933,3 +2992,4 @@ module.exports = {
   validateStrategy3PrePublish,
   writeStrategy3BlockedReceipt,
 };
+
