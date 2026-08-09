@@ -93,6 +93,7 @@
     "verify:strategy3-live-readback": "node --use-system-ca scripts/verify-strategy3-live-readback.js --expect-complete",
     "verify:strategy3-live-before": "node --use-system-ca scripts/verify-strategy3-live-readback.js --capture-before",
     "verify:strategy3-live-blocked": "node --use-system-ca scripts/verify-strategy3-live-readback.js --expect-blocked",
+    "verify:strategy3-full-scan": "node --use-system-ca scripts/verify-strategy3-full-scan-coverage.js",
     "verify:strategy5-prewater": "node scripts/verify-strategy5-prewater-static-fields.js && node scripts/verify-strategy5-prewater-fixtures.js && node scripts/verify-strategy5-prewater-fixtures.js --sample-mutations && node scripts/verify-strategy5-prewater-fixtures.js --payload fixtures/strategy5-prewater-blocked-receipt.json --type receipt && node scripts/verify-strategy5-prewater-formal-payloads.js",
     "verify:strategy5-prewater:static": "node scripts/verify-strategy5-prewater-static-fields.js",
     "verify:strategy5-prewater:fixtures": "node scripts/verify-strategy5-prewater-fixtures.js",
@@ -377,3 +378,4 @@
     "node": "24.x"
   }
 }
+
