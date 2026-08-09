@@ -98,16 +98,16 @@ function verifyModules(issues, audit, registry, auditRoot) {
   if (isReceiptFreeAudit(audit)) return;
   const coreKeys = new Set(STAGES.map((stage) => stage.key));
   const requiredModules = (registry.modules || []).filter((module) => !coreKeys.has(module.key) && module.required !== false && module.receipt_required !== false);
-  const auditRows = new Map((audit.module_receipts || []).map((row) => [row.key, row]));
+  const auditRows = new Map((audit?.module_receipts || []).map((row) => [row.key, row]));
   for (const module of requiredModules) {
-    const file = moduleReceiptFile(auditRoot, audit.trade_date, audit.daily_run_id, module.key);
+    const file = moduleReceiptFile(auditRoot, audit?.trade_date || "", audit?.daily_run_id || "", module.key);
     const row = auditRows.get(module.key);
     if (!row) issue(issues, "module_receipt_missing_from_final_audit", { module: module.key });
     if (!fs.existsSync(file)) { issue(issues, "module_receipt_file_missing", { module: module.key, file }); continue; }
     const receipt = readJson(file, null);
     if (!receipt || receipt.receipt_present !== true) issue(issues, "module_receipt_contract_invalid", { module: module.key });
     if (receipt && (receipt.daily_run_id !== audit.daily_run_id || receipt.trade_date !== audit.trade_date)) issue(issues, "module_receipt_identity_mismatch", { module: module.key });
-    if (audit.decision === "YES" && (!receipt || receipt.status !== "PASS" || receipt.complete !== true)) issue(issues, "non_pass_module_in_yes_audit", { module: module.key, status: receipt?.status || "missing" });
+    if (audit?.decision === "YES" && (!receipt || receipt.status !== "PASS" || receipt.complete !== true)) issue(issues, "non_pass_module_in_yes_audit", { module: module.key, status: receipt?.status || "missing" });
   }
 }
 
@@ -149,10 +149,10 @@ function verifyRequirements(issues, audit, registry) {
       }
       const core = STAGES.find((stage) => stage.key === ref);
       if (core) {
-        if (!(audit.receipts || []).some((row) => row.stage === core.key)) issue(issues, "required_receipt_core_missing", { requirement: requirement.key, receipt: ref });
+        if (!(audit?.receipts || []).some((row) => row.stage === core.key)) issue(issues, "required_receipt_core_missing", { requirement: requirement.key, receipt: ref });
         continue;
       }
-      const moduleRows = new Set((audit.module_receipts || []).map((row) => row.key));
+      const moduleRows = new Set((audit?.module_receipts || []).map((row) => row.key));
       if (!moduleRows.has(ref)) issue(issues, "required_receipt_module_missing", { requirement: requirement.key, receipt: ref });
     }
   }
